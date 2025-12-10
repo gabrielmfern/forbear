@@ -15,5 +15,5 @@ pub fn main() !void {
         "forbear playground",
         allocator,
     );
-    defer graphics.deinit(allocator);
+    defer graphics.deinit();
 }

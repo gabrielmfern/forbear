@@ -64,7 +64,19 @@ fn ensureNoError(result: c.VkResult) !void {
     std.debug.assert(result == c.VK_SUCCESS);
 }
 
-fn validateLayers(layers: []const [*c]const u8, availableLayers: []c.VkLayerProperties) error{LayerNotSupported}!void {
+fn validateLayers(layers: []const [*c]const u8, allocator: std.mem.Allocator) !void {
+    var availableLayersLen: u32 = 0;
+    try ensureNoError(c.vkEnumerateInstanceLayerProperties(
+        &availableLayersLen,
+        null,
+    ));
+    const availableLayers = try allocator.alloc(c.VkLayerProperties, @intCast(availableLayersLen));
+    defer allocator.free(availableLayers);
+    try ensureNoError(c.vkEnumerateInstanceLayerProperties(
+        &availableLayersLen,
+        availableLayers.ptr,
+    ));
+
     std.log.debug("available layers:", .{});
     for (availableLayers) |layer| {
         std.log.debug("  - {s}", .{layer.layerName});
@@ -90,7 +102,21 @@ fn validateLayers(layers: []const [*c]const u8, availableLayers: []c.VkLayerProp
     }
 }
 
-fn validateExtensions(extensions: []const [*c]const u8, availableExtensions: []c.VkExtensionProperties) error{ExtensionNotSupported}!void {
+fn validateExtensions(extensions: []const [*c]const u8, allocator: std.mem.Allocator) !void {
+    var availableExtensionsLen: u32 = 0;
+    try ensureNoError(c.vkEnumerateInstanceExtensionProperties(
+        null,
+        &availableExtensionsLen,
+        null,
+    ));
+    const availableExtensions = try allocator.alloc(c.VkExtensionProperties, @intCast(availableExtensionsLen));
+    defer allocator.free(availableExtensions);
+    try ensureNoError(c.vkEnumerateInstanceExtensionProperties(
+        null,
+        &availableExtensionsLen,
+        availableExtensions.ptr,
+    ));
+
     std.log.debug("available extensions:", .{});
     for (availableExtensions) |extension| {
         std.log.debug("  - {s}", .{extension.extensionName});
@@ -118,7 +144,6 @@ fn validateExtensions(extensions: []const [*c]const u8, availableExtensions: []c
 
 vulkanInstance: c.VkInstance,
 vulkanDebugMessenger: c.VkDebugUtilsMessengerEXT,
-availableLayers: []c.VkLayerProperties,
 
 pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     const extensions: []const [*c]const u8 = &.{
@@ -132,19 +157,9 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
         "VK_LAYER_KHRONOS_validation",
     };
 
-    var availableLayersLen: u32 = 0;
-    try ensureNoError(c.vkEnumerateInstanceLayerProperties(&availableLayersLen, null));
-    const availableLayers = try allocator.alloc(c.VkLayerProperties, @intCast(availableLayersLen));
-    errdefer allocator.free(availableLayers);
-    try ensureNoError(c.vkEnumerateInstanceLayerProperties(&availableLayersLen, availableLayers.ptr));
-    try validateLayers(layers, availableLayers);
+    try validateLayers(layers, allocator);
 
-    var availableExtensionsLen: u32 = 0;
-    try ensureNoError(c.vkEnumerateInstanceExtensionProperties(null, &availableExtensionsLen, null));
-    const availableExtensions = try allocator.alloc(c.VkExtensionProperties, @intCast(availableExtensionsLen));
-    defer allocator.free(availableExtensions);
-    try ensureNoError(c.vkEnumerateInstanceExtensionProperties(null, &availableExtensionsLen, availableExtensions.ptr));
-    try validateExtensions(extensions, availableExtensions);
+    try validateExtensions(extensions, allocator);
 
     var vulkanInstance: c.VkInstance = undefined;
     try ensureNoError(c.vkCreateInstance(
@@ -228,13 +243,10 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     return .{
         .vulkanInstance = vulkanInstance,
         .vulkanDebugMessenger = vulkanDebugMessenger,
-        .availableLayers = availableLayers,
     };
 }
 
-pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
-    allocator.free(self.availableLayers);
-
+pub fn deinit(self: @This()) void {
     DestroyDebugUtilsMessengerEXT(
         self.vulkanInstance,
         self.vulkanDebugMessenger,
