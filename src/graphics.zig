@@ -86,16 +86,25 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     errdefer allocator.free(availableLayers);
     try ensureNoError(c.vkEnumerateInstanceLayerProperties(&availableLayersLen, availableLayers.ptr));
 
+    std.log.debug("available layers:", .{});
+    for (availableLayers) |layer| {
+        std.log.debug("{s}", .{layer.layerName});
+    }
     for (layers) |layer| {
         const layerSlice: []const u8 = std.mem.span(layer);
         var isLayerSupported = false;
         for (availableLayers) |availableLayer| {
-            if (std.mem.eql(u8, availableLayer.layerName[0..], layerSlice)) {
+            if (std.mem.eql(
+                u8,
+                availableLayer.layerName[0..layerSlice.len],
+                layerSlice,
+            )) {
                 isLayerSupported = true;
                 break;
             }
         }
         if (isLayerSupported == false) {
+            std.log.err("layer {s} is not supported", .{layer});
             return error.LayerNotSupported;
         }
     }
