@@ -1,7 +1,5 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("vulkan/vulkan.h");
-});
+const c = @import("c.zig").c;
 
 fn CreateDebugUtilsMessengerEXT(
     instance: c.VkInstance,
@@ -244,6 +242,26 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
         .vulkanInstance = vulkanInstance,
         .vulkanDebugMessenger = vulkanDebugMessenger,
     };
+}
+
+pub fn createWaylandSurface(
+    self: @This(),
+    wlDisplay: *c.wl_display,
+    wlSurface: *c.wl_surface,
+) !c.VkSurfaceKHR {
+    var surface: c.VkSurfaceKHR = undefined;
+
+    try ensureNoError(c.vkCreateWaylandSurfaceKHR(
+        self.vulkanInstance,
+        &c.VkWaylandSurfaceCreateInfoKHR{
+            .sType = c.VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+            .display = wlDisplay,
+            .surface = wlSurface,
+        },
+        // TODO: define a proper allocator here using an allocator from the outside
+        null,
+        &surface,
+    ));
 }
 
 pub fn deinit(self: @This()) void {
