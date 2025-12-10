@@ -37,7 +37,7 @@ wlSurface: *c.wl_surface,
 xdgSurface: *c.xdg_surface,
 xdgToplevel: *c.xdg_toplevel,
 
-vkSurface: c.VkSurfaceKHR,
+vulkanSurface: c.VkSurfaceKHR,
 
 // Window state
 width: u32,
@@ -48,6 +48,7 @@ running: bool,
 
 handlers: Handlers,
 
+graphics: Graphics,
 allocator: std.mem.Allocator,
 
 fn BindingInfo(T: type) type {
@@ -174,13 +175,13 @@ fn xdgToplevelConfigure(
     if (width > 0 and height > 0) {
         window.width = @intCast(width);
         window.height = @intCast(height);
-        c.wl_egl_window_resize(
-            window.egl_window,
-            width,
-            height,
-            0,
-            0,
-        );
+        // c.wl_egl_window_resize(
+        //     window.egl_window,
+        //     width,
+        //     height,
+        //     0,
+        //     0,
+        // );
     }
 }
 
@@ -287,15 +288,18 @@ fn keyboardHandleKeymap(
     size: u32,
 ) callconv(.c) void {
     std.debug.assert(format == c.WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
-    std.posix.mmap(
-        null,
-        size,
-        undefined,
-        undefined,
-        fd,
-        0,
-    ) catch @panic("failed to read the given keymap");
 
+    // std.posix.mmap(
+    //     null,
+    //     size,
+    //     undefined,
+    //     undefined,
+    //     fd,
+    //     0,
+    // ) catch @panic("failed to read the given keymap");
+
+    _ = fd;
+    _ = size;
     _ = wlKeyboard;
     _ = data;
 }
@@ -421,7 +425,6 @@ pub fn init(
     window.title = title;
     window.app_id = app_id;
     window.running = true;
-    window.modifiers = .{};
 
     window.handlers = .{};
 
@@ -466,10 +469,11 @@ pub fn init(
     c.xdg_toplevel_set_app_id(window.xdgToplevel, app_id.ptr);
     c.wl_surface_commit(window.wlSurface);
 
-    window.vk_surface = try graphics.createWaylandSurface(
+    window.vulkanSurface = try graphics.createWaylandSurface(
         window.wlDisplay,
         window.wlSurface,
     );
+    window.graphics = graphics;
 
     // gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     // gl.enable(gl.BLEND);
@@ -535,17 +539,17 @@ pub fn handleEvents(self: *Self) !void {
     }
 }
 
-pub fn swapBuffers(self: *Self) !void {
-    if (c.eglSwapBuffers(
-        self.egl_display,
-        self.egl_surface,
-    ) == c.EGL_FALSE) {
-        return error.FailedToSwapBuffers;
-    }
-}
+// pub fn swapBuffers(self: *Self) !void {
+//     if (c.eglSwapBuffers(
+//         self.egl_display,
+//         self.egl_surface,
+//     ) == c.EGL_FALSE) {
+//         return error.FailedToSwapBuffers;
+//     }
+// }
 
 pub fn deinit(self: *Self) void {
-    c.wl_egl_window_destroy(self.egl_window);
+    c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.vulkanSurface, null);
     c.xdg_toplevel_destroy(self.xdgToplevel);
     c.xdg_surface_destroy(self.xdgSurface);
 

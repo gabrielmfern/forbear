@@ -262,6 +262,8 @@ pub fn createWaylandSurface(
         null,
         &surface,
     ));
+
+    return surface;
 }
 
 pub fn deinit(self: @This()) void {

@@ -16,4 +16,18 @@ pub fn main() !void {
         allocator,
     );
     defer graphics.deinit();
+
+    const window = try forbear.Window.init(
+        800,
+        600,
+        graphics,
+        "forbear playground",
+        "forbear.playground",
+        allocator,
+    );
+    defer window.deinit();
+
+    while (window.running) {
+        try window.handleEvents();
+    }
 }
