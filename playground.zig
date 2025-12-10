@@ -11,6 +11,9 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    const graphics = try forbear.Graphics.init("forbear playground", allocator);
-    defer graphics.deinit();
+    const graphics = try forbear.Graphics.init(
+        "forbear playground",
+        allocator,
+    );
+    defer graphics.deinit(allocator);
 }

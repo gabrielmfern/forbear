@@ -6,13 +6,13 @@ pub fn build(b: *std.Build) void {
 
     const forbear = b.addModule("forbear", .{
         .root_source_file = b.path("src/root.zig"),
+        .link_libc = true,
         .target = target,
         .optimize = optimize,
     });
-
     forbear.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
     forbear.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-    forbear.linkSystemLibrary("vulkan", .{});
+    forbear.linkSystemLibrary("vulkan", .{ .needed = true });
 
     const mod_tests = b.addTest(.{
         .root_module = forbear,
@@ -24,12 +24,13 @@ pub fn build(b: *std.Build) void {
     {
         const playground = b.createModule(.{
             .root_source_file = b.path("playground.zig"),
+            .link_libc = true,
             .target = target,
             .optimize = optimize,
         });
         playground.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
         playground.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-        playground.linkSystemLibrary("vulkan", .{});
+        playground.linkSystemLibrary("vulkan", .{ .needed = true });
         playground.addImport("forbear", forbear);
 
         // Playground

@@ -80,12 +80,10 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
         "VK_LAYER_KHRONOS_validation",
     };
 
-    // std.debug.assert(c.vkEnumerateInstanceLayerProperties != null);
-    // std.debug.assert(c.vkGetDeviceProcAddr != null);
-
     var availableLayersLen: u32 = 0;
     try ensureNoError(c.vkEnumerateInstanceLayerProperties(&availableLayersLen, null));
     const availableLayers = try allocator.alloc(c.VkLayerProperties, @intCast(availableLayersLen));
+    errdefer allocator.free(availableLayers);
     try ensureNoError(c.vkEnumerateInstanceLayerProperties(&availableLayersLen, availableLayers.ptr));
 
     for (layers) |layer| {
@@ -103,7 +101,6 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     }
 
     var vulkanInstance: c.VkInstance = undefined;
-    // TODO: define a proper allocator here using an allocator from the outside
     try ensureNoError(c.vkCreateInstance(
         &c.VkInstanceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -121,9 +118,15 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
             .enabledExtensionCount = extensions.len,
             .ppEnabledExtensionNames = extensions.ptr,
         },
+        // TODO: define a proper allocator here using an allocator from the outside
         null,
         &vulkanInstance,
     ));
+    errdefer c.vkDestroyInstance(
+        vulkanInstance,
+        // TODO: define a proper allocator here using an allocator from the outside
+        null,
+    );
 
     std.debug.assert(vulkanInstance != null);
 
@@ -164,6 +167,12 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
         null,
         &vulkanDebugMessenger,
     ));
+    errdefer DestroyDebugUtilsMessengerEXT(
+        vulkanInstance,
+        vulkanDebugMessenger,
+        // TODO: define a proper allocator here using an allocator from the outside
+        null,
+    );
     std.debug.assert(vulkanDebugMessenger != null);
 
     return .{
@@ -173,9 +182,18 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     };
 }
 
-pub fn deinit(self: @This()) void {
-    // TODO: define a proper allocator here using an allocator from the outside
-    DestroyDebugUtilsMessengerEXT(self.vulkanInstance, self.vulkanDebugMessenger, null);
-    // TODO: define a proper allocator here using an allocator from the outside
-    c.vkDestroyInstance(self.vulkanInstance, null);
+pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+    allocator.free(self.availableLayers);
+
+    DestroyDebugUtilsMessengerEXT(
+        self.vulkanInstance,
+        self.vulkanDebugMessenger,
+        // TODO: define a proper allocator here using an allocator from the outside
+        null,
+    );
+    c.vkDestroyInstance(
+        self.vulkanInstance,
+        // TODO: define a proper allocator here using an allocator from the outside
+        null,
+    );
 }
