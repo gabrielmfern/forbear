@@ -64,6 +64,58 @@ fn ensureNoError(result: c.VkResult) !void {
     std.debug.assert(result == c.VK_SUCCESS);
 }
 
+fn validateLayers(layers: []const [*c]const u8, availableLayers: []c.VkLayerProperties) error{LayerNotSupported}!void {
+    std.log.debug("available layers:", .{});
+    for (availableLayers) |layer| {
+        std.log.debug("  - {s}", .{layer.layerName});
+    }
+
+    for (layers) |layer| {
+        const layerSlice: []const u8 = std.mem.span(layer);
+        var isLayerSupported = false;
+        for (availableLayers) |availableLayer| {
+            if (std.mem.eql(
+                u8,
+                availableLayer.layerName[0..layerSlice.len],
+                layerSlice,
+            )) {
+                isLayerSupported = true;
+                break;
+            }
+        }
+        if (isLayerSupported == false) {
+            std.log.err("layer {s} is not supported", .{layer});
+            return error.LayerNotSupported;
+        }
+    }
+}
+
+fn validateExtensions(extensions: []const [*c]const u8, availableExtensions: []c.VkExtensionProperties) error{ExtensionNotSupported}!void {
+    std.log.debug("available extensions:", .{});
+    for (availableExtensions) |extension| {
+        std.log.debug("  - {s}", .{extension.extensionName});
+    }
+
+    for (extensions) |extension| {
+        const extensionSlice: []const u8 = std.mem.span(extension);
+        var isExtensionSupported = false;
+        for (availableExtensions) |availableExtension| {
+            if (std.mem.eql(
+                u8,
+                availableExtension.extensionName[0..extensionSlice.len],
+                extensionSlice,
+            )) {
+                isExtensionSupported = true;
+                break;
+            }
+        }
+        if (isExtensionSupported == false) {
+            std.log.err("extension {s} is not supported", .{extension});
+            return error.ExtensionNotSupported;
+        }
+    }
+}
+
 vulkanInstance: c.VkInstance,
 vulkanDebugMessenger: c.VkDebugUtilsMessengerEXT,
 availableLayers: []c.VkLayerProperties,
@@ -85,29 +137,14 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     const availableLayers = try allocator.alloc(c.VkLayerProperties, @intCast(availableLayersLen));
     errdefer allocator.free(availableLayers);
     try ensureNoError(c.vkEnumerateInstanceLayerProperties(&availableLayersLen, availableLayers.ptr));
+    try validateLayers(layers, availableLayers);
 
-    std.log.debug("available layers:", .{});
-    for (availableLayers) |layer| {
-        std.log.debug("{s}", .{layer.layerName});
-    }
-    for (layers) |layer| {
-        const layerSlice: []const u8 = std.mem.span(layer);
-        var isLayerSupported = false;
-        for (availableLayers) |availableLayer| {
-            if (std.mem.eql(
-                u8,
-                availableLayer.layerName[0..layerSlice.len],
-                layerSlice,
-            )) {
-                isLayerSupported = true;
-                break;
-            }
-        }
-        if (isLayerSupported == false) {
-            std.log.err("layer {s} is not supported", .{layer});
-            return error.LayerNotSupported;
-        }
-    }
+    var availableExtensionsLen: u32 = 0;
+    try ensureNoError(c.vkEnumerateInstanceExtensionProperties(null, &availableExtensionsLen, null));
+    const availableExtensions = try allocator.alloc(c.VkExtensionProperties, @intCast(availableExtensionsLen));
+    defer allocator.free(availableExtensions);
+    try ensureNoError(c.vkEnumerateInstanceExtensionProperties(null, &availableExtensionsLen, availableExtensions.ptr));
+    try validateExtensions(extensions, availableExtensions);
 
     var vulkanInstance: c.VkInstance = undefined;
     try ensureNoError(c.vkCreateInstance(
