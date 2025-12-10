@@ -70,7 +70,7 @@ availableLayers: []c.VkLayerProperties,
 
 pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     const extensions: []const [*c]const u8 = &.{
-        c.VK_KHR_surface,
+        c.VK_KHR_SURFACE_EXTENSION_NAME,
         "VK_KHR_wayland_surface",
         c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
         c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
@@ -114,8 +114,10 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
         &c.VkInstanceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             .flags = c.VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
+            .pNext = null,
             .pApplicationInfo = &c.VkApplicationInfo{
                 .sType = c.VK_STRUCTURE_TYPE_APPLICATION_INFO,
+                .pNext = null,
                 .pApplicationName = name,
                 .applicationVersion = c.VK_MAKE_VERSION(1, 0, 0),
                 .pEngineName = "No Engine",
@@ -144,6 +146,8 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
         vulkanInstance,
         &c.VkDebugUtilsMessengerCreateInfoEXT{
             .sType = c.VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+            .pNext = null,
+            .flags = 0,
             .messageSeverity = c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
             .messageType = c.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
             .pfnUserCallback = &(struct {
