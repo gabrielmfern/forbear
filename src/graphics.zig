@@ -80,8 +80,8 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
         "VK_LAYER_KHRONOS_validation",
     };
 
-    std.debug.assert(c.vkEnumerateInstanceLayerProperties != null);
-    std.debug.assert(c.vkGetDeviceProcAddr != null);
+    // std.debug.assert(c.vkEnumerateInstanceLayerProperties != null);
+    // std.debug.assert(c.vkGetDeviceProcAddr != null);
 
     var availableLayersLen: u32 = 0;
     try ensureNoError(c.vkEnumerateInstanceLayerProperties(&availableLayersLen, null));

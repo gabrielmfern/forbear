@@ -27,6 +27,8 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        playground.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+        playground.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
         playground.linkSystemLibrary("vulkan", .{});
         playground.addImport("forbear", forbear);
 
