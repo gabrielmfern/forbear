@@ -142,6 +142,7 @@ fn validateExtensions(extensions: []const [*c]const u8, allocator: std.mem.Alloc
 
 vulkanInstance: c.VkInstance,
 vulkanDebugMessenger: c.VkDebugUtilsMessengerEXT,
+physicalDevice: c.VkPhysicalDevice,
 
 pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     const extensions: []const [*c]const u8 = &.{
@@ -238,8 +239,39 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     );
     std.debug.assert(vulkanDebugMessenger != null);
 
+    var physicalDevicesLen: u32 = undefined;
+    try ensureNoError(c.vkEnumeratePhysicalDevices(
+        vulkanInstance,
+        &physicalDevicesLen,
+        null,
+    ));
+    const physicalDevices = try allocator.alloc(c.VkPhysicalDevice, @intCast(physicalDevicesLen));
+    errdefer allocator.free(physicalDevices);
+    try ensureNoError(c.vkEnumeratePhysicalDevices(
+        vulkanInstance,
+        &physicalDevicesLen,
+        physicalDevices.ptr,
+    ));
+
+    var preferred: ?struct { device: c.VkPhysicalDevice, score: u32 } = null;
+    for (physicalDevices) |device| {
+        var score: u32 = 0;
+        var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
+        c.vkGetPhysicalDeviceProperties(device, &deviceProperties);
+        var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
+        c.vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+        // YOU ARE HERE: continue writing the physical device selection logic, and then follow the rest of the vulkan tutorial
+        //
+        // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
+        if (deviceProperties.deviceType == c.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            score += 1000;
+        }
+    }
+
     return .{
         .vulkanInstance = vulkanInstance,
+        .physicalDevice = physicalDevices[0],
         .vulkanDebugMessenger = vulkanDebugMessenger,
     };
 }
