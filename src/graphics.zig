@@ -213,13 +213,13 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
 
                     const message = std.mem.span(callbackData.*.pMessage);
                     if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
-                        std.log.debug("{s}", .{message});
+                        std.log.debug("{s} (vulkan debug messenger)", .{message});
                     } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-                        std.log.info("{s}", .{message});
+                        std.log.info("{s} (vulkan debug messenger)", .{message});
                     } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-                        std.log.warn("{s}", .{message});
+                        std.log.warn("{s} (vulkan debug messenger)", .{message});
                     } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-                        std.log.err("{s}", .{message});
+                        std.log.err("{s} (vulkan debug messenger)", .{message});
                     }
 
                     return c.VK_FALSE;
@@ -255,23 +255,37 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
 
     var preferred: ?struct { device: c.VkPhysicalDevice, score: u32 } = null;
     for (physicalDevices) |device| {
-        var score: u32 = 0;
         var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
         c.vkGetPhysicalDeviceProperties(device, &deviceProperties);
         var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
         c.vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 
-        // YOU ARE HERE: continue writing the physical device selection logic, and then follow the rest of the vulkan tutorial
-        //
-        // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
-        if (deviceProperties.deviceType == c.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+        if (deviceFeatures.geometryShader == c.VK_FALSE) {
+            continue;
+        }
+
+        var score: u32 = deviceProperties.limits.maxImageDimension2D;
+        if (deviceProperties.deviceType != c.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
             score += 1000;
         }
+
+        if (preferred) |currentPreferred| {
+            if (score > currentPreferred.score) {
+                preferred = .{ .device = device, .score = score };
+            }
+        } else {
+            preferred = .{ .device = device, .score = score };
+        }
+    }
+
+    if (preferred == null) {
+        std.log.err("no suitable physical device found", .{});
+        return error.NoSuitablePhysicalDevice;
     }
 
     return .{
         .vulkanInstance = vulkanInstance,
-        .physicalDevice = physicalDevices[0],
+        .physicalDevice = preferred.?.device,
         .vulkanDebugMessenger = vulkanDebugMessenger,
     };
 }
