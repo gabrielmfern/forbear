@@ -261,7 +261,11 @@ const Device = struct {
     presentationQueue: c.VkQueue,
 };
 
-fn createDevice(self: @This(), surface: c.VkSurfaceKHR, allocator: std.mem.Allocator) !Device {
+pub fn createDevice(
+    self: @This(),
+    surface: c.VkSurfaceKHR,
+    allocator: std.mem.Allocator,
+) !Device {
     var physicalDevicesLen: u32 = undefined;
     try ensureNoError(c.vkEnumeratePhysicalDevices(
         self.vulkanInstance,
@@ -330,11 +334,35 @@ fn createDevice(self: @This(), surface: c.VkSurfaceKHR, allocator: std.mem.Alloc
     }
 
     const physicalDevice = preferred.?.device;
-    const graphicsQueueIndex = preferred.?.graphicsQueueIndex;
+    const graphicsQueueIndex = preferred.?.queues.graphics;
+    const presentationQueueIndex = preferred.?.queues.presentation;
 
     const logicalDeviceExtensions = []const [*c]const u8{
         c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     };
+
+    const queueCreateInfos = if (graphicsQueueIndex == presentationQueueIndex) []const c.VkDeviceQueueCreateInfo{.{
+        .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pNext = null,
+        .flags = 0,
+        .queueFamilyIndex = graphicsQueueIndex,
+        .queueCount = 1,
+        .pQueuePriorities = &1.0,
+    }} else []const c.VkDeviceQueueCreateInfo{ .{
+        .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pNext = null,
+        .flags = 0,
+        .queueFamilyIndex = graphicsQueueIndex,
+        .queueCount = 1,
+        .pQueuePriorities = &1.0,
+    }, .{
+        .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pNext = null,
+        .flags = 0,
+        .queueFamilyIndex = presentationQueueIndex,
+        .queueCount = 1,
+        .pQueuePriorities = &1.0,
+    } };
 
     var logicalDevice: c.VkDevice = undefined;
     try ensureNoError(c.vkCreateDevice(
@@ -343,16 +371,9 @@ fn createDevice(self: @This(), surface: c.VkSurfaceKHR, allocator: std.mem.Alloc
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
             .pNext = null,
             .flags = 0,
-            .queueCreateInfoCount = 1,
+            .queueCreateInfoCount = queueCreateInfos.len,
             // YOU ARE HERE: you were going to add the creation info for the presentation queue
-            .pQueueCreateInfos = &c.VkDeviceQueueCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                .pNext = null,
-                .flags = 0,
-                .queueFamilyIndex = graphicsQueueIndex,
-                .queueCount = 1,
-                .pQueuePriorities = &1.0,
-            },
+            .pQueueCreateInfos = queueCreateInfos.ptr,
             .pEnabledFeatures = std.mem.zeroes(c.VkPhysicalDeviceFeatures),
             .ppEnabledExtensionNames = logicalDeviceExtensions.ptr,
             .enabledExtensionCount = logicalDeviceExtensions.len,
@@ -371,11 +392,16 @@ fn createDevice(self: @This(), surface: c.VkSurfaceKHR, allocator: std.mem.Alloc
     c.vkGetDeviceQueue(logicalDevice, graphicsQueueIndex, 0, &graphicsQueue);
     std.debug.assert(graphicsQueue != null);
 
+    var presentationQueue: c.VkQueue = undefined;
+    c.vkGetDeviceQueue(logicalDevice, presentationQueueIndex, 0, &presentationQueue);
+    std.debug.assert(presentationQueue != null);
+
     return .{
         .physicalDevice = physicalDevice,
 
         .logicalDevice = logicalDevice,
         .graphicsQueue = graphicsQueue,
+        .presentationQueue = presentationQueue,
     };
 }
 
