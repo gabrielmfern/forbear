@@ -30,6 +30,9 @@ pub fn main() !void {
     const device = try graphics.chooseBestDevice(window.vulkanSurface, allocator);
     defer device.deinit();
 
+    const swapchain = try device.createSwapchain(window.vulkanSurface, window.width, window.height);
+    defer swapchain.deinit(device);
+
     while (window.running) {
         try window.handleEvents();
     }
