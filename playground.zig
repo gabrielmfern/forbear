@@ -27,7 +27,8 @@ pub fn main() !void {
     );
     defer window.deinit();
 
-    const device = try graphics.createDevice(window.vulkanSurface, allocator);
+    const device = try graphics.chooseBestDevice(window.vulkanSurface, allocator);
+    defer device.deinit();
 
     while (window.running) {
         try window.handleEvents();

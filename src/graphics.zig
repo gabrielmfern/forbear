@@ -71,7 +71,7 @@ fn ensureNoError(result: c.VkResult) !void {
     std.debug.assert(result == c.VK_SUCCESS);
 }
 
-fn validateLayers(layers: []const [*c]const u8, allocator: std.mem.Allocator) !void {
+fn validateInstanceLayers(layers: []const [*c]const u8, allocator: std.mem.Allocator) !void {
     var availableLayersLen: u32 = 0;
     try ensureNoError(c.vkEnumerateInstanceLayerProperties(
         &availableLayersLen,
@@ -109,7 +109,7 @@ fn validateLayers(layers: []const [*c]const u8, allocator: std.mem.Allocator) !v
     }
 }
 
-fn validateExtensions(extensions: []const [*c]const u8, allocator: std.mem.Allocator) !void {
+fn validateInstanceExtensions(extensions: []const [*c]const u8, allocator: std.mem.Allocator) !void {
     var availableExtensionsLen: u32 = 0;
     try ensureNoError(c.vkEnumerateInstanceExtensionProperties(
         null,
@@ -164,9 +164,9 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
         "VK_LAYER_KHRONOS_validation",
     };
 
-    try validateLayers(instanceLayers, allocator);
+    try validateInstanceLayers(instanceLayers, allocator);
 
-    try validateExtensions(instanceExtensions, allocator);
+    try validateInstanceExtensions(instanceExtensions, allocator);
 
     var vulkanInstance: c.VkInstance = undefined;
     try ensureNoError(c.vkCreateInstance(
@@ -253,15 +253,82 @@ pub fn init(name: [*c]const u8, allocator: std.mem.Allocator) !@This() {
     };
 }
 
+const Graphics = @This();
+
 const Device = struct {
     physicalDevice: c.VkPhysicalDevice,
 
     logicalDevice: c.VkDevice,
     graphicsQueue: c.VkQueue,
     presentationQueue: c.VkQueue,
+
+    pub fn deinit(self: @This()) void {
+        c.vkDestroyDevice(
+            self.logicalDevice,
+            // TODO: define a proper allocator here using an allocator from the outside
+            null,
+        );
+    }
 };
 
-pub fn createDevice(
+const SwapchainSupportDetails = struct {
+    capabilities: c.VkSurfaceCapabilitiesKHR,
+    formats: []c.VkSurfaceFormatKHR,
+    presentModes: []c.VkPresentModeKHR,
+};
+
+fn querySwapchainSupport(
+    device: c.VkPhysicalDevice,
+    surface: c.VkSurfaceKHR,
+    allocator: std.mem.Allocator,
+) !SwapchainSupportDetails {
+    var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
+    try ensureNoError(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        device,
+        surface,
+        &capabilities,
+    ));
+
+    var formatsLen: u32 = 0;
+    try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
+        device,
+        surface,
+        &formatsLen,
+        null,
+    ));
+    const formats = try allocator.alloc(c.VkSurfaceFormatKHR, @intCast(formatsLen));
+    defer allocator.free(formats);
+    try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
+        device,
+        surface,
+        &formatsLen,
+        formats.ptr,
+    ));
+
+    var presentModesLen: u32 = 0;
+    try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
+        device,
+        surface,
+        &presentModesLen,
+        null,
+    ));
+    const presentModes = try allocator.alloc(c.VkPresentModeKHR, @intCast(presentModesLen));
+    defer allocator.free(presentModes);
+    try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
+        device,
+        surface,
+        &presentModesLen,
+        presentModes.ptr,
+    ));
+
+    return .{
+        .capabilities = capabilities,
+        .formats = formats,
+        .presentModes = presentModes,
+    };
+}
+
+pub fn chooseBestDevice(
     self: @This(),
     surface: c.VkSurfaceKHR,
     allocator: std.mem.Allocator,
@@ -283,13 +350,18 @@ pub fn createDevice(
         physicalDevices.ptr,
     ));
 
+    const logicalDeviceExtensions: []const [*c]const u8 = &.{
+        c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    };
+
     var preferred: ?struct {
         device: c.VkPhysicalDevice,
         features: c.VkPhysicalDeviceFeatures,
+        swapchainSupport: SwapchainSupportDetails,
         queues: QueueIndices,
         score: u32,
     } = null;
-    for (physicalDevices) |device| {
+    blk: for (physicalDevices) |device| {
         var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
         c.vkGetPhysicalDeviceProperties(device, &deviceProperties);
         var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
@@ -309,12 +381,40 @@ pub fn createDevice(
             score += 1000;
         }
 
+        var deviceExtensionsLen: u32 = 0;
+        try ensureNoError(c.vkEnumerateDeviceExtensionProperties(device, null, &deviceExtensionsLen, null));
+        const deviceExtensions = try allocator.alloc(c.VkExtensionProperties, @intCast(deviceExtensionsLen));
+
+        for (logicalDeviceExtensions) |extension| {
+            const extensionSlice = std.mem.span(extension);
+            var supported = false;
+            for (deviceExtensions) |availableExtension| {
+                if (std.mem.eql(
+                    u8,
+                    availableExtension.extensionName[0..extensionSlice.len],
+                    extensionSlice,
+                )) {
+                    supported = true;
+                    break;
+                }
+            }
+            if (supported == false) {
+                continue :blk;
+            }
+        }
+
+        const swapchainSupport = try querySwapchainSupport(device, surface, allocator);
+        if (swapchainSupport.formats.len == 0 or swapchainSupport.presentModes.len == 0) {
+            continue;
+        }
+
         if (preferred) |currentPreferred| {
             if (score > currentPreferred.score) {
                 preferred = .{
                     .device = device,
                     .features = deviceFeatures,
-                    .queues = queueIndices,
+                    .queues = queueIndices.?,
+                    .swapchainSupport = swapchainSupport,
                     .score = score,
                 };
             }
@@ -322,13 +422,14 @@ pub fn createDevice(
             preferred = .{
                 .device = device,
                 .features = deviceFeatures,
-                .queues = queueIndices,
+                .queues = queueIndices.?,
+                .swapchainSupport = swapchainSupport,
                 .score = score,
             };
         }
     }
 
-    if (preferred) {
+    if (preferred == null) {
         std.log.err("no suitable physical device found", .{});
         return error.NoSuitablePhysicalDevice;
     }
@@ -337,31 +438,27 @@ pub fn createDevice(
     const graphicsQueueIndex = preferred.?.queues.graphics;
     const presentationQueueIndex = preferred.?.queues.presentation;
 
-    const logicalDeviceExtensions = []const [*c]const u8{
-        c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    };
-
-    const queueCreateInfos = if (graphicsQueueIndex == presentationQueueIndex) []const c.VkDeviceQueueCreateInfo{.{
+    const queueCreateInfos: []const c.VkDeviceQueueCreateInfo = if (graphicsQueueIndex == presentationQueueIndex) &.{.{
         .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .pNext = null,
         .flags = 0,
         .queueFamilyIndex = graphicsQueueIndex,
         .queueCount = 1,
-        .pQueuePriorities = &1.0,
-    }} else []const c.VkDeviceQueueCreateInfo{ .{
+        .pQueuePriorities = &@as(f32, 1.0),
+    }} else &.{ .{
         .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .pNext = null,
         .flags = 0,
         .queueFamilyIndex = graphicsQueueIndex,
         .queueCount = 1,
-        .pQueuePriorities = &1.0,
+        .pQueuePriorities = &@as(f32, 1.0),
     }, .{
         .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .pNext = null,
         .flags = 0,
         .queueFamilyIndex = presentationQueueIndex,
         .queueCount = 1,
-        .pQueuePriorities = &1.0,
+        .pQueuePriorities = &@as(f32, 1.0),
     } };
 
     var logicalDevice: c.VkDevice = undefined;
@@ -371,12 +468,12 @@ pub fn createDevice(
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
             .pNext = null,
             .flags = 0,
-            .queueCreateInfoCount = queueCreateInfos.len,
+            .queueCreateInfoCount = @intCast(queueCreateInfos.len),
             // YOU ARE HERE: you were going to add the creation info for the presentation queue
             .pQueueCreateInfos = queueCreateInfos.ptr,
-            .pEnabledFeatures = std.mem.zeroes(c.VkPhysicalDeviceFeatures),
+            .pEnabledFeatures = null,
             .ppEnabledExtensionNames = logicalDeviceExtensions.ptr,
-            .enabledExtensionCount = logicalDeviceExtensions.len,
+            .enabledExtensionCount = @intCast(logicalDeviceExtensions.len),
 
             // These are deprecated, and we don't need them
             .enabledLayerCount = 0,
@@ -438,19 +535,19 @@ fn getQueueIndices(
 
     for (queueFamilies, 0..) |queueFamily, index| {
         if ((queueFamily.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0) {
-            graphics = index;
+            graphics = @intCast(index);
         }
 
         var supportsPresentation: u32 = c.VK_FALSE;
         try ensureNoError(c.vkGetPhysicalDeviceSurfaceSupportKHR(
             device,
-            index,
+            @intCast(index),
             surface,
             &supportsPresentation,
         ));
 
         if (supportsPresentation == c.VK_TRUE) {
-            presentation = index;
+            presentation = @intCast(index);
         }
 
         if (graphics != null and presentation != null) {
@@ -490,11 +587,6 @@ pub fn deinit(self: @This()) void {
     DestroyDebugUtilsMessengerEXT(
         self.vulkanInstance,
         self.vulkanDebugMessenger,
-        // TODO: define a proper allocator here using an allocator from the outside
-        null,
-    );
-    c.vkDestroyDevice(
-        self.logicalDevice,
         // TODO: define a proper allocator here using an allocator from the outside
         null,
     );
