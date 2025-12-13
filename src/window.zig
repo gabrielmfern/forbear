@@ -1,7 +1,6 @@
 const std = @import("std");
 const posix = std.posix;
 const os = std.os;
-const Graphics = @import("graphics.zig");
 
 const c = @import("c.zig").c;
 
@@ -37,8 +36,6 @@ wlSurface: *c.wl_surface,
 xdgSurface: *c.xdg_surface,
 xdgToplevel: *c.xdg_toplevel,
 
-vulkanSurface: c.VkSurfaceKHR,
-
 // Window state
 width: u32,
 height: u32,
@@ -48,7 +45,6 @@ running: bool,
 
 handlers: Handlers,
 
-graphics: Graphics,
 allocator: std.mem.Allocator,
 
 fn BindingInfo(T: type) type {
@@ -411,7 +407,6 @@ const wlKeyboardListener: c.wl_keyboard_listener = .{
 pub fn init(
     width: u32,
     height: u32,
-    graphics: Graphics,
     title: [:0]const u8,
     app_id: [:0]const u8,
     allocator: std.mem.Allocator,
@@ -468,12 +463,6 @@ pub fn init(
     c.xdg_toplevel_set_title(window.xdgToplevel, title.ptr);
     c.xdg_toplevel_set_app_id(window.xdgToplevel, app_id.ptr);
     c.wl_surface_commit(window.wlSurface);
-
-    window.vulkanSurface = try graphics.createWaylandSurface(
-        window.wlDisplay,
-        window.wlSurface,
-    );
-    window.graphics = graphics;
 
     // gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     // gl.enable(gl.BLEND);
@@ -549,7 +538,6 @@ pub fn handleEvents(self: *Self) !void {
 // }
 
 pub fn deinit(self: *Self) void {
-    c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.vulkanSurface, null);
     c.xdg_toplevel_destroy(self.xdgToplevel);
     c.xdg_surface_destroy(self.xdgSurface);
 

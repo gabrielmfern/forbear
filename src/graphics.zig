@@ -1,7 +1,7 @@
 const std = @import("std");
 const c = @import("c.zig").c;
 
-fn CreateDebugUtilsMessengerEXT(
+pub fn CreateDebugUtilsMessengerEXT(
     instance: c.VkInstance,
     pCreateInfo: [*c]const c.VkDebugUtilsMessengerCreateInfoEXT,
     pAllocator: [*c]const c.VkAllocationCallbacks,
@@ -18,7 +18,7 @@ fn CreateDebugUtilsMessengerEXT(
     }
 }
 
-fn DestroyDebugUtilsMessengerEXT(
+pub fn DestroyDebugUtilsMessengerEXT(
     instance: c.VkInstance,
     debugMessenger: c.VkDebugUtilsMessengerEXT,
     pAllocator: [*c]const c.VkAllocationCallbacks,
@@ -29,7 +29,7 @@ fn DestroyDebugUtilsMessengerEXT(
     }
 }
 
-const VulkanError = error{
+pub const VulkanError = error{
     ExtensioNotPresent,
     IncompatibleDriver,
     InitializationFailed,
@@ -43,10 +43,12 @@ const VulkanError = error{
     NativeWindowInUse,
     SurfaceLost,
     CompressionExhausted,
+    InvalidOpaqueCaptureAddress,
+    InvalidShaderNv,
     Unknown,
 };
 
-fn ensureNoError(result: c.VkResult) !void {
+pub fn ensureNoError(result: c.VkResult) !void {
     if (result == c.VK_ERROR_EXTENSION_NOT_PRESENT) {
         return error.ExtensioNotPresent;
     } else if (result == c.VK_ERROR_INCOMPATIBLE_DRIVER) {
@@ -73,6 +75,10 @@ fn ensureNoError(result: c.VkResult) !void {
         return error.SurfaceLost;
     } else if (result == c.VK_ERROR_COMPRESSION_EXHAUSTED_EXT) {
         return error.CompressionExhausted;
+    } else if (result == c.VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR) {
+        return error.InvalidOpaqueCaptureAddress;
+    } else if (result == c.VK_ERROR_INVALID_SHADER_NV) {
+        return error.InvalidShaderNv;
     } else if (result == c.VK_ERROR_UNKNOWN) {
         return error.Unknown;
     }
@@ -294,6 +300,39 @@ const Swapchain = struct {
             images.ptr,
         ));
         return images;
+    }
+
+    pub fn getImageViews(self: @This(), images: []const c.VkImage, device: c.VkDevice, allocator: std.mem.Allocator) ![]c.VkImageView {
+        var imageViews = try allocator.alloc(c.VkImageView, images.len);
+        for (images, 0..) |image, i| {
+            try ensureNoError(c.vkCreateImageView(
+                device,
+                &c.VkImageViewCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .image = image,
+                    .pNext = null,
+                    .flags = 0,
+                    .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+                    .format = self.imageFormat,
+                    .components = c.VkComponentMapping{
+                        .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                    .subresourceRange = c.VkImageSubresourceRange{
+                        .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                },
+                // TODO: define a proper allocator here using an allocator from the outside
+                null,
+                &imageViews[i],
+            ));
+        }
     }
 };
 

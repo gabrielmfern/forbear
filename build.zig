@@ -49,7 +49,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
 
     {
-        const playground = b.createModule(.{
+        // Playground
+        const playground = b.addModule("playground", .{
             .root_source_file = b.path("playground.zig"),
             .link_libc = true,
             .target = target,
@@ -60,7 +61,39 @@ pub fn build(b: *std.Build) void {
         playground.linkSystemLibrary("vulkan", .{ .needed = true });
         playground.addImport("forbear", forbear);
 
-        // Playground
+        const spirv_target = b.resolveTargetQuery(.{
+            .cpu_arch = .spirv64,
+            .os_tag = .vulkan,
+            .cpu_model = .{ .explicit = &std.Target.spirv.cpu.vulkan_v1_2 },
+            .ofmt = .spirv,
+        });
+
+        const vert_spv = b.addObject(.{
+            .name = "triangle_vertex_shader",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("shaders/triangle/vertex.zig"),
+                .target = spirv_target,
+            }),
+            .use_llvm = false,
+        });
+        playground.addAnonymousImport(
+            "triangle_vertex_shader",
+            .{ .root_source_file = vert_spv.getEmittedBin() },
+        );
+
+        const frag_spv = b.addObject(.{
+            .name = "triangle_fragment_shader",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("shaders/triangle/fragment.zig"),
+                .target = spirv_target,
+            }),
+            .use_llvm = false,
+        });
+        playground.addAnonymousImport(
+            "triangle_fragment_shader",
+            .{ .root_source_file = frag_spv.getEmittedBin() },
+        );
+
         const playground_exe = b.addExecutable(.{
             .name = "playground",
             .use_llvm = true,
