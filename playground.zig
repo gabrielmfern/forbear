@@ -487,12 +487,19 @@ pub fn main() !void {
         physicalDevice,
         &c.VkDeviceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .pNext = null,
+            .pNext = &c.VkPhysicalDeviceVulkan12Features{
+                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                .bufferDeviceAddress = c.VK_TRUE,
+                .shaderInt8 = c.VK_TRUE,
+            },
             .flags = 0,
             .queueCreateInfoCount = @intCast(queueCreateInfos.len),
             // YOU ARE HERE: you were going to add the creation info for the presentation queue
             .pQueueCreateInfos = queueCreateInfos.ptr,
-            .pEnabledFeatures = &c.VkPhysicalDeviceFeatures{},
+            .pEnabledFeatures = &c.VkPhysicalDeviceFeatures{
+                .shaderInt16 = c.VK_TRUE,
+                .shaderInt64 = c.VK_TRUE,
+            },
             .ppEnabledExtensionNames = requiredDeviceExtensions.ptr,
             .enabledExtensionCount = @intCast(requiredDeviceExtensions.len),
 
