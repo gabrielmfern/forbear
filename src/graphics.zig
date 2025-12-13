@@ -266,6 +266,8 @@ const Graphics = @This();
 
 const Swapchain = struct {
     swapchain: c.VkSwapchainKHR,
+    extent: c.VkExtent2D,
+    imageFormat: c.VkFormat,
 
     pub fn deinit(self: @This(), device: Device) void {
         c.vkDestroySwapchainKHR(
@@ -274,6 +276,24 @@ const Swapchain = struct {
             // TODO: define a proper allocator here using an allocator from the outside
             null,
         );
+    }
+
+    pub fn getImages(self: @This(), device: Device, allocator: std.mem.Allocator) ![]c.VkImage {
+        var imageCount: u32 = 0;
+        try ensureNoError(c.vkGetSwapchainImagesKHR(
+            device.logicalDevice,
+            self.swapchain,
+            &imageCount,
+            null,
+        ));
+        const images = try allocator.alloc(c.VkImage, @intCast(imageCount));
+        try ensureNoError(c.vkGetSwapchainImagesKHR(
+            device.logicalDevice,
+            self.swapchain,
+            &imageCount,
+            images.ptr,
+        ));
+        return images;
     }
 };
 
@@ -364,6 +384,8 @@ const Device = struct {
 
         return Swapchain{
             .swapchain = swapchain,
+            .imageFormat = surfaceFormat.format,
+            .extent = swapExtent,
         };
     }
 
