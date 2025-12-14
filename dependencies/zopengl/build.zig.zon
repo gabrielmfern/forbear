@@ -1,0 +1,13 @@
+.{
+    .name = .zopengl,
+    .version = "0.6.0-dev",
+    .fingerprint = 0xf50d3c53cf67ebe7,
+    .minimum_zig_version = "0.14.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "README.md",
+        "LICENSE",
+    },
+}

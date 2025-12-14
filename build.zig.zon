@@ -3,7 +3,11 @@
     .version = "0.0.0",
     .fingerprint = 0x1264d4344639428e,
     .minimum_zig_version = "0.15.2",
-    .dependencies = .{},
+    .dependencies = .{
+        .zopengl = .{
+            .path = "./dependencies/zopengl",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

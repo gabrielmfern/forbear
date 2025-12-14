@@ -8,7 +8,4 @@ pub const c = @cImport({
     @cInclude("sys/mman.h");
     @cInclude("fcntl.h");
     @cInclude("errno.h");
-
-    @cInclude("vulkan/vulkan.h");
-    @cInclude("vulkan/vulkan_wayland.h");
 });
