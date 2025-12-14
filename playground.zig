@@ -922,6 +922,7 @@ pub fn main() !void {
         },
         &commandBuffer,
     ));
+    defer c.vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
 
     var imageAvailableSemaphore: c.VkSemaphore = undefined;
     try ensureNoError(c.vkCreateSemaphore(
