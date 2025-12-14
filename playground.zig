@@ -610,7 +610,12 @@ pub fn main() !void {
     ));
 
     var imageViews = try allocator.alloc(c.VkImageView, swapChainImages.len);
-    defer allocator.free(imageViews);
+    defer {
+        for (imageViews) |imageView| {
+            c.vkDestroyImageView(logicalDevice, imageView, null);
+        }
+        allocator.free(imageViews);
+    }
     for (swapChainImages, 0..) |image, i| {
         try ensureNoError(c.vkCreateImageView(
             logicalDevice,
@@ -1055,4 +1060,6 @@ pub fn main() !void {
             .pResults = null,
         }));
     }
+
+    try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
 }
