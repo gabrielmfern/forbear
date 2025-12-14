@@ -908,14 +908,106 @@ pub fn main() !void {
         &commandBuffer,
     ));
 
-    try ensureNoError(c.vkBeginCommandBuffer(&commandBuffer, &.{
+    try ensureNoError(c.vkBeginCommandBuffer(&commandBuffer, &c.VkCommandBufferBeginInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext = null,
         .flags = 0,
         .pInheritanceInfo = null,
     }));
+    c.vkCmdBeginRenderPass(
+        commandBuffer,
+        &c.VkRenderPassBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .pNext = null,
+            .renderPass = renderPass,
+            .framebuffer = swapchainFramebuffers[0],
+            .renderArea = c.VkRect2D{
+                .offset = c.VkOffset2D{ .x = 0, .y = 0 },
+                .extent = swapchainExtent,
+            },
+            .clearValueCount = 1,
+            .pClearValues = &c.VkClearValue{
+                .color = c.VkClearColorValue{
+                    .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
+                },
+            },
+        },
+        c.VK_SUBPASS_CONTENTS_INLINE,
+    );
+    c.vkCmdBindPipeline(
+        commandBuffer,
+        c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        graphicsPipeline,
+    );
+    c.vkCmdSetViewport(commandBuffer, 0, 1, &[_]c.VkViewport{c.VkViewport{
+        .x = 0.0,
+        .y = 0.0,
+        .width = @floatFromInt(swapchainExtent.width),
+        .height = @floatFromInt(swapchainExtent.height),
+        .minDepth = 0.0,
+        .maxDepth = 1.0,
+    }});
+    c.vkCmdSetScissor(commandBuffer, 0, 1, &[_]c.VkRect2D{c.VkRect2D{
+        .offset = c.VkOffset2D{ .x = 0, .y = 0 },
+        .extent = swapchainExtent,
+    }});
+    c.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    c.vkCmdEndRenderPass(commandBuffer);
+    try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
+
+    var imageAvailableSemaphore: c.VkSemaphore = undefined;
+    try ensureNoError(c.vkCreateSemaphore(
+        logicalDevice,
+        &c.VkSemaphoreCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        },
+        null,
+        &imageAvailableSemaphore,
+    ));
+    defer c.vkDestroySemaphore(logicalDevice, imageAvailableSemaphore, null);
+    var renderFinishedSemaphore: c.VkSemaphore = undefined;
+    try ensureNoError(c.vkCreateSemaphore(
+        logicalDevice,
+        &c.VkSemaphoreCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        },
+        null,
+        &renderFinishedSemaphore,
+    ));
+    defer c.vkDestroySemaphore(logicalDevice, renderFinishedSemaphore, null);
+    var inFlightFence: c.VkFence = undefined;
+    try ensureNoError(c.vkCreateFence(
+        logicalDevice,
+        &c.VkFenceCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
+        },
+        null,
+        &inFlightFence,
+    ));
+    defer c.vkDestroyFence(logicalDevice, inFlightFence, null);
 
     while (window.running) {
         try window.handleEvents();
+
+        try ensureNoError(c.vkWaitForFences(
+            logicalDevice,
+            1,
+            &inFlightFence,
+            c.VK_TRUE,
+            std.math.maxInt(u64),
+        ));
+        try ensureNoError(c.vkResetFences(logicalDevice, 1, &inFlightFence));
+        var imageIndex: u32 = undefined;
+        try ensureNoError(c.vkAcquireNextImageKHR(
+            logicalDevice,
+            swapchain,
+            std.math.maxInt(u64),
+            imageAvailableSemaphore,
+            null,
+            &imageIndex,
+        ));
+        try ensureNoError(c.vkResetCommandBuffer(commandBuffer, 0));
+        try ensureNoError(c.vkResetCommandBuffer(commandBuffer, imageIndex));
     }
 }
