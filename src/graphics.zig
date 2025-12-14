@@ -48,6 +48,7 @@ pub const VulkanError = error{
     InvalidVideoStdParameters,
     FullScreenExclusiveModeLost,
     OutOfDate,
+    PresentTimingQueueFullExt,
     Unknown,
 };
 
@@ -88,6 +89,8 @@ pub fn ensureNoError(result: c.VkResult) !void {
         return error.FullScreenExclusiveModeLost;
     } else if (result == c.VK_ERROR_OUT_OF_DATE_KHR) {
         return error.OutOfDate;
+    } else if (result == c.VK_ERROR_PRESENT_TIMING_QUEUE_FULL_EXT) {
+        return error.PresentTimingQueueFullExt;
     } else if (result == c.VK_ERROR_UNKNOWN) {
         return error.Unknown;
     }

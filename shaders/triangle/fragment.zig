@@ -9,5 +9,5 @@ export fn main() callconv(.spirv_fragment) void {
     gpu.location(&outColor, 0);
     gpu.location(&vertexColor, 0);
 
-    outColor = .{ 1.0, 0.0, 0.0, 1.0 };
+    outColor = vertexColor;
 }

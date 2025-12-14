@@ -422,6 +422,7 @@ pub fn main() !void {
 
         const swapchainSupport = try querySwapchainSupport(device, vulkanSurface, allocator);
         if (swapchainSupport.formats.len == 0 or swapchainSupport.presentModes.len == 0) {
+            swapchainSupport.deinit();
             continue;
         }
 
@@ -455,6 +456,7 @@ pub fn main() !void {
     const graphicsQueueFamilyIndex = preferred.?.queues.graphics;
     const presentationQueueFamilyIndex = preferred.?.queues.presentation;
     const swapchainSupportDetails = preferred.?.swapchainSupport;
+    defer swapchainSupportDetails.deinit();
 
     const queueCreateInfos: []const c.VkDeviceQueueCreateInfo = if (graphicsQueueFamilyIndex == presentationQueueFamilyIndex) &.{.{
         .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -728,6 +730,16 @@ pub fn main() !void {
     ));
     defer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
 
+    const renderPassDependencies: []const c.VkSubpassDependency = &.{
+        c.VkSubpassDependency{
+            .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+            .dstSubpass = 0,
+            .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .srcAccessMask = 0,
+            .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        },
+    };
     var renderPass: c.VkRenderPass = undefined;
     try ensureNoError(c.vkCreateRenderPass(
         logicalDevice,
@@ -754,6 +766,9 @@ pub fn main() !void {
                     .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 },
             },
+            .flags = 0,
+            .dependencyCount = @intCast(renderPassDependencies.len),
+            .pDependencies = renderPassDependencies.ptr,
         },
         null,
         &renderPass,
@@ -908,53 +923,6 @@ pub fn main() !void {
         &commandBuffer,
     ));
 
-    try ensureNoError(c.vkBeginCommandBuffer(&commandBuffer, &c.VkCommandBufferBeginInfo{
-        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = null,
-        .flags = 0,
-        .pInheritanceInfo = null,
-    }));
-    c.vkCmdBeginRenderPass(
-        commandBuffer,
-        &c.VkRenderPassBeginInfo{
-            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .pNext = null,
-            .renderPass = renderPass,
-            .framebuffer = swapchainFramebuffers[0],
-            .renderArea = c.VkRect2D{
-                .offset = c.VkOffset2D{ .x = 0, .y = 0 },
-                .extent = swapchainExtent,
-            },
-            .clearValueCount = 1,
-            .pClearValues = &c.VkClearValue{
-                .color = c.VkClearColorValue{
-                    .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
-                },
-            },
-        },
-        c.VK_SUBPASS_CONTENTS_INLINE,
-    );
-    c.vkCmdBindPipeline(
-        commandBuffer,
-        c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-        graphicsPipeline,
-    );
-    c.vkCmdSetViewport(commandBuffer, 0, 1, &[_]c.VkViewport{c.VkViewport{
-        .x = 0.0,
-        .y = 0.0,
-        .width = @floatFromInt(swapchainExtent.width),
-        .height = @floatFromInt(swapchainExtent.height),
-        .minDepth = 0.0,
-        .maxDepth = 1.0,
-    }});
-    c.vkCmdSetScissor(commandBuffer, 0, 1, &[_]c.VkRect2D{c.VkRect2D{
-        .offset = c.VkOffset2D{ .x = 0, .y = 0 },
-        .extent = swapchainExtent,
-    }});
-    c.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-    c.vkCmdEndRenderPass(commandBuffer);
-    try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
-
     var imageAvailableSemaphore: c.VkSemaphore = undefined;
     try ensureNoError(c.vkCreateSemaphore(
         logicalDevice,
@@ -1008,6 +976,82 @@ pub fn main() !void {
             &imageIndex,
         ));
         try ensureNoError(c.vkResetCommandBuffer(commandBuffer, 0));
-        try ensureNoError(c.vkResetCommandBuffer(commandBuffer, imageIndex));
+
+        try ensureNoError(c.vkBeginCommandBuffer(commandBuffer, &c.VkCommandBufferBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = null,
+            .flags = 0,
+            .pInheritanceInfo = null,
+        }));
+        c.vkCmdBeginRenderPass(
+            commandBuffer,
+            &c.VkRenderPassBeginInfo{
+                .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                .pNext = null,
+                .renderPass = renderPass,
+                .framebuffer = swapchainFramebuffers[imageIndex],
+                .renderArea = c.VkRect2D{
+                    .offset = c.VkOffset2D{ .x = 0, .y = 0 },
+                    .extent = swapchainExtent,
+                },
+                .clearValueCount = 1,
+                .pClearValues = &c.VkClearValue{
+                    .color = c.VkClearColorValue{
+                        .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
+                    },
+                },
+            },
+            c.VK_SUBPASS_CONTENTS_INLINE,
+        );
+        c.vkCmdBindPipeline(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            graphicsPipeline,
+        );
+        c.vkCmdSetViewport(commandBuffer, 0, 1, &[_]c.VkViewport{c.VkViewport{
+            .x = 0.0,
+            .y = 0.0,
+            .width = @floatFromInt(swapchainExtent.width),
+            .height = @floatFromInt(swapchainExtent.height),
+            .minDepth = 0.0,
+            .maxDepth = 1.0,
+        }});
+        c.vkCmdSetScissor(commandBuffer, 0, 1, &[_]c.VkRect2D{c.VkRect2D{
+            .offset = c.VkOffset2D{ .x = 0, .y = 0 },
+            .extent = swapchainExtent,
+        }});
+        c.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        c.vkCmdEndRenderPass(commandBuffer);
+        try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
+
+        const waitSemaphores: []const c.VkSemaphore = &.{imageAvailableSemaphore};
+        const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphore};
+        const waitStages: []const c.VkPipelineStageFlags = &.{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        try ensureNoError(c.vkQueueSubmit(
+            graphicsQueue,
+            1,
+            &c.VkSubmitInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .pNext = null,
+                .waitSemaphoreCount = @intCast(waitSemaphores.len),
+                .pWaitSemaphores = waitSemaphores.ptr,
+                .pWaitDstStageMask = waitStages.ptr,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &commandBuffer,
+                .signalSemaphoreCount = @intCast(signalSemaphores.len),
+                .pSignalSemaphores = signalSemaphores.ptr,
+            },
+            inFlightFence,
+        ));
+
+        try ensureNoError(c.vkQueuePresentKHR(presentationQueue, &c.VkPresentInfoKHR{
+            .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = @intCast(signalSemaphores.len),
+            .pWaitSemaphores = signalSemaphores.ptr,
+            .swapchainCount = 1,
+            .pSwapchains = &swapchain,
+            .pImageIndices = &imageIndex,
+            .pResults = null,
+        }));
     }
 }
