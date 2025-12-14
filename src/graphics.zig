@@ -45,6 +45,9 @@ pub const VulkanError = error{
     CompressionExhausted,
     InvalidOpaqueCaptureAddress,
     InvalidShaderNv,
+    InvalidVideoStdParameters,
+    FullScreenExclusiveModeLost,
+    OutOfDate,
     Unknown,
 };
 
@@ -79,6 +82,12 @@ pub fn ensureNoError(result: c.VkResult) !void {
         return error.InvalidOpaqueCaptureAddress;
     } else if (result == c.VK_ERROR_INVALID_SHADER_NV) {
         return error.InvalidShaderNv;
+    } else if (result == c.VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR) {
+        return error.InvalidVideoStdParameters;
+    } else if (result == c.VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT) {
+        return error.FullScreenExclusiveModeLost;
+    } else if (result == c.VK_ERROR_OUT_OF_DATE_KHR) {
+        return error.OutOfDate;
     } else if (result == c.VK_ERROR_UNKNOWN) {
         return error.Unknown;
     }
