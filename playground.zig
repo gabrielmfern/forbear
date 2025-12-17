@@ -14,6 +14,12 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
+    const graphics = try forbear.Graphics.init(
+        "forbear playground",
+        allocator,
+    );
+    defer graphics.deinit();
+
     const window = try forbear.Window.init(
         800,
         600,
@@ -23,17 +29,19 @@ pub fn main() !void {
     );
     defer window.deinit();
 
-    const graphics = try forbear.Graphics.init(
-        "forbear playground",
-        window,
+    const renderer = try graphics.initWaylandRenderer(
+        window.wlDisplay,
+        window.wlSurface,
+        window.width,
+        window.height,
         triangleVertexShader,
         triangleFragmentShader,
         allocator,
     );
-    defer graphics.deinit();
+    defer renderer.deinit();
 
     while (window.running) {
         try window.handleEvents();
-        try graphics.drawFrame();
+        try renderer.drawFrame();
     }
 }
