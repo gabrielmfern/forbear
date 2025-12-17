@@ -915,7 +915,9 @@ pub fn main() !void {
     ));
     defer c.vkDestroyCommandPool(logicalDevice, commandPool, null);
 
-    var commandBuffer: c.VkCommandBuffer = undefined;
+    const maxFramesInFlight = 2;
+
+    var commandBuffers: [maxFramesInFlight]c.VkCommandBuffer = undefined;
     try ensureNoError(c.vkAllocateCommandBuffers(
         logicalDevice,
         &c.VkCommandBufferAllocateInfo{
@@ -923,43 +925,59 @@ pub fn main() !void {
             .pNext = null,
             .commandPool = commandPool,
             .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = 1,
+            .commandBufferCount = maxFramesInFlight,
         },
-        &commandBuffer,
+        &commandBuffers,
     ));
-    defer c.vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
+    defer c.vkFreeCommandBuffers(logicalDevice, commandPool, maxFramesInFlight, &commandBuffers);
 
-    var imageAvailableSemaphore: c.VkSemaphore = undefined;
-    try ensureNoError(c.vkCreateSemaphore(
-        logicalDevice,
-        &c.VkSemaphoreCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        },
-        null,
-        &imageAvailableSemaphore,
-    ));
-    defer c.vkDestroySemaphore(logicalDevice, imageAvailableSemaphore, null);
-    var renderFinishedSemaphore: c.VkSemaphore = undefined;
-    try ensureNoError(c.vkCreateSemaphore(
-        logicalDevice,
-        &c.VkSemaphoreCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        },
-        null,
-        &renderFinishedSemaphore,
-    ));
-    defer c.vkDestroySemaphore(logicalDevice, renderFinishedSemaphore, null);
-    var inFlightFence: c.VkFence = undefined;
-    try ensureNoError(c.vkCreateFence(
-        logicalDevice,
-        &c.VkFenceCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-            .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
-        },
-        null,
-        &inFlightFence,
-    ));
-    defer c.vkDestroyFence(logicalDevice, inFlightFence, null);
+    var inFlightFences: [maxFramesInFlight]c.VkFence = undefined;
+    var imageAvailableSemaphores: [maxFramesInFlight]c.VkSemaphore = undefined;
+    for (0..maxFramesInFlight) |i| {
+        try ensureNoError(c.vkCreateFence(
+            logicalDevice,
+            &c.VkFenceCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+                .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
+            },
+            null,
+            &inFlightFences[i],
+        ));
+        try ensureNoError(c.vkCreateSemaphore(
+            logicalDevice,
+            &c.VkSemaphoreCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            },
+            null,
+            &imageAvailableSemaphores[i],
+        ));
+    }
+    defer {
+        for (0..maxFramesInFlight) |i| {
+            c.vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], null);
+            c.vkDestroyFence(logicalDevice, inFlightFences[i], null);
+        }
+    }
+    var renderFinishedSemaphores = try allocator.alloc(c.VkSemaphore, swapChainImages.len);
+    for (0..swapChainImagesLen) |i| {
+        try ensureNoError(c.vkCreateSemaphore(
+            logicalDevice,
+            &c.VkSemaphoreCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            },
+            null,
+            &renderFinishedSemaphores[i],
+        ));
+    }
+    defer {
+        for (0..swapChainImagesLen) |i| {
+            c.vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], null);
+        }
+        allocator.free(renderFinishedSemaphores);
+    }
+
+    var currentFrame: usize = 0;
+    var lastImageIndex: ?usize = null;
 
     while (window.running) {
         try window.handleEvents();
@@ -967,30 +985,31 @@ pub fn main() !void {
         try ensureNoError(c.vkWaitForFences(
             logicalDevice,
             1,
-            &inFlightFence,
+            &inFlightFences[currentFrame],
             c.VK_TRUE,
             std.math.maxInt(u64),
         ));
-        try ensureNoError(c.vkResetFences(logicalDevice, 1, &inFlightFence));
+        try ensureNoError(c.vkResetFences(logicalDevice, 1, &inFlightFences[currentFrame]));
+
         var imageIndex: u32 = undefined;
         try ensureNoError(c.vkAcquireNextImageKHR(
             logicalDevice,
             swapchain,
             std.math.maxInt(u64),
-            imageAvailableSemaphore,
+            imageAvailableSemaphores[currentFrame],
             null,
             &imageIndex,
         ));
-        try ensureNoError(c.vkResetCommandBuffer(commandBuffer, 0));
+        try ensureNoError(c.vkResetCommandBuffer(commandBuffers[currentFrame], 0));
 
-        try ensureNoError(c.vkBeginCommandBuffer(commandBuffer, &c.VkCommandBufferBeginInfo{
+        try ensureNoError(c.vkBeginCommandBuffer(commandBuffers[currentFrame], &c.VkCommandBufferBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .pNext = null,
             .flags = 0,
             .pInheritanceInfo = null,
         }));
         c.vkCmdBeginRenderPass(
-            commandBuffer,
+            commandBuffers[currentFrame],
             &c.VkRenderPassBeginInfo{
                 .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = null,
@@ -1010,11 +1029,11 @@ pub fn main() !void {
             c.VK_SUBPASS_CONTENTS_INLINE,
         );
         c.vkCmdBindPipeline(
-            commandBuffer,
+            commandBuffers[currentFrame],
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
             graphicsPipeline,
         );
-        c.vkCmdSetViewport(commandBuffer, 0, 1, &[_]c.VkViewport{c.VkViewport{
+        c.vkCmdSetViewport(commandBuffers[currentFrame], 0, 1, &[_]c.VkViewport{c.VkViewport{
             .x = 0.0,
             .y = 0.0,
             .width = @floatFromInt(swapchainExtent.width),
@@ -1022,16 +1041,16 @@ pub fn main() !void {
             .minDepth = 0.0,
             .maxDepth = 1.0,
         }});
-        c.vkCmdSetScissor(commandBuffer, 0, 1, &[_]c.VkRect2D{c.VkRect2D{
+        c.vkCmdSetScissor(commandBuffers[currentFrame], 0, 1, &[_]c.VkRect2D{c.VkRect2D{
             .offset = c.VkOffset2D{ .x = 0, .y = 0 },
             .extent = swapchainExtent,
         }});
-        c.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-        c.vkCmdEndRenderPass(commandBuffer);
-        try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
+        c.vkCmdDraw(commandBuffers[currentFrame], 3, 1, 0, 0);
+        c.vkCmdEndRenderPass(commandBuffers[currentFrame]);
+        try ensureNoError(c.vkEndCommandBuffer(commandBuffers[currentFrame]));
 
-        const waitSemaphores: []const c.VkSemaphore = &.{imageAvailableSemaphore};
-        const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphore};
+        const waitSemaphores: []const c.VkSemaphore = &.{imageAvailableSemaphores[currentFrame]};
+        const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphores[imageIndex]};
         const waitStages: []const c.VkPipelineStageFlags = &.{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
         try ensureNoError(c.vkQueueSubmit(
             graphicsQueue,
@@ -1043,11 +1062,11 @@ pub fn main() !void {
                 .pWaitSemaphores = waitSemaphores.ptr,
                 .pWaitDstStageMask = waitStages.ptr,
                 .commandBufferCount = 1,
-                .pCommandBuffers = &commandBuffer,
+                .pCommandBuffers = &commandBuffers[currentFrame],
                 .signalSemaphoreCount = @intCast(signalSemaphores.len),
                 .pSignalSemaphores = signalSemaphores.ptr,
             },
-            inFlightFence,
+            inFlightFences[currentFrame],
         ));
 
         try ensureNoError(c.vkQueuePresentKHR(presentationQueue, &c.VkPresentInfoKHR{
@@ -1059,6 +1078,9 @@ pub fn main() !void {
             .pImageIndices = &imageIndex,
             .pResults = null,
         }));
+
+        lastImageIndex = imageIndex;
+        currentFrame = (currentFrame + 1) % maxFramesInFlight;
     }
 
     try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
