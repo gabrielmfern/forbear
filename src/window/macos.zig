@@ -114,11 +114,13 @@ pool: ?*anyopaque,
 app: c.id,
 window: c.id,
 content_view: c.id,
+metal_layer: c.id,
 
 // Window state
 width: u32,
 height: u32,
 title: [:0]const u8,
+app_id: [:0]const u8,
 running: bool,
 
 allocator: std.mem.Allocator,
@@ -130,7 +132,6 @@ pub fn init(
     app_id: [:0]const u8,
     allocator: std.mem.Allocator,
 ) !*Self {
-    _ = app_id;
     const self = try allocator.create(Self);
     errdefer allocator.destroy(self);
 
@@ -138,6 +139,7 @@ pub fn init(
     self.width = width;
     self.height = height;
     self.title = title;
+    self.app_id = app_id;
     self.running = true;
 
     self.pool = objc_autoreleasePoolPush();
@@ -203,9 +205,18 @@ pub fn init(
     const contentView = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
     self.content_view = contentView(self.window, sel("contentView"));
 
+    self.metal_layer = null;
     if (self.content_view != null) {
         const setWantsLayer = msgSend(*const fn (c.id, c.SEL, BOOL) callconv(.c) void);
         setWantsLayer(self.content_view, sel("setWantsLayer:"), true);
+
+        // MoltenVK expects a CAMetalLayer for presentation.
+        const CAMetalLayer = getClass("CAMetalLayer");
+        const new_id_obj = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
+        self.metal_layer = new_id_obj(CAMetalLayer, sel("new"));
+
+        const setLayer = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
+        setLayer(self.content_view, sel("setLayer:"), self.metal_layer);
     }
 
     const makeKeyAndOrderFront = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
@@ -223,6 +234,11 @@ pub fn init(
 pub fn nativeView(self: *Self) ?*anyopaque {
     if (self.content_view == null) return null;
     return @ptrCast(self.content_view);
+}
+
+pub fn nativeMetalLayer(self: *Self) ?*anyopaque {
+    if (self.metal_layer == null) return null;
+    return @ptrCast(self.metal_layer);
 }
 
 const Cursor = enum {

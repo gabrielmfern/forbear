@@ -4,7 +4,7 @@ const c = @cImport({
         @cDefine("VK_USE_PLATFORM_WAYLAND_KHR", "1");
     }
     if (builtin.os.tag == .macos) {
-        @cDefine("VK_USE_PLATFORM_MACOS_MVK", "1");
+        @cDefine("VK_USE_PLATFORM_METAL_EXT", "1");
     }
 
     @cInclude("vulkan/vulkan.h");
@@ -13,7 +13,7 @@ const c = @cImport({
         @cInclude("vulkan/vulkan_wayland.h");
     }
     if (builtin.os.tag == .macos) {
-        @cInclude("vulkan/vulkan_macos.h");
+        @cInclude("vulkan/vulkan_metal.h");
     }
 });
 const builtin = @import("builtin");
@@ -355,7 +355,7 @@ fn createInstance(self: *Graphics) !void {
         },
         .macos => &.{
             c.VK_KHR_SURFACE_EXTENSION_NAME,
-            "VK_MVK_macos_surface",
+            "VK_EXT_metal_surface",
             c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
             c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
         },
@@ -551,8 +551,8 @@ pub fn initRenderer(
     switch (builtin.os.tag) {
         .linux => return Renderer.initWayland(
             self,
-            window.wlDisplay,
-            window.wlSurface,
+            window.handle.wlDisplay,
+            window.handle.wlSurface,
             window.width.*,
             window.height.*,
             vertex_shader_code,
@@ -561,13 +561,14 @@ pub fn initRenderer(
         ),
         .macos => return Renderer.initCocoa(
             self,
-            window.handle.nativeView(),
+            window.handle.nativeMetalLayer(),
             window.width.*,
             window.height.*,
             vertex_shader_code,
             fragment_shader_code,
             allocator,
         ),
+
         else => return error.UnsupportedPlatform,
     }
 }
@@ -667,14 +668,14 @@ pub const Renderer = struct {
 
     pub fn initCocoa(
         ctx: *Graphics,
-        nsView: ?*anyopaque,
+        caMetalLayer: ?*anyopaque,
         width: u32,
         height: u32,
         vertex_shader_code: []const u32,
         fragment_shader_code: []const u32,
         allocator: std.mem.Allocator,
     ) !*Self {
-        if (nsView == null) return error.NullNativeView;
+        if (caMetalLayer == null) return error.NullNativeView;
 
         const self = try allocator.create(Self);
         errdefer allocator.destroy(self);
@@ -703,13 +704,13 @@ pub const Renderer = struct {
         };
 
         var vulkanSurface: c.VkSurfaceKHR = undefined;
-        try ensureNoError(c.vkCreateMacOSSurfaceMVK(
+        try ensureNoError(c.vkCreateMetalSurfaceEXT(
             self.ctx.vulkanInstance,
-            &c.VkMacOSSurfaceCreateInfoMVK{
-                .sType = c.VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK,
+            &c.VkMetalSurfaceCreateInfoEXT{
+                .sType = c.VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
                 .pNext = null,
                 .flags = 0,
-                .pView = nsView,
+                .pLayer = caMetalLayer,
             },
             null,
             &vulkanSurface,
