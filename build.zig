@@ -12,34 +12,40 @@ pub fn build(b: *std.Build) void {
     });
     forbear.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
     forbear.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-    forbear.linkSystemLibrary("wayland-client", .{});
-    forbear.linkSystemLibrary("wayland-egl", .{});
-    forbear.linkSystemLibrary("wayland-cursor", .{});
-    forbear.linkSystemLibrary("xkbcommon", .{});
+    if (target.result.os.tag == .linux) {
+        forbear.linkSystemLibrary("wayland-client", .{});
+        forbear.linkSystemLibrary("wayland-cursor", .{});
+        forbear.linkSystemLibrary("xkbcommon", .{});
+    }
+    if (target.result.os.tag == .macos) {
+        forbear.linkFramework("Cocoa", .{});
+    }
     forbear.linkSystemLibrary("vulkan", .{});
 
-    const wf = b.addWriteFiles();
-    const xdg_shell_c_cmd = b.addSystemCommand(&.{
-        "wayland-scanner",
-        "private-code",
-        "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
-    });
-    const xdg_shell_c_file = xdg_shell_c_cmd.addOutputFileArg("xdg-shell-protocol.c");
-    const xdg_shell_protocol_c_path = wf.addCopyFile(xdg_shell_c_file, "xdg-shell-protocol.c");
+    if (target.result.os.tag == .linux) {
+        const wf = b.addWriteFiles();
+        const xdg_shell_c_cmd = b.addSystemCommand(&.{
+            "wayland-scanner",
+            "private-code",
+            "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
+        });
+        const xdg_shell_c_file = xdg_shell_c_cmd.addOutputFileArg("xdg-shell-protocol.c");
+        const xdg_shell_protocol_c_path = wf.addCopyFile(xdg_shell_c_file, "xdg-shell-protocol.c");
 
-    const xdg_shell_h_cmd = b.addSystemCommand(&.{
-        "wayland-scanner",
-        "client-header",
-        "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
-    });
-    const xdg_shell_h_file = xdg_shell_h_cmd.addOutputFileArg("xdg-shell-client-protocol.h");
-    _ = wf.addCopyFile(xdg_shell_h_file, "xdg-shell-client-protocol.h");
+        const xdg_shell_h_cmd = b.addSystemCommand(&.{
+            "wayland-scanner",
+            "client-header",
+            "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
+        });
+        const xdg_shell_h_file = xdg_shell_h_cmd.addOutputFileArg("xdg-shell-client-protocol.h");
+        _ = wf.addCopyFile(xdg_shell_h_file, "xdg-shell-client-protocol.h");
 
-    forbear.addIncludePath(wf.getDirectory());
-    forbear.addCSourceFile(.{
-        .file = xdg_shell_protocol_c_path,
-        .flags = &.{},
-    });
+        forbear.addIncludePath(wf.getDirectory());
+        forbear.addCSourceFile(.{
+            .file = xdg_shell_protocol_c_path,
+            .flags = &.{},
+        });
+    }
 
     const mod_tests = b.addTest(.{
         .root_module = forbear,
