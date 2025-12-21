@@ -14,34 +14,37 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    const graphics = try forbear.Graphics.init(
-        "forbear playground",
-        allocator,
-    );
-    defer graphics.deinit();
-
-    const window = try forbear.Window.init(
-        800,
-        600,
-        "forbear playground",
-        "forbear.playground",
-        allocator,
-    );
+    const window = try forbear.Window.init(800, 600, "forbear playground", "forbear.playground", allocator);
     defer window.deinit();
 
-    const renderer = try graphics.initWaylandRenderer(
-        window.wlDisplay,
-        window.wlSurface,
-        window.width,
-        window.height,
-        triangleVertexShader,
-        triangleFragmentShader,
-        allocator,
-    );
-    defer renderer.deinit();
+    // const graphics = try forbear.Graphics.init(
+    //     "forbear playground",
+    //     allocator,
+    // );
+    // defer graphics.deinit();
+    //
+    // const window = try forbear.Window.init(
+    //     800,
+    //     600,
+    //     "forbear playground",
+    //     "forbear.playground",
+    //     allocator,
+    // );
+    // defer window.deinit();
+    //
+    // const renderer = try graphics.initWaylandRenderer(
+    //     window.wlDisplay,
+    //     window.wlSurface,
+    //     window.width,
+    //     window.height,
+    //     triangleVertexShader,
+    //     triangleFragmentShader,
+    //     allocator,
+    // );
+    // defer renderer.deinit();
 
-    while (window.running) {
+    while (window.running.*) {
         try window.handleEvents();
-        try renderer.drawFrame();
+        // try renderer.drawFrame();
     }
 }
