@@ -3,7 +3,12 @@
     .version = "0.0.0",
     .fingerprint = 0x1264d4344639428e,
     .minimum_zig_version = "0.15.2",
-    .dependencies = .{},
+    .dependencies = .{
+        .zmath = .{
+            .url = "git+https://github.com/zig-gamedev/zmath.git#3a5955b2b72cd081563fbb084eff05bffd1e3fbb",
+            .hash = "zmath-0.11.0-dev-wjwivdMsAwD-xaLj76YHUq3t9JDH-X16xuMTmnDzqbu2",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

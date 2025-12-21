@@ -24,6 +24,9 @@ pub fn build(b: *std.Build) void {
     }
     forbear.linkSystemLibrary("vulkan", .{});
 
+    const zmath = b.dependency("zmath", .{});
+    forbear.addImport("zmath", zmath.module("root"));
+
     if (target.result.os.tag == .linux) {
         const wf = b.addWriteFiles();
         const xdg_shell_c_cmd = b.addSystemCommand(&.{
