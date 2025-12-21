@@ -220,6 +220,11 @@ pub fn init(
     return self;
 }
 
+pub fn nativeView(self: *Self) ?*anyopaque {
+    if (self.content_view == null) return null;
+    return @ptrCast(self.content_view);
+}
+
 const Cursor = enum {
     default,
     text,

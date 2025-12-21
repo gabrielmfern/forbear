@@ -202,8 +202,14 @@ pub fn ensureDeviceForSurface(self: *Graphics, surface: c.VkSurfaceKHR) !void {
     self.graphicsQueueFamilyIndex = indices.graphics;
     self.presentationQueueFamilyIndex = indices.presentation;
 
-    const requiredDeviceExtensions: []const [*c]const u8 = &.{
-        c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    const requiredDeviceExtensions: []const [*c]const u8 = switch (builtin.os.tag) {
+        .macos => &.{
+            c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            "VK_KHR_portability_subset",
+        },
+        else => &.{
+            c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        },
     };
 
     const queueCreateInfos: []const c.VkDeviceQueueCreateInfo = if (self.graphicsQueueFamilyIndex == self.presentationQueueFamilyIndex) &.{.{
@@ -456,8 +462,14 @@ fn pickPhysicalDevice(self: *Graphics) !void {
         physicalDevices.ptr,
     ));
 
-    const requiredDeviceExtensions: []const [*c]const u8 = &.{
-        c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    const requiredDeviceExtensions: []const [*c]const u8 = switch (builtin.os.tag) {
+        .macos => &.{
+            c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            "VK_KHR_portability_subset",
+        },
+        else => &.{
+            c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        },
     };
 
     var preferred: ?struct {
@@ -468,12 +480,6 @@ fn pickPhysicalDevice(self: *Graphics) !void {
     blk: for (physicalDevices) |device| {
         var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
         c.vkGetPhysicalDeviceProperties(device, &deviceProperties);
-        var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
-        c.vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-
-        if (deviceFeatures.geometryShader == c.VK_FALSE) {
-            continue;
-        }
 
         var availableDeviceExtensionsLen: u32 = 0;
         try ensureNoError(c.vkEnumerateDeviceExtensionProperties(
