@@ -1,21 +1,5 @@
 const std = @import("std");
-const c = @cImport({
-    if (builtin.os.tag == .linux) {
-        @cDefine("VK_USE_PLATFORM_WAYLAND_KHR", "1");
-    }
-    if (builtin.os.tag == .macos) {
-        @cDefine("VK_USE_PLATFORM_METAL_EXT", "1");
-    }
-
-    @cInclude("vulkan/vulkan.h");
-
-    if (builtin.os.tag == .linux) {
-        @cInclude("vulkan/vulkan_wayland.h");
-    }
-    if (builtin.os.tag == .macos) {
-        @cInclude("vulkan/vulkan_metal.h");
-    }
-});
+const c = @import("c.zig").c;
 const builtin = @import("builtin");
 const Window = @import("window/root.zig");
 

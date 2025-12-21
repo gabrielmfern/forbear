@@ -2,22 +2,17 @@ const std = @import("std");
 const posix = std.posix;
 const os = std.os;
 
-const c = @cImport({
-    @cInclude("wayland-client.h");
-    @cInclude("wayland-cursor.h");
-    @cInclude("xkbcommon/xkbcommon.h");
-    @cInclude("xdg-shell-client-protocol.h");
-});
+const c = @import("../c.zig").c;
 
 const Self = @This();
 
-// pub const Handlers = struct {
-//     pointerEnter: ?*const fn (window: *Self, serial: u32, x: c.wl_fixed_t, y: c.wl_fixed_t) void = null,
-//     pointerLeave: ?*const fn (window: *Self, serial: u32) void = null,
-//     pointerMotion: ?*const fn (window: *Self, time: u32, x: c.wl_fixed_t, y: c.wl_fixed_t) void = null,
-//     pointerButton: ?*const fn (window: *Self, serial: u32, time: u32, button: u32, state: u32) void = null,
-//     pointerAxis: ?*const fn (window: *Self, time: u32, axis: u32, value: c.wl_fixed_t) void = null,
-// };
+pub const Handlers = struct {
+    pointerEnter: ?*const fn (window: *Self, serial: u32, x: c.wl_fixed_t, y: c.wl_fixed_t) void = null,
+    pointerLeave: ?*const fn (window: *Self, serial: u32) void = null,
+    pointerMotion: ?*const fn (window: *Self, time: u32, x: c.wl_fixed_t, y: c.wl_fixed_t) void = null,
+    pointerButton: ?*const fn (window: *Self, serial: u32, time: u32, button: u32, state: u32) void = null,
+    pointerAxis: ?*const fn (window: *Self, time: u32, axis: u32, value: c.wl_fixed_t) void = null,
+};
 
 // Everything native that is contextual
 wlDisplay: *c.wl_display,
@@ -49,6 +44,8 @@ app_id: [:0]const u8,
 running: bool,
 
 allocator: std.mem.Allocator,
+
+handlers: Handlers,
 
 fn BindingInfo(T: type) type {
     return struct {

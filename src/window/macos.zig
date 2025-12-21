@@ -1,10 +1,6 @@
 const std = @import("std");
 
-const c = @cImport({
-    @cInclude("objc/objc.h");
-    @cInclude("objc/runtime.h");
-    @cInclude("objc/message.h");
-});
+const c = @import("../c.zig").c;
 
 extern fn objc_autoreleasePoolPush() ?*anyopaque;
 extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;
