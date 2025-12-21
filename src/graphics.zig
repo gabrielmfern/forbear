@@ -645,7 +645,7 @@ pub const Renderer = struct {
         self.surface = vulkanSurface;
         errdefer self.destroySurface();
 
-        try self.agnosticInit(width, height, vertex_shader_code, fragment_shader_code);
+        try self.commonSetup(width, height, vertex_shader_code, fragment_shader_code);
 
         return self;
     }
@@ -704,12 +704,12 @@ pub const Renderer = struct {
         self.surface = vulkanSurface;
         errdefer self.destroySurface();
 
-        try self.agnosticInit(width, height, vertex_shader_code, fragment_shader_code);
+        try self.commonSetup(width, height, vertex_shader_code, fragment_shader_code);
 
         return self;
     }
 
-    fn agnosticInit(
+    fn commonSetup(
         self: *Self,
         width: u32,
         height: u32,
