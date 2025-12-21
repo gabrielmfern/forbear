@@ -527,7 +527,7 @@ const Graphics = @This();
 
 pub fn initRenderer(
     self: *Graphics,
-    window: *Window,
+    window: *const Window,
     vertex_shader_code: []const u32,
     fragment_shader_code: []const u32,
     allocator: std.mem.Allocator,
@@ -535,19 +535,14 @@ pub fn initRenderer(
     switch (builtin.os.tag) {
         .linux => return Renderer.initWayland(
             self,
-            window.handle.wlDisplay,
-            window.handle.wlSurface,
-            window.width.*,
-            window.height.*,
+            window,
             vertex_shader_code,
             fragment_shader_code,
             allocator,
         ),
         .macos => return Renderer.initCocoa(
             self,
-            window.handle.nativeMetalLayer(),
-            window.width.*,
-            window.height.*,
+            window,
             vertex_shader_code,
             fragment_shader_code,
             allocator,
@@ -591,18 +586,31 @@ pub const Renderer = struct {
 
     currentFrame: usize,
 
+    window: *const Window,
+
+    pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
+        self.destroyFramebuffers();
+        self.destroySwapchain();
+
+        try self.createSwapchain(width, height);
+        errdefer self.destroySwapchain();
+
+        try self.createFramebuffers();
+        errdefer self.destroyFramebuffers();
+    }
+
     pub fn initWayland(
         ctx: *Graphics,
-        wlDisplay: *c.wl_display,
-        wlSurface: *c.wl_surface,
-        width: u32,
-        height: u32,
+        window: *const Window,
         vertex_shader_code: []const u32,
         fragment_shader_code: []const u32,
         allocator: std.mem.Allocator,
     ) !*Self {
         const self = try allocator.create(Self);
         errdefer allocator.destroy(self);
+
+        const width = window.width.*;
+        const height = window.height.*;
 
         self.* = .{
             .allocator = allocator,
@@ -625,6 +633,7 @@ pub const Renderer = struct {
             .imageAvailableSemaphores = .{null} ** maxFramesInFlight,
             .renderFinishedSemaphores = null,
             .currentFrame = 0,
+            .window = window,
         };
 
         var vulkanSurface: c.VkSurfaceKHR = undefined;
@@ -634,8 +643,8 @@ pub const Renderer = struct {
                 .sType = c.VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
                 .pNext = null,
                 .flags = 0,
-                .display = wlDisplay,
-                .surface = wlSurface,
+                .display = window.handle.wlDisplay,
+                .surface = window.handle.wlSurface,
             },
             null,
             &vulkanSurface,
@@ -652,14 +661,16 @@ pub const Renderer = struct {
 
     pub fn initCocoa(
         ctx: *Graphics,
-        caMetalLayer: ?*anyopaque,
-        width: u32,
-        height: u32,
+        window: *const Window,
         vertex_shader_code: []const u32,
         fragment_shader_code: []const u32,
         allocator: std.mem.Allocator,
     ) !*Self {
+        const caMetalLayer = window.handle.nativeMetalLayer();
         if (caMetalLayer == null) return error.NullNativeView;
+
+        const width = window.width.*;
+        const height = window.height.*;
 
         const self = try allocator.create(Self);
         errdefer allocator.destroy(self);
@@ -685,6 +696,7 @@ pub const Renderer = struct {
             .imageAvailableSemaphores = .{null} ** maxFramesInFlight,
             .renderFinishedSemaphores = null,
             .currentFrame = 0,
+            .window = window,
         };
 
         var vulkanSurface: c.VkSurfaceKHR = undefined;
@@ -867,6 +879,12 @@ pub const Renderer = struct {
         }));
 
         self.currentFrame = (self.currentFrame + 1) % maxFramesInFlight;
+
+        if (self.swapchainExtent.width != self.window.width.* or
+            self.swapchainExtent.height != self.window.height.*)
+        {
+            try self.recreateSwapchain(self.window.width.*, self.window.height.*);
+        }
     }
 
     fn destroySurface(self: *Self) void {
