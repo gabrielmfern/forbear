@@ -19,6 +19,8 @@ pub fn build(b: *std.Build) void {
     }
     if (target.result.os.tag == .macos) {
         forbear.linkFramework("Cocoa", .{});
+        forbear.linkFramework("Metal", .{});
+        forbear.linkFramework("QuartzCore", .{});
     }
     forbear.linkSystemLibrary("vulkan", .{});
 
@@ -64,6 +66,11 @@ pub fn build(b: *std.Build) void {
         });
         playground.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
         playground.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+        if (target.result.os.tag == .macos) {
+            playground.linkFramework("Cocoa", .{});
+            playground.linkFramework("Metal", .{});
+            playground.linkFramework("QuartzCore", .{});
+        }
         playground.linkSystemLibrary("vulkan", .{ .needed = true });
         playground.addImport("forbear", forbear);
 

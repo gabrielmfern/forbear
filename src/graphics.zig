@@ -1,5 +1,23 @@
 const std = @import("std");
-const c = @import("c.zig").c;
+const c = @cImport({
+    if (builtin.os.tag == .linux) {
+        @cDefine("VK_USE_PLATFORM_WAYLAND_KHR", "1");
+    }
+    if (builtin.os.tag == .macos) {
+        @cDefine("VK_USE_PLATFORM_MACOS_MVK", "1");
+    }
+
+    @cInclude("vulkan/vulkan.h");
+
+    if (builtin.os.tag == .linux) {
+        @cInclude("vulkan/vulkan_wayland.h");
+    }
+    if (builtin.os.tag == .macos) {
+        @cInclude("vulkan/vulkan_macos.h");
+    }
+});
+const builtin = @import("builtin");
+const Window = @import("window/root.zig");
 
 pub const VulkanError = error{
     ExtensioNotPresent,
@@ -61,10 +79,14 @@ pub fn ensureNoError(result: c.VkResult) !void {
         return error.FullScreenExclusiveModeLost;
     } else if (result == c.VK_ERROR_OUT_OF_DATE_KHR) {
         return error.OutOfDate;
-    } else if (result == c.VK_ERROR_PRESENT_TIMING_QUEUE_FULL_EXT) {
-        return error.PresentTimingQueueFullExt;
     } else if (result == c.VK_ERROR_UNKNOWN) {
         return error.Unknown;
+    }
+
+    if (builtin.os.tag == .linux) {
+        if (result == c.VK_ERROR_PRESENT_TIMING_QUEUE_FULL_EXT) {
+            return error.PresentTimingQueueFullExt;
+        }
     }
 
     std.debug.assert(result == c.VK_SUCCESS);
@@ -318,11 +340,24 @@ fn destroyInstance(self: *Graphics) void {
 }
 
 fn createInstance(self: *Graphics) !void {
-    const instanceExtensions: []const [*c]const u8 = &.{
-        c.VK_KHR_SURFACE_EXTENSION_NAME,
-        "VK_KHR_wayland_surface",
-        c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
-        c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+    const instanceExtensions: []const [*c]const u8 = switch (builtin.os.tag) {
+        .linux => &.{
+            c.VK_KHR_SURFACE_EXTENSION_NAME,
+            "VK_KHR_wayland_surface",
+            c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+            c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        },
+        .macos => &.{
+            c.VK_KHR_SURFACE_EXTENSION_NAME,
+            "VK_MVK_macos_surface",
+            c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+            c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        },
+        else => &.{
+            c.VK_KHR_SURFACE_EXTENSION_NAME,
+            c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+            c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        },
     };
 
     const instanceLayers: []const [*c]const u8 = &.{
@@ -500,26 +535,35 @@ fn pickPhysicalDevice(self: *Graphics) !void {
 
 const Graphics = @This();
 
-pub fn initWaylandRenderer(
+pub fn initRenderer(
     self: *Graphics,
-    wlDisplay: *c.wl_display,
-    wlSurface: *c.wl_surface,
-    width: u32,
-    height: u32,
+    window: *Window,
     vertex_shader_code: []const u32,
     fragment_shader_code: []const u32,
     allocator: std.mem.Allocator,
 ) !*Renderer {
-    return Renderer.initWayland(
-        self,
-        wlDisplay,
-        wlSurface,
-        width,
-        height,
-        vertex_shader_code,
-        fragment_shader_code,
-        allocator,
-    );
+    switch (builtin.os.tag) {
+        .linux => return Renderer.initWayland(
+            self,
+            window.wlDisplay,
+            window.wlSurface,
+            window.width.*,
+            window.height.*,
+            vertex_shader_code,
+            fragment_shader_code,
+            allocator,
+        ),
+        .macos => return Renderer.initCocoa(
+            self,
+            window.handle.nativeView(),
+            window.width.*,
+            window.height.*,
+            vertex_shader_code,
+            fragment_shader_code,
+            allocator,
+        ),
+        else => return error.UnsupportedPlatform,
+    }
 }
 
 pub const Renderer = struct {
@@ -592,9 +636,95 @@ pub const Renderer = struct {
             .currentFrame = 0,
         };
 
-        try self.createSurfaceWayland(wlDisplay, wlSurface);
+        var vulkanSurface: c.VkSurfaceKHR = undefined;
+        try ensureNoError(c.vkCreateWaylandSurfaceKHR(
+            self.ctx.vulkanInstance,
+            &c.VkWaylandSurfaceCreateInfoKHR{
+                .sType = c.VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+                .pNext = null,
+                .flags = 0,
+                .display = wlDisplay,
+                .surface = wlSurface,
+            },
+            null,
+            &vulkanSurface,
+        ));
+
+        std.debug.assert(vulkanSurface != null);
+        self.surface = vulkanSurface;
         errdefer self.destroySurface();
 
+        try self.agnosticInit(width, height, vertex_shader_code, fragment_shader_code);
+
+        return self;
+    }
+
+    pub fn initCocoa(
+        ctx: *Graphics,
+        nsView: ?*anyopaque,
+        width: u32,
+        height: u32,
+        vertex_shader_code: []const u32,
+        fragment_shader_code: []const u32,
+        allocator: std.mem.Allocator,
+    ) !*Self {
+        if (nsView == null) return error.NullNativeView;
+
+        const self = try allocator.create(Self);
+        errdefer allocator.destroy(self);
+
+        self.* = .{
+            .allocator = allocator,
+            .ctx = ctx,
+            .surface = null,
+            .surfaceFormat = undefined,
+            .presentMode = undefined,
+            .swapchainExtent = undefined,
+            .swapchain = null,
+            .swapChainImages = null,
+            .imageViews = null,
+            .pipelineLayout = null,
+            .renderPass = null,
+            .graphicsPipeline = null,
+            .swapchainFramebuffers = null,
+            .commandPool = null,
+            .commandBuffers = .{null} ** maxFramesInFlight,
+            .commandBuffersAllocated = false,
+            .inFlightFences = .{null} ** maxFramesInFlight,
+            .imageAvailableSemaphores = .{null} ** maxFramesInFlight,
+            .renderFinishedSemaphores = null,
+            .currentFrame = 0,
+        };
+
+        var vulkanSurface: c.VkSurfaceKHR = undefined;
+        try ensureNoError(c.vkCreateMacOSSurfaceMVK(
+            self.ctx.vulkanInstance,
+            &c.VkMacOSSurfaceCreateInfoMVK{
+                .sType = c.VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK,
+                .pNext = null,
+                .flags = 0,
+                .pView = nsView,
+            },
+            null,
+            &vulkanSurface,
+        ));
+
+        std.debug.assert(vulkanSurface != null);
+        self.surface = vulkanSurface;
+        errdefer self.destroySurface();
+
+        try self.agnosticInit(width, height, vertex_shader_code, fragment_shader_code);
+
+        return self;
+    }
+
+    fn agnosticInit(
+        self: *Self,
+        width: u32,
+        height: u32,
+        vertex_shader_code: []const u32,
+        fragment_shader_code: []const u32,
+    ) !void {
         try self.ctx.ensureDeviceForSurface(self.surface);
 
         try self.createSwapchain(width, height);
@@ -614,8 +744,6 @@ pub const Renderer = struct {
 
         try self.createSyncObjects();
         errdefer self.destroySyncObjects();
-
-        return self;
     }
 
     pub fn deinit(self: *Self) void {
@@ -748,25 +876,6 @@ pub const Renderer = struct {
         }));
 
         self.currentFrame = (self.currentFrame + 1) % maxFramesInFlight;
-    }
-
-    fn createSurfaceWayland(self: *Self, wlDisplay: *c.wl_display, wlSurface: *c.wl_surface) !void {
-        var vulkanSurface: c.VkSurfaceKHR = undefined;
-        try ensureNoError(c.vkCreateWaylandSurfaceKHR(
-            self.ctx.vulkanInstance,
-            &c.VkWaylandSurfaceCreateInfoKHR{
-                .sType = c.VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
-                .pNext = null,
-                .flags = 0,
-                .display = wlDisplay,
-                .surface = wlSurface,
-            },
-            null,
-            &vulkanSurface,
-        ));
-
-        std.debug.assert(vulkanSurface != null);
-        self.surface = vulkanSurface;
     }
 
     fn destroySurface(self: *Self) void {
