@@ -68,7 +68,7 @@ pub const Vertex = extern struct {
     position: @Vector(3, f32),
     color: @Vector(3, f32),
 
-    fn getBindingDescription() c.VkVertexInputBindingDescription {
+    pub fn getBindingDescription() c.VkVertexInputBindingDescription {
         return c.VkVertexInputBindingDescription{
             .binding = 0,
             .stride = @sizeOf(@This()),
@@ -76,7 +76,7 @@ pub const Vertex = extern struct {
         };
     }
 
-    fn getATtributeDescriptions() [2]c.VkVertexInputAttributeDescription {
+    pub fn getAttributeDescriptions() [2]c.VkVertexInputAttributeDescription {
         return .{
             c.VkVertexInputAttributeDescription{
                 .binding = 0,
@@ -692,6 +692,9 @@ pub const Renderer = struct {
         ));
         errdefer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
 
+        const bindingDescription = Vertex.getBindingDescription();
+        const attributeDescriptions = Vertex.getAttributeDescriptions();
+
         var graphicsPipeline: c.VkPipeline = undefined;
         try ensureNoError(c.vkCreateGraphicsPipelines(
             logicalDevice,
@@ -705,10 +708,10 @@ pub const Renderer = struct {
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
                     .pNext = null,
                     .flags = 0,
-                    .vertexBindingDescriptionCount = 0,
-                    .pVertexBindingDescriptions = null,
-                    .vertexAttributeDescriptionCount = 0,
-                    .pVertexAttributeDescriptions = null,
+                    .vertexBindingDescriptionCount = 1,
+                    .pVertexBindingDescriptions = &bindingDescription,
+                    .vertexAttributeDescriptionCount = attributeDescriptions.len,
+                    .pVertexAttributeDescriptions = &attributeDescriptions,
                 },
                 .pInputAssemblyState = &c.VkPipelineInputAssemblyStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -848,16 +851,16 @@ pub const Renderer = struct {
 
         try ensureNoError(c.vkBindBufferMemory(logicalDevice, vertexBuffer, vertexBufferMemory, 0));
 
-        var data: [3]Vertex = undefined;
+        var data: ?*anyopaque = undefined;
         try ensureNoError(c.vkMapMemory(
             logicalDevice,
             vertexBufferMemory,
             0,
             @sizeOf(Vertex) * 3,
             0,
-            @ptrCast(@alignCast(&data)),
+            &data,
         ));
-        @memcpy(&data, &triangle_vertices);
+        @memcpy(@as([*]Vertex, @ptrCast(@alignCast(data))), &triangle_vertices);
         c.vkUnmapMemory(logicalDevice, vertexBufferMemory);
 
         var commandBuffers: [maxFramesInFlight]c.VkCommandBuffer = undefined;
@@ -1055,7 +1058,7 @@ pub const Renderer = struct {
             .extent = self.swapchain.extent,
         }});
 
-        const buffers = [_]c.VkBuffer{self.vertexBuffer.?};
+        const buffers = [_]c.VkBuffer{self.vertexBuffer};
         const offsets = [_]c.VkDeviceSize{0};
         c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &buffers, &offsets);
 
