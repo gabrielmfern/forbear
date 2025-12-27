@@ -94,12 +94,6 @@ pub const Vertex = extern struct {
     }
 };
 
-const triangleVertices = [_]Vertex{
-    .{ .position = .{ 0.0, -0.5, 0.0 }, .color = .{ 1.0, 0.0, 0.0 } },
-    .{ .position = .{ 0.5, 0.5, 0.0 }, .color = .{ 0.0, 1.0, 0.0 } },
-    .{ .position = .{ -0.5, 0.5, 0.0 }, .color = .{ 0.0, 0.0, 1.0 } },
-};
-
 pub fn CreateDebugUtilsMessengerEXT(
     instance: c.VkInstance,
     pCreateInfo: [*c]const c.VkDebugUtilsMessengerCreateInfoEXT,
@@ -504,6 +498,49 @@ pub const Buffer = struct {
     }
 };
 
+pub const Model = struct {
+    vertexBuffer: Buffer,
+    vertexCount: u32,
+
+    pub fn init(vertices: []const Vertex, renderer: *Renderer) !@This() {
+        const stagingBuffer = try Buffer.init(
+            renderer.logicalDevice,
+            renderer.physicalDevice,
+            @sizeOf(Vertex) * vertices.len,
+            c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        );
+        defer stagingBuffer.deinit(renderer.logicalDevice);
+        try stagingBuffer.map(renderer.logicalDevice, @ptrCast(@alignCast(vertices)));
+
+        var vertexBuffer = try Buffer.init(
+            renderer.logicalDevice,
+            renderer.physicalDevice,
+            @sizeOf(Vertex) * vertices.len,
+            c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        );
+        errdefer vertexBuffer.deinit(renderer.logicalDevice);
+        try vertexBuffer.copyFrom(&stagingBuffer, renderer.logicalDevice, renderer.graphicsQueue, renderer.commandPool);
+
+        return Model{
+            .vertexBuffer = vertexBuffer,
+            .vertexCount = @intCast(vertices.len),
+        };
+    }
+
+    pub fn deinit(self: @This(), renderer: *Renderer) void {
+        self.vertexBuffer.deinit(renderer.logicalDevice);
+    }
+
+    pub fn draw(self: @This(), commandBuffer: c.VkCommandBuffer) void {
+        const buffers = [_]c.VkBuffer{self.vertexBuffer.handle};
+        const offsets = [_]c.VkDeviceSize{0};
+        c.vkCmdBindVertexBuffers(commandBuffer, 0, 1, &buffers, &offsets);
+        c.vkCmdDraw(commandBuffer, self.vertexCount, 1, 0, 0);
+    }
+};
+
 pub const Renderer = struct {
     const Self = @This();
 
@@ -530,8 +567,6 @@ pub const Renderer = struct {
     commandPool: c.VkCommandPool,
     commandBuffers: [maxFramesInFlight]c.VkCommandBuffer,
     commandBuffersAllocated: bool,
-
-    vertexBuffer: Buffer,
 
     inFlightFences: [maxFramesInFlight]c.VkFence,
     imageAvailableSemaphores: [maxFramesInFlight]c.VkSemaphore,
@@ -951,9 +986,6 @@ pub const Renderer = struct {
             &graphicsPipeline,
         ));
         errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
-        // self.pipelineLayout = pipelineLayout;
-        // self.renderPass = renderPass;
-        // self.graphicsPipeline = graphicsPipeline;
 
         const framebuffers = try createFramebuffers(logicalDevice, renderPass, swapchain, graphics.allocator);
         errdefer destroyFramebuffers(framebuffers, logicalDevice, graphics.allocator);
@@ -971,26 +1003,6 @@ pub const Renderer = struct {
             &commandPool,
         ));
         errdefer c.vkDestroyCommandPool(logicalDevice, commandPool, null);
-
-        const stagingBuffer = try Buffer.init(
-            logicalDevice,
-            physicalDevice,
-            @sizeOf(Vertex) * triangleVertices.len,
-            c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        );
-        defer stagingBuffer.deinit(logicalDevice);
-        try stagingBuffer.map(logicalDevice, @ptrCast(@alignCast(&triangleVertices)));
-
-        var vertexBuffer = try Buffer.init(
-            logicalDevice,
-            physicalDevice,
-            @sizeOf(Vertex) * triangleVertices.len,
-            c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        );
-        errdefer vertexBuffer.deinit(logicalDevice);
-        try vertexBuffer.copyFrom(&stagingBuffer, logicalDevice, graphicsQueue, commandPool);
 
         var commandBuffers: [maxFramesInFlight]c.VkCommandBuffer = undefined;
         try ensureNoError(c.vkAllocateCommandBuffers(
@@ -1078,8 +1090,6 @@ pub const Renderer = struct {
             .commandBuffers = commandBuffers,
             .commandBuffersAllocated = true,
 
-            .vertexBuffer = vertexBuffer,
-
             .inFlightFences = inFlightFences,
             .imageAvailableSemaphores = imageAvailableSemaphores,
             .renderFinishedSemaphores = renderFinishedSemaphores,
@@ -1115,7 +1125,6 @@ pub const Renderer = struct {
             c.vkDestroyFence(self.logicalDevice, self.inFlightFences[i], null);
         }
         c.vkFreeCommandBuffers(self.logicalDevice, self.commandPool, maxFramesInFlight, &self.commandBuffers);
-        self.vertexBuffer.deinit(self.logicalDevice);
         c.vkDestroyCommandPool(self.logicalDevice, self.commandPool, null);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
         c.vkDestroyPipeline(self.logicalDevice, self.graphicsPipeline, null);
@@ -1126,7 +1135,7 @@ pub const Renderer = struct {
         c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
     }
 
-    pub fn drawFrame(self: *Self) !void {
+    pub fn drawFrame(self: *Self, models: []const Model) !void {
         const device = self.logicalDevice;
 
         try ensureNoError(c.vkWaitForFences(
@@ -1201,11 +1210,10 @@ pub const Renderer = struct {
             .extent = self.swapchain.extent,
         }});
 
-        const buffers = [_]c.VkBuffer{self.vertexBuffer.handle};
-        const offsets = [_]c.VkDeviceSize{0};
-        c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &buffers, &offsets);
+        for (models) |model| {
+            model.draw(self.commandBuffers[self.currentFrame]);
+        }
 
-        c.vkCmdDraw(self.commandBuffers[self.currentFrame], 3, 1, 0, 0);
         c.vkCmdEndRenderPass(self.commandBuffers[self.currentFrame]);
 
         try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.currentFrame]));
