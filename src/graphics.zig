@@ -94,7 +94,7 @@ pub const Vertex = extern struct {
     }
 };
 
-const triangle_vertices = [_]Vertex{
+const triangleVertices = [_]Vertex{
     .{ .position = .{ 0.0, -0.5, 0.0 }, .color = .{ 1.0, 0.0, 0.0 } },
     .{ .position = .{ 0.5, 0.5, 0.0 }, .color = .{ 0.0, 1.0, 0.0 } },
     .{ .position = .{ -0.5, 0.5, 0.0 }, .color = .{ 0.0, 0.0, 1.0 } },
@@ -377,6 +377,7 @@ fn findMemoryType(
 pub const Buffer = struct {
     handle: c.VkBuffer,
     memory: c.VkDeviceMemory,
+    size: c.VkDeviceSize,
 
     pub fn init(
         logicalDevice: c.VkDevice,
@@ -431,7 +432,70 @@ pub const Buffer = struct {
         return .{
             .handle = buffer,
             .memory = bufferMemory,
+            .size = size,
         };
+    }
+
+    pub fn copyFrom(
+        self: *@This(),
+        from: *const Buffer,
+        logicalDevice: c.VkDevice,
+        graphicsQueue: c.VkQueue,
+        commandPool: c.VkCommandPool,
+    ) !void {
+        if (self.size != from.size) {
+            return error.BufferSizeMismatch;
+        }
+
+        var commandBuffer: c.VkCommandBuffer = undefined;
+        try ensureNoError(c.vkAllocateCommandBuffers(
+            logicalDevice,
+            &c.VkCommandBufferAllocateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .pNext = null,
+                .commandPool = commandPool,
+                .commandBufferCount = 1,
+            },
+            &commandBuffer,
+        ));
+        defer c.vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
+
+        try ensureNoError(c.vkBeginCommandBuffer(commandBuffer, &c.VkCommandBufferBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = null,
+            .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            .pInheritanceInfo = null,
+        }));
+        c.vkCmdCopyBuffer(commandBuffer, from.handle, self.handle, 1, &c.VkBufferCopy{
+            .srcOffset = 0,
+            .dstOffset = 0,
+            .size = self.size,
+        });
+        try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
+
+        try ensureNoError(c.vkQueueSubmit(
+            graphicsQueue,
+            1,
+            &c.VkSubmitInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .pNext = null,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &commandBuffer,
+            },
+            null,
+        ));
+        try ensureNoError(c.vkQueueWaitIdle(graphicsQueue));
+    }
+
+    pub fn map(self: @This(), logicalDevice: c.VkDevice, data: []const u8) !void {
+        if (data.len != @as(usize, @intCast(self.size))) {
+            return error.BufferSizeDataMismatch;
+        }
+        var vertexBufferData: ?*anyopaque = undefined;
+        try ensureNoError(c.vkMapMemory(logicalDevice, self.memory, 0, data.len, 0, &vertexBufferData));
+        @memcpy(@as([*c]u8, @ptrCast(@alignCast(vertexBufferData)))[0..data.len], data);
+        c.vkUnmapMemory(logicalDevice, self.memory);
     }
 
     pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
@@ -593,12 +657,15 @@ pub const Renderer = struct {
         if (preferred == null) {
             return error.NoSuitablePhysicalDevice;
         }
+        const physicalDevice = preferred.?.device.physicalDevice;
+        const graphicsQueueFamilyIndex = preferred.?.graphicsQueueFamilyIndex;
+        const presentationQueueFamilyIndex = preferred.?.presentationQueueFamilyIndex;
 
-        const queueCreateInfos: []const c.VkDeviceQueueCreateInfo = if (preferred.?.graphicsQueueFamilyIndex == preferred.?.presentationQueueFamilyIndex) &.{.{
+        const queueCreateInfos: []const c.VkDeviceQueueCreateInfo = if (graphicsQueueFamilyIndex == presentationQueueFamilyIndex) &.{.{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .pNext = null,
             .flags = 0,
-            .queueFamilyIndex = preferred.?.graphicsQueueFamilyIndex,
+            .queueFamilyIndex = graphicsQueueFamilyIndex,
             .queueCount = 1,
             .pQueuePriorities = &@as(f32, 1.0),
         }} else &.{
@@ -606,7 +673,7 @@ pub const Renderer = struct {
                 .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                 .pNext = null,
                 .flags = 0,
-                .queueFamilyIndex = preferred.?.graphicsQueueFamilyIndex,
+                .queueFamilyIndex = graphicsQueueFamilyIndex,
                 .queueCount = 1,
                 .pQueuePriorities = &@as(f32, 1.0),
             },
@@ -622,7 +689,7 @@ pub const Renderer = struct {
 
         var logicalDevice: c.VkDevice = undefined;
         try ensureNoError(c.vkCreateDevice(
-            preferred.?.device.physicalDevice,
+            physicalDevice,
             &c.VkDeviceCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
                 .pNext = &c.VkPhysicalDeviceVulkan12Features{
@@ -649,16 +716,16 @@ pub const Renderer = struct {
         errdefer c.vkDestroyDevice(logicalDevice, null);
 
         var graphicsQueue: c.VkQueue = undefined;
-        c.vkGetDeviceQueue(logicalDevice, preferred.?.graphicsQueueFamilyIndex, 0, &graphicsQueue);
+        c.vkGetDeviceQueue(logicalDevice, graphicsQueueFamilyIndex, 0, &graphicsQueue);
         var presentationQueue: c.VkQueue = undefined;
-        c.vkGetDeviceQueue(logicalDevice, preferred.?.presentationQueueFamilyIndex, 0, &presentationQueue);
+        c.vkGetDeviceQueue(logicalDevice, presentationQueueFamilyIndex, 0, &presentationQueue);
 
         const swapchain = try Swapchain.init(
-            preferred.?.device.physicalDevice,
+            physicalDevice,
             logicalDevice,
-            preferred.?.presentationQueueFamilyIndex,
+            presentationQueueFamilyIndex,
             presentationQueue,
-            preferred.?.graphicsQueueFamilyIndex,
+            graphicsQueueFamilyIndex,
             graphicsQueue,
             surface,
             width,
@@ -898,32 +965,32 @@ pub const Renderer = struct {
                 .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                 .pNext = null,
                 .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-                .queueFamilyIndex = preferred.?.graphicsQueueFamilyIndex,
+                .queueFamilyIndex = graphicsQueueFamilyIndex,
             },
             null,
             &commandPool,
         ));
         errdefer c.vkDestroyCommandPool(logicalDevice, commandPool, null);
 
-        const vertexBuffer = try Buffer.init(
+        const stagingBuffer = try Buffer.init(
             logicalDevice,
-            preferred.?.device.physicalDevice,
-            @sizeOf(Vertex) * 3,
-            c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            physicalDevice,
+            @sizeOf(Vertex) * triangleVertices.len,
+            c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         );
+        defer stagingBuffer.deinit(logicalDevice);
+        try stagingBuffer.map(logicalDevice, @ptrCast(@alignCast(&triangleVertices)));
 
-        var vertexBufferData: ?*anyopaque = undefined;
-        try ensureNoError(c.vkMapMemory(
+        var vertexBuffer = try Buffer.init(
             logicalDevice,
-            vertexBuffer.memory,
-            0,
-            @sizeOf(Vertex) * 3,
-            0,
-            &vertexBufferData,
-        ));
-        @memcpy(@as([*]Vertex, @ptrCast(@alignCast(vertexBufferData))), &triangle_vertices);
-        c.vkUnmapMemory(logicalDevice, vertexBuffer.memory);
+            physicalDevice,
+            @sizeOf(Vertex) * triangleVertices.len,
+            c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        );
+        errdefer vertexBuffer.deinit(logicalDevice);
+        try vertexBuffer.copyFrom(&stagingBuffer, logicalDevice, graphicsQueue, commandPool);
 
         var commandBuffers: [maxFramesInFlight]c.VkCommandBuffer = undefined;
         try ensureNoError(c.vkAllocateCommandBuffers(
@@ -992,12 +1059,12 @@ pub const Renderer = struct {
             .allocator = graphics.allocator,
             .graphics = graphics,
 
-            .physicalDevice = preferred.?.device.physicalDevice,
+            .physicalDevice = physicalDevice,
             .logicalDevice = logicalDevice,
             .graphicsQueue = graphicsQueue,
-            .graphicsQueueFamilyIndex = preferred.?.graphicsQueueFamilyIndex,
+            .graphicsQueueFamilyIndex = graphicsQueueFamilyIndex,
             .presentationQueue = presentationQueue,
-            .presentationQueueFamilyIndex = preferred.?.presentationQueueFamilyIndex,
+            .presentationQueueFamilyIndex = presentationQueueFamilyIndex,
 
             .surface = surface,
             .swapchain = swapchain,
