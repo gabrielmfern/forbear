@@ -392,6 +392,7 @@ pub const Renderer = struct {
     currentFrame: usize,
 
     pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
+        _ = c.vkDeviceWaitIdle(self.logicalDevice);
         self.swapchain.deinit(self.logicalDevice);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
 
