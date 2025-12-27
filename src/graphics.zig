@@ -1136,20 +1136,18 @@ pub const Renderer = struct {
     }
 
     pub fn drawFrame(self: *Self, models: []const Model) !void {
-        const device = self.logicalDevice;
-
         try ensureNoError(c.vkWaitForFences(
-            device,
+            self.logicalDevice,
             1,
             &self.inFlightFences[self.currentFrame],
             c.VK_TRUE,
             std.math.maxInt(u64),
         ));
-        try ensureNoError(c.vkResetFences(device, 1, &self.inFlightFences[self.currentFrame]));
+        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.currentFrame]));
 
         var imageIndex: u32 = undefined;
         try ensureNoError(c.vkAcquireNextImageKHR(
-            device,
+            self.logicalDevice,
             self.swapchain.handle,
             std.math.maxInt(u64),
             self.imageAvailableSemaphores[self.currentFrame],
