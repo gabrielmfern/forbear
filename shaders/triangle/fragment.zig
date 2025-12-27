@@ -1,7 +1,7 @@
 const std = @import("std");
 const gpu = std.gpu;
 
-extern var vertexColor: @Vector(4, f32) addrspace(.input);
+extern const vertexColor: @Vector(4, f32) addrspace(.input);
 extern var outColor: @Vector(4, f32) addrspace(.output);
 
 export fn main() callconv(.spirv_fragment) void {

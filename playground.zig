@@ -14,7 +14,7 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    const graphics = try forbear.Graphics.init(
+    var graphics = try forbear.Graphics.init(
         "forbear playground",
         allocator,
     );
@@ -29,11 +29,10 @@ pub fn main() !void {
     );
     defer window.deinit();
 
-    const renderer = try graphics.initRenderer(
+    var renderer = try graphics.initRenderer(
         window,
         triangleVertexShader,
         triangleFragmentShader,
-        allocator,
     );
     defer renderer.deinit();
 
