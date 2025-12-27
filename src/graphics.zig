@@ -355,6 +355,91 @@ pub fn initRenderer(
     return try Renderer.init(vulkanSurface, self, window.width, window.height, vertexShaderCode, fragmentShaderCode);
 }
 
+fn findMemoryType(
+    typeFilter: u32,
+    properties: c.VkMemoryPropertyFlags,
+    physicalDevice: c.VkPhysicalDevice,
+) !u32 {
+    var memoryProperties: c.VkPhysicalDeviceMemoryProperties = undefined;
+    c.vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
+
+    for (0..memoryProperties.memoryTypeCount) |i| {
+        if ((typeFilter & (@as(u32, 1) << @intCast(i))) != 0 and
+            (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return @intCast(i);
+        }
+    }
+
+    return error.MemoryTypeNotFound;
+}
+
+pub const Buffer = struct {
+    handle: c.VkBuffer,
+    memory: c.VkDeviceMemory,
+
+    pub fn init(
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        size: c.VkDeviceSize,
+        usage: c.VkBufferUsageFlags,
+        properties: c.VkMemoryPropertyFlags,
+    ) !@This() {
+        var buffer: c.VkBuffer = undefined;
+        try ensureNoError(c.vkCreateBuffer(
+            logicalDevice,
+            &c.VkBufferCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .size = size,
+                // .size = @sizeOf(Vertex) * 3,
+                // .usage = c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                .usage = usage,
+                .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount = 0,
+                .pQueueFamilyIndices = null,
+            },
+            null,
+            &buffer,
+        ));
+        errdefer c.vkDestroyBuffer(logicalDevice, buffer, null);
+
+        var bufferMemoryRequirements: c.VkMemoryRequirements = undefined;
+        c.vkGetBufferMemoryRequirements(logicalDevice, buffer, &bufferMemoryRequirements);
+        var bufferMemory: c.VkDeviceMemory = undefined;
+        try ensureNoError(c.vkAllocateMemory(
+            logicalDevice,
+            &c.VkMemoryAllocateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .pNext = null,
+                .allocationSize = bufferMemoryRequirements.size,
+                .memoryTypeIndex = try findMemoryType(
+                    bufferMemoryRequirements.memoryTypeBits,
+                    // c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    properties,
+                    physicalDevice,
+                ),
+            },
+            null,
+            &bufferMemory,
+        ));
+        errdefer c.vkFreeMemory(logicalDevice, bufferMemory, null);
+
+        try ensureNoError(c.vkBindBufferMemory(logicalDevice, buffer, bufferMemory, 0));
+
+        return .{
+            .handle = buffer,
+            .memory = bufferMemory,
+        };
+    }
+
+    pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+        c.vkFreeMemory(logicalDevice, self.memory, null);
+        c.vkDestroyBuffer(logicalDevice, self.handle, null);
+    }
+};
+
 pub const Renderer = struct {
     const Self = @This();
 
@@ -382,8 +467,7 @@ pub const Renderer = struct {
     commandBuffers: [maxFramesInFlight]c.VkCommandBuffer,
     commandBuffersAllocated: bool,
 
-    vertexBuffer: c.VkBuffer,
-    vertexBufferMemory: c.VkDeviceMemory,
+    vertexBuffer: Buffer,
 
     inFlightFences: [maxFramesInFlight]c.VkFence,
     imageAvailableSemaphores: [maxFramesInFlight]c.VkSemaphore,
@@ -821,57 +905,25 @@ pub const Renderer = struct {
         ));
         errdefer c.vkDestroyCommandPool(logicalDevice, commandPool, null);
 
-        var vertexBuffer: c.VkBuffer = undefined;
-        try ensureNoError(c.vkCreateBuffer(
+        const vertexBuffer = try Buffer.init(
             logicalDevice,
-            &c.VkBufferCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                .pNext = null,
-                .flags = 0,
-                .size = @sizeOf(Vertex) * 3,
-                .usage = c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
-                .queueFamilyIndexCount = 0,
-                .pQueueFamilyIndices = null,
-            },
-            null,
-            &vertexBuffer,
-        ));
-        errdefer c.vkDestroyBuffer(logicalDevice, vertexBuffer, null);
-
-        var bufferMemoryRequirements: c.VkMemoryRequirements = undefined;
-        c.vkGetBufferMemoryRequirements(logicalDevice, vertexBuffer, &bufferMemoryRequirements);
-        var vertexBufferMemory: c.VkDeviceMemory = undefined;
-        try ensureNoError(c.vkAllocateMemory(
-            logicalDevice,
-            &c.VkMemoryAllocateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                .pNext = null,
-                .allocationSize = bufferMemoryRequirements.size,
-                .memoryTypeIndex = try findMemoryType(
-                    bufferMemoryRequirements.memoryTypeBits,
-                    c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                    preferred.?.device.physicalDevice,
-                ),
-            },
-            null,
-            &vertexBufferMemory,
-        ));
-        errdefer c.vkFreeMemory(logicalDevice, vertexBufferMemory, null);
-
-        try ensureNoError(c.vkBindBufferMemory(logicalDevice, vertexBuffer, vertexBufferMemory, 0));
+            preferred.?.device.physicalDevice,
+            @sizeOf(Vertex) * 3,
+            c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        );
 
         var vertexBufferData: ?*anyopaque = undefined;
         try ensureNoError(c.vkMapMemory(
             logicalDevice,
-            vertexBufferMemory,
+            vertexBuffer.memory,
             0,
             @sizeOf(Vertex) * 3,
             0,
             &vertexBufferData,
         ));
         @memcpy(@as([*]Vertex, @ptrCast(@alignCast(vertexBufferData))), &triangle_vertices);
-        c.vkUnmapMemory(logicalDevice, vertexBufferMemory);
+        c.vkUnmapMemory(logicalDevice, vertexBuffer.memory);
 
         var commandBuffers: [maxFramesInFlight]c.VkCommandBuffer = undefined;
         try ensureNoError(c.vkAllocateCommandBuffers(
@@ -960,7 +1012,6 @@ pub const Renderer = struct {
             .commandBuffersAllocated = true,
 
             .vertexBuffer = vertexBuffer,
-            .vertexBufferMemory = vertexBufferMemory,
 
             .inFlightFences = inFlightFences,
             .imageAvailableSemaphores = imageAvailableSemaphores,
@@ -997,8 +1048,7 @@ pub const Renderer = struct {
             c.vkDestroyFence(self.logicalDevice, self.inFlightFences[i], null);
         }
         c.vkFreeCommandBuffers(self.logicalDevice, self.commandPool, maxFramesInFlight, &self.commandBuffers);
-        c.vkFreeMemory(self.logicalDevice, self.vertexBufferMemory, null);
-        c.vkDestroyBuffer(self.logicalDevice, self.vertexBuffer, null);
+        self.vertexBuffer.deinit(self.logicalDevice);
         c.vkDestroyCommandPool(self.logicalDevice, self.commandPool, null);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
         c.vkDestroyPipeline(self.logicalDevice, self.graphicsPipeline, null);
@@ -1084,7 +1134,7 @@ pub const Renderer = struct {
             .extent = self.swapchain.extent,
         }});
 
-        const buffers = [_]c.VkBuffer{self.vertexBuffer};
+        const buffers = [_]c.VkBuffer{self.vertexBuffer.handle};
         const offsets = [_]c.VkDeviceSize{0};
         c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &buffers, &offsets);
 
@@ -1364,23 +1414,6 @@ pub const Renderer = struct {
         }
     };
 
-    fn destroyPipeline(self: *Self) void {
-        if (self.graphicsPipeline) |pipeline| {
-            c.vkDestroyPipeline(self.graphics.logicalDevice, pipeline, null);
-            self.graphicsPipeline = null;
-        }
-
-        if (self.renderPass) |render_pass| {
-            c.vkDestroyRenderPass(self.graphics.logicalDevice, render_pass, null);
-            self.renderPass = null;
-        }
-
-        if (self.pipelineLayout) |pipeline_layout| {
-            c.vkDestroyPipelineLayout(self.graphics.logicalDevice, pipeline_layout, null);
-            self.pipelineLayout = null;
-        }
-    }
-
     fn createFramebuffers(
         logicalDevice: c.VkDevice,
         renderPass: c.VkRenderPass,
@@ -1434,197 +1467,5 @@ pub const Renderer = struct {
             c.vkDestroyFramebuffer(logicalDevice, framebuffer, null);
         }
         allocator.free(swapchainFramebuffers);
-    }
-
-    fn createCommandPool(self: *Self) !void {
-        var commandPool: c.VkCommandPool = undefined;
-        try ensureNoError(c.vkCreateCommandPool(
-            self.graphics.logicalDevice,
-            &c.VkCommandPoolCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-                .pNext = null,
-                .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-                .queueFamilyIndex = self.graphics.graphicsQueueFamilyIndex,
-            },
-            null,
-            &commandPool,
-        ));
-
-        self.commandPool = commandPool;
-    }
-
-    fn destroyCommandPool(self: *Self) void {
-        if (self.commandPool) |command_pool| {
-            c.vkDestroyCommandPool(self.graphics.logicalDevice, command_pool, null);
-            self.commandPool = null;
-        }
-    }
-
-    fn createVertexBuffer(self: *Self) !void {
-        var vertexBuffer: c.VkBuffer = undefined;
-        try ensureNoError(c.vkCreateBuffer(
-            self.graphics.logicalDevice,
-            &c.VkBufferCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                .pNext = null,
-                .flags = 0,
-                .size = @sizeOf(Vertex) * 3,
-                .usage = c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
-                .queueFamilyIndexCount = 0,
-                .pQueueFamilyIndices = null,
-            },
-            null,
-            &vertexBuffer,
-        ));
-        self.vertexBuffer = vertexBuffer;
-
-        var bufferMemoryRequirements: c.VkMemoryRequirements = undefined;
-        c.vkGetBufferMemoryRequirements(self.graphics.logicalDevice, self.vertexBuffer.?, &bufferMemoryRequirements);
-        var vertexBufferMemory: c.VkDeviceMemory = undefined;
-        try ensureNoError(c.vkAllocateMemory(
-            self.graphics.logicalDevice,
-            &c.VkMemoryAllocateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                .pNext = null,
-                .allocationSize = bufferMemoryRequirements.size,
-                .memoryTypeIndex = try self.findMemoryType(
-                    bufferMemoryRequirements.memoryTypeBits,
-                    c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                ),
-            },
-            null,
-            &vertexBufferMemory,
-        ));
-        self.vertexBufferMemory = vertexBufferMemory;
-
-        try ensureNoError(c.vkBindBufferMemory(self.graphics.logicalDevice, self.vertexBuffer.?, self.vertexBufferMemory.?, 0));
-
-        var data: [3]Vertex = undefined;
-        try ensureNoError(c.vkMapMemory(
-            self.graphics.logicalDevice,
-            self.vertexBufferMemory.?,
-            0,
-            @sizeOf(Vertex) * 3,
-            0,
-            @ptrCast(@alignCast(&data)),
-        ));
-        @memcpy(&data, &triangle_vertices);
-        c.vkUnmapMemory(self.graphics.logicalDevice, self.vertexBufferMemory.?);
-    }
-
-    fn findMemoryType(
-        typeFilter: u32,
-        properties: c.VkMemoryPropertyFlags,
-        physicalDevice: c.VkPhysicalDevice,
-    ) !u32 {
-        var memoryProperties: c.VkPhysicalDeviceMemoryProperties = undefined;
-        c.vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
-
-        for (0..memoryProperties.memoryTypeCount) |i| {
-            if ((typeFilter & (@as(u32, 1) << @intCast(i))) != 0 and
-                (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
-            {
-                return @intCast(i);
-            }
-        }
-
-        return error.MemoryTypeNotFound;
-    }
-
-    fn destroyVertexBuffer(self: *Self) void {
-        c.vkDestroyBuffer(self.graphics.logicalDevice, self.vertexBuffer.?, null);
-        c.vkFreeMemory(self.graphics.logicalDevice, self.vertexBufferMemory.?, null);
-    }
-
-    fn allocateCommandBuffers(self: *Self) !void {
-        try ensureNoError(c.vkAllocateCommandBuffers(
-            self.graphics.logicalDevice,
-            &c.VkCommandBufferAllocateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                .pNext = null,
-                .commandPool = self.commandPool,
-                .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                .commandBufferCount = maxFramesInFlight,
-            },
-            &self.commandBuffers,
-        ));
-
-        self.commandBuffersAllocated = true;
-    }
-
-    fn freeCommandBuffers(self: *Self) void {
-        if (self.commandBuffersAllocated and self.commandPool != null) {
-            c.vkFreeCommandBuffers(self.graphics.logicalDevice, self.commandPool, maxFramesInFlight, &self.commandBuffers);
-            self.commandBuffersAllocated = false;
-            self.commandBuffers = .{null} ** maxFramesInFlight;
-        }
-    }
-
-    fn createSyncObjects(self: *Self) !void {
-        for (0..maxFramesInFlight) |i| {
-            try ensureNoError(c.vkCreateFence(
-                self.graphics.logicalDevice,
-                &c.VkFenceCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-                    .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
-                },
-                null,
-                &self.inFlightFences[i],
-            ));
-
-            try ensureNoError(c.vkCreateSemaphore(
-                self.graphics.logicalDevice,
-                &c.VkSemaphoreCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-                },
-                null,
-                &self.imageAvailableSemaphores[i],
-            ));
-        }
-
-        const swapchain_images = self.swapChainImages orelse return error.SwapchainNotInitialized;
-        const renderFinishedSemaphores = try self.allocator.alloc(c.VkSemaphore, swapchain_images.len);
-        errdefer self.allocator.free(renderFinishedSemaphores);
-
-        for (renderFinishedSemaphores) |*semaphore| {
-            semaphore.* = null;
-        }
-
-        for (renderFinishedSemaphores) |*semaphore| {
-            try ensureNoError(c.vkCreateSemaphore(
-                self.graphics.logicalDevice,
-                &c.VkSemaphoreCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-                },
-                null,
-                semaphore,
-            ));
-        }
-
-        self.renderFinishedSemaphores = renderFinishedSemaphores;
-    }
-
-    fn destroySyncObjects(self: *Self) void {
-        if (self.renderFinishedSemaphores) |render_finished_semaphores| {
-            for (render_finished_semaphores) |semaphore| {
-                if (semaphore != null) {
-                    c.vkDestroySemaphore(self.graphics.logicalDevice, semaphore, null);
-                }
-            }
-            self.allocator.free(render_finished_semaphores);
-            self.renderFinishedSemaphores = null;
-        }
-
-        for (0..maxFramesInFlight) |i| {
-            if (self.imageAvailableSemaphores[i] != null) {
-                c.vkDestroySemaphore(self.graphics.logicalDevice, self.imageAvailableSemaphores[i], null);
-                self.imageAvailableSemaphores[i] = null;
-            }
-            if (self.inFlightFences[i] != null) {
-                c.vkDestroyFence(self.graphics.logicalDevice, self.inFlightFences[i], null);
-                self.inFlightFences[i] = null;
-            }
-        }
     }
 };
