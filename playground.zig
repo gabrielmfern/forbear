@@ -35,8 +35,9 @@ pub fn main() !void {
         triangleFragmentShader,
     );
     defer renderer.deinit();
+    renderer.setupResizingHandler(window);
 
-    while (window.running.*) {
+    while (window.running) {
         try window.handleEvents();
         try renderer.drawFrame();
     }

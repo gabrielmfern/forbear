@@ -152,9 +152,9 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
         .linux => .{
             "VK_KHR_wayland_surface",
         },
-        .macos => .{
-            "VK_EXT_metal_surface",
-        },
+        // .macos => .{
+        //     "VK_EXT_metal_surface",
+        // },
         else => .{},
     });
 
@@ -316,9 +316,6 @@ pub fn initRenderer(
     vertexShaderCode: []const u32,
     fragmentShaderCode: []const u32,
 ) !Renderer {
-    const width = window.width.*;
-    const height = window.height.*;
-
     var vulkanSurface: c.VkSurfaceKHR = undefined;
     switch (builtin.os.tag) {
         .linux => {
@@ -328,34 +325,34 @@ pub fn initRenderer(
                     .sType = c.VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
                     .pNext = null,
                     .flags = 0,
-                    .display = window.handle.wlDisplay,
-                    .surface = window.handle.wlSurface,
+                    .display = window.wlDisplay,
+                    .surface = window.wlSurface,
                 },
                 null,
                 &vulkanSurface,
             ));
         },
-        .macos => {
-            const caMetalLayer = window.handle.nativeMetalLayer();
-            if (caMetalLayer == null) return error.NullNativeView;
-            try ensureNoError(c.vkCreateMetalSurfaceEXT(
-                self.vulkanInstance,
-                &c.VkMetalSurfaceCreateInfoEXT{
-                    .sType = c.VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
-                    .pNext = null,
-                    .flags = 0,
-                    .pLayer = caMetalLayer,
-                },
-                null,
-                &vulkanSurface,
-            ));
-        },
+        // .macos => {
+        //     const caMetalLayer = window.handle.nativeMetalLayer();
+        //     if (caMetalLayer == null) return error.NullNativeView;
+        //     try ensureNoError(c.vkCreateMetalSurfaceEXT(
+        //         self.vulkanInstance,
+        //         &c.VkMetalSurfaceCreateInfoEXT{
+        //             .sType = c.VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
+        //             .pNext = null,
+        //             .flags = 0,
+        //             .pLayer = caMetalLayer,
+        //         },
+        //         null,
+        //         &vulkanSurface,
+        //     ));
+        // },
         else => @compileError("Unsupported platform"),
     }
     std.debug.assert(vulkanSurface != null);
     errdefer c.vkDestroySurfaceKHR(self.vulkanInstance, vulkanSurface, null);
 
-    return try Renderer.init(vulkanSurface, self, width, height, vertexShaderCode, fragmentShaderCode);
+    return try Renderer.init(vulkanSurface, self, window.width, window.height, vertexShaderCode, fragmentShaderCode);
 }
 
 pub const Renderer = struct {
@@ -369,7 +366,9 @@ pub const Renderer = struct {
     physicalDevice: c.VkPhysicalDevice,
     logicalDevice: c.VkDevice,
     graphicsQueue: c.VkQueue,
+    graphicsQueueFamilyIndex: u32,
     presentationQueue: c.VkQueue,
+    presentationQueueFamilyIndex: u32,
 
     surface: c.VkSurfaceKHR,
     swapchain: Swapchain,
@@ -392,16 +391,26 @@ pub const Renderer = struct {
 
     currentFrame: usize,
 
-    // pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
-    //     self.destroyFramebuffers();
-    //     self.destroySwapchain();
-    //
-    //     try self.createSwapchain(width, height);
-    //     errdefer self.destroySwapchain();
-    //
-    //     try self.createFramebuffers();
-    //     errdefer self.destroyFramebuffers();
-    // }
+    pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
+        self.swapchain.deinit(self.logicalDevice);
+        destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
+
+        self.swapchain = try Swapchain.init(
+            self.physicalDevice,
+            self.logicalDevice,
+            self.presentationQueueFamilyIndex,
+            self.presentationQueue,
+            self.graphicsQueueFamilyIndex,
+            self.graphicsQueue,
+            self.surface,
+            width,
+            height,
+            self.allocator,
+        );
+        errdefer self.swapchain.deinit(self.logicalDevice);
+
+        self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
+    }
 
     fn init(
         surface: c.VkSurfaceKHR,
@@ -414,9 +423,9 @@ pub const Renderer = struct {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         } ++ switch (builtin.os.tag) {
-            .macos => .{
-                "VK_KHR_portability_subset",
-            },
+            // .macos => .{
+            //     "VK_KHR_portability_subset",
+            // },
             else => .{},
         });
 
@@ -851,16 +860,16 @@ pub const Renderer = struct {
 
         try ensureNoError(c.vkBindBufferMemory(logicalDevice, vertexBuffer, vertexBufferMemory, 0));
 
-        var data: ?*anyopaque = undefined;
+        var vertexBufferData: ?*anyopaque = undefined;
         try ensureNoError(c.vkMapMemory(
             logicalDevice,
             vertexBufferMemory,
             0,
             @sizeOf(Vertex) * 3,
             0,
-            &data,
+            &vertexBufferData,
         ));
-        @memcpy(@as([*]Vertex, @ptrCast(@alignCast(data))), &triangle_vertices);
+        @memcpy(@as([*]Vertex, @ptrCast(@alignCast(vertexBufferData))), &triangle_vertices);
         c.vkUnmapMemory(logicalDevice, vertexBufferMemory);
 
         var commandBuffers: [maxFramesInFlight]c.VkCommandBuffer = undefined;
@@ -933,7 +942,9 @@ pub const Renderer = struct {
             .physicalDevice = preferred.?.device.physicalDevice,
             .logicalDevice = logicalDevice,
             .graphicsQueue = graphicsQueue,
+            .graphicsQueueFamilyIndex = preferred.?.graphicsQueueFamilyIndex,
             .presentationQueue = presentationQueue,
+            .presentationQueueFamilyIndex = preferred.?.presentationQueueFamilyIndex,
 
             .surface = surface,
             .swapchain = swapchain,
@@ -956,6 +967,20 @@ pub const Renderer = struct {
 
             .currentFrame = 0,
         };
+    }
+
+    pub fn setupResizingHandler(self: *Self, window: *Window) void {
+        window.setResizeHandler(
+            (struct {
+                fn handler(_: *Window, new_width: u32, new_height: u32, data: *anyopaque) void {
+                    recreateSwapchain(@ptrCast(@alignCast(data)), new_width, new_height) catch |err| {
+                        std.log.err("Failed to recreate swapchain on window resize {}", .{err});
+                        @panic("Failed to recreate swapchain on window resize");
+                    };
+                }
+            }).handler,
+            @ptrCast(@alignCast(self)),
+        );
     }
 
     pub fn deinit(self: *Self) void {
