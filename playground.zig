@@ -37,18 +37,22 @@ pub fn main() !void {
     defer renderer.deinit();
     renderer.setupResizingHandler(window);
 
-    const triangleModel = try forbear.Graphics.Model.init(
+    const rectangleModel = try forbear.Graphics.Model.init(
         &.{
-            .{ .position = .{ 0.0, -0.5, 0.0 }, .color = .{ 1.0, 0.0, 0.0 } },
+            .{ .position = .{ -0.5, -0.5, 0.0 }, .color = .{ 1.0, 0.0, 0.0 } },
+            .{ .position = .{ 0.5, -0.5, 0.0 }, .color = .{ 0.0, 1.0, 0.0 } },
+            .{ .position = .{ -0.5, 0.5, 0.0 }, .color = .{ 1.0, 0.0, 0.0 } },
+
+            .{ .position = .{ 0.5, -0.5, 0.0 }, .color = .{ 0.0, 1.0, 0.0 } },
             .{ .position = .{ 0.5, 0.5, 0.0 }, .color = .{ 0.0, 1.0, 0.0 } },
-            .{ .position = .{ -0.5, 0.5, 0.0 }, .color = .{ 0.0, 0.0, 1.0 } },
+            .{ .position = .{ -0.5, 0.5, 0.0 }, .color = .{ 1.0, 0.0, 0.0 } },
         },
         &renderer,
     );
-    defer triangleModel.deinit(&renderer);
+    defer rectangleModel.deinit(&renderer);
 
     while (window.running) {
         try window.handleEvents();
-        try renderer.drawFrame(&.{triangleModel});
+        try renderer.drawFrame(&.{rectangleModel});
     }
 }
