@@ -32,6 +32,15 @@ pub fn main() !void {
 
     while (window.running) {
         try window.handleEvents();
-        try renderer.drawFrame(.{ 100, 100, 0.0 }, .{ 1.0, 1.0, 1.0, 1.0 });
+        const milli: f64 = @floatFromInt(std.time.milliTimestamp());
+        const t = milli / 1000.0;
+        try renderer.drawFrame(
+            .{
+                @floatCast(std.math.cos(t) * 400 + 600),
+                @floatCast(std.math.sin(t) * 400 + 600),
+                0.0,
+            },
+            .{ 1.0, 1.0, 1.0, 1.0 },
+        );
     }
 }
