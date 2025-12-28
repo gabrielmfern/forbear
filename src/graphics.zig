@@ -1,7 +1,13 @@
 const std = @import("std");
-const c = @import("c.zig").c;
 const builtin = @import("builtin");
+
+const zmath = @import("zmath");
+
+const c = @import("c.zig").c;
 const Window = @import("window/root.zig");
+
+const Vec4 = @Vector(4, f32);
+const Vec3 = @Vector(3, f32);
 
 pub const VulkanError = error{
     ExtensioNotPresent,
@@ -25,6 +31,7 @@ pub const VulkanError = error{
     PresentTimingQueueFullExt,
     InvalidExternalHandle,
     MemoryMapFailed,
+    FragmentationExt,
     Unknown,
 };
 
@@ -50,6 +57,7 @@ pub fn ensureNoError(result: c.VkResult) !void {
         c.VK_ERROR_OUT_OF_DATE_KHR => return error.OutOfDate,
         c.VK_ERROR_INVALID_EXTERNAL_HANDLE => return error.InvalidExternalHandle,
         c.VK_ERROR_MEMORY_MAP_FAILED => return error.MemoryMapFailed,
+        c.VK_ERROR_FRAGMENTATION_EXT => return error.FragmentationExt,
         c.VK_ERROR_UNKNOWN => return error.Unknown,
         else => {
             if (builtin.os.tag == .linux) {
@@ -66,7 +74,6 @@ pub fn ensureNoError(result: c.VkResult) !void {
 
 pub const Vertex = extern struct {
     position: @Vector(3, f32),
-    color: @Vector(3, f32),
 
     pub fn getBindingDescription() c.VkVertexInputBindingDescription {
         return c.VkVertexInputBindingDescription{
@@ -76,19 +83,13 @@ pub const Vertex = extern struct {
         };
     }
 
-    pub fn getAttributeDescriptions() [2]c.VkVertexInputAttributeDescription {
+    pub fn getAttributeDescriptions() [1]c.VkVertexInputAttributeDescription {
         return .{
             c.VkVertexInputAttributeDescription{
                 .binding = 0,
                 .location = 0,
                 .format = c.VK_FORMAT_R32G32B32_SFLOAT,
                 .offset = @offsetOf(@This(), "position"),
-            },
-            c.VkVertexInputAttributeDescription{
-                .binding = 0,
-                .location = 1,
-                .format = c.VK_FORMAT_R32G32B32_SFLOAT,
-                .offset = @offsetOf(@This(), "color"),
             },
         };
     }
@@ -307,8 +308,6 @@ const Graphics = @This();
 pub fn initRenderer(
     self: *Graphics,
     window: *const Window,
-    vertexShaderCode: []const u32,
-    fragmentShaderCode: []const u32,
 ) !Renderer {
     var vulkanSurface: c.VkSurfaceKHR = undefined;
     switch (builtin.os.tag) {
@@ -346,7 +345,7 @@ pub fn initRenderer(
     std.debug.assert(vulkanSurface != null);
     errdefer c.vkDestroySurfaceKHR(self.vulkanInstance, vulkanSurface, null);
 
-    return try Renderer.init(vulkanSurface, self, window.width, window.height, vertexShaderCode, fragmentShaderCode);
+    return try Renderer.init(vulkanSurface, self, window.width, window.height);
 }
 
 fn findMemoryType(
@@ -482,7 +481,7 @@ pub const Buffer = struct {
         try ensureNoError(c.vkQueueWaitIdle(graphicsQueue));
     }
 
-    pub fn map(self: @This(), logicalDevice: c.VkDevice, data: []const u8) !void {
+    pub fn set(self: @This(), logicalDevice: c.VkDevice, data: []const u8) !void {
         if (data.len != @as(usize, @intCast(self.size))) {
             return error.BufferSizeDataMismatch;
         }
@@ -502,26 +501,32 @@ pub const Model = struct {
     vertexBuffer: Buffer,
     vertexCount: u32,
 
-    pub fn init(vertices: []const Vertex, renderer: *Renderer) !@This() {
+    pub fn init(
+        vertices: []const Vertex,
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        transferQueue: c.VkQueue,
+        commandPool: c.VkCommandPool,
+    ) !@This() {
         const stagingBuffer = try Buffer.init(
-            renderer.logicalDevice,
-            renderer.physicalDevice,
+            logicalDevice,
+            physicalDevice,
             @sizeOf(Vertex) * vertices.len,
             c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         );
-        defer stagingBuffer.deinit(renderer.logicalDevice);
-        try stagingBuffer.map(renderer.logicalDevice, @ptrCast(@alignCast(vertices)));
+        defer stagingBuffer.deinit(logicalDevice);
+        try stagingBuffer.set(logicalDevice, @ptrCast(@alignCast(vertices)));
 
         var vertexBuffer = try Buffer.init(
-            renderer.logicalDevice,
-            renderer.physicalDevice,
+            logicalDevice,
+            physicalDevice,
             @sizeOf(Vertex) * vertices.len,
             c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         );
-        errdefer vertexBuffer.deinit(renderer.logicalDevice);
-        try vertexBuffer.copyFrom(&stagingBuffer, renderer.logicalDevice, renderer.graphicsQueue, renderer.commandPool);
+        errdefer vertexBuffer.deinit(logicalDevice);
+        try vertexBuffer.copyFrom(&stagingBuffer, logicalDevice, transferQueue, commandPool);
 
         return Model{
             .vertexBuffer = vertexBuffer,
@@ -529,23 +534,338 @@ pub const Model = struct {
         };
     }
 
-    pub fn deinit(self: @This(), renderer: *Renderer) void {
-        _ = c.vkDeviceWaitIdle(renderer.logicalDevice);
-        self.vertexBuffer.deinit(renderer.logicalDevice);
-    }
-
-    pub fn draw(self: @This(), commandBuffer: c.VkCommandBuffer) void {
-        const buffers = [_]c.VkBuffer{self.vertexBuffer.handle};
-        const offsets = [_]c.VkDeviceSize{0};
-        c.vkCmdBindVertexBuffers(commandBuffer, 0, 1, &buffers, &offsets);
-        c.vkCmdDraw(commandBuffer, self.vertexCount, 1, 0, 0);
+    pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+        self.vertexBuffer.deinit(logicalDevice);
     }
 };
 
+const ElementsPipeline = struct {
+    pipelineLayout: c.VkPipelineLayout,
+    graphicsPipeline: c.VkPipeline,
+
+    uniformBufferDescriptorSetLayout: c.VkDescriptorSetLayout,
+    descriptorPool: c.VkDescriptorPool,
+    descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
+
+    elementModel: Model,
+    uniformBuffers: [maxFramesInFlight]Buffer,
+    uniformBuffersMapped: [maxFramesInFlight]*UniformBuffer,
+
+    const UniformBuffer = extern struct {
+        modelViewProjectionMatrix: zmath.Mat,
+        color: Vec4,
+    };
+
+    const elementVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_vertex_shader")));
+    const elementFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_fragment_shader")));
+
+    pub fn init(
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        graphicsQueue: c.VkQueue,
+        commandPool: c.VkCommandPool,
+        renderPass: c.VkRenderPass,
+    ) !@This() {
+        var vertexShaderModule: c.VkShaderModule = undefined;
+        try ensureNoError(c.vkCreateShaderModule(
+            logicalDevice,
+            &c.VkShaderModuleCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .codeSize = @sizeOf(u32) * elementVertexShader.len,
+                .pCode = elementVertexShader.ptr,
+            },
+            null,
+            &vertexShaderModule,
+        ));
+        defer c.vkDestroyShaderModule(logicalDevice, vertexShaderModule, null);
+
+        var fragmentShaderModule: c.VkShaderModule = undefined;
+        try ensureNoError(c.vkCreateShaderModule(
+            logicalDevice,
+            &c.VkShaderModuleCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .codeSize = @sizeOf(u32) * elementFragmentShader.len,
+                .pCode = elementFragmentShader.ptr,
+            },
+            null,
+            &fragmentShaderModule,
+        ));
+        defer c.vkDestroyShaderModule(logicalDevice, fragmentShaderModule, null);
+
+        const shaderStages: []const c.VkPipelineShaderStageCreateInfo = &.{
+            c.VkPipelineShaderStageCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+                .module = vertexShaderModule,
+                .pName = "main",
+                .pSpecializationInfo = null,
+            },
+            c.VkPipelineShaderStageCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .module = fragmentShaderModule,
+                .pName = "main",
+                .pSpecializationInfo = null,
+            },
+        };
+
+        const dynamicStates: []const c.VkDynamicState = &.{
+            c.VK_DYNAMIC_STATE_VIEWPORT,
+            c.VK_DYNAMIC_STATE_SCISSOR,
+        };
+
+        var uniformBufferDescriptorSetLayout: c.VkDescriptorSetLayout = undefined;
+        try ensureNoError(c.vkCreateDescriptorSetLayout(
+            logicalDevice,
+            &c.VkDescriptorSetLayoutCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .bindingCount = 1,
+                .pBindings = &c.VkDescriptorSetLayoutBinding{
+                    .binding = 0,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    .descriptorCount = 1,
+                    .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+                    .pImmutableSamplers = null,
+                },
+            },
+            null,
+            &uniformBufferDescriptorSetLayout,
+        ));
+
+        var pipelineLayout: c.VkPipelineLayout = undefined;
+        try ensureNoError(c.vkCreatePipelineLayout(
+            logicalDevice,
+            &c.VkPipelineLayoutCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .setLayoutCount = 1,
+                .pSetLayouts = &uniformBufferDescriptorSetLayout,
+                .pushConstantRangeCount = 0,
+                .pPushConstantRanges = null,
+            },
+            null,
+            &pipelineLayout,
+        ));
+        errdefer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
+
+        const bindingDescription = Vertex.getBindingDescription();
+        const attributeDescriptions = Vertex.getAttributeDescriptions();
+
+        var graphicsPipeline: c.VkPipeline = undefined;
+        try ensureNoError(c.vkCreateGraphicsPipelines(
+            logicalDevice,
+            null,
+            1,
+            &c.VkGraphicsPipelineCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .stageCount = @intCast(shaderStages.len),
+                .pStages = shaderStages.ptr,
+                .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .vertexBindingDescriptionCount = 1,
+                    .pVertexBindingDescriptions = &bindingDescription,
+                    .vertexAttributeDescriptionCount = attributeDescriptions.len,
+                    .pVertexAttributeDescriptions = &attributeDescriptions,
+                },
+                .pInputAssemblyState = &c.VkPipelineInputAssemblyStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                    .primitiveRestartEnable = c.VK_FALSE,
+                },
+                .pViewportState = &c.VkPipelineViewportStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .viewportCount = 1,
+                    .scissorCount = 1,
+                },
+                .pRasterizationState = &c.VkPipelineRasterizationStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .depthClampEnable = c.VK_FALSE,
+                    .rasterizerDiscardEnable = c.VK_FALSE,
+                    .polygonMode = c.VK_POLYGON_MODE_FILL,
+                    .cullMode = c.VK_CULL_MODE_BACK_BIT,
+                    .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
+                    .lineWidth = 1.0,
+                    .depthBiasEnable = c.VK_FALSE,
+                    .depthBiasConstantFactor = 0.0,
+                    .depthBiasClamp = 0.0,
+                    .depthBiasSlopeFactor = 0.0,
+                },
+                .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                    .sampleShadingEnable = c.VK_FALSE,
+                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .minSampleShading = 1.0,
+                    .pSampleMask = null,
+                    .alphaToCoverageEnable = c.VK_FALSE,
+                    .alphaToOneEnable = c.VK_FALSE,
+                    .pNext = null,
+                    .flags = 0,
+                },
+                .pDepthStencilState = null,
+                .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .logicOpEnable = c.VK_FALSE,
+                    .logicOp = c.VK_LOGIC_OP_COPY,
+                    .attachmentCount = 1,
+                    .pAttachments = &c.VkPipelineColorBlendAttachmentState{
+                        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
+                        .blendEnable = c.VK_TRUE,
+                        .srcColorBlendFactor = c.VK_BLEND_FACTOR_SRC_ALPHA,
+                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                        .colorBlendOp = c.VK_BLEND_OP_ADD,
+                        .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .alphaBlendOp = c.VK_BLEND_OP_ADD,
+                    },
+                    .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
+                },
+                .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .dynamicStateCount = @intCast(dynamicStates.len),
+                    .pDynamicStates = dynamicStates.ptr,
+                },
+                .layout = pipelineLayout,
+                .renderPass = renderPass,
+                .subpass = 0,
+                .basePipelineHandle = null,
+                .basePipelineIndex = -1,
+            },
+            null,
+            &graphicsPipeline,
+        ));
+        errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
+
+        const elementModel = try Model.init(
+            &.{
+                .{ .position = .{ -0.5, -0.5, 0.0 } },
+                .{ .position = .{ 0.5, -0.5, 0.0 } },
+                .{ .position = .{ -0.5, 0.5, 0.0 } },
+
+                .{ .position = .{ 0.5, -0.5, 0.0 } },
+                .{ .position = .{ 0.5, 0.5, 0.0 } },
+                .{ .position = .{ -0.5, 0.5, 0.0 } },
+            },
+            logicalDevice,
+            physicalDevice,
+            graphicsQueue,
+            commandPool,
+        );
+
+        var uniformBuffers: [maxFramesInFlight]Buffer = undefined;
+        var uniformBuffersMapped: [maxFramesInFlight]*UniformBuffer = undefined;
+        for (0..maxFramesInFlight) |i| {
+            const buffer = try Buffer.init(
+                logicalDevice,
+                physicalDevice,
+                @sizeOf(UniformBuffer),
+                c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            );
+            uniformBuffers[i] = buffer;
+            var uniformBufferData: ?*anyopaque = undefined;
+            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &uniformBufferData));
+            uniformBuffersMapped[i] = @ptrCast(@alignCast(uniformBufferData));
+        }
+
+        var descriptorPool: c.VkDescriptorPool = undefined;
+        try ensureNoError(c.vkCreateDescriptorPool(logicalDevice, &c.VkDescriptorPoolCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .poolSizeCount = 1,
+            .maxSets = maxFramesInFlight,
+            .pPoolSizes = &c.VkDescriptorPoolSize{
+                .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = maxFramesInFlight,
+            },
+            .flags = 0,
+            .pNext = null,
+        }, null, &descriptorPool));
+
+        var descriptorSets: [maxFramesInFlight]c.VkDescriptorSet = undefined;
+        try ensureNoError(c.vkAllocateDescriptorSets(logicalDevice, &c.VkDescriptorSetAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = descriptorPool,
+            .descriptorSetCount = maxFramesInFlight,
+            .pSetLayouts = &([1]c.VkDescriptorSetLayout{uniformBufferDescriptorSetLayout} ** maxFramesInFlight),
+        }, &descriptorSets));
+
+        for (uniformBuffers, 0..) |buffer, i| {
+            const bufferInfo = c.VkDescriptorBufferInfo{
+                .buffer = buffer.handle,
+                .offset = 0,
+                .range = c.VK_WHOLE_SIZE,
+            };
+
+            const descriptorWrite = c.VkWriteDescriptorSet{
+                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = null,
+                .dstSet = descriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .pImageInfo = null,
+                .pBufferInfo = &bufferInfo,
+                .pTexelBufferView = null,
+            };
+
+            c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+        }
+
+        return ElementsPipeline{
+            .pipelineLayout = pipelineLayout,
+            .graphicsPipeline = graphicsPipeline,
+            .elementModel = elementModel,
+
+            .uniformBufferDescriptorSetLayout = uniformBufferDescriptorSetLayout,
+            .uniformBuffers = uniformBuffers,
+            .uniformBuffersMapped = uniformBuffersMapped,
+            .descriptorSets = descriptorSets,
+            .descriptorPool = descriptorPool,
+        };
+    }
+
+    pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+        c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
+
+        for (self.uniformBuffers) |buffer| {
+            c.vkUnmapMemory(logicalDevice, buffer.memory);
+            buffer.deinit(logicalDevice);
+        }
+
+        c.vkDestroyDescriptorSetLayout(logicalDevice, self.uniformBufferDescriptorSetLayout, null);
+        self.elementModel.deinit(logicalDevice);
+        c.vkDestroyPipeline(logicalDevice, self.graphicsPipeline, null);
+        c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
+    }
+};
+
+const maxFramesInFlight = 2;
+
 pub const Renderer = struct {
     const Self = @This();
-
-    const maxFramesInFlight = 2;
 
     allocator: std.mem.Allocator,
     graphics: *const Graphics,
@@ -561,9 +881,8 @@ pub const Renderer = struct {
     swapchain: Swapchain,
     swapchainFramebuffers: []c.VkFramebuffer,
 
-    pipelineLayout: c.VkPipelineLayout,
+    elementsPipeline: ElementsPipeline,
     renderPass: c.VkRenderPass,
-    graphicsPipeline: c.VkPipeline,
 
     commandPool: c.VkCommandPool,
     commandBuffers: [maxFramesInFlight]c.VkCommandBuffer,
@@ -602,8 +921,6 @@ pub const Renderer = struct {
         graphics: *const Graphics,
         width: u32,
         height: u32,
-        vertexShaderCode: []const u32,
-        fragmentShaderCode: []const u32,
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -770,79 +1087,6 @@ pub const Renderer = struct {
         );
         errdefer swapchain.deinit(logicalDevice);
 
-        var vertexShaderModule: c.VkShaderModule = undefined;
-        try ensureNoError(c.vkCreateShaderModule(
-            logicalDevice,
-            &c.VkShaderModuleCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                .pNext = null,
-                .flags = 0,
-                .codeSize = @sizeOf(u32) * vertexShaderCode.len,
-                .pCode = vertexShaderCode.ptr,
-            },
-            null,
-            &vertexShaderModule,
-        ));
-        defer c.vkDestroyShaderModule(logicalDevice, vertexShaderModule, null);
-
-        var fragmentShaderModule: c.VkShaderModule = undefined;
-        try ensureNoError(c.vkCreateShaderModule(
-            logicalDevice,
-            &c.VkShaderModuleCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                .pNext = null,
-                .flags = 0,
-                .codeSize = @sizeOf(u32) * fragmentShaderCode.len,
-                .pCode = fragmentShaderCode.ptr,
-            },
-            null,
-            &fragmentShaderModule,
-        ));
-        defer c.vkDestroyShaderModule(logicalDevice, fragmentShaderModule, null);
-
-        const shaderStages: []const c.VkPipelineShaderStageCreateInfo = &.{
-            c.VkPipelineShaderStageCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                .pNext = null,
-                .flags = 0,
-                .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
-                .module = vertexShaderModule,
-                .pName = "main",
-                .pSpecializationInfo = null,
-            },
-            c.VkPipelineShaderStageCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                .pNext = null,
-                .flags = 0,
-                .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-                .module = fragmentShaderModule,
-                .pName = "main",
-                .pSpecializationInfo = null,
-            },
-        };
-
-        const dynamicStates: []const c.VkDynamicState = &.{
-            c.VK_DYNAMIC_STATE_VIEWPORT,
-            c.VK_DYNAMIC_STATE_SCISSOR,
-        };
-
-        var pipelineLayout: c.VkPipelineLayout = undefined;
-        try ensureNoError(c.vkCreatePipelineLayout(
-            logicalDevice,
-            &c.VkPipelineLayoutCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .pNext = null,
-                .flags = 0,
-                .setLayoutCount = 0,
-                .pSetLayouts = null,
-                .pushConstantRangeCount = 0,
-                .pPushConstantRanges = null,
-            },
-            null,
-            &pipelineLayout,
-        ));
-        errdefer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
-
         const renderPassDependencies: []const c.VkSubpassDependency = &.{
             c.VkSubpassDependency{
                 .srcSubpass = c.VK_SUBPASS_EXTERNAL,
@@ -889,108 +1133,6 @@ pub const Renderer = struct {
         ));
         errdefer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
 
-        const bindingDescription = Vertex.getBindingDescription();
-        const attributeDescriptions = Vertex.getAttributeDescriptions();
-
-        var graphicsPipeline: c.VkPipeline = undefined;
-        try ensureNoError(c.vkCreateGraphicsPipelines(
-            logicalDevice,
-            null,
-            1,
-            &c.VkGraphicsPipelineCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                .stageCount = @intCast(shaderStages.len),
-                .pStages = shaderStages.ptr,
-                .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .vertexBindingDescriptionCount = 1,
-                    .pVertexBindingDescriptions = &bindingDescription,
-                    .vertexAttributeDescriptionCount = attributeDescriptions.len,
-                    .pVertexAttributeDescriptions = &attributeDescriptions,
-                },
-                .pInputAssemblyState = &c.VkPipelineInputAssemblyStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-                    .primitiveRestartEnable = c.VK_FALSE,
-                },
-                .pViewportState = &c.VkPipelineViewportStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .viewportCount = 1,
-                    .scissorCount = 1,
-                },
-                .pRasterizationState = &c.VkPipelineRasterizationStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .depthClampEnable = c.VK_FALSE,
-                    .rasterizerDiscardEnable = c.VK_FALSE,
-                    .polygonMode = c.VK_POLYGON_MODE_FILL,
-                    .cullMode = c.VK_CULL_MODE_BACK_BIT,
-                    .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
-                    .lineWidth = 1.0,
-                    .depthBiasEnable = c.VK_FALSE,
-                    .depthBiasConstantFactor = 0.0,
-                    .depthBiasClamp = 0.0,
-                    .depthBiasSlopeFactor = 0.0,
-                },
-                .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                    .sampleShadingEnable = c.VK_FALSE,
-                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
-                    .minSampleShading = 1.0,
-                    .pSampleMask = null,
-                    .alphaToCoverageEnable = c.VK_FALSE,
-                    .alphaToOneEnable = c.VK_FALSE,
-                    .pNext = null,
-                    .flags = 0,
-                },
-                .pDepthStencilState = null,
-                .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .logicOpEnable = c.VK_FALSE,
-                    .logicOp = c.VK_LOGIC_OP_COPY,
-                    .attachmentCount = 1,
-                    .pAttachments = &c.VkPipelineColorBlendAttachmentState{
-                        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
-                        .blendEnable = c.VK_TRUE,
-                        .srcColorBlendFactor = c.VK_BLEND_FACTOR_SRC_ALPHA,
-                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-                        .colorBlendOp = c.VK_BLEND_OP_ADD,
-                        .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
-                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ZERO,
-                        .alphaBlendOp = c.VK_BLEND_OP_ADD,
-                    },
-                    .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
-                },
-                .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .dynamicStateCount = @intCast(dynamicStates.len),
-                    .pDynamicStates = dynamicStates.ptr,
-                },
-                .layout = pipelineLayout,
-                .renderPass = renderPass,
-                .subpass = 0,
-                .basePipelineHandle = null,
-                .basePipelineIndex = -1,
-            },
-            null,
-            &graphicsPipeline,
-        ));
-        errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
-
-        const framebuffers = try createFramebuffers(logicalDevice, renderPass, swapchain, graphics.allocator);
-        errdefer destroyFramebuffers(framebuffers, logicalDevice, graphics.allocator);
-
         var commandPool: c.VkCommandPool = undefined;
         try ensureNoError(c.vkCreateCommandPool(
             logicalDevice,
@@ -1004,6 +1146,18 @@ pub const Renderer = struct {
             &commandPool,
         ));
         errdefer c.vkDestroyCommandPool(logicalDevice, commandPool, null);
+
+        const elementsPipeline = try ElementsPipeline.init(
+            logicalDevice,
+            physicalDevice,
+            graphicsQueue,
+            commandPool,
+            renderPass,
+        );
+        errdefer elementsPipeline.deinit(logicalDevice);
+
+        const framebuffers = try createFramebuffers(logicalDevice, renderPass, swapchain, graphics.allocator);
+        errdefer destroyFramebuffers(framebuffers, logicalDevice, graphics.allocator);
 
         var commandBuffers: [maxFramesInFlight]c.VkCommandBuffer = undefined;
         try ensureNoError(c.vkAllocateCommandBuffers(
@@ -1083,9 +1237,8 @@ pub const Renderer = struct {
             .swapchain = swapchain,
             .swapchainFramebuffers = framebuffers,
 
-            .pipelineLayout = pipelineLayout,
+            .elementsPipeline = elementsPipeline,
             .renderPass = renderPass,
-            .graphicsPipeline = graphicsPipeline,
 
             .commandPool = commandPool,
             .commandBuffers = commandBuffers,
@@ -1128,15 +1281,14 @@ pub const Renderer = struct {
         c.vkFreeCommandBuffers(self.logicalDevice, self.commandPool, maxFramesInFlight, &self.commandBuffers);
         c.vkDestroyCommandPool(self.logicalDevice, self.commandPool, null);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
-        c.vkDestroyPipeline(self.logicalDevice, self.graphicsPipeline, null);
+        self.elementsPipeline.deinit(self.logicalDevice);
         c.vkDestroyRenderPass(self.logicalDevice, self.renderPass, null);
-        c.vkDestroyPipelineLayout(self.logicalDevice, self.pipelineLayout, null);
         self.swapchain.deinit(self.logicalDevice);
         c.vkDestroyDevice(self.logicalDevice, null);
         c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
     }
 
-    pub fn drawFrame(self: *Self, models: []const Model) !void {
+    pub fn drawFrame(self: *Self, elementPosition: @Vector(3, f32), elementColor: @Vector(4, f32)) !void {
         try ensureNoError(c.vkWaitForFences(
             self.logicalDevice,
             1,
@@ -1192,7 +1344,7 @@ pub const Renderer = struct {
         c.vkCmdBindPipeline(
             self.commandBuffers[self.currentFrame],
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            self.graphicsPipeline,
+            self.elementsPipeline.graphicsPipeline,
         );
 
         c.vkCmdSetViewport(self.commandBuffers[self.currentFrame], 0, 1, &[_]c.VkViewport{c.VkViewport{
@@ -1209,9 +1361,37 @@ pub const Renderer = struct {
             .extent = self.swapchain.extent,
         }});
 
-        for (models) |model| {
-            model.draw(self.commandBuffers[self.currentFrame]);
-        }
+        self.elementsPipeline.uniformBuffersMapped[self.currentFrame].* = .{
+            .color = elementColor,
+            .modelViewProjectionMatrix = zmath.mul(
+                zmath.mul(
+                    zmath.scaling(100, 100, 1),
+                    zmath.translation(elementPosition[0], elementPosition[1], elementPosition[2]),
+                ),
+                zmath.orthographicOffCenterRh(
+                    0.0,
+                    @floatFromInt(self.swapchain.extent.width),
+                    @floatFromInt(self.swapchain.extent.height),
+                    0.0,
+                    -1000.0,
+                    1000.0,
+                ),
+            ),
+        };
+
+        c.vkCmdBindDescriptorSets(
+            self.commandBuffers[self.currentFrame],
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.elementsPipeline.pipelineLayout,
+            0,
+            1,
+            &self.elementsPipeline.descriptorSets[self.currentFrame],
+            0,
+            null,
+        );
+
+        c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
+        c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.elementsPipeline.elementModel.vertexCount, 1, 0, 0);
 
         c.vkCmdEndRenderPass(self.commandBuffers[self.currentFrame]);
 
