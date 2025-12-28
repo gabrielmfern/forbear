@@ -201,7 +201,7 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
                     _ = messageType;
                     _ = userData;
 
-                    const message = std.mem.span(callbackData.*.pMessage);
+                    const message: []const u8 = std.mem.span(callbackData.*.pMessage);
                     if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
                         std.log.debug("{s} (vulkan debug messenger)", .{message});
                     } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
@@ -530,6 +530,7 @@ pub const Model = struct {
     }
 
     pub fn deinit(self: @This(), renderer: *Renderer) void {
+        _ = c.vkDeviceWaitIdle(renderer.logicalDevice);
         self.vertexBuffer.deinit(renderer.logicalDevice);
     }
 
