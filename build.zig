@@ -52,38 +52,22 @@ pub fn build(b: *std.Build) void {
         });
     }
 
-    const spirv_target = b.resolveTargetQuery(.{
-        .cpu_arch = .spirv32,
-        .os_tag = .vulkan,
-        .cpu_model = .{ .explicit = &std.Target.spirv.cpu.vulkan_v1_2 },
-        .ofmt = .spirv,
-    });
+    const vert_glsl_cmd = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
+    const vert_spv = vert_glsl_cmd.addOutputFileArg("vertex.spv");
+    vert_glsl_cmd.addFileArg(b.path("shaders/element/vertex.vert"));
 
-    const vert_spv = b.addObject(.{
-        .name = "element_vertex_shader",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("shaders/element/vertex.zig"),
-            .target = spirv_target,
-            .imports = &.{.{ .name = "zmath", .module = zmath.module("root") }},
-        }),
-        .use_llvm = false,
-    });
     forbear.addAnonymousImport(
         "element_vertex_shader",
-        .{ .root_source_file = vert_spv.getEmittedBin() },
+        .{ .root_source_file = vert_spv },
     );
 
-    const frag_spv = b.addObject(.{
-        .name = "element_fragment_shader",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("shaders/element/fragment.zig"),
-            .target = spirv_target,
-        }),
-        .use_llvm = false,
-    });
+    const frag_glsl_cmd = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
+    const frag_spv = frag_glsl_cmd.addOutputFileArg("fragment.spv");
+    frag_glsl_cmd.addFileArg(b.path("shaders/element/fragment.frag"));
+
     forbear.addAnonymousImport(
         "element_fragment_shader",
-        .{ .root_source_file = frag_spv.getEmittedBin() },
+        .{ .root_source_file = frag_spv },
     );
 
     const mod_tests = b.addTest(.{
