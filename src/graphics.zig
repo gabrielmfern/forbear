@@ -4,6 +4,8 @@ const builtin = @import("builtin");
 const zmath = @import("zmath");
 
 const c = @import("c.zig").c;
+const layouting = @import("layouting.zig");
+const LayoutBox = layouting.LayoutBox;
 const Window = @import("window/root.zig");
 
 const Vec4 = @Vector(4, f32);
@@ -539,22 +541,23 @@ pub const Model = struct {
     }
 };
 
+pub const ElementRenderingData = extern struct {
+    modelViewProjectionMatrix: zmath.Mat,
+    backgroundColor: Vec4,
+};
+
 const ElementsPipeline = struct {
     pipelineLayout: c.VkPipelineLayout,
     graphicsPipeline: c.VkPipeline,
 
-    uniformBufferDescriptorSetLayout: c.VkDescriptorSetLayout,
+    shaderBufferDescriptorSetLayout: c.VkDescriptorSetLayout,
     descriptorPool: c.VkDescriptorPool,
     descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
 
     elementModel: Model,
-    uniformBuffers: [maxFramesInFlight]Buffer,
-    uniformBuffersMapped: [maxFramesInFlight]*UniformBuffer,
 
-    const UniformBuffer = extern struct {
-        modelViewProjectionMatrix: zmath.Mat,
-        color: Vec4,
-    };
+    shaderBuffers: [maxFramesInFlight]Buffer,
+    shaderBuffersMapped: [maxFramesInFlight][]ElementRenderingData,
 
     const elementVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_vertex_shader")));
     const elementFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_fragment_shader")));
@@ -622,7 +625,7 @@ const ElementsPipeline = struct {
             c.VK_DYNAMIC_STATE_SCISSOR,
         };
 
-        var uniformBufferDescriptorSetLayout: c.VkDescriptorSetLayout = undefined;
+        var shaderBufferDescriptorSetLayout: c.VkDescriptorSetLayout = undefined;
         try ensureNoError(c.vkCreateDescriptorSetLayout(
             logicalDevice,
             &c.VkDescriptorSetLayoutCreateInfo{
@@ -632,14 +635,14 @@ const ElementsPipeline = struct {
                 .bindingCount = 1,
                 .pBindings = &c.VkDescriptorSetLayoutBinding{
                     .binding = 0,
-                    .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                     .descriptorCount = 1,
                     .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
                     .pImmutableSamplers = null,
                 },
             },
             null,
-            &uniformBufferDescriptorSetLayout,
+            &shaderBufferDescriptorSetLayout,
         ));
 
         var pipelineLayout: c.VkPipelineLayout = undefined;
@@ -650,7 +653,7 @@ const ElementsPipeline = struct {
                 .pNext = null,
                 .flags = 0,
                 .setLayoutCount = 1,
-                .pSetLayouts = &uniformBufferDescriptorSetLayout,
+                .pSetLayouts = &shaderBufferDescriptorSetLayout,
                 .pushConstantRangeCount = 0,
                 .pPushConstantRanges = null,
             },
@@ -720,7 +723,6 @@ const ElementsPipeline = struct {
                     .pNext = null,
                     .flags = 0,
                 },
-                .pDepthStencilState = null,
                 .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
                     .pNext = null,
@@ -774,20 +776,20 @@ const ElementsPipeline = struct {
             commandPool,
         );
 
-        var uniformBuffers: [maxFramesInFlight]Buffer = undefined;
-        var uniformBuffersMapped: [maxFramesInFlight]*UniformBuffer = undefined;
+        var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
+        var shaderBuffersMapped: [maxFramesInFlight][]ElementRenderingData = undefined;
         for (0..maxFramesInFlight) |i| {
             const buffer = try Buffer.init(
                 logicalDevice,
                 physicalDevice,
-                @sizeOf(UniformBuffer),
-                c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                @sizeOf(LayoutBox) * 8,
+                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             );
-            uniformBuffers[i] = buffer;
-            var uniformBufferData: ?*anyopaque = undefined;
-            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &uniformBufferData));
-            uniformBuffersMapped[i] = @ptrCast(@alignCast(uniformBufferData));
+            shaderBuffers[i] = buffer;
+            var storageBufferData: ?*anyopaque = undefined;
+            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
+            shaderBuffersMapped[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..8];
         }
 
         var descriptorPool: c.VkDescriptorPool = undefined;
@@ -796,7 +798,7 @@ const ElementsPipeline = struct {
             .poolSizeCount = 1,
             .maxSets = maxFramesInFlight,
             .pPoolSizes = &c.VkDescriptorPoolSize{
-                .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .type = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                 .descriptorCount = maxFramesInFlight,
             },
             .flags = 0,
@@ -808,10 +810,10 @@ const ElementsPipeline = struct {
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
             .descriptorPool = descriptorPool,
             .descriptorSetCount = maxFramesInFlight,
-            .pSetLayouts = &([1]c.VkDescriptorSetLayout{uniformBufferDescriptorSetLayout} ** maxFramesInFlight),
+            .pSetLayouts = &([1]c.VkDescriptorSetLayout{shaderBufferDescriptorSetLayout} ** maxFramesInFlight),
         }, &descriptorSets));
 
-        for (uniformBuffers, 0..) |buffer, i| {
+        for (shaderBuffers, 0..) |buffer, i| {
             const bufferInfo = c.VkDescriptorBufferInfo{
                 .buffer = buffer.handle,
                 .offset = 0,
@@ -825,7 +827,7 @@ const ElementsPipeline = struct {
                 .dstBinding = 0,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
-                .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                 .pImageInfo = null,
                 .pBufferInfo = &bufferInfo,
                 .pTexelBufferView = null,
@@ -839,9 +841,9 @@ const ElementsPipeline = struct {
             .graphicsPipeline = graphicsPipeline,
             .elementModel = elementModel,
 
-            .uniformBufferDescriptorSetLayout = uniformBufferDescriptorSetLayout,
-            .uniformBuffers = uniformBuffers,
-            .uniformBuffersMapped = uniformBuffersMapped,
+            .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
+            .shaderBuffers = shaderBuffers,
+            .shaderBuffersMapped = shaderBuffersMapped,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
         };
@@ -850,12 +852,12 @@ const ElementsPipeline = struct {
     pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
 
-        for (self.uniformBuffers) |buffer| {
+        for (self.shaderBuffers) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
             buffer.deinit(logicalDevice);
         }
 
-        c.vkDestroyDescriptorSetLayout(logicalDevice, self.uniformBufferDescriptorSetLayout, null);
+        c.vkDestroyDescriptorSetLayout(logicalDevice, self.shaderBufferDescriptorSetLayout, null);
         self.elementModel.deinit(logicalDevice);
         c.vkDestroyPipeline(logicalDevice, self.graphicsPipeline, null);
         c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
@@ -1288,7 +1290,7 @@ pub const Renderer = struct {
         c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
     }
 
-    pub fn drawFrame(self: *Self, elementPosition: @Vector(3, f32), elementColor: @Vector(4, f32)) !void {
+    pub fn drawFrame(self: *Self, layoutBoxes: []const LayoutBox) !void {
         try ensureNoError(c.vkWaitForFences(
             self.logicalDevice,
             1,
@@ -1361,23 +1363,28 @@ pub const Renderer = struct {
             .extent = self.swapchain.extent,
         }});
 
-        self.elementsPipeline.uniformBuffersMapped[self.currentFrame].* = .{
-            .color = elementColor,
-            .modelViewProjectionMatrix = zmath.mul(
-                zmath.mul(
-                    zmath.scaling(100, 100, 1),
-                    zmath.translation(elementPosition[0], elementPosition[1], elementPosition[2]),
+        const projectionMatrix = zmath.orthographicOffCenterRh(
+            0.0,
+            @floatFromInt(self.swapchain.extent.width),
+            @floatFromInt(self.swapchain.extent.height),
+            0.0,
+            -1000.0,
+            1000.0,
+        );
+
+        std.debug.assert(layoutBoxes.len <= 8);
+        for (layoutBoxes, 0..) |layoutBox, i| {
+            self.elementsPipeline.shaderBuffersMapped[self.currentFrame][i] = ElementRenderingData{
+                .modelViewProjectionMatrix = zmath.mul(
+                    zmath.mul(
+                        zmath.scaling(layoutBox.scale[0], layoutBox.scale[1], layoutBox.scale[2]),
+                        zmath.translation(layoutBox.position[0], layoutBox.position[1], layoutBox.position[2]),
+                    ),
+                    projectionMatrix,
                 ),
-                zmath.orthographicOffCenterRh(
-                    0.0,
-                    @floatFromInt(self.swapchain.extent.width),
-                    @floatFromInt(self.swapchain.extent.height),
-                    0.0,
-                    -1000.0,
-                    1000.0,
-                ),
-            ),
-        };
+                .backgroundColor = layoutBox.backgroundColor,
+            };
+        }
 
         c.vkCmdBindDescriptorSets(
             self.commandBuffers[self.currentFrame],
@@ -1391,7 +1398,7 @@ pub const Renderer = struct {
         );
 
         c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
-        c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.elementsPipeline.elementModel.vertexCount, 1, 0, 0);
+        c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxes.len), 0, 0);
 
         c.vkCmdEndRenderPass(self.commandBuffers[self.currentFrame]);
 

@@ -34,13 +34,25 @@ pub fn main() !void {
         try window.handleEvents();
         const milli: f64 = @floatFromInt(std.time.milliTimestamp());
         const t = milli / 1000.0;
-        try renderer.drawFrame(
+        try renderer.drawFrame(&.{
             .{
-                @floatCast(std.math.cos(t) * 400 + 600),
-                @floatCast(std.math.sin(t) * 400 + 600),
-                0.0,
+                .position = .{
+                    @floatCast(std.math.cos(t) * 400 + 600),
+                    @floatCast(std.math.sin(t) * 400 + 600),
+                    0.0,
+                },
+                .scale = .{ 100, 100, 1 },
+                .backgroundColor = .{ 1.0, 1.0, 1.0, 1.0 },
             },
-            .{ 1.0, 1.0, 1.0, 1.0 },
-        );
+            .{
+                .position = .{
+                    @floatCast(std.math.cos(t * 2) * 400 + 600),
+                    @floatCast(std.math.sin(t * 2) * 400 + 600),
+                    0.0,
+                },
+                .scale = .{ 100, 100, 1 },
+                .backgroundColor = .{ 1.0, 0.0, 1.0, 1.0 },
+            },
+        });
     }
 }
