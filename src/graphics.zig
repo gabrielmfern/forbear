@@ -778,20 +778,22 @@ const ElementsPipeline = struct {
             commandPool,
         );
 
+        const initialElementCapacity = 1;
+
         var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
         var shaderBuffersMapped: [maxFramesInFlight][]ElementRenderingData = undefined;
         for (0..maxFramesInFlight) |i| {
             const buffer = try Buffer.init(
                 logicalDevice,
                 physicalDevice,
-                @sizeOf(ElementRenderingData) * 8,
+                @sizeOf(ElementRenderingData) * initialElementCapacity,
                 c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             );
             shaderBuffers[i] = buffer;
             var storageBufferData: ?*anyopaque = undefined;
             try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-            shaderBuffersMapped[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..8];
+            shaderBuffersMapped[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..initialElementCapacity];
         }
 
         var descriptorPool: c.VkDescriptorPool = undefined;
@@ -851,7 +853,8 @@ const ElementsPipeline = struct {
         };
     }
 
-    pub fn resizeElementsCapacity(self: @This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
+    pub fn resizeElementsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
+        std.log.debug("increasing concurrent element capacity from {d} to {d}", .{ self.shaderBuffersMapped[0].len, newCapacity });
         for (self.shaderBuffers) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
             buffer.deinit(logicalDevice);
@@ -1418,7 +1421,13 @@ pub const Renderer = struct {
             1000.0,
         );
 
-        std.debug.assert(layoutBoxes.len <= 8);
+        if (layoutBoxes.len > self.elementsPipeline.shaderBuffersMapped[0].len) {
+            try self.elementsPipeline.resizeElementsCapacity(
+                self.logicalDevice,
+                self.physicalDevice,
+                try std.math.ceilPowerOfTwo(usize, layoutBoxes.len),
+            );
+        }
         for (layoutBoxes, 0..) |layoutBox, i| {
             self.elementsPipeline.shaderBuffersMapped[self.currentFrame][i] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
