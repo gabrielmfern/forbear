@@ -544,6 +544,8 @@ pub const Model = struct {
 pub const ElementRenderingData = extern struct {
     modelViewProjectionMatrix: zmath.Mat,
     backgroundColor: Vec4,
+    size: [2]f32,
+    borderRadius: f32,
 };
 
 const ElementsPipeline = struct {
@@ -782,7 +784,7 @@ const ElementsPipeline = struct {
             const buffer = try Buffer.init(
                 logicalDevice,
                 physicalDevice,
-                @sizeOf(LayoutBox) * 8,
+                @sizeOf(ElementRenderingData) * 8,
                 c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             );
@@ -847,6 +849,50 @@ const ElementsPipeline = struct {
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
         };
+    }
+
+    pub fn resizeElementsCapacity(self: @This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
+        for (self.shaderBuffers) |buffer| {
+            c.vkUnmapMemory(logicalDevice, buffer.memory);
+            buffer.deinit(logicalDevice);
+        }
+
+        for (0..maxFramesInFlight) |i| {
+            const buffer = try Buffer.init(
+                logicalDevice,
+                physicalDevice,
+                @sizeOf(ElementRenderingData) * newCapacity,
+                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            );
+            self.shaderBuffers[i] = buffer;
+            var storageBufferData: ?*anyopaque = undefined;
+            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
+            self.shaderBuffersMapped[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
+        }
+
+        for (self.shaderBuffers, 0..) |buffer, i| {
+            const bufferInfo = c.VkDescriptorBufferInfo{
+                .buffer = buffer.handle,
+                .offset = 0,
+                .range = c.VK_WHOLE_SIZE,
+            };
+
+            const descriptorWrite = c.VkWriteDescriptorSet{
+                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = null,
+                .dstSet = self.descriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pImageInfo = null,
+                .pBufferInfo = &bufferInfo,
+                .pTexelBufferView = null,
+            };
+
+            c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+        }
     }
 
     pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
@@ -1383,6 +1429,8 @@ pub const Renderer = struct {
                     projectionMatrix,
                 ),
                 .backgroundColor = layoutBox.backgroundColor,
+                .size = .{ layoutBox.scale[0], layoutBox.scale[1] },
+                .borderRadius = layoutBox.borderRadius,
             };
         }
 

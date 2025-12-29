@@ -7,4 +7,5 @@ pub const LayoutBox = struct {
     position: Vec3,
     scale: Vec3,
     backgroundColor: Vec4,
+    borderRadius: f32,
 };
