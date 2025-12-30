@@ -350,7 +350,7 @@ pub fn initRenderer(
     std.debug.assert(vulkanSurface != null);
     errdefer c.vkDestroySurfaceKHR(self.vulkanInstance, vulkanSurface, null);
 
-    return try Renderer.init(vulkanSurface, self, window.width, window.height);
+    return try Renderer.init(vulkanSurface, self, window.width, window.height, window.scale);
 }
 
 fn findMemoryType(
@@ -948,7 +948,7 @@ pub const Renderer = struct {
 
     currentFrame: usize,
 
-    pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
+    pub fn recreateSwapchain(self: *Self, width: u32, height: u32, scale: u32) !void {
         _ = c.vkDeviceWaitIdle(self.logicalDevice);
         self.swapchain.deinit(self.logicalDevice);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
@@ -961,8 +961,8 @@ pub const Renderer = struct {
             self.graphicsQueueFamilyIndex,
             self.graphicsQueue,
             self.surface,
-            width,
-            height,
+            (width * scale) / 120,
+            (height * scale) / 120,
             self.allocator,
         );
         errdefer self.swapchain.deinit(self.logicalDevice);
@@ -979,6 +979,7 @@ pub const Renderer = struct {
         graphics: *const Graphics,
         width: u32,
         height: u32,
+        scale: u32,
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -1139,8 +1140,8 @@ pub const Renderer = struct {
             graphicsQueueFamilyIndex,
             graphicsQueue,
             surface,
-            width,
-            height,
+            (width * scale) / 120,
+            (height * scale) / 120,
             graphics.allocator,
         );
         errdefer swapchain.deinit(logicalDevice);
@@ -1313,8 +1314,8 @@ pub const Renderer = struct {
     pub fn setupResizingHandler(self: *Self, window: *Window) void {
         window.setResizeHandler(
             (struct {
-                fn handler(_: *Window, new_width: u32, new_height: u32, data: *anyopaque) void {
-                    recreateSwapchain(@ptrCast(@alignCast(data)), new_width, new_height) catch |err| {
+                fn handler(_: *Window, new_width: u32, new_height: u32, new_scale: u32, data: *anyopaque) void {
+                    recreateSwapchain(@ptrCast(@alignCast(data)), new_width, new_height, new_scale) catch |err| {
                         std.log.err("Failed to recreate swapchain on window resize {}", .{err});
                         @panic("Failed to recreate swapchain on window resize");
                     };

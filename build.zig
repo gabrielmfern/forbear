@@ -28,28 +28,45 @@ pub fn build(b: *std.Build) void {
     forbear.addImport("zmath", zmath.module("root"));
 
     if (target.result.os.tag == .linux) {
-        const wf = b.addWriteFiles();
-        const xdg_shell_c_cmd = b.addSystemCommand(&.{
-            "wayland-scanner",
-            "private-code",
-            "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
-        });
-        const xdg_shell_c_file = xdg_shell_c_cmd.addOutputFileArg("xdg-shell-protocol.c");
-        const xdg_shell_protocol_c_path = wf.addCopyFile(xdg_shell_c_file, "xdg-shell-protocol.c");
+        const Protocol = struct {
+            name: []const u8,
+            xmlPath: []const u8,
+        };
+        const waylandProtocols = comptime [_]Protocol{
+            Protocol{
+                .name = "xdg-shell",
+                .xmlPath = "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
+            },
+            Protocol{
+                .name = "fractional-scale-v1",
+                .xmlPath = "/usr/share/wayland-protocols/staging/fractional-scale/fractional-scale-v1.xml",
+            },
+            Protocol{
+                .name = "viewporter",
+                .xmlPath = "/usr/share/wayland-protocols/stable/viewporter/viewporter.xml",
+            },
+        };
+        inline for (waylandProtocols) |protocol| {
+            const wf = b.addWriteFiles();
+            const cCommand = b.addSystemCommand(&.{
+                "wayland-scanner",
+                "private-code",
+                protocol.xmlPath,
+            });
+            const cFile = cCommand.addOutputFileArg(protocol.name ++ "-protocol.c");
+            const protocolCPath = wf.addCopyFile(cFile, protocol.name ++ "-protocol.c");
 
-        const xdg_shell_h_cmd = b.addSystemCommand(&.{
-            "wayland-scanner",
-            "client-header",
-            "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
-        });
-        const xdg_shell_h_file = xdg_shell_h_cmd.addOutputFileArg("xdg-shell-client-protocol.h");
-        _ = wf.addCopyFile(xdg_shell_h_file, "xdg-shell-client-protocol.h");
+            const headerCommand = b.addSystemCommand(&.{
+                "wayland-scanner",
+                "client-header",
+                protocol.xmlPath,
+            });
+            const headerFile = headerCommand.addOutputFileArg(protocol.name ++ "-client-protocol.h");
+            _ = wf.addCopyFile(headerFile, protocol.name ++ "-client-protocol.h");
 
-        forbear.addIncludePath(wf.getDirectory());
-        forbear.addCSourceFile(.{
-            .file = xdg_shell_protocol_c_path,
-            .flags = &.{},
-        });
+            forbear.addIncludePath(wf.getDirectory());
+            forbear.addCSourceFile(.{ .file = protocolCPath, .flags = &.{} });
+        }
     }
 
     const vert_glsl_cmd = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });

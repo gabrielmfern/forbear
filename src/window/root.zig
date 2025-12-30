@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("std";
 const posix = std.posix;
 const os = std.os;
 
@@ -29,7 +29,7 @@ pub const Handlers = struct {
     } = null,
     resize: ?struct {
         data: *anyopaque,
-        function: *const fn (window: *Self, new_width: u32, new_height: u32, data: *anyopaque) void,
+        function: *const fn (window: *Self, new_width: u32, new_height: u32, new_scale: u32, data: *anyopaque) void,
     } = null,
 };
 
@@ -40,6 +40,8 @@ wlCompositor: *c.wl_compositor,
 wlShm: *c.wl_shm,
 wlSeat: *c.wl_seat,
 xdgWmBase: *c.xdg_wm_base,
+wpFractionalScaleManager: ?*c.wp_fractional_scale_manager_v1 = null,
+wpViewporter: ?*c.wp_viewporter = null,
 
 // cursor
 wlPointer: *c.wl_pointer,
@@ -52,8 +54,11 @@ textWlCursor: *c.wl_cursor,
 
 // Everything native related to the window itself
 wlSurface: *c.wl_surface,
+wlOutput: *c.wl_output,
 xdgSurface: *c.xdg_surface,
 xdgToplevel: *c.xdg_toplevel,
+wpFractionalScale: ?*c.wp_fractional_scale_v1 = null,
+wpViewport: ?*c.wp_viewport = null,
 
 // Window state
 width: u32,
@@ -61,6 +66,7 @@ height: u32,
 title: [:0]const u8,
 app_id: [:0]const u8,
 running: bool,
+scale: u32,
 
 allocator: std.mem.Allocator,
 
@@ -96,6 +102,116 @@ fn BindingInfo(T: type) type {
     };
 }
 
+fn handleMonitorGeometry(
+    data: ?*anyopaque,
+    wlOutput: ?*c.wl_output,
+    x: i32,
+    y: i32,
+    physical_width: i32,
+    physical_height: i32,
+    subpixel: i32,
+    make: [*c]const u8,
+    model: [*c]const u8,
+    transform: i32,
+) callconv(.c) void {
+    _ = data;
+    _ = wlOutput;
+    _ = x;
+    _ = y;
+    _ = physical_width;
+    _ = physical_height;
+    _ = subpixel;
+    _ = make;
+    _ = model;
+    _ = transform;
+}
+
+fn handleMonitorMode(
+    data: ?*anyopaque,
+    wlOutput: ?*c.wl_output,
+    flags: u32,
+    width: i32,
+    height: i32,
+    refresh: i32,
+) callconv(.c) void {
+    _ = data;
+    _ = wlOutput;
+    _ = flags;
+    _ = width;
+    _ = height;
+    _ = refresh;
+}
+
+fn handleMonitorDone(
+    data: ?*anyopaque,
+    wlOutput: ?*c.wl_output,
+) callconv(.c) void {
+    _ = data;
+    _ = wlOutput;
+}
+
+fn handleMonitorScale(
+    data: ?*anyopaque,
+    wlOutput: ?*c.wl_output,
+    scale: i32,
+) callconv(.c) void {
+    const window: *Self = @ptrCast(@alignCast(data));
+    _ = wlOutput;
+    if (window.wpFractionalScale != null) return;
+    window.scale = @intCast(scale * 120);
+    if (window.handlers.resize) |handler| {
+        handler.function(window, window.width, window.height, window.scale, handler.data);
+    }
+    std.log.debug("Monitor scale changed to: {}", .{scale});
+}
+
+fn handleMonitorName(
+    data: ?*anyopaque,
+    wlOutput: ?*c.wl_output,
+    name: [*c]const u8,
+) callconv(.c) void {
+    _ = data;
+    _ = wlOutput;
+    _ = name;
+}
+
+fn handleMonitorDescription(
+    data: ?*anyopaque,
+    wlOutput: ?*c.wl_output,
+    description: [*c]const u8,
+) callconv(.c) void {
+    _ = data;
+    _ = wlOutput;
+    _ = description;
+}
+
+const outputListener: c.wl_output_listener = .{
+    .geometry = handleMonitorGeometry,
+    .mode = handleMonitorMode,
+    .done = handleMonitorDone,
+    .scale = handleMonitorScale,
+    .description = handleMonitorDescription,
+    .name = handleMonitorName,
+};
+
+fn handleFractionalScale(
+    data: ?*anyopaque,
+    wpFractionalScale: ?*c.wp_fractional_scale_v1,
+    scale: u32,
+) callconv(.c) void {
+    const window: *Self = @ptrCast(@alignCast(data));
+    _ = wpFractionalScale;
+    window.scale = scale;
+    if (window.handlers.resize) |handler| {
+        handler.function(window, window.width, window.height, window.scale, handler.data);
+    }
+    std.log.debug("Fractional scale changed to: {d}", .{@as(f32, @floatFromInt(scale)) / 120.0});
+}
+
+const fractionalScaleListener: c.wp_fractional_scale_v1_listener = .{
+    .preferred_scale = handleFractionalScale,
+};
+
 fn global(
     data: ?*anyopaque,
     registry: ?*c.wl_registry,
@@ -111,6 +227,10 @@ fn global(
         &c.wl_compositor_interface,
         4,
     );
+    const output = BindingInfo(c.wl_output).new(
+        &c.wl_output_interface,
+        3,
+    );
     const shm = BindingInfo(c.wl_shm).new(
         &c.wl_shm_interface,
         1,
@@ -121,6 +241,14 @@ fn global(
     );
     const seat = BindingInfo(c.wl_seat).new(
         &c.wl_seat_interface,
+        1,
+    );
+    const fractionalScaleManager = BindingInfo(c.wp_fractional_scale_manager_v1).new(
+        &c.wp_fractional_scale_manager_v1_interface,
+        1,
+    );
+    const viewporter = BindingInfo(c.wp_viewporter).new(
+        &c.wp_viewporter_interface,
         1,
     );
 
@@ -145,6 +273,14 @@ fn global(
 
         window.wlKeyboard = c.wl_seat_get_keyboard(window.wlSeat) orelse @panic("could not get wl_keyboard from wl_seat");
         _ = c.wl_keyboard_add_listener(window.wlKeyboard, &wlKeyboardListener, data);
+    } else if (output.is(interfaceName)) {
+        window.wlOutput = output.bind(registry, name);
+
+        _ = c.wl_output_add_listener(window.wlOutput, &outputListener, data);
+    } else if (fractionalScaleManager.is(interfaceName)) {
+        window.wpFractionalScaleManager = fractionalScaleManager.bind(registry, name);
+    } else if (viewporter.is(interfaceName)) {
+        window.wpViewporter = viewporter.bind(registry, name);
     }
 }
 
@@ -190,8 +326,11 @@ fn xdgToplevelConfigure(
     if (width > 0 and height > 0) {
         window.width = @intCast(width);
         window.height = @intCast(height);
+        if (window.wpViewport) |viewport| {
+            c.wp_viewport_set_destination(viewport, @intCast(window.width), @intCast(window.height));
+        }
         if (window.handlers.resize) |handler| {
-            handler.function(window, window.width, window.height, handler.data);
+            handler.function(window, window.width, window.height, window.scale, handler.data);
         }
     }
 }
@@ -432,6 +571,7 @@ pub fn init(
 
     window.width = width;
     window.height = height;
+    window.scale = 120;
     window.title = title;
     window.app_id = app_id;
     window.running = true;
@@ -477,6 +617,17 @@ pub fn init(
     );
     c.xdg_toplevel_set_title(window.xdgToplevel, title.ptr);
     c.xdg_toplevel_set_app_id(window.xdgToplevel, app_id.ptr);
+
+    if (window.wpFractionalScaleManager) |manager| {
+        window.wpFractionalScale = c.wp_fractional_scale_manager_v1_get_fractional_scale(manager, window.wlSurface);
+        _ = c.wp_fractional_scale_v1_add_listener(window.wpFractionalScale, &fractionalScaleListener, @ptrCast(@alignCast(window)));
+    }
+
+    if (window.wpViewporter) |viewporter| {
+        window.wpViewport = c.wp_viewporter_get_viewport(viewporter, window.wlSurface);
+        c.wp_viewport_set_destination(window.wpViewport, @intCast(window.width), @intCast(window.height));
+    }
+
     c.wl_surface_commit(window.wlSurface);
 
     // gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -505,7 +656,7 @@ const Cursor = enum {
 
 pub fn setResizeHandler(
     self: *Self,
-    handler: *const fn (window: *Self, new_width: u32, new_height: u32, data: *anyopaque) void,
+    handler: *const fn (window: *Self, new_width: u32, new_height: u32, new_scale: u32, data: *anyopaque) void,
     data: *anyopaque,
 ) void {
     self.handlers.resize = .{
@@ -564,12 +715,17 @@ pub fn handleEvents(self: *Self) !void {
 // }
 
 pub fn deinit(self: *Self) void {
+    if (self.wpFractionalScale) |fs| c.wp_fractional_scale_v1_destroy(fs);
+    if (self.wpViewport) |vp| c.wp_viewport_destroy(vp);
+
     c.xdg_toplevel_destroy(self.xdgToplevel);
     c.xdg_surface_destroy(self.xdgSurface);
 
     c.wl_cursor_theme_destroy(self.wlCursorTheme);
     c.wl_pointer_destroy(self.wlPointer);
     c.wl_keyboard_destroy(self.wlKeyboard);
+    if (self.wpFractionalScaleManager) |fsm| c.wp_fractional_scale_manager_v1_destroy(fsm);
+    if (self.wpViewporter) |vp| c.wp_viewporter_destroy(vp);
     c.wl_shm_destroy(self.wlShm);
     c.wl_compositor_destroy(self.wlCompositor);
 

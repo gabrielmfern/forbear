@@ -16,6 +16,8 @@ pub const c = @cImport({
     @cInclude("xdg-shell-client-protocol.h");
 
     @cInclude("vulkan/vulkan_wayland.h");
+    @cInclude("fractional-scale-v1-client-protocol.h");
+    @cInclude("viewporter-client-protocol.h");
     // }
     // if (builtin.os.tag == .macos) {
     //     @cInclude("objc/objc.h");
