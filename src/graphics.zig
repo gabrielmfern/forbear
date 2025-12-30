@@ -77,6 +77,42 @@ pub fn ensureNoError(result: c.VkResult) !void {
     std.debug.assert(result == c.VK_SUCCESS);
 }
 
+fn logInstanceExtensions(allocator: std.mem.Allocator, requested: []const [*c]const u8) !void {
+    var count: u32 = 0;
+    try ensureNoError(c.vkEnumerateInstanceExtensionProperties(null, &count, null));
+
+    const available = try allocator.alloc(c.VkExtensionProperties, @intCast(count));
+    defer allocator.free(available);
+
+    try ensureNoError(c.vkEnumerateInstanceExtensionProperties(null, &count, available.ptr));
+
+    std.log.info("Requested Vulkan instance extensions ({d}):", .{requested.len});
+    for (requested) |ext| {
+        std.log.info("  {s}", .{std.mem.span(ext)});
+    }
+
+    std.log.info("Available Vulkan instance extensions ({d}):", .{available.len});
+    for (available) |ext| {
+        const name = std.mem.sliceTo(ext.extensionName[0..], 0);
+        std.log.info("  {s}", .{name});
+    }
+
+    for (requested) |ext| {
+        const required_name = std.mem.span(ext);
+        var found = false;
+        for (available) |avail| {
+            const avail_name = std.mem.sliceTo(avail.extensionName[0..], 0);
+            if (std.mem.eql(u8, avail_name, required_name)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            std.log.err("Missing required Vulkan instance extension: {s}", .{required_name});
+        }
+    }
+}
+
 pub const Vertex = extern struct {
     position: @Vector(3, f32),
 
@@ -144,29 +180,65 @@ vulkanDebugMessenger: c.VkDebugUtilsMessengerEXT,
 devices: []Device,
 
 pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graphics {
+    const instanceCreateFlags: c.VkInstanceCreateFlags = switch (builtin.os.tag) {
+        // MoltenVK needs the portability enumeration extension + flag.
+        .macos => c.VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
+        else => 0,
+    };
+
     const instanceExtensions: []const [*c]const u8 = &(.{
         c.VK_KHR_SURFACE_EXTENSION_NAME,
-        c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
         c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
     } ++ switch (builtin.os.tag) {
         .linux => .{
             "VK_KHR_wayland_surface",
         },
-        // .macos => .{
-        //     "VK_EXT_metal_surface",
-        // },
+        .macos => .{
+            c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+                // "VK_EXT_metal_surface",
+        },
         else => .{},
     });
 
-    const instanceLayers: []const [*c]const u8 = &.{
-        "VK_LAYER_KHRONOS_validation",
-    };
+    // Emit helpful diagnostics when instance creation fails.
+    try logInstanceExtensions(allocator, instanceExtensions);
+
+    // Only enable validation layers when they're actually available.
+    // Tools like RenderDoc may override `VK_LAYER_PATH` which can hide system layers.
+    var instanceLayersBuf: [1][*c]const u8 = undefined;
+    var instanceLayers: []const [*c]const u8 = &.{};
+    {
+        var layerCount: u32 = 0;
+        try ensureNoError(c.vkEnumerateInstanceLayerProperties(&layerCount, null));
+
+        const availableLayers = try allocator.alloc(c.VkLayerProperties, @intCast(layerCount));
+        defer allocator.free(availableLayers);
+
+        try ensureNoError(c.vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.ptr));
+
+        const validationLayerName = "VK_LAYER_KHRONOS_validation";
+        var hasValidationLayer = false;
+        for (availableLayers) |layer| {
+            const name = std.mem.sliceTo(layer.layerName[0..], 0);
+            if (std.mem.eql(u8, name, validationLayerName)) {
+                hasValidationLayer = true;
+                break;
+            }
+        }
+
+        if (hasValidationLayer) {
+            instanceLayersBuf[0] = validationLayerName;
+            instanceLayers = instanceLayersBuf[0..1];
+        } else {
+            std.log.warn("Vulkan validation layer not found; continuing without it", .{});
+        }
+    }
 
     var vulkanInstance: c.VkInstance = undefined;
     try ensureNoError(c.vkCreateInstance(
         &c.VkInstanceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-            .flags = c.VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
+            .flags = instanceCreateFlags,
             .pNext = null,
             .pApplicationInfo = &c.VkApplicationInfo{
                 .sType = c.VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -177,9 +249,9 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
                 .engineVersion = c.VK_MAKE_VERSION(1, 0, 0),
                 .apiVersion = c.VK_API_VERSION_1_2,
             },
-            .enabledLayerCount = instanceLayers.len,
-            .ppEnabledLayerNames = instanceLayers.ptr,
-            .enabledExtensionCount = instanceExtensions.len,
+            .enabledLayerCount = @intCast(instanceLayers.len),
+            .ppEnabledLayerNames = if (instanceLayers.len > 0) instanceLayers.ptr else null,
+            .enabledExtensionCount = @intCast(instanceExtensions.len),
             .ppEnabledExtensionNames = instanceExtensions.ptr,
         },
         null,
@@ -188,8 +260,8 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
     std.debug.assert(vulkanInstance != null);
     errdefer c.vkDestroyInstance(vulkanInstance, null);
 
-    var vulkanDebugMessenger: c.VkDebugUtilsMessengerEXT = undefined;
-    try ensureNoError(CreateDebugUtilsMessengerEXT(
+    var vulkanDebugMessenger: c.VkDebugUtilsMessengerEXT = null;
+    const debugMessengerResult = CreateDebugUtilsMessengerEXT(
         vulkanInstance,
         &c.VkDebugUtilsMessengerCreateInfoEXT{
             .sType = c.VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
@@ -225,9 +297,16 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
         },
         null,
         &vulkanDebugMessenger,
-    ));
-    std.debug.assert(vulkanDebugMessenger != null);
-    errdefer DestroyDebugUtilsMessengerEXT(vulkanInstance, vulkanDebugMessenger, null);
+    );
+
+    if (debugMessengerResult == c.VK_ERROR_EXTENSION_NOT_PRESENT) {
+        std.log.warn("VK_EXT_debug_utils not present; continuing without debug messenger", .{});
+        vulkanDebugMessenger = null;
+    } else {
+        try ensureNoError(debugMessengerResult);
+        std.debug.assert(vulkanDebugMessenger != null);
+        errdefer DestroyDebugUtilsMessengerEXT(vulkanInstance, vulkanDebugMessenger, null);
+    }
 
     var physicalDevicesLen: u32 = undefined;
     try ensureNoError(c.vkEnumeratePhysicalDevices(vulkanInstance, &physicalDevicesLen, null));
@@ -299,7 +378,9 @@ pub fn deinit(self: *Graphics) void {
     }
     self.allocator.free(self.devices);
 
-    DestroyDebugUtilsMessengerEXT(self.vulkanInstance, self.vulkanDebugMessenger, null);
+    if (self.vulkanDebugMessenger != null) {
+        DestroyDebugUtilsMessengerEXT(self.vulkanInstance, self.vulkanDebugMessenger, null);
+    }
     c.vkDestroyInstance(self.vulkanInstance, null);
 }
 
