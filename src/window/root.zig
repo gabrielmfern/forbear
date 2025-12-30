@@ -1,4 +1,4 @@
-const std = @import("std";
+const std = @import("std");
 const posix = std.posix;
 const os = std.os;
 
