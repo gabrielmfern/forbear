@@ -1,11 +1,386 @@
-const root = @import("root.zig");
+const std = @import("std");
+const Node = @import("node.zig").Node;
+const Style = @import("node.zig").Style;
+const BaseStyle = @import("node.zig").BaseStyle;
+const Element = @import("node.zig").Element;
+const Direction = @import("node.zig").Direction;
 
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
+const Vec2 = @Vector(2, f32);
 
 pub const LayoutBox = struct {
-    position: Vec3,
-    scale: Vec3,
-    backgroundColor: Vec4,
-    borderRadius: f32,
+    position: Vec2,
+    size: Vec2,
+    minSize: Vec2,
+    children: ?[]LayoutBox,
+
+    style: Style,
+
+    pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+        if (self.children) |children| {
+            for (children) |child| {
+                child.deinit(allocator);
+            }
+            allocator.free(children);
+        }
+    }
+
+    pub fn getMinSize(self: @This(), direction: Direction) f32 {
+        if (direction == .leftToRight) {
+            return self.minSize[0];
+        }
+        return self.minSize[1];
+    }
+
+    pub fn getSize(self: @This(), direction: Direction) f32 {
+        if (direction == .leftToRight) {
+            return self.size[0];
+        }
+        return self.size[1];
+    }
 };
+
+fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
+    layoutBox.position += base;
+
+    if (layoutBox.children) |children| {
+        for (children) |*child| {
+            makeAbsolute(child, layoutBox.position);
+        }
+    }
+}
+
+fn growAndShrink(
+    layoutBox: *LayoutBox,
+    allocator: std.mem.Allocator,
+) !void {
+    if (layoutBox.children) |children| {
+        const direction = layoutBox.style.direction;
+
+        var toGrowGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
+        defer toGrowGradually.deinit(allocator);
+        var remaining = layoutBox.getSize(direction);
+        for (children) |*child| {
+            remaining -= child.getSize(direction);
+            if (direction.perpendicular() == .topToBottom) {
+                if (child.style.preferredHeight == .grow or (child.size[1] > layoutBox.size[1] and child.minSize[1] < child.size[1])) {
+                    child.size[1] = @max(layoutBox.size[1], child.minSize[1]);
+                }
+            } else if (direction.perpendicular() == .leftToRight) {
+                if (child.style.preferredWidth == .grow or (child.size[0] > layoutBox.size[0] and child.minSize[0] < child.size[0])) {
+                    child.size[0] = @max(layoutBox.size[0], child.minSize[0]);
+                }
+            }
+            if (child.style.getPreferredSize(direction) == .grow) {
+                try toGrowGradually.append(allocator, child);
+            }
+        }
+        if (toGrowGradually.items.len > 0) {
+            while (remaining > 0) {
+                var smallest = remaining;
+                var secondSmallest = std.math.inf(f32);
+                for (toGrowGradually.items) |child| {
+                    if (child.getSize(direction) < smallest) {
+                        smallest = child.getSize(direction);
+                    } else if (child.getSize(direction) < secondSmallest) {
+                        secondSmallest = child.getSize(direction);
+                    }
+                }
+                // This ensures these two elements don't become so large that the remaining
+                // space ends up not being shared across all of the elements
+                var toAdd = @min(
+                    secondSmallest - smallest,
+                    remaining / @as(f32, @floatFromInt(toGrowGradually.items.len)),
+                );
+                // This avoids an infinte loop. It means all the children are the same size and
+                // we can simply share the remaining space across all of them
+                if (toAdd == 0) {
+                    toAdd = remaining / @as(f32, @floatFromInt(toGrowGradually.items.len));
+                }
+                for (toGrowGradually.items) |child| {
+                    if (direction == .leftToRight) {
+                        if (child.size[0] == smallest) {
+                            child.size[0] += toAdd;
+                            remaining -= toAdd;
+                        }
+                    } else {
+                        if (child.size[1] == smallest) {
+                            child.size[1] += toAdd;
+                            remaining -= toAdd;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (remaining < 0) {
+            var toShrinkGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
+            defer toShrinkGradually.deinit(allocator);
+            for (children) |*child| {
+                if (child.getSize(direction) > child.getMinSize(direction)) {
+                    try toShrinkGradually.append(allocator, child);
+                }
+            }
+            while (remaining < -0.0000001 and toShrinkGradually.items.len > 0) {
+                var largest: f32 = toShrinkGradually.items[0].getSize(direction);
+                var secondLargest: f32 = 0.0;
+
+                var index: usize = 0;
+                while (index < toShrinkGradually.items.len) {
+                    const child = toShrinkGradually.items[index];
+                    if (child.getSize(direction) == child.getMinSize(direction)) {
+                        _ = toShrinkGradually.orderedRemove(index);
+                        continue;
+                    }
+                    if (child.getSize(direction) > largest) {
+                        largest = child.getSize(direction);
+                    } else if (child.getSize(direction) > secondLargest) {
+                        secondLargest = child.getSize(direction);
+                    }
+                    index += 1;
+                }
+                var toSubtract = @min(
+                    largest - secondLargest,
+                    -remaining / @as(f32, @floatFromInt(toShrinkGradually.items.len)),
+                );
+                if (toSubtract == 0) {
+                    toSubtract = -remaining / @as(f32, @floatFromInt(toShrinkGradually.items.len));
+                }
+                for (toShrinkGradually.items) |child| {
+                    if (child.getSize(direction) == largest) {
+                        if (child.getSize(direction) - toSubtract <= child.minSize[0]) {
+                            if (direction == .leftToRight) {
+                                child.size[0] = child.minSize[0];
+                                remaining += @abs(toSubtract - child.minSize[0]);
+                            } else {
+                                child.size[1] = child.minSize[1];
+                                remaining += @abs(toSubtract - child.minSize[1]);
+                            }
+                        } else {
+                            if (direction == .leftToRight) {
+                                child.size[0] = child.size[0] - toSubtract;
+                            } else {
+                                child.size[1] = child.size[1] - toSubtract;
+                            }
+                            remaining += toSubtract;
+                        }
+                    }
+                }
+            }
+        }
+        for (children) |*child| {
+            try growAndShrink(child, allocator);
+        }
+    }
+}
+
+fn fitHeight(layoutBox: *LayoutBox) void {
+    if (layoutBox.children) |children| {
+        const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
+        const direction = layoutBox.style.direction;
+        if (layoutBox.style.preferredHeight == .fit) {
+            layoutBox.minSize[1] = 0.0;
+        }
+        if (shouldFitMin) {
+            layoutBox.minSize[1] = 0.0;
+        }
+        for (children) |*child| {
+            fitHeight(child);
+            if (direction == .topToBottom) {
+                if (layoutBox.style.preferredHeight == .fit) {
+                    layoutBox.size[1] += child.size[1];
+                }
+                if (shouldFitMin) {
+                    layoutBox.minSize[1] += child.minSize[1];
+                }
+            }
+            if (direction == .leftToRight) {
+                if (layoutBox.style.preferredHeight == .fit) {
+                    layoutBox.size[1] = @max(child.size[1], layoutBox.size[1]);
+                }
+                if (shouldFitMin) {
+                    layoutBox.minSize[1] = @max(child.minSize[1], layoutBox.minSize[1]);
+                }
+            }
+        }
+        if (layoutBox.style.preferredHeight == .fit) {
+            layoutBox.size[1] += layoutBox.style.paddingTop + layoutBox.style.paddingBottom;
+        }
+        if (shouldFitMin) {
+            layoutBox.minSize[1] += layoutBox.style.paddingTop + layoutBox.style.paddingBottom;
+        }
+    }
+}
+
+fn fitWidth(layoutBox: *LayoutBox) void {
+    if (layoutBox.children) |children| {
+        const shouldFitMin = layoutBox.style.preferredWidth != .fixed and layoutBox.style.minWidth == null;
+        const direction = layoutBox.style.direction;
+        if (layoutBox.style.preferredWidth == .fit) {
+            layoutBox.size[0] = 0.0;
+        }
+        if (shouldFitMin) {
+            layoutBox.minSize[0] = 0.0;
+        }
+        for (children) |*child| {
+            fitWidth(child);
+            if (direction == .leftToRight) {
+                if (layoutBox.style.preferredHeight == .fit) {
+                    layoutBox.size[0] += child.size[0];
+                }
+                if (shouldFitMin) {
+                    layoutBox.minSize[0] += child.minSize[0];
+                }
+            }
+            if (direction == .topToBottom) {
+                if (layoutBox.style.preferredWidth == .fit) {
+                    layoutBox.size[0] = @max(child.size[0], layoutBox.size[0]);
+                }
+                if (shouldFitMin) {
+                    layoutBox.minSize[0] = @max(child.minSize[0], layoutBox.minSize[0]);
+                }
+            }
+        }
+        if (layoutBox.style.preferredWidth == .fit) {
+            layoutBox.size[0] += layoutBox.style.paddingLeft + layoutBox.style.paddingRight;
+        }
+        if (shouldFitMin) {
+            layoutBox.minSize[0] += layoutBox.style.paddingLeft + layoutBox.style.paddingRight;
+        }
+    }
+}
+
+fn place(layoutBox: *LayoutBox) void {
+    if (layoutBox.children) |children| {
+        var cursor: f32 = 0.0;
+        const direction = layoutBox.style.direction;
+        for (children) |*child| {
+            if (direction == .leftToRight) {
+                child.position[0] = cursor + layoutBox.style.paddingLeft;
+                child.position[1] = layoutBox.style.paddingTop;
+                cursor += child.size[0];
+            } else {
+                child.position[0] = layoutBox.style.paddingLeft;
+                child.position[1] = cursor + layoutBox.style.paddingTop;
+                cursor += child.size[1];
+            }
+            place(child);
+        }
+    }
+}
+
+const LayoutCreator = struct {
+    allocator: std.mem.Allocator,
+
+    fn init(allocator: std.mem.Allocator) @This() {
+        return .{
+            .allocator = allocator,
+        };
+    }
+
+    fn create(
+        self: *@This(),
+        node: Node,
+        baseStyle: BaseStyle,
+    ) !LayoutBox {
+        const style = switch (node) {
+            .element => |element| element.style.completeWith(baseStyle),
+        };
+        switch (node) {
+            .element => |element| {
+                var layoutBox = LayoutBox{
+                    .position = .{ 0.0, 0.0 },
+                    .size = .{
+                        switch (style.preferredWidth) {
+                            .fixed => |width| width,
+                            .fit, .grow => 0.0,
+                        },
+                        switch (style.preferredHeight) {
+                            .fixed => |height| height,
+                            .fit, .grow => 0.0,
+                        },
+                    },
+                    .minSize = .{
+                        style.minWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else 0.0,
+                        style.minHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else 0.0,
+                    },
+                    .children = null,
+                    .style = style,
+                };
+                if (element.children) |children| {
+                    layoutBox.children = try self.allocator.alloc(LayoutBox, children.len);
+                    errdefer self.allocator.free(layoutBox.children.?);
+                    for (children, 0..) |child, index| {
+                        layoutBox.children.?[index] = try self.create(child, BaseStyle.from(style));
+                    }
+                }
+                return layoutBox;
+            },
+        }
+    }
+};
+
+pub const LayoutTreeIterator = struct {
+    stack: std.ArrayList(*const LayoutBox),
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator, root: *const LayoutBox) !@This() {
+        var iterator = @This(){
+            .stack = try std.ArrayList(*const LayoutBox).initCapacity(allocator, 16),
+            .allocator = allocator,
+        };
+        try iterator.stack.append(allocator, root);
+        return iterator;
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.stack.deinit(self.allocator);
+    }
+
+    pub fn next(self: *@This()) !?*const LayoutBox {
+        if (self.stack.items.len == 0) {
+            return null;
+        }
+        const current = self.stack.pop();
+        if (current != null and current.?.children != null) {
+            for (current.?.children.?) |*child| {
+                try self.stack.append(self.allocator, child);
+            }
+        }
+        return current;
+    }
+};
+
+pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
+    var count: usize = 1;
+    if (layoutBox.children) |children| {
+        for (children) |*child| {
+            count += countTreeSize(child);
+        }
+    }
+    return count;
+}
+
+pub fn layout(
+    node: Node,
+    viewportSize: Vec2,
+    allocator: std.mem.Allocator,
+) !LayoutBox {
+    var creator = LayoutCreator.init(allocator);
+    var layoutBox = try creator.create(node, .{});
+    fitWidth(&layoutBox);
+    fitHeight(&layoutBox);
+    if (layoutBox.style.preferredWidth == .grow) {
+        layoutBox.size[0] = viewportSize[0];
+    }
+    if (layoutBox.style.preferredHeight == .grow) {
+        layoutBox.size[1] = viewportSize[1];
+    }
+    try growAndShrink(&layoutBox, allocator);
+    fitWidth(&layoutBox);
+    fitHeight(&layoutBox);
+    place(&layoutBox);
+    makeAbsolute(&layoutBox, .{ 0.0, 0.0 });
+    return layoutBox;
+}

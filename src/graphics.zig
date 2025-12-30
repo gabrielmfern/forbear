@@ -6,10 +6,13 @@ const zmath = @import("zmath");
 const c = @import("c.zig").c;
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
+const countTreeSize = layouting.countTreeSize;
+const LayoutTreeIterator = layouting.LayoutTreeIterator;
 const Window = @import("window/root.zig");
 
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
+const Vec2 = @Vector(2, f32);
 
 pub const VulkanError = error{
     ExtensioNotPresent,
@@ -967,6 +970,10 @@ pub const Renderer = struct {
         self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
     }
 
+    pub fn viewportSize(self: *Self) Vec2 {
+        return .{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
+    }
+
     fn init(
         surface: c.VkSurfaceKHR,
         graphics: *const Graphics,
@@ -1339,7 +1346,7 @@ pub const Renderer = struct {
         c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
     }
 
-    pub fn drawFrame(self: *Self, layoutBoxes: []const LayoutBox) !void {
+    pub fn drawFrame(self: *Self, rootLayoutBox: *const LayoutBox) !void {
         try ensureNoError(c.vkWaitForFences(
             self.logicalDevice,
             1,
@@ -1421,26 +1428,31 @@ pub const Renderer = struct {
             1000.0,
         );
 
-        if (layoutBoxes.len > self.elementsPipeline.shaderBuffersMapped[0].len) {
+        const layoutBoxCount = countTreeSize(rootLayoutBox);
+        if (layoutBoxCount > self.elementsPipeline.shaderBuffersMapped[0].len) {
             try self.elementsPipeline.resizeElementsCapacity(
                 self.logicalDevice,
                 self.physicalDevice,
-                try std.math.ceilPowerOfTwo(usize, layoutBoxes.len),
+                try std.math.ceilPowerOfTwo(usize, layoutBoxCount),
             );
         }
-        for (layoutBoxes, 0..) |layoutBox, i| {
+        var layoutTreeIterator = try LayoutTreeIterator.init(self.allocator, rootLayoutBox);
+        defer layoutTreeIterator.deinit();
+        var i: usize = 0;
+        while (try layoutTreeIterator.next()) |layoutBox| {
             self.elementsPipeline.shaderBuffersMapped[self.currentFrame][i] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
-                        zmath.scaling(layoutBox.scale[0], layoutBox.scale[1], layoutBox.scale[2]),
-                        zmath.translation(layoutBox.position[0], layoutBox.position[1], layoutBox.position[2]),
+                        zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
+                        zmath.translation(layoutBox.position[0], layoutBox.position[1], 0.0),
                     ),
                     projectionMatrix,
                 ),
-                .backgroundColor = layoutBox.backgroundColor,
-                .size = .{ layoutBox.scale[0], layoutBox.scale[1] },
-                .borderRadius = layoutBox.borderRadius,
+                .backgroundColor = layoutBox.style.backgroundColor,
+                .size = layoutBox.size,
+                .borderRadius = layoutBox.style.borderRadius,
             };
+            i += 1;
         }
 
         c.vkCmdBindDescriptorSets(
@@ -1455,7 +1467,7 @@ pub const Renderer = struct {
         );
 
         c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
-        c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxes.len), 0, 0);
+        c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
 
         c.vkCmdEndRenderPass(self.commandBuffers[self.currentFrame]);
 

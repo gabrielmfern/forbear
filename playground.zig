@@ -30,29 +30,31 @@ pub fn main() !void {
     defer renderer.deinit();
     renderer.setupResizingHandler(window);
 
+    var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
     while (window.running) {
+        defer _ = arenaAllocator.reset(.retain_capacity);
+
         try window.handleEvents();
-        try renderer.drawFrame(&.{
-            .{
-                .position = .{
-                    100,
-                    100,
-                    0.0,
-                },
-                .scale = .{ 100, 100, 1 },
-                .backgroundColor = .{ 1.0, 1.0, 1.0, 1.0 },
-                .borderRadius = 10.0,
+        const node = forbear.div(.{
+            .style = .{
+                .preferredWidth = .grow,
+                .backgroundColor = .{ 0.2, 0.2, 0.2, 1.0 },
             },
-            .{
-                .position = .{
-                    200,
-                    100,
-                    0.0,
-                },
-                .scale = .{ 100, 100, 1 },
-                .backgroundColor = .{ 1.0, 0.0, 1.0, 1.0 },
-                .borderRadius = 50.0,
-            },
+            .children = try forbear.children(.{
+                forbear.div(.{
+                    .style = .{
+                        .preferredWidth = .{ .fixed = 100 },
+                        .preferredHeight = .{ .fixed = 100 },
+                        .backgroundColor = .{ 1.0, 0.0, 0.0, 1.0 },
+                    },
+                }),
+            }, arena),
         });
+        const layoutBox = try forbear.layout(node, renderer.viewportSize(), arena);
+        try renderer.drawFrame(&layoutBox);
     }
 }
