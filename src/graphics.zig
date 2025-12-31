@@ -848,13 +848,13 @@ const ElementsPipeline = struct {
 
         const elementModel = try Model.init(
             &.{
-                .{ .position = .{ -0.5, -0.5, 0.0 } },
-                .{ .position = .{ 0.5, -0.5, 0.0 } },
-                .{ .position = .{ -0.5, 0.5, 0.0 } },
+                .{ .position = .{ 0.0, 0.0, 0.0 } },
+                .{ .position = .{ 1.0, 0.0, 0.0 } },
+                .{ .position = .{ 0.0, 1.0, 0.0 } },
 
-                .{ .position = .{ 0.5, -0.5, 0.0 } },
-                .{ .position = .{ 0.5, 0.5, 0.0 } },
-                .{ .position = .{ -0.5, 0.5, 0.0 } },
+                .{ .position = .{ 1.0, 0.0, 0.0 } },
+                .{ .position = .{ 1.0, 1.0, 0.0 } },
+                .{ .position = .{ 0.0, 1.0, 0.0 } },
             },
             logicalDevice,
             physicalDevice,
@@ -1523,6 +1523,7 @@ pub const Renderer = struct {
         var i: usize = 0;
         while (try layoutTreeIterator.next()) |layoutBox| {
             self.elementsPipeline.shaderBuffersMapped[self.currentFrame][i] = ElementRenderingData{
+                // .modelViewProjectionMatrix = zmath.identity(),
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
                         zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),

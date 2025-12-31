@@ -50,6 +50,7 @@ pub fn main() !void {
                         .preferredWidth = .{ .fixed = 100 },
                         .preferredHeight = .{ .fixed = 100 },
                         .backgroundColor = .{ 1.0, 0.0, 0.0, 1.0 },
+                        .borderRadius = 20,
                     },
                 }),
             }, arena),
