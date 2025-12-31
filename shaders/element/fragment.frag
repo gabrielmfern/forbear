@@ -8,15 +8,14 @@ layout(location = 0) out vec4 outColor;
 
 void main() {
     vec2 p = (localPos.xy - 0.5) * size;
-
     float r = min(borderRadius, min(size.x, size.y) * 0.5);
 
-    if (abs(p.x) >= size.x * 0.5 - r && abs(p.y) >= size.y * 0.5 - r) {
-        vec2 q = abs(p) - size * 0.5 + r;
-        if (length(q) > r) {
-            discard;
-        }
-    }
+    // SDF for rounded rectangle
+    vec2 q = abs(p) - size * 0.5 + r;
+    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
 
     outColor = vertexColor;
+    outColor.a *= step(d, 0.0);
+
+    if (outColor.a == 0.0) discard;
 }
