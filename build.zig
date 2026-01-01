@@ -12,6 +12,12 @@ pub fn build(b: *std.Build) void {
     });
     forbear.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
     forbear.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+    const freetype = b.dependency("freetype", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    forbear.linkLibrary(freetype.artifact("freetype"));
+    forbear.addIncludePath(b.path("dependencies/include"));
     if (target.result.os.tag == .linux) {
         forbear.linkSystemLibrary("wayland-client", .{});
         forbear.linkSystemLibrary("wayland-cursor", .{});

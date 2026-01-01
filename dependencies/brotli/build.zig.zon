@@ -1,0 +1,15 @@
+.{
+    .name = .brotli,
+    .version = "1.0.0",
+    .minimum_zig_version = "0.15.2",
+    .fingerprint = 0xba7766d3adc2083c,
+    .dependencies = .{},
+    .paths = .{
+        "LICENSE",
+        "build.zig",
+        "build.zig.zon",
+        "c",
+        "update.sh",
+        "verify.sh",
+    },
+}
