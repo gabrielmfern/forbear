@@ -453,6 +453,190 @@ fn findMemoryType(
     return error.MemoryTypeNotFound;
 }
 
+pub const FontTextureAtlas = struct {
+    image: c.VkImage,
+    memory: c.VkDeviceMemory,
+    mapped: []u8,
+
+    capacityExtent: c.VkExtent3D,
+    freeRectangles: std.ArrayList(FreeRectangle),
+
+    const FreeRectangle = struct {
+        u: usize,
+        v: usize,
+        width: usize,
+        height: usize,
+    };
+
+    pub fn init(
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        allocator: std.mem.Allocator,
+    ) !@This() {
+        const extent = c.VkExtent3D{
+            .width = 4096,
+            .height = 4096,
+            .depth = 1,
+        };
+
+        var image: c.VkImage = undefined;
+        try ensureNoError(c.vkCreateImage(logicalDevice, &c.VkImageCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType = c.VK_IMAGE_TYPE_2D,
+            .extent = extent,
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .format = c.VK_FORMAT_R8_UNORM,
+            .tiling = c.VK_IMAGE_TILING_LINEAR,
+            .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+            .usage = c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+            .samples = c.VK_SAMPLE_COUNT_1_BIT,
+            .flags = 0,
+            .pNext = null,
+        }, null, &image));
+        errdefer c.vkDestroyImage(logicalDevice, image, null);
+
+        var memRequirements: c.VkMemoryRequirements = undefined;
+        c.vkGetImageMemoryRequirements(logicalDevice, image, &memRequirements);
+
+        var memory: c.VkDeviceMemory = undefined;
+        try ensureNoError(c.vkAllocateMemory(logicalDevice, &c.VkMemoryAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .allocationSize = memRequirements.size,
+            .memoryTypeIndex = try findMemoryType(
+                memRequirements.memoryTypeBits,
+                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                physicalDevice,
+            ),
+        }, null, &memory));
+
+        try ensureNoError(c.vkBindImageMemory(logicalDevice, image, memory, 0));
+
+        const free_rectangle = FreeRectangle{
+            .u = 0,
+            .v = 0,
+            .width = extent.width,
+            .height = extent.height,
+        };
+
+        var free_rectangles = try std.ArrayList(FreeRectangle).initCapacity(allocator, 1);
+        free_rectangles.appendAssumeCapacity(free_rectangle);
+
+        var imageData: ?*anyopaque = undefined;
+        try ensureNoError(c.vkMapMemory(logicalDevice, memory, 0, memRequirements.size, 0, &imageData));
+
+        return @This(){
+            .image = image,
+            .memory = memory,
+            .mapped = @as([*c]u8, @ptrCast(@alignCast(imageData)))[0..@intCast(memRequirements.size)],
+
+            .capacityExtent = extent,
+            .freeRectangles = free_rectangles,
+        };
+    }
+
+    pub fn getBestFreeRectangle(
+        self: *@This(),
+        wantedWidth: usize,
+        wantedHeight: usize,
+    ) ?usize {
+        var bestRectangleIndex: ?usize = null;
+        var bestAreaDifference: usize = @intCast(std.math.maxInt(usize));
+
+        const required_area = wantedWidth * wantedHeight;
+        for (self.freeRectangles.items, 0..) |freeRectangle, index| {
+            const freeArea = freeRectangle.width * freeRectangle.height;
+            if (freeArea - required_area >= 0 and freeArea - required_area < bestAreaDifference and freeRectangle.width >= wantedWidth and freeRectangle.height >= wantedHeight) {
+                bestAreaDifference = freeArea - required_area;
+                bestRectangleIndex = index;
+            }
+        }
+
+        return bestRectangleIndex;
+    }
+
+    pub const TextureCoordinates = struct {
+        u: f32,
+        v: f32,
+        w: f32,
+        h: f32,
+    };
+
+    pub fn upload(
+        self: *@This(),
+        data: []u8,
+        uploadWidth: usize,
+        uploadHeight: usize,
+        allocator: std.mem.Allocator,
+    ) !TextureCoordinates {
+        std.debug.assert(uploadHeight == data.len);
+        // No free rectangles available in the texture atlas
+        std.debug.assert(self.freeRectangles.items.len > 0);
+
+        const freeRectangleIndex = self.getBestFreeRectangle(
+            @intCast(uploadWidth),
+            @intCast(uploadHeight),
+        ) orelse return error.MaximumTextureAtlasSizeReached;
+        const freeRectangle = self.freeRectangles.orderedRemove(freeRectangleIndex);
+        // we share the remaining space in the free rectangle in a way that this first one has the
+        // most area
+        if (freeRectangle.width > uploadWidth) {
+            try self.freeRectangles.append(
+                allocator,
+                FreeRectangle{
+                    .u = freeRectangle.u + uploadWidth,
+                    .v = freeRectangle.v,
+                    .width = freeRectangle.width - uploadWidth,
+                    .height = freeRectangle.height,
+                },
+            );
+        }
+        if (freeRectangle.height > uploadHeight) {
+            try self.freeRectangles.append(
+                allocator,
+                FreeRectangle{
+                    .u = freeRectangle.u,
+                    .v = freeRectangle.v + uploadHeight,
+                    .width = uploadWidth,
+                    .height = freeRectangle.height - uploadHeight,
+                },
+            );
+        }
+
+        for (0..uploadHeight) |y| {
+            const dest_start = (freeRectangle.v + y) * self.width() + freeRectangle.u;
+            const src_start = y * uploadWidth;
+            @memcpy(
+                self.mapped[dest_start .. dest_start + uploadWidth],
+                data[src_start .. src_start + uploadWidth],
+            );
+        }
+
+        return .{
+            .u = @as(f32, @floatFromInt(freeRectangle.u)),
+            .v = @as(f32, @floatFromInt(freeRectangle.v)),
+            .w = @as(f32, @floatFromInt(uploadWidth)),
+            .h = @as(f32, @floatFromInt(uploadHeight)),
+        };
+    }
+
+    fn width(self: @This()) usize {
+        return @as(usize, @intCast(self.capacityExtent.width));
+    }
+
+    fn height(self: @This()) usize {
+        return @as(usize, @intCast(self.capacityExtent.height));
+    }
+
+    pub fn deinit(self: @This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
+        c.vkUnmapMemory(logicalDevice, self.memory);
+        self.freeRectangles.deinit(allocator);
+        c.vkFreeMemory(logicalDevice, self.memory, null);
+        c.vkDestroyImage(logicalDevice, self.image, null);
+    }
+};
+
 pub const Buffer = struct {
     handle: c.VkBuffer,
     memory: c.VkDeviceMemory,
@@ -473,8 +657,6 @@ pub const Buffer = struct {
                 .pNext = null,
                 .flags = 0,
                 .size = size,
-                // .size = @sizeOf(Vertex) * 3,
-                // .usage = c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                 .usage = usage,
                 .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
                 .queueFamilyIndexCount = 0,
@@ -496,7 +678,6 @@ pub const Buffer = struct {
                 .allocationSize = bufferMemoryRequirements.size,
                 .memoryTypeIndex = try findMemoryType(
                     bufferMemoryRequirements.memoryTypeBits,
-                    // c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                     properties,
                     physicalDevice,
                 ),

@@ -14,7 +14,6 @@ pub const c = @cImport({
     @cInclude("wayland-cursor.h");
     @cInclude("xkbcommon/xkbcommon.h");
     @cInclude("xdg-shell-client-protocol.h");
-
     @cInclude("vulkan/vulkan_wayland.h");
     @cInclude("fractional-scale-v1-client-protocol.h");
     @cInclude("viewporter-client-protocol.h");
@@ -26,4 +25,14 @@ pub const c = @cImport({
     //
     //     @cInclude("vulkan/vulkan_metal.h");
     // }
+
+    @cInclude("freetype/ftadvanc.h");
+    @cInclude("freetype/ftbbox.h");
+    @cInclude("freetype/ftbitmap.h");
+    @cInclude("freetype/ftcolor.h");
+    @cInclude("freetype/ftlcdfil.h");
+    @cInclude("freetype/ftsizes.h");
+    @cInclude("freetype/ftstroke.h");
+    @cInclude("freetype/fttrigon.h");
+    @cInclude("freetype/ftsynth.h");
 });
