@@ -1,0 +1,12 @@
+.{
+    .name = .kb_text_shape,
+    .version = "2.0.7",
+    .minimum_zig_version = "0.14.0",
+    .fingerprint = 0xa16fd5f99e5849fc,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "kb_text_shape.c",
+        "kb_text_shape.h",
+    },
+}
