@@ -8,6 +8,12 @@
             .url = "git+https://github.com/zig-gamedev/zmath.git#3a5955b2b72cd081563fbb084eff05bffd1e3fbb",
             .hash = "zmath-0.11.0-dev-wjwivdMsAwD-xaLj76YHUq3t9JDH-X16xuMTmnDzqbu2",
         },
+        .freetype = .{
+            .path = "dependencies/freetype",
+        },
+        .kb_text_shape = .{
+            .path = "dependencies/kb_text_shape",
+        },
     },
     .paths = .{
         "build.zig",

@@ -35,6 +35,8 @@ pub fn main() !void {
 
     const arena = arenaAllocator.allocator();
 
+    const inter = try forbear.Font.init("Inter-Regular", @embedFile("Inter-Regular.ttf"));
+
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
@@ -45,6 +47,7 @@ pub fn main() !void {
                 .backgroundColor = .{ 0.2, 0.2, 0.2, 1.0 },
             },
             .children = try forbear.children(.{
+                "This is some text introducing things",
                 forbear.div(.{
                     .style = .{
                         .preferredWidth = .{ .fixed = 100 },
@@ -55,7 +58,13 @@ pub fn main() !void {
                 }),
             }, arena),
         });
-        const layoutBox = try forbear.layout(node, renderer.viewportSize(), arena);
+        const layoutBox = try forbear.layout(
+            node,
+            .{ .font = inter, .fontSize = 32, .lineHeight = 1.0 },
+            renderer.viewportSize(),
+            .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
+            arena,
+        );
         try renderer.drawFrame(&layoutBox);
     }
 }

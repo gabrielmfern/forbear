@@ -1,6 +1,7 @@
 const std = @import("std");
 const Node = @import("node.zig").Node;
 const Style = @import("node.zig").Style;
+const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const BaseStyle = @import("node.zig").BaseStyle;
 const Element = @import("node.zig").Element;
 const Direction = @import("node.zig").Direction;
@@ -9,20 +10,37 @@ const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
 
+pub const LayoutGlyph = struct {
+    index: c_uint,
+    position: Vec2,
+};
+
 pub const LayoutBox = struct {
+    pub const Children = union(enum) {
+        layoutBoxes: []LayoutBox,
+        glyphs: []LayoutGlyph,
+    };
+
     position: Vec2,
     size: Vec2,
     minSize: Vec2,
-    children: ?[]LayoutBox,
+    children: ?Children,
 
     style: Style,
 
     pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
         if (self.children) |children| {
-            for (children) |child| {
-                child.deinit(allocator);
+            switch (children) {
+                .layoutBoxes => |layoutBoxes| {
+                    for (layoutBoxes) |child| {
+                        child.deinit(allocator);
+                    }
+                    allocator.free(layoutBoxes);
+                },
+                .glyphs => |glyphs| {
+                    allocator.free(glyphs);
+                },
             }
-            allocator.free(children);
         }
     }
 
@@ -44,9 +62,18 @@ pub const LayoutBox = struct {
 fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
     layoutBox.position += base;
 
-    if (layoutBox.children) |children| {
-        for (children) |*child| {
-            makeAbsolute(child, layoutBox.position);
+    if (layoutBox.children != null) {
+        switch (layoutBox.children.?) {
+            .layoutBoxes => |children| {
+                for (children) |*child| {
+                    makeAbsolute(child, layoutBox.position);
+                }
+            },
+            .glyphs => |glyphs| {
+                for (glyphs) |*glyph| {
+                    glyph.position += layoutBox.position;
+                }
+            },
         }
     }
 }
@@ -55,7 +82,8 @@ fn growAndShrink(
     layoutBox: *LayoutBox,
     allocator: std.mem.Allocator,
 ) !void {
-    if (layoutBox.children) |children| {
+    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
+        const children = layoutBox.children.?.layoutBoxes;
         const direction = layoutBox.style.direction;
 
         var toGrowGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
@@ -176,7 +204,8 @@ fn growAndShrink(
 }
 
 fn fitHeight(layoutBox: *LayoutBox) void {
-    if (layoutBox.children) |children| {
+    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
+        const children = layoutBox.children.?.layoutBoxes;
         const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
         const direction = layoutBox.style.direction;
         if (layoutBox.style.preferredHeight == .fit) {
@@ -214,7 +243,8 @@ fn fitHeight(layoutBox: *LayoutBox) void {
 }
 
 fn fitWidth(layoutBox: *LayoutBox) void {
-    if (layoutBox.children) |children| {
+    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
+        const children = layoutBox.children.?.layoutBoxes;
         const shouldFitMin = layoutBox.style.preferredWidth != .fixed and layoutBox.style.minWidth == null;
         const direction = layoutBox.style.direction;
         if (layoutBox.style.preferredWidth == .fit) {
@@ -226,7 +256,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
         for (children) |*child| {
             fitWidth(child);
             if (direction == .leftToRight) {
-                if (layoutBox.style.preferredHeight == .fit) {
+                if (layoutBox.style.preferredWidth == .fit) {
                     layoutBox.size[0] += child.size[0];
                 }
                 if (shouldFitMin) {
@@ -252,20 +282,32 @@ fn fitWidth(layoutBox: *LayoutBox) void {
 }
 
 fn place(layoutBox: *LayoutBox) void {
-    if (layoutBox.children) |children| {
-        var cursor: f32 = 0.0;
-        const direction = layoutBox.style.direction;
-        for (children) |*child| {
-            if (direction == .leftToRight) {
-                child.position[0] = cursor + layoutBox.style.paddingLeft;
-                child.position[1] = layoutBox.style.paddingTop;
-                cursor += child.size[0];
-            } else {
-                child.position[0] = layoutBox.style.paddingLeft;
-                child.position[1] = cursor + layoutBox.style.paddingTop;
-                cursor += child.size[1];
-            }
-            place(child);
+    if (layoutBox.children != null) {
+        switch (layoutBox.children.?) {
+            .layoutBoxes => |children| {
+                var cursor: f32 = 0.0;
+                const direction = layoutBox.style.direction;
+                for (children) |*child| {
+                    if (direction == .leftToRight) {
+                        child.position[0] = cursor + layoutBox.style.paddingLeft;
+                        child.position[1] = layoutBox.style.paddingTop;
+                        cursor += child.size[0];
+                    } else {
+                        child.position[0] = layoutBox.style.paddingLeft;
+                        child.position[1] = cursor + layoutBox.style.paddingTop;
+                        cursor += child.size[1];
+                    }
+                    place(child);
+                }
+            },
+            .glyphs => |glyphs| {
+                for (glyphs) |*glyph| {
+                    glyph.position += .{
+                        layoutBox.style.paddingLeft,
+                        layoutBox.style.paddingTop,
+                    };
+                }
+            },
         }
     }
 }
@@ -283,9 +325,11 @@ const LayoutCreator = struct {
         self: *@This(),
         node: Node,
         baseStyle: BaseStyle,
+        dpi: Vec2,
     ) !LayoutBox {
         const style = switch (node) {
             .element => |element| element.style.completeWith(baseStyle),
+            .text => (IncompleteStyle{}).completeWith(baseStyle),
         };
         switch (node) {
             .element => |element| {
@@ -309,13 +353,48 @@ const LayoutCreator = struct {
                     .style = style,
                 };
                 if (element.children) |children| {
-                    layoutBox.children = try self.allocator.alloc(LayoutBox, children.len);
-                    errdefer self.allocator.free(layoutBox.children.?);
+                    layoutBox.children = .{ .layoutBoxes = try self.allocator.alloc(LayoutBox, children.len) };
+                    errdefer self.allocator.free(layoutBox.children.?.layoutBoxes);
                     for (children, 0..) |child, index| {
-                        layoutBox.children.?[index] = try self.create(child, BaseStyle.from(style));
+                        layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style), dpi);
                     }
                 }
                 return layoutBox;
+            },
+            .text => |text| {
+                var layoutGlyphs = try std.ArrayList(LayoutGlyph).initCapacity(self.allocator, 1);
+                errdefer layoutGlyphs.deinit(self.allocator);
+                try layoutGlyphs.ensureTotalCapacityPrecise(self.allocator, text.len);
+
+                const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
+                const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
+                const fontSize: f32 = @floatFromInt(style.fontSize);
+                const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * dpi / @as(Vec2, @splat(72.0));
+
+                var shapedGlyphsIterator = try style.font.shape(text);
+                var cursor: Vec2 = @splat(0.0);
+                var maxAdvance: Vec2 = @splat(0.0);
+                while (shapedGlyphsIterator.next()) |shapedGlyph| {
+                    if (layoutGlyphs.capacity < layoutGlyphs.items.len + 1) {
+                        try layoutGlyphs.ensureTotalCapacityPrecise(self.allocator, layoutGlyphs.items.len + 1);
+                    }
+                    layoutGlyphs.appendAssumeCapacity(LayoutGlyph{
+                        .index = @intCast(shapedGlyph.index),
+                        .position = cursor + shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2,
+                    });
+                    const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
+                    cursor += advance;
+                    maxAdvance = @max(maxAdvance, advance);
+                }
+                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * fontSize * dpi[1] / 72.0;
+
+                return LayoutBox{
+                    .position = .{ 0.0, 0.0 },
+                    .size = .{ cursor[0], pixelLineHeight },
+                    .minSize = .{ maxAdvance[0], pixelLineHeight },
+                    .children = .{ .glyphs = layoutGlyphs.items },
+                    .style = style,
+                };
             },
         }
     }
@@ -344,8 +423,10 @@ pub const LayoutTreeIterator = struct {
         }
         const current = self.stack.pop();
         if (current != null and current.?.children != null) {
-            for (current.?.children.?) |*child| {
-                try self.stack.append(self.allocator, child);
+            if (current.?.children.? == .layoutBoxes) {
+                for (current.?.children.?.layoutBoxes) |*child| {
+                    try self.stack.append(self.allocator, child);
+                }
             }
         }
         return current;
@@ -354,8 +435,8 @@ pub const LayoutTreeIterator = struct {
 
 pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
     var count: usize = 1;
-    if (layoutBox.children) |children| {
-        for (children) |*child| {
+    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
+        for (layoutBox.children.?.layoutBoxes) |*child| {
             count += countTreeSize(child);
         }
     }
@@ -364,11 +445,13 @@ pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
 
 pub fn layout(
     node: Node,
+    baseStyle: BaseStyle,
     viewportSize: Vec2,
+    dpi: Vec2,
     allocator: std.mem.Allocator,
 ) !LayoutBox {
     var creator = LayoutCreator.init(allocator);
-    var layoutBox = try creator.create(node, .{});
+    var layoutBox = try creator.create(node, baseStyle, dpi);
     fitWidth(&layoutBox);
     fitHeight(&layoutBox);
     if (layoutBox.style.preferredWidth == .grow) {
