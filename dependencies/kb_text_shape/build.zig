@@ -20,6 +20,7 @@ pub fn build(b: *std.Build) void {
         .flags = &.{
             "-fno-sanitize=alignment",
             "-fno-sanitize=shift",
+            "-fno-sanitize=pointer-overflow",
         },
     });
 
