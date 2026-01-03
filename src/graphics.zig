@@ -189,8 +189,7 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
 
     const instanceExtensions: []const [*c]const u8 = &(.{
         c.VK_KHR_SURFACE_EXTENSION_NAME,
-        c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-    } ++ switch (builtin.os.tag) {
+    } ++ (if (builtin.mode == .Debug) .{c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME} else .{}) ++ switch (builtin.os.tag) {
         .linux => .{
             "VK_KHR_wayland_surface",
         },
@@ -208,7 +207,7 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
     // Tools like RenderDoc may override `VK_LAYER_PATH` which can hide system layers.
     var instanceLayersBuf: [1][*c]const u8 = undefined;
     var instanceLayers: []const [*c]const u8 = &.{};
-    {
+    if (builtin.mode == .Debug) {
         var layerCount: u32 = 0;
         try ensureNoError(c.vkEnumerateInstanceLayerProperties(&layerCount, null));
 
@@ -262,51 +261,53 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
     errdefer c.vkDestroyInstance(vulkanInstance, null);
 
     var vulkanDebugMessenger: c.VkDebugUtilsMessengerEXT = null;
-    const debugMessengerResult = CreateDebugUtilsMessengerEXT(
-        vulkanInstance,
-        &c.VkDebugUtilsMessengerCreateInfoEXT{
-            .sType = c.VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-            .pNext = null,
-            .flags = 0,
-            .messageSeverity = c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-            .messageType = c.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-            .pfnUserCallback = &(struct {
-                fn debugCallback(
-                    messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT,
-                    messageType: c.VkDebugUtilsMessageTypeFlagsEXT,
-                    callbackData: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT,
-                    userData: ?*anyopaque,
-                ) callconv(.c) c.VkBool32 {
-                    _ = messageType;
-                    _ = userData;
+    if (builtin.mode == .Debug) {
+        const debugMessengerResult = CreateDebugUtilsMessengerEXT(
+            vulkanInstance,
+            &c.VkDebugUtilsMessengerCreateInfoEXT{
+                .sType = c.VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+                .pNext = null,
+                .flags = 0,
+                .messageSeverity = c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+                .messageType = c.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | c.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+                .pfnUserCallback = &(struct {
+                    fn debugCallback(
+                        messageSeverity: c.VkDebugUtilsMessageSeverityFlagBitsEXT,
+                        messageType: c.VkDebugUtilsMessageTypeFlagsEXT,
+                        callbackData: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT,
+                        userData: ?*anyopaque,
+                    ) callconv(.c) c.VkBool32 {
+                        _ = messageType;
+                        _ = userData;
 
-                    const message: []const u8 = std.mem.span(callbackData.*.pMessage);
-                    if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
-                        std.log.debug("{s} (vulkan debug messenger)", .{message});
-                    } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-                        std.log.info("{s} (vulkan debug messenger)", .{message});
-                    } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-                        std.log.warn("{s} (vulkan debug messenger)", .{message});
-                    } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-                        std.log.err("{s} (vulkan debug messenger)", .{message});
+                        const message: []const u8 = std.mem.span(callbackData.*.pMessage);
+                        if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+                            std.log.debug("{s} (vulkan debug messenger)", .{message});
+                        } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+                            std.log.info("{s} (vulkan debug messenger)", .{message});
+                        } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+                            std.log.warn("{s} (vulkan debug messenger)", .{message});
+                        } else if (messageSeverity == c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+                            std.log.err("{s} (vulkan debug messenger)", .{message});
+                        }
+
+                        return c.VK_FALSE;
                     }
+                }).debugCallback,
+                .pUserData = null,
+            },
+            null,
+            &vulkanDebugMessenger,
+        );
 
-                    return c.VK_FALSE;
-                }
-            }).debugCallback,
-            .pUserData = null,
-        },
-        null,
-        &vulkanDebugMessenger,
-    );
-
-    if (debugMessengerResult == c.VK_ERROR_EXTENSION_NOT_PRESENT) {
-        std.log.warn("VK_EXT_debug_utils not present; continuing without debug messenger", .{});
-        vulkanDebugMessenger = null;
-    } else {
-        try ensureNoError(debugMessengerResult);
-        std.debug.assert(vulkanDebugMessenger != null);
-        errdefer DestroyDebugUtilsMessengerEXT(vulkanInstance, vulkanDebugMessenger, null);
+        if (debugMessengerResult == c.VK_ERROR_EXTENSION_NOT_PRESENT) {
+            std.log.warn("VK_EXT_debug_utils not present; continuing without debug messenger", .{});
+            vulkanDebugMessenger = null;
+        } else {
+            try ensureNoError(debugMessengerResult);
+            std.debug.assert(vulkanDebugMessenger != null);
+            errdefer DestroyDebugUtilsMessengerEXT(vulkanInstance, vulkanDebugMessenger, null);
+        }
     }
 
     var physicalDevicesLen: u32 = undefined;
