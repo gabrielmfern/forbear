@@ -35,6 +35,8 @@ pub fn main() !void {
 
     const arena = arenaAllocator.allocator();
 
+    const inter = try forbear.Font.init(@embedFile("Inter-Regular.ttf"));
+
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
@@ -55,7 +57,12 @@ pub fn main() !void {
                 }),
             }, arena),
         });
-        const layoutBox = try forbear.layout(node, renderer.viewportSize(), arena);
+        const layoutBox = try forbear.layout(
+            node,
+            .{ .font = inter, .fontSize = 16, .lineHeight = 1.0 },
+            renderer.viewportSize(),
+            arena,
+        );
         try renderer.drawFrame(&layoutBox);
     }
 }
