@@ -2331,7 +2331,6 @@ pub const Renderer = struct {
         c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
 
         if (totalGlyphCount > 0) {
-            std.log.debug("total glyph count {d}", .{totalGlyphCount});
             if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
                 try self.textPipeline.resizeGlyphsCapacity(
                     self.logicalDevice,
@@ -2348,7 +2347,6 @@ pub const Renderer = struct {
                 if (layoutBox.children) |children| {
                     if (children == .glyphs) {
                         for (children.glyphs) |glyph| {
-                            std.log.debug("{}", .{glyph});
                             const glyphInfo = try layoutBox.style.font.rasterize(
                                 glyph.index,
                                 96, // @TODO: take this from the window

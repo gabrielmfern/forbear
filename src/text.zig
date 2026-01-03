@@ -267,7 +267,6 @@ pub const Font = struct {
         pub fn next(self: *@This()) ?ShapedGlyph {
             if (self.run) |*run| {
                 if (c.kbts_GlyphIteratorNext(&run.Glyphs, &self.glyph) != 0) {
-                    std.log.debug("kbts glyph {}", .{self.glyph.*.*});
                     return ShapedGlyph{
                         .index = self.glyph.*.*.Id,
                         .advance = .{ @floatFromInt(self.glyph.*.*.AdvanceX), @floatFromInt(self.glyph.*.*.AdvanceY) },
