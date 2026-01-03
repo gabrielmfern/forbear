@@ -26,6 +26,7 @@ pub const c = @cImport({
     //     @cInclude("vulkan/vulkan_metal.h");
     // }
 
+    @cInclude("kb_text_shape.h");
     @cInclude("freetype/ftadvanc.h");
     @cInclude("freetype/ftbbox.h");
     @cInclude("freetype/ftbitmap.h");

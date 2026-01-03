@@ -1,4 +1,5 @@
 const std = @import("std");
+const Font = @import("text.zig").Font;
 const Vec4 = @Vector(4, f32);
 
 pub const Direction = enum {
@@ -22,9 +23,13 @@ pub const Sizing = union(enum) {
 pub const Style = struct {
     backgroundColor: Vec4,
     borderRadius: f32,
+
+    font: Font,
+    fontSize: u32,
+    lineHeight: f32,
+
     minWidth: ?f32 = null,
     preferredWidth: Sizing,
-
     minHeight: ?f32 = null,
     preferredHeight: Sizing,
 
@@ -44,9 +49,16 @@ pub const Style = struct {
 };
 
 pub const BaseStyle = struct {
+    font: Font,
+    fontSize: u32,
+    lineHeight: f32,
+
     pub fn from(style: Style) @This() {
-        _ = style;
-        return @This(){};
+        return @This(){
+            .font = style.font,
+            .fontSize = style.fontSize,
+            .lineHeight = style.lineHeight,
+        };
     }
 };
 
@@ -54,9 +66,12 @@ pub const IncompleteStyle = struct {
     backgroundColor: ?Vec4 = null,
     borderRadius: ?f32 = null,
 
+    font: ?Font = null,
+    fontSize: ?u32 = null,
+    lineHeight: ?f32 = null,
+
     minWidth: ?f32 = null,
     preferredWidth: ?Sizing = null,
-
     minHeight: ?f32 = null,
     preferredHeight: ?Sizing = null,
 
@@ -68,12 +83,13 @@ pub const IncompleteStyle = struct {
     direction: ?Direction = null,
 
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
-        // For now it doesn't do anything, but there are certain properties
-        // that this will fall back to it for
-        _ = base;
         return Style{
             .backgroundColor = self.backgroundColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 },
             .borderRadius = self.borderRadius orelse 0.0,
+
+            .font = self.font orelse base.font,
+            .fontSize = self.fontSize orelse base.fontSize,
+            .lineHeight = self.lineHeight orelse base.lineHeight,
 
             .minWidth = self.minWidth,
             .preferredWidth = self.preferredWidth orelse .fit,
@@ -93,6 +109,7 @@ pub const IncompleteStyle = struct {
 
 pub const Node = union(enum) {
     element: Element,
+    text: []u8,
 
     pub fn from(value: anytype, allocator: std.mem.Allocator) !Node {
         const Value = @TypeOf(value);
@@ -102,24 +119,24 @@ pub const Node = union(enum) {
             return value;
         }
 
-        // if (valueTypeInfo == .pointer and valueTypeInfo.pointer.size == .slice and valueTypeInfo.pointer.child == u8) {
-        //     return Node{
-        //         .text = value,
-        //     };
-        // }
-        //
-        // if (valueTypeInfo == .int or valueTypeInfo == .float) {
-        //     const stringified = try std.fmt.allocPrint(allocator, "{d:.1}", .{value});
-        //     return Node{
-        //         .text = stringified,
-        //     };
-        // }
-        //
-        // if (valueTypeInfo == .bool) {
-        //     return Node{
-        //         .text = if (value) "true" else "false",
-        //     };
-        // }
+        if (valueTypeInfo == .pointer and valueTypeInfo.pointer.size == .slice and valueTypeInfo.pointer.child == u8) {
+            return Node{
+                .text = value,
+            };
+        }
+
+        if (valueTypeInfo == .int or valueTypeInfo == .float) {
+            const stringified = try std.fmt.allocPrint(allocator, "{d:.1}", .{value});
+            return Node{
+                .text = stringified,
+            };
+        }
+
+        if (valueTypeInfo == .bool) {
+            return Node{
+                .text = if (value) "true" else "false",
+            };
+        }
 
         if (valueTypeInfo == .pointer) {
             const child_type_info = @typeInfo(valueTypeInfo.pointer.child);
