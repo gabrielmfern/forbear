@@ -109,7 +109,7 @@ pub const IncompleteStyle = struct {
 
 pub const Node = union(enum) {
     element: Element,
-    text: []u8,
+    text: []const u8,
 
     pub fn from(value: anytype, allocator: std.mem.Allocator) !Node {
         const Value = @TypeOf(value);
