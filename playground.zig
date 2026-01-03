@@ -60,8 +60,9 @@ pub fn main() !void {
         });
         const layoutBox = try forbear.layout(
             node,
-            .{ .font = inter, .fontSize = 64, .lineHeight = 1.0 },
+            .{ .font = inter, .fontSize = 32, .lineHeight = 1.0 },
             renderer.viewportSize(),
+            .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             arena,
         );
         try renderer.drawFrame(&layoutBox);

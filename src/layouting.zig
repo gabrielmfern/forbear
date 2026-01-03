@@ -325,6 +325,7 @@ const LayoutCreator = struct {
         self: *@This(),
         node: Node,
         baseStyle: BaseStyle,
+        dpi: Vec2,
     ) !LayoutBox {
         const style = switch (node) {
             .element => |element| element.style.completeWith(baseStyle),
@@ -355,7 +356,7 @@ const LayoutCreator = struct {
                     layoutBox.children = .{ .layoutBoxes = try self.allocator.alloc(LayoutBox, children.len) };
                     errdefer self.allocator.free(layoutBox.children.?.layoutBoxes);
                     for (children, 0..) |child, index| {
-                        layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style));
+                        layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style), dpi);
                     }
                 }
                 return layoutBox;
@@ -368,7 +369,7 @@ const LayoutCreator = struct {
                 const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
                 const fontSize: f32 = @floatFromInt(style.fontSize);
-                const fontSizeVec2: Vec2 = @splat(fontSize);
+                const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * dpi / @as(Vec2, @splat(72.0));
 
                 var shapedGlyphsIterator = try style.font.shape(text);
                 var cursor: Vec2 = @splat(0.0);
@@ -379,18 +380,18 @@ const LayoutCreator = struct {
                     }
                     layoutGlyphs.appendAssumeCapacity(LayoutGlyph{
                         .index = @intCast(shapedGlyph.index),
-                        .position = cursor + shapedGlyph.offset / unitsPerEmVec2 * fontSizeVec2,
+                        .position = cursor + shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2,
                     });
-                    const advance = shapedGlyph.advance / unitsPerEmVec2 * fontSizeVec2;
+                    const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
                     cursor += advance;
                     maxAdvance = @max(maxAdvance, advance);
                 }
-                const lineHeight = style.font.lineHeight() / unitsPerEm * fontSize;
+                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * fontSize * dpi[1] / 72.0;
 
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
-                    .size = .{ cursor[0], lineHeight },
-                    .minSize = .{ maxAdvance[0], lineHeight },
+                    .size = .{ cursor[0], pixelLineHeight },
+                    .minSize = .{ maxAdvance[0], pixelLineHeight },
                     .children = .{ .glyphs = layoutGlyphs.items },
                     .style = style,
                 };
@@ -446,10 +447,11 @@ pub fn layout(
     node: Node,
     baseStyle: BaseStyle,
     viewportSize: Vec2,
+    dpi: Vec2,
     allocator: std.mem.Allocator,
 ) !LayoutBox {
     var creator = LayoutCreator.init(allocator);
-    var layoutBox = try creator.create(node, baseStyle);
+    var layoutBox = try creator.create(node, baseStyle, dpi);
     fitWidth(&layoutBox);
     fitHeight(&layoutBox);
     if (layoutBox.style.preferredWidth == .grow) {
