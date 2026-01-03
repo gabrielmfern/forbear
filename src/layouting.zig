@@ -256,7 +256,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
         for (children) |*child| {
             fitWidth(child);
             if (direction == .leftToRight) {
-                if (layoutBox.style.preferredHeight == .fit) {
+                if (layoutBox.style.preferredWidth == .fit) {
                     layoutBox.size[0] += child.size[0];
                 }
                 if (shouldFitMin) {
