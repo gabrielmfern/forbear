@@ -248,18 +248,12 @@ pub const Font = struct {
         c.FT_Done_Face(self.handle);
     }
 
-    pub const GlyphMetrics = struct {
-        width: c_long,
-        height: c_long,
-        left: c_long,
-        top: c_long,
-    };
-
     pub const RasterizedGlyph = struct {
         bitmap: ?[]u8,
-        bitmapWidth: c_uint,
-        bitmapHeight: c_uint,
-        metrics: GlyphMetrics,
+        left: c_int,
+        top: c_int,
+        width: c_uint,
+        height: c_uint,
     };
 
     pub const ShapedGlyph = struct {
@@ -325,33 +319,6 @@ pub const Font = struct {
         return self.ascent() - self.descent();
     }
 
-    pub fn metricsFor(
-        self: @This(),
-        glyphIndex: c_uint,
-        horizontalResolution: c_uint,
-        verticalResolution: c_uint,
-        size: c_long,
-    ) FreetypeError!GlyphMetrics {
-        try ensureNoError(c.FT_Set_Char_Size(
-            self.handle,
-            0,
-            size * 64,
-            horizontalResolution,
-            verticalResolution,
-        ));
-
-        try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_COMPUTE_METRICS));
-        const glyph = self.handle.*.glyph;
-        std.debug.assert(glyph != null);
-
-        return GlyphMetrics{
-            .width = @divFloor(glyph.*.metrics.width, 64),
-            .height = @divFloor(glyph.*.metrics.height, 64),
-            .left = @divFloor(glyph.*.metrics.horiBearingX, 64),
-            .top = @divFloor(glyph.*.metrics.horiBearingY, 64),
-        };
-    }
-
     pub fn rasterize(
         self: @This(),
         glyphIndex: c_uint,
@@ -377,14 +344,10 @@ pub const Font = struct {
                 null
             else
                 glyph.*.bitmap.buffer[0..@intCast(glyph.*.bitmap.width * glyph.*.bitmap.rows)],
-            .bitmapWidth = glyph.*.bitmap.width,
-            .bitmapHeight = glyph.*.bitmap.rows,
-            .metrics = .{
-                .width = @divFloor(glyph.*.metrics.width, 64),
-                .height = @divFloor(glyph.*.metrics.height, 64),
-                .left = @divFloor(glyph.*.metrics.horiBearingX, 64),
-                .top = @divFloor(glyph.*.metrics.horiBearingY, 64),
-            },
+            .width = glyph.*.bitmap.width,
+            .height = glyph.*.bitmap.rows,
+            .left = glyph.*.bitmap_left,
+            .top = glyph.*.bitmap_top,
         };
     }
 
