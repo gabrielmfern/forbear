@@ -1,5 +1,59 @@
 const std = @import("std");
 
+const Dependencies = struct {
+    freetype: *std.Build.Dependency,
+    zmath: *std.Build.Dependency,
+
+    target: std.Build.ResolvedTarget,
+
+    fn init(
+        b: *std.Build,
+        target: std.Build.ResolvedTarget,
+        optimize: std.builtin.OptimizeMode,
+    ) @This() {
+        const freetype = b.dependency("freetype", .{
+            .target = target,
+            .optimize = optimize,
+        });
+        const zmath = b.dependency("zmath", .{
+            .target = target,
+            .optimize = optimize,
+        });
+
+        return @This(){
+            .freetype = freetype,
+            .zmath = zmath,
+            .target = target,
+        };
+    }
+
+    fn addToModule(
+        self: *@This(),
+        b: *std.Build,
+        module: *std.Build.Module,
+    ) void {
+        module.addIncludePath(b.path("dependencies/include"));
+        module.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+        module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+
+        module.linkLibrary(self.freetype.artifact("freetype"));
+        module.addImport("zmath", self.zmath.module("root"));
+        module.addIncludePath(b.path("dependencies/include"));
+
+        if (self.target.result.os.tag == .linux) {
+            module.linkSystemLibrary("wayland-client", .{});
+            module.linkSystemLibrary("wayland-cursor", .{});
+            module.linkSystemLibrary("xkbcommon", .{});
+        }
+        if (self.target.result.os.tag == .macos) {
+            module.linkFramework("Cocoa", .{});
+            module.linkFramework("Metal", .{});
+            module.linkFramework("QuartzCore", .{});
+        }
+        module.linkSystemLibrary("vulkan", .{});
+    }
+};
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -10,28 +64,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    forbear.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
-    forbear.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-    const freetype = b.dependency("freetype", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    forbear.linkLibrary(freetype.artifact("freetype"));
-    forbear.addIncludePath(b.path("dependencies/include"));
-    if (target.result.os.tag == .linux) {
-        forbear.linkSystemLibrary("wayland-client", .{});
-        forbear.linkSystemLibrary("wayland-cursor", .{});
-        forbear.linkSystemLibrary("xkbcommon", .{});
-    }
-    if (target.result.os.tag == .macos) {
-        forbear.linkFramework("Cocoa", .{});
-        forbear.linkFramework("Metal", .{});
-        forbear.linkFramework("QuartzCore", .{});
-    }
-    forbear.linkSystemLibrary("vulkan", .{});
 
-    const zmath = b.dependency("zmath", .{});
-    forbear.addImport("zmath", zmath.module("root"));
+    var dependencies = Dependencies.init(b, target, optimize);
+
+    dependencies.addToModule(b, forbear);
 
     if (target.result.os.tag == .linux) {
         const Protocol = struct {
@@ -108,14 +144,9 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        playground.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
-        playground.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-        if (target.result.os.tag == .macos) {
-            playground.linkFramework("Cocoa", .{});
-            playground.linkFramework("Metal", .{});
-            playground.linkFramework("QuartzCore", .{});
-        }
-        playground.linkSystemLibrary("vulkan", .{ .needed = true });
+
+        dependencies.addToModule(b, playground);
+
         playground.addImport("forbear", forbear);
 
         const playground_exe = b.addExecutable(.{
