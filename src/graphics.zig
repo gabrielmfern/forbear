@@ -2393,8 +2393,8 @@ pub const Renderer = struct {
                                 } else {
                                     const rasterizedGlyph = try layoutBox.style.font.rasterize(
                                         glyph.index,
-                                        96, // @TODO: take this from the window
-                                        96,
+                                        72, // @TODO: take this from the window
+                                        72,
                                         @intCast(layoutBox.style.fontSize),
                                     );
 
