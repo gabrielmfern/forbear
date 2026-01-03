@@ -261,16 +261,16 @@ pub const Font = struct {
 
     pub const ShapingIterator = struct {
         run: ?c.kbts_run,
-        glyph: [*c][*c]c.kbts_glyph,
+        glyph: [*c]c.kbts_glyph,
         kbtsContext: *c.kbts_shape_context,
 
         pub fn next(self: *@This()) ?ShapedGlyph {
             if (self.run) |*run| {
-                if (c.kbts_GlyphIteratorNext(&run.Glyphs, &self.glyph) != 0) {
+                if (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&self.glyph)) != 0) {
                     return ShapedGlyph{
-                        .index = self.glyph.*.*.Id,
-                        .advance = .{ @floatFromInt(self.glyph.*.*.AdvanceX), @floatFromInt(self.glyph.*.*.AdvanceY) },
-                        .offset = .{ @floatFromInt(self.glyph.*.*.OffsetX), @floatFromInt(self.glyph.*.*.OffsetY) },
+                        .index = self.glyph.*.Id,
+                        .advance = .{ @floatFromInt(self.glyph.*.AdvanceX), @floatFromInt(self.glyph.*.AdvanceY) },
+                        .offset = .{ @floatFromInt(self.glyph.*.OffsetX), @floatFromInt(self.glyph.*.OffsetY) },
                     };
                 }
             }
