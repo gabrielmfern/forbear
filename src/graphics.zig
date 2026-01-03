@@ -458,7 +458,7 @@ pub const FontTextureAtlas = struct {
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
     mapped: []u8,
-
+    rowPitch: usize,
     capacityExtent: c.VkExtent3D,
     freeRectangles: std.ArrayList(FreeRectangle),
 
@@ -516,6 +516,13 @@ pub const FontTextureAtlas = struct {
         }, null, &memory));
 
         try ensureNoError(c.vkBindImageMemory(logicalDevice, image, memory, 0));
+
+        var subresourceLayout: c.VkSubresourceLayout = undefined;
+        c.vkGetImageSubresourceLayout(logicalDevice, image, &c.VkImageSubresource{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .arrayLayer = 0,
+        }, &subresourceLayout);
 
         var imageView: c.VkImageView = undefined;
         try ensureNoError(c.vkCreateImageView(
@@ -624,12 +631,15 @@ pub const FontTextureAtlas = struct {
 
         var imageData: ?*anyopaque = undefined;
         try ensureNoError(c.vkMapMemory(logicalDevice, memory, 0, memRequirements.size, 0, &imageData));
+        const imageDataSlice: []u8 = @as([*c]u8, @ptrCast(@alignCast(imageData)))[0..@intCast(memRequirements.size)];
+        @memset(imageDataSlice, 0);
 
         return @This(){
             .image = image,
             .imageView = imageView,
             .memory = memory,
-            .mapped = @as([*c]u8, @ptrCast(@alignCast(imageData)))[0..@intCast(memRequirements.size)],
+            .mapped = imageDataSlice,
+            .rowPitch = @intCast(subresourceLayout.rowPitch),
 
             .capacityExtent = extent,
             .freeRectangles = free_rectangles,
@@ -679,38 +689,39 @@ pub const FontTextureAtlas = struct {
         // No free rectangles available in the texture atlas
         std.debug.assert(self.freeRectangles.items.len > 0);
 
+        const padding = 1;
         const freeRectangleIndex = self.getBestFreeRectangle(
-            @intCast(uploadWidth),
-            @intCast(uploadHeight),
+            @intCast(uploadWidth + padding),
+            @intCast(uploadHeight + padding),
         ) orelse return error.MaximumTextureAtlasSizeReached;
         const freeRectangle = self.freeRectangles.orderedRemove(freeRectangleIndex);
         // we share the remaining space in the free rectangle in a way that this first one has the
         // most area
-        if (freeRectangle.width > uploadWidth) {
+        if (freeRectangle.width > uploadWidth + padding) {
             try self.freeRectangles.append(
                 allocator,
                 FreeRectangle{
-                    .u = freeRectangle.u + uploadWidth,
+                    .u = freeRectangle.u + uploadWidth + padding,
                     .v = freeRectangle.v,
-                    .width = freeRectangle.width - uploadWidth,
+                    .width = freeRectangle.width - (uploadWidth + padding),
                     .height = freeRectangle.height,
                 },
             );
         }
-        if (freeRectangle.height > uploadHeight) {
+        if (freeRectangle.height > uploadHeight + padding) {
             try self.freeRectangles.append(
                 allocator,
                 FreeRectangle{
                     .u = freeRectangle.u,
-                    .v = freeRectangle.v + uploadHeight,
-                    .width = uploadWidth,
-                    .height = freeRectangle.height - uploadHeight,
+                    .v = freeRectangle.v + uploadHeight + padding,
+                    .width = uploadWidth + padding,
+                    .height = freeRectangle.height - (uploadHeight + padding),
                 },
             );
         }
 
         for (0..uploadHeight) |y| {
-            const dest_start = (freeRectangle.v + y) * self.width() + freeRectangle.u;
+            const dest_start = (freeRectangle.v + y) * self.rowPitch + freeRectangle.u;
             if (data != null) {
                 const src_start = y * uploadWidth;
                 @memcpy(
@@ -2301,7 +2312,6 @@ pub const Renderer = struct {
                 totalGlyphCount += layoutBox.children.?.glyphs.len;
             }
             self.elementsPipeline.shaderBuffersMapped[self.currentFrame][i] = ElementRenderingData{
-                // .modelViewProjectionMatrix = zmath.identity(),
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
                         zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
