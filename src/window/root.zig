@@ -29,7 +29,14 @@ pub const Handlers = struct {
     } = null,
     resize: ?struct {
         data: *anyopaque,
-        function: *const fn (window: *Self, new_width: u32, new_height: u32, new_scale: u32, data: *anyopaque) void,
+        function: *const fn (
+            window: *Self,
+            new_width: u32,
+            new_height: u32,
+            new_scale: u32,
+            new_dpi: [2]u32,
+            data: *anyopaque,
+        ) void,
     } = null,
 };
 
@@ -67,6 +74,12 @@ title: [:0]const u8,
 app_id: [:0]const u8,
 running: bool,
 scale: u32,
+dpi: [2]u32,
+
+physicalWidthMilimeters: i32 = 0,
+physicalHeightMilimeters: i32 = 0,
+monitorWidth: i32 = 0,
+monitorHeight: i32 = 0,
 
 allocator: std.mem.Allocator,
 
@@ -114,12 +127,12 @@ fn handleMonitorGeometry(
     model: [*c]const u8,
     transform: i32,
 ) callconv(.c) void {
-    _ = data;
+    const window: *Self = @ptrCast(@alignCast(data));
     _ = wlOutput;
     _ = x;
     _ = y;
-    _ = physical_width;
-    _ = physical_height;
+    window.physicalWidthMilimeters = physical_width;
+    window.physicalHeightMilimeters = physical_height;
     _ = subpixel;
     _ = make;
     _ = model;
@@ -134,11 +147,12 @@ fn handleMonitorMode(
     height: i32,
     refresh: i32,
 ) callconv(.c) void {
-    _ = data;
+    const window: *Self = @ptrCast(@alignCast(data));
     _ = wlOutput;
-    _ = flags;
-    _ = width;
-    _ = height;
+    if (flags & c.WL_OUTPUT_MODE_CURRENT != 0) {
+        window.monitorWidth = width;
+        window.monitorHeight = height;
+    }
     _ = refresh;
 }
 
@@ -146,8 +160,20 @@ fn handleMonitorDone(
     data: ?*anyopaque,
     wlOutput: ?*c.wl_output,
 ) callconv(.c) void {
-    _ = data;
     _ = wlOutput;
+    const window: *Self = @ptrCast(@alignCast(data));
+    window.updateDpi();
+    std.log.debug(
+        "monitor done, physical width {d}mm, physical height {d}mm, width {d}px, height {d}px, DPI {d}x{d}",
+        .{
+            window.physicalWidthMilimeters,
+            window.physicalHeightMilimeters,
+            window.monitorWidth,
+            window.monitorHeight,
+            window.dpi[0],
+            window.dpi[1],
+        },
+    );
 }
 
 fn handleMonitorScale(
@@ -159,8 +185,9 @@ fn handleMonitorScale(
     _ = wlOutput;
     if (window.wpFractionalScale != null) return;
     window.scale = @intCast(scale * 120);
+    window.updateDpi();
     if (window.handlers.resize) |handler| {
-        handler.function(window, window.width, window.height, window.scale, handler.data);
+        handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
     }
     std.log.debug("Monitor scale changed to: {}", .{scale});
 }
@@ -202,8 +229,9 @@ fn handleFractionalScale(
     const window: *Self = @ptrCast(@alignCast(data));
     _ = wpFractionalScale;
     window.scale = scale;
+    window.updateDpi();
     if (window.handlers.resize) |handler| {
-        handler.function(window, window.width, window.height, window.scale, handler.data);
+        handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
     }
     std.log.debug("Fractional scale changed to: {d}", .{@as(f32, @floatFromInt(scale)) / 120.0});
 }
@@ -330,7 +358,7 @@ fn xdgToplevelConfigure(
             c.wp_viewport_set_destination(viewport, @intCast(window.width), @intCast(window.height));
         }
         if (window.handlers.resize) |handler| {
-            handler.function(window, window.width, window.height, window.scale, handler.data);
+            handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
         }
     }
 }
@@ -558,6 +586,22 @@ const wlKeyboardListener: c.wl_keyboard_listener = .{
     .repeat_info = keyboardHandleRepeatInfo,
 };
 
+pub fn updateDpi(self: *Self) void {
+    const millimetersPerInch = 25.4;
+    self.dpi = .{
+        @intFromFloat(
+            @round(
+                @as(f32, @floatFromInt(self.monitorWidth)) / (@as(f32, @floatFromInt(self.physicalWidthMilimeters)) / millimetersPerInch),
+            ),
+        ),
+        @intFromFloat(
+            @round(
+                @as(f32, @floatFromInt(self.monitorHeight)) / (@as(f32, @floatFromInt(self.physicalHeightMilimeters)) / millimetersPerInch),
+            ),
+        ),
+    };
+}
+
 pub fn init(
     width: u32,
     height: u32,
@@ -572,6 +616,7 @@ pub fn init(
     window.width = width;
     window.height = height;
     window.scale = 120;
+    window.dpi = .{ 72, 72 };
     window.title = title;
     window.app_id = app_id;
     window.running = true;
@@ -656,7 +701,7 @@ const Cursor = enum {
 
 pub fn setResizeHandler(
     self: *Self,
-    handler: *const fn (window: *Self, new_width: u32, new_height: u32, new_scale: u32, data: *anyopaque) void,
+    handler: *const fn (window: *Self, new_width: u32, new_height: u32, new_scale: u32, new_dpi: [2]u32, data: *anyopaque) void,
     data: *anyopaque,
 ) void {
     self.handlers.resize = .{

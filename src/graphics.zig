@@ -432,7 +432,7 @@ pub fn initRenderer(
     std.debug.assert(vulkanSurface != null);
     errdefer c.vkDestroySurfaceKHR(self.vulkanInstance, vulkanSurface, null);
 
-    return try Renderer.init(vulkanSurface, self, window.width, window.height, window.scale);
+    return try Renderer.init(vulkanSurface, self, window.width, window.height, window.scale, window.dpi);
 }
 
 fn findMemoryType(
@@ -1827,8 +1827,10 @@ pub const Renderer = struct {
     renderFinishedSemaphores: []c.VkSemaphore,
 
     currentFrame: usize,
+    dpi: [2]u32,
 
-    pub fn recreateSwapchain(self: *Self, width: u32, height: u32, scale: u32) !void {
+    pub fn recreateSwapchain(self: *Self, width: u32, height: u32, scale: u32, dpi: [2]u32) !void {
+        self.dpi = dpi;
         _ = c.vkDeviceWaitIdle(self.logicalDevice);
         self.swapchain.deinit(self.logicalDevice);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
@@ -1860,6 +1862,7 @@ pub const Renderer = struct {
         width: u32,
         height: u32,
         scale: u32,
+        dpi: [2]u32,
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -2199,14 +2202,15 @@ pub const Renderer = struct {
             .renderFinishedSemaphores = renderFinishedSemaphores,
 
             .currentFrame = 0,
+            .dpi = dpi,
         };
     }
 
     pub fn setupResizingHandler(self: *Self, window: *Window) void {
         window.setResizeHandler(
             (struct {
-                fn handler(_: *Window, new_width: u32, new_height: u32, new_scale: u32, data: *anyopaque) void {
-                    recreateSwapchain(@ptrCast(@alignCast(data)), new_width, new_height, new_scale) catch |err| {
+                fn handler(_: *Window, new_width: u32, new_height: u32, new_scale: u32, new_dpi: [2]u32, data: *anyopaque) void {
+                    recreateSwapchain(@ptrCast(@alignCast(data)), new_width, new_height, new_scale, new_dpi) catch |err| {
                         std.log.err("Failed to recreate swapchain on window resize {}", .{err});
                         @panic("Failed to recreate swapchain on window resize");
                     };
@@ -2393,8 +2397,7 @@ pub const Renderer = struct {
                                 } else {
                                     const rasterizedGlyph = try layoutBox.style.font.rasterize(
                                         glyph.index,
-                                        72, // @TODO: take this from the window
-                                        72,
+                                        self.dpi,
                                         @intCast(layoutBox.style.fontSize),
                                     );
 

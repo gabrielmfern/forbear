@@ -323,16 +323,15 @@ pub const Font = struct {
     pub fn rasterize(
         self: @This(),
         glyphIndex: c_uint,
-        horizontalResolution: c_uint,
-        verticalResolution: c_uint,
+        dpi: [2]u32,
         size: c_long,
     ) FreetypeError!RasterizedGlyph {
         try ensureNoError(c.FT_Set_Char_Size(
             self.handle,
             0,
             size * 64,
-            horizontalResolution,
-            verticalResolution,
+            @intCast(dpi[0]),
+            @intCast(dpi[1]),
         ));
 
         try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_DEFAULT));
