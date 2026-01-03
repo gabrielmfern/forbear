@@ -254,6 +254,7 @@ pub const Font = struct {
         top: c_int,
         width: c_uint,
         height: c_uint,
+        pitch: c_int,
     };
 
     pub const ShapedGlyph = struct {
@@ -343,11 +344,12 @@ pub const Font = struct {
             .bitmap = if (glyph.*.bitmap.buffer == null)
                 null
             else
-                glyph.*.bitmap.buffer[0..@intCast(glyph.*.bitmap.width * glyph.*.bitmap.rows)],
+                glyph.*.bitmap.buffer[0..@intCast(@abs(glyph.*.bitmap.pitch) * glyph.*.bitmap.rows)],
             .width = glyph.*.bitmap.width,
             .height = glyph.*.bitmap.rows,
             .left = glyph.*.bitmap_left,
             .top = glyph.*.bitmap_top,
+            .pitch = glyph.*.bitmap.pitch,
         };
     }
 

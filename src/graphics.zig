@@ -682,10 +682,11 @@ pub const TextureAtlas = struct {
         data: ?[]u8,
         uploadWidth: usize,
         uploadHeight: usize,
+        pitch: usize,
         allocator: std.mem.Allocator,
     ) !TextureCoordinates {
         if (data != null) {
-            std.debug.assert(uploadWidth * uploadHeight == data.?.len);
+            std.debug.assert(pitch * uploadHeight <= data.?.len);
         }
         // No free rectangles available in the texture atlas
         std.debug.assert(self.freeRectangles.items.len > 0);
@@ -730,7 +731,7 @@ pub const TextureAtlas = struct {
         for (0..uploadHeight) |y| {
             const dest_start = (freeRectangle.v + y) * self.rowPitch + freeRectangle.u;
             if (data != null) {
-                const src_start = y * uploadWidth;
+                const src_start = y * pitch;
                 @memcpy(
                     self.mapped[dest_start .. dest_start + uploadWidth],
                     data.?[src_start .. src_start + uploadWidth],
@@ -2401,6 +2402,7 @@ pub const Renderer = struct {
                                         rasterizedGlyph.bitmap,
                                         @intCast(rasterizedGlyph.width),
                                         @intCast(rasterizedGlyph.height),
+                                        @intCast(@abs(rasterizedGlyph.pitch)),
                                         self.allocator,
                                     );
                                     const data = TextPipeline.GlyphRenderingData{
@@ -2420,13 +2422,17 @@ pub const Renderer = struct {
                             const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
                             const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
 
+                            const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
+                            const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
+                            const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize;
+
                             self.textPipeline.shaderBuffersMapped[self.currentFrame][glyphIndex] = TextPipeline.GlypRenderingShaderData{
                                 .modelViewProjectionMatrix = zmath.mul(
                                     zmath.mul(
                                         zmath.scaling(width, height, 1.0),
                                         zmath.translation(
                                             layoutBox.position[0] + glyph.position[0] + left,
-                                            layoutBox.position[1] + glyph.position[1] + layoutBox.size[1] - top,
+                                            layoutBox.position[1] + glyph.position[1] + pixelAscent - top,
                                             0.0,
                                         ),
                                     ),
