@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const zmath = @import("zmath");
 
 const c = @import("c.zig").c;
+const Font = @import("text.zig").Font;
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
@@ -453,7 +454,7 @@ fn findMemoryType(
     return error.MemoryTypeNotFound;
 }
 
-pub const FontTextureAtlas = struct {
+pub const TextureAtlas = struct {
     image: c.VkImage,
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
@@ -695,6 +696,12 @@ pub const FontTextureAtlas = struct {
             @intCast(uploadHeight + padding),
         ) orelse return error.MaximumTextureAtlasSizeReached;
         const freeRectangle = self.freeRectangles.orderedRemove(freeRectangleIndex);
+        std.log.debug("Uploading glyph to texture atlas at ({d}, {d}) size ({d}x{d})", .{
+            freeRectangle.u,
+            freeRectangle.v,
+            uploadWidth,
+            uploadHeight,
+        });
         // we share the remaining space in the free rectangle in a way that this first one has the
         // most area
         if (freeRectangle.width > uploadWidth + padding) {
@@ -1314,12 +1321,20 @@ const TextPipeline = struct {
     descriptorPool: c.VkDescriptorPool,
     descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
 
+    fontTextureAtlas: TextureAtlas,
+    texutreCoordinatesPerGlyph: std.AutoHashMap(GlyphRenderingKey, TextureAtlas.TextureCoordinates),
     sampler: c.VkSampler,
 
     glyphModel: Model,
 
     shaderBuffers: [maxFramesInFlight]Buffer,
     shaderBuffersMapped: [maxFramesInFlight][]GlyphRenderingData,
+
+    const GlyphRenderingKey = struct {
+        fontSize: u32,
+        glyphIndex: u32,
+        fontKey: u64,
+    };
 
     const textVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_vertex_shader")));
     const textFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_fragment_shader")));
@@ -1330,7 +1345,7 @@ const TextPipeline = struct {
         graphicsQueue: c.VkQueue,
         commandPool: c.VkCommandPool,
         renderPass: c.VkRenderPass,
-        fontAtlasImageView: c.VkImageView,
+        allocator: std.mem.Allocator,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
         try ensureNoError(c.vkCreateShaderModule(
@@ -1568,6 +1583,15 @@ const TextPipeline = struct {
             shaderBuffersMapped[i] = @as([*]GlyphRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..initialGlyphCapacity];
         }
 
+        var fontTextureAtlas = try TextureAtlas.init(
+            logicalDevice,
+            physicalDevice,
+            allocator,
+            commandPool,
+            graphicsQueue,
+        );
+        errdefer fontTextureAtlas.deinit(logicalDevice, allocator);
+
         var sampler: c.VkSampler = undefined;
         try ensureNoError(c.vkCreateSampler(logicalDevice, &c.VkSamplerCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -1628,7 +1652,7 @@ const TextPipeline = struct {
 
             const imageInfo = c.VkDescriptorImageInfo{
                 .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .imageView = fontAtlasImageView,
+                .imageView = fontTextureAtlas.imageView,
                 .sampler = sampler,
             };
 
@@ -1672,11 +1696,14 @@ const TextPipeline = struct {
             .shaderBuffersMapped = shaderBuffersMapped,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
+
+            .texutreCoordinatesPerGlyph = std.AutoHashMap(GlyphRenderingKey, TextureAtlas.TextureCoordinates).init(allocator),
+            .fontTextureAtlas = fontTextureAtlas,
             .sampler = sampler,
         };
     }
 
-    pub fn resizeGlyphsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize, fontAtlasImageView: c.VkImageView) !void {
+    pub fn resizeGlyphsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
         std.log.debug("increasing concurrent glyph capacity from {d} to {d}", .{ self.shaderBuffersMapped[0].len, newCapacity });
         for (self.shaderBuffers) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
@@ -1706,7 +1733,7 @@ const TextPipeline = struct {
 
             const imageInfo = c.VkDescriptorImageInfo{
                 .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .imageView = fontAtlasImageView,
+                .imageView = self.fontTextureAtlas.imageView,
                 .sampler = self.sampler,
             };
 
@@ -1741,9 +1768,11 @@ const TextPipeline = struct {
         }
     }
 
-    pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+    pub fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
         c.vkDestroySampler(logicalDevice, self.sampler, null);
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
+        self.fontTextureAtlas.deinit(logicalDevice, allocator);
+        self.texutreCoordinatesPerGlyph.deinit();
 
         for (self.shaderBuffers) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
@@ -1778,7 +1807,6 @@ pub const Renderer = struct {
 
     elementsPipeline: ElementsPipeline,
     textPipeline: TextPipeline,
-    fontTextureAtlas: FontTextureAtlas,
     renderPass: c.VkRenderPass,
 
     commandPool: c.VkCommandPool,
@@ -2058,24 +2086,15 @@ pub const Renderer = struct {
         );
         errdefer elementsPipeline.deinit(logicalDevice);
 
-        var fontTextureAtlas = try FontTextureAtlas.init(
-            logicalDevice,
-            physicalDevice,
-            graphics.allocator,
-            commandPool,
-            graphicsQueue,
-        );
-        errdefer fontTextureAtlas.deinit(logicalDevice, graphics.allocator);
-
-        const textPipeline = try TextPipeline.init(
+        var textPipeline = try TextPipeline.init(
             logicalDevice,
             physicalDevice,
             graphicsQueue,
             commandPool,
             renderPass,
-            fontTextureAtlas.imageView,
+            graphics.allocator,
         );
-        errdefer textPipeline.deinit(logicalDevice);
+        errdefer textPipeline.deinit(logicalDevice, graphics.allocator);
 
         const framebuffers = try createFramebuffers(logicalDevice, renderPass, swapchain, graphics.allocator);
         errdefer destroyFramebuffers(framebuffers, logicalDevice, graphics.allocator);
@@ -2160,7 +2179,6 @@ pub const Renderer = struct {
 
             .elementsPipeline = elementsPipeline,
             .textPipeline = textPipeline,
-            .fontTextureAtlas = fontTextureAtlas,
             .renderPass = renderPass,
 
             .commandPool = commandPool,
@@ -2205,8 +2223,7 @@ pub const Renderer = struct {
         c.vkDestroyCommandPool(self.logicalDevice, self.commandPool, null);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
         self.elementsPipeline.deinit(self.logicalDevice);
-        self.textPipeline.deinit(self.logicalDevice);
-        self.fontTextureAtlas.deinit(self.logicalDevice, self.allocator);
+        self.textPipeline.deinit(self.logicalDevice, self.allocator);
         c.vkDestroyRenderPass(self.logicalDevice, self.renderPass, null);
         self.swapchain.deinit(self.logicalDevice);
         c.vkDestroyDevice(self.logicalDevice, null);
@@ -2346,7 +2363,6 @@ pub const Renderer = struct {
                     self.logicalDevice,
                     self.physicalDevice,
                     try std.math.ceilPowerOfTwo(usize, totalGlyphCount),
-                    self.fontTextureAtlas.imageView,
                 );
             }
 
@@ -2357,33 +2373,53 @@ pub const Renderer = struct {
                 if (layoutBox.children) |children| {
                     if (children == .glyphs) {
                         for (children.glyphs) |glyph| {
-                            const glyphInfo = try layoutBox.style.font.rasterize(
-                                glyph.index,
-                                96, // @TODO: take this from the window
-                                96,
-                                @intCast(layoutBox.style.fontSize),
-                            );
-                            const textureCoords = try self.fontTextureAtlas.upload(
-                                glyphInfo.bitmap,
-                                glyphInfo.width,
-                                glyphInfo.height,
-                                self.allocator,
-                            );
+                            const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
+                                .fontKey = layoutBox.style.font.key,
+                                .fontSize = layoutBox.style.fontSize,
+                                .glyphIndex = glyph.index,
+                            };
+                            var metrics: Font.GlyphMetrics = undefined;
+                            const textureCoords = blk: {
+                                if (self.textPipeline.texutreCoordinatesPerGlyph.get(glyphRenderingKey)) |coords| {
+                                    metrics = try layoutBox.style.font.metricsFor(
+                                        glyph.index,
+                                        96, // @TODO: take this from the window
+                                        96,
+                                        @intCast(layoutBox.style.fontSize),
+                                    );
+                                    break :blk coords;
+                                } else {
+                                    const rasterizedGlyph = try layoutBox.style.font.rasterize(
+                                        glyph.index,
+                                        96, // @TODO: take this from the window
+                                        96,
+                                        @intCast(layoutBox.style.fontSize),
+                                    );
+                                    metrics = rasterizedGlyph.metrics;
 
-                            const glyphWidth: f32 = @floatFromInt(glyphInfo.width);
-                            const glyphHeight: f32 = @floatFromInt(glyphInfo.height);
-                            // fontSize and unitsPerEm are not needed here if we rasterize at the correct size
-                            // const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
-                            // const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
-                            // const scale = fontSize / unitsPerEm;
+                                    const coords = try self.textPipeline.fontTextureAtlas.upload(
+                                        rasterizedGlyph.bitmap,
+                                        rasterizedGlyph.bitmapWidth,
+                                        rasterizedGlyph.bitmapHeight,
+                                        self.allocator,
+                                    );
+                                    try self.textPipeline.texutreCoordinatesPerGlyph.put(glyphRenderingKey, coords);
+                                    break :blk coords;
+                                }
+                            };
+
+                            const glyphWidth: f32 = @floatFromInt(metrics.width);
+                            const glyphHeight: f32 = @floatFromInt(metrics.height);
+                            const glyphLeft: f32 = @floatFromInt(metrics.left);
+                            const glyphTop: f32 = @floatFromInt(metrics.top);
 
                             self.textPipeline.shaderBuffersMapped[self.currentFrame][glyphIndex] = GlyphRenderingData{
                                 .modelViewProjectionMatrix = zmath.mul(
                                     zmath.mul(
                                         zmath.scaling(glyphWidth, glyphHeight, 1.0),
                                         zmath.translation(
-                                            layoutBox.position[0] + glyph.position[0] + @as(f32, @floatFromInt(glyphInfo.left)),
-                                            layoutBox.position[1] + glyph.position[1] + layoutBox.size[1] - @as(f32, @floatFromInt(glyphInfo.top)),
+                                            layoutBox.position[0] + glyph.position[0] + glyphLeft,
+                                            layoutBox.position[1] + glyph.position[1] + layoutBox.size[1] - glyphTop,
                                             0.0,
                                         ),
                                     ),
@@ -2391,12 +2427,12 @@ pub const Renderer = struct {
                                 ),
                                 .color = layoutBox.style.color,
                                 .uvOffset = .{
-                                    textureCoords.u / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.width)),
-                                    textureCoords.v / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.height)),
+                                    textureCoords.u / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width)),
+                                    textureCoords.v / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height)),
                                 },
                                 .uvSize = .{
-                                    textureCoords.w / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.width)),
-                                    textureCoords.h / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.height)),
+                                    textureCoords.w / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width)),
+                                    textureCoords.h / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height)),
                                 },
                             };
                             glyphIndex += 1;

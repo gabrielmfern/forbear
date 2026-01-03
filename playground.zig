@@ -35,7 +35,7 @@ pub fn main() !void {
 
     const arena = arenaAllocator.allocator();
 
-    const inter = try forbear.Font.init(@embedFile("Inter-Regular.ttf"));
+    const inter = try forbear.Font.init("Inter-Regular", @embedFile("Inter-Regular.ttf"));
 
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
@@ -60,7 +60,7 @@ pub fn main() !void {
         });
         const layoutBox = try forbear.layout(
             node,
-            .{ .font = inter, .fontSize = 16, .lineHeight = 1.0 },
+            .{ .font = inter, .fontSize = 64, .lineHeight = 1.0 },
             renderer.viewportSize(),
             arena,
         );
