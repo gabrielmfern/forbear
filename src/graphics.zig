@@ -455,6 +455,7 @@ fn findMemoryType(
 
 pub const FontTextureAtlas = struct {
     image: c.VkImage,
+    imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
     mapped: []u8,
 
@@ -472,6 +473,8 @@ pub const FontTextureAtlas = struct {
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         allocator: std.mem.Allocator,
+        commandPool: c.VkCommandPool,
+        graphicsQueue: c.VkQueue,
     ) !@This() {
         const extent = c.VkExtent3D{
             .width = 4096,
@@ -503,6 +506,7 @@ pub const FontTextureAtlas = struct {
         var memory: c.VkDeviceMemory = undefined;
         try ensureNoError(c.vkAllocateMemory(logicalDevice, &c.VkMemoryAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .pNext = null,
             .allocationSize = memRequirements.size,
             .memoryTypeIndex = try findMemoryType(
                 memRequirements.memoryTypeBits,
@@ -512,6 +516,101 @@ pub const FontTextureAtlas = struct {
         }, null, &memory));
 
         try ensureNoError(c.vkBindImageMemory(logicalDevice, image, memory, 0));
+
+        var imageView: c.VkImageView = undefined;
+        try ensureNoError(c.vkCreateImageView(
+            logicalDevice,
+            &c.VkImageViewCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .image = image,
+                .pNext = null,
+                .flags = 0,
+                .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+                .format = c.VK_FORMAT_R8_UNORM,
+                .components = c.VkComponentMapping{
+                    .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                },
+                .subresourceRange = c.VkImageSubresourceRange{
+                    .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            },
+            null,
+            &imageView,
+        ));
+        errdefer c.vkDestroyImageView(logicalDevice, imageView, null);
+
+        {
+            var commandBuffer: c.VkCommandBuffer = undefined;
+            try ensureNoError(c.vkAllocateCommandBuffers(logicalDevice, &c.VkCommandBufferAllocateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandPool = commandPool,
+                .commandBufferCount = 1,
+                .pNext = null,
+            }, &commandBuffer));
+
+            try ensureNoError(c.vkBeginCommandBuffer(commandBuffer, &c.VkCommandBufferBeginInfo{
+                .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+                .pNext = null,
+                .pInheritanceInfo = null,
+            }));
+
+            const barrier = c.VkImageMemoryBarrier{
+                .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                .image = image,
+                .subresourceRange = .{
+                    .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+                .srcAccessMask = 0,
+                .dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT,
+                .pNext = null,
+            };
+
+            c.vkCmdPipelineBarrier(
+                commandBuffer,
+                c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0,
+                0,
+                null,
+                0,
+                null,
+                1,
+                &barrier,
+            );
+
+            try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
+
+            try ensureNoError(c.vkQueueSubmit(graphicsQueue, 1, &c.VkSubmitInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &commandBuffer,
+                .pNext = null,
+                .waitSemaphoreCount = 0,
+                .pWaitSemaphores = null,
+                .pWaitDstStageMask = null,
+                .signalSemaphoreCount = 0,
+                .pSignalSemaphores = null,
+            }, null));
+            try ensureNoError(c.vkQueueWaitIdle(graphicsQueue));
+            c.vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
+        }
 
         const free_rectangle = FreeRectangle{
             .u = 0,
@@ -528,6 +627,7 @@ pub const FontTextureAtlas = struct {
 
         return @This(){
             .image = image,
+            .imageView = imageView,
             .memory = memory,
             .mapped = @as([*c]u8, @ptrCast(@alignCast(imageData)))[0..@intCast(memRequirements.size)],
 
@@ -546,10 +646,13 @@ pub const FontTextureAtlas = struct {
 
         const required_area = wantedWidth * wantedHeight;
         for (self.freeRectangles.items, 0..) |freeRectangle, index| {
-            const freeArea = freeRectangle.width * freeRectangle.height;
-            if (freeArea - required_area >= 0 and freeArea - required_area < bestAreaDifference and freeRectangle.width >= wantedWidth and freeRectangle.height >= wantedHeight) {
-                bestAreaDifference = freeArea - required_area;
-                bestRectangleIndex = index;
+            if (freeRectangle.width >= wantedWidth and freeRectangle.height >= wantedHeight) {
+                const freeArea = freeRectangle.width * freeRectangle.height;
+                const areaDifference = freeArea - required_area;
+                if (areaDifference < bestAreaDifference) {
+                    bestAreaDifference = areaDifference;
+                    bestRectangleIndex = index;
+                }
             }
         }
 
@@ -565,12 +668,14 @@ pub const FontTextureAtlas = struct {
 
     pub fn upload(
         self: *@This(),
-        data: []u8,
+        data: ?[]u8,
         uploadWidth: usize,
         uploadHeight: usize,
         allocator: std.mem.Allocator,
     ) !TextureCoordinates {
-        std.debug.assert(uploadHeight == data.len);
+        if (data != null) {
+            std.debug.assert(uploadWidth * uploadHeight == data.?.len);
+        }
         // No free rectangles available in the texture atlas
         std.debug.assert(self.freeRectangles.items.len > 0);
 
@@ -606,11 +711,15 @@ pub const FontTextureAtlas = struct {
 
         for (0..uploadHeight) |y| {
             const dest_start = (freeRectangle.v + y) * self.width() + freeRectangle.u;
-            const src_start = y * uploadWidth;
-            @memcpy(
-                self.mapped[dest_start .. dest_start + uploadWidth],
-                data[src_start .. src_start + uploadWidth],
-            );
+            if (data != null) {
+                const src_start = y * uploadWidth;
+                @memcpy(
+                    self.mapped[dest_start .. dest_start + uploadWidth],
+                    data.?[src_start .. src_start + uploadWidth],
+                );
+            } else {
+                @memset(self.mapped[dest_start .. dest_start + uploadWidth], 0);
+            }
         }
 
         return .{
@@ -629,10 +738,11 @@ pub const FontTextureAtlas = struct {
         return @as(usize, @intCast(self.capacityExtent.height));
     }
 
-    pub fn deinit(self: @This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
         c.vkUnmapMemory(logicalDevice, self.memory);
         self.freeRectangles.deinit(allocator);
         c.vkFreeMemory(logicalDevice, self.memory, null);
+        c.vkDestroyImageView(logicalDevice, self.imageView, null);
         c.vkDestroyImage(logicalDevice, self.image, null);
     }
 };
@@ -811,6 +921,13 @@ pub const ElementRenderingData = extern struct {
     backgroundColor: Vec4,
     size: [2]f32,
     borderRadius: f32,
+};
+
+pub const GlyphRenderingData = extern struct {
+    modelViewProjectionMatrix: zmath.Mat,
+    color: Vec4,
+    uvOffset: [2]f32,
+    uvSize: [2]f32,
 };
 
 const ElementsPipeline = struct {
@@ -1178,6 +1295,457 @@ const ElementsPipeline = struct {
     }
 };
 
+const TextPipeline = struct {
+    pipelineLayout: c.VkPipelineLayout,
+    graphicsPipeline: c.VkPipeline,
+
+    descriptorSetLayout: c.VkDescriptorSetLayout,
+    descriptorPool: c.VkDescriptorPool,
+    descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
+
+    sampler: c.VkSampler,
+
+    glyphModel: Model,
+
+    shaderBuffers: [maxFramesInFlight]Buffer,
+    shaderBuffersMapped: [maxFramesInFlight][]GlyphRenderingData,
+
+    const textVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_vertex_shader")));
+    const textFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_fragment_shader")));
+
+    pub fn init(
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        graphicsQueue: c.VkQueue,
+        commandPool: c.VkCommandPool,
+        renderPass: c.VkRenderPass,
+        fontAtlasImageView: c.VkImageView,
+    ) !@This() {
+        var vertexShaderModule: c.VkShaderModule = undefined;
+        try ensureNoError(c.vkCreateShaderModule(
+            logicalDevice,
+            &c.VkShaderModuleCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .codeSize = @sizeOf(u32) * textVertexShader.len,
+                .pCode = textVertexShader.ptr,
+            },
+            null,
+            &vertexShaderModule,
+        ));
+        defer c.vkDestroyShaderModule(logicalDevice, vertexShaderModule, null);
+
+        var fragmentShaderModule: c.VkShaderModule = undefined;
+        try ensureNoError(c.vkCreateShaderModule(
+            logicalDevice,
+            &c.VkShaderModuleCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .codeSize = @sizeOf(u32) * textFragmentShader.len,
+                .pCode = textFragmentShader.ptr,
+            },
+            null,
+            &fragmentShaderModule,
+        ));
+        defer c.vkDestroyShaderModule(logicalDevice, fragmentShaderModule, null);
+
+        const shaderStages: []const c.VkPipelineShaderStageCreateInfo = &.{
+            c.VkPipelineShaderStageCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+                .module = vertexShaderModule,
+                .pName = "main",
+                .pSpecializationInfo = null,
+            },
+            c.VkPipelineShaderStageCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .module = fragmentShaderModule,
+                .pName = "main",
+                .pSpecializationInfo = null,
+            },
+        };
+
+        const dynamicStates: []const c.VkDynamicState = &.{
+            c.VK_DYNAMIC_STATE_VIEWPORT,
+            c.VK_DYNAMIC_STATE_SCISSOR,
+        };
+
+        const bindings = [_]c.VkDescriptorSetLayoutBinding{
+            .{
+                .binding = 0,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+                .pImmutableSamplers = null,
+            },
+            .{
+                .binding = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = 1,
+                .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .pImmutableSamplers = null,
+            },
+        };
+
+        var descriptorSetLayout: c.VkDescriptorSetLayout = undefined;
+        try ensureNoError(c.vkCreateDescriptorSetLayout(
+            logicalDevice,
+            &c.VkDescriptorSetLayoutCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .bindingCount = bindings.len,
+                .pBindings = &bindings,
+            },
+            null,
+            &descriptorSetLayout,
+        ));
+
+        var pipelineLayout: c.VkPipelineLayout = undefined;
+        try ensureNoError(c.vkCreatePipelineLayout(
+            logicalDevice,
+            &c.VkPipelineLayoutCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .setLayoutCount = 1,
+                .pSetLayouts = &descriptorSetLayout,
+                .pushConstantRangeCount = 0,
+                .pPushConstantRanges = null,
+            },
+            null,
+            &pipelineLayout,
+        ));
+        errdefer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
+
+        const bindingDescription = Vertex.getBindingDescription();
+        const attributeDescriptions = Vertex.getAttributeDescriptions();
+
+        var graphicsPipeline: c.VkPipeline = undefined;
+        try ensureNoError(c.vkCreateGraphicsPipelines(
+            logicalDevice,
+            null,
+            1,
+            &c.VkGraphicsPipelineCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .stageCount = @intCast(shaderStages.len),
+                .pStages = shaderStages.ptr,
+                .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .vertexBindingDescriptionCount = 1,
+                    .pVertexBindingDescriptions = &bindingDescription,
+                    .vertexAttributeDescriptionCount = attributeDescriptions.len,
+                    .pVertexAttributeDescriptions = &attributeDescriptions,
+                },
+                .pInputAssemblyState = &c.VkPipelineInputAssemblyStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                    .primitiveRestartEnable = c.VK_FALSE,
+                },
+                .pViewportState = &c.VkPipelineViewportStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .viewportCount = 1,
+                    .scissorCount = 1,
+                },
+                .pRasterizationState = &c.VkPipelineRasterizationStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .depthClampEnable = c.VK_FALSE,
+                    .rasterizerDiscardEnable = c.VK_FALSE,
+                    .polygonMode = c.VK_POLYGON_MODE_FILL,
+                    .cullMode = c.VK_CULL_MODE_BACK_BIT,
+                    .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
+                    .lineWidth = 1.0,
+                    .depthBiasEnable = c.VK_FALSE,
+                    .depthBiasConstantFactor = 0.0,
+                    .depthBiasClamp = 0.0,
+                    .depthBiasSlopeFactor = 0.0,
+                },
+                .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                    .sampleShadingEnable = c.VK_FALSE,
+                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .minSampleShading = 1.0,
+                    .pSampleMask = null,
+                    .alphaToCoverageEnable = c.VK_FALSE,
+                    .alphaToOneEnable = c.VK_FALSE,
+                    .pNext = null,
+                    .flags = 0,
+                },
+                .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .logicOpEnable = c.VK_FALSE,
+                    .logicOp = c.VK_LOGIC_OP_COPY,
+                    .attachmentCount = 1,
+                    .pAttachments = &c.VkPipelineColorBlendAttachmentState{
+                        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
+                        .blendEnable = c.VK_TRUE,
+                        .srcColorBlendFactor = c.VK_BLEND_FACTOR_SRC_ALPHA,
+                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                        .colorBlendOp = c.VK_BLEND_OP_ADD,
+                        .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .alphaBlendOp = c.VK_BLEND_OP_ADD,
+                    },
+                    .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
+                },
+                .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .dynamicStateCount = @intCast(dynamicStates.len),
+                    .pDynamicStates = dynamicStates.ptr,
+                },
+                .layout = pipelineLayout,
+                .renderPass = renderPass,
+                .subpass = 0,
+                .basePipelineHandle = null,
+                .basePipelineIndex = -1,
+            },
+            null,
+            &graphicsPipeline,
+        ));
+        errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
+
+        const glyphModel = try Model.init(
+            &.{
+                .{ .position = .{ 0.0, 0.0, 0.0 } },
+                .{ .position = .{ 1.0, 0.0, 0.0 } },
+                .{ .position = .{ 0.0, 1.0, 0.0 } },
+
+                .{ .position = .{ 1.0, 0.0, 0.0 } },
+                .{ .position = .{ 1.0, 1.0, 0.0 } },
+                .{ .position = .{ 0.0, 1.0, 0.0 } },
+            },
+            logicalDevice,
+            physicalDevice,
+            graphicsQueue,
+            commandPool,
+        );
+
+        const initialGlyphCapacity = 1;
+
+        var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
+        var shaderBuffersMapped: [maxFramesInFlight][]GlyphRenderingData = undefined;
+        for (0..maxFramesInFlight) |i| {
+            const buffer = try Buffer.init(
+                logicalDevice,
+                physicalDevice,
+                @sizeOf(GlyphRenderingData) * initialGlyphCapacity,
+                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            );
+            shaderBuffers[i] = buffer;
+            var storageBufferData: ?*anyopaque = undefined;
+            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
+            shaderBuffersMapped[i] = @as([*]GlyphRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..initialGlyphCapacity];
+        }
+
+        var sampler: c.VkSampler = undefined;
+        try ensureNoError(c.vkCreateSampler(logicalDevice, &c.VkSamplerCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = c.VK_FILTER_LINEAR,
+            .minFilter = c.VK_FILTER_LINEAR,
+            .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .anisotropyEnable = c.VK_FALSE,
+            .maxAnisotropy = 1.0,
+            .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+            .unnormalizedCoordinates = c.VK_FALSE,
+            .compareEnable = c.VK_FALSE,
+            .compareOp = c.VK_COMPARE_OP_ALWAYS,
+            .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .mipLodBias = 0.0,
+            .minLod = 0.0,
+            .maxLod = 0.0,
+            .pNext = null,
+            .flags = 0,
+        }, null, &sampler));
+
+        const poolSizes = [_]c.VkDescriptorPoolSize{
+            .{
+                .type = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = maxFramesInFlight,
+            },
+            .{
+                .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = maxFramesInFlight,
+            },
+        };
+
+        var descriptorPool: c.VkDescriptorPool = undefined;
+        try ensureNoError(c.vkCreateDescriptorPool(logicalDevice, &c.VkDescriptorPoolCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .poolSizeCount = poolSizes.len,
+            .maxSets = maxFramesInFlight,
+            .pPoolSizes = &poolSizes,
+            .flags = 0,
+            .pNext = null,
+        }, null, &descriptorPool));
+
+        var descriptorSets: [maxFramesInFlight]c.VkDescriptorSet = undefined;
+        try ensureNoError(c.vkAllocateDescriptorSets(logicalDevice, &c.VkDescriptorSetAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = descriptorPool,
+            .descriptorSetCount = maxFramesInFlight,
+            .pSetLayouts = &([1]c.VkDescriptorSetLayout{descriptorSetLayout} ** maxFramesInFlight),
+        }, &descriptorSets));
+
+        for (0..maxFramesInFlight) |i| {
+            const bufferInfo = c.VkDescriptorBufferInfo{
+                .buffer = shaderBuffers[i].handle,
+                .offset = 0,
+                .range = c.VK_WHOLE_SIZE,
+            };
+
+            const imageInfo = c.VkDescriptorImageInfo{
+                .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = fontAtlasImageView,
+                .sampler = sampler,
+            };
+
+            const descriptorWrites = [_]c.VkWriteDescriptorSet{
+                .{
+                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = null,
+                    .dstSet = descriptorSets[i],
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .pImageInfo = null,
+                    .pBufferInfo = &bufferInfo,
+                    .pTexelBufferView = null,
+                },
+                .{
+                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = null,
+                    .dstSet = descriptorSets[i],
+                    .dstBinding = 1,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .pImageInfo = &imageInfo,
+                    .pBufferInfo = null,
+                    .pTexelBufferView = null,
+                },
+            };
+
+            c.vkUpdateDescriptorSets(logicalDevice, descriptorWrites.len, &descriptorWrites, 0, null);
+        }
+
+        return TextPipeline{
+            .pipelineLayout = pipelineLayout,
+            .graphicsPipeline = graphicsPipeline,
+            .glyphModel = glyphModel,
+
+            .descriptorSetLayout = descriptorSetLayout,
+            .shaderBuffers = shaderBuffers,
+            .shaderBuffersMapped = shaderBuffersMapped,
+            .descriptorSets = descriptorSets,
+            .descriptorPool = descriptorPool,
+            .sampler = sampler,
+        };
+    }
+
+    pub fn resizeGlyphsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize, fontAtlasImageView: c.VkImageView) !void {
+        std.log.debug("increasing concurrent glyph capacity from {d} to {d}", .{ self.shaderBuffersMapped[0].len, newCapacity });
+        for (self.shaderBuffers) |buffer| {
+            c.vkUnmapMemory(logicalDevice, buffer.memory);
+            buffer.deinit(logicalDevice);
+        }
+
+        for (0..maxFramesInFlight) |i| {
+            const buffer = try Buffer.init(
+                logicalDevice,
+                physicalDevice,
+                @sizeOf(GlyphRenderingData) * newCapacity,
+                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            );
+            self.shaderBuffers[i] = buffer;
+            var storageBufferData: ?*anyopaque = undefined;
+            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
+            self.shaderBuffersMapped[i] = @as([*]GlyphRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
+        }
+
+        for (0..maxFramesInFlight) |i| {
+            const bufferInfo = c.VkDescriptorBufferInfo{
+                .buffer = self.shaderBuffers[i].handle,
+                .offset = 0,
+                .range = c.VK_WHOLE_SIZE,
+            };
+
+            const imageInfo = c.VkDescriptorImageInfo{
+                .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = fontAtlasImageView,
+                .sampler = self.sampler,
+            };
+
+            const descriptorWrites = [_]c.VkWriteDescriptorSet{
+                .{
+                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = null,
+                    .dstSet = self.descriptorSets[i],
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .pImageInfo = null,
+                    .pBufferInfo = &bufferInfo,
+                    .pTexelBufferView = null,
+                },
+                .{
+                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = null,
+                    .dstSet = self.descriptorSets[i],
+                    .dstBinding = 1,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .pImageInfo = &imageInfo,
+                    .pBufferInfo = null,
+                    .pTexelBufferView = null,
+                },
+            };
+
+            c.vkUpdateDescriptorSets(logicalDevice, descriptorWrites.len, &descriptorWrites, 0, null);
+        }
+    }
+
+    pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+        c.vkDestroySampler(logicalDevice, self.sampler, null);
+        c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
+
+        for (self.shaderBuffers) |buffer| {
+            c.vkUnmapMemory(logicalDevice, buffer.memory);
+            buffer.deinit(logicalDevice);
+        }
+
+        c.vkDestroyDescriptorSetLayout(logicalDevice, self.descriptorSetLayout, null);
+        self.glyphModel.deinit(logicalDevice);
+        c.vkDestroyPipeline(logicalDevice, self.graphicsPipeline, null);
+        c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
+    }
+};
+
 const maxFramesInFlight = 2;
 
 pub const Renderer = struct {
@@ -1198,6 +1766,8 @@ pub const Renderer = struct {
     swapchainFramebuffers: []c.VkFramebuffer,
 
     elementsPipeline: ElementsPipeline,
+    textPipeline: TextPipeline,
+    fontTextureAtlas: FontTextureAtlas,
     renderPass: c.VkRenderPass,
 
     commandPool: c.VkCommandPool,
@@ -1477,6 +2047,25 @@ pub const Renderer = struct {
         );
         errdefer elementsPipeline.deinit(logicalDevice);
 
+        var fontTextureAtlas = try FontTextureAtlas.init(
+            logicalDevice,
+            physicalDevice,
+            graphics.allocator,
+            commandPool,
+            graphicsQueue,
+        );
+        errdefer fontTextureAtlas.deinit(logicalDevice, graphics.allocator);
+
+        const textPipeline = try TextPipeline.init(
+            logicalDevice,
+            physicalDevice,
+            graphicsQueue,
+            commandPool,
+            renderPass,
+            fontTextureAtlas.imageView,
+        );
+        errdefer textPipeline.deinit(logicalDevice);
+
         const framebuffers = try createFramebuffers(logicalDevice, renderPass, swapchain, graphics.allocator);
         errdefer destroyFramebuffers(framebuffers, logicalDevice, graphics.allocator);
 
@@ -1559,6 +2148,8 @@ pub const Renderer = struct {
             .swapchainFramebuffers = framebuffers,
 
             .elementsPipeline = elementsPipeline,
+            .textPipeline = textPipeline,
+            .fontTextureAtlas = fontTextureAtlas,
             .renderPass = renderPass,
 
             .commandPool = commandPool,
@@ -1603,6 +2194,8 @@ pub const Renderer = struct {
         c.vkDestroyCommandPool(self.logicalDevice, self.commandPool, null);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
         self.elementsPipeline.deinit(self.logicalDevice);
+        self.textPipeline.deinit(self.logicalDevice);
+        self.fontTextureAtlas.deinit(self.logicalDevice, self.allocator);
         c.vkDestroyRenderPass(self.logicalDevice, self.renderPass, null);
         self.swapchain.deinit(self.logicalDevice);
         c.vkDestroyDevice(self.logicalDevice, null);
@@ -1701,8 +2294,12 @@ pub const Renderer = struct {
         }
         var layoutTreeIterator = try LayoutTreeIterator.init(self.allocator, rootLayoutBox);
         defer layoutTreeIterator.deinit();
+        var totalGlyphCount: usize = 0;
         var i: usize = 0;
         while (try layoutTreeIterator.next()) |layoutBox| {
+            if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
+                totalGlyphCount += layoutBox.children.?.glyphs.len;
+            }
             self.elementsPipeline.shaderBuffersMapped[self.currentFrame][i] = ElementRenderingData{
                 // .modelViewProjectionMatrix = zmath.identity(),
                 .modelViewProjectionMatrix = zmath.mul(
@@ -1732,6 +2329,94 @@ pub const Renderer = struct {
 
         c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
         c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
+
+        if (totalGlyphCount > 0) {
+            std.log.debug("total glyph count {d}", .{totalGlyphCount});
+            if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
+                try self.textPipeline.resizeGlyphsCapacity(
+                    self.logicalDevice,
+                    self.physicalDevice,
+                    try std.math.ceilPowerOfTwo(usize, totalGlyphCount),
+                    self.fontTextureAtlas.imageView,
+                );
+            }
+
+            var layoutTreeIteratorForText = try LayoutTreeIterator.init(self.allocator, rootLayoutBox);
+            defer layoutTreeIteratorForText.deinit();
+            var glyphIndex: usize = 0;
+            while (try layoutTreeIteratorForText.next()) |layoutBox| {
+                if (layoutBox.children) |children| {
+                    if (children == .glyphs) {
+                        for (children.glyphs) |glyph| {
+                            std.log.debug("{}", .{glyph});
+                            const glyphInfo = try layoutBox.style.font.rasterize(
+                                glyph.index,
+                                96, // @TODO: take this from the window
+                                96,
+                                @intCast(layoutBox.style.fontSize),
+                            );
+                            const textureCoords = try self.fontTextureAtlas.upload(
+                                glyphInfo.bitmap,
+                                glyphInfo.width,
+                                glyphInfo.height,
+                                self.allocator,
+                            );
+
+                            const glyphWidth: f32 = @floatFromInt(glyphInfo.width);
+                            const glyphHeight: f32 = @floatFromInt(glyphInfo.height);
+                            // fontSize and unitsPerEm are not needed here if we rasterize at the correct size
+                            // const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
+                            // const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
+                            // const scale = fontSize / unitsPerEm;
+
+                            self.textPipeline.shaderBuffersMapped[self.currentFrame][glyphIndex] = GlyphRenderingData{
+                                .modelViewProjectionMatrix = zmath.mul(
+                                    zmath.mul(
+                                        zmath.scaling(glyphWidth, glyphHeight, 1.0),
+                                        zmath.translation(
+                                            layoutBox.position[0] + glyph.position[0] + @as(f32, @floatFromInt(glyphInfo.left)),
+                                            layoutBox.position[1] + glyph.position[1] + layoutBox.size[1] - @as(f32, @floatFromInt(glyphInfo.top)),
+                                            0.0,
+                                        ),
+                                    ),
+                                    projectionMatrix,
+                                ),
+                                .color = layoutBox.style.color,
+                                .uvOffset = .{
+                                    textureCoords.u / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.width)),
+                                    textureCoords.v / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.height)),
+                                },
+                                .uvSize = .{
+                                    textureCoords.w / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.width)),
+                                    textureCoords.h / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.height)),
+                                },
+                            };
+                            glyphIndex += 1;
+                        }
+                    }
+                }
+            }
+
+            c.vkCmdBindPipeline(
+                self.commandBuffers[self.currentFrame],
+                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                self.textPipeline.graphicsPipeline,
+            );
+
+            c.vkCmdBindDescriptorSets(
+                self.commandBuffers[self.currentFrame],
+                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                self.textPipeline.pipelineLayout,
+                0,
+                1,
+                &self.textPipeline.descriptorSets[self.currentFrame],
+                0,
+                null,
+            );
+
+            c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &self.textPipeline.glyphModel.vertexBuffer.handle, &@intCast(0));
+            c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.textPipeline.glyphModel.vertexCount, @intCast(totalGlyphCount), 0, 0);
+        }
 
         c.vkCmdEndRenderPass(self.commandBuffers[self.currentFrame]);
 

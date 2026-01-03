@@ -11,7 +11,7 @@ const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
 
 pub const LayoutGlyph = struct {
-    codepoint: u32,
+    index: c_uint,
     position: Vec2,
 };
 
@@ -30,10 +30,17 @@ pub const LayoutBox = struct {
 
     pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
         if (self.children) |children| {
-            for (children) |child| {
-                child.deinit(allocator);
+            switch (children) {
+                .layoutBoxes => |layoutBoxes| {
+                    for (layoutBoxes) |child| {
+                        child.deinit(allocator);
+                    }
+                    allocator.free(layoutBoxes);
+                },
+                .glyphs => |glyphs| {
+                    allocator.free(glyphs);
+                },
             }
-            allocator.free(children);
         }
     }
 
@@ -354,8 +361,9 @@ const LayoutCreator = struct {
                 return layoutBox;
             },
             .text => |text| {
-                var layoutGlyphs = try self.allocator.alloc(LayoutGlyph, text.len);
-                errdefer self.allocator.free(layoutGlyphs);
+                var layoutGlyphs = try std.ArrayList(LayoutGlyph).initCapacity(self.allocator, 1);
+                errdefer layoutGlyphs.deinit(self.allocator);
+                try layoutGlyphs.ensureTotalCapacityPrecise(self.allocator, text.len);
 
                 const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
@@ -365,19 +373,17 @@ const LayoutCreator = struct {
                 var shapedGlyphsIterator = try style.font.shape(text);
                 var cursor: Vec2 = @splat(0.0);
                 var maxAdvance: Vec2 = @splat(0.0);
-                var index: usize = 0;
                 while (shapedGlyphsIterator.next()) |shapedGlyph| {
-                    if (index == layoutGlyphs.len - 1) {
-                        layoutGlyphs = try self.allocator.realloc(layoutGlyphs, layoutGlyphs.len + 1);
+                    if (layoutGlyphs.capacity < layoutGlyphs.items.len + 1) {
+                        try layoutGlyphs.ensureTotalCapacityPrecise(self.allocator, layoutGlyphs.items.len + 1);
                     }
-                    layoutGlyphs[index] = LayoutGlyph{
-                        .codepoint = shapedGlyph.codepoint,
+                    layoutGlyphs.appendAssumeCapacity(LayoutGlyph{
+                        .index = @intCast(shapedGlyph.index),
                         .position = cursor + shapedGlyph.offset / unitsPerEmVec2 * fontSizeVec2,
-                    };
+                    });
                     const advance = shapedGlyph.advance / unitsPerEmVec2 * fontSizeVec2;
                     cursor += advance;
                     maxAdvance = @max(maxAdvance, advance);
-                    index += 1;
                 }
                 const lineHeight = style.font.lineHeight() / unitsPerEm * fontSize;
 
@@ -385,7 +391,7 @@ const LayoutCreator = struct {
                     .position = .{ 0.0, 0.0 },
                     .size = .{ cursor[0], lineHeight },
                     .minSize = .{ maxAdvance[0], lineHeight },
-                    .children = .{ .glyphs = layoutGlyphs },
+                    .children = .{ .glyphs = layoutGlyphs.items },
                     .style = style,
                 };
             },

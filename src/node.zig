@@ -22,6 +22,7 @@ pub const Sizing = union(enum) {
 
 pub const Style = struct {
     backgroundColor: Vec4,
+    color: Vec4,
     borderRadius: f32,
 
     font: Font,
@@ -64,6 +65,7 @@ pub const BaseStyle = struct {
 
 pub const IncompleteStyle = struct {
     backgroundColor: ?Vec4 = null,
+    color: ?Vec4 = null,
     borderRadius: ?f32 = null,
 
     font: ?Font = null,
@@ -85,6 +87,7 @@ pub const IncompleteStyle = struct {
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
         return Style{
             .backgroundColor = self.backgroundColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 },
+            .color = self.color orelse Vec4{ 1.0, 1.0, 1.0, 1.0 },
             .borderRadius = self.borderRadius orelse 0.0,
 
             .font = self.font orelse base.font,

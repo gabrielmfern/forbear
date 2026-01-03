@@ -47,6 +47,7 @@ pub fn main() !void {
                 .backgroundColor = .{ 0.2, 0.2, 0.2, 1.0 },
             },
             .children = try forbear.children(.{
+                "This is some text introducing things",
                 forbear.div(.{
                     .style = .{
                         .preferredWidth = .{ .fixed = 100 },

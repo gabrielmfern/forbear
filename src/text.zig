@@ -244,7 +244,7 @@ pub const Font = struct {
     }
 
     const Glyph = struct {
-        bitmap: []u8,
+        bitmap: ?[]u8,
         width: c_uint,
         height: c_uint,
         left: c_int,
@@ -254,8 +254,7 @@ pub const Font = struct {
     };
 
     pub const ShapedGlyph = struct {
-        /// glyphIndex?
-        codepoint: c_uint,
+        index: c_ushort,
         advance: Vec2,
         offset: Vec2,
     };
@@ -268,8 +267,9 @@ pub const Font = struct {
         pub fn next(self: *@This()) ?ShapedGlyph {
             if (self.run) |*run| {
                 if (c.kbts_GlyphIteratorNext(&run.Glyphs, &self.glyph) != 0) {
+                    std.log.debug("kbts glyph {}", .{self.glyph.*.*});
                     return ShapedGlyph{
-                        .codepoint = self.glyph.*.*.Codepoint,
+                        .index = self.glyph.*.*.Id,
                         .advance = .{ @floatFromInt(self.glyph.*.*.AdvanceX), @floatFromInt(self.glyph.*.*.AdvanceY) },
                         .offset = .{ @floatFromInt(self.glyph.*.*.OffsetX), @floatFromInt(self.glyph.*.*.OffsetY) },
                     };
@@ -334,10 +334,14 @@ pub const Font = struct {
 
         try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_COMPUTE_METRICS | c.FT_LOAD_MONOCHROME));
         const glyph = self.handle.*.glyph;
+        std.debug.assert(glyph != null);
         try ensureNoError(c.FT_Render_Glyph(glyph, c.FT_RENDER_MODE_NORMAL));
 
         return Glyph{
-            .bitmap = glyph.*.bitmap.buffer[0..@intCast(glyph.*.bitmap.width * glyph.*.bitmap.rows)],
+            .bitmap = if (glyph.*.bitmap.buffer == null)
+                null
+            else
+                glyph.*.bitmap.buffer[0..@intCast(glyph.*.bitmap.width * glyph.*.bitmap.rows)],
             .width = glyph.*.bitmap.width,
             .height = glyph.*.bitmap.rows,
             .left = glyph.*.bitmap_left,

@@ -136,6 +136,24 @@ pub fn build(b: *std.Build) void {
         .{ .root_source_file = frag_spv },
     );
 
+    const text_vert_glsl_cmd = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
+    const text_vert_spv = text_vert_glsl_cmd.addOutputFileArg("text_vertex.spv");
+    text_vert_glsl_cmd.addFileArg(b.path("shaders/text/vertex.vert"));
+
+    forbear.addAnonymousImport(
+        "text_vertex_shader",
+        .{ .root_source_file = text_vert_spv },
+    );
+
+    const text_frag_glsl_cmd = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
+    const text_frag_spv = text_frag_glsl_cmd.addOutputFileArg("text_fragment.spv");
+    text_frag_glsl_cmd.addFileArg(b.path("shaders/text/fragment.frag"));
+
+    forbear.addAnonymousImport(
+        "text_fragment_shader",
+        .{ .root_source_file = text_frag_spv },
+    );
+
     const mod_tests = b.addTest(.{
         .root_module = forbear,
     });
