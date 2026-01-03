@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Dependencies = struct {
     freetype: *std.Build.Dependency,
+    kb_text_shape: *std.Build.Dependency,
     zmath: *std.Build.Dependency,
 
     target: std.Build.ResolvedTarget,
@@ -15,6 +16,10 @@ const Dependencies = struct {
             .target = target,
             .optimize = optimize,
         });
+        const kb_text_shape = b.dependency("kb_text_shape", .{
+            .target = target,
+            .optimize = optimize,
+        });
         const zmath = b.dependency("zmath", .{
             .target = target,
             .optimize = optimize,
@@ -22,6 +27,7 @@ const Dependencies = struct {
 
         return @This(){
             .freetype = freetype,
+            .kb_text_shape = kb_text_shape,
             .zmath = zmath,
             .target = target,
         };
@@ -37,6 +43,7 @@ const Dependencies = struct {
         module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
 
         module.linkLibrary(self.freetype.artifact("freetype"));
+        module.linkLibrary(self.kb_text_shape.artifact("kb_text_shape"));
         module.addImport("zmath", self.zmath.module("root"));
         module.addIncludePath(b.path("dependencies/include"));
 

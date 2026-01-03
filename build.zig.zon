@@ -11,6 +11,9 @@
         .freetype = .{
             .path = "dependencies/freetype",
         },
+        .kb_text_shape = .{
+            .path = "dependencies/kb_text_shape",
+        },
     },
     .paths = .{
         "build.zig",
