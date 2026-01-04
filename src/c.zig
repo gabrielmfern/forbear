@@ -7,6 +7,8 @@ pub const c = @cImport({
     //     @cDefine("VK_USE_PLATFORM_METAL_EXT", "1");
     // }
 
+    @cInclude("malloc.h");
+
     @cInclude("vulkan/vulkan.h");
 
     // if (builtin.os.tag == .linux) {
