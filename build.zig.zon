@@ -14,6 +14,9 @@
         .kb_text_shape = .{
             .path = "dependencies/kb_text_shape",
         },
+        .stb_image = .{
+            .path = "dependencies/stb_image",
+        },
     },
     .paths = .{
         "build.zig",
