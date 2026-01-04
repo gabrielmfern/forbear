@@ -1,0 +1,16 @@
+.{
+    .name = .uhoh_com,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.15.2",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+    .dependencies = .{
+        .forbear = .{
+            .path = "../..",
+        },
+    },
+    .fingerprint = 0x61b2c31cb32c9831,
+}
