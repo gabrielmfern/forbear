@@ -203,156 +203,154 @@ fn ensureNoError(errorCode: c.FT_Error) FreetypeError!void {
 
 var freetypeLibrary: c.FT_Library = null;
 
-pub const Font = struct {
-    handle: c.FT_Face,
+handle: c.FT_Face,
+kbtsContext: *c.kbts_shape_context,
+kbtsFont: *c.kbts_font,
+key: u64,
+
+pub fn init(name: []const u8, memory: []const u8) FreetypeError!@This() {
+    if (freetypeLibrary == null) {
+        try ensureNoError(c.FT_Init_FreeType(&freetypeLibrary));
+    }
+    const kbtsContext = c.kbts_CreateShapeContext(null, null);
+    var face: c.FT_Face = undefined;
+    try ensureNoError(c.FT_New_Memory_Face(
+        freetypeLibrary,
+        memory.ptr,
+        @intCast(memory.len),
+        0,
+        &face,
+    ));
+    // font rendering only supports full unicode charmaps for now
+    std.debug.assert(face.*.charmap.*.encoding & c.FT_ENCODING_UNICODE != 0);
+
+    const kbtsFont = c.kbts_ShapePushFontFromMemory(
+        kbtsContext,
+        @ptrCast(@alignCast(@constCast(memory.ptr))),
+        @intCast(memory.len),
+        0,
+    );
+
+    var wyHash = std.hash.Wyhash.init(0);
+    wyHash.update(name);
+
+    return @This(){
+        .handle = face,
+        .kbtsContext = kbtsContext.?,
+        .kbtsFont = kbtsFont,
+        .key = wyHash.final(),
+    };
+}
+
+pub fn deinit(self: @This()) void {
+    c.kbts_DestroyShapeContext(self.kbtsContext);
+    c.FT_Done_Face(self.handle);
+}
+
+pub const RasterizedGlyph = struct {
+    bitmap: ?[]u8,
+    left: c_int,
+    top: c_int,
+    width: c_uint,
+    height: c_uint,
+    pitch: c_int,
+};
+
+pub const ShapedGlyph = struct {
+    index: c_ushort,
+    advance: Vec2,
+    offset: Vec2,
+};
+
+pub const ShapingIterator = struct {
+    run: ?c.kbts_run,
+    glyph: [*c]c.kbts_glyph,
     kbtsContext: *c.kbts_shape_context,
-    kbtsFont: *c.kbts_font,
-    key: u64,
 
-    pub fn init(name: []const u8, memory: []const u8) FreetypeError!Font {
-        if (freetypeLibrary == null) {
-            try ensureNoError(c.FT_Init_FreeType(&freetypeLibrary));
-        }
-        const kbtsContext = c.kbts_CreateShapeContext(null, null);
-        var face: c.FT_Face = undefined;
-        try ensureNoError(c.FT_New_Memory_Face(
-            freetypeLibrary,
-            memory.ptr,
-            @intCast(memory.len),
-            0,
-            &face,
-        ));
-        // font rendering only supports full unicode charmaps for now
-        std.debug.assert(face.*.charmap.*.encoding & c.FT_ENCODING_UNICODE != 0);
-
-        const kbtsFont = c.kbts_ShapePushFontFromMemory(
-            kbtsContext,
-            @ptrCast(@alignCast(@constCast(memory.ptr))),
-            @intCast(memory.len),
-            0,
-        );
-
-        var wyHash = std.hash.Wyhash.init(0);
-        wyHash.update(name);
-
-        return @This(){
-            .handle = face,
-            .kbtsContext = kbtsContext.?,
-            .kbtsFont = kbtsFont,
-            .key = wyHash.final(),
-        };
-    }
-
-    pub fn deinit(self: @This()) void {
-        c.kbts_DestroyShapeContext(self.kbtsContext);
-        c.FT_Done_Face(self.handle);
-    }
-
-    pub const RasterizedGlyph = struct {
-        bitmap: ?[]u8,
-        left: c_int,
-        top: c_int,
-        width: c_uint,
-        height: c_uint,
-        pitch: c_int,
-    };
-
-    pub const ShapedGlyph = struct {
-        index: c_ushort,
-        advance: Vec2,
-        offset: Vec2,
-    };
-
-    pub const ShapingIterator = struct {
-        run: ?c.kbts_run,
-        glyph: [*c]c.kbts_glyph,
-        kbtsContext: *c.kbts_shape_context,
-
-        pub fn next(self: *@This()) ?ShapedGlyph {
-            if (self.run) |*run| {
-                if (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&self.glyph)) != 0) {
-                    return ShapedGlyph{
-                        .index = self.glyph.*.Id,
-                        .advance = .{ @floatFromInt(self.glyph.*.AdvanceX), @floatFromInt(self.glyph.*.AdvanceY) },
-                        .offset = .{ @floatFromInt(self.glyph.*.OffsetX), @floatFromInt(self.glyph.*.OffsetY) },
-                    };
-                }
+    pub fn next(self: *@This()) ?ShapedGlyph {
+        if (self.run) |*run| {
+            if (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&self.glyph)) != 0) {
+                return ShapedGlyph{
+                    .index = self.glyph.*.Id,
+                    .advance = .{ @floatFromInt(self.glyph.*.AdvanceX), @floatFromInt(self.glyph.*.AdvanceY) },
+                    .offset = .{ @floatFromInt(self.glyph.*.OffsetX), @floatFromInt(self.glyph.*.OffsetY) },
+                };
             }
-            var run: c.kbts_run = undefined;
-            if (c.kbts_ShapeRun(self.kbtsContext, &run) != 0) {
-                self.run = run;
-                return self.next();
-            }
-
-            return null;
         }
-    };
+        var run: c.kbts_run = undefined;
+        if (c.kbts_ShapeRun(self.kbtsContext, &run) != 0) {
+            self.run = run;
+            return self.next();
+        }
 
-    pub fn shape(self: @This(), text: []const u8) !ShapingIterator {
-        // TODO: pass the language and direction down as styles
-        c.kbts_ShapeBegin(self.kbtsContext, c.KBTS_DIRECTION_DONT_KNOW, c.KBTS_LANGUAGE_ENGLISH);
-        c.kbts_ShapeUtf8(self.kbtsContext, text.ptr, @intCast(text.len), c.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX);
-        c.kbts_ShapeEnd(self.kbtsContext);
-
-        return ShapingIterator{
-            .run = null,
-            .glyph = undefined,
-            .kbtsContext = self.kbtsContext,
-        };
-    }
-
-    pub fn unitsPerEm(self: @This()) c_ushort {
-        return self.handle.*.units_per_EM;
-    }
-
-    pub fn ascent(self: @This()) f32 {
-        return @floatFromInt(self.handle.*.ascender);
-    }
-
-    pub fn descent(self: @This()) f32 {
-        return @floatFromInt(self.handle.*.descender);
-    }
-
-    /// returns line height in points coordinates, that is multiples of units_per_em
-    ///
-    /// it can simply be multiplied by the font size divided by units_per_em to get the line height in pixels
-    pub fn lineHeight(self: @This()) f32 {
-        return self.ascent() - self.descent();
-    }
-
-    pub fn rasterize(
-        self: @This(),
-        glyphIndex: c_uint,
-        dpi: [2]u32,
-        size: c_long,
-    ) FreetypeError!RasterizedGlyph {
-        try ensureNoError(c.FT_Set_Char_Size(
-            self.handle,
-            0,
-            size * 64,
-            @intCast(dpi[0]),
-            @intCast(dpi[1]),
-        ));
-
-        try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_DEFAULT));
-        const glyph = self.handle.*.glyph;
-        std.debug.assert(glyph != null);
-        try ensureNoError(c.FT_Render_Glyph(glyph, c.FT_RENDER_MODE_NORMAL));
-
-        return RasterizedGlyph{
-            .bitmap = if (glyph.*.bitmap.buffer == null)
-                null
-            else
-                glyph.*.bitmap.buffer[0..@intCast(@abs(glyph.*.bitmap.pitch) * glyph.*.bitmap.rows)],
-            .width = glyph.*.bitmap.width,
-            .height = glyph.*.bitmap.rows,
-            .left = glyph.*.bitmap_left,
-            .top = glyph.*.bitmap_top,
-            .pitch = glyph.*.bitmap.pitch,
-        };
-    }
-
-    pub fn getGlyphIndex(self: @This(), charcode: c_ulong) c_uint {
-        return c.FT_Get_Char_Index(self.handle, charcode);
+        return null;
     }
 };
+
+pub fn shape(self: @This(), text: []const u8) !ShapingIterator {
+    // TODO: pass the language and direction down as styles
+    c.kbts_ShapeBegin(self.kbtsContext, c.KBTS_DIRECTION_DONT_KNOW, c.KBTS_LANGUAGE_ENGLISH);
+    c.kbts_ShapeUtf8(self.kbtsContext, text.ptr, @intCast(text.len), c.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX);
+    c.kbts_ShapeEnd(self.kbtsContext);
+
+    return ShapingIterator{
+        .run = null,
+        .glyph = undefined,
+        .kbtsContext = self.kbtsContext,
+    };
+}
+
+pub fn unitsPerEm(self: @This()) c_ushort {
+    return self.handle.*.units_per_EM;
+}
+
+pub fn ascent(self: @This()) f32 {
+    return @floatFromInt(self.handle.*.ascender);
+}
+
+pub fn descent(self: @This()) f32 {
+    return @floatFromInt(self.handle.*.descender);
+}
+
+/// returns line height in points coordinates, that is multiples of units_per_em
+///
+/// it can simply be multiplied by the font size divided by units_per_em to get the line height in pixels
+pub fn lineHeight(self: @This()) f32 {
+    return self.ascent() - self.descent();
+}
+
+pub fn rasterize(
+    self: @This(),
+    glyphIndex: c_uint,
+    dpi: [2]u32,
+    size: c_long,
+) FreetypeError!RasterizedGlyph {
+    try ensureNoError(c.FT_Set_Char_Size(
+        self.handle,
+        0,
+        size * 64,
+        @intCast(dpi[0]),
+        @intCast(dpi[1]),
+    ));
+
+    try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_DEFAULT));
+    const glyph = self.handle.*.glyph;
+    std.debug.assert(glyph != null);
+    try ensureNoError(c.FT_Render_Glyph(glyph, c.FT_RENDER_MODE_NORMAL));
+
+    return RasterizedGlyph{
+        .bitmap = if (glyph.*.bitmap.buffer == null)
+            null
+        else
+            glyph.*.bitmap.buffer[0..@intCast(@abs(glyph.*.bitmap.pitch) * glyph.*.bitmap.rows)],
+        .width = glyph.*.bitmap.width,
+        .height = glyph.*.bitmap.rows,
+        .left = glyph.*.bitmap_left,
+        .top = glyph.*.bitmap_top,
+        .pitch = glyph.*.bitmap.pitch,
+    };
+}
+
+pub fn getGlyphIndex(self: @This(), charcode: c_ulong) c_uint {
+    return c.FT_Get_Char_Index(self.handle, charcode);
+}

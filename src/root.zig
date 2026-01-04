@@ -15,8 +15,7 @@ pub const ElementProps = node.ElementProps;
 pub const div = node.div;
 pub const children = node.children;
 
-const text = @import("text.zig");
-pub const Font = text.Font;
+pub const Font = @import("font.zig");
 
 // var context: ?@This() = null;
 //

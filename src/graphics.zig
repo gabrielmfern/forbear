@@ -4,7 +4,7 @@ const builtin = @import("builtin");
 const zmath = @import("zmath");
 
 const c = @import("c.zig").c;
-const Font = @import("text.zig").Font;
+const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
