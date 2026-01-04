@@ -1,5 +1,5 @@
 const std = @import("std");
-const Font = @import("text.zig").Font;
+const Font = @import("font.zig");
 const Vec4 = @Vector(4, f32);
 
 pub const Direction = enum {
