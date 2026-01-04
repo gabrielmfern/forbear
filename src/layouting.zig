@@ -233,12 +233,6 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                 }
             }
         }
-        if (layoutBox.style.preferredHeight == .fit) {
-            layoutBox.size[1] += layoutBox.style.paddingTop + layoutBox.style.paddingBottom;
-        }
-        if (shouldFitMin) {
-            layoutBox.minSize[1] += layoutBox.style.paddingTop + layoutBox.style.paddingBottom;
-        }
     }
 }
 
@@ -272,12 +266,6 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                 }
             }
         }
-        if (layoutBox.style.preferredWidth == .fit) {
-            layoutBox.size[0] += layoutBox.style.paddingLeft + layoutBox.style.paddingRight;
-        }
-        if (shouldFitMin) {
-            layoutBox.minSize[0] += layoutBox.style.paddingLeft + layoutBox.style.paddingRight;
-        }
     }
 }
 
@@ -300,14 +288,7 @@ fn place(layoutBox: *LayoutBox) void {
                     place(child);
                 }
             },
-            .glyphs => |glyphs| {
-                for (glyphs) |*glyph| {
-                    glyph.position += .{
-                        layoutBox.style.paddingLeft,
-                        layoutBox.style.paddingTop,
-                    };
-                }
-            },
+            else => {},
         }
     }
 }
