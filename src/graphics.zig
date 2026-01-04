@@ -2244,7 +2244,7 @@ pub const Renderer = struct {
         c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
     }
 
-    pub fn drawFrame(self: *Self, rootLayoutBox: *const LayoutBox) !void {
+    pub fn drawFrame(self: *Self, rootLayoutBox: *const LayoutBox, clearColor: Vec4) !void {
         try ensureNoError(c.vkWaitForFences(
             self.logicalDevice,
             1,
@@ -2289,7 +2289,7 @@ pub const Renderer = struct {
                 .clearValueCount = 1,
                 .pClearValues = &c.VkClearValue{
                     .color = c.VkClearColorValue{
-                        .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
+                        .float32 = clearColor,
                     },
                 },
             },
@@ -2515,7 +2515,7 @@ pub const Renderer = struct {
 
         self.framesRendered += 1;
         if (self.framesRendered == 50) {
-            std.log.info("fifty frames rendered, trimming memory {d}", .{c.malloc_trim(0)});
+            std.log.debug("fifty frames rendered, trimming memory {d}", .{c.malloc_trim(0)});
         }
     }
 
