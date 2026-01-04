@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
 
     lib.addIncludePath(b.path("."));
     lib.addCSourceFile(.{
-        .file = b.path("stb_iamge.c"),
+        .file = b.path("stb_image.c"),
         .flags = &.{
             "-fno-sanitize=alignment",
             "-fno-sanitize=shift",
