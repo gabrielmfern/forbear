@@ -4,6 +4,7 @@ const Dependencies = struct {
     freetype: *std.Build.Dependency,
     kb_text_shape: *std.Build.Dependency,
     zmath: *std.Build.Dependency,
+    stb_image: *std.Build.Dependency,
 
     target: std.Build.ResolvedTarget,
 
@@ -24,10 +25,15 @@ const Dependencies = struct {
             .target = target,
             .optimize = optimize,
         });
+        const stb_image = b.dependency("stb_image", .{
+            .target = target,
+            .optimize = optimize,
+        });
 
         return @This(){
             .freetype = freetype,
             .kb_text_shape = kb_text_shape,
+            .stb_image = stb_image,
             .zmath = zmath,
             .target = target,
         };
@@ -35,17 +41,15 @@ const Dependencies = struct {
 
     fn addToModule(
         self: *@This(),
-        b: *std.Build,
         module: *std.Build.Module,
     ) void {
-        module.addIncludePath(b.path("dependencies/include"));
         module.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
         module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
 
         module.linkLibrary(self.freetype.artifact("freetype"));
         module.linkLibrary(self.kb_text_shape.artifact("kb_text_shape"));
+        module.linkLibrary(self.stb_image.artifact("stb_image"));
         module.addImport("zmath", self.zmath.module("root"));
-        module.addIncludePath(b.path("dependencies/include"));
 
         if (self.target.result.os.tag == .linux) {
             module.linkSystemLibrary("wayland-client", .{});
@@ -74,7 +78,7 @@ pub fn build(b: *std.Build) void {
 
     var dependencies = Dependencies.init(b, target, optimize);
 
-    dependencies.addToModule(b, forbear);
+    dependencies.addToModule(forbear);
 
     if (target.result.os.tag == .linux) {
         const Protocol = struct {
@@ -170,7 +174,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
 
-        dependencies.addToModule(b, playground);
+        dependencies.addToModule(playground);
 
         playground.addImport("forbear", forbear);
 
