@@ -185,14 +185,21 @@ pub fn children(args: anytype, allocator: std.mem.Allocator) !?[]Node {
 
     inline for (args) |value| {
         const Value = @TypeOf(value);
-        const value_type_info = @typeInfo(Value);
+        const valueTypeInfo = @typeInfo(Value);
 
-        if (value_type_info == .pointer and value_type_info.pointer.size == .slice and value_type_info.pointer.child == Node) {
+        if (valueTypeInfo == .optional) {
+            if (value != null) {
+                try arrayList.append(allocator, try Node.from(value.?, allocator));
+            }
+            continue;
+        }
+
+        if (valueTypeInfo == .pointer and valueTypeInfo.pointer.size == .slice and valueTypeInfo.pointer.child == Node) {
             try arrayList.appendSlice(allocator, value);
             continue;
         }
 
-        if (value_type_info == .array and value_type_info.array.child == Node) {
+        if (valueTypeInfo == .array and valueTypeInfo.array.child == Node) {
             try arrayList.appendSlice(allocator, &value);
             continue;
         }
