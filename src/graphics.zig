@@ -662,7 +662,6 @@ const TextureAtlas = struct {
     image: c.VkImage,
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
-    sampler: c.VkSampler,
     mapped: []u8,
     rowPitch: usize,
     capacityExtent: c.VkExtent3D,
@@ -840,33 +839,10 @@ const TextureAtlas = struct {
         const imageDataSlice: []u8 = @as([*c]u8, @ptrCast(@alignCast(imageData)))[0..@intCast(memRequirements.size)];
         @memset(imageDataSlice, 0);
 
-        var sampler: c.VkSampler = undefined;
-        try ensureNoError(c.vkCreateSampler(logicalDevice, &c.VkSamplerCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .magFilter = c.VK_FILTER_LINEAR,
-            .minFilter = c.VK_FILTER_LINEAR,
-            .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .anisotropyEnable = c.VK_FALSE,
-            .maxAnisotropy = 1.0,
-            .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-            .unnormalizedCoordinates = c.VK_FALSE,
-            .compareEnable = c.VK_FALSE,
-            .compareOp = c.VK_COMPARE_OP_ALWAYS,
-            .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
-            .mipLodBias = 0.0,
-            .minLod = 0.0,
-            .maxLod = 0.0,
-            .pNext = null,
-            .flags = 0,
-        }, null, &sampler));
-
         return @This(){
             .image = image,
             .imageView = imageView,
             .memory = memory,
-            .sampler = sampler,
 
             .mapped = imageDataSlice,
             .rowPitch = @intCast(subresourceLayout.rowPitch),
@@ -987,7 +963,6 @@ const TextureAtlas = struct {
     }
 
     fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
-        c.vkDestroySampler(logicalDevice, self.sampler, null);
         c.vkUnmapMemory(logicalDevice, self.memory);
         self.freeRectangles.deinit(allocator);
         c.vkFreeMemory(logicalDevice, self.memory, null);
@@ -1547,6 +1522,7 @@ const TextPipeline = struct {
 
     fontTextureAtlas: TextureAtlas,
     glyphRenderingDataCache: std.AutoHashMap(GlyphRenderingKey, GlyphRenderingData),
+    sampler: c.VkSampler,
 
     glyphModel: Model,
 
@@ -1859,6 +1835,28 @@ const TextPipeline = struct {
             .pSetLayouts = &([1]c.VkDescriptorSetLayout{descriptorSetLayout} ** maxFramesInFlight),
         }, &descriptorSets));
 
+        var sampler: c.VkSampler = undefined;
+        try ensureNoError(c.vkCreateSampler(logicalDevice, &c.VkSamplerCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = c.VK_FILTER_LINEAR,
+            .minFilter = c.VK_FILTER_LINEAR,
+            .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .anisotropyEnable = c.VK_FALSE,
+            .maxAnisotropy = 1.0,
+            .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+            .unnormalizedCoordinates = c.VK_FALSE,
+            .compareEnable = c.VK_FALSE,
+            .compareOp = c.VK_COMPARE_OP_ALWAYS,
+            .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .mipLodBias = 0.0,
+            .minLod = 0.0,
+            .maxLod = 0.0,
+            .pNext = null,
+            .flags = 0,
+        }, null, &sampler));
+
         for (0..maxFramesInFlight) |i| {
             const bufferInfo = c.VkDescriptorBufferInfo{
                 .buffer = shaderBuffers[i].handle,
@@ -1869,7 +1867,7 @@ const TextPipeline = struct {
             const imageInfo = c.VkDescriptorImageInfo{
                 .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .imageView = fontTextureAtlas.imageView,
-                .sampler = fontTextureAtlas.sampler,
+                .sampler = sampler,
             };
 
             const descriptorWrites = [_]c.VkWriteDescriptorSet{
@@ -1915,6 +1913,7 @@ const TextPipeline = struct {
 
             .glyphRenderingDataCache = std.AutoHashMap(GlyphRenderingKey, GlyphRenderingData).init(allocator),
             .fontTextureAtlas = fontTextureAtlas,
+            .sampler = sampler,
         };
     }
 
@@ -1949,7 +1948,7 @@ const TextPipeline = struct {
             const imageInfo = c.VkDescriptorImageInfo{
                 .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .imageView = self.fontTextureAtlas.imageView,
-                .sampler = self.fontTextureAtlas.sampler,
+                .sampler = self.sampler,
             };
 
             const descriptorWrites = [_]c.VkWriteDescriptorSet{
@@ -1986,6 +1985,7 @@ const TextPipeline = struct {
     pub fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
         self.fontTextureAtlas.deinit(logicalDevice, allocator);
+        c.vkDestroySampler(logicalDevice, self.sampler, null);
         self.glyphRenderingDataCache.deinit();
 
         for (self.shaderBuffers) |buffer| {
