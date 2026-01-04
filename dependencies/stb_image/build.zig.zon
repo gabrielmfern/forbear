@@ -1,8 +1,8 @@
 .{
     .name = .stb_image,
-    .version = "2.30",
+    .version = "2.30.0",
     .minimum_zig_version = "0.15.2",
-    .fingerprint = 0xa16fd5f99e5849fc,
+    .fingerprint = 0xe5d3607863de6eec,
     .paths = .{
         "build.zig",
         "build.zig.zon",
