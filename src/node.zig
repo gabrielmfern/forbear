@@ -21,7 +21,7 @@ pub const Sizing = union(enum) {
 };
 
 pub const Style = struct {
-    backgroundColor: Vec4,
+    background: Background,
     color: Vec4,
     borderRadius: f32,
 
@@ -63,8 +63,13 @@ pub const BaseStyle = struct {
     }
 };
 
+pub const Background = union(enum) {
+    image: []const u8,
+    color: Vec4,
+};
+
 pub const IncompleteStyle = struct {
-    backgroundColor: ?Vec4 = null,
+    background: ?Background = null,
     color: ?Vec4 = null,
     borderRadius: ?f32 = null,
 
@@ -86,7 +91,7 @@ pub const IncompleteStyle = struct {
 
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
         return Style{
-            .backgroundColor = self.backgroundColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 },
+            .background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } },
             .color = self.color orelse Vec4{ 1.0, 1.0, 1.0, 1.0 },
             .borderRadius = self.borderRadius orelse 0.0,
 

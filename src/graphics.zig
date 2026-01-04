@@ -455,10 +455,214 @@ fn findMemoryType(
     return error.MemoryTypeNotFound;
 }
 
-pub const TextureAtlas = struct {
+pub const Image = struct {
+    const stb_image = @cImport({
+        @cInclude("stb_image.h");
+    });
+
+    pub const Format = enum {
+        png,
+    };
+
     image: c.VkImage,
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
+
+    pub fn init(contents: []const u8, format: Format, renderer: *const Renderer) !@This() {
+        switch (format) {
+            .png => {
+                var width: c_int = undefined;
+                var height: c_int = undefined;
+                var channels: c_int = undefined;
+                const pixelsPtr = stb_image.stbi_load_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels, 4);
+                if (pixelsPtr == null) return error.ImageLoadFailed;
+                defer stb_image.stbi_image_free(pixelsPtr);
+
+                const imageSize: usize = @intCast(width * height * 4);
+
+                const stagingBuffer = try Buffer.init(
+                    renderer.logicalDevice,
+                    renderer.physicalDevice,
+                    imageSize,
+                    c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                );
+                defer stagingBuffer.deinit(renderer.logicalDevice);
+                try stagingBuffer.set(renderer.logicalDevice, pixelsPtr[0..imageSize]);
+
+                const extent = c.VkExtent3D{
+                    .width = @intCast(width),
+                    .height = @intCast(height),
+                    .depth = 1,
+                };
+
+                var image: c.VkImage = undefined;
+                try ensureNoError(c.vkCreateImage(renderer.logicalDevice, &c.VkImageCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                    .imageType = c.VK_IMAGE_TYPE_2D,
+                    .extent = extent,
+                    .mipLevels = 1,
+                    .arrayLayers = 1,
+                    .format = c.VK_FORMAT_R8G8B8A8_UNORM,
+                    .tiling = c.VK_IMAGE_TILING_OPTIMAL,
+                    .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                    .usage = c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                    .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+                    .samples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .flags = 0,
+                    .pNext = null,
+                }, null, &image));
+                errdefer c.vkDestroyImage(renderer.logicalDevice, image, null);
+
+                var memRequirements: c.VkMemoryRequirements = undefined;
+                c.vkGetImageMemoryRequirements(renderer.logicalDevice, image, &memRequirements);
+
+                var memory: c.VkDeviceMemory = undefined;
+                try ensureNoError(c.vkAllocateMemory(renderer.logicalDevice, &c.VkMemoryAllocateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    .pNext = null,
+                    .allocationSize = memRequirements.size,
+                    .memoryTypeIndex = try findMemoryType(
+                        memRequirements.memoryTypeBits,
+                        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        renderer.physicalDevice,
+                    ),
+                }, null, &memory));
+                errdefer c.vkFreeMemory(renderer.logicalDevice, memory, null);
+
+                try ensureNoError(c.vkBindImageMemory(renderer.logicalDevice, image, memory, 0));
+
+                {
+                    var commandBuffer: c.VkCommandBuffer = undefined;
+                    try ensureNoError(c.vkAllocateCommandBuffers(renderer.logicalDevice, &c.VkCommandBufferAllocateInfo{
+                        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                        .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                        .commandPool = renderer.commandPool,
+                        .commandBufferCount = 1,
+                        .pNext = null,
+                    }, &commandBuffer));
+
+                    try ensureNoError(c.vkBeginCommandBuffer(commandBuffer, &c.VkCommandBufferBeginInfo{
+                        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                        .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+                        .pNext = null,
+                        .pInheritanceInfo = null,
+                    }));
+
+                    const barrier1 = c.VkImageMemoryBarrier{
+                        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                        .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                        .newLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                        .image = image,
+                        .subresourceRange = .{
+                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                        },
+                        .srcAccessMask = 0,
+                        .dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT,
+                        .pNext = null,
+                    };
+
+                    c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, c.VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, &barrier1);
+
+                    const region = c.VkBufferImageCopy{
+                        .bufferOffset = 0,
+                        .bufferRowLength = 0,
+                        .bufferImageHeight = 0,
+                        .imageSubresource = .{
+                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                            .mipLevel = 0,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                        },
+                        .imageOffset = .{ .x = 0, .y = 0, .z = 0 },
+                        .imageExtent = extent,
+                    };
+
+                    c.vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.handle, image, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+                    const barrier2 = c.VkImageMemoryBarrier{
+                        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                        .oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        .newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                        .image = image,
+                        .subresourceRange = .{
+                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                        },
+                        .srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT,
+                        .dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT,
+                        .pNext = null,
+                    };
+
+                    c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, null, 0, null, 1, &barrier2);
+
+                    try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
+
+                    try ensureNoError(c.vkQueueSubmit(renderer.graphicsQueue, 1, &c.VkSubmitInfo{
+                        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                        .commandBufferCount = 1,
+                        .pCommandBuffers = &commandBuffer,
+                        .pNext = null,
+                    }, null));
+                    try ensureNoError(c.vkQueueWaitIdle(renderer.graphicsQueue));
+                    c.vkFreeCommandBuffers(renderer.logicalDevice, renderer.commandPool, 1, &commandBuffer);
+                }
+
+                var imageView: c.VkImageView = undefined;
+                try ensureNoError(c.vkCreateImageView(renderer.logicalDevice, &c.VkImageViewCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .image = image,
+                    .pNext = null,
+                    .flags = 0,
+                    .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+                    .format = c.VK_FORMAT_R8G8B8A8_UNORM,
+                    .components = c.VkComponentMapping{
+                        .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                    .subresourceRange = c.VkImageSubresourceRange{
+                        .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                }, null, &imageView));
+
+                return @This(){
+                    .image = image,
+                    .imageView = imageView,
+                    .memory = memory,
+                };
+            },
+        }
+    }
+
+    pub fn deinit(self: *const @This(), logicalDevice: c.VkDevice) void {
+        c.vkDestroyImageView(logicalDevice, self.imageView, null);
+        c.vkDestroyImage(logicalDevice, self.image, null);
+        c.vkFreeMemory(logicalDevice, self.memory, null);
+    }
+};
+
+const TextureAtlas = struct {
+    image: c.VkImage,
+    imageView: c.VkImageView,
+    memory: c.VkDeviceMemory,
+    sampler: c.VkSampler,
     mapped: []u8,
     rowPitch: usize,
     capacityExtent: c.VkExtent3D,
@@ -471,7 +675,7 @@ pub const TextureAtlas = struct {
         height: usize,
     };
 
-    pub fn init(
+    fn init(
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         allocator: std.mem.Allocator,
@@ -636,10 +840,34 @@ pub const TextureAtlas = struct {
         const imageDataSlice: []u8 = @as([*c]u8, @ptrCast(@alignCast(imageData)))[0..@intCast(memRequirements.size)];
         @memset(imageDataSlice, 0);
 
+        var sampler: c.VkSampler = undefined;
+        try ensureNoError(c.vkCreateSampler(logicalDevice, &c.VkSamplerCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = c.VK_FILTER_LINEAR,
+            .minFilter = c.VK_FILTER_LINEAR,
+            .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .anisotropyEnable = c.VK_FALSE,
+            .maxAnisotropy = 1.0,
+            .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+            .unnormalizedCoordinates = c.VK_FALSE,
+            .compareEnable = c.VK_FALSE,
+            .compareOp = c.VK_COMPARE_OP_ALWAYS,
+            .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .mipLodBias = 0.0,
+            .minLod = 0.0,
+            .maxLod = 0.0,
+            .pNext = null,
+            .flags = 0,
+        }, null, &sampler));
+
         return @This(){
             .image = image,
             .imageView = imageView,
             .memory = memory,
+            .sampler = sampler,
+
             .mapped = imageDataSlice,
             .rowPitch = @intCast(subresourceLayout.rowPitch),
 
@@ -648,7 +876,7 @@ pub const TextureAtlas = struct {
         };
     }
 
-    pub fn getBestFreeRectangle(
+    fn getBestFreeRectangle(
         self: *@This(),
         wantedWidth: usize,
         wantedHeight: usize,
@@ -671,14 +899,14 @@ pub const TextureAtlas = struct {
         return bestRectangleIndex;
     }
 
-    pub const TextureCoordinates = struct {
+    const TextureCoordinates = struct {
         u: f32,
         v: f32,
         w: f32,
         h: f32,
     };
 
-    pub fn upload(
+    fn upload(
         self: *@This(),
         data: ?[]u8,
         uploadWidth: usize,
@@ -758,7 +986,8 @@ pub const TextureAtlas = struct {
         return @as(usize, @intCast(self.capacityExtent.height));
     }
 
-    pub fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
+    fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
+        c.vkDestroySampler(logicalDevice, self.sampler, null);
         c.vkUnmapMemory(logicalDevice, self.memory);
         self.freeRectangles.deinit(allocator);
         c.vkFreeMemory(logicalDevice, self.memory, null);
@@ -767,12 +996,12 @@ pub const TextureAtlas = struct {
     }
 };
 
-pub const Buffer = struct {
+const Buffer = struct {
     handle: c.VkBuffer,
     memory: c.VkDeviceMemory,
     size: c.VkDeviceSize,
 
-    pub fn init(
+    fn init(
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         size: c.VkDeviceSize,
@@ -826,7 +1055,7 @@ pub const Buffer = struct {
         };
     }
 
-    pub fn copyFrom(
+    fn copyFrom(
         self: *@This(),
         from: *const Buffer,
         logicalDevice: c.VkDevice,
@@ -878,7 +1107,7 @@ pub const Buffer = struct {
         try ensureNoError(c.vkQueueWaitIdle(graphicsQueue));
     }
 
-    pub fn set(self: @This(), logicalDevice: c.VkDevice, data: []const u8) !void {
+    fn set(self: @This(), logicalDevice: c.VkDevice, data: []const u8) !void {
         if (data.len != @as(usize, @intCast(self.size))) {
             return error.BufferSizeDataMismatch;
         }
@@ -888,17 +1117,17 @@ pub const Buffer = struct {
         c.vkUnmapMemory(logicalDevice, self.memory);
     }
 
-    pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+    fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
         c.vkFreeMemory(logicalDevice, self.memory, null);
         c.vkDestroyBuffer(logicalDevice, self.handle, null);
     }
 };
 
-pub const Model = struct {
+const Model = struct {
     vertexBuffer: Buffer,
     vertexCount: u32,
 
-    pub fn init(
+    fn init(
         vertices: []const Vertex,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
@@ -931,12 +1160,12 @@ pub const Model = struct {
         };
     }
 
-    pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+    fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
         self.vertexBuffer.deinit(logicalDevice);
     }
 };
 
-pub const ElementRenderingData = extern struct {
+const ElementRenderingData = extern struct {
     modelViewProjectionMatrix: zmath.Mat,
     backgroundColor: Vec4,
     size: [2]f32,
@@ -959,7 +1188,7 @@ const ElementsPipeline = struct {
     const elementVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_vertex_shader")));
     const elementFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_fragment_shader")));
 
-    pub fn init(
+    fn init(
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         graphicsQueue: c.VkQueue,
@@ -1248,7 +1477,7 @@ const ElementsPipeline = struct {
         };
     }
 
-    pub fn resizeElementsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
+    fn resizeElementsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
         std.log.debug("increasing concurrent element capacity from {d} to {d}", .{ self.shaderBuffersMapped[0].len, newCapacity });
         for (self.shaderBuffers) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
@@ -1293,7 +1522,7 @@ const ElementsPipeline = struct {
         }
     }
 
-    pub fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+    fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
 
         for (self.shaderBuffers) |buffer| {
@@ -1318,7 +1547,6 @@ const TextPipeline = struct {
 
     fontTextureAtlas: TextureAtlas,
     glyphRenderingDataCache: std.AutoHashMap(GlyphRenderingKey, GlyphRenderingData),
-    sampler: c.VkSampler,
 
     glyphModel: Model,
 
@@ -1602,28 +1830,6 @@ const TextPipeline = struct {
         );
         errdefer fontTextureAtlas.deinit(logicalDevice, allocator);
 
-        var sampler: c.VkSampler = undefined;
-        try ensureNoError(c.vkCreateSampler(logicalDevice, &c.VkSamplerCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .magFilter = c.VK_FILTER_LINEAR,
-            .minFilter = c.VK_FILTER_LINEAR,
-            .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .anisotropyEnable = c.VK_FALSE,
-            .maxAnisotropy = 1.0,
-            .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-            .unnormalizedCoordinates = c.VK_FALSE,
-            .compareEnable = c.VK_FALSE,
-            .compareOp = c.VK_COMPARE_OP_ALWAYS,
-            .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
-            .mipLodBias = 0.0,
-            .minLod = 0.0,
-            .maxLod = 0.0,
-            .pNext = null,
-            .flags = 0,
-        }, null, &sampler));
-
         const poolSizes = [_]c.VkDescriptorPoolSize{
             .{
                 .type = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -1663,7 +1869,7 @@ const TextPipeline = struct {
             const imageInfo = c.VkDescriptorImageInfo{
                 .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .imageView = fontTextureAtlas.imageView,
-                .sampler = sampler,
+                .sampler = fontTextureAtlas.sampler,
             };
 
             const descriptorWrites = [_]c.VkWriteDescriptorSet{
@@ -1709,7 +1915,6 @@ const TextPipeline = struct {
 
             .glyphRenderingDataCache = std.AutoHashMap(GlyphRenderingKey, GlyphRenderingData).init(allocator),
             .fontTextureAtlas = fontTextureAtlas,
-            .sampler = sampler,
         };
     }
 
@@ -1744,7 +1949,7 @@ const TextPipeline = struct {
             const imageInfo = c.VkDescriptorImageInfo{
                 .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .imageView = self.fontTextureAtlas.imageView,
-                .sampler = self.sampler,
+                .sampler = self.fontTextureAtlas.sampler,
             };
 
             const descriptorWrites = [_]c.VkWriteDescriptorSet{
@@ -1779,7 +1984,6 @@ const TextPipeline = struct {
     }
 
     pub fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
-        c.vkDestroySampler(logicalDevice, self.sampler, null);
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
         self.fontTextureAtlas.deinit(logicalDevice, allocator);
         self.glyphRenderingDataCache.deinit();
@@ -2349,7 +2553,10 @@ pub const Renderer = struct {
                     ),
                     projectionMatrix,
                 ),
-                .backgroundColor = layoutBox.style.backgroundColor,
+                .backgroundColor = switch (layoutBox.style.background) {
+                    .color => |color| color,
+                    .image => Vec4{ 0.0, 0.0, 0.0, 0.0 },
+                },
                 .size = layoutBox.size,
                 .borderRadius = layoutBox.style.borderRadius,
             };
