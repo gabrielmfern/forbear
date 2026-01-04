@@ -6,11 +6,14 @@ layout(location = 1) out float borderRadius;
 layout(location = 2) out vec4 localPos;
 layout(location = 3) out vec2 size;
 
+layout(location = 4) out flat int imageIndex;
+
 struct ElementRenderingData {
     mat4 modelViewProjectionMatrix;
     vec4 backgroundColor;
     vec2 size;
     float borderRadius;
+    int imageIndex;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer RenderingData {
@@ -25,4 +28,5 @@ void main() {
     borderRadius = d.borderRadius;
     size = d.size;
     localPos = vec4(vertexPosition, 1.0);
+    imageIndex = d.imageIndex;
 }

@@ -1,10 +1,14 @@
 #version 450
+#extension GL_EXT_nonuniform_qualifier : enable
 
 layout(location = 0) in vec4 vertexColor;
 layout(location = 1) in float borderRadius;
 layout(location = 2) in vec4 localPos;
 layout(location = 3) in vec2 size;
+layout(location = 4) in flat int imageIndex;
 layout(location = 0) out vec4 outColor;
+
+layout(set = 0, binding = 1) uniform sampler2D textures[];
 
 void main() {
     vec2 p = (localPos.xy - 0.5) * size;
@@ -14,7 +18,12 @@ void main() {
     vec2 q = abs(p) - size * 0.5 + r;
     float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
 
-    outColor = vertexColor;
+    vec4 color = vertexColor;
+    if (imageIndex >= 0) {
+        color *= texture(textures[nonuniformEXT(imageIndex)], localPos.xy);
+    }
+
+    outColor = color;
     outColor.a *= step(d, 0.0);
 
     if (outColor.a == 0.0) discard;

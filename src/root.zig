@@ -4,6 +4,8 @@ pub const c = @import("c.zig").c;
 pub const Graphics = @import("graphics.zig");
 pub const Window = @import("window/root.zig");
 
+pub const Image = @import("graphics.zig").Image;
+
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
 pub const Layoutbox = layouting.LayoutBox;
