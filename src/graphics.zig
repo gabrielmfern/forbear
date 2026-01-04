@@ -1827,7 +1827,7 @@ pub const Renderer = struct {
     imageAvailableSemaphores: [maxFramesInFlight]c.VkSemaphore,
     renderFinishedSemaphores: []c.VkSemaphore,
 
-    currentFrame: usize,
+    framesRendered: usize,
     dpi: [2]u32,
 
     pub fn recreateSwapchain(self: *Self, width: u32, height: u32, scale: u32, dpi: [2]u32) !void {
@@ -2202,7 +2202,7 @@ pub const Renderer = struct {
             .imageAvailableSemaphores = imageAvailableSemaphores,
             .renderFinishedSemaphores = renderFinishedSemaphores,
 
-            .currentFrame = 0,
+            .framesRendered = 0,
             .dpi = dpi,
         };
     }
@@ -2248,25 +2248,24 @@ pub const Renderer = struct {
         try ensureNoError(c.vkWaitForFences(
             self.logicalDevice,
             1,
-            &self.inFlightFences[self.currentFrame],
+            &self.inFlightFences[self.framesRendered % maxFramesInFlight],
             c.VK_TRUE,
             std.math.maxInt(u64),
         ));
-        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.currentFrame]));
-
+        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.framesRendered % maxFramesInFlight]));
         var imageIndex: u32 = undefined;
         try ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
             self.swapchain.handle,
             std.math.maxInt(u64),
-            self.imageAvailableSemaphores[self.currentFrame],
+            self.imageAvailableSemaphores[self.framesRendered % maxFramesInFlight],
             null,
             &imageIndex,
         ));
 
-        try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.currentFrame], 0));
+        try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0));
 
-        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.currentFrame], &c.VkCommandBufferBeginInfo{
+        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRendered % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .pNext = null,
             .flags = 0,
@@ -2277,7 +2276,7 @@ pub const Renderer = struct {
         const framebuffer_index: usize = @intCast(imageIndex);
 
         c.vkCmdBeginRenderPass(
-            self.commandBuffers[self.currentFrame],
+            self.commandBuffers[self.framesRendered % maxFramesInFlight],
             &c.VkRenderPassBeginInfo{
                 .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = null,
@@ -2298,12 +2297,12 @@ pub const Renderer = struct {
         );
 
         c.vkCmdBindPipeline(
-            self.commandBuffers[self.currentFrame],
+            self.commandBuffers[self.framesRendered % maxFramesInFlight],
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
             self.elementsPipeline.graphicsPipeline,
         );
 
-        c.vkCmdSetViewport(self.commandBuffers[self.currentFrame], 0, 1, &[_]c.VkViewport{c.VkViewport{
+        c.vkCmdSetViewport(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0, 1, &[_]c.VkViewport{c.VkViewport{
             .x = 0.0,
             .y = 0.0,
             .width = @floatFromInt(self.swapchain.extent.width),
@@ -2312,7 +2311,7 @@ pub const Renderer = struct {
             .maxDepth = 1.0,
         }});
 
-        c.vkCmdSetScissor(self.commandBuffers[self.currentFrame], 0, 1, &[_]c.VkRect2D{c.VkRect2D{
+        c.vkCmdSetScissor(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{c.VkRect2D{
             .offset = c.VkOffset2D{ .x = 0, .y = 0 },
             .extent = self.swapchain.extent,
         }});
@@ -2342,7 +2341,7 @@ pub const Renderer = struct {
             if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
                 totalGlyphCount += layoutBox.children.?.glyphs.len;
             }
-            self.elementsPipeline.shaderBuffersMapped[self.currentFrame][i] = ElementRenderingData{
+            self.elementsPipeline.shaderBuffersMapped[self.framesRendered % maxFramesInFlight][i] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
                         zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
@@ -2358,18 +2357,18 @@ pub const Renderer = struct {
         }
 
         c.vkCmdBindDescriptorSets(
-            self.commandBuffers[self.currentFrame],
+            self.commandBuffers[self.framesRendered % maxFramesInFlight],
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
             self.elementsPipeline.pipelineLayout,
             0,
             1,
-            &self.elementsPipeline.descriptorSets[self.currentFrame],
+            &self.elementsPipeline.descriptorSets[self.framesRendered % maxFramesInFlight],
             0,
             null,
         );
 
-        c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
-        c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
+        c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
+        c.vkCmdDraw(self.commandBuffers[self.framesRendered % maxFramesInFlight], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
 
         if (totalGlyphCount > 0) {
             if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
@@ -2430,13 +2429,13 @@ pub const Renderer = struct {
                             const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
                             const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize;
 
-                            self.textPipeline.shaderBuffersMapped[self.currentFrame][glyphIndex] = TextPipeline.GlypRenderingShaderData{
+                            self.textPipeline.shaderBuffersMapped[self.framesRendered % maxFramesInFlight][glyphIndex] = TextPipeline.GlypRenderingShaderData{
                                 .modelViewProjectionMatrix = zmath.mul(
                                     zmath.mul(
                                         zmath.scaling(width, height, 1.0),
                                         zmath.translation(
-                                            layoutBox.position[0] + glyph.position[0] + left,
-                                            layoutBox.position[1] + glyph.position[1] + pixelAscent - top,
+                                            glyph.position[0] + left,
+                                            glyph.position[1] + pixelAscent - top,
                                             0.0,
                                         ),
                                     ),
@@ -2459,31 +2458,30 @@ pub const Renderer = struct {
             }
 
             c.vkCmdBindPipeline(
-                self.commandBuffers[self.currentFrame],
+                self.commandBuffers[self.framesRendered % maxFramesInFlight],
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 self.textPipeline.graphicsPipeline,
             );
 
             c.vkCmdBindDescriptorSets(
-                self.commandBuffers[self.currentFrame],
+                self.commandBuffers[self.framesRendered % maxFramesInFlight],
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 self.textPipeline.pipelineLayout,
                 0,
                 1,
-                &self.textPipeline.descriptorSets[self.currentFrame],
+                &self.textPipeline.descriptorSets[self.framesRendered % maxFramesInFlight],
                 0,
                 null,
             );
 
-            c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame], 0, 1, &self.textPipeline.glyphModel.vertexBuffer.handle, &@intCast(0));
-            c.vkCmdDraw(self.commandBuffers[self.currentFrame], self.textPipeline.glyphModel.vertexCount, @intCast(totalGlyphCount), 0, 0);
+            c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0, 1, &self.textPipeline.glyphModel.vertexBuffer.handle, &@intCast(0));
+            c.vkCmdDraw(self.commandBuffers[self.framesRendered % maxFramesInFlight], self.textPipeline.glyphModel.vertexCount, @intCast(totalGlyphCount), 0, 0);
         }
 
-        c.vkCmdEndRenderPass(self.commandBuffers[self.currentFrame]);
+        c.vkCmdEndRenderPass(self.commandBuffers[self.framesRendered % maxFramesInFlight]);
+        try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRendered % maxFramesInFlight]));
 
-        try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.currentFrame]));
-
-        const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.currentFrame]};
+        const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.framesRendered % maxFramesInFlight]};
         const renderFinishedSemaphores = self.renderFinishedSemaphores;
         const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphores[framebuffer_index]};
         const waitStages: []const c.VkPipelineStageFlags = &.{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -2498,11 +2496,11 @@ pub const Renderer = struct {
                 .pWaitSemaphores = waitSemaphores.ptr,
                 .pWaitDstStageMask = waitStages.ptr,
                 .commandBufferCount = 1,
-                .pCommandBuffers = &self.commandBuffers[self.currentFrame],
+                .pCommandBuffers = &self.commandBuffers[self.framesRendered % maxFramesInFlight],
                 .signalSemaphoreCount = @intCast(signalSemaphores.len),
                 .pSignalSemaphores = signalSemaphores.ptr,
             },
-            self.inFlightFences[self.currentFrame],
+            self.inFlightFences[self.framesRendered % maxFramesInFlight],
         ));
 
         try ensureNoError(c.vkQueuePresentKHR(self.presentationQueue, &c.VkPresentInfoKHR{
@@ -2515,7 +2513,10 @@ pub const Renderer = struct {
             .pResults = null,
         }));
 
-        self.currentFrame = (self.currentFrame + 1) % maxFramesInFlight;
+        self.framesRendered += 1;
+        if (self.framesRendered == 50) {
+            std.log.info("fifty frames rendered, trimming memory {d}", .{c.malloc_trim(0)});
+        }
     }
 
     const SwapchainSupportDetails = struct {
