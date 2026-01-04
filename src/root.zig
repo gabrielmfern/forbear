@@ -11,7 +11,7 @@ pub const Layoutbox = layouting.LayoutBox;
 const node = @import("node.zig");
 pub const Node = node.Node;
 pub const Element = node.Element;
-pub const ElementProps = node.ElementProps;
+pub const ElementProps = node.DivProps;
 pub const div = node.div;
 pub const children = node.children;
 
