@@ -1,5 +1,6 @@
 const std = @import("std");
 const Font = @import("font.zig");
+const Graphics = @import("graphics.zig");
 const Vec4 = @Vector(4, f32);
 
 pub const Direction = enum {
@@ -51,12 +52,14 @@ pub const Style = struct {
 
 pub const BaseStyle = struct {
     font: Font,
+    color: Vec4,
     fontSize: u32,
     lineHeight: f32,
 
     pub fn from(style: Style) @This() {
         return @This(){
             .font = style.font,
+            .color = style.color,
             .fontSize = style.fontSize,
             .lineHeight = style.lineHeight,
         };
@@ -64,7 +67,7 @@ pub const BaseStyle = struct {
 };
 
 pub const Background = union(enum) {
-    image: []const u8,
+    image: *const Graphics.Image,
     color: Vec4,
 };
 
@@ -92,7 +95,7 @@ pub const IncompleteStyle = struct {
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
         return Style{
             .background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } },
-            .color = self.color orelse Vec4{ 1.0, 1.0, 1.0, 1.0 },
+            .color = self.color orelse base.color,
             .borderRadius = self.borderRadius orelse 0.0,
 
             .font = self.font orelse base.font,

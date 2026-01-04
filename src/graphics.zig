@@ -651,10 +651,10 @@ pub const Image = struct {
         }
     }
 
-    pub fn deinit(self: *const @This(), logicalDevice: c.VkDevice) void {
-        c.vkDestroyImageView(logicalDevice, self.imageView, null);
-        c.vkDestroyImage(logicalDevice, self.image, null);
-        c.vkFreeMemory(logicalDevice, self.memory, null);
+    pub fn deinit(self: *const @This(), renderer: *const Renderer) void {
+        c.vkDestroyImageView(renderer.logicalDevice, self.imageView, null);
+        c.vkDestroyImage(renderer.logicalDevice, self.image, null);
+        c.vkFreeMemory(renderer.logicalDevice, self.memory, null);
     }
 };
 
@@ -1145,6 +1145,7 @@ const ElementRenderingData = extern struct {
     backgroundColor: Vec4,
     size: [2]f32,
     borderRadius: f32,
+    imageIndex: i32,
 };
 
 const ElementsPipeline = struct {
@@ -1159,6 +1160,10 @@ const ElementsPipeline = struct {
 
     shaderBuffers: [maxFramesInFlight]Buffer,
     shaderBuffersMapped: [maxFramesInFlight][]ElementRenderingData,
+
+    sampler: c.VkSampler,
+
+    const maxImages = 1024;
 
     const elementVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_vertex_shader")));
     const elementFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_fragment_shader")));
@@ -1226,21 +1231,44 @@ const ElementsPipeline = struct {
             c.VK_DYNAMIC_STATE_SCISSOR,
         };
 
+        const bindings = [_]c.VkDescriptorSetLayoutBinding{
+            .{
+                .binding = 0,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+                .pImmutableSamplers = null,
+            },
+            .{
+                .binding = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = maxImages,
+                .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .pImmutableSamplers = null,
+            },
+        };
+
+        const bindingFlags = [_]c.VkDescriptorBindingFlags{
+            0,
+            c.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | c.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+        };
+
+        var bindingFlagsInfo = c.VkDescriptorSetLayoutBindingFlagsCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+            .pNext = null,
+            .bindingCount = bindings.len,
+            .pBindingFlags = &bindingFlags,
+        };
+
         var shaderBufferDescriptorSetLayout: c.VkDescriptorSetLayout = undefined;
         try ensureNoError(c.vkCreateDescriptorSetLayout(
             logicalDevice,
             &c.VkDescriptorSetLayoutCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = null,
-                .flags = 0,
-                .bindingCount = 1,
-                .pBindings = &c.VkDescriptorSetLayoutBinding{
-                    .binding = 0,
-                    .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                    .descriptorCount = 1,
-                    .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-                    .pImmutableSamplers = null,
-                },
+                .pNext = &bindingFlagsInfo,
+                .flags = c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+                .bindingCount = bindings.len,
+                .pBindings = &bindings,
             },
             null,
             &shaderBufferDescriptorSetLayout,
@@ -1395,16 +1423,24 @@ const ElementsPipeline = struct {
             shaderBuffersMapped[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..initialElementCapacity];
         }
 
-        var descriptorPool: c.VkDescriptorPool = undefined;
-        try ensureNoError(c.vkCreateDescriptorPool(logicalDevice, &c.VkDescriptorPoolCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .poolSizeCount = 1,
-            .maxSets = maxFramesInFlight,
-            .pPoolSizes = &c.VkDescriptorPoolSize{
+        const poolSizes = [_]c.VkDescriptorPoolSize{
+            .{
                 .type = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                 .descriptorCount = maxFramesInFlight,
             },
-            .flags = 0,
+            .{
+                .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = maxFramesInFlight * maxImages,
+            },
+        };
+
+        var descriptorPool: c.VkDescriptorPool = undefined;
+        try ensureNoError(c.vkCreateDescriptorPool(logicalDevice, &c.VkDescriptorPoolCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .poolSizeCount = poolSizes.len,
+            .maxSets = maxFramesInFlight,
+            .pPoolSizes = &poolSizes,
+            .flags = c.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
             .pNext = null,
         }, null, &descriptorPool));
 
@@ -1439,6 +1475,28 @@ const ElementsPipeline = struct {
             c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
         }
 
+        var sampler: c.VkSampler = undefined;
+        try ensureNoError(c.vkCreateSampler(logicalDevice, &c.VkSamplerCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = c.VK_FILTER_LINEAR,
+            .minFilter = c.VK_FILTER_LINEAR,
+            .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .anisotropyEnable = c.VK_FALSE,
+            .maxAnisotropy = 1.0,
+            .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+            .unnormalizedCoordinates = c.VK_FALSE,
+            .compareEnable = c.VK_FALSE,
+            .compareOp = c.VK_COMPARE_OP_ALWAYS,
+            .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .mipLodBias = 0.0,
+            .minLod = 0.0,
+            .maxLod = 0.0,
+            .pNext = null,
+            .flags = 0,
+        }, null, &sampler));
+
         return ElementsPipeline{
             .pipelineLayout = pipelineLayout,
             .graphicsPipeline = graphicsPipeline,
@@ -1449,6 +1507,7 @@ const ElementsPipeline = struct {
             .shaderBuffersMapped = shaderBuffersMapped,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
+            .sampler = sampler,
         };
     }
 
@@ -1498,6 +1557,7 @@ const ElementsPipeline = struct {
     }
 
     fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+        c.vkDestroySampler(logicalDevice, self.sampler, null);
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
 
         for (self.shaderBuffers) |buffer| {
@@ -2023,6 +2083,8 @@ pub const Renderer = struct {
     textPipeline: TextPipeline,
     renderPass: c.VkRenderPass,
 
+    registeredImages: std.ArrayList(*const Image),
+
     commandPool: c.VkCommandPool,
     commandBuffers: [maxFramesInFlight]c.VkCommandBuffer,
     commandBuffersAllocated: bool,
@@ -2059,6 +2121,42 @@ pub const Renderer = struct {
 
     pub fn viewportSize(self: *Self) Vec2 {
         return .{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
+    }
+
+    pub fn registerImage(self: *Self, image: *const Image) !u32 {
+        for (self.registeredImages.items, 0..) |registered, i| {
+            if (registered == image) return @intCast(i);
+        }
+
+        const index = self.registeredImages.items.len;
+        if (index >= ElementsPipeline.maxImages) return error.TooManyImages;
+
+        try self.registeredImages.append(self.allocator, image);
+
+        for (0..maxFramesInFlight) |i| {
+            const imageInfo = c.VkDescriptorImageInfo{
+                .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = image.imageView,
+                .sampler = self.elementsPipeline.sampler,
+            };
+
+            const descriptorWrite = c.VkWriteDescriptorSet{
+                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = null,
+                .dstSet = self.elementsPipeline.descriptorSets[i],
+                .dstBinding = 1,
+                .dstArrayElement = @intCast(index),
+                .descriptorCount = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .pImageInfo = &imageInfo,
+                .pBufferInfo = null,
+                .pTexelBufferView = null,
+            };
+
+            c.vkUpdateDescriptorSets(self.logicalDevice, 1, &descriptorWrite, 0, null);
+        }
+
+        return @intCast(index);
     }
 
     fn init(
@@ -2196,6 +2294,10 @@ pub const Renderer = struct {
                     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
                     .bufferDeviceAddress = c.VK_TRUE,
                     .shaderInt8 = c.VK_TRUE,
+                    .descriptorIndexing = c.VK_TRUE,
+                    .shaderSampledImageArrayNonUniformIndexing = c.VK_TRUE,
+                    .descriptorBindingPartiallyBound = c.VK_TRUE,
+                    .runtimeDescriptorArray = c.VK_TRUE,
                 },
                 .flags = 0,
                 .queueCreateInfoCount = @intCast(queueCreateInfos.len),
@@ -2398,6 +2500,8 @@ pub const Renderer = struct {
             .textPipeline = textPipeline,
             .renderPass = renderPass,
 
+            .registeredImages = try std.ArrayList(*const Image).initCapacity(graphics.allocator, 16),
+
             .commandPool = commandPool,
             .commandBuffers = commandBuffers,
             .commandBuffersAllocated = true,
@@ -2441,6 +2545,7 @@ pub const Renderer = struct {
         c.vkDestroyCommandPool(self.logicalDevice, self.commandPool, null);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
         self.elementsPipeline.deinit(self.logicalDevice);
+        self.registeredImages.deinit(self.allocator);
         self.textPipeline.deinit(self.logicalDevice, self.allocator);
         c.vkDestroyRenderPass(self.logicalDevice, self.renderPass, null);
         self.swapchain.deinit(self.logicalDevice);
@@ -2545,6 +2650,10 @@ pub const Renderer = struct {
             if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
                 totalGlyphCount += layoutBox.children.?.glyphs.len;
             }
+            const texture_index: i32 = switch (layoutBox.style.background) {
+                .color => -1,
+                .image => |imgPtr| @intCast(try self.registerImage(imgPtr)),
+            };
             self.elementsPipeline.shaderBuffersMapped[self.framesRendered % maxFramesInFlight][i] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
@@ -2555,10 +2664,11 @@ pub const Renderer = struct {
                 ),
                 .backgroundColor = switch (layoutBox.style.background) {
                     .color => |color| color,
-                    .image => Vec4{ 0.0, 0.0, 0.0, 0.0 },
+                    .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
                 },
                 .size = layoutBox.size,
                 .borderRadius = layoutBox.style.borderRadius,
+                .imageIndex = texture_index,
             };
             i += 1;
         }
