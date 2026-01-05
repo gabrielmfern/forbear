@@ -2,6 +2,7 @@ const std = @import("std");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
 const Vec4 = @Vector(4, f32);
+const Vec2 = @Vector(2, f32);
 
 pub const Direction = enum {
     leftToRight,
@@ -35,12 +36,14 @@ pub const Style = struct {
     minHeight: ?f32 = null,
     preferredHeight: Sizing,
 
-    paddingLeft: f32,
-    paddingRight: f32,
-    paddingTop: f32,
-    paddingBottom: f32,
+    paddingInline: Vec2,
+    paddingBlock: Vec2,
+    marginInline: Vec2,
+    marginBlock: Vec2,
 
     direction: Direction,
+    horizontalAlignment: Alignment,
+    verticalAlignment: Alignment,
 
     pub fn getPreferredSize(self: @This(), direction: Direction) Sizing {
         if (direction == .leftToRight) {
@@ -71,6 +74,12 @@ pub const Background = union(enum) {
     color: Vec4,
 };
 
+pub const Alignment = enum {
+    start,
+    center,
+    end,
+};
+
 pub const IncompleteStyle = struct {
     background: ?Background = null,
     color: ?Vec4 = null,
@@ -85,11 +94,13 @@ pub const IncompleteStyle = struct {
     minHeight: ?f32 = null,
     preferredHeight: ?Sizing = null,
 
-    paddingLeft: ?f32 = null,
-    paddingRight: ?f32 = null,
-    paddingTop: ?f32 = null,
-    paddingBottom: ?f32 = null,
+    paddingInline: ?Vec2 = null,
+    paddingBlock: ?Vec2 = null,
+    marginInline: ?Vec2 = null,
+    marginBlock: ?Vec2 = null,
 
+    horizontalAlignment: ?Alignment = null,
+    verticalAlignment: ?Alignment = null,
     direction: ?Direction = null,
 
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
@@ -108,12 +119,14 @@ pub const IncompleteStyle = struct {
             .minHeight = self.minHeight,
             .preferredHeight = self.preferredHeight orelse .fit,
 
-            .paddingLeft = self.paddingLeft orelse 0.0,
-            .paddingRight = self.paddingRight orelse 0.0,
-            .paddingTop = self.paddingTop orelse 0.0,
-            .paddingBottom = self.paddingBottom orelse 0.0,
+            .paddingInline = self.paddingInline orelse @splat(0.0),
+            .paddingBlock = self.paddingBlock orelse @splat(0.0),
+            .marginInline = self.marginInline orelse @splat(0.0),
+            .marginBlock = self.marginBlock orelse @splat(0.0),
 
             .direction = self.direction orelse .leftToRight,
+            .horizontalAlignment = self.horizontalAlignment orelse .start,
+            .verticalAlignment = self.verticalAlignment orelse .start,
         };
     }
 };

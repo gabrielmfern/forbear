@@ -47,8 +47,7 @@ pub fn main() !void {
             .style = .{
                 .preferredWidth = .grow,
                 .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
-                .paddingLeft = 10,
-                .paddingRight = 10,
+                .paddingInline = .{ 10, 10 },
             },
             .children = try forbear.children(.{
                 "fps:",

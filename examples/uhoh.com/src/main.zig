@@ -49,13 +49,15 @@ pub fn main() !void {
             .style = .{
                 .preferredWidth = .grow,
                 .direction = .topToBottom,
+                .horizontalAlignment = .center,
+                .fontSize = 14,
             },
             .children = try forbear.children(.{
                 forbear.div(.{
                     .style = .{
                         .background = .{ .image = &comeOnImage },
                         .preferredWidth = .{
-                            .fixed = 200,
+                            .fixed = 180,
                         },
                         .preferredHeight = .{
                             .fixed = 200,
@@ -65,7 +67,8 @@ pub fn main() !void {
                 forbear.div(.{
                     .style = .{
                         .font = spaceGroteskBold,
-                        .fontSize = 24,
+                        .fontSize = 30,
+                        .marginBlock = .{ 20, 25 },
                     },
                     .children = try forbear.children(.{
                         "Dude, you’re at the bottom of our landing page.",

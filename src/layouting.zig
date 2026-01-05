@@ -216,20 +216,21 @@ fn fitHeight(layoutBox: *LayoutBox) void {
         }
         for (children) |*child| {
             fitHeight(child);
+            const childMargins = child.style.marginBlock[0] + child.style.marginBlock[1];
             if (direction == .topToBottom) {
                 if (layoutBox.style.preferredHeight == .fit) {
-                    layoutBox.size[1] += child.size[1];
+                    layoutBox.size[1] += childMargins + child.size[1];
                 }
                 if (shouldFitMin) {
-                    layoutBox.minSize[1] += child.minSize[1];
+                    layoutBox.minSize[1] += childMargins + child.minSize[1];
                 }
             }
             if (direction == .leftToRight) {
                 if (layoutBox.style.preferredHeight == .fit) {
-                    layoutBox.size[1] = @max(child.size[1], layoutBox.size[1]);
+                    layoutBox.size[1] = @max(childMargins + child.size[1], layoutBox.size[1]);
                 }
                 if (shouldFitMin) {
-                    layoutBox.minSize[1] = @max(child.minSize[1], layoutBox.minSize[1]);
+                    layoutBox.minSize[1] = @max(childMargins + child.minSize[1], layoutBox.minSize[1]);
                 }
             }
         }
@@ -249,20 +250,21 @@ fn fitWidth(layoutBox: *LayoutBox) void {
         }
         for (children) |*child| {
             fitWidth(child);
+            const childMargins = child.style.marginInline[0] + child.style.marginInline[1];
             if (direction == .leftToRight) {
                 if (layoutBox.style.preferredWidth == .fit) {
-                    layoutBox.size[0] += child.size[0];
+                    layoutBox.size[0] += childMargins + child.size[0];
                 }
                 if (shouldFitMin) {
-                    layoutBox.minSize[0] += child.minSize[0];
+                    layoutBox.minSize[0] += childMargins + child.minSize[0];
                 }
             }
             if (direction == .topToBottom) {
                 if (layoutBox.style.preferredWidth == .fit) {
-                    layoutBox.size[0] = @max(child.size[0], layoutBox.size[0]);
+                    layoutBox.size[0] = @max(childMargins + child.size[0], layoutBox.size[0]);
                 }
                 if (shouldFitMin) {
-                    layoutBox.minSize[0] = @max(child.minSize[0], layoutBox.minSize[0]);
+                    layoutBox.minSize[0] = @max(childMargins + child.minSize[0], layoutBox.minSize[0]);
                 }
             }
         }
@@ -273,17 +275,58 @@ fn place(layoutBox: *LayoutBox) void {
     if (layoutBox.children != null) {
         switch (layoutBox.children.?) {
             .layoutBoxes => |children| {
-                var cursor: f32 = 0.0;
                 const direction = layoutBox.style.direction;
+                const hAlign = layoutBox.style.horizontalAlignment;
+                const vAlign = layoutBox.style.verticalAlignment;
+
+                const availableSize = layoutBox.size - Vec2{
+                    layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1],
+                    layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1],
+                };
+
+                var childrenSize: Vec2 = @splat(0.0);
+                for (children) |child| {
+                    childrenSize += child.size;
+                }
+
+                var cursor: Vec2 = .{ layoutBox.style.paddingInline[0], layoutBox.style.paddingBlock[0] };
+                if (direction == .leftToRight) {
+                    switch (hAlign) {
+                        .start => {},
+                        .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
+                        .end => cursor[0] += (availableSize[0] - childrenSize[0]),
+                    }
+                } else {
+                    switch (vAlign) {
+                        .start => {},
+                        .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
+                        .end => cursor[1] += (availableSize[1] - childrenSize[1]),
+                    }
+                }
+
                 for (children) |*child| {
                     if (direction == .leftToRight) {
-                        child.position[0] = cursor + layoutBox.style.paddingLeft;
-                        child.position[1] = layoutBox.style.paddingTop;
-                        cursor += child.size[0];
+                        // Cross-axis alignment (Vertical)
+                        switch (vAlign) {
+                            .start => child.position[1] = 0.0,
+                            .center => child.position[1] = (availableSize[1] - child.size[1]) / 2.0,
+                            .end => child.position[1] = (availableSize[1] - child.size[1]),
+                        }
+
+                        cursor[0] += child.style.marginInline[0];
+                        child.position += cursor;
+                        cursor[0] += child.size[0] + child.style.marginInline[1];
                     } else {
-                        child.position[0] = layoutBox.style.paddingLeft;
-                        child.position[1] = cursor + layoutBox.style.paddingTop;
-                        cursor += child.size[1];
+                        // Cross-axis alignment (Vertical)
+                        switch (hAlign) {
+                            .start => child.position[0] = 0.0,
+                            .center => child.position[0] = (availableSize[0] - child.size[0]) / 2.0,
+                            .end => child.position[0] = (availableSize[0] - child.size[0]),
+                        }
+
+                        cursor[1] += child.style.marginBlock[1];
+                        child.position += cursor;
+                        cursor[1] += child.size[1] + child.style.marginBlock[1];
                     }
                     place(child);
                 }
