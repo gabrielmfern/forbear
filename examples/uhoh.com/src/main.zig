@@ -68,7 +68,7 @@ pub fn main() !void {
                     .style = .{
                         .font = spaceGroteskBold,
                         .fontSize = 30,
-                        .marginBlock = .{ 20, 25 },
+                        .marginBlock = .{ 20, 20 },
                     },
                     .children = try forbear.children(.{
                         "Dude, you’re at the bottom of our landing page.",

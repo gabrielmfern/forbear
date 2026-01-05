@@ -324,7 +324,7 @@ fn place(layoutBox: *LayoutBox) void {
                             .end => child.position[0] = (availableSize[0] - child.size[0]),
                         }
 
-                        cursor[1] += child.style.marginBlock[1];
+                        cursor[1] += child.style.marginBlock[0];
                         child.position += cursor;
                         cursor[1] += child.size[1] + child.style.marginBlock[1];
                     }
