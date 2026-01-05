@@ -468,6 +468,9 @@ pub const Image = struct {
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
 
+    width: c_int,
+    height: c_int,
+
     pub fn init(contents: []const u8, format: Format, renderer: *const Renderer) !@This() {
         switch (format) {
             .png => {
@@ -646,6 +649,8 @@ pub const Image = struct {
                     .image = image,
                     .imageView = imageView,
                     .memory = memory,
+                    .width = width,
+                    .height = height,
                 };
             },
         }
