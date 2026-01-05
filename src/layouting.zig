@@ -209,10 +209,10 @@ fn fitHeight(layoutBox: *LayoutBox) void {
         const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
         const direction = layoutBox.style.direction;
         if (layoutBox.style.preferredHeight == .fit) {
-            layoutBox.minSize[1] = 0.0;
+            layoutBox.size[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1];
         }
         if (shouldFitMin) {
-            layoutBox.minSize[1] = 0.0;
+            layoutBox.minSize[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1];
         }
         for (children) |*child| {
             fitHeight(child);
@@ -243,10 +243,10 @@ fn fitWidth(layoutBox: *LayoutBox) void {
         const shouldFitMin = layoutBox.style.preferredWidth != .fixed and layoutBox.style.minWidth == null;
         const direction = layoutBox.style.direction;
         if (layoutBox.style.preferredWidth == .fit) {
-            layoutBox.size[0] = 0.0;
+            layoutBox.size[0] = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1];
         }
         if (shouldFitMin) {
-            layoutBox.minSize[0] = 0.0;
+            layoutBox.minSize[0] = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1];
         }
         for (children) |*child| {
             fitWidth(child);
@@ -279,10 +279,7 @@ fn place(layoutBox: *LayoutBox) void {
                 const hAlign = layoutBox.style.horizontalAlignment;
                 const vAlign = layoutBox.style.verticalAlignment;
 
-                const availableSize = layoutBox.size - Vec2{
-                    layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1],
-                    layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1],
-                };
+                const availableSize = layoutBox.size;
 
                 var childrenSize: Vec2 = @splat(0.0);
                 for (children) |child| {
