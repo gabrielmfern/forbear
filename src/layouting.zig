@@ -209,10 +209,10 @@ fn fitHeight(layoutBox: *LayoutBox) void {
         const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
         const direction = layoutBox.style.direction;
         if (layoutBox.style.preferredHeight == .fit) {
-            layoutBox.size[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1] + layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
+            layoutBox.size[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1] + layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1];
         }
         if (shouldFitMin) {
-            layoutBox.minSize[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1] + layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
+            layoutBox.minSize[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1] + layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1];
         }
         for (children) |*child| {
             fitHeight(child);
@@ -243,10 +243,10 @@ fn fitWidth(layoutBox: *LayoutBox) void {
         const shouldFitMin = layoutBox.style.preferredWidth != .fixed and layoutBox.style.minWidth == null;
         const direction = layoutBox.style.direction;
         if (layoutBox.style.preferredWidth == .fit) {
-            layoutBox.size[0] = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1];
+            layoutBox.size[0] = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1] + layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
         }
         if (shouldFitMin) {
-            layoutBox.minSize[0] = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1];
+            layoutBox.minSize[0] = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1] + layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
         }
         for (children) |*child| {
             fitWidth(child);
