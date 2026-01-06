@@ -7,13 +7,17 @@ layout(location = 2) out vec4 localPos;
 layout(location = 3) out vec2 size;
 
 layout(location = 4) out flat int imageIndex;
+layout(location = 5) out vec4 borderColor;
+layout(location = 6) out vec4 borderSize;
 
 struct ElementRenderingData {
-    mat4 modelViewProjectionMatrix;
     vec4 backgroundColor;
-    vec2 size;
+    vec4 borderColor;
     float borderRadius;
+    vec4 borderSize;
     int imageIndex;
+    mat4 modelViewProjectionMatrix;
+    vec2 size;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer RenderingData {
@@ -25,6 +29,8 @@ void main() {
 
     gl_Position = d.modelViewProjectionMatrix * vec4(vertexPosition, 1.0);
     vertexColorForFrag = d.backgroundColor;
+    borderSize = d.borderSize;
+    borderColor = d.borderColor;
     borderRadius = d.borderRadius;
     size = d.size;
     localPos = vec4(vertexPosition, 1.0);

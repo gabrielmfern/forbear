@@ -26,6 +26,9 @@ pub const Style = struct {
     background: Background,
     color: Vec4,
     borderRadius: f32,
+    borderColor: Vec4,
+    borderBlockWidth: Vec2,
+    borderInlineWidth: Vec2,
 
     font: Font,
     fontSize: u32,
@@ -84,6 +87,9 @@ pub const IncompleteStyle = struct {
     background: ?Background = null,
     color: ?Vec4 = null,
     borderRadius: ?f32 = null,
+    borderColor: ?Vec4 = null,
+    borderBlockWidth: ?Vec2 = null,
+    borderInlineWidth: ?Vec2 = null,
 
     font: ?Font = null,
     fontSize: ?u32 = null,
@@ -107,7 +113,11 @@ pub const IncompleteStyle = struct {
         return Style{
             .background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } },
             .color = self.color orelse base.color,
+
             .borderRadius = self.borderRadius orelse 0.0,
+            .borderColor = self.borderColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 },
+            .borderBlockWidth = self.borderBlockWidth orelse @splat(0.0),
+            .borderInlineWidth = self.borderInlineWidth orelse @splat(0.0),
 
             .font = self.font orelse base.font,
             .fontSize = self.fontSize orelse base.fontSize,

@@ -209,10 +209,10 @@ fn fitHeight(layoutBox: *LayoutBox) void {
         const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
         const direction = layoutBox.style.direction;
         if (layoutBox.style.preferredHeight == .fit) {
-            layoutBox.size[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1];
+            layoutBox.size[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1] + layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
         }
         if (shouldFitMin) {
-            layoutBox.minSize[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1];
+            layoutBox.minSize[1] = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1] + layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
         }
         for (children) |*child| {
             fitHeight(child);
