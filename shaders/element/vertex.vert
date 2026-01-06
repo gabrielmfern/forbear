@@ -1,7 +1,7 @@
 #version 450
 
 layout(location = 0) in vec3 vertexPosition;
-layout(location = 0) out vec4 vertexColorForFrag;
+layout(location = 0) out vec4 vertexColor;
 layout(location = 1) out float borderRadius;
 layout(location = 2) out vec4 localPos;
 layout(location = 3) out vec2 size;
@@ -28,7 +28,7 @@ void main() {
     ElementRenderingData d = renderingData.data[gl_InstanceIndex];
 
     gl_Position = d.modelViewProjectionMatrix * vec4(vertexPosition, 1.0);
-    vertexColorForFrag = d.backgroundColor;
+    vertexColor = d.backgroundColor;
     borderSize = d.borderSize;
     borderColor = d.borderColor;
     borderRadius = d.borderRadius;

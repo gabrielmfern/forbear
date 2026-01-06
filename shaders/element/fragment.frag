@@ -30,10 +30,11 @@ void main() {
 
     if (step(d, 0.0) == 0.0) discard;
 
+    // Calculate distance to each edge (for non-corner regions)
     vec4 distanceToEdges = vec4(
             // top
             abs(p.y - (-size.y * 0.5)),
-            // bottom,
+            // bottom
             abs(p.y - size.y * 0.5),
             // left
             abs(p.x - (-size.x * 0.5)),
@@ -41,10 +42,26 @@ void main() {
             abs(p.x - size.x * 0.5)
         );
 
-    if (distanceToEdges.x <= borderSize.x ||
-            distanceToEdges.y <= borderSize.y ||
-            distanceToEdges.z <= borderSize.z ||
-            distanceToEdges.w <= borderSize.w) {
+    // Check if we're in the border region using both approaches:
+    // 1. SDF-based for corners (follows the rounded edge)
+    // 2. Edge-based for straight sections (allows different border widths per side)
+    
+    // For corners: use SDF with the minimum border width
+    float minBorderWidth = min(min(borderSize.x, borderSize.y), min(borderSize.z, borderSize.w));
+    bool inCornerBorder = d > -minBorderWidth && minBorderWidth > 0.0;
+    
+    // For straight edges: check if we're within the border width of each edge
+    // but outside the corner regions
+    bool inCornerRegion = (abs(p.x) > size.x * 0.5 - r) && (abs(p.y) > size.y * 0.5 - r);
+    
+    bool inEdgeBorder = !inCornerRegion && (
+        distanceToEdges.x <= borderSize.x ||
+        distanceToEdges.y <= borderSize.y ||
+        distanceToEdges.z <= borderSize.z ||
+        distanceToEdges.w <= borderSize.w
+    );
+    
+    if ((inCornerRegion && inCornerBorder) || inEdgeBorder) {
         outColor = mix(outColor, borderColor, borderColor.a);
     }
 }
