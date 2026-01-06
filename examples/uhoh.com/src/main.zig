@@ -76,11 +76,41 @@ pub fn main() !void {
                 }),
                 "Just get the free trial already if you’re that interested.",
                 "You scrolled all the way here.",
+                forbear.div(.{
+                    .style = .{
+                        .borderRadius = 8,
+                        .borderInlineWidth = @splat(2.0),
+                        .borderBlockWidth = @splat(2.0),
+                        .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
+                        .paddingBlock = @splat(25),
+                        .paddingInline = @splat(50),
+                        .horizontalAlignment = .center,
+                        .verticalAlignment = .center,
+                        .direction = .topToBottom,
+                    },
+                    .children = try forbear.children(.{
+                        forbear.div(.{
+                            .style = .{
+                                .fontSize = 18,
+                                .font = spaceGroteskBold,
+                            },
+                            .children = try forbear.children(.{
+                                "Come on, click on this",
+                            }, arena),
+                        }),
+                        "Don't make me beg",
+                    }, arena),
+                }),
             }, arena),
         });
         const layoutBox = try forbear.layout(
             node,
-            .{ .font = spaceGroteskMedium, .color = .{ 0.0, 0.0, 0.0, 1.0 }, .fontSize = 16, .lineHeight = 1.0 },
+            .{
+                .font = spaceGroteskMedium,
+                .color = .{ 0.0, 0.0, 0.0, 1.0 },
+                .fontSize = 16,
+                .lineHeight = 1.0,
+            },
             renderer.viewportSize(),
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             arena,

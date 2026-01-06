@@ -1146,11 +1146,13 @@ const Model = struct {
 };
 
 const ElementRenderingData = extern struct {
-    modelViewProjectionMatrix: zmath.Mat,
     backgroundColor: Vec4,
-    size: [2]f32,
+    borderColor: Vec4,
     borderRadius: f32,
+    borderSize: Vec4,
     imageIndex: i32,
+    modelViewProjectionMatrix: zmath.Mat,
+    size: [2]f32,
 };
 
 const ElementsPipeline = struct {
@@ -2673,6 +2675,13 @@ pub const Renderer = struct {
                 },
                 .size = layoutBox.size,
                 .borderRadius = layoutBox.style.borderRadius,
+                .borderColor = layoutBox.style.borderColor,
+                .borderSize = .{
+                    layoutBox.style.borderBlockWidth[0],
+                    layoutBox.style.borderBlockWidth[1],
+                    layoutBox.style.borderInlineWidth[0],
+                    layoutBox.style.borderInlineWidth[1],
+                },
                 .imageIndex = texture_index,
             };
             i += 1;
