@@ -19,7 +19,6 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "playground",
-        .use_llvm = true,
         .root_module = uhoh,
     });
     b.installArtifact(exe);
