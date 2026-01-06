@@ -42,26 +42,36 @@ void main() {
             abs(p.x - size.x * 0.5)
         );
 
-    // Check if we're in the border region using both approaches:
-    // 1. SDF-based for corners (follows the rounded edge)
-    // 2. Edge-based for straight sections (allows different border widths per side)
-    
-    // For corners: use SDF with the minimum border width
-    float minBorderWidth = min(min(borderSize.x, borderSize.y), min(borderSize.z, borderSize.w));
-    bool inCornerBorder = d > -minBorderWidth && minBorderWidth > 0.0;
-    
-    // For straight edges: check if we're within the border width of each edge
-    // but outside the corner regions
-    bool inCornerRegion = (abs(p.x) > size.x * 0.5 - r) && (abs(p.y) > size.y * 0.5 - r);
-    
-    bool inEdgeBorder = !inCornerRegion && (
-        distanceToEdges.x <= borderSize.x ||
-        distanceToEdges.y <= borderSize.y ||
-        distanceToEdges.z <= borderSize.z ||
-        distanceToEdges.w <= borderSize.w
-    );
-    
-    if ((inCornerRegion && inCornerBorder) || inEdgeBorder) {
+    float borderTop = borderSize.x;
+    float borderBottom = borderSize.y;
+    float borderLeft = borderSize.z;
+    float borderRight = borderSize.w;
+
+    // Are we near a corner (close to both an x and a y edge)?
+    bool inCornerRegion = (abs(p.x) > size.x * 0.5 - r) &&
+            (abs(p.y) > size.y * 0.5 - r);
+
+    // Per-corner effective border thickness. Browsers effectively clamp
+    // the corner thickness by the thinner of the two touching edges.
+    bool top = p.y < 0.0;
+    bool left_side = p.x < 0.0;
+
+    float cornerBorder = min(
+            top ? borderTop : borderBottom,
+            left_side ? borderLeft : borderRight
+        );
+
+    bool inCornerBorder = inCornerRegion &&
+            cornerBorder > 0.0 &&
+            d > -cornerBorder;
+
+    // Straight edges: use per-edge widths, but ignore the corner regions
+    bool inTopBorder = borderTop > 0.0 && p.y < 0.0 && distanceToEdges.x <= borderTop;
+    bool inBottomBorder = borderBottom > 0.0 && p.y > 0.0 && distanceToEdges.y <= borderBottom;
+    bool inLeftBorder = borderLeft > 0.0 && p.x < 0.0 && distanceToEdges.z <= borderLeft;
+    bool inRightBorder = borderRight > 0.0 && p.x > 0.0 && distanceToEdges.w <= borderRight;
+
+    if (inCornerBorder || inTopBorder || inBottomBorder || inLeftBorder || inRightBorder) {
         outColor = mix(outColor, borderColor, borderColor.a);
     }
 }
