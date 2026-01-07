@@ -1,6 +1,8 @@
 const std = @import("std");
+
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
+
 const Vec4 = @Vector(4, f32);
 const Vec2 = @Vector(2, f32);
 
