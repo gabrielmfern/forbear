@@ -344,10 +344,10 @@ pub fn rasterize(
         @intCast(dpi[1]),
     ));
 
-    try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_DEFAULT));
+    try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_TARGET_LIGHT));
     const glyph = self.handle.*.glyph;
     std.debug.assert(glyph != null);
-    try ensureNoError(c.FT_Render_Glyph(glyph, c.FT_RENDER_MODE_NORMAL));
+    try ensureNoError(c.FT_Render_Glyph(glyph, c.FT_RENDER_MODE_LIGHT));
 
     return RasterizedGlyph{
         .bitmap = if (glyph.*.bitmap.buffer == null)
