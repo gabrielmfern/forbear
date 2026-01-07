@@ -1,10 +1,11 @@
 const std = @import("std");
+
+const BaseStyle = @import("node.zig").BaseStyle;
+const Direction = @import("node.zig").Direction;
+const Element = @import("node.zig").Element;
+const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const Node = @import("node.zig").Node;
 const Style = @import("node.zig").Style;
-const IncompleteStyle = @import("node.zig").IncompleteStyle;
-const BaseStyle = @import("node.zig").BaseStyle;
-const Element = @import("node.zig").Element;
-const Direction = @import("node.zig").Direction;
 
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
