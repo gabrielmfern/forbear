@@ -2949,7 +2949,7 @@ pub const Renderer = struct {
 
             var presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
             for (swapchainSupportDetails.presentModes) |availablePresentMode| {
-                if (availablePresentMode == c.VK_PRESENT_MODE_MAILBOX_KHR) {
+                if (availablePresentMode == c.VK_PRESENT_MODE_FIFO_KHR) {
                     presentMode = availablePresentMode;
                     break;
                 }
