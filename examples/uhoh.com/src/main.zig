@@ -50,7 +50,7 @@ pub fn main() !void {
                 .preferredWidth = .grow,
                 .direction = .topToBottom,
                 .horizontalAlignment = .center,
-                .fontSize = 14,
+                .fontSize = 12,
             },
             .children = try forbear.children(.{
                 forbear.div(.{
