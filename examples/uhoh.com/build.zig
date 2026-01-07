@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
     uhoh.addImport("forbear", forbear.module("forbear"));
 
     const exe = b.addExecutable(.{
-        .name = "playground",
+        .name = "uhoh.com",
         .root_module = uhoh,
     });
     b.installArtifact(exe);
