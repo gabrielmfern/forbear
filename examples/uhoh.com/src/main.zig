@@ -81,6 +81,7 @@ pub fn main() !void {
                         .borderRadius = 8,
                         .borderInlineWidth = @splat(2.0),
                         .borderBlockWidth = @splat(2.0),
+                        .marginBlock = .{ 40.0, 0.0 },
                         .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
                         .paddingBlock = @splat(25),
                         .paddingInline = @splat(50),
