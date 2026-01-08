@@ -7,6 +7,23 @@ extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;
 
 const Self = @This();
 
+// Global variable to hold the current window instance for delegate callbacks
+var g_current_window: ?*Self = null;
+
+pub const Handlers = struct {
+    resize: ?struct {
+        data: *anyopaque,
+        function: *const fn (
+            window: *Self,
+            new_width: u32,
+            new_height: u32,
+            new_scale: u32,
+            new_dpi: [2]u32,
+            data: *anyopaque,
+        ) void,
+    } = null,
+};
+
 // Objective-C / Cocoa types we need.
 const BOOL = c.BOOL;
 const NSInteger = c_long;
@@ -67,6 +84,31 @@ fn applicationShouldTerminateAfterLastWindowClosed(self: c.id, _cmd: c.SEL, appl
     return true; // YES
 }
 
+fn windowDidResize(self_obj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
+    _ = self_obj;
+    _ = _cmd;
+    _ = notification;
+
+    // Get the window instance from the global variable
+    if (g_current_window) |window| {
+        // Get current window size
+        const frame = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSRect);
+        const window_frame = frame(window.window, sel("frame"));
+
+        const new_width: u32 = @intFromFloat(window_frame.size.width);
+        const new_height: u32 = @intFromFloat(window_frame.size.height);
+
+        // Update window dimensions
+        window.width = new_width;
+        window.height = new_height;
+
+        // Call the resize handler if it exists
+        if (window.handlers.resize) |handler| {
+            handler.function(window, new_width, new_height, window.scale, window.dpi, handler.data);
+        }
+    }
+}
+
 fn createMenuBar(app: c.id) void {
     const NSMenu = getClass("NSMenu");
     const NSMenuItem = getClass("NSMenuItem");
@@ -123,6 +165,8 @@ running: bool,
 
 allocator: std.mem.Allocator,
 
+handlers: Handlers,
+
 pub fn init(
     width: u32,
     height: u32,
@@ -141,6 +185,8 @@ pub fn init(
     self.title = title;
     self.app_id = app_id;
     self.running = true;
+
+    self.handlers = .{};
 
     self.pool = objc_autoreleasePoolPush();
 
@@ -202,6 +248,27 @@ pub fn init(
     const center = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
     center(self.window, sel("center"));
 
+    // Create a window delegate to handle resize events
+    const WindowDelegate = c.objc_allocateClassPair(NSObject, "MinimalWindowDelegate", 0);
+    if (WindowDelegate != null) {
+        const success = c.class_addMethod(
+            WindowDelegate,
+            sel("windowDidResize:"),
+            @ptrCast(&windowDidResize),
+            "v@:@",
+        );
+        if (success) {
+            c.objc_registerClassPair(WindowDelegate);
+
+            const window_delegate = new_id(@ptrCast(WindowDelegate), sel("new"));
+
+            // Set the global window instance for delegate callbacks
+            g_current_window = self;
+
+            setDelegate(self.window, sel("setDelegate:"), window_delegate);
+        }
+    }
+
     const contentView = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
     self.content_view = contentView(self.window, sel("contentView"));
 
@@ -254,6 +321,17 @@ pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
     // TODO: map to NSCursor.
 }
 
+pub fn setResizeHandler(
+    self: *Self,
+    handler: *const fn (window: *Self, new_width: u32, new_height: u32, new_scale: u32, new_dpi: [2]u32, data: *anyopaque) void,
+    data: *anyopaque,
+) void {
+    self.handlers.resize = .{
+        .data = data,
+        .function = handler,
+    };
+}
+
 pub fn handleEvents(self: *Self) !void {
     // Non-blocking event pump; lets callers keep a per-frame loop.
     const NSDate = getClass("NSDate");
@@ -290,6 +368,11 @@ pub fn handleEvents(self: *Self) !void {
 }
 
 pub fn deinit(self: *Self) void {
+    // Clear the global window reference
+    if (g_current_window == self) {
+        g_current_window = null;
+    }
+
     if (self.window != null) {
         const close = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
         close(self.window, sel("close"));
