@@ -9,7 +9,7 @@ const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
-const Window = @import("window/root.zig");
+const Window = @import("window/root.zig").Window;
 
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
@@ -195,7 +195,7 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
         },
         .macos => .{
             c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
-                // "VK_EXT_metal_surface",
+            "VK_EXT_metal_surface",
         },
         else => .{},
     });
@@ -413,21 +413,21 @@ pub fn initRenderer(
                 &vulkanSurface,
             ));
         },
-        // .macos => {
-        //     const caMetalLayer = window.handle.nativeMetalLayer();
-        //     if (caMetalLayer == null) return error.NullNativeView;
-        //     try ensureNoError(c.vkCreateMetalSurfaceEXT(
-        //         self.vulkanInstance,
-        //         &c.VkMetalSurfaceCreateInfoEXT{
-        //             .sType = c.VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
-        //             .pNext = null,
-        //             .flags = 0,
-        //             .pLayer = caMetalLayer,
-        //         },
-        //         null,
-        //         &vulkanSurface,
-        //     ));
-        // },
+        .macos => {
+            const caMetalLayer = window.nativeMetalLayer();
+            if (caMetalLayer == null) return error.NullNativeView;
+            try ensureNoError(c.vkCreateMetalSurfaceEXT(
+                self.vulkanInstance,
+                &c.VkMetalSurfaceCreateInfoEXT{
+                    .sType = c.VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
+                    .pNext = null,
+                    .flags = 0,
+                    .pLayer = caMetalLayer,
+                },
+                null,
+                &vulkanSurface,
+            ));
+        },
         else => @compileError("Unsupported platform"),
     }
     std.debug.assert(vulkanSurface != null);
@@ -2846,7 +2846,9 @@ pub const Renderer = struct {
 
         self.framesRendered += 1;
         if (self.framesRendered == 50) {
-            std.log.debug("fifty frames rendered, trimming memory {d}", .{c.malloc_trim(0)});
+            if (builtin.os.tag == .linux) {
+                std.log.debug("fifty frames rendered, trimming memory {d}", .{c.malloc_trim(0)});
+            }
         }
     }
 

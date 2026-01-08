@@ -13,7 +13,7 @@ pub const Element = node.Element;
 pub const ElementProps = node.DivProps;
 pub const div = node.div;
 pub const children = node.children;
-pub const Window = @import("window/root.zig");
+pub const Window = @import("window/root.zig").Window;
 
 // var context: ?@This() = null;
 //

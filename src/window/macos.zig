@@ -115,6 +115,8 @@ metal_layer: c.id,
 // Window state
 width: u32,
 height: u32,
+scale: u32,
+dpi: [2]u32,
 title: [:0]const u8,
 app_id: [:0]const u8,
 running: bool,
@@ -134,6 +136,8 @@ pub fn init(
     self.allocator = allocator;
     self.width = width;
     self.height = height;
+    self.dpi = .{ 96, 96 };
+    self.scale = 120;
     self.title = title;
     self.app_id = app_id;
     self.running = true;
@@ -232,7 +236,7 @@ pub fn nativeView(self: *Self) ?*anyopaque {
     return @ptrCast(self.content_view);
 }
 
-pub fn nativeMetalLayer(self: *Self) ?*anyopaque {
+pub fn nativeMetalLayer(self: *const Self) ?*anyopaque {
     if (self.metal_layer == null) return null;
     return @ptrCast(self.metal_layer);
 }
