@@ -2830,67 +2830,6 @@ pub const Renderer = struct {
         }
     }
 
-    const SwapchainSupportDetails = struct {
-        capabilities: c.VkSurfaceCapabilitiesKHR,
-        formats: []c.VkSurfaceFormatKHR,
-        presentModes: []c.VkPresentModeKHR,
-
-        allocator: std.mem.Allocator,
-
-        fn deinit(self: @This()) void {
-            self.allocator.free(self.formats);
-            self.allocator.free(self.presentModes);
-        }
-    };
-
-    fn querySwapchainSupport(surface: c.VkSurfaceKHR, device: c.VkPhysicalDevice, allocator: std.mem.Allocator) !SwapchainSupportDetails {
-        var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
-        try ensureNoError(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-            device,
-            surface,
-            &capabilities,
-        ));
-
-        var formatsLen: u32 = 0;
-        try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
-            device,
-            surface,
-            &formatsLen,
-            null,
-        ));
-        const formats = try allocator.alloc(c.VkSurfaceFormatKHR, @intCast(formatsLen));
-        errdefer allocator.free(formats);
-        try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
-            device,
-            surface,
-            &formatsLen,
-            formats.ptr,
-        ));
-
-        var presentModesLen: u32 = 0;
-        try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
-            device,
-            surface,
-            &presentModesLen,
-            null,
-        ));
-        const presentModes = try allocator.alloc(c.VkPresentModeKHR, @intCast(presentModesLen));
-        errdefer allocator.free(presentModes);
-        try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
-            device,
-            surface,
-            &presentModesLen,
-            presentModes.ptr,
-        ));
-
-        return .{
-            .capabilities = capabilities,
-            .formats = formats,
-            .presentModes = presentModes,
-            .allocator = allocator,
-        };
-    }
-
     const Swapchain = struct {
         handle: c.VkSwapchainKHR,
         surfaceFormat: c.VkSurfaceFormatKHR,
@@ -2901,6 +2840,19 @@ pub const Renderer = struct {
         imageViews: []c.VkImageView,
 
         allocator: std.mem.Allocator,
+
+        const SwapchainSupportDetails = struct {
+            capabilities: c.VkSurfaceCapabilitiesKHR,
+            formats: []c.VkSurfaceFormatKHR,
+            presentModes: []c.VkPresentModeKHR,
+
+            allocator: std.mem.Allocator,
+
+            fn deinit(self: @This()) void {
+                self.allocator.free(self.formats);
+                self.allocator.free(self.presentModes);
+            }
+        };
 
         fn init(
             physicalDevice: c.VkPhysicalDevice,
@@ -2914,7 +2866,45 @@ pub const Renderer = struct {
             height: u32,
             allocator: std.mem.Allocator,
         ) !Swapchain {
-            const swapchainSupportDetails = try querySwapchainSupport(surface, physicalDevice, allocator);
+            var swapchainSupportDetails: SwapchainSupportDetails = undefined;
+            swapchainSupportDetails.allocator = allocator;
+            try ensureNoError(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                physicalDevice,
+                surface,
+                &swapchainSupportDetails.capabilities,
+            ));
+
+            var formatsLen: u32 = 0;
+            try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
+                physicalDevice,
+                surface,
+                &formatsLen,
+                null,
+            ));
+            swapchainSupportDetails.formats = try allocator.alloc(c.VkSurfaceFormatKHR, @intCast(formatsLen));
+            errdefer allocator.free(swapchainSupportDetails.formats);
+            try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
+                physicalDevice,
+                surface,
+                &formatsLen,
+                swapchainSupportDetails.formats.ptr,
+            ));
+
+            var presentModesLen: u32 = 0;
+            try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
+                physicalDevice,
+                surface,
+                &presentModesLen,
+                null,
+            ));
+            swapchainSupportDetails.presentModes = try allocator.alloc(c.VkPresentModeKHR, @intCast(presentModesLen));
+            errdefer allocator.free(swapchainSupportDetails.presentModes);
+            try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
+                physicalDevice,
+                surface,
+                &presentModesLen,
+                swapchainSupportDetails.presentModes.ptr,
+            ));
             defer swapchainSupportDetails.deinit();
 
             var surfaceFormat: c.VkSurfaceFormatKHR = swapchainSupportDetails.formats[0];
