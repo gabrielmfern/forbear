@@ -78,29 +78,6 @@ pub fn ensureNoError(result: c.VkResult) !void {
     std.debug.assert(result == c.VK_SUCCESS);
 }
 
-pub const Vertex = extern struct {
-    position: @Vector(3, f32),
-
-    pub fn getBindingDescription() c.VkVertexInputBindingDescription {
-        return c.VkVertexInputBindingDescription{
-            .binding = 0,
-            .stride = @sizeOf(@This()),
-            .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
-        };
-    }
-
-    pub fn getAttributeDescriptions() [1]c.VkVertexInputAttributeDescription {
-        return .{
-            c.VkVertexInputAttributeDescription{
-                .binding = 0,
-                .location = 0,
-                .format = c.VK_FORMAT_R32G32B32_SFLOAT,
-                .offset = @offsetOf(@This(), "position"),
-            },
-        };
-    }
-};
-
 pub fn CreateDebugUtilsMessengerEXT(
     instance: c.VkInstance,
     pCreateInfo: [*c]const c.VkDebugUtilsMessengerCreateInfoEXT,
@@ -196,7 +173,7 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
         }
     }
 
-    var instanceLayers: []const [*c]const u8 = if (builtin.mode == .Debug)
+    const instanceLayers: []const [*c]const u8 = if (builtin.mode == .Debug)
         &.{"VK_LAYER_KHRONOS_validation"}
     else
         &.{};
@@ -370,8 +347,8 @@ pub fn deinit(self: *Graphics) void {
     }
     self.allocator.free(self.devices);
 
-    if (self.vulkanDebugMessenger != null) {
-        DestroyDebugUtilsMessengerEXT(self.vulkanInstance, self.vulkanDebugMessenger, null);
+    if (self.vulkanDebugMessenger) |messenger| {
+        DestroyDebugUtilsMessengerEXT(self.vulkanInstance, messenger, null);
     }
     c.vkDestroyInstance(self.vulkanInstance, null);
 }
@@ -1093,6 +1070,29 @@ const Buffer = struct {
     }
 };
 
+pub const Vertex = extern struct {
+    position: @Vector(3, f32),
+
+    pub fn getBindingDescription() c.VkVertexInputBindingDescription {
+        return c.VkVertexInputBindingDescription{
+            .binding = 0,
+            .stride = @sizeOf(@This()),
+            .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
+        };
+    }
+
+    pub fn getAttributeDescriptions() [1]c.VkVertexInputAttributeDescription {
+        return .{
+            c.VkVertexInputAttributeDescription{
+                .binding = 0,
+                .location = 0,
+                .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+                .offset = @offsetOf(@This(), "position"),
+            },
+        };
+    }
+};
+
 const Model = struct {
     vertexBuffer: Buffer,
     vertexCount: u32,
@@ -1245,24 +1245,12 @@ const ElementsPipeline = struct {
             },
         };
 
-        const bindingFlags = [_]c.VkDescriptorBindingFlags{
-            0,
-            c.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | c.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
-        };
-
-        var bindingFlagsInfo = c.VkDescriptorSetLayoutBindingFlagsCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-            .pNext = null,
-            .bindingCount = bindings.len,
-            .pBindingFlags = &bindingFlags,
-        };
-
         var shaderBufferDescriptorSetLayout: c.VkDescriptorSetLayout = undefined;
         try ensureNoError(c.vkCreateDescriptorSetLayout(
             logicalDevice,
             &c.VkDescriptorSetLayoutCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = &bindingFlagsInfo,
+                .pNext = null,
                 .flags = c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
                 .bindingCount = bindings.len,
                 .pBindings = &bindings,
