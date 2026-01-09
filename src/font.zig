@@ -349,18 +349,11 @@ pub fn rasterize(
     std.debug.assert(glyph != null);
     try ensureNoError(c.FT_Render_Glyph(glyph, c.FT_RENDER_MODE_NORMAL));
 
-    var bitmap: ?[]u8 = null;
-    if (glyph.*.bitmap.buffer != null) {
-        bitmap = glyph.*.bitmap.buffer[0..@intCast(@abs(glyph.*.bitmap.pitch) * glyph.*.bitmap.rows)];
-        for (bitmap.?) |*pixel| {
-            const normalized = @as(f32, @floatFromInt(pixel.*)) / 255.0;
-            const corrected = std.math.pow(f32, normalized, 1.0 / 2.2);
-            pixel.* = @intFromFloat(corrected * 255.0);
-        }
-    }
-
     return RasterizedGlyph{
-        .bitmap = bitmap,
+        .bitmap = if (glyph.*.bitmap.buffer != null)
+            glyph.*.bitmap.buffer[0..@intCast(@abs(glyph.*.bitmap.pitch) * glyph.*.bitmap.rows)]
+        else
+            null,
         .width = glyph.*.bitmap.width,
         .height = glyph.*.bitmap.rows,
         .left = glyph.*.bitmap_left,
