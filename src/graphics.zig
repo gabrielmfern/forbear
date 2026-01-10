@@ -630,7 +630,7 @@ pub const Image = struct {
     }
 };
 
-const TextureAtlas = struct {
+const FontTextureAtlas = struct {
     image: c.VkImage,
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
@@ -666,7 +666,8 @@ const TextureAtlas = struct {
             .extent = extent,
             .mipLevels = 1,
             .arrayLayers = 1,
-            .format = c.VK_FORMAT_R8_UNORM,
+            // Use RGBA format for subpixel/LCD text rendering (RGB coverage + alpha)
+            .format = c.VK_FORMAT_R8G8B8A8_SRGB,
             .tiling = c.VK_IMAGE_TILING_LINEAR,
             .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
             .usage = c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -710,7 +711,8 @@ const TextureAtlas = struct {
                 .pNext = null,
                 .flags = 0,
                 .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
-                .format = c.VK_FORMAT_R8_UNORM,
+                // Use RGBA format for subpixel/LCD text rendering
+                .format = c.VK_FORMAT_R8G8B8A8_SRGB,
                 .components = c.VkComponentMapping{
                     .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
                     .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -854,6 +856,10 @@ const TextureAtlas = struct {
         h: f32,
     };
 
+    /// Upload LCD/subpixel glyph data to the texture atlas.
+    /// The input data is in FreeType LCD format (3 bytes per pixel: R, G, B).
+    /// uploadWidth is the width in bytes from FreeType (= pixel_width * 3 for LCD mode).
+    /// The texture atlas uses RGBA format (4 bytes per pixel) for dual-source blending.
     fn upload(
         self: *@This(),
         data: ?[]u8,
@@ -868,27 +874,31 @@ const TextureAtlas = struct {
         // No free rectangles available in the texture atlas
         std.debug.assert(self.freeRectangles.items.len > 0);
 
+        // FreeType LCD mode: uploadWidth is 3x the actual pixel width (RGB bytes)
+        // Convert to actual pixel width for texture storage
+        const pixelWidth = uploadWidth / 3;
+
         const padding = 1;
         const freeRectangleIndex = self.getBestFreeRectangle(
-            @intCast(uploadWidth + padding),
+            @intCast(pixelWidth + padding),
             @intCast(uploadHeight + padding),
         ) orelse return error.MaximumTextureAtlasSizeReached;
         const freeRectangle = self.freeRectangles.orderedRemove(freeRectangleIndex);
         std.log.debug("Uploading glyph to texture atlas at ({d}, {d}) size ({d}x{d})", .{
             freeRectangle.u,
             freeRectangle.v,
-            uploadWidth,
+            pixelWidth,
             uploadHeight,
         });
         // we share the remaining space in the free rectangle in a way that this first one has the
         // most area
-        if (freeRectangle.width > uploadWidth + padding) {
+        if (freeRectangle.width > pixelWidth + padding) {
             try self.freeRectangles.append(
                 allocator,
                 FreeRectangle{
-                    .u = freeRectangle.u + uploadWidth + padding,
+                    .u = freeRectangle.u + pixelWidth + padding,
                     .v = freeRectangle.v,
-                    .width = freeRectangle.width - (uploadWidth + padding),
+                    .width = freeRectangle.width - (pixelWidth + padding),
                     .height = freeRectangle.height,
                 },
             );
@@ -899,29 +909,43 @@ const TextureAtlas = struct {
                 FreeRectangle{
                     .u = freeRectangle.u,
                     .v = freeRectangle.v + uploadHeight + padding,
-                    .width = uploadWidth + padding,
+                    .width = pixelWidth + padding,
                     .height = freeRectangle.height - (uploadHeight + padding),
                 },
             );
         }
 
+        // Convert RGB (3 bytes per pixel from FreeType LCD) to RGBA (4 bytes per pixel)
+        // rowPitch is in bytes, and we have 4 bytes per pixel (RGBA)
         for (0..uploadHeight) |y| {
-            const dest_start = (freeRectangle.v + y) * self.rowPitch + freeRectangle.u;
+            const dest_row_start = (freeRectangle.v + y) * self.rowPitch + freeRectangle.u * 4;
             if (data != null) {
-                const src_start = y * pitch;
-                @memcpy(
-                    self.mapped[dest_start .. dest_start + uploadWidth],
-                    data.?[src_start .. src_start + uploadWidth],
-                );
+                const src_row_start = y * pitch;
+                for (0..pixelWidth) |x| {
+                    const src_offset = src_row_start + x * 3;
+                    const dest_offset = dest_row_start + x * 4;
+                    // Copy RGB from FreeType LCD bitmap
+                    self.mapped[dest_offset + 0] = data.?[src_offset + 0]; // R
+                    self.mapped[dest_offset + 1] = data.?[src_offset + 1]; // G
+                    self.mapped[dest_offset + 2] = data.?[src_offset + 2]; // B
+                    // Alpha = max of RGB coverages (for discard test and general alpha)
+                    self.mapped[dest_offset + 3] = @max(@max(data.?[src_offset + 0], data.?[src_offset + 1]), data.?[src_offset + 2]);
+                }
             } else {
-                @memset(self.mapped[dest_start .. dest_start + uploadWidth], 0);
+                for (0..pixelWidth) |x| {
+                    const dest_offset = dest_row_start + x * 4;
+                    self.mapped[dest_offset + 0] = 0;
+                    self.mapped[dest_offset + 1] = 0;
+                    self.mapped[dest_offset + 2] = 0;
+                    self.mapped[dest_offset + 3] = 0;
+                }
             }
         }
 
         return .{
             .u = @as(f32, @floatFromInt(freeRectangle.u)),
             .v = @as(f32, @floatFromInt(freeRectangle.v)),
-            .w = @as(f32, @floatFromInt(uploadWidth)),
+            .w = @as(f32, @floatFromInt(pixelWidth)),
             .h = @as(f32, @floatFromInt(uploadHeight)),
         };
     }
@@ -1565,7 +1589,7 @@ const TextPipeline = struct {
     descriptorPool: c.VkDescriptorPool,
     descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
 
-    fontTextureAtlas: TextureAtlas,
+    fontTextureAtlas: FontTextureAtlas,
     glyphRenderingDataCache: std.AutoHashMap(GlyphRenderingKey, GlyphRenderingData),
     sampler: c.VkSampler,
 
@@ -1575,7 +1599,7 @@ const TextPipeline = struct {
     shaderBuffersMapped: [maxFramesInFlight][]GlypRenderingShaderData,
 
     const GlyphRenderingData = struct {
-        textureCoordinates: TextureAtlas.TextureCoordinates,
+        textureCoordinates: FontTextureAtlas.TextureCoordinates,
         bitmapWidth: u32,
         bitmapHeight: u32,
         bitmapLeft: i32,
@@ -1771,6 +1795,11 @@ const TextPipeline = struct {
                     .pNext = null,
                     .flags = 0,
                 },
+                // Dual-source blending for subpixel text rendering:
+                // Fragment shader outputs two colors at location 0 (index 0 and index 1)
+                // - index 0: pre-multiplied text color (text_color.rgb * coverage.rgb)
+                // - index 1: blend weights (text_color.a * coverage.rgb for per-channel blending)
+                // Blend equation: result = src * ONE + dst * (1 - src1_color)
                 .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
                     .pNext = null,
@@ -1781,11 +1810,12 @@ const TextPipeline = struct {
                     .pAttachments = &c.VkPipelineColorBlendAttachmentState{
                         .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
                         .blendEnable = c.VK_TRUE,
-                        .srcColorBlendFactor = c.VK_BLEND_FACTOR_SRC_ALPHA,
-                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                        // Dual-source blending: use SRC1_COLOR from fragment shader's second output
+                        .srcColorBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
                         .colorBlendOp = c.VK_BLEND_OP_ADD,
                         .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
-                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
                         .alphaBlendOp = c.VK_BLEND_OP_ADD,
                     },
                     .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
@@ -1842,7 +1872,7 @@ const TextPipeline = struct {
             shaderBuffersMapped[i] = @as([*]GlypRenderingShaderData, @ptrCast(@alignCast(storageBufferData)))[0..initialGlyphCapacity];
         }
 
-        var fontTextureAtlas = try TextureAtlas.init(
+        var fontTextureAtlas = try FontTextureAtlas.init(
             logicalDevice,
             physicalDevice,
             allocator,
@@ -2290,6 +2320,8 @@ pub const Renderer = struct {
                 .pEnabledFeatures = &c.VkPhysicalDeviceFeatures{
                     .shaderInt16 = c.VK_TRUE,
                     .shaderInt64 = c.VK_TRUE,
+                    // Enable dual-source blending for subpixel text rendering
+                    .dualSrcBlend = c.VK_TRUE,
                 },
                 .ppEnabledExtensionNames = requiredDeviceExtensions.ptr,
                 .enabledExtensionCount = @intCast(requiredDeviceExtensions.len),
@@ -2717,10 +2749,13 @@ pub const Renderer = struct {
                                         @intCast(@abs(rasterizedGlyph.pitch)),
                                         self.allocator,
                                     );
+                                    // FreeType LCD mode: width is 3x the actual pixel width (RGB bytes)
+                                    // Convert to actual pixel width for rendering
+                                    const pixelWidth = rasterizedGlyph.width / 3;
                                     const data = TextPipeline.GlyphRenderingData{
                                         .bitmapTop = @intCast(rasterizedGlyph.top),
                                         .bitmapLeft = @intCast(rasterizedGlyph.left),
-                                        .bitmapWidth = @intCast(rasterizedGlyph.width),
+                                        .bitmapWidth = @intCast(pixelWidth),
                                         .bitmapHeight = @intCast(rasterizedGlyph.height),
                                         .textureCoordinates = textureCoordinates,
                                     };
