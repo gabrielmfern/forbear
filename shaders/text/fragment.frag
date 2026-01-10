@@ -2,12 +2,18 @@
 
 layout(location = 0) in vec2 inUV;
 layout(location = 1) in vec4 inColor;
-layout(location = 0) out vec4 outColor;
+
+// Dual-source blending outputs for subpixel text rendering
+// index 0: pre-multiplied text color (color * coverage per channel)
+// index 1: blend weights for per-channel blending
+layout(location = 0, index = 0) out vec4 fragColor;
+layout(location = 0, index = 1) out vec4 blendWeights;
 
 layout(set = 0, binding = 1) uniform sampler2D fontAtlas;
 
 void main() {
-    float alpha = texture(fontAtlas, inUV).r;
-    outColor = vec4(inColor.rgb, inColor.a * alpha);
-    if (outColor.a == 0.0) discard;
+    vec3 coverage = texture(fontAtlas, inUV).rgb;
+    
+    fragColor = vec4(inColor.rgb * coverage, 1.0);
+    blendWeights = vec4(coverage * inColor.a, inColor.a);
 }

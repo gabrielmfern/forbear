@@ -222,6 +222,9 @@ key: u64,
 pub fn init(name: []const u8, memory: []const u8) FreetypeError!@This() {
     if (freetypeLibrary == null) {
         try ensureNoError(c.FT_Init_FreeType(&freetypeLibrary));
+        // Enable LCD filtering for subpixel rendering to reduce color fringes.
+        // FreeType must be built with FT_CONFIG_OPTION_SUBPIXEL_RENDERING enabled.
+        try ensureNoError(c.FT_Library_SetLcdFilter(freetypeLibrary, c.FT_LCD_FILTER_DEFAULT));
     }
     const kbtsContext = c.kbts_CreateShapeContext(null, null);
     var face: c.FT_Face = undefined;
@@ -347,7 +350,9 @@ pub fn rasterize(
     try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_DEFAULT));
     const glyph = self.handle.*.glyph;
     std.debug.assert(glyph != null);
-    try ensureNoError(c.FT_Render_Glyph(glyph, c.FT_RENDER_MODE_NORMAL));
+    // Use LCD rendering mode for subpixel anti-aliasing
+    // This produces a bitmap with 3x horizontal resolution (one byte per R, G, B subpixel)
+    try ensureNoError(c.FT_Render_Glyph(glyph, c.FT_RENDER_MODE_LCD));
 
     return RasterizedGlyph{
         .bitmap = if (glyph.*.bitmap.buffer != null)
