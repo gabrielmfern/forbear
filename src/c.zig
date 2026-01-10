@@ -25,5 +25,7 @@ pub const c = @cImport({
         @cInclude("objc/message.h");
 
         @cInclude("vulkan/vulkan_metal.h");
+    } else if (builtin.os.tag == .windows) {
+        @cInclude("windows.h");
     }
 });

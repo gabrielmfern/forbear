@@ -36,5 +36,7 @@ pub const Window = if (builtin.os.tag == .macos)
     @import("macos.zig")
 else if (builtin.os.tag == .linux)
     @import("linux.zig")
+else if (builtin.os.tag == .windows)
+    @import("windows.zig")
 else
     @compileError("Unsupported OS");
