@@ -667,7 +667,7 @@ const FontTextureAtlas = struct {
             .mipLevels = 1,
             .arrayLayers = 1,
             // Use RGBA format for subpixel/LCD text rendering (RGB coverage + alpha)
-            .format = c.VK_FORMAT_R8G8B8A8_SRGB,
+            .format = c.VK_FORMAT_R8G8B8A8_UNORM,
             .tiling = c.VK_IMAGE_TILING_LINEAR,
             .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
             .usage = c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -712,7 +712,7 @@ const FontTextureAtlas = struct {
                 .flags = 0,
                 .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
                 // Use RGBA format for subpixel/LCD text rendering
-                .format = c.VK_FORMAT_R8G8B8A8_SRGB,
+                .format = c.VK_FORMAT_R8G8B8A8_UNORM,
                 .components = c.VkComponentMapping{
                     .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
                     .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
