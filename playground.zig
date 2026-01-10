@@ -78,4 +78,5 @@ pub fn main() !void {
         time = newCurrentTime;
         fps = @intFromFloat(@round(@as(f64, @floatFromInt(std.time.ns_per_s)) / @as(f64, @floatFromInt(deltaTime))));
     }
+    try renderer.waitIdle();
 }

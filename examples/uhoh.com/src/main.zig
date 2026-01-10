@@ -50,7 +50,7 @@ pub fn main() !void {
                 .preferredWidth = .grow,
                 .direction = .topToBottom,
                 .horizontalAlignment = .center,
-                .fontSize = 12,
+                .fontSize = 13,
             },
             .children = try forbear.children(.{
                 forbear.div(.{
@@ -118,4 +118,5 @@ pub fn main() !void {
         );
         try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 });
     }
+    try renderer.waitIdle();
 }

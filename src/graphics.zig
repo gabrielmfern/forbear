@@ -2546,9 +2546,11 @@ pub const Renderer = struct {
         );
     }
 
-    pub fn deinit(self: *Self) void {
-        _ = c.vkDeviceWaitIdle(self.logicalDevice);
+    pub fn waitIdle(self: *Self) !void {
+        try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
+    }
 
+    pub fn deinit(self: *Self) void {
         for (self.renderFinishedSemaphores) |semaphore| {
             c.vkDestroySemaphore(self.logicalDevice, semaphore, null);
         }
