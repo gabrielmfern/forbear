@@ -102,9 +102,44 @@ fn windowDidResize(self_obj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c)
         window.width = new_width;
         window.height = new_height;
 
+        // Update DPI and scale (window may have moved to a different screen)
+        window.updateDpiAndScale();
+
         // Call the resize handler if it exists
         if (window.handlers.resize) |handler| {
             handler.function(window, new_width, new_height, window.scale, window.dpi, handler.data);
+        }
+    }
+}
+
+fn windowDidChangeScreen(self_obj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
+    _ = self_obj;
+    _ = _cmd;
+    _ = notification;
+
+    // When window moves to a different screen, update DPI and scale
+    if (g_current_window) |window| {
+        window.updateDpiAndScale();
+
+        // Notify via resize handler since DPI/scale may have changed
+        if (window.handlers.resize) |handler| {
+            handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
+        }
+    }
+}
+
+fn windowDidChangeBackingProperties(self_obj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
+    _ = self_obj;
+    _ = _cmd;
+    _ = notification;
+
+    // Called when backing scale factor changes (e.g., moving between Retina and non-Retina displays)
+    if (g_current_window) |window| {
+        window.updateDpiAndScale();
+
+        // Notify via resize handler since scale may have changed
+        if (window.handlers.resize) |handler| {
+            handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
         }
     }
 }
@@ -248,25 +283,36 @@ pub fn init(
     const center = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
     center(self.window, sel("center"));
 
-    // Create a window delegate to handle resize events
+    // Create a window delegate to handle resize and screen change events
     const WindowDelegate = c.objc_allocateClassPair(NSObject, "MinimalWindowDelegate", 0);
     if (WindowDelegate != null) {
-        const success = c.class_addMethod(
+        _ = c.class_addMethod(
             WindowDelegate,
             sel("windowDidResize:"),
             @ptrCast(&windowDidResize),
             "v@:@",
         );
-        if (success) {
-            c.objc_registerClassPair(WindowDelegate);
+        _ = c.class_addMethod(
+            WindowDelegate,
+            sel("windowDidChangeScreen:"),
+            @ptrCast(&windowDidChangeScreen),
+            "v@:@",
+        );
+        _ = c.class_addMethod(
+            WindowDelegate,
+            sel("windowDidChangeBackingProperties:"),
+            @ptrCast(&windowDidChangeBackingProperties),
+            "v@:@",
+        );
 
-            const window_delegate = new_id(@ptrCast(WindowDelegate), sel("new"));
+        c.objc_registerClassPair(WindowDelegate);
 
-            // Set the global window instance for delegate callbacks
-            g_current_window = self;
+        const window_delegate = new_id(@ptrCast(WindowDelegate), sel("new"));
 
-            setDelegate(self.window, sel("setDelegate:"), window_delegate);
-        }
+        // Set the global window instance for delegate callbacks
+        g_current_window = self;
+
+        setDelegate(self.window, sel("setDelegate:"), window_delegate);
     }
 
     const contentView = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
@@ -295,7 +341,84 @@ pub fn init(
     const finishLaunching = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
     finishLaunching(self.app, sel("finishLaunching"));
 
+    // Get proper DPI and scale from the screen
+    self.updateDpiAndScale();
+
     return self;
+}
+
+pub fn updateDpiAndScale(self: *Self) void {
+    // Get the screen that the window is currently on
+    const getScreen = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
+    const screen = getScreen(self.window, sel("screen"));
+
+    if (screen == null) {
+        // Fallback to main screen if window's screen is not available
+        const NSScreen = getClass("NSScreen");
+        const mainScreen = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
+        const main = mainScreen(NSScreen, sel("mainScreen"));
+        if (main == null) return;
+        self.updateDpiFromScreen(main);
+    } else {
+        self.updateDpiFromScreen(screen);
+    }
+}
+
+fn updateDpiFromScreen(self: *Self, screen: c.id) void {
+    // Get the backing scale factor (1.0 for standard displays, 2.0 for Retina)
+    const backingScaleFactor = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
+    const scale_factor = backingScaleFactor(screen, sel("backingScaleFactor"));
+
+    // Update scale (using the same 120-based scale as Linux for consistency)
+    // scale = 120 means 1.0x, scale = 240 means 2.0x (Retina)
+    self.scale = @intFromFloat(@round(scale_factor * 120.0));
+
+    // Get the screen's frame (in points) and backing pixel dimensions
+    const getFrame = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSRect);
+    const screen_frame = getFrame(screen, sel("frame"));
+
+    // Get the NSDeviceDescription dictionary to access physical screen info
+    const deviceDescription = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
+    const device_desc = deviceDescription(screen, sel("deviceDescription"));
+
+    if (device_desc != null) {
+        // Try to get NSDeviceResolution which contains the DPI
+        const NSDeviceResolution = nsstring("NSDeviceResolution");
+        const objectForKey = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) c.id);
+        const resolution_value = objectForKey(device_desc, sel("objectForKey:"), NSDeviceResolution);
+
+        if (resolution_value != null) {
+            // NSDeviceResolution is an NSValue containing an NSSize with DPI
+            const sizeValue = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSSize);
+            const dpi_size = sizeValue(resolution_value, sel("sizeValue"));
+
+            self.dpi = .{
+                @intFromFloat(@round(dpi_size.width)),
+                @intFromFloat(@round(dpi_size.height)),
+            };
+
+            std.log.debug(
+                "macOS screen DPI: {d}x{d}, scale factor: {d}, screen size: {d}x{d}",
+                .{ self.dpi[0], self.dpi[1], scale_factor, screen_frame.size.width, screen_frame.size.height },
+            );
+            return;
+        }
+    }
+
+    // Fallback: Calculate DPI from screen size if NSDeviceResolution is not available
+    // macOS uses 72 points per inch as the base, so actual DPI = 72 * backingScaleFactor
+    // However, for physical DPI we need to consider the actual display
+    // Most Mac displays are around 110-220 DPI depending on model
+
+    // Use 72 * scale_factor as a reasonable approximation
+    // This gives 72 DPI for standard displays and 144 DPI for Retina
+    const base_dpi: u32 = @intFromFloat(@round(72.0 * scale_factor));
+    self.dpi = .{ base_dpi, base_dpi };
+
+    std.log.debug(
+        "macOS screen DPI (fallback): {d}x{d}, scale factor: {d}",
+        .{ self.dpi[0], self.dpi[1], scale_factor },
+    );
 }
 
 pub fn nativeView(self: *Self) ?*anyopaque {
