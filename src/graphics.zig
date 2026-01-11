@@ -2147,6 +2147,7 @@ pub const Renderer = struct {
             (width * scale) / 120,
             (height * scale) / 120,
             self.allocator,
+            self.swapchain,
         );
         errdefer self.swapchain.deinit(self.logicalDevice);
 
@@ -2369,6 +2370,7 @@ pub const Renderer = struct {
             (width * scale) / 120,
             (height * scale) / 120,
             graphics.allocator,
+            null,
         );
         errdefer swapchain.deinit(logicalDevice);
 
@@ -2925,6 +2927,7 @@ pub const Renderer = struct {
             width: u32,
             height: u32,
             allocator: std.mem.Allocator,
+            oldSwapchain: ?Swapchain,
         ) !Swapchain {
             var swapchainSupportDetails: SwapchainSupportDetails = undefined;
             swapchainSupportDetails.allocator = allocator;
@@ -3031,7 +3034,7 @@ pub const Renderer = struct {
                     .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
                     .presentMode = presentMode,
                     .clipped = c.VK_TRUE,
-                    .oldSwapchain = null,
+                    .oldSwapchain = if (oldSwapchain) |prev| prev.handle else null,
                 },
                 null,
                 &swapchain,
