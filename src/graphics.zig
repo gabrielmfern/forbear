@@ -2771,8 +2771,12 @@ pub const Renderer = struct {
                             const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
 
                             const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
+                            const resolutionMultiplier = Vec2{
+                                @as(f32, @floatFromInt(self.dpi[0])) / 72.0,
+                                @as(f32, @floatFromInt(self.dpi[1])) / 72.0,
+                            };
                             const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
-                            const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize;
+                            const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize * resolutionMultiplier[0];
 
                             self.textPipeline.shaderBuffersMapped[self.framesRendered % maxFramesInFlight][glyphIndex] = TextPipeline.GlypRenderingShaderData{
                                 .modelViewProjectionMatrix = zmath.mul(
