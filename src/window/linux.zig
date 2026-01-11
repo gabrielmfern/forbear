@@ -80,6 +80,7 @@ physicalWidthMilimeters: i32 = 0,
 physicalHeightMilimeters: i32 = 0,
 monitorWidth: i32 = 0,
 monitorHeight: i32 = 0,
+refreshRate: u32 = 60000, // in millihertz (mHz), default 60Hz
 
 allocator: std.mem.Allocator,
 
@@ -152,8 +153,10 @@ fn handleMonitorMode(
     if (flags & c.WL_OUTPUT_MODE_CURRENT != 0) {
         window.monitorWidth = width;
         window.monitorHeight = height;
+        if (refresh > 0) {
+            window.refreshRate = @intCast(refresh);
+        }
     }
-    _ = refresh;
 }
 
 fn handleMonitorDone(
@@ -164,7 +167,7 @@ fn handleMonitorDone(
     const window: *Self = @ptrCast(@alignCast(data));
     window.updateDpi();
     std.log.debug(
-        "monitor done, physical width {d}mm, physical height {d}mm, width {d}px, height {d}px, DPI {d}x{d}",
+        "monitor done, physical width {d}mm, physical height {d}mm, width {d}px, height {d}px, DPI {d}x{d}, refresh rate {d}",
         .{
             window.physicalWidthMilimeters,
             window.physicalHeightMilimeters,
@@ -172,6 +175,7 @@ fn handleMonitorDone(
             window.monitorHeight,
             window.dpi[0],
             window.dpi[1],
+            window.refreshRate,
         },
     );
 }
@@ -748,6 +752,14 @@ pub fn handleEvents(self: *Self) !void {
     if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
         return error.WaylandDispatchFailed;
     }
+}
+
+/// Returns the target frame time in nanoseconds based on the monitor's refresh rate.
+/// For example, 60Hz returns ~16,666,666 ns.
+pub fn targetFrameTimeNs(self: *const Self) u64 {
+    // refreshRate is in millihertz (mHz), e.g., 60000 for 60Hz
+    // frame_time_ns = 1_000_000_000_000 / refreshRate
+    return @divFloor(@as(u64, 1_000_000_000_000), @as(u64, self.refreshRate));
 }
 
 // pub fn swapBuffers(self: *Self) !void {

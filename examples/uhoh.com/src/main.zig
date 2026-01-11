@@ -41,6 +41,8 @@ pub fn main() !void {
     const comeOnImage = try forbear.Image.init(@embedFile("come-on.png"), .png, &renderer);
     defer comeOnImage.deinit(&renderer);
 
+    var capper = forbear.FrameRateCapper{};
+
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
@@ -116,6 +118,8 @@ pub fn main() !void {
             arena,
         );
         try renderer.drawFrame(&layoutBox, .{ 0.99, 0.98, 0.96, 1.0 });
+
+        try capper.cap(window.targetFrameTimeNs());
     }
     try renderer.waitIdle();
 }

@@ -37,6 +37,8 @@ pub fn main() !void {
 
     const inter = try forbear.Font.init("Inter-Regular", @embedFile("Inter-Regular.ttf"));
 
+    var capper = forbear.FrameRateCapper{};
+
     var time = std.time.nanoTimestamp();
     var fps: ?u32 = null;
     while (window.running) {
@@ -72,6 +74,8 @@ pub fn main() !void {
             arena,
         );
         try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 });
+
+        try capper.cap(window.targetFrameTimeNs());
 
         const newCurrentTime = std.time.nanoTimestamp();
         const deltaTime = newCurrentTime - time;
