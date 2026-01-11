@@ -15,6 +15,26 @@ const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
 
+/// Convert a single sRGB color component to linear RGB.
+/// sRGB values are gamma-encoded for display; linear values are needed for
+/// physically correct blending/compositing in shaders when using an sRGB swapchain.
+fn srgbToLinear(value: f32) f32 {
+    if (value <= 0.04045) {
+        return value / 12.92;
+    } else {
+        return std.math.pow(f32, (value + 0.055) / 1.055, 2.4);
+    }
+}
+
+fn srgbToLinearColor(color: Vec4) Vec4 {
+    return Vec4{
+        srgbToLinear(color[0]),
+        srgbToLinear(color[1]),
+        srgbToLinear(color[2]),
+        color[3], // Alpha is already linear
+    };
+}
+
 pub const VulkanError = error{
     ExtensioNotPresent,
     IncompatibleDriver,
@@ -2616,7 +2636,7 @@ pub const Renderer = struct {
                 .clearValueCount = 1,
                 .pClearValues = &c.VkClearValue{
                     .color = c.VkClearColorValue{
-                        .float32 = clearColor,
+                        .float32 = srgbToLinearColor(clearColor),
                     },
                 },
             },
@@ -2681,12 +2701,12 @@ pub const Renderer = struct {
                     projectionMatrix,
                 ),
                 .backgroundColor = switch (layoutBox.style.background) {
-                    .color => |color| color,
+                    .color => |color| srgbToLinearColor(color),
                     .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
                 },
                 .size = layoutBox.size,
                 .borderRadius = layoutBox.style.borderRadius,
-                .borderColor = layoutBox.style.borderColor,
+                .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
                 .borderSize = .{
                     layoutBox.style.borderBlockWidth[0],
                     layoutBox.style.borderBlockWidth[1],
@@ -2790,7 +2810,7 @@ pub const Renderer = struct {
                                     ),
                                     projectionMatrix,
                                 ),
-                                .color = layoutBox.style.color,
+                                .color = srgbToLinearColor(layoutBox.style.color),
                                 .uvOffset = .{
                                     glyphRenderingData.textureCoordinates.u / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width)),
                                     glyphRenderingData.textureCoordinates.v / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height)),
