@@ -32,9 +32,9 @@
 //! So making this cross platform, is still quite easy.
 const builtin = @import("builtin");
 
-pub const Window = if (builtin.os.tag == .macos)
-    @import("macos.zig")
-else if (builtin.os.tag == .linux)
+pub const Window = if (builtin.os.tag == .linux)
     @import("linux.zig")
+else if (builtin.os.tag == .macos)
+    @import("macos.zig")
 else
     @compileError("Unsupported OS");

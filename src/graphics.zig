@@ -2132,7 +2132,7 @@ pub const Renderer = struct {
 
     pub fn recreateSwapchain(self: *Self, width: u32, height: u32, scale: u32, dpi: [2]u32) !void {
         self.dpi = dpi;
-        _ = c.vkDeviceWaitIdle(self.logicalDevice);
+        try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
         const previousSwapchain = self.swapchain;
 
         self.swapchain = try Swapchain.init(
@@ -2984,10 +2984,16 @@ pub const Renderer = struct {
 
             var presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
             for (swapchainSupportDetails.presentModes) |availablePresentMode| {
-                if (availablePresentMode == c.VK_PRESENT_MODE_FIFO_KHR) {
+                if (availablePresentMode == c.VK_PRESENT_MODE_MAILBOX_KHR) {
                     presentMode = availablePresentMode;
                     break;
                 }
+            }
+            if (presentMode == c.VK_PRESENT_MODE_FIFO_KHR) {
+                std.log.warn(
+                    \\Was not able to use the most optimzied presentation mode (mailbox). 
+                    \\Thus, to avoid slow downs on window resize, the application will generally be cap the frame again.
+                , .{});
             }
 
             var swapchainExtent: c.VkExtent2D = swapchainSupportDetails.capabilities.currentExtent;
