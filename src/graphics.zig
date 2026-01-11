@@ -891,25 +891,25 @@ const FontTextureAtlas = struct {
         });
         // we share the remaining space in the free rectangle in a way that this first one has the
         // most area
-        if (freeRectangle.width > pixelWidth + padding) {
+        if (freeRectangle.width > pixelWidth) {
             try self.freeRectangles.append(
                 allocator,
                 FreeRectangle{
-                    .u = freeRectangle.u + pixelWidth + padding,
+                    .u = freeRectangle.u + pixelWidth,
                     .v = freeRectangle.v,
-                    .width = freeRectangle.width - (pixelWidth + padding),
+                    .width = freeRectangle.width - pixelWidth,
                     .height = freeRectangle.height,
                 },
             );
         }
-        if (freeRectangle.height > uploadHeight + padding) {
+        if (freeRectangle.height > uploadHeight) {
             try self.freeRectangles.append(
                 allocator,
                 FreeRectangle{
                     .u = freeRectangle.u,
-                    .v = freeRectangle.v + uploadHeight + padding,
-                    .width = pixelWidth + padding,
-                    .height = freeRectangle.height - (uploadHeight + padding),
+                    .v = freeRectangle.v + uploadHeight,
+                    .width = pixelWidth,
+                    .height = freeRectangle.height - uploadHeight,
                 },
             );
         }
