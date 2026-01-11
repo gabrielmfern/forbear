@@ -385,7 +385,6 @@ const LayoutCreator = struct {
         style.marginInline *= @splat(resolutionMultiplier[0]);
         style.marginBlock *= @splat(resolutionMultiplier[1]);
         style.borderRadius *= resolutionMultiplier[0];
-        std.log.debug("paddingBlock {}", .{style.paddingBlock});
         switch (node) {
             .element => |element| {
                 var layoutBox = LayoutBox{
@@ -425,7 +424,6 @@ const LayoutCreator = struct {
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
                 const fontSize: f32 = @floatFromInt(style.fontSize);
                 const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * resolutionMultiplier;
-                std.log.debug("final font size {}", .{pixelSizeVec2});
 
                 var shapedGlyphsIterator = try style.font.shape(text);
                 var cursor: Vec2 = @splat(0.0);
@@ -443,7 +441,6 @@ const LayoutCreator = struct {
                     maxAdvance = @max(maxAdvance, advance);
                 }
                 const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
-                std.log.debug("line height {d}", .{pixelLineHeight});
 
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
