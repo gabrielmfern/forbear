@@ -50,7 +50,7 @@ pub fn main() !void {
                 .preferredWidth = .grow,
                 .direction = .topToBottom,
                 .horizontalAlignment = .center,
-                .fontSize = 11,
+                .fontSize = 12,
             },
             .children = try forbear.children(.{
                 forbear.div(.{
@@ -67,7 +67,7 @@ pub fn main() !void {
                 forbear.div(.{
                     .style = .{
                         .font = spaceGroteskBold,
-                        .fontSize = 24,
+                        .fontSize = 30,
                         .marginBlock = .{ 10, 10 },
                     },
                     .children = try forbear.children(.{
@@ -115,7 +115,7 @@ pub fn main() !void {
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             arena,
         );
-        try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 });
+        try renderer.drawFrame(&layoutBox, .{ 0.99, 0.98, 0.96, 1.0 });
     }
     try renderer.waitIdle();
 }
