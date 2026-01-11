@@ -359,10 +359,18 @@ const LayoutCreator = struct {
         baseStyle: BaseStyle,
         dpi: Vec2,
     ) !LayoutBox {
-        const style = switch (node) {
+        const resolutionMultiplier = dpi / @as(Vec2, @splat(72));
+        var style = switch (node) {
             .element => |element| element.style.completeWith(baseStyle),
             .text => (IncompleteStyle{}).completeWith(baseStyle),
         };
+        style.borderInlineWidth *= @splat(resolutionMultiplier[0]);
+        style.borderBlockWidth *= @splat(resolutionMultiplier[1]);
+        style.paddingInline *= @splat(resolutionMultiplier[0]);
+        style.paddingBlock *= @splat(resolutionMultiplier[1]);
+        style.marginInline *= @splat(resolutionMultiplier[0]);
+        style.marginBlock *= @splat(resolutionMultiplier[1]);
+        style.borderRadius *= resolutionMultiplier[0];
         switch (node) {
             .element => |element| {
                 var layoutBox = LayoutBox{
@@ -401,7 +409,7 @@ const LayoutCreator = struct {
                 const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
                 const fontSize: f32 = @floatFromInt(style.fontSize);
-                const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * dpi / @as(Vec2, @splat(72.0));
+                const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * resolutionMultiplier;
 
                 var shapedGlyphsIterator = try style.font.shape(text);
                 var cursor: Vec2 = @splat(0.0);
@@ -418,7 +426,7 @@ const LayoutCreator = struct {
                     cursor += advance;
                     maxAdvance = @max(maxAdvance, advance);
                 }
-                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * fontSize * dpi[1] / 72.0;
+                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
 
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
