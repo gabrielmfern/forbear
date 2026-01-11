@@ -2133,8 +2133,7 @@ pub const Renderer = struct {
     pub fn recreateSwapchain(self: *Self, width: u32, height: u32, scale: u32, dpi: [2]u32) !void {
         self.dpi = dpi;
         _ = c.vkDeviceWaitIdle(self.logicalDevice);
-        self.swapchain.deinit(self.logicalDevice);
-        destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
+        const previousSwapchain = self.swapchain;
 
         self.swapchain = try Swapchain.init(
             self.physicalDevice,
@@ -2147,9 +2146,12 @@ pub const Renderer = struct {
             (width * scale) / 120,
             (height * scale) / 120,
             self.allocator,
-            self.swapchain,
+            previousSwapchain,
         );
         errdefer self.swapchain.deinit(self.logicalDevice);
+
+        previousSwapchain.deinit(self.logicalDevice);
+        destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
 
         self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
     }
