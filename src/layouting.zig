@@ -276,7 +276,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
     }
 }
 
-fn place(layoutBox: *LayoutBox) void {
+fn placeChildrenOf(layoutBox: *LayoutBox) void {
     if (layoutBox.children != null) {
         switch (layoutBox.children.?) {
             .layoutBoxes => |children| {
@@ -291,7 +291,17 @@ fn place(layoutBox: *LayoutBox) void {
 
                 var childrenSize: Vec2 = @splat(0.0);
                 for (children) |child| {
-                    childrenSize += child.size;
+                    const contributingSize = Vec2{
+                        child.size[0] + child.style.marginInline[0] + child.style.marginInline[1],
+                        child.size[1] + child.style.marginBlock[0] + child.style.marginBlock[1],
+                    };
+                    if (direction == .leftToRight) {
+                        childrenSize[0] += contributingSize[0];
+                        childrenSize[1] = @max(contributingSize[1], childrenSize[1]);
+                    } else if (direction == .topToBottom) {
+                        childrenSize[0] = @max(contributingSize[0], childrenSize[0]);
+                        childrenSize[1] += contributingSize[1];
+                    }
                 }
 
                 var cursor: Vec2 = .{
@@ -313,30 +323,34 @@ fn place(layoutBox: *LayoutBox) void {
                 }
 
                 for (children) |*child| {
+                    const contributingSize = Vec2{
+                        child.size[0] + child.style.marginInline[0] + child.style.marginInline[1],
+                        child.size[1] + child.style.marginBlock[0] + child.style.marginBlock[1],
+                    };
                     if (direction == .leftToRight) {
                         // Cross-axis alignment (Vertical)
                         switch (vAlign) {
                             .start => child.position[1] = 0.0,
-                            .center => child.position[1] = (availableSize[1] - child.size[1]) / 2.0,
-                            .end => child.position[1] = (availableSize[1] - child.size[1]),
+                            .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
+                            .end => child.position[1] = (availableSize[1] - contributingSize[1]),
                         }
 
                         cursor[0] += child.style.marginInline[0];
                         child.position += cursor;
                         cursor[0] += child.size[0] + child.style.marginInline[1];
                     } else {
-                        // Cross-axis alignment (Vertical)
+                        // Cross-axis alignment (Horizontal)
                         switch (hAlign) {
                             .start => child.position[0] = 0.0,
-                            .center => child.position[0] = (availableSize[0] - child.size[0]) / 2.0,
-                            .end => child.position[0] = (availableSize[0] - child.size[0]),
+                            .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
+                            .end => child.position[0] = (availableSize[0] - contributingSize[0]),
                         }
 
                         cursor[1] += child.style.marginBlock[0];
                         child.position += cursor;
                         cursor[1] += child.size[1] + child.style.marginBlock[1];
                     }
-                    place(child);
+                    placeChildrenOf(child);
                 }
             },
             else => {},
@@ -371,6 +385,7 @@ const LayoutCreator = struct {
         style.marginInline *= @splat(resolutionMultiplier[0]);
         style.marginBlock *= @splat(resolutionMultiplier[1]);
         style.borderRadius *= resolutionMultiplier[0];
+        std.log.debug("paddingBlock {}", .{style.paddingBlock});
         switch (node) {
             .element => |element| {
                 var layoutBox = LayoutBox{
@@ -410,6 +425,7 @@ const LayoutCreator = struct {
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
                 const fontSize: f32 = @floatFromInt(style.fontSize);
                 const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * resolutionMultiplier;
+                std.log.debug("final font size {}", .{pixelSizeVec2});
 
                 var shapedGlyphsIterator = try style.font.shape(text);
                 var cursor: Vec2 = @splat(0.0);
@@ -427,6 +443,7 @@ const LayoutCreator = struct {
                     maxAdvance = @max(maxAdvance, advance);
                 }
                 const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
+                std.log.debug("line height {d}", .{pixelLineHeight});
 
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
@@ -503,7 +520,7 @@ pub fn layout(
     try growAndShrink(&layoutBox, allocator);
     fitWidth(&layoutBox);
     fitHeight(&layoutBox);
-    place(&layoutBox);
+    placeChildrenOf(&layoutBox);
     makeAbsolute(&layoutBox, .{ 0.0, 0.0 });
     return layoutBox;
 }
