@@ -50,7 +50,7 @@ pub fn main() !void {
                 .preferredWidth = .grow,
                 .direction = .topToBottom,
                 .horizontalAlignment = .center,
-                .fontSize = 13,
+                .fontSize = 11,
             },
             .children = try forbear.children(.{
                 forbear.div(.{
@@ -67,7 +67,7 @@ pub fn main() !void {
                 forbear.div(.{
                     .style = .{
                         .font = spaceGroteskBold,
-                        .fontSize = 30,
+                        .fontSize = 24,
                         .marginBlock = .{ 10, 10 },
                     },
                     .children = try forbear.children(.{
@@ -78,13 +78,13 @@ pub fn main() !void {
                 "You scrolled all the way here.",
                 forbear.div(.{
                     .style = .{
-                        .borderRadius = 4,
-                        .borderInlineWidth = @splat(1.0),
-                        .borderBlockWidth = @splat(1.0),
+                        .borderRadius = 6,
+                        .borderInlineWidth = @splat(1.5),
+                        .borderBlockWidth = @splat(1.5),
                         .marginBlock = .{ 20.0, 0.0 },
                         .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
-                        .paddingBlock = @splat(12),
-                        .paddingInline = @splat(25),
+                        .paddingBlock = @splat(20),
+                        .paddingInline = @splat(36),
                         .horizontalAlignment = .center,
                         .verticalAlignment = .center,
                         .direction = .topToBottom,
@@ -93,7 +93,6 @@ pub fn main() !void {
                         forbear.div(.{
                             .style = .{
                                 .fontSize = 18,
-                                .font = spaceGroteskBold,
                             },
                             .children = try forbear.children(.{
                                 "Come on, click on this",
