@@ -68,7 +68,7 @@ pub fn main() !void {
                     .style = .{
                         .font = spaceGroteskBold,
                         .fontSize = 30,
-                        .marginBlock = .{ 20, 20 },
+                        .marginBlock = .{ 10, 10 },
                     },
                     .children = try forbear.children(.{
                         "Dude, you’re at the bottom of our landing page.",
@@ -78,13 +78,13 @@ pub fn main() !void {
                 "You scrolled all the way here.",
                 forbear.div(.{
                     .style = .{
-                        .borderRadius = 8,
-                        .borderInlineWidth = @splat(2.0),
-                        .borderBlockWidth = @splat(2.0),
-                        .marginBlock = .{ 40.0, 0.0 },
+                        .borderRadius = 4,
+                        .borderInlineWidth = @splat(1.0),
+                        .borderBlockWidth = @splat(1.0),
+                        .marginBlock = .{ 20.0, 0.0 },
                         .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
-                        .paddingBlock = @splat(25),
-                        .paddingInline = @splat(50),
+                        .paddingBlock = @splat(12),
+                        .paddingInline = @splat(25),
                         .horizontalAlignment = .center,
                         .verticalAlignment = .center,
                         .direction = .topToBottom,
