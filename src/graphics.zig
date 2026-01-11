@@ -878,10 +878,9 @@ const FontTextureAtlas = struct {
         // Convert to actual pixel width for texture storage
         const pixelWidth = uploadWidth / 3;
 
-        const padding = 1;
         const freeRectangleIndex = self.getBestFreeRectangle(
-            @intCast(pixelWidth + padding),
-            @intCast(uploadHeight + padding),
+            @intCast(pixelWidth),
+            @intCast(uploadHeight),
         ) orelse return error.MaximumTextureAtlasSizeReached;
         const freeRectangle = self.freeRectangles.orderedRemove(freeRectangleIndex);
         std.log.debug("Uploading glyph to texture atlas at ({d}, {d}) size ({d}x{d})", .{
