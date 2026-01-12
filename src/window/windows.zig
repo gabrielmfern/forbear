@@ -76,9 +76,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This()) void {
-    if (self.handle) |handle| {
-        _ = win32.DestroyWindow(handle);
-    }
+    _ = win32.DestroyWindow(self.handle);
     _ = win32.UnregisterClassW(self.className.ptr, self.hInstance);
     self.allocator.free(self.className);
     self.allocator.free(self.title);
@@ -92,7 +90,7 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
         },
         win32.WM_DESTROY => {
             std.log.debug("destroy", .{});
-            _ = win32.DestroyWindow(hwnd);
+            win32.PostQuitMessage(0);
         },
         win32.WM_CLOSE => {
             std.log.debug("close", .{});
@@ -111,7 +109,7 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
 
 pub fn handleEvents(self: *@This()) !void {
     var message: win32.MSG = undefined;
-    if (win32.GetMessageW(&message, self.handle, 0, 0) > 0) {
+    if (win32.GetMessageW(&message, null, 0, 0) > 0) {
         _ = win32.TranslateMessage(&message);
         _ = win32.DispatchMessageW(&message);
     } else {
