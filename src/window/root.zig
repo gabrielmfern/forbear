@@ -11,6 +11,8 @@
 //!
 //! fn init(width: u32, height: u32, title: [:0]const u8, app_id: [:0]const u8, allocator: std.mem.Allocator) void
 //!
+//! fn targetFrameTimeNs() u64;
+//!
 //! fn setResizeHandler(
 //!     self: *@This(),
 //!     handler: *const fn (
@@ -32,9 +34,9 @@
 //! So making this cross platform, is still quite easy.
 const builtin = @import("builtin");
 
-pub const Window = if (builtin.os.tag == .linux)
-    @import("linux.zig")
-else if (builtin.os.tag == .macos)
-    @import("macos.zig")
-else
-    @compileError("Unsupported OS");
+pub const Window = switch (builtin.os.tag) {
+    .windows => @import("windows.zig"),
+    .linux => @import("linux.zig"),
+    .macos => @import("macos.zig"),
+    else => @compileError("Unsupported OS"),
+};

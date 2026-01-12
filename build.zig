@@ -52,7 +52,7 @@ const Dependencies = struct {
                 module.addIncludePath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Include" });
                 module.addLibraryPath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Lib" });
             },
-            else => {}
+            else => {},
         }
 
         module.linkLibrary(self.freetype.artifact("freetype"));
@@ -60,15 +60,23 @@ const Dependencies = struct {
         module.linkLibrary(self.stb_image.artifact("stb_image"));
         module.addImport("zmath", self.zmath.module("root"));
 
-        if (self.target.result.os.tag == .linux) {
-            module.linkSystemLibrary("wayland-client", .{});
-            module.linkSystemLibrary("wayland-cursor", .{});
-            module.linkSystemLibrary("xkbcommon", .{});
-        }
-        if (self.target.result.os.tag == .macos) {
-            module.linkFramework("Cocoa", .{});
-            module.linkFramework("Metal", .{});
-            module.linkFramework("QuartzCore", .{});
+        switch (self.target.result.os.tag) {
+            .linux => {
+                module.linkSystemLibrary("wayland-client", .{});
+                module.linkSystemLibrary("wayland-cursor", .{});
+                module.linkSystemLibrary("xkbcommon", .{});
+            },
+            .macos => {
+                module.linkFramework("Cocoa", .{});
+                module.linkFramework("Metal", .{});
+                module.linkFramework("QuartzCore", .{});
+            },
+            .windows => {
+                module.linkSystemLibrary("user32", .{});
+                module.linkSystemLibrary("kernel32", .{});
+                module.linkSystemLibrary("gdi32", .{});
+            },
+            else => {},
         }
         module.linkSystemLibrary("vulkan", .{});
     }
