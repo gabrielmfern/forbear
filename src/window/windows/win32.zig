@@ -1,0 +1,235 @@
+// Manual Windows API declarations to avoid @cImport macro translation issues
+// This provides clean Zig bindings for the Windows APIs needed for windowing
+
+const std = @import("std");
+
+// Basic Windows types
+pub const BOOL = c_int;
+pub const WORD = u16;
+pub const DWORD = u32;
+pub const UINT = c_uint;
+pub const INT = c_int;
+pub const LONG = c_long;
+pub const LONG_PTR = isize;
+pub const UINT_PTR = usize;
+pub const ATOM = WORD;
+
+pub const LPVOID = ?*anyopaque;
+pub const LPCVOID = ?*const anyopaque;
+pub const LPWSTR = [*:0]u16;
+pub const LPCWSTR = [*:0]const u16;
+
+pub const HANDLE = *anyopaque;
+pub const HWND = ?HANDLE;
+pub const HINSTANCE = ?HANDLE;
+pub const HMODULE = ?HANDLE;
+pub const HICON = ?HANDLE;
+pub const HCURSOR = ?HANDLE;
+pub const HBRUSH = ?HANDLE;
+pub const HMENU = ?HANDLE;
+pub const HDC = ?HANDLE;
+
+pub const WPARAM = UINT_PTR;
+pub const LPARAM = LONG_PTR;
+pub const LRESULT = LONG_PTR;
+
+// Window procedure callback type
+pub const WNDPROC = *const fn (hwnd: HWND, msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT;
+
+// WNDCLASSEXW structure
+pub const WNDCLASSEXW = extern struct {
+    cbSize: UINT = @sizeOf(WNDCLASSEXW),
+    style: UINT = 0,
+    lpfnWndProc: WNDPROC,
+    cbClsExtra: INT = 0,
+    cbWndExtra: INT = 0,
+    hInstance: HINSTANCE = null,
+    hIcon: HICON = null,
+    hCursor: HCURSOR = null,
+    hbrBackground: HBRUSH = null,
+    lpszMenuName: ?LPCWSTR = null,
+    lpszClassName: LPCWSTR,
+    hIconSm: HICON = null,
+};
+
+// RECT structure
+pub const RECT = extern struct {
+    left: LONG = 0,
+    top: LONG = 0,
+    right: LONG = 0,
+    bottom: LONG = 0,
+};
+
+// POINT structure
+pub const POINT = extern struct {
+    x: LONG = 0,
+    y: LONG = 0,
+};
+
+// MSG structure
+pub const MSG = extern struct {
+    hwnd: HWND = null,
+    message: UINT = 0,
+    wParam: WPARAM = 0,
+    lParam: LPARAM = 0,
+    time: DWORD = 0,
+    pt: POINT = .{},
+};
+
+// Window styles
+pub const WS_OVERLAPPED: DWORD = 0x00000000;
+pub const WS_POPUP: DWORD = 0x80000000;
+pub const WS_CHILD: DWORD = 0x40000000;
+pub const WS_MINIMIZE: DWORD = 0x20000000;
+pub const WS_VISIBLE: DWORD = 0x10000000;
+pub const WS_DISABLED: DWORD = 0x08000000;
+pub const WS_CLIPSIBLINGS: DWORD = 0x04000000;
+pub const WS_CLIPCHILDREN: DWORD = 0x02000000;
+pub const WS_MAXIMIZE: DWORD = 0x01000000;
+pub const WS_CAPTION: DWORD = 0x00C00000;
+pub const WS_BORDER: DWORD = 0x00800000;
+pub const WS_DLGFRAME: DWORD = 0x00400000;
+pub const WS_VSCROLL: DWORD = 0x00200000;
+pub const WS_HSCROLL: DWORD = 0x00100000;
+pub const WS_SYSMENU: DWORD = 0x00080000;
+pub const WS_THICKFRAME: DWORD = 0x00040000;
+pub const WS_GROUP: DWORD = 0x00020000;
+pub const WS_TABSTOP: DWORD = 0x00010000;
+pub const WS_MINIMIZEBOX: DWORD = 0x00020000;
+pub const WS_MAXIMIZEBOX: DWORD = 0x00010000;
+pub const WS_OVERLAPPEDWINDOW: DWORD = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+
+// Class styles
+pub const CS_VREDRAW: UINT = 0x0001;
+pub const CS_HREDRAW: UINT = 0x0002;
+pub const CS_DBLCLKS: UINT = 0x0008;
+pub const CS_OWNDC: UINT = 0x0020;
+pub const CS_CLASSDC: UINT = 0x0040;
+pub const CS_PARENTDC: UINT = 0x0080;
+pub const CS_NOCLOSE: UINT = 0x0200;
+pub const CS_SAVEBITS: UINT = 0x0800;
+pub const CS_BYTEALIGNCLIENT: UINT = 0x1000;
+pub const CS_BYTEALIGNWINDOW: UINT = 0x2000;
+pub const CS_GLOBALCLASS: UINT = 0x4000;
+
+// Window messages
+pub const WM_NULL: UINT = 0x0000;
+pub const WM_CREATE: UINT = 0x0001;
+pub const WM_DESTROY: UINT = 0x0002;
+pub const WM_MOVE: UINT = 0x0003;
+pub const WM_SIZE: UINT = 0x0005;
+pub const WM_ACTIVATE: UINT = 0x0006;
+pub const WM_SETFOCUS: UINT = 0x0007;
+pub const WM_KILLFOCUS: UINT = 0x0008;
+pub const WM_ENABLE: UINT = 0x000A;
+pub const WM_SETREDRAW: UINT = 0x000B;
+pub const WM_SETTEXT: UINT = 0x000C;
+pub const WM_GETTEXT: UINT = 0x000D;
+pub const WM_GETTEXTLENGTH: UINT = 0x000E;
+pub const WM_PAINT: UINT = 0x000F;
+pub const WM_CLOSE: UINT = 0x0010;
+pub const WM_QUIT: UINT = 0x0012;
+pub const WM_ACTIVATEAPP: UINT = 0x001C;
+pub const WM_KEYDOWN: UINT = 0x0100;
+pub const WM_KEYUP: UINT = 0x0101;
+pub const WM_CHAR: UINT = 0x0102;
+pub const WM_SYSKEYDOWN: UINT = 0x0104;
+pub const WM_SYSKEYUP: UINT = 0x0105;
+pub const WM_SYSCHAR: UINT = 0x0106;
+pub const WM_MOUSEMOVE: UINT = 0x0200;
+pub const WM_LBUTTONDOWN: UINT = 0x0201;
+pub const WM_LBUTTONUP: UINT = 0x0202;
+pub const WM_LBUTTONDBLCLK: UINT = 0x0203;
+pub const WM_RBUTTONDOWN: UINT = 0x0204;
+pub const WM_RBUTTONUP: UINT = 0x0205;
+pub const WM_RBUTTONDBLCLK: UINT = 0x0206;
+pub const WM_MBUTTONDOWN: UINT = 0x0207;
+pub const WM_MBUTTONUP: UINT = 0x0208;
+pub const WM_MBUTTONDBLCLK: UINT = 0x0209;
+pub const WM_MOUSEWHEEL: UINT = 0x020A;
+
+// CW_USEDEFAULT
+pub const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
+
+// Standard cursor IDs (these are resource IDs cast to pointers)
+pub const IDC_ARROW: LPCWSTR = @ptrFromInt(32512);
+pub const IDC_IBEAM: LPCWSTR = @ptrFromInt(32513);
+pub const IDC_WAIT: LPCWSTR = @ptrFromInt(32514);
+pub const IDC_CROSS: LPCWSTR = @ptrFromInt(32515);
+pub const IDC_UPARROW: LPCWSTR = @ptrFromInt(32516);
+pub const IDC_SIZE: LPCWSTR = @ptrFromInt(32640);
+pub const IDC_ICON: LPCWSTR = @ptrFromInt(32641);
+pub const IDC_SIZENWSE: LPCWSTR = @ptrFromInt(32642);
+pub const IDC_SIZENESW: LPCWSTR = @ptrFromInt(32643);
+pub const IDC_SIZEWE: LPCWSTR = @ptrFromInt(32644);
+pub const IDC_SIZENS: LPCWSTR = @ptrFromInt(32645);
+pub const IDC_SIZEALL: LPCWSTR = @ptrFromInt(32646);
+pub const IDC_NO: LPCWSTR = @ptrFromInt(32648);
+pub const IDC_HAND: LPCWSTR = @ptrFromInt(32649);
+pub const IDC_APPSTARTING: LPCWSTR = @ptrFromInt(32650);
+pub const IDC_HELP: LPCWSTR = @ptrFromInt(32651);
+
+// PeekMessage flags
+pub const PM_NOREMOVE: UINT = 0x0000;
+pub const PM_REMOVE: UINT = 0x0001;
+pub const PM_NOYIELD: UINT = 0x0002;
+
+// ShowWindow commands
+pub const SW_HIDE: c_int = 0;
+pub const SW_SHOWNORMAL: c_int = 1;
+pub const SW_SHOW: c_int = 5;
+pub const SW_MINIMIZE: c_int = 6;
+pub const SW_MAXIMIZE: c_int = 3;
+pub const SW_RESTORE: c_int = 9;
+
+// External function declarations
+pub extern "kernel32" fn GetModuleHandleW(lpModuleName: ?LPCWSTR) callconv(.c) HMODULE;
+pub extern "kernel32" fn GetLastError() callconv(.c) DWORD;
+
+pub extern "user32" fn RegisterClassExW(lpWndClass: *const WNDCLASSEXW) callconv(.c) ATOM;
+pub extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: HINSTANCE) callconv(.c) BOOL;
+
+pub extern "user32" fn CreateWindowExW(
+    dwExStyle: DWORD,
+    lpClassName: LPCWSTR,
+    lpWindowName: LPCWSTR,
+    dwStyle: DWORD,
+    x: c_int,
+    y: c_int,
+    nWidth: c_int,
+    nHeight: c_int,
+    hWndParent: HWND,
+    hMenu: HMENU,
+    hInstance: HINSTANCE,
+    lpParam: LPVOID,
+) callconv(.c) HWND;
+
+pub extern "user32" fn DestroyWindow(hWnd: HWND) callconv(.c) BOOL;
+pub extern "user32" fn ShowWindow(hWnd: HWND, nCmdShow: c_int) callconv(.c) BOOL;
+pub extern "user32" fn UpdateWindow(hWnd: HWND) callconv(.c) BOOL;
+
+pub extern "user32" fn DefWindowProcW(hWnd: HWND, msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT;
+
+pub extern "user32" fn GetMessageW(lpMsg: *MSG, hWnd: HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT) callconv(.c) BOOL;
+pub extern "user32" fn PeekMessageW(lpMsg: *MSG, hWnd: HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT, wRemoveMsg: UINT) callconv(.c) BOOL;
+pub extern "user32" fn TranslateMessage(lpMsg: *const MSG) callconv(.c) BOOL;
+pub extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(.c) LRESULT;
+pub extern "user32" fn PostQuitMessage(nExitCode: c_int) callconv(.c) void;
+
+pub extern "user32" fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: LPCWSTR) callconv(.c) HCURSOR;
+pub extern "user32" fn SetCursor(hCursor: HCURSOR) callconv(.c) HCURSOR;
+
+pub extern "user32" fn AdjustWindowRectEx(lpRect: *RECT, dwStyle: DWORD, bMenu: BOOL, dwExStyle: DWORD) callconv(.c) BOOL;
+pub extern "user32" fn GetClientRect(hWnd: HWND, lpRect: *RECT) callconv(.c) BOOL;
+pub extern "user32" fn GetWindowRect(hWnd: HWND, lpRect: *RECT) callconv(.c) BOOL;
+
+pub extern "user32" fn SetWindowTextW(hWnd: HWND, lpString: LPCWSTR) callconv(.c) BOOL;
+pub extern "user32" fn GetWindowTextW(hWnd: HWND, lpString: LPWSTR, nMaxCount: c_int) callconv(.c) c_int;
+
+pub extern "user32" fn InvalidateRect(hWnd: HWND, lpRect: ?*const RECT, bErase: BOOL) callconv(.c) BOOL;
+
+pub extern "user32" fn GetDC(hWnd: HWND) callconv(.c) HDC;
+pub extern "user32" fn ReleaseDC(hWnd: HWND, hDC: HDC) callconv(.c) c_int;
+
+// DPI awareness
+pub extern "user32" fn GetDpiForWindow(hwnd: HWND) callconv(.c) UINT;
