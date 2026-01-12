@@ -43,8 +43,17 @@ const Dependencies = struct {
         self: *@This(),
         module: *std.Build.Module,
     ) void {
-        module.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
-        module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+        switch (self.target.result.os.tag) {
+            .linux, .macos => {
+                module.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
+                module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+            },
+            .windows => {
+                module.addIncludePath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Include" });
+                module.addLibraryPath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Lib" });
+            },
+            else => {}
+        }
 
         module.linkLibrary(self.freetype.artifact("freetype"));
         module.linkLibrary(self.kb_text_shape.artifact("kb_text_shape"));
