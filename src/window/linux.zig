@@ -31,10 +31,9 @@ pub const Handlers = struct {
         data: *anyopaque,
         function: *const fn (
             window: *Self,
-            new_width: u32,
-            new_height: u32,
-            new_scale: u32,
-            new_dpi: [2]u32,
+            newWidth: u32,
+            newHeight: u32,
+            newDpi: [2]u32,
             data: *anyopaque,
         ) void,
     } = null,
@@ -73,9 +72,9 @@ height: u32,
 title: [:0]const u8,
 app_id: [:0]const u8,
 running: bool,
-scale: u32,
 dpi: [2]u32,
 
+scale: f32 = 1.0,
 physicalWidthMilimeters: i32 = 0,
 physicalHeightMilimeters: i32 = 0,
 monitorWidth: i32 = 0,
@@ -188,10 +187,10 @@ fn handleMonitorScale(
     const window: *Self = @ptrCast(@alignCast(data));
     _ = wlOutput;
     if (window.wpFractionalScale != null) return;
-    window.scale = @intCast(scale * 120);
+    window.scale = @floatFromInt(scale);
     window.updateDpi();
     if (window.handlers.resize) |handler| {
-        handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
+        handler.function(window, window.width, window.height, window.dpi, handler.data);
     }
     std.log.debug("Monitor scale changed to: {}", .{scale});
 }
@@ -230,9 +229,10 @@ fn handleFractionalScale(
     wpFractionalScale: ?*c.wp_fractional_scale_v1,
     scale: u32,
 ) callconv(.c) void {
-    const window: *Self = @ptrCast(@alignCast(data));
     _ = wpFractionalScale;
-    window.scale = scale;
+
+    const window: *Self = @ptrCast(@alignCast(data));
+    window.scale = @as(f32, @floatFromInt(scale)) / 120.0;
     window.updateDpi();
     if (window.handlers.resize) |handler| {
         handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
@@ -592,17 +592,13 @@ const wlKeyboardListener: c.wl_keyboard_listener = .{
 
 pub fn updateDpi(self: *Self) void {
     const millimetersPerInch = 25.4;
+    const monitorWidth: f32 = @floatFromInt(self.monitorWidth);
+    const monitorHeight: f32 = @floatFromInt(self.monitorHeight);
+    const physicalWidth: f32 = @floatFromInt(self.physicalWidthMilimeters);
+    const physicalHeight: f32 = @floatFromInt(self.physicalHeightMilimeters);
     self.dpi = .{
-        @intFromFloat(
-            @round(
-                @as(f32, @floatFromInt(self.monitorWidth)) / (@as(f32, @floatFromInt(self.physicalWidthMilimeters)) / millimetersPerInch),
-            ),
-        ),
-        @intFromFloat(
-            @round(
-                @as(f32, @floatFromInt(self.monitorHeight)) / (@as(f32, @floatFromInt(self.physicalHeightMilimeters)) / millimetersPerInch),
-            ),
-        ),
+        @intFromFloat(@round(monitorWidth / (physicalWidth / millimetersPerInch) * self.scale)),
+        @intFromFloat(@round(monitorHeight / (physicalHeight / millimetersPerInch) * self.scale)),
     };
 }
 
@@ -619,8 +615,8 @@ pub fn init(
 
     window.width = width;
     window.height = height;
-    window.scale = 120;
-    window.dpi = .{ 72, 72 };
+    window.scale = 1.0;
+    window.dpi = .{ 96, 96 };
     window.title = title;
     window.app_id = app_id;
     window.running = true;
@@ -705,7 +701,7 @@ const Cursor = enum {
 
 pub fn setResizeHandler(
     self: *Self,
-    handler: *const fn (window: *Self, new_width: u32, new_height: u32, new_scale: u32, new_dpi: [2]u32, data: *anyopaque) void,
+    handler: *const fn (window: *Self, newWidth: u32, newHeight: u32, newDpi: [2]u32, data: *anyopaque) void,
     data: *anyopaque,
 ) void {
     self.handlers.resize = .{
