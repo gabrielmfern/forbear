@@ -86,6 +86,15 @@ pub fn ensureNoError(result: c.VkResult) !void {
         c.VK_ERROR_MEMORY_MAP_FAILED => return error.MemoryMapFailed,
         c.VK_ERROR_FRAGMENTATION_EXT => return error.FragmentationExt,
         c.VK_ERROR_UNKNOWN => return error.Unknown,
+        c.VK_SUBOPTIMAL_KHR => {
+            std.log.warn("Vulkan doesn't consider this an error, but it returned a VK_SUBOPTIMAL_KHR", .{});
+        },
+        c.VK_NOT_READY => {
+            std.log.warn("Vulkan doesn't consider this an error, but it returned a VK_NOT_READY", .{});
+        },
+        c.VK_TIMEOUT => {
+            std.log.warn("Vulkan doesn't consider this an error, but it returned a VK_TIMEOUT", .{});
+        },
         else => {
             if (builtin.os.tag == .linux) {
                 switch (result) {
@@ -96,7 +105,7 @@ pub fn ensureNoError(result: c.VkResult) !void {
         },
     }
 
-    std.debug.assert(result == c.VK_SUCCESS);
+    std.debug.assert(result == c.VK_SUCCESS or result == c.VK_SUBOPTIMAL_KHR or result == c.VK_NOT_READY or result == c.VK_TIMEOUT);
 }
 
 pub fn CreateDebugUtilsMessengerEXT(
@@ -434,7 +443,7 @@ pub fn initRenderer(
     std.debug.assert(vulkanSurface != null);
     errdefer c.vkDestroySurfaceKHR(self.vulkanInstance, vulkanSurface, null);
 
-    return try Renderer.init(vulkanSurface, self, window.width, window.height, window.dpi);
+    return try Renderer.init(vulkanSurface, self, window);
 }
 
 fn findMemoryType(
@@ -2110,6 +2119,20 @@ const TextPipeline = struct {
 
 const maxFramesInFlight = 2;
 
+pub const FrameRateCapper = struct {
+    lastFrameEnd: ?std.time.Instant = null,
+
+    pub fn cap(self: *@This(), targetFrameTimeNs: u64) !void {
+        if (self.lastFrameEnd) |lastFrameEnd| {
+            const elapsedNs = (try std.time.Instant.now()).since(lastFrameEnd);
+            if (elapsedNs <= targetFrameTimeNs) {
+                std.Thread.sleep(targetFrameTimeNs - elapsedNs);
+            }
+        }
+        self.lastFrameEnd = try std.time.Instant.now();
+    }
+};
+
 pub const Renderer = struct {
     const Self = @This();
 
@@ -2141,11 +2164,11 @@ pub const Renderer = struct {
     imageAvailableSemaphores: [maxFramesInFlight]c.VkSemaphore,
     renderFinishedSemaphores: []c.VkSemaphore,
 
-    framesRendered: usize,
-    dpi: [2]u32,
+    frameRateCapper: FrameRateCapper,
+    framesRenderedSinceSwapChainCreation: usize,
+    window: *const Window,
 
-    pub fn recreateSwapchain(self: *Self, width: u32, height: u32, dpi: [2]u32) !void {
-        self.dpi = dpi;
+    pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
         try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
         const previousSwapchain = self.swapchain;
 
@@ -2167,6 +2190,7 @@ pub const Renderer = struct {
         previousSwapchain.deinit(self.logicalDevice);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
 
+        self.framesRenderedSinceSwapChainCreation = 0;
         self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
     }
 
@@ -2213,9 +2237,7 @@ pub const Renderer = struct {
     fn init(
         surface: c.VkSurfaceKHR,
         graphics: *const Graphics,
-        width: u32,
-        height: u32,
-        dpi: [2]u32,
+        window: *const Window,
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -2382,8 +2404,8 @@ pub const Renderer = struct {
             graphicsQueueFamilyIndex,
             graphicsQueue,
             surface,
-            width,
-            height,
+            window.width,
+            window.height,
             graphics.allocator,
             null,
         );
@@ -2563,8 +2585,9 @@ pub const Renderer = struct {
             .imageAvailableSemaphores = imageAvailableSemaphores,
             .renderFinishedSemaphores = renderFinishedSemaphores,
 
-            .framesRendered = 0,
-            .dpi = dpi,
+            .framesRenderedSinceSwapChainCreation = 0,
+            .frameRateCapper = FrameRateCapper{},
+            .window = window,
         };
     }
 
@@ -2572,7 +2595,8 @@ pub const Renderer = struct {
         window.setResizeHandler(
             (struct {
                 fn handler(_: *Window, newWidth: u32, newHeight: u32, newDpi: [2]u32, data: *anyopaque) void {
-                    recreateSwapchain(@ptrCast(@alignCast(data)), newWidth, newHeight, newDpi) catch |err| {
+                    _ = newDpi;
+                    recreateSwapchain(@ptrCast(@alignCast(data)), newWidth, newHeight) catch |err| {
                         std.log.err("Failed to recreate swapchain on window resize {}", .{err});
                         @panic("Failed to recreate swapchain on window resize");
                     };
@@ -2612,24 +2636,24 @@ pub const Renderer = struct {
         try ensureNoError(c.vkWaitForFences(
             self.logicalDevice,
             1,
-            &self.inFlightFences[self.framesRendered % maxFramesInFlight],
+            &self.inFlightFences[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
             c.VK_TRUE,
             std.math.maxInt(u64),
         ));
-        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.framesRendered % maxFramesInFlight]));
+        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight]));
         var imageIndex: u32 = undefined;
         try ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
             self.swapchain.handle,
             std.math.maxInt(u64),
-            self.imageAvailableSemaphores[self.framesRendered % maxFramesInFlight],
+            self.imageAvailableSemaphores[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
             null,
             &imageIndex,
         ));
 
-        try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0));
+        try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight], 0));
 
-        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRendered % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
+        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .pNext = null,
             .flags = 0,
@@ -2640,7 +2664,7 @@ pub const Renderer = struct {
         const framebuffer_index: usize = @intCast(imageIndex);
 
         c.vkCmdBeginRenderPass(
-            self.commandBuffers[self.framesRendered % maxFramesInFlight],
+            self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
             &c.VkRenderPassBeginInfo{
                 .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = null,
@@ -2661,12 +2685,12 @@ pub const Renderer = struct {
         );
 
         c.vkCmdBindPipeline(
-            self.commandBuffers[self.framesRendered % maxFramesInFlight],
+            self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
             self.elementsPipeline.graphicsPipeline,
         );
 
-        c.vkCmdSetViewport(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0, 1, &[_]c.VkViewport{c.VkViewport{
+        c.vkCmdSetViewport(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight], 0, 1, &[_]c.VkViewport{c.VkViewport{
             .x = 0.0,
             .y = 0.0,
             .width = @floatFromInt(self.swapchain.extent.width),
@@ -2675,7 +2699,7 @@ pub const Renderer = struct {
             .maxDepth = 1.0,
         }});
 
-        c.vkCmdSetScissor(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{c.VkRect2D{
+        c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{c.VkRect2D{
             .offset = c.VkOffset2D{ .x = 0, .y = 0 },
             .extent = self.swapchain.extent,
         }});
@@ -2709,7 +2733,7 @@ pub const Renderer = struct {
                 .color => -1,
                 .image => |imgPtr| @intCast(try self.registerImage(imgPtr)),
             };
-            self.elementsPipeline.shaderBuffersMapped[self.framesRendered % maxFramesInFlight][i] = ElementRenderingData{
+            self.elementsPipeline.shaderBuffersMapped[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight][i] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
                         zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
@@ -2736,18 +2760,18 @@ pub const Renderer = struct {
         }
 
         c.vkCmdBindDescriptorSets(
-            self.commandBuffers[self.framesRendered % maxFramesInFlight],
+            self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
             self.elementsPipeline.pipelineLayout,
             0,
             1,
-            &self.elementsPipeline.descriptorSets[self.framesRendered % maxFramesInFlight],
+            &self.elementsPipeline.descriptorSets[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
             0,
             null,
         );
 
-        c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
-        c.vkCmdDraw(self.commandBuffers[self.framesRendered % maxFramesInFlight], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
+        c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
+        c.vkCmdDraw(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
 
         if (totalGlyphCount > 0) {
             if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
@@ -2776,7 +2800,7 @@ pub const Renderer = struct {
                                 } else {
                                     const rasterizedGlyph = try layoutBox.style.font.rasterize(
                                         glyph.index,
-                                        self.dpi,
+                                        self.window.dpi,
                                         @intCast(layoutBox.style.fontSize),
                                     );
 
@@ -2809,13 +2833,13 @@ pub const Renderer = struct {
 
                             const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
                             const resolutionMultiplier = Vec2{
-                                @as(f32, @floatFromInt(self.dpi[0])) / 72.0,
-                                @as(f32, @floatFromInt(self.dpi[1])) / 72.0,
+                                @as(f32, @floatFromInt(self.window.dpi[0])) / 72.0,
+                                @as(f32, @floatFromInt(self.window.dpi[1])) / 72.0,
                             };
                             const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
                             const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize * resolutionMultiplier[0];
 
-                            self.textPipeline.shaderBuffersMapped[self.framesRendered % maxFramesInFlight][glyphIndex] = TextPipeline.GlypRenderingShaderData{
+                            self.textPipeline.shaderBuffersMapped[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight][glyphIndex] = TextPipeline.GlypRenderingShaderData{
                                 .modelViewProjectionMatrix = zmath.mul(
                                     zmath.mul(
                                         zmath.scaling(width, height, 1.0),
@@ -2844,30 +2868,30 @@ pub const Renderer = struct {
             }
 
             c.vkCmdBindPipeline(
-                self.commandBuffers[self.framesRendered % maxFramesInFlight],
+                self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 self.textPipeline.graphicsPipeline,
             );
 
             c.vkCmdBindDescriptorSets(
-                self.commandBuffers[self.framesRendered % maxFramesInFlight],
+                self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 self.textPipeline.pipelineLayout,
                 0,
                 1,
-                &self.textPipeline.descriptorSets[self.framesRendered % maxFramesInFlight],
+                &self.textPipeline.descriptorSets[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
                 0,
                 null,
             );
 
-            c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRendered % maxFramesInFlight], 0, 1, &self.textPipeline.glyphModel.vertexBuffer.handle, &@intCast(0));
-            c.vkCmdDraw(self.commandBuffers[self.framesRendered % maxFramesInFlight], self.textPipeline.glyphModel.vertexCount, @intCast(totalGlyphCount), 0, 0);
+            c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight], 0, 1, &self.textPipeline.glyphModel.vertexBuffer.handle, &@intCast(0));
+            c.vkCmdDraw(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight], self.textPipeline.glyphModel.vertexCount, @intCast(totalGlyphCount), 0, 0);
         }
 
-        c.vkCmdEndRenderPass(self.commandBuffers[self.framesRendered % maxFramesInFlight]);
-        try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRendered % maxFramesInFlight]));
+        c.vkCmdEndRenderPass(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight]);
+        try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight]));
 
-        const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.framesRendered % maxFramesInFlight]};
+        const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight]};
         const renderFinishedSemaphores = self.renderFinishedSemaphores;
         const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphores[framebuffer_index]};
         const waitStages: []const c.VkPipelineStageFlags = &.{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -2882,11 +2906,11 @@ pub const Renderer = struct {
                 .pWaitSemaphores = waitSemaphores.ptr,
                 .pWaitDstStageMask = waitStages.ptr,
                 .commandBufferCount = 1,
-                .pCommandBuffers = &self.commandBuffers[self.framesRendered % maxFramesInFlight],
+                .pCommandBuffers = &self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
                 .signalSemaphoreCount = @intCast(signalSemaphores.len),
                 .pSignalSemaphores = signalSemaphores.ptr,
             },
-            self.inFlightFences[self.framesRendered % maxFramesInFlight],
+            self.inFlightFences[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
         ));
 
         try ensureNoError(c.vkQueuePresentKHR(self.presentationQueue, &c.VkPresentInfoKHR{
@@ -2899,10 +2923,19 @@ pub const Renderer = struct {
             .pResults = null,
         }));
 
-        self.framesRendered += 1;
-        if (self.framesRendered == 50) {
-            if (builtin.os.tag == .linux) {
-                std.log.debug("fifty frames rendered, trimming memory {d}", .{c.malloc_trim(0)});
+        self.framesRenderedSinceSwapChainCreation += 1;
+        // We cap this because the driver's native Vulkan "frame rate capper"
+        // can be disabled causing a "slow motion" effect during swapchain
+        // recreation (generally done in window resizing)
+        if (self.framesRenderedSinceSwapChainCreation < 50) {
+            try self.frameRateCapper.cap(self.window.targetFrameTimeNs());
+        }
+        if (self.framesRenderedSinceSwapChainCreation == 50) {
+            switch (builtin.os.tag) {
+                .linux => {
+                    std.log.debug("fifty frames rendered, trimming memory {d}", .{c.malloc_trim(0)});
+                },
+                else => {}
             }
         }
     }
@@ -2995,19 +3028,7 @@ pub const Renderer = struct {
                 }
             }
 
-            var presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
-            for (swapchainSupportDetails.presentModes) |availablePresentMode| {
-                if (availablePresentMode == c.VK_PRESENT_MODE_MAILBOX_KHR) {
-                    presentMode = availablePresentMode;
-                    break;
-                }
-            }
-            if (presentMode == c.VK_PRESENT_MODE_FIFO_KHR) {
-                std.log.warn(
-                    \\Was not able to use the most optimzied presentation mode (mailbox). 
-                    \\Thus, to avoid slow downs on window resize, the application will generally be cap the frame again.
-                , .{});
-            }
+            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
 
             var swapchainExtent: c.VkExtent2D = swapchainSupportDetails.capabilities.currentExtent;
             if (swapchainExtent.width == std.math.maxInt(u32)) {
