@@ -2,6 +2,7 @@
 // This provides clean Zig bindings for the Windows APIs needed for windowing
 
 const std = @import("std");
+const c = @import("../c.zig").c;
 
 // Basic Windows types
 pub const BOOL = c_int;
@@ -274,3 +275,74 @@ pub const CREATESTRUCTW = extern struct {
     lpszClass: ?LPCWSTR,
     dwExStyle: DWORD,
 };
+
+// Monitor functions
+pub const HMONITOR = ?HANDLE;
+
+pub const MONITOR_DEFAULTTONULL: DWORD = 0x00000000;
+pub const MONITOR_DEFAULTTOPRIMARY: DWORD = 0x00000001;
+pub const MONITOR_DEFAULTTONEAREST: DWORD = 0x00000002;
+
+pub const MONITORINFOEXW = extern struct {
+    cbSize: DWORD = @sizeOf(MONITORINFOEXW),
+    rcMonitor: RECT = .{},
+    rcWork: RECT = .{},
+    dwFlags: DWORD = 0,
+    szDevice: [32]u16 = [_]u16{0} ** 32,
+};
+
+pub const DEVMODEW = extern struct {
+    dmDeviceName: [32]u16 = [_]u16{0} ** 32,
+    dmSpecVersion: WORD = 0,
+    dmDriverVersion: WORD = 0,
+    dmSize: WORD = @sizeOf(DEVMODEW),
+    dmDriverExtra: WORD = 0,
+    dmFields: DWORD = 0,
+    // Union of POINTL/display settings - using anonymous struct for display settings
+    dmPosition: POINT = .{},
+    dmDisplayOrientation: DWORD = 0,
+    dmDisplayFixedOutput: DWORD = 0,
+    dmColor: i16 = 0,
+    dmDuplex: i16 = 0,
+    dmYResolution: i16 = 0,
+    dmTTOption: i16 = 0,
+    dmCollate: i16 = 0,
+    dmFormName: [32]u16 = [_]u16{0} ** 32,
+    dmLogPixels: WORD = 0,
+    dmBitsPerPel: DWORD = 0,
+    dmPelsWidth: DWORD = 0,
+    dmPelsHeight: DWORD = 0,
+    dmDisplayFlags: DWORD = 0,
+    dmDisplayFrequency: DWORD = 0,
+    dmICMMethod: DWORD = 0,
+    dmICMIntent: DWORD = 0,
+    dmMediaType: DWORD = 0,
+    dmDitherType: DWORD = 0,
+    dmReserved1: DWORD = 0,
+    dmReserved2: DWORD = 0,
+    dmPanningWidth: DWORD = 0,
+    dmPanningHeight: DWORD = 0,
+};
+
+pub const ENUM_CURRENT_SETTINGS: DWORD = 0xFFFFFFFF;
+
+pub extern "user32" fn MonitorFromWindow(hwnd: HWND, dwFlags: DWORD) callconv(.c) HMONITOR;
+pub extern "user32" fn GetMonitorInfoW(hMonitor: HMONITOR, lpmi: *MONITORINFOEXW) callconv(.c) BOOL;
+pub extern "user32" fn EnumDisplaySettingsW(lpszDeviceName: [*:0]const u16, iModeNum: DWORD, lpDevMode: *DEVMODEW) callconv(.c) BOOL;
+
+// Vulkan
+pub const VkWin32SurfaceCreateFlagsKHR = c.VkFlags;
+pub const VkWin32SurfaceCreateInfoKHR = extern struct {
+    sType: c.VkStructureType,
+    pNext: ?*const anyopaque,
+    flags: VkWin32SurfaceCreateFlagsKHR,
+    hinstance: HINSTANCE,
+    hwnd: HWND,
+};
+
+pub extern "vulkan" fn vkCreateWin32SurfaceKHR(
+    instance: c.VkInstance,
+    pCreateInfo: ?*const VkWin32SurfaceCreateInfoKHR,
+    pAllocator: ?*c.VkAllocationCallbacks,
+    pSurface: ?*c.VkSurfaceKHR,
+) c.VkResult;
