@@ -124,11 +124,19 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
     switch (message) {
         win32.WM_SIZING => {
             if (window) |self| {
-                const rect: *win32.RECT = @ptrFromInt(@as(usize, @intCast(lParam)));
-                self.width = @intCast(rect.right - rect.left);
-                self.height = @intCast(rect.bottom - rect.top);
-                if (self.handlers.resize) |handler| {
-                    handler.function(self, self.width, self.height, self.dpi, handler.data);
+                var clientRect: win32.RECT = undefined;
+                if (win32.GetClientRect(hwnd, &clientRect) == 0) {
+                    std.log.warn("failed to get the client rectangle for the current window, ignoring resize", .{});
+                } else {
+                    const newWidth: u32 = @intCast(clientRect.right - clientRect.left);
+                    const newHeight: u32 = @intCast(clientRect.bottom - clientRect.top);
+                    if (self.width != newWidth and self.height != newHeight) {
+                        self.width = newWidth;
+                        self.height = newHeight;
+                        if (self.handlers.resize) |handler| {
+                            handler.function(self, self.width, self.height, self.dpi, handler.data);
+                        }
+                    }
                 }
             }
         },
