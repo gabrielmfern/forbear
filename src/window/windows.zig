@@ -1,5 +1,5 @@
 const std = @import("std");
-const win32 = @import("windows/win32.zig");
+const win32 = @import("../windows/win32.zig");
 
 handle: win32.HWND,
 hInstance: win32.HINSTANCE,
@@ -11,7 +11,22 @@ className: [:0]const u16,
 running: bool,
 dpi: [2]u32,
 
+handlers: Handlers,
+
 allocator: std.mem.Allocator,
+
+pub const Handlers = struct {
+    resize: ?struct {
+        data: *anyopaque,
+        function: *const fn (
+            window: *@This(),
+            newWidth: u32,
+            newHeight: u32,
+            newDpi: [2]u32,
+            data: *anyopaque,
+        ) void,
+    } = null,
+};
 
 pub fn init(
     width: u32,
@@ -110,12 +125,18 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                 const rect: *win32.RECT = @ptrFromInt(@as(usize, @intCast(lParam)));
                 self.width = @intCast(rect.right - rect.left);
                 self.height = @intCast(rect.bottom - rect.top);
+                if (self.handlers.resize) |handler| {
+                    handler.function(self, self.width, self.height, self.dpi, handler.data);
+                }
             }
         },
         win32.WM_DPICHANGED => {
             if (window) |self| {
                 const dpi = win32.HIWORD(@intCast(lParam));
                 self.dpi = .{ @intCast(dpi), @intCast(dpi) };
+                if (self.handlers.resize) |handler| {
+                    handler.function(self, self.width, self.height, self.dpi, handler.data);
+                }
             }
         },
         win32.WM_DESTROY => {
@@ -139,11 +160,56 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
     return 0;
 }
 
+pub fn setResizeHandler(
+    self: *@This(),
+    handler: *const fn (
+        window: *@This(),
+        newWidth: u32,
+        newHeight: u32,
+        newDpi: [2]u32,
+        data: *anyopaque,
+    ) void,
+    data: *anyopaque,
+) void {
+    self.handlers.resize = .{
+        .data = data,
+        .function = handler,
+    };
+}
+
+pub fn targetFrameTimeNs(self: *const @This()) u64 {
+    const fallback_60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
+
+    // Get the monitor that contains most of this window
+    const monitor = win32.MonitorFromWindow(self.handle, win32.MONITOR_DEFAULTTONEAREST);
+    if (monitor == null) {
+        return fallback_60hz;
+    }
+
+    // Get monitor info to retrieve the device name
+    var monitorInfo: win32.MONITORINFOEXW = .{};
+    if (win32.GetMonitorInfoW(monitor, &monitorInfo) == 0) {
+        return fallback_60hz;
+    }
+
+    // Get current display settings for this monitor
+    var devMode: win32.DEVMODEW = .{};
+    if (win32.EnumDisplaySettingsW(@ptrCast(&monitorInfo.szDevice), win32.ENUM_CURRENT_SETTINGS, &devMode) == 0) {
+        return fallback_60hz;
+    }
+
+    const refreshRate = devMode.dmDisplayFrequency;
+    if (refreshRate == 0 or refreshRate == 1) {
+        // 0 or 1 means default/unknown
+        return fallback_60hz;
+    }
+
+    return @divTrunc(1_000_000_000, @as(u64, refreshRate));
+}
+
 pub fn handleEvents(self: *@This()) !void {
     var message: win32.MSG = undefined;
-    std.log.debug("get message started", .{});
     if (win32.GetMessageW(&message, self.handle, 0, 0) > 0) {
-        std.log.debug("get message returned", .{});
         _ = win32.TranslateMessage(&message);
         _ = win32.DispatchMessageW(&message);
     } else {
