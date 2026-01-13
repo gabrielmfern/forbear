@@ -2642,14 +2642,21 @@ pub const Renderer = struct {
         ));
         try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight]));
         var imageIndex: u32 = undefined;
-        try ensureNoError(c.vkAcquireNextImageKHR(
+        ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
             self.swapchain.handle,
             std.math.maxInt(u64),
             self.imageAvailableSemaphores[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight],
             null,
             &imageIndex,
-        ));
+        )) catch |err| {
+            if (err == error.OutOfDate) {
+                try self.recreateSwapchain(self.window.width, self.window.height);
+                return;
+            } else {
+                return err;
+            }
+        };
 
         try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRenderedSinceSwapChainCreation % maxFramesInFlight], 0));
 
@@ -3030,21 +3037,18 @@ pub const Renderer = struct {
 
             const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
 
-            var swapchainExtent: c.VkExtent2D = swapchainSupportDetails.capabilities.currentExtent;
-            if (swapchainExtent.width == std.math.maxInt(u32)) {
-                swapchainExtent = c.VkExtent2D{
-                    .width = std.math.clamp(
-                        width,
-                        swapchainSupportDetails.capabilities.minImageExtent.width,
-                        swapchainSupportDetails.capabilities.maxImageExtent.width,
-                    ),
-                    .height = std.math.clamp(
-                        height,
-                        swapchainSupportDetails.capabilities.minImageExtent.height,
-                        swapchainSupportDetails.capabilities.maxImageExtent.height,
-                    ),
-                };
-            }
+            const swapchainExtent = c.VkExtent2D{
+                .width = std.math.clamp(
+                    width,
+                    swapchainSupportDetails.capabilities.minImageExtent.width,
+                    swapchainSupportDetails.capabilities.maxImageExtent.width,
+                ),
+                .height = std.math.clamp(
+                    height,
+                    swapchainSupportDetails.capabilities.minImageExtent.height,
+                    swapchainSupportDetails.capabilities.maxImageExtent.height,
+                ),
+            };
 
             var imageCount: u32 = swapchainSupportDetails.capabilities.minImageCount + 1;
             if (swapchainSupportDetails.capabilities.maxImageCount > 0 and imageCount > swapchainSupportDetails.capabilities.maxImageCount) {
