@@ -16,12 +16,12 @@
 //!     self: *@This(),
 //!     handler: *const fn (
 //!         window: *@This(),
-//!         new_width: u32,
-//!         new_height: u32,
-//!         new_dpi: [2]u32,
-//!         data: *anyopaque
-//!     ),
-//!     data: *anyopaque
+//!         newWidth: u32,
+//!         newHeight: u32,
+//!         newDpi: [2]u32,
+//!         data: *anyopaque,
+//!     ) void,
+//!     data: *anyopaque,
 //! ) void
 //!
 //! fn handleEvents(self: *@This()) !void
