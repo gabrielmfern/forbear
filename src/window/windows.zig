@@ -15,11 +15,13 @@ handlers: Handlers,
 
 allocator: std.mem.Allocator,
 
+const Self = @This();
+
 pub const Handlers = struct {
     resize: ?struct {
         data: *anyopaque,
         function: *const fn (
-            window: *@This(),
+            window: *Self,
             newWidth: u32,
             newHeight: u32,
             newDpi: [2]u32,
@@ -132,7 +134,7 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
         },
         win32.WM_DPICHANGED => {
             if (window) |self| {
-                const dpi = win32.HIWORD(@intCast(lParam));
+                const dpi: u16 = @truncate(@as(u32, @intCast(lParam)));
                 self.dpi = .{ @intCast(dpi), @intCast(dpi) };
                 if (self.handlers.resize) |handler| {
                     handler.function(self, self.width, self.height, self.dpi, handler.data);

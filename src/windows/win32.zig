@@ -235,9 +235,6 @@ pub extern "user32" fn InvalidateRect(hWnd: HWND, lpRect: ?*const RECT, bErase: 
 pub extern "user32" fn GetDC(hWnd: HWND) callconv(.c) HDC;
 pub extern "user32" fn ReleaseDC(hWnd: HWND, hDC: HDC) callconv(.c) c_int;
 
-pub extern "user32" fn LOWORD(l: DWORD) callconv(.c) WORD;
-pub extern "user32" fn HIWORD(l: DWORD) callconv(.c) WORD;
-
 // DPI awareness
 pub const DPI_AWARENESS_CONTEXT = ?HANDLE;
 pub const DPI_AWARENESS_CONTEXT_UNAWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))));
