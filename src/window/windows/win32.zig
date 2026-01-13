@@ -117,6 +117,7 @@ pub const WM_NULL: UINT = 0x0000;
 pub const WM_NCCREATE: UINT = 0x0081;
 pub const WM_CREATE: UINT = 0x0001;
 pub const WM_DESTROY: UINT = 0x0002;
+pub const WM_DPICHANGED: UINT = 0x02E0;
 pub const WM_MOVE: UINT = 0x0003;
 pub const WM_SIZE: UINT = 0x0005;
 pub const WM_SIZING: UINT = 0x0214;
@@ -237,7 +238,16 @@ pub extern "user32" fn LOWORD(l: DWORD) callconv(.c) WORD;
 pub extern "user32" fn HIWORD(l: DWORD) callconv(.c) WORD;
 
 // DPI awareness
+pub const DPI_AWARENESS_CONTEXT = ?HANDLE;
+pub const DPI_AWARENESS_CONTEXT_UNAWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))));
+pub const DPI_AWARENESS_CONTEXT_SYSTEM_AWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -2))));
+pub const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -3))));
+pub const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -4))));
+pub const DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -5))));
+
 pub extern "user32" fn GetDpiForWindow(hwnd: HWND) callconv(.c) UINT;
+pub extern "user32" fn SetThreadDpiAwarenessContext(dpiContext: DPI_AWARENESS_CONTEXT) callconv(.c) DPI_AWARENESS_CONTEXT;
+pub extern "user32" fn SetProcessDpiAwarenessContext(value: DPI_AWARENESS_CONTEXT) callconv(.c) BOOL;
 
 // Window long ptr indices
 pub const GWLP_WNDPROC: c_int = -4;
