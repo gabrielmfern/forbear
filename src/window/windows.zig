@@ -69,7 +69,7 @@ pub fn init(
         null,
         null,
         window.hInstance,
-        null,
+        window,
     ) orelse return error.FailedToCreateWindow;
 
     return window;
@@ -84,17 +84,38 @@ pub fn deinit(self: *@This()) void {
 }
 
 fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: win32.LPARAM) callconv(.c) win32.LRESULT {
+    // Handle WM_NCCREATE to store the window pointer
+    if (message == win32.WM_NCCREATE) {
+        const createStruct: *win32.CREATESTRUCTW = @ptrFromInt(@as(usize, @bitCast(lParam)));
+        const window: *@This() = @ptrCast(@alignCast(createStruct.lpCreateParams));
+        _ = win32.SetWindowLongPtrW(hwnd, win32.GWLP_USERDATA, @bitCast(@intFromPtr(window)));
+        return win32.DefWindowProcW(hwnd, message, wParam, lParam);
+    }
+
+    // Retrieve the window pointer for all other messages
+    const window: ?*@This() = blk: {
+        const ptr = win32.GetWindowLongPtrW(hwnd, win32.GWLP_USERDATA);
+        break :blk if (ptr == 0) null else @ptrFromInt(@as(usize, @bitCast(ptr)));
+    };
+
     switch (message) {
-        win32.WM_SIZE => {
-            std.log.debug("size", .{});
+        win32.WM_SIZING => {
+            std.log.debug("sizing", .{});
+            if (window) |self| {
+                const rect: *win32.RECT = @ptrFromInt(@as(usize, @intCast(lParam)));
+                self.width = @intCast(rect.right - rect.left);
+                self.height = @intCast(rect.bottom - rect.top);
+            }
         },
         win32.WM_DESTROY => {
-            std.log.debug("destroy", .{});
-            win32.PostQuitMessage(0);
+            if (window) |self| {
+                self.running = false;
+            }
         },
         win32.WM_CLOSE => {
-            std.log.debug("close", .{});
-            win32.PostQuitMessage(0);
+            if (window) |self| {
+                self.running = false;
+            }
         },
         win32.WM_ACTIVATEAPP => {
             std.log.debug("activate app", .{});
@@ -109,7 +130,9 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
 
 pub fn handleEvents(self: *@This()) !void {
     var message: win32.MSG = undefined;
-    if (win32.GetMessageW(&message, null, 0, 0) > 0) {
+    std.log.debug("get message started", .{});
+    if (win32.GetMessageW(&message, self.handle, 0, 0) > 0) {
+        std.log.debug("get message returned", .{});
         _ = win32.TranslateMessage(&message);
         _ = win32.DispatchMessageW(&message);
     } else {

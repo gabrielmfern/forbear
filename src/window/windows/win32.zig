@@ -114,10 +114,12 @@ pub const CS_GLOBALCLASS: UINT = 0x4000;
 
 // Window messages
 pub const WM_NULL: UINT = 0x0000;
+pub const WM_NCCREATE: UINT = 0x0081;
 pub const WM_CREATE: UINT = 0x0001;
 pub const WM_DESTROY: UINT = 0x0002;
 pub const WM_MOVE: UINT = 0x0003;
 pub const WM_SIZE: UINT = 0x0005;
+pub const WM_SIZING: UINT = 0x0214;
 pub const WM_ACTIVATE: UINT = 0x0006;
 pub const WM_SETFOCUS: UINT = 0x0007;
 pub const WM_KILLFOCUS: UINT = 0x0008;
@@ -231,5 +233,34 @@ pub extern "user32" fn InvalidateRect(hWnd: HWND, lpRect: ?*const RECT, bErase: 
 pub extern "user32" fn GetDC(hWnd: HWND) callconv(.c) HDC;
 pub extern "user32" fn ReleaseDC(hWnd: HWND, hDC: HDC) callconv(.c) c_int;
 
+pub extern "user32" fn LOWORD(l: DWORD) callconv(.c) WORD;
+pub extern "user32" fn HIWORD(l: DWORD) callconv(.c) WORD;
+
 // DPI awareness
 pub extern "user32" fn GetDpiForWindow(hwnd: HWND) callconv(.c) UINT;
+
+// Window long ptr indices
+pub const GWLP_WNDPROC: c_int = -4;
+pub const GWLP_HINSTANCE: c_int = -6;
+pub const GWLP_HWNDPARENT: c_int = -8;
+pub const GWLP_USERDATA: c_int = -21;
+pub const GWLP_ID: c_int = -12;
+
+pub extern "user32" fn SetWindowLongPtrW(hWnd: HWND, nIndex: c_int, dwNewLong: LONG_PTR) callconv(.c) LONG_PTR;
+pub extern "user32" fn GetWindowLongPtrW(hWnd: HWND, nIndex: c_int) callconv(.c) LONG_PTR;
+
+// CREATESTRUCT for WM_CREATE/WM_NCCREATE
+pub const CREATESTRUCTW = extern struct {
+    lpCreateParams: LPVOID,
+    hInstance: HINSTANCE,
+    hMenu: HMENU,
+    hwndParent: HWND,
+    cy: c_int,
+    cx: c_int,
+    y: c_int,
+    x: c_int,
+    style: LONG,
+    lpszName: ?LPCWSTR,
+    lpszClass: ?LPCWSTR,
+    dwExStyle: DWORD,
+};
