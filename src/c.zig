@@ -2,8 +2,23 @@ const builtin = @import("builtin");
 
 pub const c = @cImport({
     switch (builtin.os.tag) {
+        .windows => {
+            @cDefine("VK_USE_PLATFORM_WIN32_KHR", "1");
+        },
         .linux => {
             @cDefine("VK_USE_PLATFORM_WAYLAND_KHR", "1");
+        },
+        .macos => {
+            @cDefine("VK_USE_PLATFORM_METAL_EXT", "1");
+        },
+        else => {},
+    }
+
+    @cInclude("vulkan/vulkan.h");
+
+    switch (builtin.os.tag) {
+        .linux => {
+            @cInclude("vulkan/vulkan_wayland.h");
 
             @cInclude("malloc.h");
 
@@ -11,24 +26,16 @@ pub const c = @cImport({
             @cInclude("wayland-cursor.h");
             @cInclude("xkbcommon/xkbcommon.h");
             @cInclude("xdg-shell-client-protocol.h");
-            @cInclude("vulkan/vulkan_wayland.h");
             @cInclude("fractional-scale-v1-client-protocol.h");
             @cInclude("viewporter-client-protocol.h");
         },
         .macos => {
-            @cDefine("VK_USE_PLATFORM_METAL_EXT", "1");
-
             @cInclude("objc/objc.h");
             @cInclude("objc/runtime.h");
             @cInclude("objc/message.h");
 
             @cInclude("vulkan/vulkan_metal.h");
         },
-        .windows => {
-            @cDefine("VK_USE_PLATFORM_WIN32_KHR", "1");
-        },
-        else => @compileError("Unsupported OS"),
+        else => {}
     }
-
-    @cInclude("vulkan/vulkan.h");
 });
