@@ -6,7 +6,6 @@
 //! width: u32
 //! height: u32
 //! running: bool
-//! scale: u32
 //! dpi: [2]u32
 //!
 //! fn init(width: u32, height: u32, title: [:0]const u8, app_id: [:0]const u8, allocator: std.mem.Allocator) void
@@ -19,7 +18,6 @@
 //!         window: *@This(),
 //!         new_width: u32,
 //!         new_height: u32,
-//!         new_scale: u32,
 //!         new_dpi: [2]u32,
 //!         data: *anyopaque
 //!     ),
