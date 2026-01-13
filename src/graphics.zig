@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const zmath = @import("zmath");
 
 const c = @import("c.zig").c;
+const win32 = @import("windows/win32.zig");
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
@@ -151,13 +152,12 @@ pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graph
     const requestedInstanceExtensions: []const [*c]const u8 = &(.{
         c.VK_KHR_SURFACE_EXTENSION_NAME,
     } ++ (if (builtin.mode == .Debug) .{c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME} else .{}) ++ switch (builtin.os.tag) {
-        .linux => .{
-            "VK_KHR_wayland_surface",
-        },
+        .linux => .{"VK_KHR_wayland_surface"},
         .macos => .{
             c.VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
             "VK_EXT_metal_surface",
         },
+        .windows => .{"VK_KHR_win32_surface"},
         else => .{},
     });
 
@@ -415,12 +415,26 @@ pub fn initRenderer(
                 &vulkanSurface,
             ));
         },
+        .windows => {
+            try ensureNoError(win32.vkCreateWin32SurfaceKHR(
+                self.vulkanInstance,
+                &win32.VkWin32SurfaceCreateInfoKHR{
+                    .sType = c.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+                    .pNext = null,
+                    .flags = 0,
+                    .hinstance = window.hInstance,
+                    .hwnd = window.handle,
+                },
+                null,
+                &vulkanSurface,
+            ));
+        },
         else => @compileError("Unsupported platform"),
     }
     std.debug.assert(vulkanSurface != null);
     errdefer c.vkDestroySurfaceKHR(self.vulkanInstance, vulkanSurface, null);
 
-    return try Renderer.init(vulkanSurface, self, window.width, window.height, window.scale, window.dpi);
+    return try Renderer.init(vulkanSurface, self, window.width, window.height, window.dpi);
 }
 
 fn findMemoryType(
@@ -2130,7 +2144,7 @@ pub const Renderer = struct {
     framesRendered: usize,
     dpi: [2]u32,
 
-    pub fn recreateSwapchain(self: *Self, width: u32, height: u32, scale: u32, dpi: [2]u32) !void {
+    pub fn recreateSwapchain(self: *Self, width: u32, height: u32, dpi: [2]u32) !void {
         self.dpi = dpi;
         try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
         const previousSwapchain = self.swapchain;
@@ -2143,8 +2157,8 @@ pub const Renderer = struct {
             self.graphicsQueueFamilyIndex,
             self.graphicsQueue,
             self.surface,
-            (width * scale) / 120,
-            (height * scale) / 120,
+            width,
+            height,
             self.allocator,
             previousSwapchain,
         );
@@ -2201,7 +2215,6 @@ pub const Renderer = struct {
         graphics: *const Graphics,
         width: u32,
         height: u32,
-        scale: u32,
         dpi: [2]u32,
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
@@ -2369,8 +2382,8 @@ pub const Renderer = struct {
             graphicsQueueFamilyIndex,
             graphicsQueue,
             surface,
-            (width * scale) / 120,
-            (height * scale) / 120,
+            width,
+            height,
             graphics.allocator,
             null,
         );
@@ -2558,8 +2571,8 @@ pub const Renderer = struct {
     pub fn setupResizingHandler(self: *Self, window: *Window) void {
         window.setResizeHandler(
             (struct {
-                fn handler(_: *Window, new_width: u32, new_height: u32, new_scale: u32, new_dpi: [2]u32, data: *anyopaque) void {
-                    recreateSwapchain(@ptrCast(@alignCast(data)), new_width, new_height, new_scale, new_dpi) catch |err| {
+                fn handler(_: *Window, newWidth: u32, newHeight: u32, newDpi: [2]u32, data: *anyopaque) void {
+                    recreateSwapchain(@ptrCast(@alignCast(data)), newWidth, newHeight, newDpi) catch |err| {
                         std.log.err("Failed to recreate swapchain on window resize {}", .{err});
                         @panic("Failed to recreate swapchain on window resize");
                     };
