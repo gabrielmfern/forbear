@@ -9,7 +9,6 @@ height: u32,
 title: [:0]const u16,
 className: [:0]const u16,
 running: bool,
-scale: u32,
 dpi: [2]u32,
 
 allocator: std.mem.Allocator,
@@ -31,8 +30,6 @@ pub fn init(
     window.className = try std.unicode.utf8ToUtf16LeAllocZ(allocator, app_id);
     errdefer allocator.free(window.className);
     window.running = true;
-    window.scale = 120;
-    window.dpi = .{ 96, 96 };
 
     window.allocator = allocator;
 
@@ -72,7 +69,16 @@ pub fn init(
         window,
     ) orelse return error.FailedToCreateWindow;
 
+    _ = win32.SetThreadDpiAwarenessContext(win32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+    window.updateDpi();
+
     return window;
+}
+
+fn updateDpi(self: *@This()) void {
+    const dpi = win32.GetDpiForWindow(self.handle);
+    self.dpi = .{ dpi, dpi };
 }
 
 pub fn deinit(self: *@This()) void {
@@ -100,11 +106,16 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
 
     switch (message) {
         win32.WM_SIZING => {
-            std.log.debug("sizing", .{});
             if (window) |self| {
                 const rect: *win32.RECT = @ptrFromInt(@as(usize, @intCast(lParam)));
                 self.width = @intCast(rect.right - rect.left);
                 self.height = @intCast(rect.bottom - rect.top);
+            }
+        },
+        win32.WM_DPICHANGED => {
+            if (window) |self| {
+                const dpi = win32.HIWORD(@intCast(lParam));
+                self.dpi = .{ @intCast(dpi), @intCast(dpi) };
             }
         },
         win32.WM_DESTROY => {
