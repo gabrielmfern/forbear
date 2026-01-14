@@ -213,13 +213,12 @@ pub fn targetFrameTimeNs(self: *const @This()) u64 {
 }
 
 pub fn handleEvents(self: *@This()) !void {
-    while (self.running) {
-        var message: win32.MSG = undefined;
-        if (win32.GetMessageW(&message, self.handle, 0, 0) != 0) {
-            _ = win32.TranslateMessage(&message);
-            _ = win32.DispatchMessageW(&message);
-        } else {
+    var message: win32.MSG = undefined;
+    if (win32.PeekMessageW(&message, self.handle, 0, 0, win32.PM_REMOVE) != 0) {
+        if (message.message == win32.WM_QUIT) {
             self.running = false;
         }
+        _ = win32.TranslateMessage(&message);
+        _ = win32.DispatchMessageW(&message);
     }
 }
