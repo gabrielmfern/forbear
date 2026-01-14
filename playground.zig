@@ -28,7 +28,7 @@ pub fn main() !void {
 
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
-    renderer.setupResizingHandler(window);
+    window.setResizeHandler(&resizeHandler, &renderer);
 
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
     defer arenaAllocator.deinit();
@@ -43,6 +43,7 @@ pub fn main() !void {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
         try window.handleEvents();
+        std.log.debug("events handled, rendering", .{});
         const node = forbear.div(.{
             .style = .{
                 .preferredWidth = .grow,
@@ -71,7 +72,7 @@ pub fn main() !void {
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             arena,
         );
-        try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 });
+        try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
 
         const newCurrentTime = std.time.nanoTimestamp();
         const deltaTime = newCurrentTime - time;
@@ -79,4 +80,14 @@ pub fn main() !void {
         fps = @intFromFloat(@round(@as(f64, @floatFromInt(std.time.ns_per_s)) / @as(f64, @floatFromInt(deltaTime))));
     }
     try renderer.waitIdle();
+}
+
+fn resizeHandler(window: *forbear.Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
+    _ = dpi;
+    _ = window;
+
+    const renderer: *forbear.Graphics.Renderer = @ptrCast(@alignCast(data));
+    renderer.handleResize(width, height) catch |err| {
+        std.log.err("renderer could not handle window resize {}", .{err});
+    };
 }
