@@ -122,20 +122,15 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
     };
 
     switch (message) {
-        win32.WM_SIZING => {
+        win32.WM_SIZE => {
             if (window) |self| {
-                var clientRect: win32.RECT = undefined;
-                if (win32.GetClientRect(hwnd, &clientRect) == 0) {
-                    std.log.warn("failed to get the client rectangle for the current window, ignoring resize", .{});
-                } else {
-                    const newWidth: u32 = @intCast(clientRect.right - clientRect.left);
-                    const newHeight: u32 = @intCast(clientRect.bottom - clientRect.top);
-                    if (self.width != newWidth and self.height != newHeight) {
-                        self.width = newWidth;
-                        self.height = newHeight;
-                        if (self.handlers.resize) |handler| {
-                            handler.function(self, self.width, self.height, self.dpi, handler.data);
-                        }
+                const newWidth: u16 = @truncate(@as(u32, @intCast(lParam)));
+                const newHeight: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
+                if (self.width != @as(u32, @intCast(newWidth)) or self.height != @as(u32, @intCast(newHeight))) {
+                    self.width = @intCast(newWidth);
+                    self.height = @intCast(newHeight);
+                    if (self.handlers.resize) |handler| {
+                        handler.function(self, self.width, self.height, self.dpi, handler.data);
                     }
                 }
             }
@@ -218,13 +213,13 @@ pub fn targetFrameTimeNs(self: *const @This()) u64 {
 }
 
 pub fn handleEvents(self: *@This()) !void {
-    var message: win32.MSG = undefined;
-    while (win32.PeekMessageW(&message, self.handle, 0, 0, win32.PM_REMOVE) != 0) {
-        if (message.message == win32.WM_QUIT) {
+    while (self.running) {
+        var message: win32.MSG = undefined;
+        if (win32.GetMessageW(&message, self.handle, 0, 0) != 0) {
+            _ = win32.TranslateMessage(&message);
+            _ = win32.DispatchMessageW(&message);
+        } else {
             self.running = false;
-            return;
         }
-        _ = win32.TranslateMessage(&message);
-        _ = win32.DispatchMessageW(&message);
     }
 }
