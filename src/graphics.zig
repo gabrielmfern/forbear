@@ -105,7 +105,10 @@ pub fn ensureNoError(result: c.VkResult) !void {
         },
     }
 
-    std.debug.assert(result == c.VK_SUCCESS or result == c.VK_SUBOPTIMAL_KHR or result == c.VK_NOT_READY or result == c.VK_TIMEOUT);
+    if (result != c.VK_SUCCESS and result != c.VK_SUBOPTIMAL_KHR and result == c.VK_NOT_READY and result != c.VK_TIMEOUT) {
+        std.log.err("failed with an unexpected error {}", .{result});
+        unreachable;
+    }
 }
 
 pub fn CreateDebugUtilsMessengerEXT(
@@ -2170,10 +2173,16 @@ pub const Renderer = struct {
     height: u32,
 
     pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
-        try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
-        const previousSwapchain = self.swapchain;
+        try ensureNoError(c.vkWaitForFences(
+            self.logicalDevice,
+            2,
+            &self.inFlightFences,
+            c.VK_TRUE,
+            1_000,
+        ));
 
-        self.swapchain = try Swapchain.init(
+        errdefer self.swapchain.deinit(self.logicalDevice);
+        try self.swapchain.recreate(
             self.physicalDevice,
             self.logicalDevice,
             self.presentationQueueFamilyIndex,
@@ -2183,15 +2192,9 @@ pub const Renderer = struct {
             self.surface,
             width,
             height,
-            self.allocator,
-            previousSwapchain,
         );
-        errdefer self.swapchain.deinit(self.logicalDevice);
 
-        previousSwapchain.deinit(self.logicalDevice);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
-
-        // self.currentFrame = 0;
         self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
     }
 
@@ -2409,7 +2412,6 @@ pub const Renderer = struct {
             width,
             height,
             graphics.allocator,
-            null,
         );
         errdefer swapchain.deinit(logicalDevice);
 
@@ -2963,6 +2965,135 @@ pub const Renderer = struct {
             }
         };
 
+        fn recreate(
+            self: *@This(),
+            physicalDevice: c.VkPhysicalDevice,
+            logicalDevice: c.VkDevice,
+            presentationQueueFamilyIndex: u32,
+            presentationQueue: c.VkQueue,
+            graphicsQueueFamilyIndex: u32,
+            graphicsQueue: c.VkQueue,
+            surface: c.VkSurfaceKHR,
+            width: u32,
+            height: u32,
+        ) !void {
+            for (self.imageViews) |imageView| {
+                c.vkDestroyImageView(logicalDevice, imageView, null);
+            }
+
+            var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
+            try ensureNoError(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                physicalDevice,
+                surface,
+                &capabilities,
+            ));
+
+            var swapchainExtent: c.VkExtent2D = capabilities.currentExtent;
+            if (swapchainExtent.width == std.math.maxInt(u32)) {
+                swapchainExtent = c.VkExtent2D{
+                    .width = std.math.clamp(
+                        width,
+                        capabilities.minImageExtent.width,
+                        capabilities.maxImageExtent.width,
+                    ),
+                    .height = std.math.clamp(
+                        height,
+                        capabilities.minImageExtent.height,
+                        capabilities.maxImageExtent.height,
+                    ),
+                };
+            }
+
+            const previousHandle = self.handle;
+            try ensureNoError(c.vkCreateSwapchainKHR(
+                logicalDevice,
+                &c.VkSwapchainCreateInfoKHR{
+                    .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+                    .surface = surface,
+                    .minImageCount = capabilities.minImageCount,
+                    .imageFormat = self.surfaceFormat.format,
+                    .imageColorSpace = self.surfaceFormat.colorSpace,
+                    .imageExtent = swapchainExtent,
+                    .imageArrayLayers = 1,
+                    .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                    .imageSharingMode = if (presentationQueue == graphicsQueue)
+                        c.VK_SHARING_MODE_EXCLUSIVE
+                    else
+                        c.VK_SHARING_MODE_CONCURRENT,
+                    .queueFamilyIndexCount = if (presentationQueueFamilyIndex == graphicsQueueFamilyIndex) 0 else 2,
+                    .pQueueFamilyIndices = if (presentationQueueFamilyIndex == graphicsQueueFamilyIndex)
+                        null
+                    else
+                        &[_]u32{ graphicsQueueFamilyIndex, presentationQueueFamilyIndex },
+                    .preTransform = capabilities.currentTransform,
+                    .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+                    .presentMode = self.presentMode,
+                    .clipped = c.VK_TRUE,
+                    .oldSwapchain = self.handle,
+                },
+                null,
+                &self.handle,
+            ));
+            c.vkDestroySwapchainKHR(logicalDevice, previousHandle, null);
+            errdefer c.vkDestroySwapchainKHR(logicalDevice, self.handle, null);
+            std.debug.assert(self.handle != null);
+
+            var swapChainImagesLen: u32 = 0;
+            try ensureNoError(c.vkGetSwapchainImagesKHR(
+                logicalDevice,
+                self.handle,
+                &swapChainImagesLen,
+                null,
+            ));
+            _ = try self.allocator.realloc(self.images, swapChainImagesLen);
+            try ensureNoError(c.vkGetSwapchainImagesKHR(
+                logicalDevice,
+                self.handle,
+                &swapChainImagesLen,
+                self.images.ptr,
+            ));
+
+            if (self.images.len != self.imageViews.len) {
+                _ = try self.allocator.realloc(self.imageViews, self.images.len);
+            }
+            errdefer {
+                for (self.imageViews) |imageView| {
+                    if (imageView != null) {
+                        c.vkDestroyImageView(logicalDevice, imageView, null);
+                    }
+                }
+                self.allocator.free(self.imageViews);
+            }
+            for (self.images, 0..) |image, i| {
+                try ensureNoError(c.vkCreateImageView(
+                    logicalDevice,
+                    &c.VkImageViewCreateInfo{
+                        .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                        .image = image,
+                        .pNext = null,
+                        .flags = 0,
+                        .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+                        .format = self.surfaceFormat.format,
+                        .components = c.VkComponentMapping{
+                            .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        },
+                        .subresourceRange = c.VkImageSubresourceRange{
+                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                        },
+                    },
+                    null,
+                    &self.imageViews[i],
+                ));
+            }
+        }
+
         fn init(
             physicalDevice: c.VkPhysicalDevice,
             logicalDevice: c.VkDevice,
@@ -2974,7 +3105,6 @@ pub const Renderer = struct {
             width: u32,
             height: u32,
             allocator: std.mem.Allocator,
-            oldSwapchain: ?Swapchain,
         ) !Swapchain {
             var swapchainSupportDetails: SwapchainSupportDetails = undefined;
             swapchainSupportDetails.allocator = allocator;
@@ -3075,7 +3205,7 @@ pub const Renderer = struct {
                     .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
                     .presentMode = presentMode,
                     .clipped = c.VK_TRUE,
-                    .oldSwapchain = if (oldSwapchain) |prev| prev.handle else null,
+                    .oldSwapchain = null,
                 },
                 null,
                 &swapchain,
