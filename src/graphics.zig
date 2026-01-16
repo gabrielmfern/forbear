@@ -2173,29 +2173,68 @@ pub const Renderer = struct {
     height: u32,
 
     pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
-        try ensureNoError(c.vkWaitForFences(
-            self.logicalDevice,
-            2,
-            &self.inFlightFences,
-            c.VK_TRUE,
-            1_000,
-        ));
+        std.log.debug("swapchain recreation has began", .{});
+        const timestamp = std.time.milliTimestamp();
+        try self.waitIdle();
+        std.log.debug("spent {d}ms waiting for idle device", .{std.time.milliTimestamp() - timestamp});
 
-        errdefer self.swapchain.deinit(self.logicalDevice);
-        try self.swapchain.recreate(
+        // try ensureNoError(c.vkWaitForFences(
+        //     self.logicalDevice,
+        //     maxFramesInFlight,
+        //     &self.inFlightFences,
+        //     c.VK_TRUE,
+        //     std.math.maxInt(u64),
+        // ));
+        // try ensureNoError(c.vkResetFences(
+        //     self.logicalDevice,
+        //     maxFramesInFlight,
+        //     &self.inFlightFences,
+        // ));
+
+        const previousSwapchain = self.swapchain;
+        const recreateStart = std.time.milliTimestamp();
+        self.swapchain = try Swapchain.init(
             self.physicalDevice,
             self.logicalDevice,
-            self.presentationQueueFamilyIndex,
-            self.presentationQueue,
-            self.graphicsQueueFamilyIndex,
-            self.graphicsQueue,
             self.surface,
             width,
             height,
+            self.allocator,
+            previousSwapchain,
         );
+        errdefer self.swapchain.deinit(self.logicalDevice);
+        std.log.debug("spent {d}ms just recreating swapchain", .{std.time.milliTimestamp() - recreateStart});
+        previousSwapchain.deinit(self.logicalDevice);
 
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
+
         self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
+        std.log.debug("swapchain recreation took {d}ms", .{std.time.milliTimestamp() - timestamp});
+
+        for (self.renderFinishedSemaphores) |semaphore| {
+            c.vkDestroySemaphore(self.logicalDevice, semaphore, null);
+        }
+        self.renderFinishedSemaphores = try self.allocator.realloc(self.renderFinishedSemaphores, self.swapchain.images.len);
+        errdefer self.allocator.free(self.renderFinishedSemaphores);
+
+        for (self.renderFinishedSemaphores) |*semaphore| {
+            try ensureNoError(c.vkCreateSemaphore(
+                self.logicalDevice,
+                &c.VkSemaphoreCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                    .flags = 0,
+                    .pNext = null,
+                },
+                null,
+                semaphore,
+            ));
+        }
+        errdefer {
+            for (self.renderFinishedSemaphores) |semaphore| {
+                c.vkDestroySemaphore(self.logicalDevice, semaphore, null);
+            }
+        }
+        self.currentFrame = 0;
     }
 
     pub fn viewportSize(self: *Self) Vec2 {
@@ -2404,14 +2443,11 @@ pub const Renderer = struct {
         const swapchain = try Swapchain.init(
             physicalDevice,
             logicalDevice,
-            presentationQueueFamilyIndex,
-            presentationQueue,
-            graphicsQueueFamilyIndex,
-            graphicsQueue,
             surface,
             width,
             height,
             graphics.allocator,
+            null,
         );
         errdefer swapchain.deinit(logicalDevice);
 
@@ -2519,6 +2555,7 @@ pub const Renderer = struct {
                 &c.VkFenceCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
                     .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
+                    .pNext = null,
                 },
                 null,
                 &inFlightFences[i],
@@ -2528,6 +2565,8 @@ pub const Renderer = struct {
                 logicalDevice,
                 &c.VkSemaphoreCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                    .flags = 0,
+                    .pNext = null,
                 },
                 null,
                 &imageAvailableSemaphores[i],
@@ -2540,8 +2579,7 @@ pub const Renderer = struct {
             }
         }
 
-        const swapchain_images = swapchain.images;
-        const renderFinishedSemaphores = try graphics.allocator.alloc(c.VkSemaphore, swapchain_images.len);
+        const renderFinishedSemaphores = try graphics.allocator.alloc(c.VkSemaphore, swapchain.images.len);
         errdefer graphics.allocator.free(renderFinishedSemaphores);
 
         for (renderFinishedSemaphores) |*semaphore| {
@@ -2549,6 +2587,8 @@ pub const Renderer = struct {
                 logicalDevice,
                 &c.VkSemaphoreCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                    .flags = 0,
+                    .pNext = null,
                 },
                 null,
                 semaphore,
@@ -2641,7 +2681,7 @@ pub const Renderer = struct {
             c.VK_TRUE,
             std.math.maxInt(u64),
         ));
-        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.currentFrame % maxFramesInFlight]));
+        const start = std.time.milliTimestamp();
         var imageIndex: u32 = undefined;
         try ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
@@ -2651,6 +2691,7 @@ pub const Renderer = struct {
             null,
             &imageIndex,
         ));
+        std.log.debug("image ({d}) acquiring took {d}ms", .{ imageIndex, std.time.milliTimestamp() - start });
 
         try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.currentFrame % maxFramesInFlight], 0));
 
@@ -2662,7 +2703,7 @@ pub const Renderer = struct {
         }));
 
         const framebuffers = self.swapchainFramebuffers;
-        const framebuffer_index: usize = @intCast(imageIndex);
+        const framebufferIndex: usize = @intCast(imageIndex);
 
         c.vkCmdBeginRenderPass(
             self.commandBuffers[self.currentFrame % maxFramesInFlight],
@@ -2670,7 +2711,7 @@ pub const Renderer = struct {
                 .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = null,
                 .renderPass = self.renderPass,
-                .framebuffer = framebuffers[framebuffer_index],
+                .framebuffer = framebuffers[framebufferIndex],
                 .renderArea = c.VkRect2D{
                     .offset = c.VkOffset2D{ .x = 0, .y = 0 },
                     .extent = self.swapchain.extent,
@@ -2894,9 +2935,10 @@ pub const Renderer = struct {
 
         const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.currentFrame % maxFramesInFlight]};
         const renderFinishedSemaphores = self.renderFinishedSemaphores;
-        const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphores[framebuffer_index]};
+        const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphores[framebufferIndex]};
         const waitStages: []const c.VkPipelineStageFlags = &.{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
+        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.currentFrame % maxFramesInFlight]));
         try ensureNoError(c.vkQueueSubmit(
             self.graphicsQueue,
             1,
@@ -2965,146 +3007,14 @@ pub const Renderer = struct {
             }
         };
 
-        fn recreate(
-            self: *@This(),
-            physicalDevice: c.VkPhysicalDevice,
-            logicalDevice: c.VkDevice,
-            presentationQueueFamilyIndex: u32,
-            presentationQueue: c.VkQueue,
-            graphicsQueueFamilyIndex: u32,
-            graphicsQueue: c.VkQueue,
-            surface: c.VkSurfaceKHR,
-            width: u32,
-            height: u32,
-        ) !void {
-            for (self.imageViews) |imageView| {
-                c.vkDestroyImageView(logicalDevice, imageView, null);
-            }
-
-            var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
-            try ensureNoError(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                physicalDevice,
-                surface,
-                &capabilities,
-            ));
-
-            var swapchainExtent: c.VkExtent2D = capabilities.currentExtent;
-            if (swapchainExtent.width == std.math.maxInt(u32)) {
-                swapchainExtent = c.VkExtent2D{
-                    .width = std.math.clamp(
-                        width,
-                        capabilities.minImageExtent.width,
-                        capabilities.maxImageExtent.width,
-                    ),
-                    .height = std.math.clamp(
-                        height,
-                        capabilities.minImageExtent.height,
-                        capabilities.maxImageExtent.height,
-                    ),
-                };
-            }
-
-            const previousHandle = self.handle;
-            try ensureNoError(c.vkCreateSwapchainKHR(
-                logicalDevice,
-                &c.VkSwapchainCreateInfoKHR{
-                    .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-                    .surface = surface,
-                    .minImageCount = capabilities.minImageCount,
-                    .imageFormat = self.surfaceFormat.format,
-                    .imageColorSpace = self.surfaceFormat.colorSpace,
-                    .imageExtent = swapchainExtent,
-                    .imageArrayLayers = 1,
-                    .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                    .imageSharingMode = if (presentationQueue == graphicsQueue)
-                        c.VK_SHARING_MODE_EXCLUSIVE
-                    else
-                        c.VK_SHARING_MODE_CONCURRENT,
-                    .queueFamilyIndexCount = if (presentationQueueFamilyIndex == graphicsQueueFamilyIndex) 0 else 2,
-                    .pQueueFamilyIndices = if (presentationQueueFamilyIndex == graphicsQueueFamilyIndex)
-                        null
-                    else
-                        &[_]u32{ graphicsQueueFamilyIndex, presentationQueueFamilyIndex },
-                    .preTransform = capabilities.currentTransform,
-                    .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-                    .presentMode = self.presentMode,
-                    .clipped = c.VK_TRUE,
-                    .oldSwapchain = self.handle,
-                },
-                null,
-                &self.handle,
-            ));
-            c.vkDestroySwapchainKHR(logicalDevice, previousHandle, null);
-            errdefer c.vkDestroySwapchainKHR(logicalDevice, self.handle, null);
-            std.debug.assert(self.handle != null);
-
-            var swapChainImagesLen: u32 = 0;
-            try ensureNoError(c.vkGetSwapchainImagesKHR(
-                logicalDevice,
-                self.handle,
-                &swapChainImagesLen,
-                null,
-            ));
-            _ = try self.allocator.realloc(self.images, swapChainImagesLen);
-            try ensureNoError(c.vkGetSwapchainImagesKHR(
-                logicalDevice,
-                self.handle,
-                &swapChainImagesLen,
-                self.images.ptr,
-            ));
-
-            if (self.images.len != self.imageViews.len) {
-                _ = try self.allocator.realloc(self.imageViews, self.images.len);
-            }
-            errdefer {
-                for (self.imageViews) |imageView| {
-                    if (imageView != null) {
-                        c.vkDestroyImageView(logicalDevice, imageView, null);
-                    }
-                }
-                self.allocator.free(self.imageViews);
-            }
-            for (self.images, 0..) |image, i| {
-                try ensureNoError(c.vkCreateImageView(
-                    logicalDevice,
-                    &c.VkImageViewCreateInfo{
-                        .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                        .image = image,
-                        .pNext = null,
-                        .flags = 0,
-                        .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
-                        .format = self.surfaceFormat.format,
-                        .components = c.VkComponentMapping{
-                            .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                            .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                            .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                            .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                        },
-                        .subresourceRange = c.VkImageSubresourceRange{
-                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = 1,
-                            .baseArrayLayer = 0,
-                            .layerCount = 1,
-                        },
-                    },
-                    null,
-                    &self.imageViews[i],
-                ));
-            }
-        }
-
         fn init(
             physicalDevice: c.VkPhysicalDevice,
             logicalDevice: c.VkDevice,
-            presentationQueueFamilyIndex: u32,
-            presentationQueue: c.VkQueue,
-            graphicsQueueFamilyIndex: u32,
-            graphicsQueue: c.VkQueue,
             surface: c.VkSurfaceKHR,
             width: u32,
             height: u32,
             allocator: std.mem.Allocator,
+            oldSwapchain: ?@This(),
         ) !Swapchain {
             var swapchainSupportDetails: SwapchainSupportDetails = undefined;
             swapchainSupportDetails.allocator = allocator;
@@ -3157,7 +3067,7 @@ pub const Renderer = struct {
                 }
             }
 
-            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
+            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_IMMEDIATE_KHR;
 
             var swapchainExtent: c.VkExtent2D = swapchainSupportDetails.capabilities.currentExtent;
             if (swapchainExtent.width == std.math.maxInt(u32)) {
@@ -3192,20 +3102,14 @@ pub const Renderer = struct {
                     .imageExtent = swapchainExtent,
                     .imageArrayLayers = 1,
                     .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                    .imageSharingMode = if (presentationQueue == graphicsQueue)
-                        c.VK_SHARING_MODE_EXCLUSIVE
-                    else
-                        c.VK_SHARING_MODE_CONCURRENT,
-                    .queueFamilyIndexCount = if (presentationQueueFamilyIndex == graphicsQueueFamilyIndex) 0 else 2,
-                    .pQueueFamilyIndices = if (presentationQueueFamilyIndex == graphicsQueueFamilyIndex)
-                        null
-                    else
-                        &[_]u32{ graphicsQueueFamilyIndex, presentationQueueFamilyIndex },
+                    .imageSharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = null,
                     .preTransform = swapchainSupportDetails.capabilities.currentTransform,
                     .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
                     .presentMode = presentMode,
                     .clipped = c.VK_TRUE,
-                    .oldSwapchain = null,
+                    .oldSwapchain = if (oldSwapchain) |prev| prev.handle else null,
                 },
                 null,
                 &swapchain,
@@ -3250,10 +3154,10 @@ pub const Renderer = struct {
                         .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
                         .format = surfaceFormat.format,
                         .components = c.VkComponentMapping{
-                            .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                            .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                            .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                            .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .r = c.VK_COMPONENT_SWIZZLE_R,
+                            .g = c.VK_COMPONENT_SWIZZLE_G,
+                            .b = c.VK_COMPONENT_SWIZZLE_B,
+                            .a = c.VK_COMPONENT_SWIZZLE_A,
                         },
                         .subresourceRange = c.VkImageSubresourceRange{
                             .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
