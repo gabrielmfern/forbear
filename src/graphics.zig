@@ -87,13 +87,13 @@ pub fn ensureNoError(result: c.VkResult) !void {
         c.VK_ERROR_FRAGMENTATION_EXT => return error.FragmentationExt,
         c.VK_ERROR_UNKNOWN => return error.Unknown,
         c.VK_SUBOPTIMAL_KHR => {
-            std.log.warn("Vulkan doesn't consider this an error, but it returned a VK_SUBOPTIMAL_KHR", .{});
+            std.log.debug("Vulkan doesn't consider this an error, but it returned a VK_SUBOPTIMAL_KHR", .{});
         },
         c.VK_NOT_READY => {
-            std.log.warn("Vulkan doesn't consider this an error, but it returned a VK_NOT_READY", .{});
+            std.log.debug("Vulkan doesn't consider this an error, but it returned a VK_NOT_READY", .{});
         },
         c.VK_TIMEOUT => {
-            std.log.warn("Vulkan doesn't consider this an error, but it returned a VK_TIMEOUT", .{});
+            std.log.debug("Vulkan doesn't consider this an error, but it returned a VK_TIMEOUT", .{});
         },
         else => {
             if (builtin.os.tag == .linux) {
@@ -105,7 +105,7 @@ pub fn ensureNoError(result: c.VkResult) !void {
         },
     }
 
-    if (result != c.VK_SUCCESS and result != c.VK_SUBOPTIMAL_KHR and result == c.VK_NOT_READY and result != c.VK_TIMEOUT) {
+    if (result != c.VK_SUCCESS and result != c.VK_SUBOPTIMAL_KHR and result != c.VK_NOT_READY and result != c.VK_TIMEOUT) {
         std.log.err("failed with an unexpected error {}", .{result});
         unreachable;
     }
