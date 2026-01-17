@@ -59,6 +59,10 @@ pub const VulkanError = error{
     InvalidExternalHandle,
     MemoryMapFailed,
     FragmentationExt,
+    // Not exactly errors, but they aren't the best scenario, so we can consider them errors
+    Suboptimal,
+    NotReady,
+    Timeout,
     Unknown,
 };
 
@@ -86,15 +90,9 @@ pub fn ensureNoError(result: c.VkResult) !void {
         c.VK_ERROR_MEMORY_MAP_FAILED => return error.MemoryMapFailed,
         c.VK_ERROR_FRAGMENTATION_EXT => return error.FragmentationExt,
         c.VK_ERROR_UNKNOWN => return error.Unknown,
-        c.VK_SUBOPTIMAL_KHR => {
-            std.log.debug("Vulkan doesn't consider this an error, but it returned a VK_SUBOPTIMAL_KHR", .{});
-        },
-        c.VK_NOT_READY => {
-            std.log.debug("Vulkan doesn't consider this an error, but it returned a VK_NOT_READY", .{});
-        },
-        c.VK_TIMEOUT => {
-            std.log.debug("Vulkan doesn't consider this an error, but it returned a VK_TIMEOUT", .{});
-        },
+        c.VK_SUBOPTIMAL_KHR => return error.Suboptimal,
+        c.VK_NOT_READY => return error.NotReady,
+        c.VK_TIMEOUT => return error.Timeout,
         else => {
             if (builtin.os.tag == .linux) {
                 switch (result) {
@@ -105,7 +103,7 @@ pub fn ensureNoError(result: c.VkResult) !void {
         },
     }
 
-    if (result != c.VK_SUCCESS and result != c.VK_SUBOPTIMAL_KHR and result != c.VK_NOT_READY and result != c.VK_TIMEOUT) {
+    if (result != c.VK_SUCCESS) {
         std.log.err("failed with an unexpected error {}", .{result});
         unreachable;
     }
@@ -2161,21 +2159,22 @@ pub const Renderer = struct {
 
     commandPool: c.VkCommandPool,
     commandBuffers: [maxFramesInFlight]c.VkCommandBuffer,
-    commandBuffersAllocated: bool,
 
     inFlightFences: [maxFramesInFlight]c.VkFence,
     imageAvailableSemaphores: [maxFramesInFlight]c.VkSemaphore,
     renderFinishedSemaphores: []c.VkSemaphore,
 
     frameRateCapper: FrameRateCapper,
+    executingFrame: bool,
     currentFrame: usize,
-    width: u32,
-    height: u32,
 
     pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
         std.log.debug("swapchain recreation has began", .{});
         const timestamp = std.time.milliTimestamp();
-        try self.waitIdle();
+        // try self.stallForFrames();
+        // try self.flushFrame();
+
+        // try self.waitIdle();
         std.log.debug("spent {d}ms waiting for idle device", .{std.time.milliTimestamp() - timestamp});
 
         // try ensureNoError(c.vkWaitForFences(
@@ -2623,21 +2622,73 @@ pub const Renderer = struct {
 
             .commandPool = commandPool,
             .commandBuffers = commandBuffers,
-            .commandBuffersAllocated = true,
 
             .inFlightFences = inFlightFences,
             .imageAvailableSemaphores = imageAvailableSemaphores,
             .renderFinishedSemaphores = renderFinishedSemaphores,
 
             .currentFrame = 0,
+            .executingFrame = false,
             .frameRateCapper = FrameRateCapper{},
-            .width = width,
-            .height = height,
         };
     }
 
     pub fn handleResize(self: *Self, width: u32, height: u32) !void {
+        // try ensureNoError(c.vkQueueWaitIdle(self.graphicsQueue));
+        // try ensureNoError(c.vkQueueWaitIdle(self.presentationQueue));
+        try self.stallForFrames();
+        try self.flushFrame();
         try self.recreateSwapchain(width, height);
+    }
+
+    fn stallForFrames(self: *Self) !void {
+        try ensureNoError(c.vkQueueWaitIdle(self.presentationQueue));
+        for (self.inFlightFences) |fence| {
+            ensureNoError(c.vkGetFenceStatus(self.logicalDevice, fence)) catch |err| {
+                if (err != error.NotReady) {
+                    return err;
+                }
+            };
+
+            try ensureNoError(c.vkWaitForFences(self.logicalDevice, 1, &fence, c.VK_TRUE, std.math.maxInt(u64)));
+        }
+    }
+
+    fn flushFrame(self: *Self) !void {
+        if (self.executingFrame) {
+            try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.currentFrame % maxFramesInFlight]));
+            try ensureNoError(c.vkQueueSubmit(
+                self.graphicsQueue,
+                1,
+                &c.VkSubmitInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                    .commandBufferCount = 1,
+                    .pCommandBuffers = &self.commandBuffers[self.currentFrame % maxFramesInFlight],
+                    .pNext = null,
+                    .pSignalSemaphores = null,
+                    .pWaitSemaphores = null,
+                    .pWaitDstStageMask = null,
+                    .signalSemaphoreCount = 0,
+                    .waitSemaphoreCount = 0,
+                },
+                self.inFlightFences[self.currentFrame % maxFramesInFlight],
+            ));
+
+            try ensureNoError(c.vkWaitForFences(
+                self.logicalDevice,
+                1,
+                &self.inFlightFences[self.currentFrame % maxFramesInFlight],
+                c.VK_TRUE,
+                std.math.maxInt(u64),
+            ));
+            try ensureNoError(c.vkResetFences(
+                self.logicalDevice,
+                1,
+                &self.inFlightFences[self.currentFrame % maxFramesInFlight],
+            ));
+            self.currentFrame += 1;
+            self.executingFrame = false;
+        }
     }
 
     pub fn waitIdle(self: *Self) !void {
@@ -2666,6 +2717,28 @@ pub const Renderer = struct {
         c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
     }
 
+    fn handleResizeMidFrame(self: *Self) !void {
+        std.log.debug("image acquring errored with out of date, this means we need to recreate the swapchain", .{});
+        try self.stallForFrames();
+        try self.flushFrame();
+
+        c.vkDestroySemaphore(self.logicalDevice, self.imageAvailableSemaphores[self.currentFrame % maxFramesInFlight], null);
+        try ensureNoError(c.vkCreateSemaphore(
+            self.logicalDevice,
+            &c.VkSemaphoreCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                .flags = 0,
+                .pNext = null,
+            },
+            null,
+            &self.imageAvailableSemaphores[self.currentFrame % maxFramesInFlight],
+        ));
+
+        var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
+        try ensureNoError(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(self.physicalDevice, self.surface, &capabilities));
+        try self.recreateSwapchain(capabilities.currentExtent.width, capabilities.currentExtent.height);
+    }
+
     pub fn drawFrame(
         self: *Self,
         rootLayoutBox: *const LayoutBox,
@@ -2681,17 +2754,7 @@ pub const Renderer = struct {
             c.VK_TRUE,
             std.math.maxInt(u64),
         ));
-        const start = std.time.milliTimestamp();
-        var imageIndex: u32 = undefined;
-        try ensureNoError(c.vkAcquireNextImageKHR(
-            self.logicalDevice,
-            self.swapchain.handle,
-            std.math.maxInt(u64),
-            self.imageAvailableSemaphores[self.currentFrame % maxFramesInFlight],
-            null,
-            &imageIndex,
-        ));
-        std.log.debug("image ({d}) acquiring took {d}ms", .{ imageIndex, std.time.milliTimestamp() - start });
+        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.currentFrame % maxFramesInFlight]));
 
         try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.currentFrame % maxFramesInFlight], 0));
 
@@ -2701,6 +2764,32 @@ pub const Renderer = struct {
             .flags = 0,
             .pInheritanceInfo = null,
         }));
+        self.executingFrame = true;
+
+        const start = std.time.milliTimestamp();
+        var imageIndex: u32 = undefined;
+        ensureNoError(c.vkAcquireNextImageKHR(
+            self.logicalDevice,
+            self.swapchain.handle,
+            std.math.maxInt(u64),
+            self.imageAvailableSemaphores[self.currentFrame % maxFramesInFlight],
+            null,
+            &imageIndex,
+        )) catch |err| {
+            switch (err) {
+                error.Suboptimal => {
+                    std.log.debug("Suboptimal, but image will still be used", .{});
+                },
+                error.OutOfDate => {
+                    try self.handleResizeMidFrame();
+                    return;
+                },
+                else => return err
+            }
+        };
+        if (std.time.milliTimestamp() - start > 100) {
+            std.log.err("image ({d}) acquiring took {d}ms!!!!!!!", .{ imageIndex, std.time.milliTimestamp() - start });
+        }
 
         const framebuffers = self.swapchainFramebuffers;
         const framebufferIndex: usize = @intCast(imageIndex);
@@ -2938,7 +3027,6 @@ pub const Renderer = struct {
         const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphores[framebufferIndex]};
         const waitStages: []const c.VkPipelineStageFlags = &.{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
-        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.currentFrame % maxFramesInFlight]));
         try ensureNoError(c.vkQueueSubmit(
             self.graphicsQueue,
             1,
@@ -2955,8 +3043,9 @@ pub const Renderer = struct {
             },
             self.inFlightFences[self.currentFrame % maxFramesInFlight],
         ));
+        self.executingFrame = false;
 
-        try ensureNoError(c.vkQueuePresentKHR(self.presentationQueue, &c.VkPresentInfoKHR{
+        ensureNoError(c.vkQueuePresentKHR(self.presentationQueue, &c.VkPresentInfoKHR{
             .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .waitSemaphoreCount = @intCast(signalSemaphores.len),
             .pWaitSemaphores = signalSemaphores.ptr,
@@ -2964,7 +3053,18 @@ pub const Renderer = struct {
             .pSwapchains = &self.swapchain.handle,
             .pImageIndices = &imageIndex,
             .pResults = null,
-        }));
+        })) catch |err| {
+            switch (err) {
+                error.Suboptimal => {
+                    std.log.debug("Suboptimal, but image will still be used", .{});
+                },
+                error.OutOfDate => {
+                    try self.handleResizeMidFrame();
+                    return;
+                },
+                else => return err,
+            }
+        };
 
         self.currentFrame += 1;
         // We cap this because the driver's native Vulkan "frame rate capper"
@@ -3067,7 +3167,7 @@ pub const Renderer = struct {
                 }
             }
 
-            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_IMMEDIATE_KHR;
+            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
 
             var swapchainExtent: c.VkExtent2D = swapchainSupportDetails.capabilities.currentExtent;
             if (swapchainExtent.width == std.math.maxInt(u32)) {
