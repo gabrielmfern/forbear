@@ -444,7 +444,7 @@ pub fn initRenderer(
     std.debug.assert(vulkanSurface != null);
     errdefer c.vkDestroySurfaceKHR(self.vulkanInstance, vulkanSurface, null);
 
-    return try Renderer.init(vulkanSurface, self, window.width, window.height);
+    return try Renderer.init(vulkanSurface, window, self);
 }
 
 fn findMemoryType(
@@ -2137,6 +2137,8 @@ pub const FrameRateCapper = struct {
 pub const Renderer = struct {
     const Self = @This();
 
+    mutex: std.Thread.Mutex,
+
     allocator: std.mem.Allocator,
     graphics: *const Graphics,
 
@@ -2148,6 +2150,7 @@ pub const Renderer = struct {
     presentationQueueFamilyIndex: u32,
 
     surface: c.VkSurfaceKHR,
+    window: *const Window,
     swapchain: Swapchain,
     swapchainFramebuffers: []c.VkFramebuffer,
 
@@ -2166,49 +2169,89 @@ pub const Renderer = struct {
 
     frameRateCapper: FrameRateCapper,
     executingFrame: bool,
-    currentFrame: usize,
+    framesRenderedInSwapchain: usize,
 
-    pub fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
+    fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
         std.log.debug("swapchain recreation has began", .{});
         const timestamp = std.time.milliTimestamp();
-        // try self.stallForFrames();
-        // try self.flushFrame();
-
-        // try self.waitIdle();
-        std.log.debug("spent {d}ms waiting for idle device", .{std.time.milliTimestamp() - timestamp});
-
-        // try ensureNoError(c.vkWaitForFences(
-        //     self.logicalDevice,
-        //     maxFramesInFlight,
-        //     &self.inFlightFences,
-        //     c.VK_TRUE,
-        //     std.math.maxInt(u64),
-        // ));
-        // try ensureNoError(c.vkResetFences(
-        //     self.logicalDevice,
-        //     maxFramesInFlight,
-        //     &self.inFlightFences,
-        // ));
 
         const previousSwapchain = self.swapchain;
         const recreateStart = std.time.milliTimestamp();
-        self.swapchain = try Swapchain.init(
-            self.physicalDevice,
-            self.logicalDevice,
-            self.surface,
-            width,
-            height,
-            self.allocator,
-            previousSwapchain,
-        );
+        if (builtin.os.tag == .windows) {
+            // On Windows, there is a stupid hell of a bug, probably because
+            // we're using a rendering thread, that makes it so
+            // vkAcquireNextImageKHR takes 2 seconds after the swapchain
+            // recreation, unless we recreate the surface which is wasteful and
+            // very annoying but is the only way to get a reasonable experience
+            // on Windows.
+            previousSwapchain.deinit(self.logicalDevice);
+            c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
+            try ensureNoError(win32.vkCreateWin32SurfaceKHR(
+                self.graphics.vulkanInstance,
+                &win32.VkWin32SurfaceCreateInfoKHR{
+                    .sType = c.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+                    .pNext = null,
+                    .flags = 0,
+                    .hinstance = self.window.hInstance,
+                    .hwnd = self.window.handle,
+                },
+                null,
+                &self.surface,
+            ));
+            self.swapchain = try Swapchain.init(
+                self.physicalDevice,
+                self.logicalDevice,
+                self.surface,
+                width,
+                height,
+                self.allocator,
+                null,
+            );
+        } else {
+            self.swapchain = try Swapchain.init(
+                self.physicalDevice,
+                self.logicalDevice,
+                self.surface,
+                width,
+                height,
+                self.allocator,
+                previousSwapchain,
+            );
+            previousSwapchain.deinit(self.logicalDevice);
+        }
         errdefer self.swapchain.deinit(self.logicalDevice);
         std.log.debug("spent {d}ms just recreating swapchain", .{std.time.milliTimestamp() - recreateStart});
-        previousSwapchain.deinit(self.logicalDevice);
 
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
 
         self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
         std.log.debug("swapchain recreation took {d}ms", .{std.time.milliTimestamp() - timestamp});
+
+        for (0..maxFramesInFlight) |i| {
+            c.vkDestroyFence(self.logicalDevice, self.inFlightFences[i], null);
+            try ensureNoError(c.vkCreateFence(
+                self.logicalDevice,
+                &c.VkFenceCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+                    .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
+                    .pNext = null,
+                },
+                null,
+                &self.inFlightFences[i],
+            ));
+
+            c.vkDestroySemaphore(self.logicalDevice, self.imageAvailableSemaphores[i], null);
+            try ensureNoError(c.vkCreateSemaphore(
+                self.logicalDevice,
+                &c.VkSemaphoreCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                    .flags = 0,
+                    .pNext = null,
+                },
+                null,
+                &self.imageAvailableSemaphores[i],
+            ));
+        }
 
         for (self.renderFinishedSemaphores) |semaphore| {
             c.vkDestroySemaphore(self.logicalDevice, semaphore, null);
@@ -2233,14 +2276,16 @@ pub const Renderer = struct {
                 c.vkDestroySemaphore(self.logicalDevice, semaphore, null);
             }
         }
-        self.currentFrame = 0;
+        self.framesRenderedInSwapchain = 0;
     }
 
     pub fn viewportSize(self: *Self) Vec2 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         return .{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
     }
 
-    pub fn registerImage(self: *Self, image: *const Image) !u32 {
+    fn registerImage(self: *Self, image: *const Image) !u32 {
         for (self.registeredImages.items, 0..) |registered, i| {
             if (registered == image) return @intCast(i);
         }
@@ -2278,9 +2323,8 @@ pub const Renderer = struct {
 
     fn init(
         surface: c.VkSurfaceKHR,
+        window: *const Window,
         graphics: *const Graphics,
-        width: u32,
-        height: u32,
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -2443,8 +2487,8 @@ pub const Renderer = struct {
             physicalDevice,
             logicalDevice,
             surface,
-            width,
-            height,
+            window.width,
+            window.height,
             graphics.allocator,
             null,
         );
@@ -2602,6 +2646,8 @@ pub const Renderer = struct {
         return Renderer{
             .allocator = graphics.allocator,
             .graphics = graphics,
+            .window = window,
+            .mutex = std.Thread.Mutex{},
 
             .physicalDevice = physicalDevice,
             .logicalDevice = logicalDevice,
@@ -2627,15 +2673,15 @@ pub const Renderer = struct {
             .imageAvailableSemaphores = imageAvailableSemaphores,
             .renderFinishedSemaphores = renderFinishedSemaphores,
 
-            .currentFrame = 0,
+            .framesRenderedInSwapchain = 0,
             .executingFrame = false,
             .frameRateCapper = FrameRateCapper{},
         };
     }
 
     pub fn handleResize(self: *Self, width: u32, height: u32) !void {
-        // try ensureNoError(c.vkQueueWaitIdle(self.graphicsQueue));
-        // try ensureNoError(c.vkQueueWaitIdle(self.presentationQueue));
+        self.mutex.lock();
+        defer self.mutex.unlock();
         try self.stallForFrames();
         try self.flushFrame();
         try self.recreateSwapchain(width, height);
@@ -2656,14 +2702,14 @@ pub const Renderer = struct {
 
     fn flushFrame(self: *Self) !void {
         if (self.executingFrame) {
-            try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.currentFrame % maxFramesInFlight]));
+            try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]));
             try ensureNoError(c.vkQueueSubmit(
                 self.graphicsQueue,
                 1,
                 &c.VkSubmitInfo{
                     .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
                     .commandBufferCount = 1,
-                    .pCommandBuffers = &self.commandBuffers[self.currentFrame % maxFramesInFlight],
+                    .pCommandBuffers = &self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
                     .pNext = null,
                     .pSignalSemaphores = null,
                     .pWaitSemaphores = null,
@@ -2671,31 +2717,35 @@ pub const Renderer = struct {
                     .signalSemaphoreCount = 0,
                     .waitSemaphoreCount = 0,
                 },
-                self.inFlightFences[self.currentFrame % maxFramesInFlight],
+                self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight],
             ));
 
             try ensureNoError(c.vkWaitForFences(
                 self.logicalDevice,
                 1,
-                &self.inFlightFences[self.currentFrame % maxFramesInFlight],
+                &self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight],
                 c.VK_TRUE,
                 std.math.maxInt(u64),
             ));
             try ensureNoError(c.vkResetFences(
                 self.logicalDevice,
                 1,
-                &self.inFlightFences[self.currentFrame % maxFramesInFlight],
+                &self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight],
             ));
-            self.currentFrame += 1;
+            self.framesRenderedInSwapchain += 1;
             self.executingFrame = false;
         }
     }
 
     pub fn waitIdle(self: *Self) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
     }
 
     pub fn deinit(self: *Self) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         for (self.renderFinishedSemaphores) |semaphore| {
             c.vkDestroySemaphore(self.logicalDevice, semaphore, null);
         }
@@ -2722,7 +2772,7 @@ pub const Renderer = struct {
         try self.stallForFrames();
         try self.flushFrame();
 
-        c.vkDestroySemaphore(self.logicalDevice, self.imageAvailableSemaphores[self.currentFrame % maxFramesInFlight], null);
+        c.vkDestroySemaphore(self.logicalDevice, self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight], null);
         try ensureNoError(c.vkCreateSemaphore(
             self.logicalDevice,
             &c.VkSemaphoreCreateInfo{
@@ -2731,7 +2781,7 @@ pub const Renderer = struct {
                 .pNext = null,
             },
             null,
-            &self.imageAvailableSemaphores[self.currentFrame % maxFramesInFlight],
+            &self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight],
         ));
 
         var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
@@ -2746,19 +2796,20 @@ pub const Renderer = struct {
         dpi: [2]u32,
         targetFrameTimeNs: u64,
     ) !void {
-        _ = targetFrameTimeNs;
+        self.mutex.lock();
+        defer self.mutex.unlock();
         try ensureNoError(c.vkWaitForFences(
             self.logicalDevice,
             1,
-            &self.inFlightFences[self.currentFrame % maxFramesInFlight],
+            &self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight],
             c.VK_TRUE,
             std.math.maxInt(u64),
         ));
-        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.currentFrame % maxFramesInFlight]));
+        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight]));
 
-        try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.currentFrame % maxFramesInFlight], 0));
+        try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0));
 
-        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.currentFrame % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
+        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .pNext = null,
             .flags = 0,
@@ -2771,8 +2822,8 @@ pub const Renderer = struct {
         ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
             self.swapchain.handle,
-            std.math.maxInt(u64),
-            self.imageAvailableSemaphores[self.currentFrame % maxFramesInFlight],
+            0,
+            self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight],
             null,
             &imageIndex,
         )) catch |err| {
@@ -2795,7 +2846,7 @@ pub const Renderer = struct {
         const framebufferIndex: usize = @intCast(imageIndex);
 
         c.vkCmdBeginRenderPass(
-            self.commandBuffers[self.currentFrame % maxFramesInFlight],
+            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
             &c.VkRenderPassBeginInfo{
                 .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = null,
@@ -2816,12 +2867,12 @@ pub const Renderer = struct {
         );
 
         c.vkCmdBindPipeline(
-            self.commandBuffers[self.currentFrame % maxFramesInFlight],
+            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
             self.elementsPipeline.graphicsPipeline,
         );
 
-        c.vkCmdSetViewport(self.commandBuffers[self.currentFrame % maxFramesInFlight], 0, 1, &[_]c.VkViewport{c.VkViewport{
+        c.vkCmdSetViewport(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkViewport{c.VkViewport{
             .x = 0.0,
             .y = 0.0,
             .width = @floatFromInt(self.swapchain.extent.width),
@@ -2830,7 +2881,7 @@ pub const Renderer = struct {
             .maxDepth = 1.0,
         }});
 
-        c.vkCmdSetScissor(self.commandBuffers[self.currentFrame % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{c.VkRect2D{
+        c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{c.VkRect2D{
             .offset = c.VkOffset2D{ .x = 0, .y = 0 },
             .extent = self.swapchain.extent,
         }});
@@ -2864,7 +2915,7 @@ pub const Renderer = struct {
                 .color => -1,
                 .image => |imgPtr| @intCast(try self.registerImage(imgPtr)),
             };
-            self.elementsPipeline.shaderBuffersMapped[self.currentFrame % maxFramesInFlight][i] = ElementRenderingData{
+            self.elementsPipeline.shaderBuffersMapped[self.framesRenderedInSwapchain % maxFramesInFlight][i] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
                         zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
@@ -2891,18 +2942,18 @@ pub const Renderer = struct {
         }
 
         c.vkCmdBindDescriptorSets(
-            self.commandBuffers[self.currentFrame % maxFramesInFlight],
+            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
             self.elementsPipeline.pipelineLayout,
             0,
             1,
-            &self.elementsPipeline.descriptorSets[self.currentFrame % maxFramesInFlight],
+            &self.elementsPipeline.descriptorSets[self.framesRenderedInSwapchain % maxFramesInFlight],
             0,
             null,
         );
 
-        c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame % maxFramesInFlight], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
-        c.vkCmdDraw(self.commandBuffers[self.currentFrame % maxFramesInFlight], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
+        c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
+        c.vkCmdDraw(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
 
         if (totalGlyphCount > 0) {
             if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
@@ -2970,7 +3021,7 @@ pub const Renderer = struct {
                             const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
                             const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize * resolutionMultiplier[0];
 
-                            self.textPipeline.shaderBuffersMapped[self.currentFrame % maxFramesInFlight][glyphIndex] = TextPipeline.GlypRenderingShaderData{
+                            self.textPipeline.shaderBuffersMapped[self.framesRenderedInSwapchain % maxFramesInFlight][glyphIndex] = TextPipeline.GlypRenderingShaderData{
                                 .modelViewProjectionMatrix = zmath.mul(
                                     zmath.mul(
                                         zmath.scaling(width, height, 1.0),
@@ -2999,30 +3050,30 @@ pub const Renderer = struct {
             }
 
             c.vkCmdBindPipeline(
-                self.commandBuffers[self.currentFrame % maxFramesInFlight],
+                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 self.textPipeline.graphicsPipeline,
             );
 
             c.vkCmdBindDescriptorSets(
-                self.commandBuffers[self.currentFrame % maxFramesInFlight],
+                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 self.textPipeline.pipelineLayout,
                 0,
                 1,
-                &self.textPipeline.descriptorSets[self.currentFrame % maxFramesInFlight],
+                &self.textPipeline.descriptorSets[self.framesRenderedInSwapchain % maxFramesInFlight],
                 0,
                 null,
             );
 
-            c.vkCmdBindVertexBuffers(self.commandBuffers[self.currentFrame % maxFramesInFlight], 0, 1, &self.textPipeline.glyphModel.vertexBuffer.handle, &@intCast(0));
-            c.vkCmdDraw(self.commandBuffers[self.currentFrame % maxFramesInFlight], self.textPipeline.glyphModel.vertexCount, @intCast(totalGlyphCount), 0, 0);
+            c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &self.textPipeline.glyphModel.vertexBuffer.handle, &@intCast(0));
+            c.vkCmdDraw(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], self.textPipeline.glyphModel.vertexCount, @intCast(totalGlyphCount), 0, 0);
         }
 
-        c.vkCmdEndRenderPass(self.commandBuffers[self.currentFrame % maxFramesInFlight]);
-        try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.currentFrame % maxFramesInFlight]));
+        c.vkCmdEndRenderPass(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]);
+        try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]));
 
-        const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.currentFrame % maxFramesInFlight]};
+        const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight]};
         const renderFinishedSemaphores = self.renderFinishedSemaphores;
         const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphores[framebufferIndex]};
         const waitStages: []const c.VkPipelineStageFlags = &.{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -3037,11 +3088,11 @@ pub const Renderer = struct {
                 .pWaitSemaphores = waitSemaphores.ptr,
                 .pWaitDstStageMask = waitStages.ptr,
                 .commandBufferCount = 1,
-                .pCommandBuffers = &self.commandBuffers[self.currentFrame % maxFramesInFlight],
+                .pCommandBuffers = &self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
                 .signalSemaphoreCount = @intCast(signalSemaphores.len),
                 .pSignalSemaphores = signalSemaphores.ptr,
             },
-            self.inFlightFences[self.currentFrame % maxFramesInFlight],
+            self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight],
         ));
         self.executingFrame = false;
 
@@ -3066,17 +3117,20 @@ pub const Renderer = struct {
             }
         };
 
-        self.currentFrame += 1;
+        self.framesRenderedInSwapchain += 1;
         // We cap this because the driver's native Vulkan "frame rate capper"
         // can be disabled causing a "slow motion" effect during swapchain
         // recreation (generally done in window resizing)
-        // if (self.framesRenderedSinceSwapChainCreation < 50) {
-        //     try self.frameRateCapper.cap(targetFrameTimeNs);
-        // }
-        if (self.currentFrame == 50) {
+        if (builtin.os.tag == .linux and self.framesRenderedInSwapchain < 50) {
+            try self.frameRateCapper.cap(targetFrameTimeNs);
+        }
+        if (self.framesRenderedInSwapchain == 50) {
             switch (builtin.os.tag) {
                 .linux => {
                     std.log.debug("fifty frames rendered, trimming memory {d}", .{c.malloc_trim(0)});
+                },
+                .windows => {
+                    _ = win32.SetProcessWorkingSetSize(win32.GetCurrentProcess(), std.math.maxInt(isize) - 1, std.math.maxInt(isize) - 1);
                 },
                 else => {}
             }

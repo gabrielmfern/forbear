@@ -13,6 +13,7 @@ pub const INT = c_int;
 pub const LONG = c_long;
 pub const LONG_PTR = isize;
 pub const UINT_PTR = usize;
+pub const SIZE_T = usize;
 pub const ATOM = WORD;
 
 pub const LPVOID = ?*anyopaque;
@@ -380,6 +381,9 @@ pub const ENUM_CURRENT_SETTINGS: DWORD = 0xFFFFFFFF;
 pub extern "user32" fn MonitorFromWindow(hwnd: HWND, dwFlags: DWORD) callconv(.c) HMONITOR;
 pub extern "user32" fn GetMonitorInfoW(hMonitor: HMONITOR, lpmi: *MONITORINFOEXW) callconv(.c) BOOL;
 pub extern "user32" fn EnumDisplaySettingsW(lpszDeviceName: [*:0]const u16, iModeNum: DWORD, lpDevMode: *DEVMODEW) callconv(.c) BOOL;
+
+pub extern "user32" fn SetProcessWorkingSetSize(hProcess: HANDLE, dwMinimumWorkingSetSize: SIZE_T, dwMaximumWorkingSetSize: SIZE_T) callconv(.c) BOOL;
+pub extern "user32" fn GetCurrentProcess() callconv(.c) HANDLE;
 
 // Vulkan
 pub const VkWin32SurfaceCreateFlagsKHR = c.VkFlags;
