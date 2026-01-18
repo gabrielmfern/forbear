@@ -235,7 +235,7 @@ fn handleFractionalScale(
     window.scale = @as(f32, @floatFromInt(scale)) / 120.0;
     window.updateDpi();
     if (window.handlers.resize) |handler| {
-        handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
+        handler.function(window, window.width, window.height, window.dpi, handler.data);
     }
     std.log.debug("Fractional scale changed to: {d}", .{@as(f32, @floatFromInt(scale)) / 120.0});
 }
@@ -362,7 +362,7 @@ fn xdgToplevelConfigure(
             c.wp_viewport_set_destination(viewport, @intCast(window.width), @intCast(window.height));
         }
         if (window.handlers.resize) |handler| {
-            handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
+            handler.function(window, window.width, window.height, window.dpi, handler.data);
         }
     }
 }
@@ -730,23 +730,25 @@ pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
 }
 
 pub fn handleEvents(self: *Self) !void {
-    while (c.wl_display_prepare_read(self.wlDisplay) != 0) {
+    while (self.running) {
+        while (c.wl_display_prepare_read(self.wlDisplay) != 0) {
+            if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
+                return error.WaylandDispatchFailed;
+            }
+        }
+
+        if (c.wl_display_flush(self.wlDisplay) == -1) {
+            c.wl_display_cancel_read(self.wlDisplay);
+            return error.WaylandFlushFailed;
+        }
+
+        if (c.wl_display_read_events(self.wlDisplay) == -1) {
+            return error.WaylandReadEventsFailed;
+        }
+
         if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
             return error.WaylandDispatchFailed;
         }
-    }
-
-    if (c.wl_display_flush(self.wlDisplay) == -1) {
-        c.wl_display_cancel_read(self.wlDisplay);
-        return error.WaylandFlushFailed;
-    }
-
-    if (c.wl_display_read_events(self.wlDisplay) == -1) {
-        return error.WaylandReadEventsFailed;
-    }
-
-    if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
-        return error.WaylandDispatchFailed;
     }
 }
 
