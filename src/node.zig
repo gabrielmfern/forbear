@@ -24,6 +24,19 @@ pub const Sizing = union(enum) {
     grow,
 };
 
+pub const Shadow = struct {
+    offset: Vec4,
+    blurRadius: f32,
+    spread: f32,
+    color: Vec4,
+};
+
+pub const Alignment = enum {
+    start,
+    center,
+    end,
+};
+
 pub const Style = struct {
     background: Background,
     color: Vec4,
@@ -31,6 +44,8 @@ pub const Style = struct {
     borderColor: Vec4,
     borderBlockWidth: Vec2,
     borderInlineWidth: Vec2,
+
+    shadow: ?Shadow = null,
 
     font: Font,
     fontSize: u32,
@@ -79,12 +94,6 @@ pub const Background = union(enum) {
     color: Vec4,
 };
 
-pub const Alignment = enum {
-    start,
-    center,
-    end,
-};
-
 pub const IncompleteStyle = struct {
     background: ?Background = null,
     color: ?Vec4 = null,
@@ -92,6 +101,8 @@ pub const IncompleteStyle = struct {
     borderColor: ?Vec4 = null,
     borderBlockWidth: ?Vec2 = null,
     borderInlineWidth: ?Vec2 = null,
+
+    shadow: ?Shadow = null,
 
     font: ?Font = null,
     fontSize: ?u32 = null,
@@ -120,6 +131,8 @@ pub const IncompleteStyle = struct {
             .borderColor = self.borderColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 },
             .borderBlockWidth = self.borderBlockWidth orelse @splat(0.0),
             .borderInlineWidth = self.borderInlineWidth orelse @splat(0.0),
+
+            .shadow = self.shadow,
 
             .font = self.font orelse base.font,
             .fontSize = self.fontSize orelse base.fontSize,
