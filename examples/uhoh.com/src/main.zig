@@ -1,35 +1,11 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        if (gpa.deinit() == .leak) {
-            std.log.err("Memory was leaked", .{});
-        }
-    }
-
-    const allocator = gpa.allocator();
-
-    var graphics = try forbear.Graphics.init(
-        "forbear playground",
-        allocator,
-    );
-    defer graphics.deinit();
-
-    const window = try forbear.Window.init(
-        800,
-        600,
-        "uhoh.com",
-        "uhoh.com",
-        allocator,
-    );
-    defer window.deinit();
-
-    var renderer = try graphics.initRenderer(window);
-    defer renderer.deinit();
-    renderer.setupResizingHandler(window);
-
+fn renderingMain(
+    renderer: *forbear.Graphics.Renderer,
+    window: *const forbear.Window,
+    allocator: std.mem.Allocator,
+) !void {
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
     defer arenaAllocator.deinit();
 
@@ -38,15 +14,10 @@ pub fn main() !void {
     const spaceGroteskMedium = try forbear.Font.init("SpaceGrotesk-Medium", @embedFile("SpaceGrotesk-Medium.ttf"));
     const spaceGroteskBold = try forbear.Font.init("SpaceGrotesk-Bold", @embedFile("SpaceGrotesk-Bold.ttf"));
 
-    const comeOnImage = try forbear.Image.init(@embedFile("come-on.png"), .png, &renderer);
-    defer comeOnImage.deinit(&renderer);
-
-    var capper = forbear.FrameRateCapper{};
+    const comeOnImage = try forbear.Image.init(@embedFile("come-on.png"), .png, renderer);
+    defer comeOnImage.deinit(renderer);
 
     while (window.running) {
-        defer _ = arenaAllocator.reset(.retain_capacity);
-
-        try window.handleEvents();
         const node = forbear.div(.{
             .style = .{
                 .preferredWidth = .grow,
@@ -117,9 +88,59 @@ pub fn main() !void {
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             arena,
         );
-        try renderer.drawFrame(&layoutBox, .{ 0.99, 0.98, 0.96, 1.0 });
-
-        try capper.cap(window.targetFrameTimeNs());
+        try renderer.drawFrame(&layoutBox, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
     }
     try renderer.waitIdle();
+}
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        if (gpa.deinit() == .leak) {
+            std.log.err("Memory was leaked", .{});
+        }
+    }
+
+    const allocator = gpa.allocator();
+
+    var graphics = try forbear.Graphics.init(
+        "forbear playground",
+        allocator,
+    );
+    defer graphics.deinit();
+
+    const window = try forbear.Window.init(
+        800,
+        600,
+        "uhoh.com",
+        "uhoh.com",
+        allocator,
+    );
+    defer window.deinit();
+
+    var renderer = try graphics.initRenderer(window);
+    defer renderer.deinit();
+    window.setResizeHandler(handleResize, @ptrCast(@alignCast(&renderer)));
+
+    const renderingThread = try std.Thread.spawn(
+        .{ .allocator = allocator },
+        renderingMain,
+        .{
+            &renderer,
+            window,
+            allocator,
+        },
+    );
+    defer renderingThread.join();
+
+    try window.handleEvents();
+}
+
+fn handleResize(window: *forbear.Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
+    _ = window;
+    _ = dpi;
+    const renderer: *forbear.Graphics.Renderer = @ptrCast(@alignCast(data));
+    renderer.handleResize(width, height) catch |err| {
+        std.log.err("Renderer could not handle window resize {}", .{err});
+    };
 }
