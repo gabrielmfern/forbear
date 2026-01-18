@@ -2741,6 +2741,8 @@ pub const Renderer = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
+        try ensureNoError(c.vkQueueWaitIdle(self.graphicsQueue));
+        try ensureNoError(c.vkQueueWaitIdle(self.presentationQueue));
     }
 
     pub fn deinit(self: *Self) void {
@@ -2822,7 +2824,7 @@ pub const Renderer = struct {
         ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
             self.swapchain.handle,
-            0,
+            std.math.maxInt(u64),
             self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight],
             null,
             &imageIndex,
@@ -2835,7 +2837,7 @@ pub const Renderer = struct {
                     try self.handleResizeMidFrame();
                     return;
                 },
-                else => return err
+                else => return err,
             }
         };
         if (std.time.milliTimestamp() - start > 100) {
@@ -3132,7 +3134,7 @@ pub const Renderer = struct {
                 .windows => {
                     _ = win32.SetProcessWorkingSetSize(win32.GetCurrentProcess(), std.math.maxInt(isize) - 1, std.math.maxInt(isize) - 1);
                 },
-                else => {}
+                else => {},
             }
         }
     }
