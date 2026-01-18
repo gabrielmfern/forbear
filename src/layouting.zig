@@ -458,10 +458,13 @@ pub const LayoutTreeIterator = struct {
     stack: std.ArrayList(*const LayoutBox),
     allocator: std.mem.Allocator,
 
+    root: *const LayoutBox,
+
     pub fn init(allocator: std.mem.Allocator, root: *const LayoutBox) !@This() {
         var iterator = @This(){
             .stack = try std.ArrayList(*const LayoutBox).initCapacity(allocator, 16),
             .allocator = allocator,
+            .root = root,
         };
         try iterator.stack.append(allocator, root);
         return iterator;
@@ -469,6 +472,11 @@ pub const LayoutTreeIterator = struct {
 
     pub fn deinit(self: *@This()) void {
         self.stack.deinit(self.allocator);
+    }
+
+    pub fn reset(self: *@This()) !void {
+        self.stack.clearRetainingCapacity();
+        try self.stack.append(self.root);
     }
 
     pub fn next(self: *@This()) !?*const LayoutBox {

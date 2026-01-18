@@ -1223,7 +1223,7 @@ const ElementsPipeline = struct {
     elementModel: Model,
 
     shaderBuffers: [maxFramesInFlight]Buffer,
-    shaderBuffersMapped: [maxFramesInFlight][]ElementRenderingData,
+    elementsShaderData: [maxFramesInFlight][]ElementRenderingData,
 
     sampler: c.VkSampler,
 
@@ -1556,15 +1556,15 @@ const ElementsPipeline = struct {
 
             .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
             .shaderBuffers = shaderBuffers,
-            .shaderBuffersMapped = shaderBuffersMapped,
+            .elementsShaderData = shaderBuffersMapped,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
             .sampler = sampler,
         };
     }
 
-    fn resizeElementsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
-        std.log.debug("increasing concurrent element capacity from {d} to {d}", .{ self.shaderBuffersMapped[0].len, newCapacity });
+    fn resizeConcurrentElementCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
+        std.log.debug("increasing concurrent element capacity from {d} to {d}", .{ self.elementsShaderData[0].len, newCapacity });
         for (self.shaderBuffers) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
             buffer.deinit(logicalDevice);
@@ -1581,7 +1581,7 @@ const ElementsPipeline = struct {
             self.shaderBuffers[i] = buffer;
             var storageBufferData: ?*anyopaque = undefined;
             try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-            self.shaderBuffersMapped[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
+            self.elementsShaderData[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
         }
 
         for (self.shaderBuffers, 0..) |buffer, i| {
@@ -2898,8 +2898,8 @@ pub const Renderer = struct {
         );
 
         const layoutBoxCount = countTreeSize(rootLayoutBox);
-        if (layoutBoxCount > self.elementsPipeline.shaderBuffersMapped[0].len) {
-            try self.elementsPipeline.resizeElementsCapacity(
+        if (layoutBoxCount > self.elementsPipeline.elementsShaderData[0].len) {
+            try self.elementsPipeline.resizeConcurrentElementCapacity(
                 self.logicalDevice,
                 self.physicalDevice,
                 try std.math.ceilPowerOfTwo(usize, layoutBoxCount),
@@ -2917,7 +2917,7 @@ pub const Renderer = struct {
                 .color => -1,
                 .image => |imgPtr| @intCast(try self.registerImage(imgPtr)),
             };
-            self.elementsPipeline.shaderBuffersMapped[self.framesRenderedInSwapchain % maxFramesInFlight][i] = ElementRenderingData{
+            self.elementsPipeline.elementsShaderData[self.framesRenderedInSwapchain % maxFramesInFlight][i] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
                         zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
