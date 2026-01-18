@@ -380,6 +380,12 @@ const LayoutCreator = struct {
         };
         style.borderInlineWidth *= @splat(resolutionMultiplier[0]);
         style.borderBlockWidth *= @splat(resolutionMultiplier[1]);
+        if (style.shadow) |*shadow| {
+            shadow.offsetInline *= @splat(resolutionMultiplier[0]);
+            shadow.offsetBlock *= @splat(resolutionMultiplier[1]);
+            shadow.blurRadius *= resolutionMultiplier[0];
+            shadow.spread *= resolutionMultiplier[0];
+        }
         style.paddingInline *= @splat(resolutionMultiplier[0]);
         style.paddingBlock *= @splat(resolutionMultiplier[1]);
         style.marginInline *= @splat(resolutionMultiplier[0]);
@@ -476,7 +482,7 @@ pub const LayoutTreeIterator = struct {
 
     pub fn reset(self: *@This()) !void {
         self.stack.clearRetainingCapacity();
-        try self.stack.append(self.root);
+        try self.stack.append(self.allocator, self.root);
     }
 
     pub fn next(self: *@This()) !?*const LayoutBox {
