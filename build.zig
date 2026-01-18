@@ -82,6 +82,17 @@ const Dependencies = struct {
     }
 };
 
+pub fn addShaderImport(b: *std.Build, module: *std.Build.Module, path: []const u8, name: []const u8) void {
+    const glslangValidatorCommand = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
+    const spirv = glslangValidatorCommand.addOutputFileArg(std.fs.path.basename(path));
+    glslangValidatorCommand.addFileArg(b.path(path));
+
+    module.addAnonymousImport(
+        name,
+        .{ .root_source_file = spirv },
+    );
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -139,41 +150,12 @@ pub fn build(b: *std.Build) void {
         }
     }
 
-    const vert_glsl_cmd = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
-    const vert_spv = vert_glsl_cmd.addOutputFileArg("vertex.spv");
-    vert_glsl_cmd.addFileArg(b.path("shaders/element/vertex.vert"));
-
-    forbear.addAnonymousImport(
-        "element_vertex_shader",
-        .{ .root_source_file = vert_spv },
-    );
-
-    const frag_glsl_cmd = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
-    const frag_spv = frag_glsl_cmd.addOutputFileArg("fragment.spv");
-    frag_glsl_cmd.addFileArg(b.path("shaders/element/fragment.frag"));
-
-    forbear.addAnonymousImport(
-        "element_fragment_shader",
-        .{ .root_source_file = frag_spv },
-    );
-
-    const text_vert_glsl_cmd = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
-    const text_vert_spv = text_vert_glsl_cmd.addOutputFileArg("text_vertex.spv");
-    text_vert_glsl_cmd.addFileArg(b.path("shaders/text/vertex.vert"));
-
-    forbear.addAnonymousImport(
-        "text_vertex_shader",
-        .{ .root_source_file = text_vert_spv },
-    );
-
-    const text_frag_glsl_cmd = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
-    const text_frag_spv = text_frag_glsl_cmd.addOutputFileArg("text_fragment.spv");
-    text_frag_glsl_cmd.addFileArg(b.path("shaders/text/fragment.frag"));
-
-    forbear.addAnonymousImport(
-        "text_fragment_shader",
-        .{ .root_source_file = text_frag_spv },
-    );
+    addShaderImport(b, forbear, "shaders/element/vertex.vert", "element_vertex_shader");
+    addShaderImport(b, forbear, "shaders/element/fragment.frag", "element_fragment_shader");
+    addShaderImport(b, forbear, "shaders/text/vertex.vert", "text_vertex_shader");
+    addShaderImport(b, forbear, "shaders/text/fragment.frag", "text_fragment_shader");
+    addShaderImport(b, forbear, "shaders/shadow/vertex.vert", "shadow_vertex_shader");
+    addShaderImport(b, forbear, "shaders/shadow/fragment.frag", "shadow_fragment_shader");
 
     const mod_tests = b.addTest(.{
         .root_module = forbear,

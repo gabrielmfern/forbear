@@ -25,7 +25,8 @@ pub const Sizing = union(enum) {
 };
 
 pub const Shadow = struct {
-    offset: Vec4,
+    offsetBlock: Vec2,
+    offsetInline: Vec2,
     blurRadius: f32,
     spread: f32,
     color: Vec4,
