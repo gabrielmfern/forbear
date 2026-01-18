@@ -15,7 +15,7 @@ void main() {
     vec2 p = (localPos.xy - 0.5) * size;
 
     // The shadow shape is based on the original element size, not the quad size
-    float r = min(borderRadius, min(size.x, size.y) * 0.5);
+    float r = min(borderRadius, min(elementSize.x, elementSize.y) * 0.5);
 
     // SDF for rounded rectangle (using original element size)
     vec2 q = abs(p) - elementSize * 0.5 + r;
