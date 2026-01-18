@@ -97,10 +97,9 @@ pub fn main() !void {
             allocator,
         },
     );
+    defer renderingThread.join();
 
     try window.handleEvents();
-
-    renderingThread.join();
 }
 
 fn handleResize(window: *forbear.Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
