@@ -4,33 +4,36 @@ layout(location = 0) in vec4 vertexColor;
 layout(location = 1) in float borderRadius;
 layout(location = 2) in vec4 localPos;
 layout(location = 3) in vec2 size;
-layout(location = 4) in float blur;
-layout(location = 5) in float spread;
+layout(location = 4) in vec2 elementSize;
+layout(location = 5) in float blur;
+layout(location = 6) in float spread;
 
 layout(location = 0) out vec4 outColor;
 
 void main() {
+    // localPos.xy is 0-1 across the quad, convert to pixel coords centered at origin
     vec2 p = (localPos.xy - 0.5) * size;
+
+    // The shadow shape is based on the original element size, not the quad size
     float r = min(borderRadius, min(size.x, size.y) * 0.5);
 
-    // SDF for rounded rectangle
-    vec2 q = abs(p) - size * 0.5 + r;
+    // SDF for rounded rectangle (using original element size)
+    vec2 q = abs(p) - elementSize * 0.5 + r;
     float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
 
-    vec4 color = vertexColor;
-    outColor = color;
-    outColor.a *= step(d, 0.0);
+    // Apply spread: positive spread expands shadow, negative contracts
+    float adjustedDist = d - spread;
 
-    // Gaussian blur
+    // Calculate alpha based on distance and blur
+    float alpha;
     if (blur > 0.0) {
-        float sigma = blur * 0.5;
-        float alpha = exp(-0.5 * (d * d) / (sigma * sigma));
-        outColor.a *= alpha;
+        // Smooth falloff from inside to outside over the blur radius
+        alpha = 1.0 - smoothstep(0.0, blur, adjustedDist);
+    } else {
+        // Hard edge when no blur
+        alpha = adjustedDist < 0.0 ? 1.0 : 0.0;
     }
 
-    // Spread effect
-    if (spread != 0.0) {
-        float spreadDist = spread;
-        outColor.a *= smoothstep(-spreadDist, 0.0, -d);
-    }
+    outColor = vertexColor;
+    outColor.a *= alpha;
 }

@@ -6,14 +6,16 @@ layout(location = 0) out vec4 vertexColor;
 layout(location = 1) out float borderRadius;
 layout(location = 2) out vec4 localPos;
 layout(location = 3) out vec2 size;
-layout(location = 4) out float blur;
-layout(location = 5) out float spread;
+layout(location = 4) out vec2 elementSize;
+layout(location = 5) out float blur;
+layout(location = 6) out float spread;
 
 struct ShadowRenderingData {
     float blur;
     float borderRadius;
     vec4 color;
     mat4 modelViewProjectionMatrix;
+    vec2 elementSize;
     vec2 size;
     float spread;
 };
@@ -29,6 +31,7 @@ void main() {
     vertexColor = data.color;
     borderRadius = data.borderRadius;
     size = data.size;
+    elementSize = data.elementSize;
     localPos = vec4(vertexPosition, 1.0);
     blur = data.blur;
     spread = data.spread;

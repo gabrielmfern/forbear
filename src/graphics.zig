@@ -1207,6 +1207,7 @@ const ShadowRenderingData = extern struct {
     borderRadius: f32,
     color: Vec4,
     modelViewProjectionMatrix: zmath.Mat,
+    elementSize: [2]f32,
     size: [2]f32,
     spread: f32,
 };
@@ -3310,18 +3311,28 @@ pub const Renderer = struct {
             var shadowIndex: usize = 0;
             while (try layoutTreeIterator.next()) |layoutBox| {
                 if (layoutBox.style.shadow) |shadow| {
+                    const padding = Vec2{
+                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
+                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    };
+                    const position = Vec2{
+                        layoutBox.position[0] - padding[0] - shadow.offsetInline[0] + shadow.offsetInline[1],
+                        layoutBox.position[1] - padding[1] - shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    };
+                    const size = layoutBox.size + padding * Vec2{ 2, 2 };
                     self.shadowsPipeline.shadowShaderData[self.framesRenderedInSwapchain % maxFramesInFlight][shadowIndex] = ShadowRenderingData{
                         .modelViewProjectionMatrix = zmath.mul(
                             zmath.mul(
-                                zmath.scaling(layoutBox.size[0] + shadow.offsetInline[0], layoutBox.size[1] + shadow.offsetBlock[0], 1.0),
-                                zmath.translation(layoutBox.position[0] + shadow.offsetInline[1], layoutBox.position[1] + shadow.offsetBlock[1], 0.0),
+                                zmath.scaling(size[0], size[1], 1.0),
+                                zmath.translation(position[0], position[1], 0.0),
                             ),
                             projectionMatrix,
                         ),
                         .color = srgbToLinearColor(shadow.color),
                         .blur = shadow.blurRadius,
                         .spread = shadow.spread,
-                        .size = layoutBox.size,
+                        .elementSize = layoutBox.size,
+                        .size = size,
                         .borderRadius = layoutBox.style.borderRadius,
                     };
                     shadowIndex += 1;
