@@ -1202,6 +1202,371 @@ const Model = struct {
     }
 };
 
+const ShadowRenderingData = extern struct {
+    blur: f32,
+    borderRadius: f32,
+    color: Vec4,
+    modelViewProjectionMatrix: zmath.Mat,
+    size: [2]f32,
+    spread: f32,
+};
+
+const ShadowsPipeline = struct {
+    pipelineLayout: c.VkPipelineLayout,
+    graphicsPipeline: c.VkPipeline,
+
+    shaderBufferDescriptorSetLayout: c.VkDescriptorSetLayout,
+    descriptorPool: c.VkDescriptorPool,
+    descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
+
+    shadowShaderDataBuffers: [maxFramesInFlight]Buffer,
+    shadowShaderData: [maxFramesInFlight][]ShadowRenderingData,
+
+    const shadowVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("shadow_vertex_shader")));
+    const shadowFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("shadow_fragment_shader")));
+
+    fn init(
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        renderPass: c.VkRenderPass,
+    ) !@This() {
+        var vertexShaderModule: c.VkShaderModule = undefined;
+        try ensureNoError(c.vkCreateShaderModule(
+            logicalDevice,
+            &c.VkShaderModuleCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .codeSize = @sizeOf(u32) * shadowVertexShader.len,
+                .pCode = shadowVertexShader.ptr,
+            },
+            null,
+            &vertexShaderModule,
+        ));
+        defer c.vkDestroyShaderModule(logicalDevice, vertexShaderModule, null);
+
+        var fragmentShaderModule: c.VkShaderModule = undefined;
+        try ensureNoError(c.vkCreateShaderModule(
+            logicalDevice,
+            &c.VkShaderModuleCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .codeSize = @sizeOf(u32) * shadowFragmentShader.len,
+                .pCode = shadowFragmentShader.ptr,
+            },
+            null,
+            &fragmentShaderModule,
+        ));
+        defer c.vkDestroyShaderModule(logicalDevice, fragmentShaderModule, null);
+
+        const shaderStages: []const c.VkPipelineShaderStageCreateInfo = &.{
+            c.VkPipelineShaderStageCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+                .module = vertexShaderModule,
+                .pName = "main",
+                .pSpecializationInfo = null,
+            },
+            c.VkPipelineShaderStageCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .module = fragmentShaderModule,
+                .pName = "main",
+                .pSpecializationInfo = null,
+            },
+        };
+
+        const dynamicStates: []const c.VkDynamicState = &.{
+            c.VK_DYNAMIC_STATE_VIEWPORT,
+            c.VK_DYNAMIC_STATE_SCISSOR,
+        };
+
+        const bindings = [_]c.VkDescriptorSetLayoutBinding{
+            .{
+                .binding = 0,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+                .pImmutableSamplers = null,
+            },
+        };
+
+        var shaderBufferDescriptorSetLayout: c.VkDescriptorSetLayout = undefined;
+        try ensureNoError(c.vkCreateDescriptorSetLayout(
+            logicalDevice,
+            &c.VkDescriptorSetLayoutCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .pNext = null,
+                .flags = c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+                .bindingCount = bindings.len,
+                .pBindings = &bindings,
+            },
+            null,
+            &shaderBufferDescriptorSetLayout,
+        ));
+
+        var pipelineLayout: c.VkPipelineLayout = undefined;
+        try ensureNoError(c.vkCreatePipelineLayout(
+            logicalDevice,
+            &c.VkPipelineLayoutCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .setLayoutCount = 1,
+                .pSetLayouts = &shaderBufferDescriptorSetLayout,
+                .pushConstantRangeCount = 0,
+                .pPushConstantRanges = null,
+            },
+            null,
+            &pipelineLayout,
+        ));
+        errdefer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
+
+        const bindingDescription = Vertex.getBindingDescription();
+        const attributeDescriptions = Vertex.getAttributeDescriptions();
+
+        var graphicsPipeline: c.VkPipeline = undefined;
+        try ensureNoError(c.vkCreateGraphicsPipelines(
+            logicalDevice,
+            null,
+            1,
+            &c.VkGraphicsPipelineCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .stageCount = @intCast(shaderStages.len),
+                .pStages = shaderStages.ptr,
+                .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .vertexBindingDescriptionCount = 1,
+                    .pVertexBindingDescriptions = &bindingDescription,
+                    .vertexAttributeDescriptionCount = attributeDescriptions.len,
+                    .pVertexAttributeDescriptions = &attributeDescriptions,
+                },
+                .pInputAssemblyState = &c.VkPipelineInputAssemblyStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                    .primitiveRestartEnable = c.VK_FALSE,
+                },
+                .pViewportState = &c.VkPipelineViewportStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .viewportCount = 1,
+                    .scissorCount = 1,
+                },
+                .pRasterizationState = &c.VkPipelineRasterizationStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .depthClampEnable = c.VK_FALSE,
+                    .rasterizerDiscardEnable = c.VK_FALSE,
+                    .polygonMode = c.VK_POLYGON_MODE_FILL,
+                    .cullMode = c.VK_CULL_MODE_BACK_BIT,
+                    .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
+                    .lineWidth = 1.0,
+                    .depthBiasEnable = c.VK_FALSE,
+                    .depthBiasConstantFactor = 0.0,
+                    .depthBiasClamp = 0.0,
+                    .depthBiasSlopeFactor = 0.0,
+                },
+                .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                    .sampleShadingEnable = c.VK_FALSE,
+                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .minSampleShading = 1.0,
+                    .pSampleMask = null,
+                    .alphaToCoverageEnable = c.VK_FALSE,
+                    .alphaToOneEnable = c.VK_FALSE,
+                    .pNext = null,
+                    .flags = 0,
+                },
+                .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .logicOpEnable = c.VK_FALSE,
+                    .logicOp = c.VK_LOGIC_OP_COPY,
+                    .attachmentCount = 1,
+                    .pAttachments = &c.VkPipelineColorBlendAttachmentState{
+                        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
+                        .blendEnable = c.VK_TRUE,
+                        .srcColorBlendFactor = c.VK_BLEND_FACTOR_SRC_ALPHA,
+                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                        .colorBlendOp = c.VK_BLEND_OP_ADD,
+                        .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .alphaBlendOp = c.VK_BLEND_OP_ADD,
+                    },
+                    .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
+                },
+                .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .dynamicStateCount = @intCast(dynamicStates.len),
+                    .pDynamicStates = dynamicStates.ptr,
+                },
+                .layout = pipelineLayout,
+                .renderPass = renderPass,
+                .subpass = 0,
+                .basePipelineHandle = null,
+                .basePipelineIndex = -1,
+            },
+            null,
+            &graphicsPipeline,
+        ));
+        errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
+
+        const initialShadowCapacity = 1;
+
+        var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
+        var shaderBuffersMapped: [maxFramesInFlight][]ShadowRenderingData = undefined;
+        for (0..maxFramesInFlight) |i| {
+            const buffer = try Buffer.init(
+                logicalDevice,
+                physicalDevice,
+                @sizeOf(ShadowRenderingData) * initialShadowCapacity,
+                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            );
+            shaderBuffers[i] = buffer;
+            var storageBufferData: ?*anyopaque = undefined;
+            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
+            shaderBuffersMapped[i] = @as([*]ShadowRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..initialShadowCapacity];
+        }
+
+        const poolSizes = [_]c.VkDescriptorPoolSize{
+            .{
+                .type = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = maxFramesInFlight,
+            },
+        };
+
+        var descriptorPool: c.VkDescriptorPool = undefined;
+        try ensureNoError(c.vkCreateDescriptorPool(logicalDevice, &c.VkDescriptorPoolCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .poolSizeCount = poolSizes.len,
+            .maxSets = maxFramesInFlight,
+            .pPoolSizes = &poolSizes,
+            .flags = c.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+            .pNext = null,
+        }, null, &descriptorPool));
+
+        var descriptorSets: [maxFramesInFlight]c.VkDescriptorSet = undefined;
+        try ensureNoError(c.vkAllocateDescriptorSets(logicalDevice, &c.VkDescriptorSetAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = descriptorPool,
+            .descriptorSetCount = maxFramesInFlight,
+            .pSetLayouts = &([1]c.VkDescriptorSetLayout{shaderBufferDescriptorSetLayout} ** maxFramesInFlight),
+        }, &descriptorSets));
+
+        for (shaderBuffers, 0..) |buffer, i| {
+            const bufferInfo = c.VkDescriptorBufferInfo{
+                .buffer = buffer.handle,
+                .offset = 0,
+                .range = c.VK_WHOLE_SIZE,
+            };
+
+            const descriptorWrite = c.VkWriteDescriptorSet{
+                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = null,
+                .dstSet = descriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pImageInfo = null,
+                .pBufferInfo = &bufferInfo,
+                .pTexelBufferView = null,
+            };
+
+            c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+        }
+
+        return ShadowsPipeline{
+            .pipelineLayout = pipelineLayout,
+            .graphicsPipeline = graphicsPipeline,
+
+            .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
+            .shadowShaderDataBuffers = shaderBuffers,
+            .shadowShaderData = shaderBuffersMapped,
+            .descriptorSets = descriptorSets,
+            .descriptorPool = descriptorPool,
+        };
+    }
+
+    fn resizeConcurrentShadowCapacity(
+        self: *@This(),
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        newCapacity: usize,
+    ) !void {
+        std.log.debug("increasing concurrent shadow capacity from {d} to {d}", .{ self.shadowShaderData[0].len, newCapacity });
+        for (self.shadowShaderDataBuffers) |buffer| {
+            c.vkUnmapMemory(logicalDevice, buffer.memory);
+            buffer.deinit(logicalDevice);
+        }
+
+        for (0..maxFramesInFlight) |i| {
+            const buffer = try Buffer.init(
+                logicalDevice,
+                physicalDevice,
+                @sizeOf(ShadowRenderingData) * newCapacity,
+                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            );
+            self.shadowShaderDataBuffers[i] = buffer;
+            var storageBufferData: ?*anyopaque = undefined;
+            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
+            self.shadowShaderData[i] = @as([*]ShadowRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
+        }
+
+        for (self.shadowShaderDataBuffers, 0..) |buffer, i| {
+            const bufferInfo = c.VkDescriptorBufferInfo{
+                .buffer = buffer.handle,
+                .offset = 0,
+                .range = c.VK_WHOLE_SIZE,
+            };
+
+            const descriptorWrite = c.VkWriteDescriptorSet{
+                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = null,
+                .dstSet = self.descriptorSets[i],
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pImageInfo = null,
+                .pBufferInfo = &bufferInfo,
+                .pTexelBufferView = null,
+            };
+
+            c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+        }
+    }
+
+    fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+        c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
+
+        for (self.shadowShaderDataBuffers) |buffer| {
+            c.vkUnmapMemory(logicalDevice, buffer.memory);
+            buffer.deinit(logicalDevice);
+        }
+
+        c.vkDestroyDescriptorSetLayout(logicalDevice, self.shaderBufferDescriptorSetLayout, null);
+        c.vkDestroyPipeline(logicalDevice, self.graphicsPipeline, null);
+        c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
+    }
+};
+
 const ElementRenderingData = extern struct {
     backgroundColor: Vec4,
     borderColor: Vec4,
@@ -1220,9 +1585,7 @@ const ElementsPipeline = struct {
     descriptorPool: c.VkDescriptorPool,
     descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
 
-    elementModel: Model,
-
-    shaderBuffers: [maxFramesInFlight]Buffer,
+    elementsShaderDataBuffer: [maxFramesInFlight]Buffer,
     elementsShaderData: [maxFramesInFlight][]ElementRenderingData,
 
     sampler: c.VkSampler,
@@ -1235,8 +1598,6 @@ const ElementsPipeline = struct {
     fn init(
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-        graphicsQueue: c.VkQueue,
-        commandPool: c.VkCommandPool,
         renderPass: c.VkRenderPass,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
@@ -1441,22 +1802,6 @@ const ElementsPipeline = struct {
         ));
         errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
 
-        const elementModel = try Model.init(
-            &.{
-                .{ .position = .{ 0.0, 0.0, 0.0 } },
-                .{ .position = .{ 1.0, 0.0, 0.0 } },
-                .{ .position = .{ 0.0, 1.0, 0.0 } },
-
-                .{ .position = .{ 1.0, 0.0, 0.0 } },
-                .{ .position = .{ 1.0, 1.0, 0.0 } },
-                .{ .position = .{ 0.0, 1.0, 0.0 } },
-            },
-            logicalDevice,
-            physicalDevice,
-            graphicsQueue,
-            commandPool,
-        );
-
         const initialElementCapacity = 1;
 
         var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
@@ -1552,10 +1897,9 @@ const ElementsPipeline = struct {
         return ElementsPipeline{
             .pipelineLayout = pipelineLayout,
             .graphicsPipeline = graphicsPipeline,
-            .elementModel = elementModel,
 
             .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
-            .shaderBuffers = shaderBuffers,
+            .elementsShaderDataBuffer = shaderBuffers,
             .elementsShaderData = shaderBuffersMapped,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
@@ -1565,7 +1909,7 @@ const ElementsPipeline = struct {
 
     fn resizeConcurrentElementCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
         std.log.debug("increasing concurrent element capacity from {d} to {d}", .{ self.elementsShaderData[0].len, newCapacity });
-        for (self.shaderBuffers) |buffer| {
+        for (self.elementsShaderDataBuffer) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
             buffer.deinit(logicalDevice);
         }
@@ -1578,13 +1922,13 @@ const ElementsPipeline = struct {
                 c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             );
-            self.shaderBuffers[i] = buffer;
+            self.elementsShaderDataBuffer[i] = buffer;
             var storageBufferData: ?*anyopaque = undefined;
             try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
             self.elementsShaderData[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
         }
 
-        for (self.shaderBuffers, 0..) |buffer, i| {
+        for (self.elementsShaderDataBuffer, 0..) |buffer, i| {
             const bufferInfo = c.VkDescriptorBufferInfo{
                 .buffer = buffer.handle,
                 .offset = 0,
@@ -1612,13 +1956,12 @@ const ElementsPipeline = struct {
         c.vkDestroySampler(logicalDevice, self.sampler, null);
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
 
-        for (self.shaderBuffers) |buffer| {
+        for (self.elementsShaderDataBuffer) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
             buffer.deinit(logicalDevice);
         }
 
         c.vkDestroyDescriptorSetLayout(logicalDevice, self.shaderBufferDescriptorSetLayout, null);
-        self.elementModel.deinit(logicalDevice);
         c.vkDestroyPipeline(logicalDevice, self.graphicsPipeline, null);
         c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
     }
@@ -1635,8 +1978,6 @@ const TextPipeline = struct {
     fontTextureAtlas: FontTextureAtlas,
     glyphRenderingDataCache: std.AutoHashMap(GlyphRenderingKey, GlyphRenderingData),
     sampler: c.VkSampler,
-
-    glyphModel: Model,
 
     shaderBuffers: [maxFramesInFlight]Buffer,
     shaderBuffersMapped: [maxFramesInFlight][]GlypRenderingShaderData,
@@ -1881,22 +2222,6 @@ const TextPipeline = struct {
         ));
         errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
 
-        const glyphModel = try Model.init(
-            &.{
-                .{ .position = .{ 0.0, 0.0, 0.0 } },
-                .{ .position = .{ 1.0, 0.0, 0.0 } },
-                .{ .position = .{ 0.0, 1.0, 0.0 } },
-
-                .{ .position = .{ 1.0, 0.0, 0.0 } },
-                .{ .position = .{ 1.0, 1.0, 0.0 } },
-                .{ .position = .{ 0.0, 1.0, 0.0 } },
-            },
-            logicalDevice,
-            physicalDevice,
-            graphicsQueue,
-            commandPool,
-        );
-
         const initialGlyphCapacity = 1;
 
         var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
@@ -2021,7 +2346,6 @@ const TextPipeline = struct {
         return TextPipeline{
             .pipelineLayout = pipelineLayout,
             .graphicsPipeline = graphicsPipeline,
-            .glyphModel = glyphModel,
 
             .descriptorSetLayout = descriptorSetLayout,
             .shaderBuffers = shaderBuffers,
@@ -2112,7 +2436,6 @@ const TextPipeline = struct {
         }
 
         c.vkDestroyDescriptorSetLayout(logicalDevice, self.descriptorSetLayout, null);
-        self.glyphModel.deinit(logicalDevice);
         c.vkDestroyPipeline(logicalDevice, self.graphicsPipeline, null);
         c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
     }
@@ -2155,8 +2478,10 @@ pub const Renderer = struct {
     swapchainFramebuffers: []c.VkFramebuffer,
 
     elementsPipeline: ElementsPipeline,
+    shadowsPipeline: ShadowsPipeline,
     textPipeline: TextPipeline,
     renderPass: c.VkRenderPass,
+    rectangleModel: Model,
 
     registeredImages: std.ArrayList(*const Image),
 
@@ -2554,11 +2879,25 @@ pub const Renderer = struct {
         ));
         errdefer c.vkDestroyCommandPool(logicalDevice, commandPool, null);
 
-        const elementsPipeline = try ElementsPipeline.init(
+        const rectangleModel = try Model.init(
+            &.{
+                .{ .position = .{ 0.0, 0.0, 0.0 } },
+                .{ .position = .{ 1.0, 0.0, 0.0 } },
+                .{ .position = .{ 0.0, 1.0, 0.0 } },
+
+                .{ .position = .{ 1.0, 0.0, 0.0 } },
+                .{ .position = .{ 1.0, 1.0, 0.0 } },
+                .{ .position = .{ 0.0, 1.0, 0.0 } },
+            },
             logicalDevice,
             physicalDevice,
             graphicsQueue,
             commandPool,
+        );
+
+        const elementsPipeline = try ElementsPipeline.init(
+            logicalDevice,
+            physicalDevice,
             renderPass,
         );
         errdefer elementsPipeline.deinit(logicalDevice);
@@ -2572,6 +2911,13 @@ pub const Renderer = struct {
             graphics.allocator,
         );
         errdefer textPipeline.deinit(logicalDevice, graphics.allocator);
+
+        const shadowsPipeline = try ShadowsPipeline.init(
+            logicalDevice,
+            physicalDevice,
+            renderPass,
+        );
+        errdefer shadowsPipeline.deinit(logicalDevice);
 
         const framebuffers = try createFramebuffers(logicalDevice, renderPass, swapchain, graphics.allocator);
         errdefer destroyFramebuffers(framebuffers, logicalDevice, graphics.allocator);
@@ -2662,6 +3008,8 @@ pub const Renderer = struct {
 
             .elementsPipeline = elementsPipeline,
             .textPipeline = textPipeline,
+            .shadowsPipeline = shadowsPipeline,
+            .rectangleModel = rectangleModel,
             .renderPass = renderPass,
 
             .registeredImages = try std.ArrayList(*const Image).initCapacity(graphics.allocator, 16),
@@ -2763,6 +3111,8 @@ pub const Renderer = struct {
         self.elementsPipeline.deinit(self.logicalDevice);
         self.registeredImages.deinit(self.allocator);
         self.textPipeline.deinit(self.logicalDevice, self.allocator);
+        self.shadowsPipeline.deinit(self.logicalDevice);
+        self.rectangleModel.deinit(self.logicalDevice);
         c.vkDestroyRenderPass(self.logicalDevice, self.renderPass, null);
         self.swapchain.deinit(self.logicalDevice);
         c.vkDestroyDevice(self.logicalDevice, null);
@@ -2868,12 +3218,6 @@ pub const Renderer = struct {
             c.VK_SUBPASS_CONTENTS_INLINE,
         );
 
-        c.vkCmdBindPipeline(
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            self.elementsPipeline.graphicsPipeline,
-        );
-
         c.vkCmdSetViewport(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkViewport{c.VkViewport{
             .x = 0.0,
             .y = 0.0,
@@ -2905,15 +3249,15 @@ pub const Renderer = struct {
                 try std.math.ceilPowerOfTwo(usize, layoutBoxCount),
             );
         }
+
+        var totalGlyphCount: usize = 0;
+        var totalShadowCount: usize = 0;
+
         var layoutTreeIterator = try LayoutTreeIterator.init(self.allocator, rootLayoutBox);
         defer layoutTreeIterator.deinit();
-        var totalGlyphCount: usize = 0;
         var i: usize = 0;
         while (try layoutTreeIterator.next()) |layoutBox| {
-            if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
-                totalGlyphCount += layoutBox.children.?.glyphs.len;
-            }
-            const texture_index: i32 = switch (layoutBox.style.background) {
+            const textureIndex: i32 = switch (layoutBox.style.background) {
                 .color => -1,
                 .image => |imgPtr| @intCast(try self.registerImage(imgPtr)),
             };
@@ -2938,11 +3282,90 @@ pub const Renderer = struct {
                     layoutBox.style.borderInlineWidth[0],
                     layoutBox.style.borderInlineWidth[1],
                 },
-                .imageIndex = texture_index,
+                .imageIndex = textureIndex,
             };
+
+            if (layoutBox.style.shadow != null) {
+                totalShadowCount += 1;
+            }
+
+            if (layoutBox.children) |children| {
+                if (children == .glyphs) {
+                    totalGlyphCount += children.glyphs.len;
+                }
+            }
+
             i += 1;
         }
 
+        if (totalShadowCount > 0) {
+            if (totalShadowCount > self.shadowsPipeline.shadowShaderData[0].len) {
+                try self.shadowsPipeline.resizeConcurrentShadowCapacity(
+                    self.logicalDevice,
+                    self.physicalDevice,
+                    try std.math.ceilPowerOfTwo(usize, totalShadowCount),
+                );
+            }
+            try layoutTreeIterator.reset();
+            var shadowIndex: usize = 0;
+            while (try layoutTreeIterator.next()) |layoutBox| {
+                if (layoutBox.style.shadow) |shadow| {
+                    self.shadowsPipeline.shadowShaderData[self.framesRenderedInSwapchain % maxFramesInFlight][shadowIndex] = ShadowRenderingData{
+                        .modelViewProjectionMatrix = zmath.mul(
+                            zmath.mul(
+                                zmath.scaling(layoutBox.size[0] + shadow.offsetInline[0], layoutBox.size[1] + shadow.offsetBlock[0], 1.0),
+                                zmath.translation(layoutBox.position[0] + shadow.offsetInline[1], layoutBox.position[1] + shadow.offsetBlock[1], 0.0),
+                            ),
+                            projectionMatrix,
+                        ),
+                        .color = srgbToLinearColor(shadow.color),
+                        .blur = shadow.blurRadius,
+                        .spread = shadow.spread,
+                        .size = layoutBox.size,
+                        .borderRadius = layoutBox.style.borderRadius,
+                    };
+                    shadowIndex += 1;
+                }
+            }
+
+            c.vkCmdBindPipeline(
+                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                self.shadowsPipeline.graphicsPipeline,
+            );
+
+            c.vkCmdBindDescriptorSets(
+                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                self.shadowsPipeline.pipelineLayout,
+                0,
+                1,
+                &self.shadowsPipeline.descriptorSets[self.framesRenderedInSwapchain % maxFramesInFlight],
+                0,
+                null,
+            );
+
+            c.vkCmdBindVertexBuffers(
+                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                0,
+                1,
+                &self.rectangleModel.vertexBuffer.handle,
+                &@intCast(0),
+            );
+            c.vkCmdDraw(
+                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                self.rectangleModel.vertexCount,
+                @intCast(totalShadowCount),
+                0,
+                0,
+            );
+        }
+
+        c.vkCmdBindPipeline(
+            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.elementsPipeline.graphicsPipeline,
+        );
         c.vkCmdBindDescriptorSets(
             self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -2953,9 +3376,20 @@ pub const Renderer = struct {
             0,
             null,
         );
-
-        c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &self.elementsPipeline.elementModel.vertexBuffer.handle, &@intCast(0));
-        c.vkCmdDraw(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], self.elementsPipeline.elementModel.vertexCount, @intCast(layoutBoxCount), 0, 0);
+        c.vkCmdBindVertexBuffers(
+            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+            0,
+            1,
+            &self.rectangleModel.vertexBuffer.handle,
+            &@intCast(0),
+        );
+        c.vkCmdDraw(
+            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+            self.rectangleModel.vertexCount,
+            @intCast(layoutBoxCount),
+            0,
+            0,
+        );
 
         if (totalGlyphCount > 0) {
             if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
@@ -2966,12 +3400,13 @@ pub const Renderer = struct {
                 );
             }
 
-            var layoutTreeIteratorForText = try LayoutTreeIterator.init(self.allocator, rootLayoutBox);
-            defer layoutTreeIteratorForText.deinit();
             var glyphIndex: usize = 0;
-            while (try layoutTreeIteratorForText.next()) |layoutBox| {
+            try layoutTreeIterator.reset();
+            while (try layoutTreeIterator.next()) |layoutBox| {
                 if (layoutBox.children) |children| {
                     if (children == .glyphs) {
+                        totalGlyphCount += layoutBox.children.?.glyphs.len;
+
                         for (children.glyphs) |glyph| {
                             const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
                                 .fontKey = layoutBox.style.font.key,
@@ -3068,8 +3503,20 @@ pub const Renderer = struct {
                 null,
             );
 
-            c.vkCmdBindVertexBuffers(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &self.textPipeline.glyphModel.vertexBuffer.handle, &@intCast(0));
-            c.vkCmdDraw(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], self.textPipeline.glyphModel.vertexCount, @intCast(totalGlyphCount), 0, 0);
+            c.vkCmdBindVertexBuffers(
+                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                0,
+                1,
+                &self.rectangleModel.vertexBuffer.handle,
+                &@intCast(0),
+            );
+            c.vkCmdDraw(
+                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                self.rectangleModel.vertexCount,
+                @intCast(totalGlyphCount),
+                0,
+                0,
+            );
         }
 
         c.vkCmdEndRenderPass(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]);
