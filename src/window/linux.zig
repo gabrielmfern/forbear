@@ -9,7 +9,7 @@ const Self = @This();
 pub const Handlers = struct {
     pointerEnter: ?struct {
         data: *anyopaque,
-        function: *const fn (window: *Self, serial: u32, x: c.wl_fixed_t, y: c.wl_fixed_t, data: *anyopaque) void,
+        function: *const fn (window: *Self, serial: u32, x: i32, y: i32, data: *anyopaque) void,
     } = null,
     pointerLeave: ?struct {
         data: *anyopaque,
@@ -17,7 +17,7 @@ pub const Handlers = struct {
     } = null,
     pointerMotion: ?struct {
         data: *anyopaque,
-        function: *const fn (window: *Self, time: u32, x: c.wl_fixed_t, y: c.wl_fixed_t, data: *anyopaque) void,
+        function: *const fn (window: *Self, time: u32, x: i32, y: i32, data: *anyopaque) void,
     } = null,
     pointerButton: ?struct {
         data: *anyopaque,
@@ -420,7 +420,7 @@ fn pointerHandleMotion(
 ) callconv(.c) void {
     const window: *Self = @ptrCast(@alignCast(data));
     if (window.handlers.pointerMotion) |handler| {
-        handler.function(window, time, surfaceX, surfaceY, handler.data);
+        handler.function(window, time, c.wl_fixed_to_int(surfaceX), c.wl_fixed_to_int(surfaceY), handler.data);
     }
     _ = wlPointer;
 }
@@ -698,6 +698,17 @@ const Cursor = enum {
     text,
     pointer,
 };
+
+pub fn setPointerMotion(
+    self: *Self,
+    handler: *const fn (window: *Self, time: u32, x: i32, y: i32, data: *anyopaque) void,
+    data: *anyopaque,
+) void {
+    self.handlers.pointerMotion = .{
+        .data = data,
+        .function = handler,
+    };
+}
 
 pub fn setResizeHandler(
     self: *Self,

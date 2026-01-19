@@ -2,11 +2,11 @@ const builtin = @import("builtin");
 
 pub const c = @cImport({
     switch (builtin.os.tag) {
-        .windows => {
-            @cDefine("VK_USE_PLATFORM_WIN32_KHR", "1");
-        },
         .linux => {
             @cDefine("VK_USE_PLATFORM_WAYLAND_KHR", "1");
+        },
+        .windows => {
+            @cDefine("VK_USE_PLATFORM_WIN32_KHR", "1");
         },
         .macos => {
             @cDefine("VK_USE_PLATFORM_METAL_EXT", "1");
