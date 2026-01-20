@@ -208,13 +208,26 @@ pub const Node = union(enum) {
     }
 };
 
+pub const EventHandlers = struct {
+    onMouseOver: ?struct {
+        data: ?*anyopaque,
+        handler: *const fn (mousePosition: Vec2, data: ?*anyopaque) anyerror!void,
+    } = null,
+    onMouseOut: ?struct {
+        data: ?*anyopaque,
+        handler: *const fn (mousePosition: Vec2, data: ?*anyopaque) anyerror!void,
+    } = null,
+};
+
 pub const Element = struct {
     style: IncompleteStyle,
+    handlers: EventHandlers,
     children: ?[]Node,
 };
 
 pub const ElementProps = struct {
     style: IncompleteStyle = .{},
+    handlers: EventHandlers = .{},
     children: ?[]Node = null,
 };
 
@@ -261,6 +274,7 @@ pub fn div(props: ElementProps) Node {
     return .{
         .element = .{
             .style = props.style,
+            .handlers = props.handlers,
             .children = props.children,
         },
     };
