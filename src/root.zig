@@ -67,6 +67,11 @@ pub fn update(self: *@This(), root: *const LayoutBox, arena: std.mem.Allocator) 
             try onMouseOver.handler(self.mousePosition, onMouseOver.data);
             self.hoveredElementKey = hoveredBox.key;
         }
+    } else if (previouslyHoveredLayoutBox) |prevBox| {
+        if (prevBox.handlers.onMouseOut) |onMouseOut| {
+            try onMouseOut.handler(self.mousePosition, onMouseOut.data);
+            self.hoveredElementKey = null;
+        }
     }
 }
 
