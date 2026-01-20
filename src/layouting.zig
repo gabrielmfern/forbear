@@ -4,6 +4,7 @@ const BaseStyle = @import("node.zig").BaseStyle;
 const Direction = @import("node.zig").Direction;
 const Element = @import("node.zig").Element;
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
+const EventHandlers = @import("node.zig").EventHandlers;
 const Node = @import("node.zig").Node;
 const Style = @import("node.zig").Style;
 
@@ -22,11 +23,15 @@ pub const LayoutBox = struct {
         glyphs: []LayoutGlyph,
     };
 
+    key: u64,
+
     position: Vec2,
+    z: usize,
     size: Vec2,
     minSize: Vec2,
     children: ?Children,
 
+    handlers: EventHandlers,
     style: Style,
 
     pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
@@ -360,19 +365,16 @@ fn placeChildrenOf(layoutBox: *LayoutBox) void {
 
 const LayoutCreator = struct {
     allocator: std.mem.Allocator,
+    path: std.ArrayList(usize),
 
-    fn init(allocator: std.mem.Allocator) @This() {
+    fn init(allocator: std.mem.Allocator) !@This() {
         return .{
             .allocator = allocator,
+            .path = try std.ArrayList(usize).initCapacity(allocator, 0),
         };
     }
 
-    fn create(
-        self: *@This(),
-        node: Node,
-        baseStyle: BaseStyle,
-        dpi: Vec2,
-    ) !LayoutBox {
+    fn create(self: *@This(), node: Node, baseStyle: BaseStyle, dpi: Vec2) !LayoutBox {
         const resolutionMultiplier = dpi / @as(Vec2, @splat(72));
         var style = switch (node) {
             .element => |element| element.style.completeWith(baseStyle),
@@ -391,10 +393,14 @@ const LayoutCreator = struct {
         style.marginInline *= @splat(resolutionMultiplier[0]);
         style.marginBlock *= @splat(resolutionMultiplier[1]);
         style.borderRadius *= resolutionMultiplier[0];
+
+        var hasher = std.hash.Wyhash.init(0);
+        hasher.update(@ptrCast(self.path.items));
         switch (node) {
             .element => |element| {
                 var layoutBox = LayoutBox{
                     .position = .{ 0.0, 0.0 },
+                    .z = self.path.items.len,
                     .size = .{
                         switch (style.preferredWidth) {
                             .fixed => |width| width,
@@ -409,14 +415,23 @@ const LayoutCreator = struct {
                         style.minWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else 0.0,
                         style.minHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else 0.0,
                     },
+                    .key = hasher.final(),
                     .children = null,
+                    .handlers = element.handlers,
                     .style = style,
                 };
                 if (element.children) |children| {
                     layoutBox.children = .{ .layoutBoxes = try self.allocator.alloc(LayoutBox, children.len) };
                     errdefer self.allocator.free(layoutBox.children.?.layoutBoxes);
                     for (children, 0..) |child, index| {
-                        layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style), dpi);
+                        try self.path.append(self.allocator, index);
+                        defer _ = self.path.pop();
+
+                        layoutBox.children.?.layoutBoxes[index] = try self.create(
+                            child,
+                            BaseStyle.from(style),
+                            dpi,
+                        );
                     }
                 }
                 return layoutBox;
@@ -448,12 +463,17 @@ const LayoutCreator = struct {
                 }
                 const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
 
+                hasher.update(text);
+
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
+                    .z = self.path.items.len,
+                    .key = hasher.final(),
                     .size = .{ cursor[0], pixelLineHeight },
                     .minSize = .{ maxAdvance[0], pixelLineHeight },
                     .children = .{ .glyphs = layoutGlyphs.items },
                     .style = style,
+                    .handlers = .{},
                 };
             },
         }
@@ -518,7 +538,7 @@ pub fn layout(
     dpi: Vec2,
     allocator: std.mem.Allocator,
 ) !LayoutBox {
-    var creator = LayoutCreator.init(allocator);
+    var creator = try LayoutCreator.init(allocator);
     var layoutBox = try creator.create(node, baseStyle, dpi);
     fitWidth(&layoutBox);
     fitHeight(&layoutBox);
