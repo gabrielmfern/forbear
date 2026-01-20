@@ -37,16 +37,6 @@ fn renderingMain(
                         .background = .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
                         .borderRadius = 20,
                     },
-                    .handlers = .{
-                        .onMouseOver = .{
-                            .handler = &(struct {
-                                fn handler(mousePosition: @Vector(2, f32), _: ?*anyopaque) anyerror!void {
-                                    std.log.debug("Mouse over red box at {}", .{mousePosition});
-                                }
-                            }).handler,
-                            .data = null,
-                        },
-                    },
                 }),
             }, arena),
         });
