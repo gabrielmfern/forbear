@@ -36,6 +36,6 @@ pub const c = @cImport({
 
             @cInclude("vulkan/vulkan_metal.h");
         },
-        else => {}
+        else => {},
     }
 });
