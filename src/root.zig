@@ -8,12 +8,15 @@ pub const Image = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
 pub const LayoutBox = layouting.LayoutBox;
-const node = @import("node.zig");
-pub const Node = node.Node;
-pub const Element = node.Element;
-pub const ElementProps = node.DivProps;
-pub const div = node.div;
-pub const children = node.children;
+const nodeImport = @import("node.zig");
+pub const Node = nodeImport.Node;
+pub const Component = nodeImport.Component;
+pub const component = nodeImport.component;
+pub const ComponentProps = nodeImport.ComponentProps;
+pub const Element = nodeImport.Element;
+pub const ElementProps = nodeImport.DivProps;
+pub const div = nodeImport.div;
+pub const children = nodeImport.children;
 pub const Window = @import("window/root.zig").Window;
 
 const Vec2 = @Vector(2, f32);
@@ -49,6 +52,61 @@ pub fn init(allocator: std.mem.Allocator) !void {
         .componentStates = .init(allocator),
         .componentResolutionState = null,
     };
+}
+
+const TreeNode = struct {
+    key: u64,
+    node: Node,
+};
+
+const Resolver = struct {
+    path: []usize,
+
+    fn resolve(self: @This(), node: Node) !TreeNode {
+        const forbear = getContext();
+
+        var hasher = std.hash.Wyhash.init(0);
+        hasher.update(std.mem.asBytes(self.path.items));
+        switch (node) {
+            .component => |comp| {
+                hasher.update(std.mem.asBytes(&comp.id));
+                const key = hasher.final();
+
+                const previousComponentResolutionState = forbear.componentResolutionState;
+                forbear.componentResolutionState = .{
+                    .key = key,
+                    .stateByteCursor = 0,
+                };
+                const componentNode = try comp.function(comp.props);
+                forbear.componentResolutionState = previousComponentResolutionState;
+                return .{
+                    .key = key,
+                    .node = componentNode,
+                };
+            },
+            .element => {
+                // you are here: starting to implement the recursivity of
+                // component resolution. you just finished implementing
+                // components being called themselves jkust above
+                for (node.element.children) || {
+                }
+                return .{
+                    .key = hasher.final(),
+                    .node = node,
+                };
+            },
+            .text => |text| {
+                hasher.update(text);
+                return .{
+                    .key = hasher.final(),
+                    .node = node,
+                };
+            },
+        }
+    }
+};
+
+pub fn resolve(node: Node) TreeNode {
 }
 
 const stateAlignment: std.mem.Alignment = .@"8";
@@ -177,6 +235,7 @@ pub fn setHandlers(window: *Window) void {
 
 pub fn deinit() void {
     const self = getContext();
+    std.debug.assert(self.componentResolutionState == null);
     var nodeStatesIterator = self.componentStates.valueIterator();
     while (nodeStatesIterator.next()) |states| {
         self.allocator.free(states.*);

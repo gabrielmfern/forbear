@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
 
@@ -159,6 +160,7 @@ pub const IncompleteStyle = struct {
 
 pub const Node = union(enum) {
     element: Element,
+    component: Component,
     text: []const u8,
 
     pub fn from(value: anytype, allocator: std.mem.Allocator) !Node {
@@ -208,7 +210,58 @@ pub const Node = union(enum) {
     }
 };
 
-pub const EventHandlers = struct {
+pub const Component = struct {
+    function: *const fn (props: *anyopaque) anyerror!Node,
+    /// Integer associated with the static pointer to the component's function
+    id: usize,
+    props: *anyopaque,
+};
+
+pub fn ComponentProps(function: anytype) type {
+    return @typeInfo(@TypeOf(function)).@"fn".params[0].type.?;
+}
+
+pub inline fn component(comptime function: anytype, props: ComponentProps(function), arena: std.mem.Allocator) !Node {
+    const functionTypeInfo = @typeInfo(function);
+    if (functionTypeInfo != .@"fn") {
+        @compileError("expected function to be a `fn`, but found " ++ @typeName(function));
+    }
+
+    if (functionTypeInfo.@"fn".return_type) |ReturnType| {
+        if (ReturnType != Node) {
+            const returnTypeInfo = @typeInfo(ReturnType);
+            if (returnTypeInfo == .error_union and returnTypeInfo.error_union.payload == Node) {
+                @compileError(
+                    "function components must return some Node, or an error union with Node, instead found " ++ @typeName(functionTypeInfo.@"fn".return_type),
+                );
+            }
+        }
+    } else {
+        @compileError("function components must return some Node, or an error union with Node, instead found void");
+    }
+
+    if (functionTypeInfo.@"fn".params.len > 1) {
+        @compileError(
+            "function components can only have one parameter `props: struct`, found " ++ @typeName(functionTypeInfo.@"fn".params.len),
+        );
+    }
+
+    const ownedProps = try arena.create(@TypeOf(props));
+    ownedProps.* = props;
+    return Node{
+        .component = .{
+            .function = &(struct {
+                fn wrapper(ptr: *anyopaque) anyerror!Node {
+                    return function(@ptrCast(@alignCast(ptr)));
+                }
+            }).wrapper,
+            .id = @intFromPtr(&function),
+            .props = @ptrCast(@alignCast(ownedProps)),
+        },
+    };
+}
+
+pub const ElementEventHandlers = struct {
     onMouseOver: ?struct {
         data: ?*anyopaque,
         handler: *const fn (mousePosition: Vec2, data: ?*anyopaque) anyerror!void,
@@ -221,15 +274,25 @@ pub const EventHandlers = struct {
 
 pub const Element = struct {
     style: IncompleteStyle,
-    handlers: EventHandlers,
+    handlers: ElementEventHandlers,
     children: ?[]Node,
 };
 
 pub const ElementProps = struct {
     style: IncompleteStyle = .{},
-    handlers: EventHandlers = .{},
+    handlers: ElementEventHandlers = .{},
     children: ?[]Node = null,
 };
+
+pub fn div(props: ElementProps) Node {
+    return .{
+        .element = .{
+            .style = props.style,
+            .handlers = props.handlers,
+            .children = props.children,
+        },
+    };
+}
 
 pub fn children(args: anytype, allocator: std.mem.Allocator) !?[]Node {
     const ArgsType = @TypeOf(args);
@@ -270,12 +333,3 @@ pub fn children(args: anytype, allocator: std.mem.Allocator) !?[]Node {
     return arrayList.items;
 }
 
-pub fn div(props: ElementProps) Node {
-    return .{
-        .element = .{
-            .style = props.style,
-            .handlers = props.handlers,
-            .children = props.children,
-        },
-    };
-}

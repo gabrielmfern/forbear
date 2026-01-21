@@ -4,7 +4,7 @@ const BaseStyle = @import("node.zig").BaseStyle;
 const Direction = @import("node.zig").Direction;
 const Element = @import("node.zig").Element;
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
-const EventHandlers = @import("node.zig").EventHandlers;
+const EventHandlers = @import("node.zig").ElementEventHandlers;
 const Node = @import("node.zig").Node;
 const Style = @import("node.zig").Style;
 
