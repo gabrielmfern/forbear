@@ -51,8 +51,9 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
 const stateAlignment: std.mem.Alignment = .@"8";
 
-// TODO: in debug mode, we should be adding some guard rail here to make sure of warning the user if they called the hook in an unexpected order,
-// as it can cause undefined behavior as is right now
+// TODO: in debug mode, we should be adding some guard rail here to make sure
+// of warning the user if they called the hook in an unexpected order, as it
+// can cause undefined behavior as is right now
 pub fn useState(T: type, initialValue: T) !*T {
     const self = getContext();
     if (self.componentResolutionState) |*state| {
