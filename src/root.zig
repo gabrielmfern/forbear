@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const c = @import("c.zig").c;
 pub const Font = @import("font.zig");
@@ -21,10 +22,20 @@ const Context = @This();
 
 var context: ?@This() = null;
 
+allocator: std.mem.Allocator,
 mousePosition: Vec2,
 hoveredElementKey: ?u64,
 
-pub fn init() !@This() {
+/// A literal string of bytes that have the size of some state, and the
+componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
+componentResolutionState: ?ComponentResolutionState,
+
+const ComponentResolutionState = struct {
+    stateByteCursor: usize,
+    key: u64,
+};
+
+pub fn init(allocator: std.mem.Allocator) !void {
     if (context != null) {
         return error.AlreadyInitialized;
     }
@@ -32,11 +43,87 @@ pub fn init() !@This() {
     context = @This(){
         .mousePosition = .{ 0.0, 0.0 },
         .hoveredElementKey = null,
+        .allocator = allocator,
+        .componentStates = .init(allocator),
+        .componentResolutionState = null,
     };
-    return context.?;
 }
 
-pub fn update(self: *@This(), root: *const LayoutBox, arena: std.mem.Allocator) !void {
+const stateAlignment: std.mem.Alignment = .@"8";
+
+// TODO: in debug mode, we should be adding some guard rail here to make sure of warning the user if they called the hook in an unexpected order,
+// as it can cause undefined behavior as is right now
+pub fn useState(T: type, initialValue: T) !*T {
+    const self = getContext();
+    if (self.componentResolutionState) |*state| {
+        const stateResult = try self.componentStates.getOrPut(state.key);
+        const alignedCursor = std.mem.alignForward(usize, state.stateByteCursor, @alignOf(T));
+        const requiredLen = alignedCursor + @sizeOf(T);
+        defer state.stateByteCursor = requiredLen;
+        if (stateResult.found_existing) {
+            if (alignedCursor < stateResult.value_ptr.*.len) {
+                return @ptrCast(@alignCast(stateResult.value_ptr.*[alignedCursor..requiredLen]));
+            }
+            stateResult.value_ptr.* = try self.allocator.realloc(stateResult.value_ptr.*, requiredLen);
+        } else {
+            stateResult.value_ptr.* = try self.allocator.alignedAlloc(u8, stateAlignment, requiredLen);
+        }
+        @memcpy(
+            stateResult.value_ptr.*[alignedCursor..requiredLen],
+            std.mem.asBytes(&initialValue),
+        );
+        return @ptrCast(@alignCast(stateResult.value_ptr.*[alignedCursor..requiredLen]));
+    } else {
+        if (!builtin.is_test) {
+            std.log.err("You might be calling useState outside of a component, and forbear cannot track state there.", .{});
+        }
+        return error.NoComponentContext;
+    }
+}
+
+test "State creation with manual handling" {
+    try init(std.testing.allocator);
+    defer deinit();
+    const self = getContext();
+    {
+        // First run that should allocate RAM, and still allow reading and writing the values
+        self.componentResolutionState = ComponentResolutionState{
+            .stateByteCursor = 0,
+            .key = 1,
+        };
+        const state1 = try useState(i32, 42);
+        try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(1).?.len);
+        const state2 = try useState(f32, 3.14);
+        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.len);
+        try std.testing.expectEqual(42, state1.*);
+        try std.testing.expectEqual(3.14, state2.*);
+        state1.* = 100;
+        state2.* = 6.28;
+        try std.testing.expectEqual(100, state1.*);
+        try std.testing.expectEqual(6.28, state2.*);
+    }
+    {
+        // Second run that should not allcoate new memory
+        self.componentResolutionState = ComponentResolutionState{
+            .stateByteCursor = 0,
+            .key = 1,
+        };
+        const state1 = try useState(i32, 42);
+        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.len);
+        const state2 = try useState(f32, 3.14);
+        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.len);
+        try std.testing.expectEqual(100, state1.*);
+        try std.testing.expectEqual(6.28, state2.*);
+    }
+    {
+        self.componentResolutionState = null;
+        try std.testing.expectError(error.NoComponentContext, useState(i32, 42));
+    }
+}
+
+pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
+    const self = getContext();
+
     var iterator = try layouting.LayoutTreeIterator.init(arena, root);
     var previouslyHoveredLayoutBox: ?*const LayoutBox = null;
 
@@ -70,7 +157,9 @@ pub fn update(self: *@This(), root: *const LayoutBox, arena: std.mem.Allocator) 
     }
 }
 
-pub fn setHandlers(self: *@This(), window: *Window) void {
+pub fn setHandlers(window: *Window) void {
+    const self = getContext();
+
     window.setPointerMotion(
         &(struct {
             fn handler(_: *Window, time: u32, x: i32, y: i32, data: *anyopaque) void {
@@ -83,11 +172,16 @@ pub fn setHandlers(self: *@This(), window: *Window) void {
     );
 }
 
-pub fn deinit(self: @This()) void {
-    _ = self;
+pub fn deinit() void {
+    const self = getContext();
+    var nodeStatesIterator = self.componentStates.valueIterator();
+    while (nodeStatesIterator.next()) |states| {
+        self.allocator.free(states.*);
+    }
+    self.componentStates.deinit();
     context = null;
 }
 
 pub fn getContext() *@This() {
-    return context;
+    return &context.?;
 }
