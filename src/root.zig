@@ -26,6 +26,7 @@ allocator: std.mem.Allocator,
 mousePosition: Vec2,
 hoveredElementKey: ?u64,
 
+// The alignment here is probably messed up, we should find a way to fix it later
 /// A literal string of bytes that have the size of some state, and the
 componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
 componentResolutionState: ?ComponentResolutionState,
