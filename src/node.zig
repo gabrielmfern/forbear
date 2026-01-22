@@ -222,7 +222,8 @@ pub fn ComponentProps(function: anytype) type {
 }
 
 pub inline fn component(comptime function: anytype, props: ComponentProps(function), arena: std.mem.Allocator) !Node {
-    const functionTypeInfo = @typeInfo(function);
+    const Function = @TypeOf(function);
+    const functionTypeInfo = @typeInfo(Function);
     if (functionTypeInfo != .@"fn") {
         @compileError("expected function to be a `fn`, but found " ++ @typeName(function));
     }
@@ -230,9 +231,9 @@ pub inline fn component(comptime function: anytype, props: ComponentProps(functi
     if (functionTypeInfo.@"fn".return_type) |ReturnType| {
         if (ReturnType != Node) {
             const returnTypeInfo = @typeInfo(ReturnType);
-            if (returnTypeInfo == .error_union and returnTypeInfo.error_union.payload == Node) {
+            if (returnTypeInfo != .error_union or returnTypeInfo.error_union.payload != Node) {
                 @compileError(
-                    "function components must return some Node, or an error union with Node, instead found " ++ @typeName(functionTypeInfo.@"fn".return_type),
+                    "function components must return some Node, or an error union with Node, instead found " ++ @typeName(ReturnType),
                 );
             }
         }
@@ -246,13 +247,18 @@ pub inline fn component(comptime function: anytype, props: ComponentProps(functi
         );
     }
 
+    if (functionTypeInfo.@"fn".params.len == 1 and functionTypeInfo.@"fn".params[0].type != @TypeOf(props)) {
+        @compileError("expected props to be of type " ++ @typeName(functionTypeInfo.@"fn".params[0].type orelse void) ++ ", but found " ++ @typeName(@TypeOf(props)));
+    }
+
     const ownedProps = try arena.create(@TypeOf(props));
     ownedProps.* = props;
     return Node{
         .component = .{
             .function = &(struct {
                 fn wrapper(ptr: *anyopaque) anyerror!Node {
-                    return function(@ptrCast(@alignCast(ptr)));
+                    const propsPtr: *@TypeOf(props) = @ptrCast(@alignCast(ptr));
+                    return function(propsPtr.*);
                 }
             }).wrapper,
             .id = @intFromPtr(&function),
@@ -332,4 +338,3 @@ pub fn children(args: anytype, allocator: std.mem.Allocator) !?[]Node {
 
     return arrayList.items;
 }
-

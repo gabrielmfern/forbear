@@ -57,16 +57,25 @@ pub fn init(allocator: std.mem.Allocator) !void {
 const TreeNode = struct {
     key: u64,
     node: Node,
+    children: ?[]TreeNode,
 };
 
 const Resolver = struct {
-    path: []usize,
+    path: std.ArrayList(usize),
+    arenaAllocator: std.mem.Allocator,
 
-    fn resolve(self: @This(), node: Node) !TreeNode {
+    fn init(arenaAllocator: std.mem.Allocator) !@This() {
+        return .{
+            .arenaAllocator = arenaAllocator,
+            .path = try std.ArrayList(usize).initCapacity(arenaAllocator, 0),
+        };
+    }
+
+    fn resolve(self: *@This(), node: Node) !TreeNode {
         const forbear = getContext();
 
         var hasher = std.hash.Wyhash.init(0);
-        hasher.update(std.mem.asBytes(self.path.items));
+        hasher.update(@ptrCast(self.path.items));
         switch (node) {
             .component => |comp| {
                 hasher.update(std.mem.asBytes(&comp.id));
@@ -78,35 +87,100 @@ const Resolver = struct {
                     .stateByteCursor = 0,
                 };
                 const componentNode = try comp.function(comp.props);
+                if (!forbear.componentStates.contains(key) or forbear.componentResolutionState.?.stateByteCursor != forbear.componentStates.get(key).?.len) {
+                    return error.RulesOfHooksViolated;
+                }
                 forbear.componentResolutionState = previousComponentResolutionState;
-                return .{
-                    .key = key,
-                    .node = componentNode,
-                };
+                // TODO: investigate if should we reuse the same key as above?
+                // Is it a problem that it creates a new key here?
+                return self.resolve(componentNode);
             },
             .element => {
-                // you are here: starting to implement the recursivity of
-                // component resolution. you just finished implementing
-                // components being called themselves jkust above
-                for (node.element.children) || {
+                if (node.element.children != null) {
+                    var treeChildren = try self.arenaAllocator.alloc(TreeNode, node.element.children.?.len);
+                    for (node.element.children.?, 0..) |child, i| {
+                        try self.path.append(self.arenaAllocator, i);
+                        defer _ = self.path.pop();
+                        treeChildren[i] = try self.resolve(child);
+                    }
+                    return .{
+                        .key = hasher.final(),
+                        .node = node,
+                        .children = treeChildren,
+                    };
+                } else {
+                    return .{
+                        .key = hasher.final(),
+                        .node = node,
+                        .children = null,
+                    };
                 }
-                return .{
-                    .key = hasher.final(),
-                    .node = node,
-                };
             },
             .text => |text| {
                 hasher.update(text);
                 return .{
                     .key = hasher.final(),
                     .node = node,
+                    .children = null,
                 };
             },
         }
     }
 };
 
-pub fn resolve(node: Node) TreeNode {
+pub fn resolve(rootNode: Node, arenaAllocator: std.mem.Allocator) !TreeNode {
+    var resolver = try Resolver.init(arenaAllocator);
+
+    return resolver.resolve(rootNode);
+}
+
+test "Component resolution" {
+    try init(std.testing.allocator);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var callCount: u32 = 0;
+
+    const MyComponentProps = struct {
+        callCount: *u32,
+        value: u32,
+        arenaAllocator: std.mem.Allocator,
+    };
+
+    const MyComponent = (struct {
+        fn component(props: MyComponentProps) !Node {
+            props.callCount.* += 1;
+            const counter = try useState(u32, props.value);
+            try std.testing.expectEqual(props.value, counter.*);
+            return div(.{
+                .children = try children(.{ "Value: ", counter.* }, props.arenaAllocator),
+            });
+        }
+    }).component;
+
+    const rootNode = div(.{
+        .children = try children(.{
+            try component(
+                MyComponent,
+                .{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
+                arenaAllocator,
+            ),
+            try component(
+                MyComponent,
+                .{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
+                arenaAllocator,
+            ),
+        }, arenaAllocator),
+    });
+
+    _ = try resolve(rootNode, arenaAllocator);
+    try std.testing.expectEqual(2, callCount);
+
+    _ = try resolve(rootNode, arenaAllocator);
+    try std.testing.expectEqual(4, callCount);
 }
 
 const stateAlignment: std.mem.Alignment = .@"8";
