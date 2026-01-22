@@ -117,6 +117,8 @@ fn renderingMain(
     defer comeOnImage.deinit(renderer);
 
     while (window.running) {
+        defer _ = arenaAllocator.reset(.retain_capacity);
+
         const treeNode = try forbear.resolve(try forbear.component(
             App,
             AppProps{ .comeOnImage = &comeOnImage, .spaceGroteskBold = spaceGroteskBold },
