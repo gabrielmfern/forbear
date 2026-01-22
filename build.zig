@@ -83,13 +83,22 @@ const Dependencies = struct {
 };
 
 pub fn addShaderImport(b: *std.Build, module: *std.Build.Module, path: []const u8, name: []const u8) void {
+    // Step 1: Compile GLSL to SPIR-V
     const glslangValidatorCommand = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
-    const spirv = glslangValidatorCommand.addOutputFileArg(std.fs.path.basename(path));
+    const unoptimized_spirv = glslangValidatorCommand.addOutputFileArg(std.fs.path.basename(path));
     glslangValidatorCommand.addFileArg(b.path(path));
 
+    // Step 2: Optimize SPIR-V
+    const spirvOptCommand = b.addSystemCommand(&.{ "spirv-opt", "-O", "-o" });
+    const basename = std.fs.path.basename(path);
+    const optimized_name = b.fmt("optimized_{s}", .{basename});
+    const optimized_spirv = spirvOptCommand.addOutputFileArg(optimized_name);
+    spirvOptCommand.addFileArg(unoptimized_spirv);
+
+    // Step 3: Use optimized SPIR-V
     module.addAnonymousImport(
         name,
-        .{ .root_source_file = spirv },
+        .{ .root_source_file = optimized_spirv },
     );
 }
 
