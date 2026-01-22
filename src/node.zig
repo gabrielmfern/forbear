@@ -211,17 +211,13 @@ pub const Node = union(enum) {
 };
 
 pub const Component = struct {
-    function: *const fn (props: *anyopaque) anyerror!Node,
+    function: *const fn (props: ?*anyopaque) anyerror!Node,
     /// Integer associated with the static pointer to the component's function
     id: usize,
     props: *anyopaque,
 };
 
-pub fn ComponentProps(function: anytype) type {
-    return @typeInfo(@TypeOf(function)).@"fn".params[0].type.?;
-}
-
-pub inline fn component(comptime function: anytype, props: ComponentProps(function), arena: std.mem.Allocator) !Node {
+pub inline fn component(comptime function: anytype, props: anytype, arena: std.mem.Allocator) !Node {
     const Function = @TypeOf(function);
     const functionTypeInfo = @typeInfo(Function);
     if (functionTypeInfo != .@"fn") {
@@ -247,27 +243,42 @@ pub inline fn component(comptime function: anytype, props: ComponentProps(functi
         );
     }
 
-    if (functionTypeInfo.@"fn".params.len == 1 and functionTypeInfo.@"fn".params[0].type != @TypeOf(props)) {
+    const hasProps = functionTypeInfo.@"fn".params.len == 1;
+
+    if (hasProps and functionTypeInfo.@"fn".params[0].type != @TypeOf(props)) {
         @compileError("expected props to be of type " ++ @typeName(functionTypeInfo.@"fn".params[0].type orelse void) ++ ", but found " ++ @typeName(@TypeOf(props)));
     }
 
-    const ownedProps = try arena.create(@TypeOf(props));
-    ownedProps.* = props;
-    return Node{
-        .component = .{
+    if (hasProps) {
+        const ownedPropsPtr = try arena.create(@TypeOf(props));
+        ownedPropsPtr.* = props;
+        return Node{ .component = .{
             .function = &(struct {
-                fn wrapper(ptr: *anyopaque) anyerror!Node {
+                fn wrapper(ptr: ?*anyopaque) anyerror!Node {
                     const propsPtr: *@TypeOf(props) = @ptrCast(@alignCast(ptr));
                     return function(propsPtr.*);
                 }
             }).wrapper,
             .id = @intFromPtr(&function),
-            .props = @ptrCast(@alignCast(ownedProps)),
-        },
-    };
+            .props = @ptrCast(@alignCast(ownedPropsPtr)),
+        } };
+    } else {
+        return Node{ .component = .{
+            .function = &(struct {
+                fn wrapper(_: ?*anyopaque) anyerror!Node {
+                    return function();
+                }
+            }).wrapper,
+            .id = @intFromPtr(&function),
+            .props = @ptrCast(@alignCast(@constCast(&void{}))),
+        } };
+    }
 }
 
 pub const ElementEventHandlers = struct {
+    // you are here: allow users to define the event data that is then
+    // allocated for the frame and then can be used to call the underlying
+    // function
     onMouseOver: ?struct {
         data: ?*anyopaque,
         handler: *const fn (mousePosition: Vec2, data: ?*anyopaque) anyerror!void,

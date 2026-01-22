@@ -1,6 +1,56 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
+fn App() !forbear.Node {
+    const arena = try forbear.useArena();
+    const isHovering = try forbear.useState(bool, false);
+
+    std.log.debug("is hovering {}", .{isHovering.*});
+    return forbear.div(.{
+        .style = .{
+            .preferredWidth = .grow,
+            .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
+            .paddingInline = .{ 10, 10 },
+        },
+        .children = try forbear.children(.{
+            // "fps:",
+            // fps,
+            // " ",
+            "This is some text introducing things",
+            forbear.div(.{
+                .style = .{
+                    .preferredWidth = .{ .fixed = 100 },
+                    .preferredHeight = .{ .fixed = 100 },
+                    .background = .{
+                        .color = if (isHovering.*) .{ 1.0, 0.0, 0.0, 1.0 } else .{ 0.0, 0.0, 0.0, 1.0 },
+                    },
+                    .borderRadius = 20,
+                },
+                .handlers = .{
+                    .onMouseOver = .{
+                        .data = @ptrCast(@alignCast(isHovering)),
+                        .handler = &(struct {
+                            fn handler(_: @Vector(2, f32), data: ?*anyopaque) anyerror!void {
+                                const isHoveringData: *bool = @ptrCast(data.?);
+                                isHoveringData.* = true;
+                            }
+                        }).handler,
+                    },
+                    .onMouseOut = .{
+                        .data = @ptrCast(@alignCast(isHovering)),
+                        .handler = &(struct {
+                            fn handler(_: @Vector(2, f32), data: ?*anyopaque) anyerror!void {
+                                const isHoveringData: *bool = @ptrCast(data.?);
+                                isHoveringData.* = false;
+                            }
+                        }).handler,
+                    },
+                },
+            }),
+        }, arena),
+    });
+}
+
 fn renderingMain(
     renderer: *forbear.Graphics.Renderer,
     window: *const forbear.Window,
@@ -18,37 +68,7 @@ fn renderingMain(
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
-        const node = forbear.div(.{
-            .style = .{
-                .preferredWidth = .grow,
-                .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
-                .paddingInline = .{ 10, 10 },
-            },
-            .children = try forbear.children(.{
-                "fps:",
-                fps,
-                " ",
-                "This is some text introducing things",
-                forbear.div(.{
-                    .style = .{
-                        .preferredWidth = .{ .fixed = 100 },
-                        .preferredHeight = .{ .fixed = 100 },
-                        .background = .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
-                        .borderRadius = 20,
-                    },
-                    .handlers = .{
-                        .onMouseOver = .{
-                            .data = null,
-                            .handler = &(struct { 
-                                fn handler(_: @Vector(2, f32), _: ?*anyopaque) anyerror!void {
-                                    std.log.info("Mouse over red box", .{});
-                                }
-                            }).handler,
-                        },
-                    },
-                }),
-            }, arena),
-        });
+        const node = try forbear.component(App, null, arena);
         const treeNode = try forbear.resolve(node, arena);
         const layoutBox = try forbear.layout(
             treeNode,

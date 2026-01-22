@@ -36,6 +36,7 @@ componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
 componentResolutionState: ?ComponentResolutionState,
 
 const ComponentResolutionState = struct {
+    arenaAllocator: std.mem.Allocator,
     stateByteCursor: usize,
     key: u64,
 };
@@ -87,6 +88,7 @@ const Resolver = struct {
                 const previousComponentResolutionState = forbear.componentResolutionState;
                 forbear.componentResolutionState = .{
                     .key = key,
+                    .arenaAllocator = self.arenaAllocator,
                     .stateByteCursor = 0,
                 };
                 const componentNode = try comp.function(comp.props);
@@ -187,6 +189,18 @@ test "Component resolution" {
 }
 
 const stateAlignment: std.mem.Alignment = .@"8";
+
+pub fn useArena() !std.mem.Allocator {
+    const self = getContext();
+    if (self.componentResolutionState) |state| {
+        return state.arenaAllocator;
+    } else {
+        if (!builtin.is_test) {
+            std.log.err("You might be calling useState outside of a component, and forbear cannot track state there.", .{});
+        }
+        return error.NoComponentContext;
+    }
+}
 
 // TODO: in debug mode, we should be adding some guard rail here to make sure
 // of warning the user if they called the hook in an unexpected order, as it
