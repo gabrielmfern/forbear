@@ -54,7 +54,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
     };
 }
 
-const TreeNode = struct {
+pub const TreeNode = struct {
     key: u64,
     node: Node,
     children: ?[]TreeNode,
@@ -81,6 +81,7 @@ const Resolver = struct {
                 hasher.update(std.mem.asBytes(&comp.id));
                 const key = hasher.final();
 
+                // TODO(up next): find a way to free the state data once the component instance is gone
                 const previousComponentResolutionState = forbear.componentResolutionState;
                 forbear.componentResolutionState = .{
                     .key = key,

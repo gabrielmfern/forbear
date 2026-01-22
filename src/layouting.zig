@@ -7,6 +7,7 @@ const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const EventHandlers = @import("node.zig").ElementEventHandlers;
 const Node = @import("node.zig").Node;
 const Style = @import("node.zig").Style;
+const TreeNode = @import("root.zig").TreeNode;
 
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
@@ -367,18 +368,19 @@ const LayoutCreator = struct {
     allocator: std.mem.Allocator,
     path: std.ArrayList(usize),
 
-    fn init(allocator: std.mem.Allocator) !@This() {
+    fn init(arenaAllocator: std.mem.Allocator) !@This() {
         return .{
-            .allocator = allocator,
-            .path = try std.ArrayList(usize).initCapacity(allocator, 0),
+            .allocator = arenaAllocator,
+            .path = try std.ArrayList(usize).initCapacity(arenaAllocator, 0),
         };
     }
 
-    fn create(self: *@This(), node: Node, baseStyle: BaseStyle, dpi: Vec2) !LayoutBox {
+    fn create(self: *@This(), treeNode: TreeNode, baseStyle: BaseStyle, dpi: Vec2) !LayoutBox {
         const resolutionMultiplier = dpi / @as(Vec2, @splat(72));
-        var style = switch (node) {
+        var style = switch (treeNode.node) {
             .element => |element| element.style.completeWith(baseStyle),
             .text => (IncompleteStyle{}).completeWith(baseStyle),
+            .component => unreachable,
         };
         style.borderInlineWidth *= @splat(resolutionMultiplier[0]);
         style.borderBlockWidth *= @splat(resolutionMultiplier[1]);
@@ -394,9 +396,7 @@ const LayoutCreator = struct {
         style.marginBlock *= @splat(resolutionMultiplier[1]);
         style.borderRadius *= resolutionMultiplier[0];
 
-        var hasher = std.hash.Wyhash.init(0);
-        hasher.update(@ptrCast(self.path.items));
-        switch (node) {
+        switch (treeNode.node) {
             .element => |element| {
                 var layoutBox = LayoutBox{
                     .position = .{ 0.0, 0.0 },
@@ -415,23 +415,19 @@ const LayoutCreator = struct {
                         style.minWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else 0.0,
                         style.minHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else 0.0,
                     },
-                    .key = hasher.final(),
+                    .key = treeNode.key,
                     .children = null,
                     .handlers = element.handlers,
                     .style = style,
                 };
-                if (element.children) |children| {
+                if (treeNode.children) |children| {
                     layoutBox.children = .{ .layoutBoxes = try self.allocator.alloc(LayoutBox, children.len) };
                     errdefer self.allocator.free(layoutBox.children.?.layoutBoxes);
                     for (children, 0..) |child, index| {
                         try self.path.append(self.allocator, index);
                         defer _ = self.path.pop();
 
-                        layoutBox.children.?.layoutBoxes[index] = try self.create(
-                            child,
-                            BaseStyle.from(style),
-                            dpi,
-                        );
+                        layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style), dpi);
                     }
                 }
                 return layoutBox;
@@ -463,12 +459,10 @@ const LayoutCreator = struct {
                 }
                 const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
 
-                hasher.update(text);
-
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
                     .z = self.path.items.len,
-                    .key = hasher.final(),
+                    .key = treeNode.key,
                     .size = .{ cursor[0], pixelLineHeight },
                     .minSize = .{ maxAdvance[0], pixelLineHeight },
                     .children = .{ .glyphs = layoutGlyphs.items },
@@ -476,6 +470,7 @@ const LayoutCreator = struct {
                     .handlers = .{},
                 };
             },
+            .component => unreachable,
         }
     }
 };
@@ -532,14 +527,14 @@ pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
 }
 
 pub fn layout(
-    node: Node,
+    treeNode: TreeNode,
     baseStyle: BaseStyle,
     viewportSize: Vec2,
     dpi: Vec2,
-    allocator: std.mem.Allocator,
+    arenaAllocator: std.mem.Allocator,
 ) !LayoutBox {
-    var creator = try LayoutCreator.init(allocator);
-    var layoutBox = try creator.create(node, baseStyle, dpi);
+    var creator = try LayoutCreator.init(arenaAllocator);
+    var layoutBox = try creator.create(treeNode, baseStyle, dpi);
     fitWidth(&layoutBox);
     fitHeight(&layoutBox);
     if (layoutBox.style.preferredWidth == .grow) {
@@ -548,7 +543,7 @@ pub fn layout(
     if (layoutBox.style.preferredHeight == .grow) {
         layoutBox.size[1] = viewportSize[1];
     }
-    try growAndShrink(&layoutBox, allocator);
+    try growAndShrink(&layoutBox, arenaAllocator);
     fitWidth(&layoutBox);
     fitHeight(&layoutBox);
     placeChildrenOf(&layoutBox);
