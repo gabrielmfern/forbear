@@ -78,7 +78,7 @@ const Resolver = struct {
         const forbear = getContext();
 
         var hasher = std.hash.Wyhash.init(0);
-        hasher.update(@ptrCast(self.path.items));
+        hasher.update(std.mem.sliceAsBytes(self.path.items));
         switch (node) {
             .component => |comp| {
                 hasher.update(std.mem.asBytes(&comp.id));
