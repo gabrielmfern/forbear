@@ -1,10 +1,62 @@
 const std = @import("std");
-const Forbear = @import("forbear");
+const forbear = @import("forbear");
+
+const AppProps = struct {
+    fps: ?u32,
+};
+
+fn App(props: AppProps) !forbear.Node {
+    const arena = try forbear.useArena();
+    const isHovering = try forbear.useState(bool, false);
+
+    return forbear.div(.{
+        .style = .{
+            .preferredWidth = .grow,
+            .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
+            .paddingInline = .{ 10, 10 },
+        },
+        .children = try forbear.children(.{
+            "fps:",
+            props.fps,
+            " ",
+            "This is some text introducing things",
+            forbear.div(.{
+                .style = .{
+                    .preferredWidth = .{ .fixed = 100 },
+                    .preferredHeight = .{ .fixed = 100 },
+                    .background = .{
+                        .color = if (isHovering.*) .{ 1.0, 0.0, 0.0, 1.0 } else .{ 1.0, 0.3, 0.0, 1.0 },
+                    },
+                    .borderRadius = 20,
+                },
+                .handlers = .{
+                    .onMouseOver = .{
+                        .data = @ptrCast(@alignCast(isHovering)),
+                        .handler = &(struct {
+                            fn handler(_: @Vector(2, f32), data: ?*anyopaque) anyerror!void {
+                                const isHoveringData: *bool = @ptrCast(data.?);
+                                isHoveringData.* = true;
+                            }
+                        }).handler,
+                    },
+                    .onMouseOut = .{
+                        .data = @ptrCast(@alignCast(isHovering)),
+                        .handler = &(struct {
+                            fn handler(_: @Vector(2, f32), data: ?*anyopaque) anyerror!void {
+                                const isHoveringData: *bool = @ptrCast(data.?);
+                                isHoveringData.* = false;
+                            }
+                        }).handler,
+                    },
+                },
+            }),
+        }, arena),
+    });
+}
 
 fn renderingMain(
-    renderer: *Forbear.Graphics.Renderer,
-    forbearContext: *Forbear,
-    window: *const Forbear.Window,
+    renderer: *forbear.Graphics.Renderer,
+    window: *const forbear.Window,
     allocator: std.mem.Allocator,
 ) !void {
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
@@ -12,46 +64,17 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    const inter = try Forbear.Font.init("Inter-Regular", @embedFile("Inter-Regular.ttf"));
+    const inter = try forbear.Font.init("Inter-Regular", @embedFile("Inter-Regular.ttf"));
 
     var time = std.time.nanoTimestamp();
     var fps: ?u32 = null;
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
-        const node = Forbear.div(.{
-            .style = .{
-                .preferredWidth = .grow,
-                .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
-                .paddingInline = .{ 10, 10 },
-            },
-            .children = try Forbear.children(.{
-                "fps:",
-                fps,
-                " ",
-                "This is some text introducing things",
-                Forbear.div(.{
-                    .style = .{
-                        .preferredWidth = .{ .fixed = 100 },
-                        .preferredHeight = .{ .fixed = 100 },
-                        .background = .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
-                        .borderRadius = 20,
-                    },
-                    .handlers = .{
-                        .onMouseOver = .{
-                            .handler = &(struct {
-                                fn handler(mousePosition: @Vector(2, f32), _: ?*anyopaque) anyerror!void {
-                                    std.log.debug("Mouse over red box at {}", .{mousePosition});
-                                }
-                            }).handler,
-                            .data = null,
-                        },
-                    },
-                }),
-            }, arena),
-        });
-        const layoutBox = try Forbear.layout(
-            node,
+        const node = try forbear.component(App, AppProps{ .fps = fps }, arena);
+        const treeNode = try forbear.resolve(node, arena);
+        const layoutBox = try forbear.layout(
+            treeNode,
             .{ .font = inter, .color = .{ 1.0, 1.0, 1.0, 1.0 }, .fontSize = 32, .lineHeight = 1.0 },
             .{ @floatFromInt(window.width), @floatFromInt(window.height) },
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
@@ -59,7 +82,7 @@ fn renderingMain(
         );
         try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
 
-        try forbearContext.update(&layoutBox, arena);
+        try forbear.update(&layoutBox, arena);
 
         const newCurrentTime = std.time.nanoTimestamp();
         const deltaTime = newCurrentTime - time;
@@ -79,13 +102,13 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    var graphics = try Forbear.Graphics.init(
+    var graphics = try forbear.Graphics.init(
         "forbear playground",
         allocator,
     );
     defer graphics.deinit();
 
-    const window = try Forbear.Window.init(
+    const window = try forbear.Window.init(
         800,
         600,
         "forbear playground",
@@ -94,9 +117,9 @@ pub fn main() !void {
     );
     defer window.deinit();
 
-    var forbearContext = try Forbear.init();
-    defer forbearContext.deinit();
-    forbearContext.setHandlers(window);
+    try forbear.init(allocator);
+    defer forbear.deinit();
+    forbear.setHandlers(window);
 
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
@@ -110,7 +133,6 @@ pub fn main() !void {
         renderingMain,
         .{
             &renderer,
-            &forbearContext,
             window,
             allocator,
         },
@@ -120,10 +142,10 @@ pub fn main() !void {
     try window.handleEvents();
 }
 
-fn handleResize(window: *Forbear.Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
+fn handleResize(window: *forbear.Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
     _ = window;
     _ = dpi;
-    const renderer: *Forbear.Graphics.Renderer = @ptrCast(@alignCast(data));
+    const renderer: *forbear.Graphics.Renderer = @ptrCast(@alignCast(data));
     renderer.handleResize(width, height) catch |err| {
         std.log.err("Renderer could not handle window resize {}", .{err});
     };
