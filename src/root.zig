@@ -170,12 +170,12 @@ test "Component resolution" {
         .children = try children(.{
             try component(
                 MyComponent,
-                .{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
+                MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
                 arenaAllocator,
             ),
             try component(
                 MyComponent,
-                .{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
+                MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
                 arenaAllocator,
             ),
         }, arenaAllocator),
@@ -242,6 +242,7 @@ test "State creation with manual handling" {
         self.componentResolutionState = ComponentResolutionState{
             .stateByteCursor = 0,
             .key = 1,
+            .arenaAllocator = std.testing.allocator,
         };
         const state1 = try useState(i32, 42);
         try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(1).?.len);
@@ -259,6 +260,7 @@ test "State creation with manual handling" {
         self.componentResolutionState = ComponentResolutionState{
             .stateByteCursor = 0,
             .key = 1,
+            .arenaAllocator = std.testing.allocator,
         };
         const state1 = try useState(i32, 42);
         try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.len);
