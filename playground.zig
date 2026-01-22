@@ -1,7 +1,11 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
-fn App() !forbear.Node {
+const AppProps = struct {
+    fps: ?u32,
+};
+
+fn App(props: AppProps) !forbear.Node {
     const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
@@ -12,9 +16,9 @@ fn App() !forbear.Node {
             .paddingInline = .{ 10, 10 },
         },
         .children = try forbear.children(.{
-            // "fps:",
-            // fps,
-            // " ",
+            "fps:",
+            props.fps,
+            " ",
             "This is some text introducing things",
             forbear.div(.{
                 .style = .{
@@ -67,7 +71,7 @@ fn renderingMain(
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
-        const node = try forbear.component(App, null, arena);
+        const node = try forbear.component(App, AppProps{ .fps = fps }, arena);
         const treeNode = try forbear.resolve(node, arena);
         const layoutBox = try forbear.layout(
             treeNode,
