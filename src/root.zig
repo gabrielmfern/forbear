@@ -54,6 +54,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
     };
 }
 
+/// TODO: inherit all properties from Node, and add the key and differnet
+/// children, as well as removing the component variant
 pub const TreeNode = struct {
     key: u64,
     node: Node,
