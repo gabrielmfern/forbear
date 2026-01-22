@@ -5,7 +5,6 @@ fn App() !forbear.Node {
     const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
-    std.log.debug("is hovering {}", .{isHovering.*});
     return forbear.div(.{
         .style = .{
             .preferredWidth = .grow,
@@ -22,7 +21,7 @@ fn App() !forbear.Node {
                     .preferredWidth = .{ .fixed = 100 },
                     .preferredHeight = .{ .fixed = 100 },
                     .background = .{
-                        .color = if (isHovering.*) .{ 1.0, 0.0, 0.0, 1.0 } else .{ 0.0, 0.0, 0.0, 1.0 },
+                        .color = if (isHovering.*) .{ 1.0, 0.0, 0.0, 1.0 } else .{ 1.0, 0.3, 0.0, 1.0 },
                     },
                     .borderRadius = 20,
                 },
