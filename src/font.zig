@@ -258,7 +258,7 @@ pub fn init(name: []const u8, memory: []const u8) FreetypeError!@This() {
 
 pub fn deinit(self: @This()) void {
     c.kbts_DestroyShapeContext(self.kbtsContext);
-    c.FT_Done_Face(self.handle);
+    ensureNoError(c.FT_Done_Face(self.handle)) catch @panic("Failed to done FT_Face");
 }
 
 pub const RasterizedGlyph = struct {
