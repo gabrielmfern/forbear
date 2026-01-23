@@ -17,6 +17,8 @@ pub const Element = nodeImport.Element;
 pub const ElementProps = nodeImport.DivProps;
 pub const div = nodeImport.div;
 pub const children = nodeImport.children;
+pub const eventHandler = nodeImport.eventHandler;
+pub const EventHandler = nodeImport.EventHandler;
 pub const Window = @import("window/root.zig").Window;
 
 const Vec2 = @Vector(2, f32);
@@ -229,8 +231,16 @@ pub const Animation = struct {
         };
     }
 
+    pub fn reset(self: @This()) void {
+        self.state.* = null;
+    }
+
+    pub fn isRunning(self: @This()) bool {
+        return self.state.* != null;
+    }
+
     /// Does not apply any easing function. To apply one, just call the function in this value.
-    pub fn progress(self: @This()) ?f32 {
+    pub fn progress(self: @This()) ?f64 {
         if (self.state.*) |state| {
             return state.progress;
         }
@@ -243,11 +253,8 @@ pub fn useAnimation(duration: f64) !Animation {
     const state = try useState(?AnimationState, null);
 
     if (state.* != null and state.*.?.progress < 1.0) {
-        if (state.*.?.progress == 1.0) {
-            state.*.? = null;
-        }
         state.*.?.timeSinceStart += self.deltaTime orelse 0.0;
-        state.*.?.progress = std.math.min(
+        state.*.?.progress = @min(
             1.0,
             state.*.?.timeSinceStart / state.*.?.estimatedEnd,
         );
@@ -260,7 +267,7 @@ pub fn useAnimation(duration: f64) !Animation {
 }
 
 pub fn cubicBezier(p0: f64, p1: f64, p2: f64, p3: f64, progress: f64) f64 {
-    const inverseProgress = 1.0 - progress; 
+    const inverseProgress = 1.0 - progress;
 
     return inverseProgress * inverseProgress * inverseProgress * p0 +
         3.0 * inverseProgress * inverseProgress * progress * p1 +
@@ -400,17 +407,17 @@ pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
         if (hoveredBox.key != self.hoveredElementKey) {
             if (previouslyHoveredLayoutBox) |prevBox| {
                 if (prevBox.handlers.onMouseOut) |onMouseOut| {
-                    try onMouseOut.handler(self.mousePosition, onMouseOut.data);
+                    try onMouseOut.handler(prevBox, onMouseOut.data);
                 }
             }
         }
         if (hoveredBox.handlers.onMouseOver) |onMouseOver| {
-            try onMouseOver.handler(self.mousePosition, onMouseOver.data);
+            try onMouseOver.handler(hoveredBox, onMouseOver.data);
             self.hoveredElementKey = hoveredBox.key;
         }
     } else if (previouslyHoveredLayoutBox) |prevBox| {
         if (prevBox.handlers.onMouseOut) |onMouseOut| {
-            try onMouseOut.handler(self.mousePosition, onMouseOut.data);
+            try onMouseOut.handler(prevBox, onMouseOut.data);
             self.hoveredElementKey = null;
         }
     }
