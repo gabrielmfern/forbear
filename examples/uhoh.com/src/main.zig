@@ -10,7 +10,7 @@ fn App(props: AppProps) !forbear.Node {
     const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
-    const animation = try forbear.useAnimation();
+    const animation = try forbear.useAnimation(0.1);
 
     return forbear.div(.{
         .style = .{

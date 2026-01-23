@@ -219,11 +219,12 @@ const AnimationState = struct {
 
 pub const Animation = struct {
     state: *?AnimationState,
+    duration: f64,
 
-    pub fn start(self: @This(), duration: f32) void {
+    pub fn start(self: @This()) void {
         self.state.* = .{
             .timeSinceStart = 0.0,
-            .estimatedEnd = duration,
+            .estimatedEnd = self.duration,
             .progress = 0.0,
         };
     }
@@ -237,7 +238,7 @@ pub const Animation = struct {
     }
 };
 
-pub fn useAnimation() !Animation {
+pub fn useAnimation(duration: f64) !Animation {
     const self = getContext();
     const state = try useState(?AnimationState, null);
 
@@ -254,6 +255,7 @@ pub fn useAnimation() !Animation {
 
     return .{
         .state = state,
+        .duration = duration,
     };
 }
 
