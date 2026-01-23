@@ -196,7 +196,7 @@ pub fn useArena() !std.mem.Allocator {
         return state.arenaAllocator;
     } else {
         if (!builtin.is_test) {
-            std.log.err("You might be calling useState outside of a component, and forbear cannot track state there.", .{});
+            std.log.err("You might be calling a hook (useArena) outside of a component, and forbear cannot track things outside of one.", .{});
         }
         return error.NoComponentContext;
     }
@@ -227,7 +227,7 @@ pub fn useState(T: type, initialValue: T) !*T {
         return @ptrCast(@alignCast(stateResult.value_ptr.*[alignedCursor..requiredLen]));
     } else {
         if (!builtin.is_test) {
-            std.log.err("You might be calling useState outside of a component, and forbear cannot track state there.", .{});
+            std.log.err("You might be calling a hook (useState) outside of a component, and forbear cannot track things outside of one.", .{});
         }
         return error.NoComponentContext;
     }
