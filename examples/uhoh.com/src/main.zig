@@ -49,6 +49,7 @@ fn App(props: AppProps) !forbear.Node {
                     .marginBlock = .{ 20.0, 0.0 },
                     .background = .{ .color = .{ 0.99, 0.98, 0.96, 1.0 } },
                     .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
+                    .translate = if (isHovering.*) .{ 0.0, -6.0 } else .{ 0.0, 0.0 },
                     .shadow = .{
                         .blurRadius = 0.0,
                         .spread = 0.0,
