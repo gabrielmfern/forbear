@@ -283,6 +283,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
 }
 
 fn placeChildrenOf(layoutBox: *LayoutBox) void {
+    layoutBox.position += layoutBox.style.translate;
     if (layoutBox.children != null) {
         switch (layoutBox.children.?) {
             .layoutBoxes => |children| {

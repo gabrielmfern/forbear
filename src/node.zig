@@ -58,6 +58,8 @@ pub const Style = struct {
     minHeight: ?f32 = null,
     preferredHeight: Sizing,
 
+    translate: Vec2,
+
     paddingInline: Vec2,
     paddingBlock: Vec2,
     marginInline: Vec2,
@@ -115,6 +117,8 @@ pub const IncompleteStyle = struct {
     minHeight: ?f32 = null,
     preferredHeight: ?Sizing = null,
 
+    translate: ?Vec2 = null,
+
     paddingInline: ?Vec2 = null,
     paddingBlock: ?Vec2 = null,
     marginInline: ?Vec2 = null,
@@ -145,6 +149,8 @@ pub const IncompleteStyle = struct {
 
             .minHeight = self.minHeight,
             .preferredHeight = self.preferredHeight orelse .fit,
+
+            .translate = self.translate orelse @splat(0.0),
 
             .paddingInline = self.paddingInline orelse @splat(0.0),
             .paddingBlock = self.paddingBlock orelse @splat(0.0),
