@@ -25,21 +25,28 @@ const Context = @This();
 
 var context: ?@This() = null;
 
+const ComponentResolutionState = struct {
+    arenaAllocator: std.mem.Allocator,
+    stateByteCursor: usize,
+    key: u64,
+};
+
 allocator: std.mem.Allocator,
 mousePosition: Vec2,
 hoveredElementKey: ?u64,
+
+/// Seconds
+startTime: f64,
+/// Seconds
+deltaTime: ?f64,
+/// Seconds
+lastUpdateTime: ?f64,
 
 // TODO: The alignment here is probably messed up, we should find a way to fix
 // it later
 /// A literal string of bytes that have the size of some state, and the
 componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
 componentResolutionState: ?ComponentResolutionState,
-
-const ComponentResolutionState = struct {
-    arenaAllocator: std.mem.Allocator,
-    stateByteCursor: usize,
-    key: u64,
-};
 
 pub fn init(allocator: std.mem.Allocator) !void {
     if (context != null) {
@@ -52,6 +59,10 @@ pub fn init(allocator: std.mem.Allocator) !void {
         .allocator = allocator,
         .componentStates = .init(allocator),
         .componentResolutionState = null,
+
+        .startTime = timestampSeconds(),
+        .deltaTime = null,
+        .lastUpdateTime = null,
     };
 }
 
@@ -188,7 +199,92 @@ test "Component resolution" {
     try std.testing.expectEqual(4, callCount);
 }
 
-const stateAlignment: std.mem.Alignment = .@"8";
+const AnimationState = struct {
+    /// Seconds
+    timeSinceStart: f64,
+    /// Seconds, equivalent to the duration
+    estimatedEnd: f64,
+
+    /// Value ranging from 0.0 to 1.0
+    progress: f64,
+
+    pub fn start(self: *?@This(), duration: f64) void {
+        self.state = .{
+            .timeSinceStart = 0.0,
+            .estimatedEnd = duration,
+            .progress = 0.0,
+        };
+    }
+};
+
+pub const Animation = struct {
+    state: *?AnimationState,
+
+    pub fn start(self: @This(), duration: f32) void {
+        self.state.* = .{
+            .timeSinceStart = 0.0,
+            .estimatedEnd = duration,
+            .progress = 0.0,
+        };
+    }
+
+    /// Does not apply any easing function. To apply one, just call the function in this value.
+    pub fn progress(self: @This()) ?f32 {
+        if (self.state.*) |state| {
+            return state.progress;
+        }
+        return null;
+    }
+};
+
+pub fn useAnimation() !Animation {
+    const self = getContext();
+    const state = try useState(?AnimationState, null);
+
+    if (state.* != null and state.*.?.progress < 1.0) {
+        if (state.*.?.progress == 1.0) {
+            state.*.? = null;
+        }
+        state.*.?.timeSinceStart += self.deltaTime orelse 0.0;
+        state.*.?.progress = std.math.min(
+            1.0,
+            state.*.?.timeSinceStart / state.*.?.estimatedEnd,
+        );
+    }
+
+    return .{
+        .state = state,
+    };
+}
+
+pub fn cubicBezier(p0: f64, p1: f64, p2: f64, p3: f64, progress: f64) f64 {
+    const inverseProgress = 1.0 - progress; 
+
+    return inverseProgress * inverseProgress * inverseProgress * p0 +
+        3.0 * inverseProgress * inverseProgress * progress * p1 +
+        3.0 * inverseProgress * progress * progress * p2 +
+        progress * progress * progress * p3;
+}
+
+/// Equivalent to CSS's ease timing function
+pub fn easeInOut(progress: f64) f64 {
+    return cubicBezier(0.42, 0.0, 0.58, 1.0, progress);
+}
+
+/// Equivalent to CSS's ease timing function
+pub fn ease(progress: f64) f64 {
+    return cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
+}
+
+pub fn useDeltaTime() f64 {
+    const self = getContext();
+    return self.deltaTime orelse 0.0;
+}
+
+pub fn useLastUpdateTime() f64 {
+    const self = getContext();
+    return self.lastUpdateTime orelse self.startTime;
+}
 
 pub fn useArena() !std.mem.Allocator {
     const self = getContext();
@@ -201,6 +297,8 @@ pub fn useArena() !std.mem.Allocator {
         return error.NoComponentContext;
     }
 }
+
+const stateAlignment: std.mem.Alignment = .@"8";
 
 // TODO: in debug mode, we should be adding some guard rail here to make sure
 // of warning the user if they called the hook in an unexpected order, as it
@@ -314,6 +412,14 @@ pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
             self.hoveredElementKey = null;
         }
     }
+
+    const timestamp = timestampSeconds();
+    self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
+    self.lastUpdateTime = timestamp;
+}
+
+fn timestampSeconds() f64 {
+    return @as(f64, @floatFromInt(std.time.nanoTimestamp())) / std.time.ns_per_s;
 }
 
 pub fn setHandlers(window: *Window) void {

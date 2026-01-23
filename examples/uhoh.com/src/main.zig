@@ -10,6 +10,8 @@ fn App(props: AppProps) !forbear.Node {
     const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
+    const animation = try forbear.useAnimation();
+
     return forbear.div(.{
         .style = .{
             .preferredWidth = .grow,
