@@ -35,7 +35,7 @@ const ComponentResolutionState = struct {
 
 allocator: std.mem.Allocator,
 mousePosition: Vec2,
-hoveredElementKey: ?u64,
+hoveredElementKeys: std.ArrayList(u64),
 
 /// Seconds
 startTime: f64,
@@ -57,7 +57,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
     context = @This(){
         .mousePosition = .{ 0.0, 0.0 },
-        .hoveredElementKey = null,
+        .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .allocator = allocator,
         .componentStates = .init(allocator),
         .componentResolutionState = null,
@@ -468,11 +468,23 @@ pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
     const self = getContext();
 
     var iterator = try layouting.LayoutTreeIterator.init(arena, root);
-    var previouslyHoveredLayoutBox: ?*const LayoutBox = null;
+
+    var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
+    missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
 
     var highestHoveredLayoutBox: ?*const LayoutBox = null;
     while (try iterator.next()) |layoutBox| {
-        if (layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1] and layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1]) {
+        const isMouseAfter = layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1];
+        const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
+        const isMouseInside = isMouseAfter and isMouseBefore;
+
+        const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, layoutBox.key);
+
+        if (std.mem.indexOfScalar(u64, missingHoveredKeys.items, layoutBox.key)) |i| {
+            _ = missingHoveredKeys.swapRemove(i);
+        }
+
+        if (isMouseInside) {
             if (highestHoveredLayoutBox) |hoveredBox| {
                 if (layoutBox.z > hoveredBox.z) {
                     highestHoveredLayoutBox = layoutBox;
@@ -480,29 +492,25 @@ pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
             } else {
                 highestHoveredLayoutBox = layoutBox;
             }
-        }
-        if (layoutBox.key == self.hoveredElementKey) {
-            previouslyHoveredLayoutBox = layoutBox;
+
+            if (hoveredElementKeysIndexOpt == null) {
+                if (layoutBox.handlers.onMouseOver) |onMouseOver| {
+                    try onMouseOver.handler(layoutBox, onMouseOver.data);
+                }
+                try self.hoveredElementKeys.append(self.allocator, layoutBox.key);
+            }
+        } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
+            if (layoutBox.handlers.onMouseOut) |onMouseOut| {
+                try onMouseOut.handler(layoutBox, onMouseOut.data);
+            }
+            _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
         }
     }
-    if (highestHoveredLayoutBox) |hoveredBox| {
-        if (hoveredBox.key != self.hoveredElementKey) {
-            if (previouslyHoveredLayoutBox) |prevBox| {
-                if (prevBox.handlers.onMouseOut) |onMouseOut| {
-                    try onMouseOut.handler(prevBox, onMouseOut.data);
-                }
-            }
-            // only call onMouseOver the first time it's over
-            if (hoveredBox.handlers.onMouseOver) |onMouseOver| {
-                try onMouseOver.handler(hoveredBox, onMouseOver.data);
-            }
-            self.hoveredElementKey = hoveredBox.key;
+
+    for (missingHoveredKeys.items) |key| {
+        if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
+            _ = self.hoveredElementKeys.swapRemove(i);
         }
-    } else if (previouslyHoveredLayoutBox) |prevBox| {
-        if (prevBox.handlers.onMouseOut) |onMouseOut| {
-            try onMouseOut.handler(prevBox, onMouseOut.data);
-        }
-        self.hoveredElementKey = null;
     }
 
     const timestamp = timestampSeconds();
@@ -537,6 +545,7 @@ pub fn deinit() void {
         self.allocator.free(states.*);
     }
     self.componentStates.deinit();
+    self.hoveredElementKeys.deinit(self.allocator);
     context = null;
 }
 
