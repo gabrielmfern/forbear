@@ -410,16 +410,17 @@ pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
                     try onMouseOut.handler(prevBox, onMouseOut.data);
                 }
             }
-        }
-        if (hoveredBox.handlers.onMouseOver) |onMouseOver| {
-            try onMouseOver.handler(hoveredBox, onMouseOver.data);
+            // only call onMouseOver the first time it's over
+            if (hoveredBox.handlers.onMouseOver) |onMouseOver| {
+                try onMouseOver.handler(hoveredBox, onMouseOver.data);
+            }
             self.hoveredElementKey = hoveredBox.key;
         }
     } else if (previouslyHoveredLayoutBox) |prevBox| {
         if (prevBox.handlers.onMouseOut) |onMouseOut| {
             try onMouseOut.handler(prevBox, onMouseOut.data);
-            self.hoveredElementKey = null;
         }
+        self.hoveredElementKey = null;
     }
 
     const timestamp = timestampSeconds();
