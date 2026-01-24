@@ -266,22 +266,77 @@ pub fn useAnimation(duration: f32) !Animation {
     };
 }
 
-pub fn cubicBezier(p0: f64, p1: f64, p2: f64, p3: f64, progress: f64) f64 {
-    const inverseProgress = 1.0 - progress;
+/// CSS-style cubic bezier timing function.
+/// Given control points (x1, y1) and (x2, y2), returns the y-value for a given x-value (time).
+/// The curve always starts at (0, 0) and ends at (1, 1).
+pub fn cubicBezier(x1: f32, y1: f32, x2: f32, y2: f32, time: f32) f32 {
+    // Early returns for edge cases
+    if (time <= 0.0) return 0.0;
+    if (time >= 1.0) return 1.0;
 
-    return inverseProgress * inverseProgress * inverseProgress * p0 +
-        3.0 * inverseProgress * inverseProgress * progress * p1 +
-        3.0 * inverseProgress * progress * progress * p2 +
-        progress * progress * progress * p3;
+    // Newton-Raphson method to solve for t given x (time)
+    // We need to find t such that bezierX(t) = time
+    var t = time; // Initial guess
+    const epsilon = 0.0001;
+    const maxIterations = 8;
+
+    var i: u32 = 0;
+    while (i < maxIterations) : (i += 1) {
+        const currentX = bezierX(x1, x2, t);
+        const diff = currentX - time;
+        if (@abs(diff) < epsilon) break;
+
+        const derivative = bezierXDerivative(x1, x2, t);
+        if (@abs(derivative) < epsilon) break;
+
+        t -= diff / derivative;
+    }
+
+    // Now that we have t, calculate the corresponding y value
+    return bezierY(y1, y2, t);
+}
+
+fn bezierX(x1: f32, x2: f32, t: f32) f32 {
+    // x(t) = 3*(1-t)^2*t*x1 + 3*(1-t)*t^2*x2 + t^3
+    const oneMinusT = 1.0 - t;
+    return 3.0 * oneMinusT * oneMinusT * t * x1 +
+        3.0 * oneMinusT * t * t * x2 +
+        t * t * t;
+}
+
+fn bezierY(y1: f32, y2: f32, t: f32) f32 {
+    // y(t) = 3*(1-t)^2*t*y1 + 3*(1-t)*t^2*y2 + t^3
+    const oneMinusT = 1.0 - t;
+    return 3.0 * oneMinusT * oneMinusT * t * y1 +
+        3.0 * oneMinusT * t * t * y2 +
+        t * t * t;
+}
+
+fn bezierXDerivative(x1: f32, x2: f32, t: f32) f32 {
+    // dx/dt = 3*(1-t)^2*x1 + 6*(1-t)*t*(x2-x1) + 3*t^2*(1-x2)
+    const oneMinusT = 1.0 - t;
+    return 3.0 * oneMinusT * oneMinusT * x1 +
+        6.0 * oneMinusT * t * (x2 - x1) +
+        3.0 * t * t * (1.0 - x2);
+}
+
+test "easeInOut" {
+    try std.testing.expectEqual(1.0, easeInOut(1.0));
+    try std.testing.expectEqual(0.0, easeInOut(0.0));
+}
+
+test "ease" {
+    try std.testing.expectEqual(1.0, ease(1.0));
+    try std.testing.expectEqual(0.0, ease(0.0));
 }
 
 /// Equivalent to CSS's ease timing function
-pub fn easeInOut(progress: f64) f64 {
+pub fn easeInOut(progress: f32) f32 {
     return cubicBezier(0.42, 0.0, 0.58, 1.0, progress);
 }
 
 /// Equivalent to CSS's ease timing function
-pub fn ease(progress: f64) f64 {
+pub fn ease(progress: f32) f32 {
     return cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
 }
 
