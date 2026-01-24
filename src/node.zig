@@ -3,6 +3,7 @@ const std = @import("std");
 const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
+const LayoutBox = @import("layouting.zig").LayoutBox;
 
 const Vec4 = @Vector(4, f32);
 const Vec2 = @Vector(2, f32);
@@ -281,18 +282,35 @@ pub inline fn component(comptime function: anytype, props: anytype, arena: std.m
     }
 }
 
+const EventHandler = struct {
+    data: ?*anyopaque,
+    handler: *const fn (target: *const LayoutBox, data: ?*anyopaque) anyerror!void,
+};
+
+pub fn eventHandler(
+    data: anytype,
+    handler: fn (target: *const LayoutBox, data: @TypeOf(data)) anyerror!void,
+    arena: std.mem.Allocator,
+) !EventHandler {
+    const ownedDataPtr = try arena.create(@TypeOf(data)); 
+    ownedDataPtr.* = data;
+    return .{
+        .data = @ptrCast(@alignCast(ownedDataPtr)),
+        .handler = (struct {
+            fn handle(target: *const LayoutBox, dataAnyPtr: ?*anyopaque) anyerror!void {
+                const dataPtr: *@TypeOf(data) = @ptrCast(@alignCast(dataAnyPtr.?));
+                return handler(target, dataPtr.*);
+            }
+        }).handle,
+    };
+}
+
 pub const ElementEventHandlers = struct {
     // you are here: allow users to define the event data that is then
     // allocated for the frame and then can be used to call the underlying
     // function
-    onMouseOver: ?struct {
-        data: ?*anyopaque,
-        handler: *const fn (mousePosition: Vec2, data: ?*anyopaque) anyerror!void,
-    } = null,
-    onMouseOut: ?struct {
-        data: ?*anyopaque,
-        handler: *const fn (mousePosition: Vec2, data: ?*anyopaque) anyerror!void,
-    } = null,
+    onMouseOver: ?EventHandler = null,
+    onMouseOut: ?EventHandler = null,
 };
 
 pub const Element = struct {

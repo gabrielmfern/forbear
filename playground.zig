@@ -33,7 +33,7 @@ fn App(props: AppProps) !forbear.Node {
                     .onMouseOver = .{
                         .data = @ptrCast(@alignCast(isHovering)),
                         .handler = &(struct {
-                            fn handler(_: @Vector(2, f32), data: ?*anyopaque) anyerror!void {
+                            fn handler(_: *const forbear.LayoutBox, data: ?*anyopaque) anyerror!void {
                                 const isHoveringData: *bool = @ptrCast(data.?);
                                 isHoveringData.* = true;
                             }
@@ -42,7 +42,7 @@ fn App(props: AppProps) !forbear.Node {
                     .onMouseOut = .{
                         .data = @ptrCast(@alignCast(isHovering)),
                         .handler = &(struct {
-                            fn handler(_: @Vector(2, f32), data: ?*anyopaque) anyerror!void {
+                            fn handler(_: *const forbear.LayoutBox, data: ?*anyopaque) anyerror!void {
                                 const isHoveringData: *bool = @ptrCast(data.?);
                                 isHoveringData.* = false;
                             }
