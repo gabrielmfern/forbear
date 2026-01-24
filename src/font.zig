@@ -10,6 +10,7 @@ const c = @cImport({
     @cInclude("freetype/ftsizes.h");
     @cInclude("freetype/ftstroke.h");
     @cInclude("freetype/fttrigon.h");
+    @cInclude("freetype/ftmm.h");
     @cInclude("freetype/ftsynth.h");
 });
 
@@ -331,6 +332,40 @@ pub fn descent(self: @This()) f32 {
 /// it can simply be multiplied by the font size divided by units_per_em to get the line height in pixels
 pub fn lineHeight(self: @This()) f32 {
     return self.ascent() - self.descent();
+}
+
+/// Weight can go from 100 to 900 like CSS, but it can be higher or lower. Note
+/// that the weight is clipped by the maximum and minimum values
+pub fn setWeight(self: @This(), weight: c.FT_UInt, allocator: std.mem.Allocator) !void {
+    var mm: [*c]c.FT_MM_Var = undefined;
+    ensureNoError(c.FT_Get_MM_Var(self.handle, &mm)) catch |err| {
+        if (err == error.InvalidArgument) {
+            std.log.warn("Font does not support multiple masters, cannot set weight. This is most likely not a variable font, doing nothing.");
+            return;
+        }
+        return err;
+    };
+    defer ensureNoError(c.FT_Done_MM_Var(freetypeLibrary, mm)) catch |err| {
+        std.log.err("Could not free MM_Var: {}", .{err});
+    };
+
+    const coords = try allocator.alloc(c.FT_Fixed, @intCast(mm.*.num_axis));
+    defer allocator.free(coords);
+    try ensureNoError(c.FT_Get_Var_Design_Coordinates(self.handle, mm.*.num_axis, coords.ptr));
+
+    for (0..mm.*.num_axis) |i| {
+        const a = &mm.*.axis[i];
+        const w: c_ulong = @intCast('w');
+        const g: c_ulong = @intCast('g');
+        const h: c_ulong = @intCast('h');
+        const t: c_ulong = @intCast('t');
+        const wght = (w << 24) | (g << 16) | (h << 8) | t;
+        if (a.*.tag == wght) {
+            coords[i] = @max(@min(weight * 65536, a.*.maximum), a.*.minimum);
+            break;
+        }
+    }
+    try ensureNoError(c.FT_Set_Var_Design_Coordinates(self.handle, mm.*.num_axis, coords.ptr));
 }
 
 pub fn rasterize(
