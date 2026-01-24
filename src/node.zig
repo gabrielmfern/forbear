@@ -185,7 +185,7 @@ pub const Node = union(enum) {
         }
 
         if (valueTypeInfo == .int or valueTypeInfo == .float) {
-            const stringified = try std.fmt.allocPrint(allocator, "{d:.1}", .{value});
+            const stringified = try std.fmt.allocPrint(allocator, "{d}", .{value});
             return Node{
                 .text = stringified,
             };
