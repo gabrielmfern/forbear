@@ -18,6 +18,10 @@ allocator: std.mem.Allocator,
 const Self = @This();
 
 pub const Handlers = struct {
+    pointerMotion: ?struct {
+        data: *anyopaque,
+        function: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
+    } = null,
     resize: ?struct {
         data: *anyopaque,
         function: *const fn (
@@ -144,6 +148,15 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                 }
             }
         },
+        win32.WM_MOUSEMOVE => {
+            if (window) |self| {
+                const mouseX: u16 = @truncate(@as(u32, @intCast(lParam)));
+                const mouseY: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
+                if (self.handlers.pointerMotion) |handler| {
+                    handler.function(self, 0, @floatFromInt(mouseX), @floatFromInt(mouseY), handler.data);
+                }
+            }
+        },
         // win32.WM_SIZE => {
         //     if (window) |self| {
         //         const newWidth: u16 = @truncate(@as(u32, @intCast(lParam)));
@@ -185,6 +198,17 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
     }
 
     return 0;
+}
+
+pub fn setPointerMotionHandler(
+    self: *Self,
+    handler: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
+    data: *anyopaque,
+) void {
+    self.handlers.pointerMotion = .{
+        .data = data,
+        .function = handler,
+    };
 }
 
 pub fn setResizeHandler(
