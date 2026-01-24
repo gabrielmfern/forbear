@@ -81,9 +81,7 @@ fn App(props: AppProps) !forbear.Node {
                         eventData,
                         (struct {
                             fn handler(_: *const forbear.LayoutBox, data: EventData) anyerror!void {
-                                if (!data.clickMeHoverAnimation.isRunning()) {
-                                    data.clickMeHoverAnimation.start();
-                                }
+                                data.clickMeHoverAnimation.start();
                             }
                         }).handler,
                         arena,
@@ -92,10 +90,7 @@ fn App(props: AppProps) !forbear.Node {
                         eventData,
                         (struct {
                             fn handler(_: *const forbear.LayoutBox, data: EventData) anyerror!void {
-                                std.log.debug("mouse out of click me", .{});
-                                if (data.clickMeHoverAnimation.isRunning()) {
-                                    data.clickMeHoverAnimation.reverseReset();
-                                }
+                                data.clickMeHoverAnimation.reverseReset();
                             }
                         }).handler,
                         arena,
