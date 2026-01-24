@@ -17,6 +17,8 @@ pub const Element = nodeImport.Element;
 pub const ElementProps = nodeImport.DivProps;
 pub const div = nodeImport.div;
 pub const children = nodeImport.children;
+pub const eventHandler = nodeImport.eventHandler;
+pub const EventHandler = nodeImport.EventHandler;
 pub const Window = @import("window/root.zig").Window;
 
 const Vec2 = @Vector(2, f32);
@@ -25,21 +27,28 @@ const Context = @This();
 
 var context: ?@This() = null;
 
+const ComponentResolutionState = struct {
+    arenaAllocator: std.mem.Allocator,
+    stateByteCursor: usize,
+    key: u64,
+};
+
 allocator: std.mem.Allocator,
 mousePosition: Vec2,
-hoveredElementKey: ?u64,
+hoveredElementKeys: std.ArrayList(u64),
+
+/// Seconds
+startTime: f64,
+/// Seconds
+deltaTime: ?f64,
+/// Seconds
+lastUpdateTime: ?f64,
 
 // TODO: The alignment here is probably messed up, we should find a way to fix
 // it later
 /// A literal string of bytes that have the size of some state, and the
 componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
 componentResolutionState: ?ComponentResolutionState,
-
-const ComponentResolutionState = struct {
-    arenaAllocator: std.mem.Allocator,
-    stateByteCursor: usize,
-    key: u64,
-};
 
 pub fn init(allocator: std.mem.Allocator) !void {
     if (context != null) {
@@ -48,10 +57,14 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
     context = @This(){
         .mousePosition = .{ 0.0, 0.0 },
-        .hoveredElementKey = null,
+        .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .allocator = allocator,
         .componentStates = .init(allocator),
         .componentResolutionState = null,
+
+        .startTime = timestampSeconds(),
+        .deltaTime = null,
+        .lastUpdateTime = null,
     };
 }
 
@@ -188,7 +201,181 @@ test "Component resolution" {
     try std.testing.expectEqual(4, callCount);
 }
 
-const stateAlignment: std.mem.Alignment = .@"8";
+const AnimationState = struct {
+    /// Seconds
+    timeSinceStart: f32,
+    /// Seconds, equivalent to the duration
+    estimatedEnd: f32,
+
+    /// Value ranging from 0.0 to 1.0
+    progress: f32,
+
+    reverseReset: bool,
+
+    pub fn start(self: *?@This(), duration: f64) void {
+        self.state = .{
+            .timeSinceStart = 0.0,
+            .estimatedEnd = duration,
+            .progress = 0.0,
+            .reverseReset = false,
+        };
+    }
+};
+
+pub const Animation = struct {
+    state: *?AnimationState,
+    duration: f32,
+
+    pub fn start(self: @This()) void {
+        self.state.* = .{
+            .timeSinceStart = 0.0,
+            .estimatedEnd = self.duration,
+            .progress = 0.0,
+            .reverseReset = false,
+        };
+    }
+
+    /// Progresses through the animation in reverse, and once it gets to the start,
+    /// it is completely reset.
+    pub fn reverseReset(self: @This()) void {
+        self.state.* = .{
+            .timeSinceStart = 0.0,
+            .estimatedEnd = self.duration,
+            .progress = 1.0,
+            .reverseReset = true,
+        };
+    }
+
+    pub fn reset(self: @This()) void {
+        self.state.* = null;
+    }
+
+    pub fn isRunning(self: @This()) bool {
+        return self.state.* != null;
+    }
+
+    /// Does not apply any easing function. To apply one, just call the function in this value.
+    pub fn progress(self: @This()) ?f32 {
+        if (self.state.*) |state| {
+            return state.progress;
+        }
+        return null;
+    }
+};
+
+pub fn useAnimation(duration: f32) !Animation {
+    const self = getContext();
+    const state = try useState(?AnimationState, null);
+
+    if (state.* != null and state.*.?.progress == 0.0 and state.*.?.reverseReset == true) {
+        // we're going backwards and reached the start, so we can stop the animation
+        state.* = null;
+    }
+    if (state.* != null) {
+        if (state.*.?.progress < 1.0 and state.*.?.reverseReset == false) {
+            state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
+            state.*.?.progress = @min(
+                1.0,
+                state.*.?.timeSinceStart / state.*.?.estimatedEnd,
+            );
+        } else if (state.*.?.progress > 0.0 and state.*.?.reverseReset == true) {
+            state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
+            state.*.?.progress = 1.0 - @min(
+                1.0,
+                state.*.?.timeSinceStart / state.*.?.estimatedEnd,
+            );
+        }
+    }
+
+    return .{
+        .state = state,
+        .duration = duration,
+    };
+}
+
+/// CSS-style cubic bezier timing function.
+/// Given control points (x1, y1) and (x2, y2), returns the y-value for a given x-value (time).
+/// The curve always starts at (0, 0) and ends at (1, 1).
+pub fn cubicBezier(x1: f32, y1: f32, x2: f32, y2: f32, time: f32) f32 {
+    // Early returns for edge cases
+    if (time <= 0.0) return 0.0;
+    if (time >= 1.0) return 1.0;
+
+    // Newton-Raphson method to solve for t given x (time)
+    // We need to find t such that bezierX(t) = time
+    var t = time; // Initial guess
+    const epsilon = 0.0001;
+    const maxIterations = 8;
+
+    var i: u32 = 0;
+    while (i < maxIterations) : (i += 1) {
+        const currentX = bezierX(x1, x2, t);
+        const diff = currentX - time;
+        if (@abs(diff) < epsilon) break;
+
+        const derivative = bezierXDerivative(x1, x2, t);
+        if (@abs(derivative) < epsilon) break;
+
+        t -= diff / derivative;
+    }
+
+    // Now that we have t, calculate the corresponding y value
+    return bezierY(y1, y2, t);
+}
+
+fn bezierX(x1: f32, x2: f32, t: f32) f32 {
+    // x(t) = 3*(1-t)^2*t*x1 + 3*(1-t)*t^2*x2 + t^3
+    const oneMinusT = 1.0 - t;
+    return 3.0 * oneMinusT * oneMinusT * t * x1 +
+        3.0 * oneMinusT * t * t * x2 +
+        t * t * t;
+}
+
+fn bezierY(y1: f32, y2: f32, t: f32) f32 {
+    // y(t) = 3*(1-t)^2*t*y1 + 3*(1-t)*t^2*y2 + t^3
+    const oneMinusT = 1.0 - t;
+    return 3.0 * oneMinusT * oneMinusT * t * y1 +
+        3.0 * oneMinusT * t * t * y2 +
+        t * t * t;
+}
+
+fn bezierXDerivative(x1: f32, x2: f32, t: f32) f32 {
+    // dx/dt = 3*(1-t)^2*x1 + 6*(1-t)*t*(x2-x1) + 3*t^2*(1-x2)
+    const oneMinusT = 1.0 - t;
+    return 3.0 * oneMinusT * oneMinusT * x1 +
+        6.0 * oneMinusT * t * (x2 - x1) +
+        3.0 * t * t * (1.0 - x2);
+}
+
+test "easeInOut" {
+    try std.testing.expectEqual(1.0, easeInOut(1.0));
+    try std.testing.expectEqual(0.0, easeInOut(0.0));
+}
+
+test "ease" {
+    try std.testing.expectEqual(1.0, ease(1.0));
+    try std.testing.expectEqual(0.0, ease(0.0));
+}
+
+/// Equivalent to CSS's ease timing function
+pub fn easeInOut(progress: f32) f32 {
+    return cubicBezier(0.42, 0.0, 0.58, 1.0, progress);
+}
+
+/// Equivalent to CSS's ease timing function
+pub fn ease(progress: f32) f32 {
+    return cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
+}
+
+pub fn useDeltaTime() f64 {
+    const self = getContext();
+    return self.deltaTime orelse 0.0;
+}
+
+pub fn useLastUpdateTime() f64 {
+    const self = getContext();
+    return self.lastUpdateTime orelse self.startTime;
+}
 
 pub fn useArena() !std.mem.Allocator {
     const self = getContext();
@@ -201,6 +388,8 @@ pub fn useArena() !std.mem.Allocator {
         return error.NoComponentContext;
     }
 }
+
+const stateAlignment: std.mem.Alignment = .@"8";
 
 // TODO: in debug mode, we should be adding some guard rail here to make sure
 // of warning the user if they called the hook in an unexpected order, as it
@@ -279,11 +468,23 @@ pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
     const self = getContext();
 
     var iterator = try layouting.LayoutTreeIterator.init(arena, root);
-    var previouslyHoveredLayoutBox: ?*const LayoutBox = null;
+
+    var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
+    missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
 
     var highestHoveredLayoutBox: ?*const LayoutBox = null;
     while (try iterator.next()) |layoutBox| {
-        if (layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1] and layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1]) {
+        const isMouseAfter = layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1];
+        const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
+        const isMouseInside = isMouseAfter and isMouseBefore;
+
+        const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, layoutBox.key);
+
+        if (std.mem.indexOfScalar(u64, missingHoveredKeys.items, layoutBox.key)) |i| {
+            _ = missingHoveredKeys.swapRemove(i);
+        }
+
+        if (isMouseInside) {
             if (highestHoveredLayoutBox) |hoveredBox| {
                 if (layoutBox.z > hoveredBox.z) {
                     highestHoveredLayoutBox = layoutBox;
@@ -291,29 +492,34 @@ pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
             } else {
                 highestHoveredLayoutBox = layoutBox;
             }
-        }
-        if (layoutBox.key == self.hoveredElementKey) {
-            previouslyHoveredLayoutBox = layoutBox;
-        }
-    }
-    if (highestHoveredLayoutBox) |hoveredBox| {
-        if (hoveredBox.key != self.hoveredElementKey) {
-            if (previouslyHoveredLayoutBox) |prevBox| {
-                if (prevBox.handlers.onMouseOut) |onMouseOut| {
-                    try onMouseOut.handler(self.mousePosition, onMouseOut.data);
+
+            if (hoveredElementKeysIndexOpt == null) {
+                if (layoutBox.handlers.onMouseOver) |onMouseOver| {
+                    try onMouseOver.handler(layoutBox, onMouseOver.data);
                 }
+                try self.hoveredElementKeys.append(self.allocator, layoutBox.key);
             }
-        }
-        if (hoveredBox.handlers.onMouseOver) |onMouseOver| {
-            try onMouseOver.handler(self.mousePosition, onMouseOver.data);
-            self.hoveredElementKey = hoveredBox.key;
-        }
-    } else if (previouslyHoveredLayoutBox) |prevBox| {
-        if (prevBox.handlers.onMouseOut) |onMouseOut| {
-            try onMouseOut.handler(self.mousePosition, onMouseOut.data);
-            self.hoveredElementKey = null;
+        } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
+            if (layoutBox.handlers.onMouseOut) |onMouseOut| {
+                try onMouseOut.handler(layoutBox, onMouseOut.data);
+            }
+            _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
         }
     }
+
+    for (missingHoveredKeys.items) |key| {
+        if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
+            _ = self.hoveredElementKeys.swapRemove(i);
+        }
+    }
+
+    const timestamp = timestampSeconds();
+    self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
+    self.lastUpdateTime = timestamp;
+}
+
+fn timestampSeconds() f64 {
+    return @as(f64, @floatFromInt(std.time.nanoTimestamp())) / std.time.ns_per_s;
 }
 
 pub fn setHandlers(window: *Window) void {
@@ -339,6 +545,7 @@ pub fn deinit() void {
         self.allocator.free(states.*);
     }
     self.componentStates.deinit();
+    self.hoveredElementKeys.deinit(self.allocator);
     context = null;
 }
 
