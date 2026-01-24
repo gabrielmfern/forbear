@@ -755,7 +755,6 @@ const FontTextureAtlas = struct {
                 .pNext = null,
                 .flags = 0,
                 .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
-                // Use RGBA format for subpixel/LCD text rendering
                 .format = c.VK_FORMAT_R8G8B8A8_UNORM,
                 .components = c.VkComponentMapping{
                     .r = c.VK_COMPONENT_SWIZZLE_R,
