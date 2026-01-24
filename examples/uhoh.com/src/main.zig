@@ -30,7 +30,7 @@ fn App(props: AppProps) !forbear.Node {
                 .style = .{
                     .background = .{ .image = props.comeOnImage },
                     .preferredWidth = .{
-                        .fixed = 180,
+                        .fixed = 165,
                     },
                     .preferredHeight = .{
                         .fixed = 200,
