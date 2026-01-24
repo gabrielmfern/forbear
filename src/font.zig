@@ -337,28 +337,29 @@ pub fn lineHeight(self: @This()) f32 {
 /// Weight can go from 100 to 900 like CSS, but it can be higher or lower. Note
 /// that the weight is clipped by the maximum and minimum values
 pub fn setWeight(self: @This(), weight: c.FT_UInt, allocator: std.mem.Allocator) !void {
-  var mm: [*c]c.FT_MM_Var  = undefined;
-  try ensureNoError(c.FT_Get_MM_Var(self.handle, &mm));
+    var mm: [*c]c.FT_MM_Var = undefined;
+    try ensureNoError(c.FT_Get_MM_Var(self.handle, &mm));
+    defer ensureNoError(c.FT_Done_MM_Var(freetypeLibrary, mm)) catch |err| {
+        std.log.err("Could not free MM_Var: {}", .{err});
+    };
 
-  const coords = try allocator.alloc(c.FT_Fixed, @intCast(mm.*.num_axis));
-  defer allocator.free(coords);
-  try ensureNoError(c.FT_Get_Var_Design_Coordinates(self.handle, mm.*.num_axis, coords.ptr));
+    const coords = try allocator.alloc(c.FT_Fixed, @intCast(mm.*.num_axis));
+    defer allocator.free(coords);
+    try ensureNoError(c.FT_Get_Var_Design_Coordinates(self.handle, mm.*.num_axis, coords.ptr));
 
-  for (0..mm.*.num_axis) |i| {
-    const a  = &mm.*.axis[i];
-    const w: c_ulong = @intCast('w');
-    const g: c_ulong = @intCast('g');
-    const h: c_ulong = @intCast('h');
-    const t: c_ulong = @intCast('t');
-    const wght = (w << 24) | (g << 16) | (h << 8) | t;
-    if (a.*.tag == wght) {
-      coords[i] = @max(@min(weight * 65536, a.*.maximum), a.*.minimum);
-      break;
+    for (0..mm.*.num_axis) |i| {
+        const a = &mm.*.axis[i];
+        const w: c_ulong = @intCast('w');
+        const g: c_ulong = @intCast('g');
+        const h: c_ulong = @intCast('h');
+        const t: c_ulong = @intCast('t');
+        const wght = (w << 24) | (g << 16) | (h << 8) | t;
+        if (a.*.tag == wght) {
+            coords[i] = @max(@min(weight * 65536, a.*.maximum), a.*.minimum);
+            break;
+        }
     }
-  }
-  try ensureNoError(c.FT_Set_Var_Design_Coordinates(self.handle, mm.*.num_axis, coords.ptr));
-
-  try ensureNoError(c.FT_Done_MM_Var(freetypeLibrary, mm));
+    try ensureNoError(c.FT_Set_Var_Design_Coordinates(self.handle, mm.*.num_axis, coords.ptr));
 }
 
 pub fn rasterize(

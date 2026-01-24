@@ -299,7 +299,7 @@ pub fn eventHandler(
     handler: fn (target: *const LayoutBox, data: @TypeOf(data)) anyerror!void,
     arena: std.mem.Allocator,
 ) !EventHandler {
-    const ownedDataPtr = try arena.create(@TypeOf(data)); 
+    const ownedDataPtr = try arena.create(@TypeOf(data));
     ownedDataPtr.* = data;
     return .{
         .data = @ptrCast(@alignCast(ownedDataPtr)),
