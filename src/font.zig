@@ -338,7 +338,13 @@ pub fn lineHeight(self: @This()) f32 {
 /// that the weight is clipped by the maximum and minimum values
 pub fn setWeight(self: @This(), weight: c.FT_UInt, allocator: std.mem.Allocator) !void {
     var mm: [*c]c.FT_MM_Var = undefined;
-    try ensureNoError(c.FT_Get_MM_Var(self.handle, &mm));
+    ensureNoError(c.FT_Get_MM_Var(self.handle, &mm)) catch |err| {
+        if (err == error.InvalidArgument) {
+            std.log.warn("Font does not support multiple masters, cannot set weight. This is most likely not a variable font, doing nothing.");
+            return;
+        }
+        return err;
+    };
     defer ensureNoError(c.FT_Done_MM_Var(freetypeLibrary, mm)) catch |err| {
         std.log.err("Could not free MM_Var: {}", .{err});
     };
