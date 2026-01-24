@@ -57,7 +57,7 @@ fn App(props: AppProps) !forbear.Node {
                     .background = .{ .color = .{ 0.99, 0.98, 0.96, 1.0 } },
                     .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
                     .translate = if (clickMeHoverAnimation.progress()) |progress|
-                        .{ 0.0, -6.0 * @as(f32, @floatCast(progress)) }
+                        .{ 0.0, -6.0 * forbear.easeInOut(progress) }
                     else
                         .{ 0.0, 0.0 },
                     .shadow = .{
@@ -65,7 +65,7 @@ fn App(props: AppProps) !forbear.Node {
                         .spread = 0.0,
                         .color = .{ 0.0, 0.0, 0.0, 1.0 },
                         .offsetBlock = if (clickMeHoverAnimation.progress()) |progress|
-                            .{ 0.0, 6.0 * @as(f32, @floatCast(progress)) }
+                            .{ 0.0, 6.0 * forbear.easeInOut(progress) }
                         else
                             .{ 0.0, 0.0 },
                         .offsetInline = @splat(0.0),

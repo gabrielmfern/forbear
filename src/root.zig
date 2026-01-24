@@ -203,12 +203,12 @@ test "Component resolution" {
 
 const AnimationState = struct {
     /// Seconds
-    timeSinceStart: f64,
+    timeSinceStart: f32,
     /// Seconds, equivalent to the duration
-    estimatedEnd: f64,
+    estimatedEnd: f32,
 
     /// Value ranging from 0.0 to 1.0
-    progress: f64,
+    progress: f32,
 
     pub fn start(self: *?@This(), duration: f64) void {
         self.state = .{
@@ -221,7 +221,7 @@ const AnimationState = struct {
 
 pub const Animation = struct {
     state: *?AnimationState,
-    duration: f64,
+    duration: f32,
 
     pub fn start(self: @This()) void {
         self.state.* = .{
@@ -240,7 +240,7 @@ pub const Animation = struct {
     }
 
     /// Does not apply any easing function. To apply one, just call the function in this value.
-    pub fn progress(self: @This()) ?f64 {
+    pub fn progress(self: @This()) ?f32 {
         if (self.state.*) |state| {
             return state.progress;
         }
@@ -248,12 +248,12 @@ pub const Animation = struct {
     }
 };
 
-pub fn useAnimation(duration: f64) !Animation {
+pub fn useAnimation(duration: f32) !Animation {
     const self = getContext();
     const state = try useState(?AnimationState, null);
 
     if (state.* != null and state.*.?.progress < 1.0) {
-        state.*.?.timeSinceStart += self.deltaTime orelse 0.0;
+        state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
         state.*.?.progress = @min(
             1.0,
             state.*.?.timeSinceStart / state.*.?.estimatedEnd,
