@@ -340,7 +340,7 @@ pub fn setWeight(self: @This(), weight: c.FT_UInt, allocator: std.mem.Allocator)
     var mm: [*c]c.FT_MM_Var = undefined;
     ensureNoError(c.FT_Get_MM_Var(self.handle, &mm)) catch |err| {
         if (err == error.InvalidArgument) {
-            std.log.warn("Font does not support multiple masters, cannot set weight. This is most likely not a variable font, doing nothing.");
+            std.log.warn("Font does not support multiple masters, cannot set weight. This is most likely not a variable font, doing nothing.", .{});
             return;
         }
         return err;
@@ -382,7 +382,7 @@ pub fn rasterize(
         @intCast(dpi[1]),
     ));
 
-    try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_DEFAULT));
+    try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_TARGET_LCD));
     const glyph = self.handle.*.glyph;
     std.debug.assert(glyph != null);
     // Use LCD rendering mode for subpixel anti-aliasing
