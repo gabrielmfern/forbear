@@ -2,7 +2,7 @@ const std = @import("std");
 const forbear = @import("forbear");
 
 const AppProps = struct {
-    spaceGroteskBold: forbear.Font,
+    spaceGrotesk: forbear.Font,
     comeOnImage: *const forbear.Image,
 };
 
@@ -22,6 +22,7 @@ fn App(props: AppProps) !forbear.Node {
             .preferredWidth = .grow,
             .direction = .topToBottom,
             .horizontalAlignment = .center,
+            .fontWeight = 500,
             .fontSize = 12,
         },
         .children = try forbear.children(.{
@@ -38,7 +39,8 @@ fn App(props: AppProps) !forbear.Node {
             }),
             forbear.div(.{
                 .style = .{
-                    .font = props.spaceGroteskBold,
+                    .font = props.spaceGrotesk,
+                    .fontWeight = 700,
                     .fontSize = 30,
                     .marginBlock = .{ 10, 10 },
                 },
@@ -122,10 +124,8 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    const spaceGroteskMedium = try forbear.Font.init("SpaceGrotesk-Medium", @embedFile("SpaceGrotesk-Medium.ttf"));
-    defer spaceGroteskMedium.deinit();
-    const spaceGroteskBold = try forbear.Font.init("SpaceGrotesk-Bold", @embedFile("SpaceGrotesk-Bold.ttf"));
-    defer spaceGroteskBold.deinit();
+    const spaceGrotesk = try forbear.Font.init("SpaceGrotesk", @embedFile("SpaceGrotesk.ttf"));
+    defer spaceGrotesk.deinit();
 
     const comeOnImage = try forbear.Image.init(@embedFile("come-on.png"), .png, renderer);
     defer comeOnImage.deinit(renderer);
@@ -135,15 +135,16 @@ fn renderingMain(
 
         const treeNode = try forbear.resolve(try forbear.component(
             App,
-            AppProps{ .comeOnImage = &comeOnImage, .spaceGroteskBold = spaceGroteskBold },
+            AppProps{ .comeOnImage = &comeOnImage, .spaceGrotesk = spaceGrotesk },
             arena,
         ), arena);
         const layoutBox = try forbear.layout(
             treeNode,
             .{
-                .font = spaceGroteskMedium,
+                .font = spaceGrotesk,
                 .color = .{ 0.0, 0.0, 0.0, 1.0 },
                 .fontSize = 16,
+                .fontWeight = 400,
                 .lineHeight = 1.0,
             },
             renderer.viewportSize(),

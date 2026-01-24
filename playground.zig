@@ -64,7 +64,7 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    const inter = try forbear.Font.init("Inter-Regular", @embedFile("Inter-Regular.ttf"));
+    const inter = try forbear.Font.init("Inter", @embedFile("Inter.ttf"));
 
     var time = std.time.nanoTimestamp();
     var fps: ?u32 = null;
@@ -75,7 +75,7 @@ fn renderingMain(
         const treeNode = try forbear.resolve(node, arena);
         const layoutBox = try forbear.layout(
             treeNode,
-            .{ .font = inter, .color = .{ 1.0, 1.0, 1.0, 1.0 }, .fontSize = 32, .lineHeight = 1.0 },
+            .{ .font = inter, .color = .{ 1.0, 1.0, 1.0, 1.0 }, .fontSize = 32, .fontWeight = 400, .lineHeight = 1.0 },
             .{ @floatFromInt(window.width), @floatFromInt(window.height) },
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             arena,

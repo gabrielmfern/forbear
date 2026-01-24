@@ -1993,6 +1993,7 @@ const TextPipeline = struct {
 
     const GlyphRenderingKey = struct {
         fontSize: u32,
+        fontWeight: u32,
         glyphIndex: u32,
         fontKey: u64,
     };
@@ -3419,6 +3420,7 @@ pub const Renderer = struct {
                         for (children.glyphs) |glyph| {
                             const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
                                 .fontKey = layoutBox.style.font.key,
+                                .fontWeight = layoutBox.style.fontWeight,
                                 .fontSize = layoutBox.style.fontSize,
                                 .glyphIndex = glyph.index,
                             };
@@ -3426,6 +3428,7 @@ pub const Renderer = struct {
                                 if (self.textPipeline.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
                                     break :blk data;
                                 } else {
+                                    try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, self.allocator);
                                     const rasterizedGlyph = try layoutBox.style.font.rasterize(
                                         glyph.index,
                                         dpi,
