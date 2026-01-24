@@ -210,11 +210,14 @@ const AnimationState = struct {
     /// Value ranging from 0.0 to 1.0
     progress: f32,
 
+    reverseReset: bool,
+
     pub fn start(self: *?@This(), duration: f64) void {
         self.state = .{
             .timeSinceStart = 0.0,
             .estimatedEnd = duration,
             .progress = 0.0,
+            .reverseReset = false,
         };
     }
 };
@@ -228,6 +231,18 @@ pub const Animation = struct {
             .timeSinceStart = 0.0,
             .estimatedEnd = self.duration,
             .progress = 0.0,
+            .reverseReset = false,
+        };
+    }
+
+    /// Progresses through the animation in reverse, and once it gets to the start,
+    /// it is completely reset.
+    pub fn reverseReset(self: @This()) void {
+        self.state.* = .{
+            .timeSinceStart = 0.0,
+            .estimatedEnd = self.duration,
+            .progress = 1.0,
+            .reverseReset = true,
         };
     }
 
@@ -252,12 +267,24 @@ pub fn useAnimation(duration: f32) !Animation {
     const self = getContext();
     const state = try useState(?AnimationState, null);
 
-    if (state.* != null and state.*.?.progress < 1.0) {
-        state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
-        state.*.?.progress = @min(
-            1.0,
-            state.*.?.timeSinceStart / state.*.?.estimatedEnd,
-        );
+    if (state.* != null and state.*.?.progress == 0.0 and state.*.?.reverseReset == true) {
+        // we're going backwards and reached the start, so we can stop the animation
+        state.* = null;
+    }
+    if (state.* != null) {
+        if (state.*.?.progress < 1.0 and state.*.?.reverseReset == false) {
+            state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
+            state.*.?.progress = @min(
+                1.0,
+                state.*.?.timeSinceStart / state.*.?.estimatedEnd,
+            );
+        } else if (state.*.?.progress > 0.0 and state.*.?.reverseReset == true) {
+            state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
+            state.*.?.progress = 1.0 - @min(
+                1.0,
+                state.*.?.timeSinceStart / state.*.?.estimatedEnd,
+            );
+        }
     }
 
     return .{
