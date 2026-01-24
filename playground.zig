@@ -119,7 +119,7 @@ pub fn main() !void {
 
     try forbear.init(allocator);
     defer forbear.deinit();
-    forbear.setHandlers(window);
+    forbear.setWindowHandlers(window);
 
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();

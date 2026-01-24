@@ -17,7 +17,7 @@ pub const Handlers = struct {
     } = null,
     pointerMotion: ?struct {
         data: *anyopaque,
-        function: *const fn (window: *Self, time: u32, x: i32, y: i32, data: *anyopaque) void,
+        function: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
     } = null,
     pointerButton: ?struct {
         data: *anyopaque,
@@ -420,7 +420,13 @@ fn pointerHandleMotion(
 ) callconv(.c) void {
     const window: *Self = @ptrCast(@alignCast(data));
     if (window.handlers.pointerMotion) |handler| {
-        handler.function(window, time, c.wl_fixed_to_int(surfaceX), c.wl_fixed_to_int(surfaceY), handler.data);
+        handler.function(
+            window,
+            time,
+            @floatCast(c.wl_fixed_to_double(surfaceX)),
+            @floatCast(c.wl_fixed_to_double(surfaceY)),
+            handler.data,
+        );
     }
     _ = wlPointer;
 }
@@ -699,9 +705,9 @@ const Cursor = enum {
     pointer,
 };
 
-pub fn setPointerMotion(
+pub fn setPointerMotionHandler(
     self: *Self,
-    handler: *const fn (window: *Self, time: u32, x: i32, y: i32, data: *anyopaque) void,
+    handler: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
     data: *anyopaque,
 ) void {
     self.handlers.pointerMotion = .{

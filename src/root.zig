@@ -522,15 +522,15 @@ fn timestampSeconds() f64 {
     return @as(f64, @floatFromInt(std.time.nanoTimestamp())) / std.time.ns_per_s;
 }
 
-pub fn setHandlers(window: *Window) void {
+pub fn setWindowHandlers(window: *Window) void {
     const self = getContext();
 
-    window.setPointerMotion(
+    window.setPointerMotionHandler(
         &(struct {
-            fn handler(_: *Window, time: u32, x: i32, y: i32, data: *anyopaque) void {
+            fn handler(_: *Window, time: u32, x: f32, y: f32, data: *anyopaque) void {
                 _ = time;
                 const ctx: *Context = @ptrCast(@alignCast(data));
-                ctx.mousePosition = .{ @floatFromInt(x), @floatFromInt(y) };
+                ctx.mousePosition = .{ x, y };
             }
         }).handler,
         @ptrCast(@alignCast(self)),
