@@ -158,6 +158,11 @@ pub const Style = struct {
    }
    ```
 
+4. **Allocator as first parameter**:
+   ```zig
+   pub fn createResource(allocator: std.mem.Allocator, ...) !Resource { ... }
+   ```
+
 ### C Interop
 
 1. **Single c.zig file** - All C imports centralized:

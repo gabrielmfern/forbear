@@ -182,7 +182,8 @@ pub fn resolve(rootNode: Node, arenaAllocator: std.mem.Allocator) !TreeNode {
 }
 
 test "Component resolution" {
-    try init(std.testing.allocator);
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
     defer deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -203,13 +204,13 @@ test "Component resolution" {
             const counter = try useState(u32, props.value);
             try std.testing.expectEqual(props.value, counter.*);
             return div(.{
-                .children = try children(.{ "Value: ", counter.* }, props.arenaAllocator),
+                .children = try children(props.arenaAllocator, .{ "Value: ", counter.* }),
             });
         }
     }).component;
 
     const rootNode = div(.{
-        .children = try children(.{
+        .children = try children(arenaAllocator, .{
             try component(
                 MyComponent,
                 MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
@@ -220,7 +221,7 @@ test "Component resolution" {
                 MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
                 arenaAllocator,
             ),
-        }, arenaAllocator),
+        }),
     });
 
     _ = try resolve(rootNode, arenaAllocator);
@@ -484,7 +485,8 @@ pub fn useState(T: type, initialValue: T) !*T {
 }
 
 test "State creation with manual handling" {
-    try init(std.testing.allocator);
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
     {

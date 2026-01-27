@@ -8,7 +8,7 @@
 //! running: bool
 //! dpi: [2]u32
 //!
-//! fn init(width: u32, height: u32, title: [:0]const u8, app_id: [:0]const u8, allocator: std.mem.Allocator) void
+//! fn init(allocator: std.mem.Allocator, width: u32, height: u32, title: [:0]const u8, app_id: [:0]const u8) void
 //!
 //! fn targetFrameTimeNs() u64;
 //!

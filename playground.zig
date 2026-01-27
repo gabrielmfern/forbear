@@ -15,7 +15,7 @@ fn App(props: AppProps) !forbear.Node {
             .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
             .paddingInline = .{ 10, 10 },
         },
-        .children = try forbear.children(.{
+        .children = try forbear.children(arena, .{
             "fps:",
             props.fps,
             " ",
@@ -55,14 +55,14 @@ fn App(props: AppProps) !forbear.Node {
                     },
                 },
             }),
-        }, arena),
+        }),
     });
 }
 
 fn renderingMain(
+    allocator: std.mem.Allocator,
     renderer: *forbear.Graphics.Renderer,
     window: *const forbear.Window,
-    allocator: std.mem.Allocator,
 ) !void {
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
     defer arenaAllocator.deinit();
@@ -75,8 +75,9 @@ fn renderingMain(
         defer _ = arenaAllocator.reset(.retain_capacity);
 
         const node = try forbear.component(App, AppProps{ .fps = fps }, arena);
-        const treeNode = try forbear.resolve(node, arena, renderer);
+        const treeNode = try forbear.resolve(node, arena);
         const layoutBox = try forbear.layout(
+            arena,
             treeNode,
             .{
                 .font = try forbear.useFont("Inter", @embedFile("Inter.ttf")),
@@ -87,7 +88,6 @@ fn renderingMain(
             },
             .{ @floatFromInt(window.width), @floatFromInt(window.height) },
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
-            arena,
         );
         try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
 
@@ -112,26 +112,26 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     var graphics = try forbear.Graphics.init(
-        "forbear playground",
         allocator,
+        "forbear playground",
     );
     defer graphics.deinit();
 
     const window = try forbear.Window.init(
+        allocator,
         800,
         600,
         "forbear playground",
         "forbear.playground",
-        allocator,
     );
     defer window.deinit();
 
-    try forbear.init(allocator);
-    defer forbear.deinit();
-    forbear.setWindowHandlers(window);
-
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
+
+    try forbear.init(allocator, &renderer);
+    defer forbear.deinit();
+    forbear.setWindowHandlers(window);
     window.setResizeHandler(
         &handleResize,
         @ptrCast(@alignCast(&renderer)),
@@ -141,9 +141,9 @@ pub fn main() !void {
         .{ .allocator = allocator },
         renderingMain,
         .{
+            allocator,
             &renderer,
             window,
-            allocator,
         },
     );
     defer renderingThread.join();
