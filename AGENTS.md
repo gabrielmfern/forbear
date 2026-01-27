@@ -22,6 +22,9 @@ zig build run
 # Run all tests
 zig build test
 
+# Build all examples and playground (verifies everything compiles)
+zig build check
+
 # Build with release optimizations
 zig build --release=fast
 
@@ -236,6 +239,20 @@ forbear/
 ```
 
 ## Common Tasks
+
+### Verifying All Code Compiles
+
+After making changes, use `zig build check` to verify all examples and the playground compile:
+
+```bash
+zig build check
+```
+
+This command:
+- Builds the playground executable
+- Builds all examples in `examples/` directory
+- Does not run tests (use `zig build test` for that)
+- Useful for CI or before committing changes
 
 ### Adding a New Source File
 
