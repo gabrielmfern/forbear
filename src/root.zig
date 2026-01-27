@@ -29,6 +29,7 @@ var context: ?@This() = null;
 
 const ComponentResolutionState = struct {
     arenaAllocator: std.mem.Allocator,
+    componentRenderer: *const Graphics.Renderer,
     stateByteCursor: usize,
     key: u64,
 };
@@ -46,9 +47,13 @@ lastUpdateTime: ?f64,
 
 // TODO: The alignment here is probably messed up, we should find a way to fix
 // it later
-/// A literal string of bytes that have the size of some state, and the
+/// A literal string of bytes that have the size of some state, and then the
+/// actual state
 componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
+// images: std.StringHashMap(Image),
 componentResolutionState: ?ComponentResolutionState,
+
+fonts: std.StringHashMap(Font),
 
 pub fn init(allocator: std.mem.Allocator) !void {
     if (context != null) {
@@ -61,6 +66,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
         .allocator = allocator,
         .componentStates = .init(allocator),
         .componentResolutionState = null,
+
+        .fonts = std.StringHashMap(Font).init(allocator),
 
         .startTime = timestampSeconds(),
         .deltaTime = null,
@@ -79,15 +86,31 @@ pub const TreeNode = struct {
 const Resolver = struct {
     path: std.ArrayList(usize),
     arenaAllocator: std.mem.Allocator,
+    resolvedComponentKeys: std.ArrayList(u64),
 
     fn init(arenaAllocator: std.mem.Allocator) !@This() {
+        const forbear = getContext();
+
         return .{
             .arenaAllocator = arenaAllocator,
             .path = try std.ArrayList(usize).initCapacity(arenaAllocator, 0),
+            .resolvedComponentKeys = try std.ArrayList(u64).initCapacity(arenaAllocator, forbear.componentStates.count()),
         };
     }
 
-    fn resolve(self: *@This(), node: Node) !TreeNode {
+    fn cleanup(self: @This()) void {
+        const forbear = getContext();
+
+        var stateKeysIterator = forbear.componentStates.keyIterator();
+        while (stateKeysIterator.next()) |key| {
+            if (std.mem.indexOfScalar(u64, self.resolvedComponentKeys, key) == null) {
+                std.log.debug("cleaning up component instance with key {d}", .{key});
+                forbear.componentStates.remove(key);
+            }
+        }
+    }
+
+    fn resolve(self: *@This(), node: Node, renderer: *const Graphics.Renderer) !TreeNode {
         const forbear = getContext();
 
         var hasher = std.hash.Wyhash.init(0);
@@ -97,21 +120,22 @@ const Resolver = struct {
                 hasher.update(std.mem.asBytes(&comp.id));
                 const key = hasher.final();
 
-                // TODO(up next): find a way to free the state data once the component instance is gone
                 const previousComponentResolutionState = forbear.componentResolutionState;
                 forbear.componentResolutionState = .{
                     .key = key,
                     .arenaAllocator = self.arenaAllocator,
+                    .componentRenderer = renderer,
                     .stateByteCursor = 0,
                 };
                 const componentNode = try comp.function(comp.props);
                 if (!forbear.componentStates.contains(key) or forbear.componentResolutionState.?.stateByteCursor != forbear.componentStates.get(key).?.len) {
                     return error.RulesOfHooksViolated;
                 }
+                try self.resolvedComponentKeys.append(self.arenaAllocator, key);
                 forbear.componentResolutionState = previousComponentResolutionState;
                 // TODO: investigate if should we reuse the same key as above?
                 // Is it a problem that it creates a new key here?
-                return self.resolve(componentNode);
+                return self.resolve(componentNode, renderer);
             },
             .element => {
                 if (node.element.children != null) {
@@ -119,7 +143,7 @@ const Resolver = struct {
                     for (node.element.children.?, 0..) |child, i| {
                         try self.path.append(self.arenaAllocator, i);
                         defer _ = self.path.pop();
-                        treeChildren[i] = try self.resolve(child);
+                        treeChildren[i] = try self.resolve(child, renderer);
                     }
                     return .{
                         .key = hasher.final(),
@@ -146,10 +170,10 @@ const Resolver = struct {
     }
 };
 
-pub fn resolve(rootNode: Node, arenaAllocator: std.mem.Allocator) !TreeNode {
+pub fn resolve(rootNode: Node, arenaAllocator: std.mem.Allocator, renderer: *const Graphics.Renderer) !TreeNode {
     var resolver = try Resolver.init(arenaAllocator);
 
-    return resolver.resolve(rootNode);
+    return resolver.resolve(rootNode, renderer);
 }
 
 test "Component resolution" {
@@ -201,6 +225,31 @@ test "Component resolution" {
     try std.testing.expectEqual(4, callCount);
 }
 
+/// Embeds an image from the given path, or retrieves it from cache if already embedded.
+///
+/// Only deinits when the forbear context is deinited. 
+pub fn useFont(name: []const u8, comptime contents: []const u8) !*const Font {
+    const self = getContext();
+    const result = try self.fonts.getOrPut(name);
+    if (!result.found_existing) {
+        result.value_ptr.* = try Font.init(name, contents);
+    }
+    return result.value_ptr;
+}
+
+/// Embeds an image from the given path, using the component's renderer.
+// pub fn useImage(comptime path: []const u8, format: Graphics.Image.Format) !Image {
+//     const self = getContext();
+//     if (self.componentResolutionState) {
+//         return try useState(Image.init(@embedFile(path), format));
+//     } else {
+//         if (!builtin.is_test) {
+//             std.log.err("You might be calling a hook (useImage) outside of a component, and forbear cannot track things outside of one.", .{});
+//         }
+//         return error.NoComponentContext;
+//     }
+// }
+
 const AnimationState = struct {
     /// Seconds
     timeSinceStart: f32,
@@ -210,14 +259,11 @@ const AnimationState = struct {
     /// Value ranging from 0.0 to 1.0
     progress: f32,
 
-    reverseReset: bool,
-
     pub fn start(self: *?@This(), duration: f64) void {
         self.state = .{
             .timeSinceStart = 0.0,
             .estimatedEnd = duration,
             .progress = 0.0,
-            .reverseReset = false,
         };
     }
 };
@@ -231,18 +277,6 @@ pub const Animation = struct {
             .timeSinceStart = 0.0,
             .estimatedEnd = self.duration,
             .progress = 0.0,
-            .reverseReset = false,
-        };
-    }
-
-    /// Progresses through the animation in reverse, and once it gets to the start,
-    /// it is completely reset.
-    pub fn reverseReset(self: @This()) void {
-        self.state.* = .{
-            .timeSinceStart = 0.0,
-            .estimatedEnd = self.duration,
-            .progress = 1.0,
-            .reverseReset = true,
         };
     }
 
@@ -290,20 +324,10 @@ pub fn useAnimation(duration: f32) !Animation {
     const self = getContext();
     const state = try useState(?AnimationState, null);
 
-    if (state.* != null and state.*.?.progress == 0.0 and state.*.?.reverseReset == true) {
-        // we're going backwards and reached the start, so we can stop the animation
-        state.* = null;
-    }
     if (state.* != null) {
         if (state.*.?.progress < 1.0 and state.*.?.reverseReset == false) {
             state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
             state.*.?.progress = @min(
-                1.0,
-                state.*.?.timeSinceStart / state.*.?.estimatedEnd,
-            );
-        } else if (state.*.?.progress > 0.0 and state.*.?.reverseReset == true) {
-            state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
-            state.*.?.progress = 1.0 - @min(
                 1.0,
                 state.*.?.timeSinceStart / state.*.?.estimatedEnd,
             );
@@ -563,11 +587,16 @@ pub fn setWindowHandlers(window: *Window) void {
 pub fn deinit() void {
     const self = getContext();
     std.debug.assert(self.componentResolutionState == null);
-    var nodeStatesIterator = self.componentStates.valueIterator();
-    while (nodeStatesIterator.next()) |states| {
+    var componentStatesIterator = self.componentStates.valueIterator();
+    while (componentStatesIterator.next()) |states| {
         self.allocator.free(states.*);
     }
     self.componentStates.deinit();
+    var fontsIterator = self.fonts.valueIterator();
+    while (fontsIterator.next()) |font| {
+        font.deinit();
+    }
+    self.fonts.deinit();
     self.hoveredElementKeys.deinit(self.allocator);
     context = null;
 }
