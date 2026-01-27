@@ -5,3 +5,12 @@
 - [x] fix image anti aliasing to look more like the browser
 - [x] what do I need to have variant fonts?
 
+## Wed Jan 28
+
+- [ ] text wrapping
+- [ ] text selection
+    - full of unknowns, I'm not absolutely sure how I'm tackling this
+    - we need selection to span from one layout box to the other, with a start and an end over the characters
+    - once selected, we should also allow users to copy with ctrl + c 
+    - one other problem
+
