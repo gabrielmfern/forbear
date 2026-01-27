@@ -198,4 +198,34 @@ pub fn build(b: *std.Build) void {
         const run_playground_step = b.step("run", "Run the playground");
         run_playground_step.dependOn(&run_playground_command.step);
     }
+
+    // Check step - builds all examples and playground
+    {
+        const check_step = b.step("check", "Build all examples and playground");
+
+        // Build playground
+        const playground = b.addModule("playground_check", .{
+            .root_source_file = b.path("playground.zig"),
+            .link_libc = true,
+            .target = target,
+            .optimize = optimize,
+        });
+
+        dependencies.addToModule(playground);
+        playground.addImport("forbear", forbear);
+
+        const playground_exe = b.addExecutable(.{
+            .name = "playground_check",
+            .root_module = playground,
+        });
+        check_step.dependOn(&playground_exe.step);
+
+        // Build uhoh.com example
+        const uhoh_build = b.addSystemCommand(&.{
+            "zig",
+            "build",
+        });
+        uhoh_build.setCwd(b.path("examples/uhoh.com"));
+        check_step.dependOn(&uhoh_build.step);
+    }
 }
