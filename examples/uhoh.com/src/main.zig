@@ -2,18 +2,22 @@ const std = @import("std");
 const forbear = @import("forbear");
 
 const AppProps = struct {
-    spaceGrotesk: forbear.Font,
     comeOnImage: *const forbear.Image,
 };
+
+const spaceGroteskTtf = @embedFile("SpaceGrotesk.ttf");
 
 fn App(props: AppProps) !forbear.Node {
     const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
+    const spaceGrotesk = try forbear.useFont("SpaceGrotesk", spaceGroteskTtf);
+
     return forbear.div(.{ .style = .{
         .preferredWidth = .grow,
         .direction = .topToBottom,
         .horizontalAlignment = .center,
+        .font = spaceGrotesk,
         .fontWeight = 500,
         .fontSize = 12,
     }, .children = try forbear.children(.{
@@ -29,7 +33,6 @@ fn App(props: AppProps) !forbear.Node {
             },
         }),
         forbear.div(.{ .style = .{
-            .font = props.spaceGrotesk,
             .fontWeight = 700,
             .fontSize = 30,
             .marginBlock = .{ 10, 10 },
@@ -104,9 +107,6 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    const spaceGrotesk = try forbear.Font.init("SpaceGrotesk", @embedFile("SpaceGrotesk.ttf"));
-    defer spaceGrotesk.deinit();
-
     const comeOnImage = try forbear.Image.init(@embedFile("come-on.png"), .png, renderer);
     defer comeOnImage.deinit(renderer);
 
@@ -115,13 +115,13 @@ fn renderingMain(
 
         const treeNode = try forbear.resolve(try forbear.component(
             App,
-            AppProps{ .comeOnImage = &comeOnImage, .spaceGrotesk = spaceGrotesk },
+            AppProps{ .comeOnImage = &comeOnImage },
             arena,
-        ), arena);
+        ), arena, renderer);
         const layoutBox = try forbear.layout(
             treeNode,
             .{
-                .font = spaceGrotesk,
+                .font = try forbear.useFont("SpaceGrotesk", spaceGroteskTtf),
                 .color = .{ 0.0, 0.0, 0.0, 1.0 },
                 .fontSize = 16,
                 .fontWeight = 400,

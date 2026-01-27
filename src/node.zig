@@ -50,9 +50,9 @@ pub const Style = struct {
 
     shadow: ?Shadow = null,
 
-    font: Font,
+    font: *const Font,
     /// Will do nothing if the font is not a variable font. If you don't have a
-    /// variable font, you should use differnet fonts for different weightsV
+    /// variable font, you should use differnet fonts for different weights.
     fontWeight: u32,
     fontSize: u32,
     lineHeight: f32,
@@ -82,7 +82,7 @@ pub const Style = struct {
 };
 
 pub const BaseStyle = struct {
-    font: Font,
+    font: *const Font,
     color: Vec4,
     fontSize: u32,
     fontWeight: u32,
@@ -114,7 +114,7 @@ pub const IncompleteStyle = struct {
 
     shadow: ?Shadow = null,
 
-    font: ?Font = null,
+    font: ?*const Font = null,
     fontWeight: ?u32 = null,
     fontSize: ?u32 = null,
     lineHeight: ?f32 = null,
