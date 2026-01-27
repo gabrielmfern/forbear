@@ -8,14 +8,7 @@ const AppProps = struct {
 
 fn App(props: AppProps) !forbear.Node {
     const arena = try forbear.useArena();
-    const clickMeHoverAnimation = try forbear.useAnimation(0.1);
-
-    const EventData = struct {
-        clickMeHoverAnimation: forbear.Animation,
-    };
-    const eventData = EventData{
-        .clickMeHoverAnimation = clickMeHoverAnimation,
-    };
+    const isHovering = try forbear.useState(bool, false);
 
     return forbear.div(.{
         .style = .{
@@ -58,18 +51,18 @@ fn App(props: AppProps) !forbear.Node {
                     .marginBlock = .{ 20.0, 0.0 },
                     .background = .{ .color = .{ 0.99, 0.98, 0.96, 1.0 } },
                     .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
-                    .translate = if (clickMeHoverAnimation.progress()) |progress|
-                        .{ 0.0, -6.0 * forbear.easeInOut(progress) }
-                    else
-                        .{ 0.0, 0.0 },
+                    .translate = .{
+                        0.0,
+                        try forbear.useTransition(if (isHovering.*) -4.5 else 0.0, 0.1, forbear.easeInOut),
+                    },
                     .shadow = .{
                         .blurRadius = 0.0,
                         .spread = 0.0,
                         .color = .{ 0.0, 0.0, 0.0, 1.0 },
-                        .offsetBlock = if (clickMeHoverAnimation.progress()) |progress|
-                            .{ 0.0, 6.0 * forbear.easeInOut(progress) }
-                        else
-                            .{ 0.0, 0.0 },
+                        .offsetBlock = .{
+                            0.0,
+                            try forbear.useTransition(if (isHovering.*) 4.5 else 0.0, 0.1, forbear.easeInOut),
+                        },
                         .offsetInline = @splat(0.0),
                     },
                     .paddingBlock = @splat(20),
@@ -80,19 +73,19 @@ fn App(props: AppProps) !forbear.Node {
                 },
                 .handlers = .{
                     .onMouseOver = try forbear.eventHandler(
-                        eventData,
+                        isHovering,
                         (struct {
-                            fn handler(_: *const forbear.LayoutBox, data: EventData) anyerror!void {
-                                data.clickMeHoverAnimation.start();
+                            fn handler(_: *const forbear.LayoutBox, hovering: *bool) anyerror!void {
+                                hovering.* = true;
                             }
                         }).handler,
                         arena,
                     ),
                     .onMouseOut = try forbear.eventHandler(
-                        eventData,
+                        isHovering,
                         (struct {
-                            fn handler(_: *const forbear.LayoutBox, data: EventData) anyerror!void {
-                                data.clickMeHoverAnimation.reverseReset();
+                            fn handler(_: *const forbear.LayoutBox, hovering: *bool) anyerror!void {
+                                hovering.* = false;
                             }
                         }).handler,
                         arena,

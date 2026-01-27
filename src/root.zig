@@ -263,6 +263,29 @@ pub const Animation = struct {
     }
 };
 
+pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) !f32 {
+    const valueToTransitionFrom = try useState(f32, value);
+    const animation = try useAnimation(duration);
+
+    if (value != valueToTransitionFrom.*) {
+        if (!animation.isRunning()) {
+            animation.start();
+        }
+        if (animation.progress()) |progress| {
+            if (progress == 1.0) {
+                valueToTransitionFrom.* = value;
+                animation.reset();
+                return value;
+            }
+            return valueToTransitionFrom.* + (value - valueToTransitionFrom.*) * easing(progress);
+        } else {
+            return value;
+        }
+    }
+
+    return value;
+}
+
 pub fn useAnimation(duration: f32) !Animation {
     const self = getContext();
     const state = try useState(?AnimationState, null);
