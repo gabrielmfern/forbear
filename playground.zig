@@ -25,7 +25,12 @@ fn App(props: AppProps) !forbear.Node {
                     .preferredWidth = .{ .fixed = 100 },
                     .preferredHeight = .{ .fixed = 100 },
                     .background = .{
-                        .color = if (isHovering.*) .{ 1.0, 0.0, 0.0, 1.0 } else .{ 1.0, 0.3, 0.0, 1.0 },
+                        .color = .{
+                            1.0,
+                            try forbear.useTransition(if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
+                            0.0,
+                            1.0,
+                        },
                     },
                     .borderRadius = 20,
                 },
@@ -64,18 +69,22 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    const inter = try forbear.Font.init("Inter", @embedFile("Inter.ttf"));
-
     var time = std.time.nanoTimestamp();
     var fps: ?u32 = null;
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
         const node = try forbear.component(App, AppProps{ .fps = fps }, arena);
-        const treeNode = try forbear.resolve(node, arena);
+        const treeNode = try forbear.resolve(node, arena, renderer);
         const layoutBox = try forbear.layout(
             treeNode,
-            .{ .font = inter, .color = .{ 1.0, 1.0, 1.0, 1.0 }, .fontSize = 32, .fontWeight = 400, .lineHeight = 1.0 },
+            .{
+                .font = try forbear.useFont("Inter", @embedFile("Inter.ttf")),
+                .color = .{ 1.0, 1.0, 1.0, 1.0 },
+                .fontSize = 32,
+                .fontWeight = 400,
+                .lineHeight = 1.0,
+            },
             .{ @floatFromInt(window.width), @floatFromInt(window.height) },
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             arena,
