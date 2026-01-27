@@ -227,7 +227,7 @@ test "Component resolution" {
 
 /// Embeds an image from the given path, or retrieves it from cache if already embedded.
 ///
-/// Only deinits when the forbear context is deinited. 
+/// Only deinits when the forbear context is deinited.
 pub fn useFont(name: []const u8, comptime contents: []const u8) !*const Font {
     const self = getContext();
     const result = try self.fonts.getOrPut(name);
