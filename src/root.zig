@@ -325,7 +325,7 @@ pub fn useAnimation(duration: f32) !Animation {
     const state = try useState(?AnimationState, null);
 
     if (state.* != null) {
-        if (state.*.?.progress < 1.0 and state.*.?.reverseReset == false) {
+        if (state.*.?.progress < 1.0) {
             state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
             state.*.?.progress = @min(
                 1.0,
@@ -338,6 +338,10 @@ pub fn useAnimation(duration: f32) !Animation {
         .state = state,
         .duration = duration,
     };
+}
+
+pub fn linear(time: f32) f32 {
+    return time;
 }
 
 /// CSS-style cubic bezier timing function.
