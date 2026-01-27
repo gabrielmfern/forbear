@@ -1,17 +1,14 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
-const AppProps = struct {
-    comeOnImage: *const forbear.Image,
-};
-
 const spaceGroteskTtf = @embedFile("SpaceGrotesk.ttf");
 
-fn App(props: AppProps) !forbear.Node {
+fn App() !forbear.Node {
     const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
     const spaceGrotesk = try forbear.useFont("SpaceGrotesk", spaceGroteskTtf);
+    const comeOnImage = try forbear.useImage("come-on", @embedFile("come-on.png"), .png);
 
     return forbear.div(.{ .style = .{
         .preferredWidth = .grow,
@@ -23,7 +20,7 @@ fn App(props: AppProps) !forbear.Node {
     }, .children = try forbear.children(.{
         forbear.div(.{
             .style = .{
-                .background = .{ .image = props.comeOnImage },
+                .background = .{ .image = comeOnImage },
                 .preferredWidth = .{
                     .fixed = 165,
                 },
@@ -107,17 +104,14 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    const comeOnImage = try forbear.Image.init(@embedFile("come-on.png"), .png, renderer);
-    defer comeOnImage.deinit(renderer);
-
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
         const treeNode = try forbear.resolve(try forbear.component(
             App,
-            AppProps{ .comeOnImage = &comeOnImage },
+            null,
             arena,
-        ), arena, renderer);
+        ), arena);
         const layoutBox = try forbear.layout(
             treeNode,
             .{
@@ -162,13 +156,13 @@ pub fn main() !void {
     );
     defer window.deinit();
 
-    try forbear.init(allocator);
-    defer forbear.deinit();
-    forbear.setWindowHandlers(window);
-
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
     window.setResizeHandler(handleResize, @ptrCast(@alignCast(&renderer)));
+
+    try forbear.init(allocator, &renderer);
+    defer forbear.deinit();
+    forbear.setWindowHandlers(window);
 
     const renderingThread = try std.Thread.spawn(
         .{ .allocator = allocator },

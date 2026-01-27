@@ -29,7 +29,6 @@ var context: ?@This() = null;
 
 const ComponentResolutionState = struct {
     arenaAllocator: std.mem.Allocator,
-    componentRenderer: *const Graphics.Renderer,
     stateByteCursor: usize,
     key: u64,
 };
@@ -37,6 +36,8 @@ const ComponentResolutionState = struct {
 allocator: std.mem.Allocator,
 mousePosition: Vec2,
 hoveredElementKeys: std.ArrayList(u64),
+
+renderer: *Graphics.Renderer,
 
 /// Seconds
 startTime: f64,
@@ -53,9 +54,10 @@ componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
 // images: std.StringHashMap(Image),
 componentResolutionState: ?ComponentResolutionState,
 
+images: std.StringHashMap(Image),
 fonts: std.StringHashMap(Font),
 
-pub fn init(allocator: std.mem.Allocator) !void {
+pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
     if (context != null) {
         return error.AlreadyInitialized;
     }
@@ -64,14 +66,18 @@ pub fn init(allocator: std.mem.Allocator) !void {
         .mousePosition = .{ 0.0, 0.0 },
         .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .allocator = allocator,
-        .componentStates = .init(allocator),
-        .componentResolutionState = null,
 
-        .fonts = std.StringHashMap(Font).init(allocator),
+        .renderer = renderer,
 
         .startTime = timestampSeconds(),
         .deltaTime = null,
         .lastUpdateTime = null,
+
+        .componentStates = .init(allocator),
+        .componentResolutionState = null,
+
+        .images = std.StringHashMap(Image).init(allocator),
+        .fonts = std.StringHashMap(Font).init(allocator),
     };
 }
 
@@ -110,7 +116,7 @@ const Resolver = struct {
         }
     }
 
-    fn resolve(self: *@This(), node: Node, renderer: *const Graphics.Renderer) !TreeNode {
+    fn resolve(self: *@This(), node: Node) !TreeNode {
         const forbear = getContext();
 
         var hasher = std.hash.Wyhash.init(0);
@@ -124,7 +130,6 @@ const Resolver = struct {
                 forbear.componentResolutionState = .{
                     .key = key,
                     .arenaAllocator = self.arenaAllocator,
-                    .componentRenderer = renderer,
                     .stateByteCursor = 0,
                 };
                 const componentNode = try comp.function(comp.props);
@@ -135,7 +140,7 @@ const Resolver = struct {
                 forbear.componentResolutionState = previousComponentResolutionState;
                 // TODO: investigate if should we reuse the same key as above?
                 // Is it a problem that it creates a new key here?
-                return self.resolve(componentNode, renderer);
+                return self.resolve(componentNode);
             },
             .element => {
                 if (node.element.children != null) {
@@ -143,7 +148,7 @@ const Resolver = struct {
                     for (node.element.children.?, 0..) |child, i| {
                         try self.path.append(self.arenaAllocator, i);
                         defer _ = self.path.pop();
-                        treeChildren[i] = try self.resolve(child, renderer);
+                        treeChildren[i] = try self.resolve(child);
                     }
                     return .{
                         .key = hasher.final(),
@@ -170,10 +175,10 @@ const Resolver = struct {
     }
 };
 
-pub fn resolve(rootNode: Node, arenaAllocator: std.mem.Allocator, renderer: *const Graphics.Renderer) !TreeNode {
+pub fn resolve(rootNode: Node, arenaAllocator: std.mem.Allocator) !TreeNode {
     var resolver = try Resolver.init(arenaAllocator);
 
-    return resolver.resolve(rootNode, renderer);
+    return resolver.resolve(rootNode);
 }
 
 test "Component resolution" {
@@ -238,17 +243,22 @@ pub fn useFont(name: []const u8, comptime contents: []const u8) !*const Font {
 }
 
 /// Embeds an image from the given path, using the component's renderer.
-// pub fn useImage(comptime path: []const u8, format: Graphics.Image.Format) !Image {
-//     const self = getContext();
-//     if (self.componentResolutionState) {
-//         return try useState(Image.init(@embedFile(path), format));
-//     } else {
-//         if (!builtin.is_test) {
-//             std.log.err("You might be calling a hook (useImage) outside of a component, and forbear cannot track things outside of one.", .{});
-//         }
-//         return error.NoComponentContext;
-//     }
-// }
+pub fn useImage(
+    uniqueIdentifier: []const u8,
+    comptime contents: []const u8,
+    format: Graphics.Image.Format,
+) !*const Image {
+    const self = getContext();
+    const getOrPutResult = try self.images.getOrPut(uniqueIdentifier);
+    if (!getOrPutResult.found_existing) {
+        getOrPutResult.value_ptr.* = try Graphics.Image.init(
+            contents,
+            format,
+            self.renderer,
+        );
+    }
+    return getOrPutResult.value_ptr;
+}
 
 const AnimationState = struct {
     /// Seconds
@@ -601,6 +611,11 @@ pub fn deinit() void {
         font.deinit();
     }
     self.fonts.deinit();
+    var imagesIterator = self.images.valueIterator();
+    while (imagesIterator.next()) |image| {
+        image.deinit();
+    }
+    self.images.deinit();
     self.hoveredElementKeys.deinit(self.allocator);
     context = null;
 }
