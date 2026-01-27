@@ -482,6 +482,8 @@ pub const Image = struct {
     width: c_int,
     height: c_int,
 
+    renderer: *const Renderer,
+
     pub fn init(contents: []const u8, format: Format, renderer: *const Renderer) !@This() {
         switch (format) {
             .png => {
@@ -662,15 +664,16 @@ pub const Image = struct {
                     .memory = memory,
                     .width = width,
                     .height = height,
+                    .renderer = renderer,
                 };
             },
         }
     }
 
-    pub fn deinit(self: *const @This(), renderer: *const Renderer) void {
-        c.vkDestroyImageView(renderer.logicalDevice, self.imageView, null);
-        c.vkDestroyImage(renderer.logicalDevice, self.image, null);
-        c.vkFreeMemory(renderer.logicalDevice, self.memory, null);
+    pub fn deinit(self: *const @This()) void {
+        c.vkDestroyImageView(self.renderer.logicalDevice, self.imageView, null);
+        c.vkDestroyImage(self.renderer.logicalDevice, self.image, null);
+        c.vkFreeMemory(self.renderer.logicalDevice, self.memory, null);
     }
 };
 
