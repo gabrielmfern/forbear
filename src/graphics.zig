@@ -152,7 +152,7 @@ vulkanDebugMessenger: c.VkDebugUtilsMessengerEXT,
 
 devices: []DeviceInformation,
 
-pub fn init(application_name: [:0]const u8, allocator: std.mem.Allocator) !Graphics {
+pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graphics {
     const instanceCreateFlags: c.VkInstanceCreateFlags = switch (builtin.os.tag) {
         // MoltenVK needs the portability enumeration extension + flag.
         .macos => c.VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR,
@@ -694,9 +694,9 @@ const FontTextureAtlas = struct {
     };
 
     fn init(
+        allocator: std.mem.Allocator,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-        allocator: std.mem.Allocator,
         commandPool: c.VkCommandPool,
         graphicsQueue: c.VkQueue,
     ) !@This() {
@@ -908,11 +908,11 @@ const FontTextureAtlas = struct {
     /// The texture atlas uses RGBA format (4 bytes per pixel) for dual-source blending.
     fn upload(
         self: *@This(),
+        allocator: std.mem.Allocator,
         data: ?[]u8,
         uploadWidth: usize,
         uploadHeight: usize,
         pitch: usize,
-        allocator: std.mem.Allocator,
     ) !TextureCoordinates {
         if (data != null) {
             std.debug.assert(pitch * uploadHeight <= data.?.len);
@@ -1003,7 +1003,7 @@ const FontTextureAtlas = struct {
         return @as(usize, @intCast(self.capacityExtent.height));
     }
 
-    fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
+    fn deinit(self: *@This(), allocator: std.mem.Allocator, logicalDevice: c.VkDevice) void {
         c.vkUnmapMemory(logicalDevice, self.memory);
         self.freeRectangles.deinit(allocator);
         c.vkFreeMemory(logicalDevice, self.memory, null);
@@ -2011,12 +2011,12 @@ const TextPipeline = struct {
     const textFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_fragment_shader")));
 
     pub fn init(
+        allocator: std.mem.Allocator,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         graphicsQueue: c.VkQueue,
         commandPool: c.VkCommandPool,
         renderPass: c.VkRenderPass,
-        allocator: std.mem.Allocator,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
         try ensureNoError(c.vkCreateShaderModule(
@@ -2245,13 +2245,13 @@ const TextPipeline = struct {
         }
 
         var fontTextureAtlas = try FontTextureAtlas.init(
+            allocator,
             logicalDevice,
             physicalDevice,
-            allocator,
             commandPool,
             graphicsQueue,
         );
-        errdefer fontTextureAtlas.deinit(logicalDevice, allocator);
+        errdefer fontTextureAtlas.deinit(allocator, logicalDevice);
 
         const poolSizes = [_]c.VkDescriptorPoolSize{
             .{
@@ -2430,7 +2430,7 @@ const TextPipeline = struct {
 
     pub fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
-        self.fontTextureAtlas.deinit(logicalDevice, allocator);
+        self.fontTextureAtlas.deinit(allocator, logicalDevice);
         c.vkDestroySampler(logicalDevice, self.sampler, null);
         self.glyphRenderingDataCache.deinit();
 
@@ -2528,22 +2528,22 @@ pub const Renderer = struct {
                 &self.surface,
             ));
             self.swapchain = try Swapchain.init(
+                self.allocator,
                 self.physicalDevice,
                 self.logicalDevice,
                 self.surface,
                 width,
                 height,
-                self.allocator,
                 null,
             );
         } else {
             self.swapchain = try Swapchain.init(
+                self.allocator,
                 self.physicalDevice,
                 self.logicalDevice,
                 self.surface,
                 width,
                 height,
-                self.allocator,
                 previousSwapchain,
             );
             previousSwapchain.deinit(self.logicalDevice);
@@ -2813,12 +2813,12 @@ pub const Renderer = struct {
         c.vkGetDeviceQueue(logicalDevice, presentationQueueFamilyIndex, 0, &presentationQueue);
 
         const swapchain = try Swapchain.init(
+            graphics.allocator,
             physicalDevice,
             logicalDevice,
             surface,
             window.width,
             window.height,
-            graphics.allocator,
             null,
         );
         errdefer swapchain.deinit(logicalDevice);
@@ -2907,12 +2907,12 @@ pub const Renderer = struct {
         errdefer elementsPipeline.deinit(logicalDevice);
 
         var textPipeline = try TextPipeline.init(
+            graphics.allocator,
             logicalDevice,
             physicalDevice,
             graphicsQueue,
             commandPool,
             renderPass,
-            graphics.allocator,
         );
         errdefer textPipeline.deinit(logicalDevice, graphics.allocator);
 
@@ -3438,11 +3438,11 @@ pub const Renderer = struct {
                                     );
 
                                     const textureCoordinates = try self.textPipeline.fontTextureAtlas.upload(
+                                        self.allocator,
                                         rasterizedGlyph.bitmap,
                                         @intCast(rasterizedGlyph.width),
                                         @intCast(rasterizedGlyph.height),
                                         @intCast(@abs(rasterizedGlyph.pitch)),
-                                        self.allocator,
                                     );
                                     // FreeType LCD mode: width is 3x the actual pixel width (RGB bytes)
                                     // Convert to actual pixel width for rendering
@@ -3625,12 +3625,12 @@ pub const Renderer = struct {
         };
 
         fn init(
+            allocator: std.mem.Allocator,
             physicalDevice: c.VkPhysicalDevice,
             logicalDevice: c.VkDevice,
             surface: c.VkSurfaceKHR,
             width: u32,
             height: u32,
-            allocator: std.mem.Allocator,
             oldSwapchain: ?@This(),
         ) !Swapchain {
             var swapchainSupportDetails: SwapchainSupportDetails = undefined;

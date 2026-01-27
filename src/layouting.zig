@@ -86,8 +86,8 @@ fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
 }
 
 fn growAndShrink(
-    layoutBox: *LayoutBox,
     allocator: std.mem.Allocator,
+    layoutBox: *LayoutBox,
 ) !void {
     if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
         const children = layoutBox.children.?.layoutBoxes;
@@ -205,7 +205,7 @@ fn growAndShrink(
             }
         }
         for (children) |*child| {
-            try growAndShrink(child, allocator);
+            try growAndShrink(allocator, child);
         }
     }
 }
@@ -528,11 +528,11 @@ pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
 }
 
 pub fn layout(
+    arenaAllocator: std.mem.Allocator,
     treeNode: TreeNode,
     baseStyle: BaseStyle,
     viewportSize: Vec2,
     dpi: Vec2,
-    arenaAllocator: std.mem.Allocator,
 ) !LayoutBox {
     var creator = try LayoutCreator.init(arenaAllocator);
     var layoutBox = try creator.create(treeNode, baseStyle, dpi);
@@ -544,7 +544,7 @@ pub fn layout(
     if (layoutBox.style.preferredHeight == .grow) {
         layoutBox.size[1] = viewportSize[1];
     }
-    try growAndShrink(&layoutBox, arenaAllocator);
+    try growAndShrink(arenaAllocator, &layoutBox);
     fitWidth(&layoutBox);
     fitHeight(&layoutBox);
     placeChildrenOf(&layoutBox);

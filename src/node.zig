@@ -177,7 +177,7 @@ pub const Node = union(enum) {
     component: Component,
     text: []const u8,
 
-    pub fn from(value: anytype, allocator: std.mem.Allocator) !Node {
+    pub fn from(allocator: std.mem.Allocator, value: anytype) !Node {
         const Value = @TypeOf(value);
         const valueTypeInfo = @typeInfo(Value);
 
@@ -213,11 +213,11 @@ pub const Node = union(enum) {
                 };
             }
 
-            return Node.from(value.*, allocator);
+            return Node.from(allocator, value.*);
         }
 
         if (valueTypeInfo == .error_union) {
-            return Node.from(try value, allocator);
+            return Node.from(allocator, try value);
         }
 
         @compileError("The type " ++ @typeName(Value) ++ " cannot be converted into a Node for rendering");
@@ -295,9 +295,9 @@ const EventHandler = struct {
 };
 
 pub fn eventHandler(
+    arena: std.mem.Allocator,
     data: anytype,
     handler: fn (target: *const LayoutBox, data: @TypeOf(data)) anyerror!void,
-    arena: std.mem.Allocator,
 ) !EventHandler {
     const ownedDataPtr = try arena.create(@TypeOf(data));
     ownedDataPtr.* = data;
@@ -342,7 +342,7 @@ pub fn div(props: ElementProps) Node {
     };
 }
 
-pub fn children(args: anytype, allocator: std.mem.Allocator) !?[]Node {
+pub fn children(allocator: std.mem.Allocator, args: anytype) !?[]Node {
     const ArgsType = @TypeOf(args);
     const typeInfo = @typeInfo(ArgsType);
     if (typeInfo == .null) {
@@ -360,7 +360,7 @@ pub fn children(args: anytype, allocator: std.mem.Allocator) !?[]Node {
 
         if (valueTypeInfo == .optional) {
             if (value != null) {
-                try arrayList.append(allocator, try Node.from(value.?, allocator));
+                try arrayList.append(allocator, try Node.from(allocator, value.?));
             }
             continue;
         }
@@ -375,7 +375,7 @@ pub fn children(args: anytype, allocator: std.mem.Allocator) !?[]Node {
             continue;
         }
 
-        try arrayList.append(allocator, try Node.from(value, allocator));
+        try arrayList.append(allocator, try Node.from(allocator, value));
     }
 
     return arrayList.items;

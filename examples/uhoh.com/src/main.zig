@@ -17,7 +17,7 @@ fn App() !forbear.Node {
         .font = spaceGrotesk,
         .fontWeight = 500,
         .fontSize = 12,
-    }, .children = try forbear.children(.{
+    }, .children = try forbear.children(arena, .{
         forbear.div(.{
             .style = .{
                 .background = .{ .image = comeOnImage },
@@ -33,9 +33,9 @@ fn App() !forbear.Node {
             .fontWeight = 700,
             .fontSize = 30,
             .marginBlock = .{ 10, 10 },
-        }, .children = try forbear.children(.{
+        }, .children = try forbear.children(arena, .{
             "Dude, you’re at the bottom of our landing page.",
-        }, arena) }),
+        }) }),
         "Just get the free trial already if you’re that interested.",
         "You scrolled all the way here.",
         forbear.div(.{ .style = .{
@@ -66,38 +66,38 @@ fn App() !forbear.Node {
             .direction = .topToBottom,
         }, .handlers = .{
             .onMouseOver = try forbear.eventHandler(
+                arena,
                 isHovering,
                 (struct {
                     fn handler(_: *const forbear.LayoutBox, hovering: *bool) anyerror!void {
                         hovering.* = true;
                     }
                 }).handler,
-                arena,
             ),
             .onMouseOut = try forbear.eventHandler(
+                arena,
                 isHovering,
                 (struct {
                     fn handler(_: *const forbear.LayoutBox, hovering: *bool) anyerror!void {
                         hovering.* = false;
                     }
                 }).handler,
-                arena,
             ),
-        }, .children = try forbear.children(.{
+        }, .children = try forbear.children(arena, .{
             forbear.div(.{ .style = .{
                 .fontSize = 18,
-            }, .children = try forbear.children(.{
+            }, .children = try forbear.children(arena, .{
                 "Come on, click on this",
-            }, arena) }),
+            }) }),
             "Don't make me beg",
-        }, arena) }),
-    }, arena) });
+        }) }),
+    }) });
 }
 
 fn renderingMain(
+    allocator: std.mem.Allocator,
     renderer: *forbear.Graphics.Renderer,
     window: *const forbear.Window,
-    allocator: std.mem.Allocator,
 ) !void {
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
     defer arenaAllocator.deinit();
@@ -113,6 +113,7 @@ fn renderingMain(
             arena,
         ), arena);
         const layoutBox = try forbear.layout(
+            arena,
             treeNode,
             .{
                 .font = try forbear.useFont("SpaceGrotesk", spaceGroteskTtf),
@@ -123,7 +124,6 @@ fn renderingMain(
             },
             renderer.viewportSize(),
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
-            arena,
         );
         try renderer.drawFrame(&layoutBox, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
         try forbear.update(&layoutBox, arena);
@@ -142,17 +142,17 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     var graphics = try forbear.Graphics.init(
-        "forbear playground",
         allocator,
+        "forbear playground",
     );
     defer graphics.deinit();
 
     const window = try forbear.Window.init(
+        allocator,
         800,
         600,
         "uhoh.com",
         "uhoh.com",
-        allocator,
     );
     defer window.deinit();
 
@@ -168,9 +168,9 @@ pub fn main() !void {
         .{ .allocator = allocator },
         renderingMain,
         .{
+            allocator,
             &renderer,
             window,
-            allocator,
         },
     );
     defer renderingThread.join();

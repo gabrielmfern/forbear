@@ -35,11 +35,11 @@ pub const Handlers = struct {
 };
 
 pub fn init(
+    allocator: std.mem.Allocator,
     width: u32,
     height: u32,
     title: [:0]const u8,
     app_id: [:0]const u8,
-    allocator: std.mem.Allocator,
 ) !*@This() {
     const window = try allocator.create(@This());
     errdefer allocator.destroy(window);
