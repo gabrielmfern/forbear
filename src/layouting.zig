@@ -60,7 +60,7 @@ pub const LayoutBox = struct {
                     allocator.free(layoutBoxes);
                 },
                 .glyphs => |glyphs| {
-                    allocator.free(glyphs);
+                    allocator.free(glyphs.slice);
                 },
             }
         }
