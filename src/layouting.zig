@@ -50,22 +50,6 @@ pub const LayoutBox = struct {
     handlers: EventHandlers,
     style: Style,
 
-    pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
-        if (self.children) |children| {
-            switch (children) {
-                .layoutBoxes => |layoutBoxes| {
-                    for (layoutBoxes) |child| {
-                        child.deinit(allocator);
-                    }
-                    allocator.free(layoutBoxes);
-                },
-                .glyphs => |glyphs| {
-                    allocator.free(glyphs.slice);
-                },
-            }
-        }
-    }
-
     pub fn getMinSize(self: @This(), direction: Direction) f32 {
         if (direction == .leftToRight) {
             return self.minSize[0];
