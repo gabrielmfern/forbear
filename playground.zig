@@ -82,6 +82,7 @@ fn renderingMain(
             .{
                 .font = try forbear.useFont("Inter", @embedFile("Inter.ttf")),
                 .color = .{ 1.0, 1.0, 1.0, 1.0 },
+                .textWrapping = .word,
                 .fontSize = 32,
                 .fontWeight = 400,
                 .lineHeight = 1.0,

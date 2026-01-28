@@ -273,9 +273,14 @@ pub const RasterizedGlyph = struct {
 
 pub const ShapedGlyph = struct {
     index: c_ushort,
+    codepoint: c_int,
     advance: Vec2,
     offset: Vec2,
 };
+
+pub fn encodeUtf8(codepoint: c_int) c.kbts_encode_utf8 {
+    return c.kbts_EncodeUtf8(codepoint);
+}
 
 pub const ShapingIterator = struct {
     run: ?c.kbts_run,
@@ -285,8 +290,12 @@ pub const ShapingIterator = struct {
     pub fn next(self: *@This()) ?ShapedGlyph {
         if (self.run) |*run| {
             if (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&self.glyph)) != 0) {
+                var shapeCodepoint: c.kbts_shape_codepoint = undefined;
+                _ = c.kbts_ShapeGetShapeCodepoint(self.kbtsContext, self.glyph.*.UserIdOrCodepointIndex, &shapeCodepoint);
+
                 return ShapedGlyph{
                     .index = self.glyph.*.Id,
+                    .codepoint = shapeCodepoint.Codepoint,
                     .advance = .{ @floatFromInt(self.glyph.*.AdvanceX), @floatFromInt(self.glyph.*.AdvanceY) },
                     .offset = .{ @floatFromInt(self.glyph.*.OffsetX), @floatFromInt(self.glyph.*.OffsetY) },
                 };
