@@ -8,9 +8,11 @@
 ## Wed Jan 28
 
 - [ ] text wrapping
+
+## Thur Jan 30
+
 - [ ] text selection
     - full of unknowns, I'm not absolutely sure how I'm tackling this
     - we need selection to span from one layout box to the other, with a start and an end over the characters
     - once selected, we should also allow users to copy with ctrl + c 
     - one other problem
-
