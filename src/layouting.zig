@@ -239,7 +239,7 @@ fn wrap(layoutBox: *LayoutBox) void {
                 switch (layoutBox.style.textWrapping) {
                     .character => {
                         for (glyphs.slice) |*glyph| {
-                            if (cursor[0] + glyph.offset[0] > lineWidth) {
+                            if (cursor[0] > lineWidth) {
                                 cursor[0] = 0;
                                 cursor[1] += glyphs.lineHeight;
                             }
@@ -256,7 +256,7 @@ fn wrap(layoutBox: *LayoutBox) void {
                             const utf8 = encodeUtf8(glyph.codepoint);
                             const text = utf8.Encoded[0..@intCast(utf8.EncodedLength)];
 
-                            if (cursor[0] + glyph.offset[0] > lineWidth) {
+                            if (cursor[0] > lineWidth) {
                                 if (lastSpaceInfoOpt) |lastSpaceInfo| {
                                     cursor[0] = 0;
                                     cursor[1] += glyphs.lineHeight;
