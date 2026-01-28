@@ -44,3 +44,36 @@ Edge Cases
 - Support selection of whitespace
 - Handle zero-width elements gracefully
 
+kb_text_shape Integration
+
+Glyph-to-Character Mapping:
+- Each `kbts_glyph` has `UserIdOrCodepointIndex` field
+- When using context API (kbts_ShapeUtf8), this is a codepoint index
+- Call `kbts_ShapeGetShapeCodepoint(Context, Glyph.UserIdOrCodepointIndex, &ShapeCodepoint)` to get:
+  - `Codepoint` - Unicode codepoint value
+  - `UserId` - depends on generation mode passed to kbts_ShapeUtf8
+
+User ID Generation Modes (passed to kbts_ShapeUtf8):
+- `KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX` - UserId increments by 1 per codepoint (0, 1, 2...)
+- `KBTS_USER_ID_GENERATION_MODE_SOURCE_INDEX` - UserId is byte offset in source UTF-8 string
+
+Ligature Handling:
+- `LigatureComponentCount` - how many codepoints were merged (e.g., 2 for "fi" ligature)
+- Ligature covers codepoints: [UserIdOrCodepointIndex, UserIdOrCodepointIndex + LigatureComponentCount - 1]
+- To get byte offsets for each codepoint in ligature:
+  1. Use SOURCE_INDEX generation mode
+  2. Call kbts_ShapeGetShapeCodepoint for each index in the range
+  3. Each ShapeCodepoint.UserId gives that codepoint's byte offset
+
+Cursor Positioning Within Ligatures:
+- kb_text_shape does NOT expose OpenType ligature caret table (GDEF LigatureCaretList)
+- Fallback: divide advance width equally by component count
+  - component_width = glyph.AdvanceX / glyph.LigatureComponentCount
+  - caret position for component i = glyph_x + (i * component_width)
+
+Hit Testing (click to cursor position):
+- For each glyph, calculate its x-range: [glyph_x, glyph_x + AdvanceX]
+- For ligatures, subdivide into LigatureComponentCount regions
+- Map click x-coordinate to the appropriate codepoint index
+- Use ShapeCodepoint.UserId to get byte offset if needed
+
