@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const encodeUtf8 = @import("font.zig").encodeUtf8;
 const BaseStyle = @import("node.zig").BaseStyle;
 const Direction = @import("node.zig").Direction;
 const Element = @import("node.zig").Element;
@@ -16,6 +17,8 @@ const Vec2 = @Vector(2, f32);
 pub const LayoutGlyph = struct {
     index: c_uint,
     position: Vec2,
+
+    codepoint: c_int,
 
     /// Meant for the recalculation of the glyphs position if that's required
     /// at some other layouting step
@@ -233,13 +236,52 @@ fn wrap(layoutBox: *LayoutBox) void {
             .glyphs => |glyphs| {
                 const lineWidth = layoutBox.size[0];
                 var cursor: Vec2 = @splat(0.0);
-                for (glyphs.slice) |*glyph| {
-                    if (cursor[0] + glyph.offset[0] > lineWidth) {
-                        cursor[0] = 0;
-                        cursor[1] += glyphs.lineHeight;
-                    }
-                    glyph.position = cursor + glyph.offset;
-                    cursor += glyph.advance;
+                switch (layoutBox.style.textWrapping) {
+                    .character => {
+                        for (glyphs.slice) |*glyph| {
+                            if (cursor[0] + glyph.offset[0] > lineWidth) {
+                                cursor[0] = 0;
+                                cursor[1] += glyphs.lineHeight;
+                            }
+                            glyph.position = cursor + glyph.offset;
+                            cursor += glyph.advance;
+                        }
+                    },
+                    .word => {
+                        var lastSpaceInfoOpt: ?struct{
+                            index: usize,
+                            position: Vec2,
+                        } = null;
+                        for (glyphs.slice, 0..) |*glyph, index| {
+                            const utf8 = encodeUtf8(glyph.codepoint);
+                            const text = utf8.Encoded[0..@intCast(utf8.EncodedLength)];
+
+                            if (cursor[0] + glyph.offset[0] > lineWidth) {
+                                if (lastSpaceInfoOpt) |lastSpaceInfo| {
+                                    cursor[0] = 0;
+                                    cursor[1] += glyphs.lineHeight;
+
+                                    const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
+                                    for (lastSpaceInfo.index + 1..index) |reverseIndex| {
+                                        const reverseGlyph = &glyphs.slice[reverseIndex];
+                                        reverseGlyph.position[0] -= firstWordGlyph.position[0];
+                                        reverseGlyph.position[1] += glyphs.lineHeight;
+
+                                        cursor += reverseGlyph.advance;
+                                    }
+                                }
+                            }
+
+                            glyph.position = cursor + glyph.offset;
+                            cursor += glyph.advance;
+                            if (std.mem.eql(u8, text, " ")) {
+                                lastSpaceInfoOpt = .{
+                                    .index = index,
+                                    .position = glyph.position,
+                                };
+                            }
+                        }
+                    },
                 }
                 layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
             },
@@ -411,12 +453,12 @@ fn place(layoutBox: *LayoutBox) void {
 }
 
 const LayoutCreator = struct {
-    allocator: std.mem.Allocator,
+    arenaAllocator: std.mem.Allocator,
     path: std.ArrayList(usize),
 
     fn init(arenaAllocator: std.mem.Allocator) !@This() {
         return .{
-            .allocator = arenaAllocator,
+            .arenaAllocator = arenaAllocator,
             .path = try std.ArrayList(usize).initCapacity(arenaAllocator, 0),
         };
     }
@@ -467,10 +509,10 @@ const LayoutCreator = struct {
                     .style = style,
                 };
                 if (treeNode.children) |children| {
-                    layoutBox.children = .{ .layoutBoxes = try self.allocator.alloc(LayoutBox, children.len) };
-                    errdefer self.allocator.free(layoutBox.children.?.layoutBoxes);
+                    layoutBox.children = .{ .layoutBoxes = try self.arenaAllocator.alloc(LayoutBox, children.len) };
+                    errdefer self.arenaAllocator.free(layoutBox.children.?.layoutBoxes);
                     for (children, 0..) |child, index| {
-                        try self.path.append(self.allocator, index);
+                        try self.path.append(self.arenaAllocator, index);
                         defer _ = self.path.pop();
 
                         layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style), dpi);
@@ -479,9 +521,9 @@ const LayoutCreator = struct {
                 return layoutBox;
             },
             .text => |text| {
-                var layoutGlyphs = try std.ArrayList(LayoutGlyph).initCapacity(self.allocator, 1);
-                errdefer layoutGlyphs.deinit(self.allocator);
-                try layoutGlyphs.ensureTotalCapacityPrecise(self.allocator, text.len);
+                var layoutGlyphs = try std.ArrayList(LayoutGlyph).initCapacity(self.arenaAllocator, 1);
+                errdefer layoutGlyphs.deinit(self.arenaAllocator);
+                try layoutGlyphs.ensureTotalCapacityPrecise(self.arenaAllocator, text.len);
 
                 const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
@@ -493,13 +535,15 @@ const LayoutCreator = struct {
                 var maxAdvance: Vec2 = @splat(0.0);
                 while (shapedGlyphsIterator.next()) |shapedGlyph| {
                     if (layoutGlyphs.capacity < layoutGlyphs.items.len + 1) {
-                        try layoutGlyphs.ensureTotalCapacityPrecise(self.allocator, layoutGlyphs.items.len + 1);
+                        try layoutGlyphs.ensureTotalCapacityPrecise(self.arenaAllocator, layoutGlyphs.items.len + 1);
                     }
                     const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
                     const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
                     layoutGlyphs.appendAssumeCapacity(LayoutGlyph{
                         .index = @intCast(shapedGlyph.index),
                         .position = cursor + offset,
+
+                        .codepoint = shapedGlyph.codepoint,
 
                         .advance = advance,
                         .offset = offset,
