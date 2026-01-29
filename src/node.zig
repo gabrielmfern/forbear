@@ -69,6 +69,8 @@ pub const Style = struct {
     lineHeight: f32,
     textWrapping: TextWrapping,
 
+    placement: Placement,
+
     minWidth: ?f32 = null,
     preferredWidth: Sizing,
     minHeight: ?f32 = null,
@@ -118,6 +120,18 @@ pub const Background = union(enum) {
     color: Vec4,
 };
 
+pub const Placement = union(enum) {
+    /// When defined, explictily overrides layout positioning, taking it
+    /// outside of the normal element flow, it won't affect the sizing of its
+    /// parent, nor the placement of its siblings. To define width and height,
+    /// use preferredWidth and preferredHeight.
+    manual: struct {
+        x: f32,
+        y: f32,
+    },
+    standard,
+};
+
 pub const IncompleteStyle = struct {
     background: ?Background = null,
     color: ?Vec4 = null,
@@ -134,10 +148,12 @@ pub const IncompleteStyle = struct {
     lineHeight: ?f32 = null,
     textWrapping: ?TextWrapping = null,
 
+    placement: Placement = .standard,
+
     minWidth: ?f32 = null,
-    preferredWidth: ?Sizing = null,
+    preferredWidth: Sizing = .fit,
     minHeight: ?f32 = null,
-    preferredHeight: ?Sizing = null,
+    preferredHeight: Sizing = .fit,
 
     translate: ?Vec2 = null,
 
@@ -168,11 +184,13 @@ pub const IncompleteStyle = struct {
             .lineHeight = self.lineHeight orelse base.lineHeight,
             .textWrapping = self.textWrapping orelse base.textWrapping,
 
+            .placement = self.placement,
+
             .minWidth = self.minWidth,
-            .preferredWidth = self.preferredWidth orelse .fit,
+            .preferredWidth = self.preferredWidth,
 
             .minHeight = self.minHeight,
-            .preferredHeight = self.preferredHeight orelse .fit,
+            .preferredHeight = self.preferredHeight,
 
             .translate = self.translate orelse @splat(0.0),
 
