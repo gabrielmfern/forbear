@@ -1,11 +1,7 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
-const AppProps = struct {
-    fps: ?u32,
-};
-
-fn App(props: AppProps) !forbear.Node {
+fn App() !forbear.Node {
     const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
@@ -16,10 +12,8 @@ fn App(props: AppProps) !forbear.Node {
             .paddingInline = .{ 10, 10 },
         },
         .children = try forbear.children(arena, .{
-            "fps:",
-            props.fps,
-            " ",
-            "This is some text introducing things",
+            forbear.component(forbear.FpsCounter, null, arena),
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;':\",.<>/?`~",
             forbear.div(.{
                 .style = .{
                     .preferredWidth = .{ .fixed = 100 },
@@ -69,35 +63,29 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    var time = std.time.nanoTimestamp();
-    var fps: ?u32 = null;
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
-        const node = try forbear.component(App, AppProps{ .fps = fps }, arena);
+        const node = try forbear.component(App, null, arena);
         const treeNode = try forbear.resolve(node, arena);
+        const viewportSize = renderer.viewportSize();
         const layoutBox = try forbear.layout(
             arena,
             treeNode,
             .{
                 .font = try forbear.useFont("Inter", @embedFile("Inter.ttf")),
                 .color = .{ 1.0, 1.0, 1.0, 1.0 },
-                .textWrapping = .word,
+                .textWrapping = .character,
                 .fontSize = 32,
                 .fontWeight = 400,
                 .lineHeight = 1.0,
             },
-            .{ @floatFromInt(window.width), @floatFromInt(window.height) },
+            viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         );
         try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
 
-        try forbear.update(&layoutBox, arena);
-
-        const newCurrentTime = std.time.nanoTimestamp();
-        const deltaTime = newCurrentTime - time;
-        time = newCurrentTime;
-        fps = @intFromFloat(@round(@as(f64, @floatFromInt(std.time.ns_per_s)) / @as(f64, @floatFromInt(deltaTime))));
+        try forbear.update(&layoutBox, viewportSize, arena);
     }
     try renderer.waitIdle();
 }
