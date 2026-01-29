@@ -20,6 +20,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "uhoh.com",
         .root_module = uhoh,
+        .use_llvm = true,
     });
     b.installArtifact(exe);
 
