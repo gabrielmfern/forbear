@@ -40,6 +40,17 @@ pub const Alignment = enum {
     end,
 };
 
+/// Will modify the min size of layout boxes that wrap text accordingly
+/// character => largest character
+/// word => largest word
+/// none => all in one line
+pub const TextWrapping = enum {
+    character,
+    /// Uses a simple greedy algorithm to break on word boundaries
+    word,
+    none,
+};
+
 pub const Style = struct {
     background: Background,
     color: Vec4,
@@ -56,6 +67,7 @@ pub const Style = struct {
     fontWeight: u32,
     fontSize: u32,
     lineHeight: f32,
+    textWrapping: TextWrapping,
 
     minWidth: ?f32 = null,
     preferredWidth: Sizing,
@@ -87,6 +99,7 @@ pub const BaseStyle = struct {
     fontSize: u32,
     fontWeight: u32,
     lineHeight: f32,
+    textWrapping: TextWrapping,
 
     pub fn from(style: Style) @This() {
         return @This(){
@@ -95,6 +108,7 @@ pub const BaseStyle = struct {
             .fontSize = style.fontSize,
             .fontWeight = style.fontWeight,
             .lineHeight = style.lineHeight,
+            .textWrapping = style.textWrapping,
         };
     }
 };
@@ -118,6 +132,7 @@ pub const IncompleteStyle = struct {
     fontWeight: ?u32 = null,
     fontSize: ?u32 = null,
     lineHeight: ?f32 = null,
+    textWrapping: ?TextWrapping = null,
 
     minWidth: ?f32 = null,
     preferredWidth: ?Sizing = null,
@@ -151,6 +166,7 @@ pub const IncompleteStyle = struct {
             .fontWeight = self.fontWeight orelse base.fontWeight,
             .fontSize = self.fontSize orelse base.fontSize,
             .lineHeight = self.lineHeight orelse base.lineHeight,
+            .textWrapping = self.textWrapping orelse base.textWrapping,
 
             .minWidth = self.minWidth,
             .preferredWidth = self.preferredWidth orelse .fit,
