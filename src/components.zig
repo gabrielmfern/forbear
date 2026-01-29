@@ -1,3 +1,4 @@
+const std = @import("std");
 const forbear = @import("root.zig");
 
 const Vec4 = @Vector(4, f32);
@@ -12,18 +13,18 @@ pub fn FpsCounter() !forbear.Node {
         .placement = .{ .manual = .{ 10, 10 } },
         .zIndex = 10,
         .background = .{ .color = .{ 0.0, 0.0, 0.0, 0.5 } },
-        .fontSize = 10,
-        .color = .{ 0.5, 0.5, 0.0, 1.0 },
+        .fontSize = 12,
+        .paddingBlock = .{ 4, 4 },
+        .paddingInline = .{ 4, 4 },
+        .borderRadius = 2,
+        .color = .{ 1.0, 1.0, 0.0, 1.0 },
         .direction = .topToBottom,
     }, .children = try forbear.children(arena, .{
         forbear.div(.{ .children = try forbear.children(arena, .{
-            "FPS: ",
-            fps,
+            std.fmt.allocPrint(arena, "FPS: {d:.1}ms", .{fps}),
         }) }),
         forbear.div(.{ .children = try forbear.children(arena, .{
-            "delta time: ",
-            deltaTime * 1000.0,
-            "ms"
+            std.fmt.allocPrint(arena, "delta time: {d:.1}ms", .{deltaTime * 1000.0}),
         }) }),
     }) });
 }
