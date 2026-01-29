@@ -7,7 +7,7 @@
 
 ## Wed Jan 28
 
-- [ ] text wrapping
+- [x] text wrapping
 
 ## Thur Jan 30
 
