@@ -512,7 +512,12 @@ const LayoutCreator = struct {
                         try self.path.append(self.arenaAllocator, index);
                         defer _ = self.path.pop();
 
-                        layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style), layoutBox.z + 1, dpi);
+                        layoutBox.children.?.layoutBoxes[index] = try self.create(
+                            child,
+                            BaseStyle.from(style),
+                            if (layoutBox.z == std.math.maxInt(u16)) layoutBox.z else layoutBox.z + 1,
+                            dpi,
+                        );
                     }
                 }
                 return layoutBox;

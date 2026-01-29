@@ -7,7 +7,7 @@ pub fn FpsCounter() !forbear.Node {
     const arena = try forbear.useArena();
 
     const deltaTime = forbear.useDeltaTime();
-    const fps = 1.0 / deltaTime;
+    const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
 
     return forbear.div(.{ .style = .{
         .placement = .{ .manual = .{ 10, 10 } },
@@ -21,7 +21,7 @@ pub fn FpsCounter() !forbear.Node {
         .direction = .topToBottom,
     }, .children = try forbear.children(arena, .{
         forbear.div(.{ .children = try forbear.children(arena, .{
-            std.fmt.allocPrint(arena, "FPS: {d:.1}ms", .{fps}),
+            std.fmt.allocPrint(arena, "FPS: {d:.1}", .{fps}),
         }) }),
         forbear.div(.{ .children = try forbear.children(arena, .{
             std.fmt.allocPrint(arena, "delta time: {d:.1}ms", .{deltaTime * 1000.0}),

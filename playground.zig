@@ -63,8 +63,6 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    var time = std.time.nanoTimestamp();
-    var fps: ?u32 = null;
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
@@ -88,11 +86,6 @@ fn renderingMain(
         try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
 
         try forbear.update(&layoutBox, viewportSize, arena);
-
-        const newCurrentTime = std.time.nanoTimestamp();
-        const deltaTime = newCurrentTime - time;
-        time = newCurrentTime;
-        fps = @intFromFloat(@round(@as(f64, @floatFromInt(std.time.ns_per_s)) / @as(f64, @floatFromInt(deltaTime))));
     }
     try renderer.waitIdle();
 }
