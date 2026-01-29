@@ -1410,6 +1410,20 @@ const ShadowsPipeline = struct {
                     },
                     .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
                 },
+                .pDepthStencilState = &c.VkPipelineDepthStencilStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .depthTestEnable = c.VK_TRUE,
+                    .depthWriteEnable = c.VK_TRUE,
+                    .depthCompareOp = c.VK_COMPARE_OP_LESS,
+                    .depthBoundsTestEnable = c.VK_FALSE,
+                    .stencilTestEnable = c.VK_FALSE,
+                    .front = undefined,
+                    .back = undefined,
+                    .minDepthBounds = 0.0,
+                    .maxDepthBounds = 1.0,
+                },
                 .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
                     .pNext = null,
@@ -1786,6 +1800,20 @@ const ElementsPipeline = struct {
                         .alphaBlendOp = c.VK_BLEND_OP_ADD,
                     },
                     .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
+                },
+                .pDepthStencilState = &c.VkPipelineDepthStencilStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .depthTestEnable = c.VK_TRUE,
+                    .depthWriteEnable = c.VK_TRUE,
+                    .depthCompareOp = c.VK_COMPARE_OP_LESS,
+                    .depthBoundsTestEnable = c.VK_FALSE,
+                    .stencilTestEnable = c.VK_FALSE,
+                    .front = undefined,
+                    .back = undefined,
+                    .minDepthBounds = 0.0,
+                    .maxDepthBounds = 1.0,
                 },
                 .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -2207,6 +2235,20 @@ const TextPipeline = struct {
                         .alphaBlendOp = c.VK_BLEND_OP_ADD,
                     },
                     .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
+                },
+                .pDepthStencilState = &c.VkPipelineDepthStencilStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .depthTestEnable = c.VK_TRUE,
+                    .depthWriteEnable = c.VK_TRUE,
+                    .depthCompareOp = c.VK_COMPARE_OP_LESS,
+                    .depthBoundsTestEnable = c.VK_FALSE,
+                    .stencilTestEnable = c.VK_FALSE,
+                    .front = undefined,
+                    .back = undefined,
+                    .minDepthBounds = 0.0,
+                    .maxDepthBounds = 1.0,
                 },
                 .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -2827,10 +2869,37 @@ pub const Renderer = struct {
             c.VkSubpassDependency{
                 .srcSubpass = c.VK_SUBPASS_EXTERNAL,
                 .dstSubpass = 0,
-                .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
                 .srcAccessMask = 0,
-                .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            },
+        };
+
+        const attachments = [_]c.VkAttachmentDescription{
+            // Color attachment
+            c.VkAttachmentDescription{
+                .format = swapchain.surfaceFormat.format,
+                .samples = c.VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+                .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                .flags = 0,
+            },
+            // Depth attachment
+            c.VkAttachmentDescription{
+                .format = swapchain.depthFormat,
+                .samples = c.VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                .flags = 0,
             },
         };
 
@@ -2839,18 +2908,8 @@ pub const Renderer = struct {
             logicalDevice,
             &c.VkRenderPassCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-                .attachmentCount = 1,
-                .pAttachments = &c.VkAttachmentDescription{
-                    .format = swapchain.surfaceFormat.format,
-                    .samples = c.VK_SAMPLE_COUNT_1_BIT,
-                    .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-                    .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
-                    .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                    .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                    .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-                    .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                    .flags = 0,
-                },
+                .attachmentCount = attachments.len,
+                .pAttachments = &attachments,
                 .subpassCount = 1,
                 .pSubpasses = &c.VkSubpassDescription{
                     .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -2858,6 +2917,10 @@ pub const Renderer = struct {
                     .pColorAttachments = &c.VkAttachmentReference{
                         .attachment = 0,
                         .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    },
+                    .pDepthStencilAttachment = &c.VkAttachmentReference{
+                        .attachment = 1,
+                        .layout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                     },
                 },
                 .flags = 0,
@@ -3201,6 +3264,20 @@ pub const Renderer = struct {
         const framebuffers = self.swapchainFramebuffers;
         const framebufferIndex: usize = @intCast(imageIndex);
 
+        const clearValues = [_]c.VkClearValue{
+            c.VkClearValue{
+                .color = c.VkClearColorValue{
+                    .float32 = srgbToLinearColor(clearColor),
+                },
+            },
+            c.VkClearValue{
+                .depthStencil = c.VkClearDepthStencilValue{
+                    .depth = 1.0,
+                    .stencil = 0,
+                },
+            },
+        };
+
         c.vkCmdBeginRenderPass(
             self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
             &c.VkRenderPassBeginInfo{
@@ -3212,12 +3289,8 @@ pub const Renderer = struct {
                     .offset = c.VkOffset2D{ .x = 0, .y = 0 },
                     .extent = self.swapchain.extent,
                 },
-                .clearValueCount = 1,
-                .pClearValues = &c.VkClearValue{
-                    .color = c.VkClearColorValue{
-                        .float32 = srgbToLinearColor(clearColor),
-                    },
-                },
+                .clearValueCount = clearValues.len,
+                .pClearValues = &clearValues,
             },
             c.VK_SUBPASS_CONTENTS_INLINE,
         );
@@ -3269,7 +3342,7 @@ pub const Renderer = struct {
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
                         zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
-                        zmath.translation(layoutBox.position[0], layoutBox.position[1], @floatFromInt(1000 - layoutBox.z)),
+                        zmath.translation(layoutBox.position[0], layoutBox.position[1], @floatFromInt(layoutBox.z)),
                     ),
                     projectionMatrix,
                 ),
@@ -3327,7 +3400,7 @@ pub const Renderer = struct {
                         .modelViewProjectionMatrix = zmath.mul(
                             zmath.mul(
                                 zmath.scaling(size[0], size[1], 1.0),
-                                zmath.translation(position[0], position[1], @floatFromInt(1000 - layoutBox.z)),
+                                zmath.translation(position[0], position[1], @floatFromInt(layoutBox.z)),
                             ),
                             projectionMatrix,
                         ),
@@ -3479,7 +3552,7 @@ pub const Renderer = struct {
                                         zmath.translation(
                                             glyph.position[0] + left,
                                             glyph.position[1] + pixelAscent - top,
-                                            @floatFromInt(1000 - layoutBox.z),
+                                            @floatFromInt(layoutBox.z),
                                         ),
                                     ),
                                     projectionMatrix,
@@ -3600,6 +3673,41 @@ pub const Renderer = struct {
         }
     }
 
+    fn findSupportedFormat(
+        physicalDevice: c.VkPhysicalDevice,
+        candidates: []const c.VkFormat,
+        tiling: c.VkImageTiling,
+        features: c.VkFormatFeatureFlags,
+    ) !c.VkFormat {
+        for (candidates) |format| {
+            var props: c.VkFormatProperties = undefined;
+            c.vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+
+            if (tiling == c.VK_IMAGE_TILING_LINEAR and (props.linearTilingFeatures & features) == features) {
+                return format;
+            } else if (tiling == c.VK_IMAGE_TILING_OPTIMAL and (props.optimalTilingFeatures & features) == features) {
+                return format;
+            }
+        }
+
+        return error.NoSupportedFormat;
+    }
+
+    fn findDepthFormat(physicalDevice: c.VkPhysicalDevice) !c.VkFormat {
+        const candidates = [_]c.VkFormat{
+            c.VK_FORMAT_D32_SFLOAT,
+            c.VK_FORMAT_D32_SFLOAT_S8_UINT,
+            c.VK_FORMAT_D24_UNORM_S8_UINT,
+        };
+
+        return findSupportedFormat(
+            physicalDevice,
+            &candidates,
+            c.VK_IMAGE_TILING_OPTIMAL,
+            c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        );
+    }
+
     const Swapchain = struct {
         handle: c.VkSwapchainKHR,
         surfaceFormat: c.VkSurfaceFormatKHR,
@@ -3608,6 +3716,11 @@ pub const Renderer = struct {
 
         images: []c.VkImage,
         imageViews: []c.VkImageView,
+
+        depthImage: c.VkImage,
+        depthImageMemory: c.VkDeviceMemory,
+        depthImageView: c.VkImageView,
+        depthFormat: c.VkFormat,
 
         allocator: std.mem.Allocator,
 
@@ -3789,6 +3902,90 @@ pub const Renderer = struct {
                 ));
             }
 
+            // Create depth resources
+            const depthFormat = try findDepthFormat(physicalDevice);
+
+            var depthImage: c.VkImage = undefined;
+            try ensureNoError(c.vkCreateImage(
+                logicalDevice,
+                &c.VkImageCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .imageType = c.VK_IMAGE_TYPE_2D,
+                    .format = depthFormat,
+                    .extent = c.VkExtent3D{
+                        .width = swapchainExtent.width,
+                        .height = swapchainExtent.height,
+                        .depth = 1,
+                    },
+                    .mipLevels = 1,
+                    .arrayLayers = 1,
+                    .samples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .tiling = c.VK_IMAGE_TILING_OPTIMAL,
+                    .usage = c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                    .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = null,
+                    .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                },
+                null,
+                &depthImage,
+            ));
+            errdefer c.vkDestroyImage(logicalDevice, depthImage, null);
+
+            var memRequirements: c.VkMemoryRequirements = undefined;
+            c.vkGetImageMemoryRequirements(logicalDevice, depthImage, &memRequirements);
+
+            var depthImageMemory: c.VkDeviceMemory = undefined;
+            try ensureNoError(c.vkAllocateMemory(
+                logicalDevice,
+                &c.VkMemoryAllocateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    .pNext = null,
+                    .allocationSize = memRequirements.size,
+                    .memoryTypeIndex = try findMemoryType(
+                        memRequirements.memoryTypeBits,
+                        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        physicalDevice,
+                    ),
+                },
+                null,
+                &depthImageMemory,
+            ));
+            errdefer c.vkFreeMemory(logicalDevice, depthImageMemory, null);
+
+            try ensureNoError(c.vkBindImageMemory(logicalDevice, depthImage, depthImageMemory, 0));
+
+            var depthImageView: c.VkImageView = undefined;
+            try ensureNoError(c.vkCreateImageView(
+                logicalDevice,
+                &c.VkImageViewCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .image = depthImage,
+                    .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+                    .format = depthFormat,
+                    .components = c.VkComponentMapping{
+                        .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                    .subresourceRange = c.VkImageSubresourceRange{
+                        .aspectMask = c.VK_IMAGE_ASPECT_DEPTH_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                },
+                null,
+                &depthImageView,
+            ));
+            errdefer c.vkDestroyImageView(logicalDevice, depthImageView, null);
+
             return Swapchain{
                 .handle = swapchain,
                 .surfaceFormat = surfaceFormat,
@@ -3796,11 +3993,19 @@ pub const Renderer = struct {
                 .extent = swapchainExtent,
                 .images = swapChainImages,
                 .imageViews = imageViews,
+                .depthImage = depthImage,
+                .depthImageMemory = depthImageMemory,
+                .depthImageView = depthImageView,
+                .depthFormat = depthFormat,
                 .allocator = allocator,
             };
         }
 
         fn deinit(self: Swapchain, logicalDevice: c.VkDevice) void {
+            c.vkDestroyImageView(logicalDevice, self.depthImageView, null);
+            c.vkDestroyImage(logicalDevice, self.depthImage, null);
+            c.vkFreeMemory(logicalDevice, self.depthImageMemory, null);
+
             for (self.imageViews) |imageView| {
                 c.vkDestroyImageView(logicalDevice, imageView, null);
             }
@@ -3834,6 +4039,7 @@ pub const Renderer = struct {
         }
 
         for (imageViews, 0..) |imageView, i| {
+            const framebufferAttachments = [_]c.VkImageView{ imageView, swapchain.depthImageView };
             try ensureNoError(c.vkCreateFramebuffer(
                 logicalDevice,
                 &c.VkFramebufferCreateInfo{
@@ -3841,8 +4047,8 @@ pub const Renderer = struct {
                     .pNext = null,
                     .flags = 0,
                     .renderPass = renderPass,
-                    .attachmentCount = 1,
-                    .pAttachments = &imageView,
+                    .attachmentCount = framebufferAttachments.len,
+                    .pAttachments = &framebufferAttachments,
                     .width = swapchain.extent.width,
                     .height = swapchain.extent.height,
                     .layers = 1,
