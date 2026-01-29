@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const encodeUtf8 = @import("font.zig").encodeUtf8;
 const BaseStyle = @import("node.zig").BaseStyle;
 const Direction = @import("node.zig").Direction;
 const Element = @import("node.zig").Element;
@@ -18,14 +17,14 @@ pub const LayoutGlyph = struct {
     index: c_uint,
     position: Vec2,
 
-    codepoint: c_int,
+    text: []const u8,
 
     /// Meant for the recalculation of the glyphs position if that's required
     /// at some other layouting step
-    offset: Vec2,
+    advance: Vec2,
     /// Meant for the recalculation of the glyphs position if that's required
     /// at some other layouting step
-    advance: Vec2,
+    offset: Vec2,
 };
 
 pub const Glyphs = struct {
@@ -218,6 +217,9 @@ fn wrap(layoutBox: *LayoutBox) void {
                 }
             },
             .glyphs => |glyphs| {
+                if (layoutBox.style.textWrapping == .none) {
+                    return;
+                }
                 const lineWidth = layoutBox.size[0];
                 var cursor: Vec2 = @splat(0.0);
                 switch (layoutBox.style.textWrapping) {
@@ -232,14 +234,11 @@ fn wrap(layoutBox: *LayoutBox) void {
                         }
                     },
                     .word => {
-                        var lastSpaceInfoOpt: ?struct{
+                        var lastSpaceInfoOpt: ?struct {
                             index: usize,
                             position: Vec2,
                         } = null;
                         for (glyphs.slice, 0..) |*glyph, index| {
-                            const utf8 = encodeUtf8(glyph.codepoint);
-                            const text = utf8.Encoded[0..@intCast(utf8.EncodedLength)];
-
                             if (cursor[0] > lineWidth) {
                                 if (lastSpaceInfoOpt) |lastSpaceInfo| {
                                     cursor[0] = 0;
@@ -253,12 +252,13 @@ fn wrap(layoutBox: *LayoutBox) void {
 
                                         cursor += reverseGlyph.advance;
                                     }
+                                    lastSpaceInfoOpt = null;
                                 }
                             }
 
                             glyph.position = cursor + glyph.offset;
                             cursor += glyph.advance;
-                            if (std.mem.eql(u8, text, " ")) {
+                            if (std.mem.eql(u8, glyph.text, " ")) {
                                 lastSpaceInfoOpt = .{
                                     .index = index,
                                     .position = glyph.position,
@@ -266,6 +266,7 @@ fn wrap(layoutBox: *LayoutBox) void {
                             }
                         }
                     },
+                    else => unreachable,
                 }
                 layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
             },
@@ -513,36 +514,54 @@ const LayoutCreator = struct {
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
                 const fontSize: f32 = @floatFromInt(style.fontSize);
                 const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * resolutionMultiplier;
+                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
 
                 var shapedGlyphsIterator = try style.font.shape(text);
                 var cursor: Vec2 = @splat(0.0);
-                var maxAdvance: Vec2 = @splat(0.0);
+
+                var minSize: Vec2 = .{ 0.0, pixelLineHeight };
+
+                var wordStart: usize = 0;
+                var wordAdvance: Vec2 = @splat(0.0);
                 while (shapedGlyphsIterator.next()) |shapedGlyph| {
                     if (layoutGlyphs.capacity < layoutGlyphs.items.len + 1) {
                         try layoutGlyphs.ensureTotalCapacityPrecise(self.arenaAllocator, layoutGlyphs.items.len + 1);
                     }
                     const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
                     const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
+                    const glyphText = try self.arenaAllocator.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]);
                     layoutGlyphs.appendAssumeCapacity(LayoutGlyph{
                         .index = @intCast(shapedGlyph.index),
                         .position = cursor + offset,
 
-                        .codepoint = shapedGlyph.codepoint,
+                        .text = glyphText,
 
                         .advance = advance,
                         .offset = offset,
                     });
+
                     cursor += advance;
-                    maxAdvance = @max(maxAdvance, advance);
+                    if (style.textWrapping == .word) {
+                        if (std.mem.eql(u8, glyphText, " ")) {
+                            wordStart = layoutGlyphs.items.len;
+                            wordAdvance = @splat(0.0);
+                        } else {
+                            wordAdvance += advance;
+                        }
+                        minSize = @max(minSize, wordAdvance);
+                    } else if (style.textWrapping == .character) {
+                        minSize = @max(minSize, advance);
+                    } else if (style.textWrapping == .none) {
+                        minSize = cursor;
+                    }
                 }
-                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
 
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
                     .z = self.path.items.len,
                     .key = treeNode.key,
                     .size = .{ cursor[0], pixelLineHeight },
-                    .minSize = .{ maxAdvance[0], pixelLineHeight },
+                    .minSize = minSize,
                     .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs.items, .lineHeight = pixelLineHeight } },
                     .style = style,
                     .handlers = .{},
