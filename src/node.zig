@@ -70,6 +70,7 @@ pub const Style = struct {
     textWrapping: TextWrapping,
 
     placement: Placement,
+    zIndex: ?u16 = null,
 
     minWidth: ?f32 = null,
     preferredWidth: Sizing,
@@ -125,10 +126,7 @@ pub const Placement = union(enum) {
     /// outside of the normal element flow, it won't affect the sizing of its
     /// parent, nor the placement of its siblings. To define width and height,
     /// use preferredWidth and preferredHeight.
-    manual: struct {
-        position: Vec2,
-        z: usize,
-    },
+    manual: Vec2,
     standard,
 };
 
@@ -149,6 +147,7 @@ pub const IncompleteStyle = struct {
     textWrapping: ?TextWrapping = null,
 
     placement: Placement = .standard,
+    zIndex: ?u16 = null,
 
     minWidth: ?f32 = null,
     preferredWidth: Sizing = .fit,
@@ -185,6 +184,7 @@ pub const IncompleteStyle = struct {
             .textWrapping = self.textWrapping orelse base.textWrapping,
 
             .placement = self.placement,
+            .zIndex = self.zIndex,
 
             .minWidth = self.minWidth,
             .preferredWidth = self.preferredWidth,

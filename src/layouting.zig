@@ -41,7 +41,7 @@ pub const LayoutBox = struct {
     key: u64,
 
     position: Vec2,
-    z: usize,
+    z: u16,
     size: Vec2,
     minSize: Vec2,
     children: ?Children,
@@ -460,7 +460,7 @@ const LayoutCreator = struct {
         };
     }
 
-    fn create(self: *@This(), treeNode: TreeNode, baseStyle: BaseStyle, dpi: Vec2) !LayoutBox {
+    fn create(self: *@This(), treeNode: TreeNode, baseStyle: BaseStyle, z: u16, dpi: Vec2) !LayoutBox {
         const resolutionMultiplier = dpi / @as(Vec2, @splat(72));
         var style = switch (treeNode.node) {
             .element => |element| element.style.completeWith(baseStyle),
@@ -484,8 +484,8 @@ const LayoutCreator = struct {
         switch (treeNode.node) {
             .element => |element| {
                 var layoutBox = LayoutBox{
-                    .position = if (style.placement == .manual) style.placement.manual.position else .{ 0.0, 0.0 },
-                    .z = if (style.placement == .manual) style.placement.manual.z else self.path.items.len,
+                    .position = if (style.placement == .manual) style.placement.manual else .{ 0.0, 0.0 },
+                    .z = if (style.zIndex) |zIndex| zIndex else z,
                     .size = .{
                         switch (style.preferredWidth) {
                             .fixed => |width| width,
@@ -512,7 +512,7 @@ const LayoutCreator = struct {
                         try self.path.append(self.arenaAllocator, index);
                         defer _ = self.path.pop();
 
-                        layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style), dpi);
+                        layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style), layoutBox.z + 1, dpi);
                     }
                 }
                 return layoutBox;
@@ -570,7 +570,7 @@ const LayoutCreator = struct {
 
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
-                    .z = self.path.items.len,
+                    .z = z,
                     .key = treeNode.key,
                     .size = .{ cursor[0], pixelLineHeight },
                     .minSize = minSize,
@@ -643,7 +643,7 @@ pub fn layout(
     dpi: Vec2,
 ) !LayoutBox {
     var creator = try LayoutCreator.init(arenaAllocator);
-    var layoutBox = try creator.create(treeNode, baseStyle, dpi);
+    var layoutBox = try creator.create(treeNode, baseStyle, 1, dpi);
     fitWidth(&layoutBox);
     fitHeight(&layoutBox);
     if (layoutBox.style.preferredWidth == .grow) {

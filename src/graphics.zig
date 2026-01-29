@@ -3314,8 +3314,8 @@ pub const Renderer = struct {
             @floatFromInt(self.swapchain.extent.width),
             @floatFromInt(self.swapchain.extent.height),
             0.0,
-            -1000.0,
-            1000.0,
+            -32768.0,
+            32768.0,
         );
 
         const layoutBoxCount = countTreeSize(rootLayoutBox);
@@ -3342,7 +3342,7 @@ pub const Renderer = struct {
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
                         zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
-                        zmath.translation(layoutBox.position[0], layoutBox.position[1], @floatFromInt(layoutBox.z)),
+                        zmath.translation(layoutBox.position[0], layoutBox.position[1], @as(f32, @floatFromInt(layoutBox.z)) - 32768),
                     ),
                     projectionMatrix,
                 ),
@@ -3400,7 +3400,7 @@ pub const Renderer = struct {
                         .modelViewProjectionMatrix = zmath.mul(
                             zmath.mul(
                                 zmath.scaling(size[0], size[1], 1.0),
-                                zmath.translation(position[0], position[1], @floatFromInt(layoutBox.z)),
+                                zmath.translation(position[0], position[1], @as(f32, @floatFromInt(layoutBox.z)) - 32768),
                             ),
                             projectionMatrix,
                         ),
@@ -3552,7 +3552,7 @@ pub const Renderer = struct {
                                         zmath.translation(
                                             glyph.position[0] + left,
                                             glyph.position[1] + pixelAscent - top,
-                                            @floatFromInt(layoutBox.z),
+                                            @as(f32, @floatFromInt(layoutBox.z)) - 32768,
                                         ),
                                     ),
                                     projectionMatrix,
