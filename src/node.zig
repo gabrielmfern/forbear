@@ -40,9 +40,15 @@ pub const Alignment = enum {
     end,
 };
 
+/// Will modify the min size of layout boxes that wrap text accordingly
+/// character => largest character
+/// word => largest word
+/// none => all in one line
 pub const TextWrapping = enum {
     character,
+    /// Uses a simple greedy algorithm to break on word boundaries
     word,
+    none,
 };
 
 pub const Style = struct {
