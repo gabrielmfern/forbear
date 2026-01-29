@@ -273,14 +273,10 @@ pub const RasterizedGlyph = struct {
 
 pub const ShapedGlyph = struct {
     index: c_ushort,
-    codepoint: c_int,
+    utf8: c.kbts_encode_utf8,
     advance: Vec2,
     offset: Vec2,
 };
-
-pub fn encodeUtf8(codepoint: c_int) c.kbts_encode_utf8 {
-    return c.kbts_EncodeUtf8(codepoint);
-}
 
 pub const ShapingIterator = struct {
     run: ?c.kbts_run,
@@ -291,13 +287,18 @@ pub const ShapingIterator = struct {
         if (self.run) |*run| {
             if (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&self.glyph)) != 0) {
                 var shapeCodepoint: c.kbts_shape_codepoint = undefined;
-                _ = c.kbts_ShapeGetShapeCodepoint(self.kbtsContext, self.glyph.*.UserIdOrCodepointIndex, &shapeCodepoint);
+                if (c.kbts_ShapeGetShapeCodepoint(self.kbtsContext, self.glyph.*.UserIdOrCodepointIndex, &shapeCodepoint) == 0) {
+                    std.log.err("Could not get original codeopint for glyph with user id {}", .{self.glyph.*.UserIdOrCodepointIndex});
+                    return self.next();
+                }
 
                 return ShapedGlyph{
                     .index = self.glyph.*.Id,
-                    .codepoint = shapeCodepoint.Codepoint,
                     .advance = .{ @floatFromInt(self.glyph.*.AdvanceX), @floatFromInt(self.glyph.*.AdvanceY) },
                     .offset = .{ @floatFromInt(self.glyph.*.OffsetX), @floatFromInt(self.glyph.*.OffsetY) },
+                    // When not using llvm, if we don't set this in a variable,
+                    // the index in ShapedGlyph becomes 0 because of some Zig bug
+                    .utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint),
                 };
             }
         }
