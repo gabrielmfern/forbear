@@ -484,8 +484,8 @@ const LayoutCreator = struct {
         switch (treeNode.node) {
             .element => |element| {
                 var layoutBox = LayoutBox{
-                    .position = .{ 0.0, 0.0 },
-                    .z = self.path.items.len,
+                    .position = if (style.placement == .manual) style.placement.manual.position else .{ 0.0, 0.0 },
+                    .z = if (style.placement == .manual) style.placement.manual.z else self.path.items.len,
                     .size = .{
                         switch (style.preferredWidth) {
                             .fixed => |width| width,

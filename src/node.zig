@@ -126,8 +126,8 @@ pub const Placement = union(enum) {
     /// parent, nor the placement of its siblings. To define width and height,
     /// use preferredWidth and preferredHeight.
     manual: struct {
-        x: f32,
-        y: f32,
+        position: Vec2,
+        z: usize,
     },
     standard,
 };

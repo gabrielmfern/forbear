@@ -21,7 +21,6 @@ pub const eventHandler = nodeImport.eventHandler;
 pub const EventHandler = nodeImport.EventHandler;
 pub const Window = @import("window/root.zig").Window;
 pub const components = @import("components.zig");
-pub const FpsCounterProps = components.FpsCounterProps;
 pub const FpsCounter = components.FpsCounter;
 
 const Vec2 = @Vector(2, f32);
