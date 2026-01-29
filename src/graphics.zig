@@ -3295,7 +3295,7 @@ pub const Renderer = struct {
 
             if (layoutBox.children) |children| {
                 if (children == .glyphs) {
-                    totalGlyphCount += children.glyphs.len;
+                    totalGlyphCount += children.glyphs.slice.len;
                 }
             }
 
@@ -3419,7 +3419,7 @@ pub const Renderer = struct {
             while (try layoutTreeIterator.next()) |layoutBox| {
                 if (layoutBox.children) |children| {
                     if (children == .glyphs) {
-                        for (children.glyphs) |glyph| {
+                        for (children.glyphs.slice) |glyph| {
                             const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
                                 .fontKey = layoutBox.style.font.key,
                                 .fontWeight = layoutBox.style.fontWeight,

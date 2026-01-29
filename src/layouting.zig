@@ -16,12 +16,26 @@ const Vec2 = @Vector(2, f32);
 pub const LayoutGlyph = struct {
     index: c_uint,
     position: Vec2,
+
+    text: []const u8,
+
+    /// Meant for the recalculation of the glyphs position if that's required
+    /// at some other layouting step
+    advance: Vec2,
+    /// Meant for the recalculation of the glyphs position if that's required
+    /// at some other layouting step
+    offset: Vec2,
+};
+
+pub const Glyphs = struct {
+    lineHeight: f32,
+    slice: []LayoutGlyph,
 };
 
 pub const LayoutBox = struct {
     pub const Children = union(enum) {
         layoutBoxes: []LayoutBox,
-        glyphs: []LayoutGlyph,
+        glyphs: Glyphs,
     };
 
     key: u64,
@@ -34,22 +48,6 @@ pub const LayoutBox = struct {
 
     handlers: EventHandlers,
     style: Style,
-
-    pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
-        if (self.children) |children| {
-            switch (children) {
-                .layoutBoxes => |layoutBoxes| {
-                    for (layoutBoxes) |child| {
-                        child.deinit(allocator);
-                    }
-                    allocator.free(layoutBoxes);
-                },
-                .glyphs => |glyphs| {
-                    allocator.free(glyphs);
-                },
-            }
-        }
-    }
 
     pub fn getMinSize(self: @This(), direction: Direction) f32 {
         if (direction == .leftToRight) {
@@ -77,7 +75,7 @@ fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
                 }
             },
             .glyphs => |glyphs| {
-                for (glyphs) |*glyph| {
+                for (glyphs.slice) |*glyph| {
                     glyph.position += layoutBox.position;
                 }
             },
@@ -210,79 +208,153 @@ fn growAndShrink(
     }
 }
 
+fn wrap(layoutBox: *LayoutBox) void {
+    if (layoutBox.children) |children| {
+        switch (children) {
+            .layoutBoxes => |childBoxes| {
+                for (childBoxes) |*child| {
+                    wrap(child);
+                }
+            },
+            .glyphs => |glyphs| {
+                if (layoutBox.style.textWrapping == .none) {
+                    return;
+                }
+                const lineWidth = layoutBox.size[0];
+                var cursor: Vec2 = @splat(0.0);
+                switch (layoutBox.style.textWrapping) {
+                    .character => {
+                        for (glyphs.slice) |*glyph| {
+                            if (cursor[0] > lineWidth) {
+                                cursor[0] = 0;
+                                cursor[1] += glyphs.lineHeight;
+                            }
+                            glyph.position = cursor + glyph.offset;
+                            cursor += glyph.advance;
+                        }
+                    },
+                    .word => {
+                        var lastSpaceInfoOpt: ?struct {
+                            index: usize,
+                            position: Vec2,
+                        } = null;
+                        for (glyphs.slice, 0..) |*glyph, index| {
+                            if (cursor[0] > lineWidth) {
+                                if (lastSpaceInfoOpt) |lastSpaceInfo| {
+                                    cursor[0] = 0;
+                                    cursor[1] += glyphs.lineHeight;
+
+                                    const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
+                                    for (lastSpaceInfo.index + 1..index) |reverseIndex| {
+                                        const reverseGlyph = &glyphs.slice[reverseIndex];
+                                        reverseGlyph.position[0] -= firstWordGlyph.position[0];
+                                        reverseGlyph.position[1] += glyphs.lineHeight;
+
+                                        cursor += reverseGlyph.advance;
+                                    }
+                                    lastSpaceInfoOpt = null;
+                                }
+                            }
+
+                            glyph.position = cursor + glyph.offset;
+                            cursor += glyph.advance;
+                            if (std.mem.eql(u8, glyph.text, " ")) {
+                                lastSpaceInfoOpt = .{
+                                    .index = index,
+                                    .position = glyph.position,
+                                };
+                            }
+                        }
+                    },
+                    else => unreachable,
+                }
+                layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
+            },
+        }
+    }
+}
+
 fn fitHeight(layoutBox: *LayoutBox) void {
-    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
-        const children = layoutBox.children.?.layoutBoxes;
-        const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
-        const direction = layoutBox.style.direction;
-        const padding = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1];
-        const border = layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1];
-        if (layoutBox.style.preferredHeight == .fit) {
-            layoutBox.size[1] = padding + border;
-        }
-        if (shouldFitMin) {
-            layoutBox.minSize[1] = padding + border;
-        }
-        for (children) |*child| {
-            fitHeight(child);
-            const childMargins = child.style.marginBlock[0] + child.style.marginBlock[1];
-            if (direction == .topToBottom) {
+    if (layoutBox.children) |children| {
+        switch (children) {
+            .layoutBoxes => |childBoxes| {
+                const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
+                const direction = layoutBox.style.direction;
+                const padding = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1];
+                const border = layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1];
                 if (layoutBox.style.preferredHeight == .fit) {
-                    layoutBox.size[1] += childMargins + child.size[1];
+                    layoutBox.size[1] = padding + border;
                 }
                 if (shouldFitMin) {
-                    layoutBox.minSize[1] += childMargins + child.minSize[1];
+                    layoutBox.minSize[1] = padding + border;
                 }
-            }
-            if (direction == .leftToRight) {
-                if (layoutBox.style.preferredHeight == .fit) {
-                    layoutBox.size[1] = @max(childMargins + padding + border + child.size[1], layoutBox.size[1]);
+                for (childBoxes) |*child| {
+                    fitHeight(child);
+                    const childMargins = child.style.marginBlock[0] + child.style.marginBlock[1];
+                    if (direction == .topToBottom) {
+                        if (layoutBox.style.preferredHeight == .fit) {
+                            layoutBox.size[1] += childMargins + child.size[1];
+                        }
+                        if (shouldFitMin) {
+                            layoutBox.minSize[1] += childMargins + child.minSize[1];
+                        }
+                    }
+                    if (direction == .leftToRight) {
+                        if (layoutBox.style.preferredHeight == .fit) {
+                            layoutBox.size[1] = @max(childMargins + padding + border + child.size[1], layoutBox.size[1]);
+                        }
+                        if (shouldFitMin) {
+                            layoutBox.minSize[1] = @max(childMargins + padding + border + child.minSize[1], layoutBox.minSize[1]);
+                        }
+                    }
                 }
-                if (shouldFitMin) {
-                    layoutBox.minSize[1] = @max(childMargins + padding + border + child.minSize[1], layoutBox.minSize[1]);
-                }
-            }
+            },
+            else => {},
         }
     }
 }
 
 fn fitWidth(layoutBox: *LayoutBox) void {
-    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
-        const children = layoutBox.children.?.layoutBoxes;
-        const shouldFitMin = layoutBox.style.preferredWidth != .fixed and layoutBox.style.minWidth == null;
-        const direction = layoutBox.style.direction;
-        const padding = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1];
-        const border = layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
-        if (layoutBox.style.preferredWidth == .fit) {
-            layoutBox.size[0] = padding + border;
-        }
-        if (shouldFitMin) {
-            layoutBox.minSize[0] = padding + border;
-        }
-        for (children) |*child| {
-            fitWidth(child);
-            const childMargins = child.style.marginInline[0] + child.style.marginInline[1];
-            if (direction == .leftToRight) {
+    if (layoutBox.children) |children| {
+        switch (children) {
+            .layoutBoxes => |childBoxes| {
+                const shouldFitMin = layoutBox.style.preferredWidth != .fixed and layoutBox.style.minWidth == null;
+                const direction = layoutBox.style.direction;
+                const padding = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1];
+                const border = layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
                 if (layoutBox.style.preferredWidth == .fit) {
-                    layoutBox.size[0] += childMargins + child.size[0];
+                    layoutBox.size[0] = padding + border;
                 }
                 if (shouldFitMin) {
-                    layoutBox.minSize[0] += childMargins + child.minSize[0];
+                    layoutBox.minSize[0] = padding + border;
                 }
-            }
-            if (direction == .topToBottom) {
-                if (layoutBox.style.preferredWidth == .fit) {
-                    layoutBox.size[0] = @max(childMargins + padding + border + child.size[0], layoutBox.size[0]);
+                for (childBoxes) |*child| {
+                    fitWidth(child);
+                    const childMargins = child.style.marginInline[0] + child.style.marginInline[1];
+                    if (direction == .leftToRight) {
+                        if (layoutBox.style.preferredWidth == .fit) {
+                            layoutBox.size[0] += childMargins + child.size[0];
+                        }
+                        if (shouldFitMin) {
+                            layoutBox.minSize[0] += childMargins + child.minSize[0];
+                        }
+                    }
+                    if (direction == .topToBottom) {
+                        if (layoutBox.style.preferredWidth == .fit) {
+                            layoutBox.size[0] = @max(childMargins + padding + border + child.size[0], layoutBox.size[0]);
+                        }
+                        if (shouldFitMin) {
+                            layoutBox.minSize[0] = @max(childMargins + padding + border + child.minSize[0], layoutBox.minSize[0]);
+                        }
+                    }
                 }
-                if (shouldFitMin) {
-                    layoutBox.minSize[0] = @max(childMargins + padding + border + child.minSize[0], layoutBox.minSize[0]);
-                }
-            }
+            },
+            else => {},
         }
     }
 }
 
-fn placeChildrenOf(layoutBox: *LayoutBox) void {
+fn place(layoutBox: *LayoutBox) void {
     layoutBox.position += layoutBox.style.translate;
     if (layoutBox.children != null) {
         switch (layoutBox.children.?) {
@@ -357,7 +429,7 @@ fn placeChildrenOf(layoutBox: *LayoutBox) void {
                         child.position += cursor;
                         cursor[1] += child.size[1] + child.style.marginBlock[1];
                     }
-                    placeChildrenOf(child);
+                    place(child);
                 }
             },
             else => {},
@@ -366,12 +438,12 @@ fn placeChildrenOf(layoutBox: *LayoutBox) void {
 }
 
 const LayoutCreator = struct {
-    allocator: std.mem.Allocator,
+    arenaAllocator: std.mem.Allocator,
     path: std.ArrayList(usize),
 
     fn init(arenaAllocator: std.mem.Allocator) !@This() {
         return .{
-            .allocator = arenaAllocator,
+            .arenaAllocator = arenaAllocator,
             .path = try std.ArrayList(usize).initCapacity(arenaAllocator, 0),
         };
     }
@@ -422,10 +494,10 @@ const LayoutCreator = struct {
                     .style = style,
                 };
                 if (treeNode.children) |children| {
-                    layoutBox.children = .{ .layoutBoxes = try self.allocator.alloc(LayoutBox, children.len) };
-                    errdefer self.allocator.free(layoutBox.children.?.layoutBoxes);
+                    layoutBox.children = .{ .layoutBoxes = try self.arenaAllocator.alloc(LayoutBox, children.len) };
+                    errdefer self.arenaAllocator.free(layoutBox.children.?.layoutBoxes);
                     for (children, 0..) |child, index| {
-                        try self.path.append(self.allocator, index);
+                        try self.path.append(self.arenaAllocator, index);
                         defer _ = self.path.pop();
 
                         layoutBox.children.?.layoutBoxes[index] = try self.create(child, BaseStyle.from(style), dpi);
@@ -434,39 +506,63 @@ const LayoutCreator = struct {
                 return layoutBox;
             },
             .text => |text| {
-                var layoutGlyphs = try std.ArrayList(LayoutGlyph).initCapacity(self.allocator, 1);
-                errdefer layoutGlyphs.deinit(self.allocator);
-                try layoutGlyphs.ensureTotalCapacityPrecise(self.allocator, text.len);
+                var layoutGlyphs = try std.ArrayList(LayoutGlyph).initCapacity(self.arenaAllocator, 1);
+                errdefer layoutGlyphs.deinit(self.arenaAllocator);
+                try layoutGlyphs.ensureTotalCapacityPrecise(self.arenaAllocator, text.len);
 
                 const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
                 const fontSize: f32 = @floatFromInt(style.fontSize);
                 const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * resolutionMultiplier;
+                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
 
                 var shapedGlyphsIterator = try style.font.shape(text);
                 var cursor: Vec2 = @splat(0.0);
-                var maxAdvance: Vec2 = @splat(0.0);
+
+                var minSize: Vec2 = .{ 0.0, pixelLineHeight };
+
+                var wordStart: usize = 0;
+                var wordAdvance: Vec2 = @splat(0.0);
                 while (shapedGlyphsIterator.next()) |shapedGlyph| {
                     if (layoutGlyphs.capacity < layoutGlyphs.items.len + 1) {
-                        try layoutGlyphs.ensureTotalCapacityPrecise(self.allocator, layoutGlyphs.items.len + 1);
+                        try layoutGlyphs.ensureTotalCapacityPrecise(self.arenaAllocator, layoutGlyphs.items.len + 1);
                     }
+                    const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
+                    const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
+                    const glyphText = try self.arenaAllocator.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]);
                     layoutGlyphs.appendAssumeCapacity(LayoutGlyph{
                         .index = @intCast(shapedGlyph.index),
-                        .position = cursor + shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2,
+                        .position = cursor + offset,
+
+                        .text = glyphText,
+
+                        .advance = advance,
+                        .offset = offset,
                     });
-                    const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
+
                     cursor += advance;
-                    maxAdvance = @max(maxAdvance, advance);
+                    if (style.textWrapping == .word) {
+                        if (std.mem.eql(u8, glyphText, " ")) {
+                            wordStart = layoutGlyphs.items.len;
+                            wordAdvance = @splat(0.0);
+                        } else {
+                            wordAdvance += advance;
+                        }
+                        minSize = @max(minSize, wordAdvance);
+                    } else if (style.textWrapping == .character) {
+                        minSize = @max(minSize, advance);
+                    } else if (style.textWrapping == .none) {
+                        minSize = cursor;
+                    }
                 }
-                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
 
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
                     .z = self.path.items.len,
                     .key = treeNode.key,
                     .size = .{ cursor[0], pixelLineHeight },
-                    .minSize = .{ maxAdvance[0], pixelLineHeight },
-                    .children = .{ .glyphs = layoutGlyphs.items },
+                    .minSize = minSize,
+                    .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs.items, .lineHeight = pixelLineHeight } },
                     .style = style,
                     .handlers = .{},
                 };
@@ -545,9 +641,10 @@ pub fn layout(
         layoutBox.size[1] = viewportSize[1];
     }
     try growAndShrink(arenaAllocator, &layoutBox);
+    wrap(&layoutBox);
     fitWidth(&layoutBox);
     fitHeight(&layoutBox);
-    placeChildrenOf(&layoutBox);
+    place(&layoutBox);
     makeAbsolute(&layoutBox, .{ 0.0, 0.0 });
     return layoutBox;
 }

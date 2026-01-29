@@ -119,6 +119,7 @@ fn renderingMain(
                 .font = try forbear.useFont("SpaceGrotesk", spaceGroteskTtf),
                 .color = .{ 0.0, 0.0, 0.0, 1.0 },
                 .fontSize = 16,
+                .textWrapping = .word,
                 .fontWeight = 400,
                 .lineHeight = 1.0,
             },
