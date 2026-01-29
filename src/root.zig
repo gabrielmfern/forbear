@@ -20,6 +20,8 @@ pub const children = nodeImport.children;
 pub const eventHandler = nodeImport.eventHandler;
 pub const EventHandler = nodeImport.EventHandler;
 pub const Window = @import("window/root.zig").Window;
+pub const components = @import("components.zig");
+pub const FpsCounter = components.FpsCounter;
 
 const Vec2 = @Vector(2, f32);
 
@@ -45,6 +47,7 @@ startTime: f64,
 deltaTime: ?f64,
 /// Seconds
 lastUpdateTime: ?f64,
+viewportSize: Vec2,
 
 // TODO: The alignment here is probably messed up, we should find a way to fix
 // it later
@@ -72,6 +75,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .startTime = timestampSeconds(),
         .deltaTime = null,
         .lastUpdateTime = null,
+        .viewportSize = @splat(0.0),
 
         .componentStates = .init(allocator),
         .componentResolutionState = null,
@@ -133,7 +137,7 @@ const Resolver = struct {
                     .stateByteCursor = 0,
                 };
                 const componentNode = try comp.function(comp.props);
-                if (!forbear.componentStates.contains(key) or forbear.componentResolutionState.?.stateByteCursor != forbear.componentStates.get(key).?.len) {
+                if (forbear.componentStates.contains(key) and forbear.componentResolutionState.?.stateByteCursor != forbear.componentStates.get(key).?.len) {
                     return error.RulesOfHooksViolated;
                 }
                 try self.resolvedComponentKeys.append(self.arenaAllocator, key);
@@ -429,6 +433,11 @@ pub fn ease(progress: f32) f32 {
     return cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
 }
 
+pub fn useViewportSize() Vec2 {
+    const self = getContext();
+    return self.viewportSize;
+}
+
 pub fn useDeltaTime() f64 {
     const self = getContext();
     return self.deltaTime orelse 0.0;
@@ -527,7 +536,7 @@ test "State creation with manual handling" {
     }
 }
 
-pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
+pub fn update(root: *const LayoutBox, viewportSize: Vec2, arena: std.mem.Allocator) !void {
     const self = getContext();
 
     var iterator = try layouting.LayoutTreeIterator.init(arena, root);
@@ -575,6 +584,8 @@ pub fn update(root: *const LayoutBox, arena: std.mem.Allocator) !void {
             _ = self.hoveredElementKeys.swapRemove(i);
         }
     }
+
+    self.viewportSize = viewportSize;
 
     const timestamp = timestampSeconds();
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));

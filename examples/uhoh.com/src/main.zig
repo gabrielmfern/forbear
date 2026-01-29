@@ -18,6 +18,7 @@ fn App() !forbear.Node {
         .fontWeight = 500,
         .fontSize = 12,
     }, .children = try forbear.children(arena, .{
+        forbear.component(forbear.FpsCounter, null, arena),
         forbear.div(.{
             .style = .{
                 .background = .{ .image = comeOnImage },
@@ -112,6 +113,7 @@ fn renderingMain(
             null,
             arena,
         ), arena);
+        const viewportSize = renderer.viewportSize();
         const layoutBox = try forbear.layout(
             arena,
             treeNode,
@@ -123,11 +125,11 @@ fn renderingMain(
                 .fontWeight = 400,
                 .lineHeight = 1.0,
             },
-            renderer.viewportSize(),
+            viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         );
         try renderer.drawFrame(&layoutBox, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
-        try forbear.update(&layoutBox, arena);
+        try forbear.update(&layoutBox, viewportSize, arena);
     }
     try renderer.waitIdle();
 }
