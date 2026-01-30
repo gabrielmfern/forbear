@@ -523,7 +523,6 @@ const LayoutCreator = struct {
                 return layoutBox;
             },
             .text => |text| {
-
                 const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
                 const fontSize: f32 = @floatFromInt(style.fontSize);
