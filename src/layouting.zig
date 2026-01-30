@@ -523,31 +523,26 @@ const LayoutCreator = struct {
                 return layoutBox;
             },
             .text => |text| {
-                var layoutGlyphs = try std.ArrayList(LayoutGlyph).initCapacity(self.arenaAllocator, 1);
-                errdefer layoutGlyphs.deinit(self.arenaAllocator);
-                try layoutGlyphs.ensureTotalCapacityPrecise(self.arenaAllocator, text.len);
-
                 const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
                 const fontSize: f32 = @floatFromInt(style.fontSize);
                 const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * resolutionMultiplier;
                 const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
 
-                var shapedGlyphsIterator = try style.font.shape(text);
+                const shapedGlyphs = try style.font.shape(text);
+                var layoutGlyphs = try self.arenaAllocator.alloc(LayoutGlyph, shapedGlyphs.len);
+                errdefer self.arenaAllocator.free(layoutGlyphs);
                 var cursor: Vec2 = @splat(0.0);
 
                 var minSize: Vec2 = .{ 0.0, pixelLineHeight };
 
                 var wordStart: usize = 0;
                 var wordAdvance: Vec2 = @splat(0.0);
-                while (shapedGlyphsIterator.next()) |shapedGlyph| {
-                    if (layoutGlyphs.capacity < layoutGlyphs.items.len + 1) {
-                        try layoutGlyphs.ensureTotalCapacityPrecise(self.arenaAllocator, layoutGlyphs.items.len + 1);
-                    }
+                for (shapedGlyphs, 0..) |shapedGlyph, i| {
                     const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
                     const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
                     const glyphText = try self.arenaAllocator.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]);
-                    layoutGlyphs.appendAssumeCapacity(LayoutGlyph{
+                    layoutGlyphs[i] = LayoutGlyph{
                         .index = @intCast(shapedGlyph.index),
                         .position = cursor + offset,
 
@@ -555,12 +550,12 @@ const LayoutCreator = struct {
 
                         .advance = advance,
                         .offset = offset,
-                    });
+                    };
 
                     cursor += advance;
                     if (style.textWrapping == .word) {
                         if (std.mem.eql(u8, glyphText, " ")) {
-                            wordStart = layoutGlyphs.items.len;
+                            wordStart = i;
                             wordAdvance = @splat(0.0);
                         } else {
                             wordAdvance += advance;
@@ -579,7 +574,7 @@ const LayoutCreator = struct {
                     .key = treeNode.key,
                     .size = .{ cursor[0], pixelLineHeight },
                     .minSize = minSize,
-                    .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs.items, .lineHeight = pixelLineHeight } },
+                    .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight } },
                     .style = style,
                     .handlers = .{},
                 };

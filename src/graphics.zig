@@ -3656,7 +3656,9 @@ pub const Renderer = struct {
         self.framesRenderedInSwapchain += 1;
         // We cap this because the driver's native Vulkan "frame rate capper"
         // can be disabled causing a "slow motion" effect during swapchain
-        // recreation (generally done in window resizing)
+        // recreation. (generally done in window resizing)
+        // This is only done for the first 50 frames because after that FIFO
+        // should kick in properly.
         if (builtin.os.tag == .linux and self.framesRenderedInSwapchain < 50) {
             try self.frameRateCapper.cap(targetFrameTimeNs);
         }
