@@ -35,6 +35,8 @@ pub const c = @cImport({
             @cInclude("objc/message.h");
 
             @cInclude("vulkan/vulkan_metal.h");
+
+            @cInclude("CoreGraphics/CoreGraphics.h");
         },
         else => {},
     }
