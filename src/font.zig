@@ -845,7 +845,6 @@ pub fn rasterize(
         @intCast(dpi[1]),
     ));
 
-    std.log.debug("glyph index {d}", .{glyphIndex});
     try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_TARGET_LCD));
     const glyph = self.handle.*.glyph;
     std.debug.assert(glyph != null);
