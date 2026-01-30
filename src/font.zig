@@ -685,7 +685,7 @@ pub fn init(allocator: std.mem.Allocator, name: []const u8, memory: []const u8) 
 }
 
 pub fn deinit(self: *@This()) void {
-    for (self.shapingCache.entries) |entry| {
+    for (self.shapingCache.entries[0..self.shapingCache.length]) |entry| {
         self.allocator.free(entry.key);
         self.allocator.free(entry.value);
     }
