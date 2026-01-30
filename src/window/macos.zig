@@ -11,14 +11,17 @@ const Self = @This();
 var g_current_window: ?*Self = null;
 
 pub const Handlers = struct {
+    pointerMotion: ?struct {
+        data: *anyopaque,
+        function: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
+    } = null,
     resize: ?struct {
         data: *anyopaque,
         function: *const fn (
             window: *Self,
-            new_width: u32,
-            new_height: u32,
-            new_scale: u32,
-            new_dpi: [2]u32,
+            newWidth: u32,
+            newHeight: u32,
+            newDpi: [2]u32,
             data: *anyopaque,
         ) void,
     } = null,
@@ -53,6 +56,12 @@ fn NSMakeRect(x: f64, y: f64, w: f64, h: f64) NSRect {
 
 const NSApplicationActivationPolicyRegular: NSInteger = 0;
 const NSBackingStoreBuffered: NSUInteger = 2;
+
+// NSEventType constants
+const NSEventTypeMouseMoved: NSUInteger = 5;
+const NSEventTypeLeftMouseDragged: NSUInteger = 6;
+const NSEventTypeRightMouseDragged: NSUInteger = 7;
+const NSEventTypeOtherMouseDragged: NSUInteger = 27;
 
 const NSWindowStyleMaskTitled: NSUInteger = 1 << 0;
 const NSWindowStyleMaskClosable: NSUInteger = 1 << 1;
@@ -107,7 +116,7 @@ fn windowDidResize(self_obj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c)
 
         // Call the resize handler if it exists
         if (window.handlers.resize) |handler| {
-            handler.function(window, new_width, new_height, window.scale, window.dpi, handler.data);
+            handler.function(window, new_width, new_height, window.dpi, handler.data);
         }
     }
 }
@@ -123,7 +132,7 @@ fn windowDidChangeScreen(self_obj: c.id, _cmd: c.SEL, notification: c.id) callco
 
         // Notify via resize handler since DPI/scale may have changed
         if (window.handlers.resize) |handler| {
-            handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
+            handler.function(window, window.width, window.height, window.dpi, handler.data);
         }
     }
 }
@@ -139,7 +148,7 @@ fn windowDidChangeBackingProperties(self_obj: c.id, _cmd: c.SEL, notification: c
 
         // Notify via resize handler since scale may have changed
         if (window.handlers.resize) |handler| {
-            handler.function(window, window.width, window.height, window.scale, window.dpi, handler.data);
+            handler.function(window, window.width, window.height, window.dpi, handler.data);
         }
     }
 }
@@ -444,9 +453,26 @@ pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
     // TODO: map to NSCursor.
 }
 
+pub fn setPointerMotionHandler(
+    self: *Self,
+    handler: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
+    data: *anyopaque,
+) void {
+    self.handlers.pointerMotion = .{
+        .data = data,
+        .function = handler,
+    };
+}
+
 pub fn setResizeHandler(
     self: *Self,
-    handler: *const fn (window: *Self, new_width: u32, new_height: u32, new_scale: u32, new_dpi: [2]u32, data: *anyopaque) void,
+    handler: *const fn (
+        window: *Self,
+        newWidth: u32,
+        newHeight: u32,
+        newDpi: [2]u32,
+        data: *anyopaque,
+    ) void,
     data: *anyopaque,
 ) void {
     self.handlers.resize = .{
@@ -455,38 +481,146 @@ pub fn setResizeHandler(
     };
 }
 
+/// Returns the target frame time in nanoseconds based on the display's refresh rate.
+/// Falls back to 60Hz (~16.67ms) if the refresh rate cannot be determined.
+pub fn targetFrameTimeNs(self: *const Self) u64 {
+    const fallback_60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
+
+    // Get the screen that the window is currently on
+    const getScreen = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
+    var screen = getScreen(self.window, sel("screen"));
+
+    if (screen == null) {
+        // Fallback to main screen if window's screen is not available
+        const NSScreen = getClass("NSScreen");
+        const mainScreen = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
+        screen = mainScreen(NSScreen, sel("mainScreen"));
+        if (screen == null) return fallback_60hz;
+    }
+
+    // Get the display ID for this screen
+    const deviceDescription = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
+    const device_desc = deviceDescription(screen, sel("deviceDescription"));
+    if (device_desc == null) return fallback_60hz;
+
+    // Get the NSScreenNumber (CGDirectDisplayID) from the device description
+    const NSScreenNumber = nsstring("NSScreenNumber");
+    const objectForKey = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) c.id);
+    const screen_number_value = objectForKey(device_desc, sel("objectForKey:"), NSScreenNumber);
+    if (screen_number_value == null) return fallback_60hz;
+
+    // Get the unsigned int value (CGDirectDisplayID)
+    const unsignedIntValue = msgSend(*const fn (c.id, c.SEL) callconv(.c) c_uint);
+    const display_id = unsignedIntValue(screen_number_value, sel("unsignedIntValue"));
+
+    // Use Core Graphics to get the display mode and refresh rate
+    const display_mode = c.CGDisplayCopyDisplayMode(display_id);
+    if (display_mode == null) return fallback_60hz;
+    defer c.CGDisplayModeRelease(display_mode);
+
+    const refresh_rate = c.CGDisplayModeGetRefreshRate(display_mode);
+
+    // Some displays (especially built-in Retina displays) report 0 refresh rate
+    // In that case, fall back to 60Hz
+    if (refresh_rate <= 0) return fallback_60hz;
+
+    // Convert refresh rate (Hz) to frame time (nanoseconds)
+    return @intFromFloat(@round(1_000_000_000.0 / refresh_rate));
+}
+
+fn processEvent(self: *Self, event: c.id) void {
+    // Get event type
+    const getType = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSUInteger);
+    const event_type = getType(event, sel("type"));
+
+    // Handle mouse motion events
+    if (event_type == NSEventTypeMouseMoved or
+        event_type == NSEventTypeLeftMouseDragged or
+        event_type == NSEventTypeRightMouseDragged or
+        event_type == NSEventTypeOtherMouseDragged)
+    {
+        if (self.handlers.pointerMotion) |handler| {
+            // Get the mouse location in window coordinates (relative to content view, origin at bottom-left)
+            const locationInWindow = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSPoint);
+            const location = locationInWindow(event, sel("locationInWindow"));
+
+            // Get the content view's bounds to get the correct height for coordinate conversion
+            const getBounds = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSRect);
+            const content_bounds = getBounds(self.content_view, sel("bounds"));
+
+            // macOS has origin at bottom-left, convert to top-left origin using content view height
+            const x: f32 = @floatCast(location.x);
+            const y: f32 = @as(f32, @floatCast(content_bounds.size.height)) - @as(f32, @floatCast(location.y));
+
+            // Get timestamp (in seconds since system startup, convert to milliseconds)
+            const getTimestamp = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
+            const timestamp = getTimestamp(event, sel("timestamp"));
+            const time_ms: u32 = @intFromFloat(timestamp * 1000.0);
+
+            handler.function(self, time_ms, x, y, handler.data);
+        }
+    }
+}
+
 pub fn handleEvents(self: *Self) !void {
-    // Non-blocking event pump; lets callers keep a per-frame loop.
     const NSDate = getClass("NSDate");
+    const distantFuture = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
     const distantPast = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-    const untilDate = distantPast(NSDate, sel("distantPast"));
 
     const mask_any: NSUInteger = std.math.maxInt(NSUInteger);
     const mode = nsstring("kCFRunLoopDefaultMode");
 
     const nextEvent = msgSend(*const fn (c.id, c.SEL, NSUInteger, c.id, c.id, BOOL) callconv(.c) c.id);
     const sendEvent = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
+    const updateWindows = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
+    const isVisible = msgSend(*const fn (c.id, c.SEL) callconv(.c) BOOL);
 
-    while (true) {
+    // Enable mouse moved events for our window
+    const setAcceptsMouseMovedEvents = msgSend(*const fn (c.id, c.SEL, BOOL) callconv(.c) void);
+    setAcceptsMouseMovedEvents(self.window, sel("setAcceptsMouseMovedEvents:"), true);
+
+    while (self.running) {
+        // Block waiting for the next event (like GetMessageW on Windows or wl_display_dispatch on Linux)
+        const blocking_date = distantFuture(NSDate, sel("distantFuture"));
         const event = nextEvent(
             self.app,
             sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
             mask_any,
-            untilDate,
+            blocking_date,
             mode,
             true,
         );
-        if (event == null) break;
-        sendEvent(self.app, sel("sendEvent:"), event);
-    }
 
-    const updateWindows = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
-    updateWindows(self.app, sel("updateWindows"));
+        if (event != null) {
+            // Process event for our handlers first
+            self.processEvent(event);
 
-    // Treat a closed window as "stop running".
-    const isVisible = msgSend(*const fn (c.id, c.SEL) callconv(.c) BOOL);
-    if (isVisible(self.window, sel("isVisible")) == false) {
-        self.running = false;
+            // Then let the system handle it
+            sendEvent(self.app, sel("sendEvent:"), event);
+
+            // Process any additional pending events without blocking
+            const non_blocking_date = distantPast(NSDate, sel("distantPast"));
+            while (true) {
+                const pending_event = nextEvent(
+                    self.app,
+                    sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
+                    mask_any,
+                    non_blocking_date,
+                    mode,
+                    true,
+                );
+                if (pending_event == null) break;
+                self.processEvent(pending_event);
+                sendEvent(self.app, sel("sendEvent:"), pending_event);
+            }
+
+            updateWindows(self.app, sel("updateWindows"));
+        }
+
+        // Check if window was closed
+        if (isVisible(self.window, sel("isVisible")) == false) {
+            self.running = false;
+        }
     }
 }
 
