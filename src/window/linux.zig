@@ -748,20 +748,7 @@ pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
 
 pub fn handleEvents(self: *Self) !void {
     while (self.running) {
-        if (c.wl_display_dispatch(self.wlDisplay) != 0) {
-            return error.WaylandDispatchFailed;
-        }
-
-        if (c.wl_display_flush(self.wlDisplay) == -1) {
-            c.wl_display_cancel_read(self.wlDisplay);
-            return error.WaylandFlushFailed;
-        }
-
-        if (c.wl_display_read_events(self.wlDisplay) == -1) {
-            return error.WaylandReadEventsFailed;
-        }
-
-        if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
+        if (c.wl_display_dispatch(self.wlDisplay) == -1) {
             return error.WaylandDispatchFailed;
         }
     }
