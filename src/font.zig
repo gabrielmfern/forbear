@@ -216,11 +216,436 @@ fn ensureNoError(errorCode: c.FT_Error) FreetypeError!void {
 var freetypeLibrary: c.FT_Library = null;
 
 handle: c.FT_Face,
+allocator: std.mem.Allocator,
 kbtsContext: *c.kbts_shape_context,
 kbtsFont: *c.kbts_font,
 key: u64,
 
-pub fn init(name: []const u8, memory: []const u8) FreetypeError!@This() {
+shapingCache: ShapingCache,
+
+const ShapingCache = LRU([]const u8, []ShapedGlyph, 256, std.hash_map.StringContext);
+
+pub fn LRU(
+    comptime Key: type,
+    comptime Value: type,
+    comptime capacity: usize,
+    comptime Context: type,
+) type {
+    return struct {
+        pub const Entry = struct {
+            value: Value,
+            key: Key,
+            next: ?usize = null,
+            prev: ?usize = null,
+        };
+
+        entries: [capacity]Entry,
+        first: ?usize,
+        last: ?usize,
+        length: usize,
+        entries_map: EntriesMap,
+
+        const EntriesMap = std.HashMap(
+            Key,
+            usize,
+            Context,
+            std.hash_map.default_max_load_percentage,
+        );
+
+        pub fn init(allocator: std.mem.Allocator) error{OutOfMemory}!@This() {
+            // TODO: even though this allocation is only done once, it would ideally be data from
+            // the stack which would be much more efficient here, but there are no subsequent
+            // allocations done, and we only use methods that assert enough capacity
+            var entries_map = EntriesMap.init(allocator);
+            try entries_map.ensureUnusedCapacity(capacity);
+            return @This(){
+                .entries = undefined,
+                .first = null,
+                .last = null,
+                .length = 0,
+                .entries_map = entries_map,
+            };
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self.entries_map.deinit();
+        }
+
+        pub fn contains(self: *@This(), key: Key) bool {
+            return self.entries_map.contains(key);
+        }
+
+        pub fn clear(self: *@This()) void {
+            self.entries_map.clearRetainingCapacity();
+            self.first = null;
+            self.last = null;
+            self.length = 0;
+        }
+
+        /// Gets the data without updating its recency
+        pub fn peek(self: *@This(), key: Key) ?*const Entry {
+            if (self.entries_map.get(key)) |index| {
+                return &self.entries[index];
+            } else {
+                return null;
+            }
+        }
+
+        fn join(self: *@This(), a: ?usize, b: ?usize) void {
+            if (a != null) {
+                self.entries[a.?].next = b;
+            }
+            if (b != null) {
+                self.entries[b.?].prev = a;
+            }
+        }
+
+        fn set_first(self: *@This(), index: usize) void {
+            if (self.first != index) {
+                const entry = &self.entries[index];
+                self.join(entry.prev, entry.next);
+                if (entry.prev != null and self.last == index) {
+                    self.last = entry.prev.?;
+                }
+
+                if (self.first) |first| {
+                    self.join(index, first);
+                }
+                entry.prev = null;
+                self.first = index;
+                if (self.last == null) {
+                    self.last = index;
+                }
+            }
+        }
+
+        const PutResult = struct {
+            index: usize,
+            evicted: ?Entry,
+        };
+
+        pub fn put(self: *@This(), key: Key, value: Value) PutResult {
+            if (self.entries_map.get(key)) |index| {
+                self.entries[index].value = value;
+                self.set_first(index);
+                return .{ .index = index, .evicted = null };
+            }
+
+            const entry = Entry{
+                .key = key,
+                .value = value,
+                .next = null,
+                .prev = null,
+            };
+            if (self.length >= capacity) {
+                std.debug.assert(self.last != null);
+                std.debug.assert(self.first != null);
+
+                const removed_least_recent_entry = self.entries[self.last.?];
+
+                // since the capacity of the entries is full, we reuse the last entry's memory with
+                // the one from this new one
+                const new_entry_index = self.last.?;
+                self.entries[new_entry_index].key = entry.key;
+                self.entries[new_entry_index].value = entry.value;
+                self.set_first(new_entry_index);
+                // we remove before here to ensure the capacity of the hashmap is available for the
+                // new entry's key
+                _ = self.entries_map.remove(removed_least_recent_entry.key);
+                self.entries_map.putAssumeCapacity(key, new_entry_index);
+
+                return .{ .index = new_entry_index, .evicted = removed_least_recent_entry };
+            } else {
+                const new_entry_index = self.length;
+                self.entries[new_entry_index] = entry;
+                self.set_first(new_entry_index);
+                self.length += 1;
+
+                self.entries_map.putAssumeCapacity(key, new_entry_index);
+
+                return .{ .index = new_entry_index, .evicted = null };
+            }
+        }
+
+        pub fn print(self: @This()) void {
+            var current = if (self.first) |first| self.entries[first] else null;
+            var index: usize = 0;
+            while (current) |entry| {
+                std.debug.print("Entry {}: key = {any}, value = {s}\n", .{ index, entry.key, entry.value });
+                current = if (entry.next) |next| self.entries[next] else null;
+                index += 1;
+            }
+        }
+
+        fn get_index(self: *@This(), key: Key) ?usize {
+            if (self.entries_map.get(key)) |entry_index| {
+                std.debug.assert(self.first != null);
+                if (entry_index != self.first.?) {
+                    self.set_first(entry_index);
+                }
+                return entry_index;
+            } else {
+                return null;
+            }
+        }
+
+        pub fn getMut(self: *@This(), key: Key) ?*Entry {
+            if (self.get_index(key)) |index| {
+                return &self.entries[index];
+            } else {
+                return null;
+            }
+        }
+
+        pub fn get(self: *@This(), key: Key) ?*const Entry {
+            if (self.get_index(key)) |index| {
+                return &self.entries[index];
+            } else {
+                return null;
+            }
+        }
+    };
+}
+
+test "LRU cache - set_first" {
+    const LRUIntString = LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32));
+    var lru = try LRUIntString.init(std.testing.allocator);
+    defer lru.deinit();
+
+    lru.entries[0] = LRUIntString.Entry{ .key = 1, .value = "one" };
+    lru.entries[1] = LRUIntString.Entry{ .key = 2, .value = "two" };
+    lru.entries[2] = LRUIntString.Entry{ .key = 3, .value = "three" };
+
+    lru.first = 0;
+    lru.last = 2;
+
+    lru.set_first(2);
+
+    try std.testing.expectEqual(2, lru.first.?);
+    try std.testing.expectEqual(3, lru.entries[lru.first.?].key);
+    try std.testing.expectEqualSlices(u8, "three", lru.entries[lru.first.?].value);
+}
+
+test "LRU Cache" {
+    var lru = try LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+
+    defer lru.deinit();
+
+    _ = lru.put(1, "1");
+    _ = lru.put(2, "2");
+    _ = lru.put(3, "3");
+    std.debug.print("After inserting all three entries:\n", .{});
+    lru.print();
+
+    const entry_2 = lru.get(2);
+    try std.testing.expect(entry_2 != null);
+    try std.testing.expectEqual(2, entry_2.?.key);
+    try std.testing.expectEqualSlices(u8, "2", entry_2.?.value);
+    try std.testing.expectEqual(entry_2.?, &lru.entries[lru.first.?]);
+    std.debug.print("After accessing entry 2:\n", .{});
+    lru.print();
+
+    const entry_1 = lru.get(1);
+    try std.testing.expect(entry_1 != null);
+    try std.testing.expectEqual(1, entry_1.?.key);
+    try std.testing.expectEqualSlices(u8, "1", entry_1.?.value);
+    try std.testing.expectEqual(entry_1.?, &lru.entries[lru.first.?]);
+    std.debug.print("After accessing entry 1:\n", .{});
+    lru.print();
+
+    const entry_3 = lru.get(3);
+    try std.testing.expect(entry_3 != null);
+    try std.testing.expectEqual(3, entry_3.?.key);
+    try std.testing.expectEqualSlices(u8, "3", entry_3.?.value);
+    try std.testing.expectEqual(entry_3.?, &lru.entries[lru.first.?]);
+    std.debug.print("After accessing entry 3:\n", .{});
+    lru.print();
+
+    // Adding a new value should evict the least recently used value
+    const entry_4 = lru.put(4, "4");
+    std.debug.print("After adding the entry '4' beyond the capacity of the LRU:\n", .{});
+    lru.print();
+    try std.testing.expectEqual(entry_4, lru.first.?);
+    // The entry for 2 should have been discarded completely
+    try std.testing.expectEqual(entry_1.?, &lru.entries[lru.last.?]);
+    try std.testing.expect(lru.get(2) == null);
+}
+
+test "LRU cache - update existing key" {
+    var lru = try LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+    defer lru.deinit();
+
+    _ = lru.put(1, "one");
+    _ = lru.put(2, "two");
+    _ = lru.put(3, "three");
+
+    // Update existing key should replace value and move to front
+    const updated_index = lru.put(2, "TWO");
+
+    const entry = lru.get(2);
+    try std.testing.expect(entry != null);
+    try std.testing.expectEqualSlices(u8, "TWO", entry.?.value);
+    try std.testing.expectEqual(updated_index, lru.first.?);
+    try std.testing.expectEqual(2, lru.entries[lru.first.?].key);
+    try std.testing.expectEqual(3, lru.length);
+}
+
+test "LRU cache - empty cache operations" {
+    var lru = try LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+    defer lru.deinit();
+
+    // Get from empty cache should return null
+    try std.testing.expect(lru.get(1) == null);
+    try std.testing.expect(lru.peek(1) == null);
+    try std.testing.expectEqual(false, lru.contains(1));
+    try std.testing.expectEqual(null, lru.first);
+    try std.testing.expectEqual(null, lru.last);
+    try std.testing.expectEqual(0, lru.length);
+}
+
+test "LRU cache - single item cache" {
+    var lru = try LRU(i32, []const u8, 1, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+    defer lru.deinit();
+
+    _ = lru.put(1, "one");
+    try std.testing.expectEqual(1, lru.length);
+    try std.testing.expectEqual(0, lru.first.?);
+    try std.testing.expectEqual(0, lru.last.?);
+
+    const entry = lru.get(1);
+    try std.testing.expect(entry != null);
+    try std.testing.expectEqualSlices(u8, "one", entry.?.value);
+
+    // Adding another item should evict the first
+    _ = lru.put(2, "two");
+    try std.testing.expectEqual(1, lru.length);
+    try std.testing.expect(lru.get(1) == null);
+
+    const entry2 = lru.get(2);
+    try std.testing.expect(entry2 != null);
+    try std.testing.expectEqualSlices(u8, "two", entry2.?.value);
+}
+
+test "LRU cache - multiple accesses same key" {
+    var lru = try LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+    defer lru.deinit();
+
+    _ = lru.put(1, "one");
+    _ = lru.put(2, "two");
+    _ = lru.put(3, "three");
+
+    // Access same key multiple times
+    _ = lru.get(2);
+    _ = lru.get(2);
+    _ = lru.get(2);
+
+    // Should still be at front
+    try std.testing.expectEqual(1, lru.first.?);
+    try std.testing.expectEqual(2, lru.entries[lru.first.?].key);
+
+    // Add new item, key 2 was most recently used, so 1 should be evicted
+    _ = lru.put(4, "four");
+    try std.testing.expect(lru.get(1) == null);
+    try std.testing.expect(lru.get(2) != null);
+}
+
+test "LRU cache - peek does not affect order" {
+    var lru = try LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+    defer lru.deinit();
+
+    _ = lru.put(1, "one");
+    _ = lru.put(2, "two");
+    _ = lru.put(3, "three");
+
+    // Peek at key 1 (currently at back)
+    const peeked = lru.peek(1);
+    try std.testing.expect(peeked != null);
+    try std.testing.expectEqualSlices(u8, "one", peeked.?.value);
+
+    // Key 3 should still be at front
+    try std.testing.expectEqual(2, lru.first.?);
+    try std.testing.expectEqual(3, lru.entries[lru.first.?].key);
+
+    // Add new item, key 1 should be evicted (not moved to front by peek)
+    _ = lru.put(4, "four");
+    try std.testing.expect(lru.get(1) == null);
+}
+
+test "LRU cache - contains" {
+    var lru = try LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+    defer lru.deinit();
+
+    _ = lru.put(1, "one");
+    _ = lru.put(2, "two");
+
+    try std.testing.expectEqual(true, lru.contains(1));
+    try std.testing.expectEqual(true, lru.contains(2));
+    try std.testing.expectEqual(false, lru.contains(3));
+}
+
+test "LRU cache - clear" {
+    var lru = try LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+    defer lru.deinit();
+
+    _ = lru.put(1, "one");
+    _ = lru.put(2, "two");
+    _ = lru.put(3, "three");
+
+    try std.testing.expectEqual(3, lru.length);
+
+    lru.clear();
+
+    try std.testing.expectEqual(0, lru.length);
+    try std.testing.expectEqual(null, lru.first);
+    try std.testing.expectEqual(null, lru.last);
+    try std.testing.expect(lru.get(1) == null);
+    try std.testing.expect(lru.get(2) == null);
+    try std.testing.expect(lru.get(3) == null);
+
+    // Should be able to add new items after clear
+    _ = lru.put(4, "four");
+    const entry = lru.get(4);
+    try std.testing.expect(entry != null);
+    try std.testing.expectEqualSlices(u8, "four", entry.?.value);
+}
+
+test "LRU cache - getMut allows modification" {
+    var lru = try LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+    defer lru.deinit();
+
+    _ = lru.put(1, "one");
+
+    const entry = lru.getMut(1);
+    try std.testing.expect(entry != null);
+    entry.?.value = "modified";
+
+    const retrieved = lru.get(1);
+    try std.testing.expect(retrieved != null);
+    try std.testing.expectEqualSlices(u8, "modified", retrieved.?.value);
+}
+
+test "LRU cache - eviction order with mixed access" {
+    var lru = try LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32)).init(std.testing.allocator);
+    defer lru.deinit();
+
+    _ = lru.put(1, "one");
+    _ = lru.put(2, "two");
+    _ = lru.put(3, "three");
+
+    // Access pattern: 1, 3, (2 not accessed)
+    _ = lru.get(1);
+    _ = lru.get(3);
+
+    // Add new item, 2 should be evicted as least recently used
+    _ = lru.put(4, "four");
+
+    try std.testing.expect(lru.get(1) != null);
+    try std.testing.expect(lru.get(2) == null);
+    try std.testing.expect(lru.get(3) != null);
+    try std.testing.expect(lru.get(4) != null);
+}
+
+pub fn init(allocator: std.mem.Allocator, name: []const u8, memory: []const u8) FreetypeError!@This() {
     if (freetypeLibrary == null) {
         try ensureNoError(c.FT_Init_FreeType(&freetypeLibrary));
         // Enable LCD filtering for subpixel rendering to reduce color fringes.
@@ -250,6 +675,8 @@ pub fn init(name: []const u8, memory: []const u8) FreetypeError!@This() {
     wyHash.update(name);
 
     return @This(){
+        .allocator = allocator,
+        .shapingCache = try ShapingCache.init(allocator),
         .handle = face,
         .kbtsContext = kbtsContext.?,
         .kbtsFont = kbtsFont,
@@ -257,7 +684,12 @@ pub fn init(name: []const u8, memory: []const u8) FreetypeError!@This() {
     };
 }
 
-pub fn deinit(self: @This()) void {
+pub fn deinit(self: *@This()) void {
+    for (self.shapingCache.entries) |entry| {
+        self.allocator.free(entry.key);
+        self.allocator.free(entry.value);
+    }
+    self.shapingCache.deinit();
     c.kbts_DestroyShapeContext(self.kbtsContext);
     ensureNoError(c.FT_Done_Face(self.handle)) catch @panic("Failed to done FT_Face");
 }
@@ -292,13 +724,14 @@ pub const ShapingIterator = struct {
                     return self.next();
                 }
 
+                const utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint);
                 return ShapedGlyph{
                     .index = self.glyph.*.Id,
                     .advance = .{ @floatFromInt(self.glyph.*.AdvanceX), @floatFromInt(self.glyph.*.AdvanceY) },
                     .offset = .{ @floatFromInt(self.glyph.*.OffsetX), @floatFromInt(self.glyph.*.OffsetY) },
                     // When not using llvm, if we don't set this in a variable,
                     // the index in ShapedGlyph becomes 0 because of some Zig bug
-                    .utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint),
+                    .utf8 = utf8,
                 };
             }
         }
@@ -312,17 +745,37 @@ pub const ShapingIterator = struct {
     }
 };
 
-pub fn shape(self: @This(), text: []const u8) !ShapingIterator {
+pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
+    if (self.shapingCache.get(text)) |cache| {
+        return cache.value;
+    }
+
     // TODO: pass the language and direction down as styles
-    c.kbts_ShapeBegin(self.kbtsContext, c.KBTS_DIRECTION_DONT_KNOW, c.KBTS_LANGUAGE_ENGLISH);
+    c.kbts_ShapeBegin(self.kbtsContext, c.KBTS_DIRECTION_RTL, c.KBTS_LANGUAGE_DONT_KNOW);
     c.kbts_ShapeUtf8(self.kbtsContext, text.ptr, @intCast(text.len), c.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX);
     c.kbts_ShapeEnd(self.kbtsContext);
 
-    return ShapingIterator{
+    var glyphs = try self.allocator.alloc(ShapedGlyph, text.len); // worst case for all glyphs
+    errdefer self.allocator.free(glyphs);
+    var glyphCount: usize = 0;
+
+    var iterator = ShapingIterator{
         .run = null,
         .glyph = undefined,
         .kbtsContext = self.kbtsContext,
     };
+    while (iterator.next()) |shapedGlyph| {
+        glyphs[glyphCount] = shapedGlyph;
+        glyphCount += 1;
+    }
+
+    glyphs = try self.allocator.realloc(glyphs, glyphCount);
+    const putResult = self.shapingCache.put(try self.allocator.dupe(u8, text), glyphs);
+    if (putResult.evicted) |evicted| {
+        self.allocator.free(evicted.key);
+        self.allocator.free(evicted.value);
+    }
+    return glyphs;
 }
 
 pub fn unitsPerEm(self: @This()) c_ushort {
@@ -337,9 +790,9 @@ pub fn descent(self: @This()) f32 {
     return @floatFromInt(self.handle.*.descender);
 }
 
-/// returns line height in points coordinates, that is multiples of units_per_em
+/// Teturns line height in points coordinates, that is multiples of unitsPerEm.
 ///
-/// it can simply be multiplied by the font size divided by units_per_em to get the line height in pixels
+/// It can simply be multiplied by the font size divided by unitsPerEm to get the line height in pixels.
 pub fn lineHeight(self: @This()) f32 {
     return self.ascent() - self.descent();
 }
@@ -392,6 +845,7 @@ pub fn rasterize(
         @intCast(dpi[1]),
     ));
 
+    std.log.debug("glyph index {d}", .{glyphIndex});
     try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_TARGET_LCD));
     const glyph = self.handle.*.glyph;
     std.debug.assert(glyph != null);
