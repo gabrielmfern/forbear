@@ -599,16 +599,27 @@ fn timestampSeconds() f64 {
 pub fn setWindowHandlers(window: *Window) void {
     const self = getContext();
 
-    window.setPointerMotionHandler(
-        &(struct {
-            fn handler(_: *Window, time: u32, x: f32, y: f32, data: *anyopaque) void {
-                _ = time;
+    window.handlers.resize = .{
+        .function = &(struct {
+            fn handler(_: *Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
+                _ = dpi;
+                const ctx: *Context = @ptrCast(@alignCast(data));
+                ctx.renderer.handleResize(width, height) catch |err| {
+                    std.log.err("Renderer failed to handle resize: {}", .{err});
+                };
+            }
+        }).handler,
+        .data = @ptrCast(@alignCast(self)),
+    };
+    window.handlers.pointerMotion = .{
+        .function = &(struct {
+            fn handler(_: *Window, x: f32, y: f32, data: *anyopaque) void {
                 const ctx: *Context = @ptrCast(@alignCast(data));
                 ctx.mousePosition = .{ x, y };
             }
         }).handler,
-        @ptrCast(@alignCast(self)),
-    );
+        .data = @ptrCast(@alignCast(self)),
+    };
 }
 
 pub fn deinit() void {
