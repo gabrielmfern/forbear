@@ -121,10 +121,6 @@ pub fn main() !void {
     try forbear.init(allocator, &renderer);
     defer forbear.deinit();
     forbear.setWindowHandlers(window);
-    window.setResizeHandler(
-        &handleResize,
-        @ptrCast(@alignCast(&renderer)),
-    );
 
     const renderingThread = try std.Thread.spawn(
         .{ .allocator = allocator },
@@ -140,11 +136,4 @@ pub fn main() !void {
     try window.handleEvents();
 }
 
-fn handleResize(window: *forbear.Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
-    _ = window;
-    _ = dpi;
-    const renderer: *forbear.Graphics.Renderer = @ptrCast(@alignCast(data));
-    renderer.handleResize(width, height) catch |err| {
-        std.log.err("Renderer could not handle window resize {}", .{err});
-    };
-}
+
