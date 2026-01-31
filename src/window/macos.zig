@@ -201,7 +201,6 @@ metal_layer: c.id,
 // Window state
 width: u32,
 height: u32,
-scale: u32,
 dpi: [2]u32,
 title: [:0]const u8,
 app_id: [:0]const u8,
@@ -225,7 +224,6 @@ pub fn init(
     self.width = width;
     self.height = height;
     self.dpi = .{ 96, 96 };
-    self.scale = 120;
     self.title = title;
     self.app_id = app_id;
     self.running = true;
@@ -375,58 +373,63 @@ pub fn updateDpiAndScale(self: *Self) void {
 
 fn updateDpiFromScreen(self: *Self, screen: c.id) void {
     // Get the backing scale factor (1.0 for standard displays, 2.0 for Retina)
-    const backingScaleFactor = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
-    const scale_factor = backingScaleFactor(screen, sel("backingScaleFactor"));
+    // const backingScaleFactor = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
+    // const scale_factor = backingScaleFactor(screen, sel("backingScaleFactor"));
 
     // Update scale (using the same 120-based scale as Linux for consistency)
     // scale = 120 means 1.0x, scale = 240 means 2.0x (Retina)
-    self.scale = @intFromFloat(@round(scale_factor * 120.0));
+    // self.scale = @intFromFloat(@round(scale_factor * 120.0));
 
-    // Get the screen's frame (in points) and backing pixel dimensions
-    const getFrame = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSRect);
-    const screen_frame = getFrame(screen, sel("frame"));
-
-    // Get the NSDeviceDescription dictionary to access physical screen info
+    // Get the NSDeviceDescription dictionary to access display ID
     const deviceDescription = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
     const device_desc = deviceDescription(screen, sel("deviceDescription"));
 
-    if (device_desc != null) {
-        // Try to get NSDeviceResolution which contains the DPI
-        const NSDeviceResolution = nsstring("NSDeviceResolution");
-        const objectForKey = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) c.id);
-        const resolution_value = objectForKey(device_desc, sel("objectForKey:"), NSDeviceResolution);
-
-        if (resolution_value != null) {
-            // NSDeviceResolution is an NSValue containing an NSSize with DPI
-            const sizeValue = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSSize);
-            const dpi_size = sizeValue(resolution_value, sel("sizeValue"));
-
-            self.dpi = .{
-                @intFromFloat(@round(dpi_size.width)),
-                @intFromFloat(@round(dpi_size.height)),
-            };
-
-            std.log.debug(
-                "macOS screen DPI: {d}x{d}, scale factor: {d}, screen size: {d}x{d}",
-                .{ self.dpi[0], self.dpi[1], scale_factor, screen_frame.size.width, screen_frame.size.height },
-            );
-            return;
-        }
+    if (device_desc == null) {
+        // Fallback to 96 DPI if we can't get device description
+        self.dpi = .{ 96, 96 };
+        return;
     }
 
-    // Fallback: Calculate DPI from screen size if NSDeviceResolution is not available
-    // macOS uses 72 points per inch as the base, so actual DPI = 72 * backingScaleFactor
-    // However, for physical DPI we need to consider the actual display
-    // Most Mac displays are around 110-220 DPI depending on model
+    // Get the NSScreenNumber (CGDirectDisplayID) from the device description
+    const NSScreenNumber = nsstring("NSScreenNumber");
+    const objectForKey = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) c.id);
+    const screen_number_value = objectForKey(device_desc, sel("objectForKey:"), NSScreenNumber);
 
-    // Use 72 * scale_factor as a reasonable approximation
-    // This gives 72 DPI for standard displays and 144 DPI for Retina
-    const base_dpi: u32 = @intFromFloat(@round(72.0 * scale_factor));
-    self.dpi = .{ base_dpi, base_dpi };
+    if (screen_number_value == null) {
+        self.dpi = .{ 96, 96 };
+        return;
+    }
+
+    const unsignedIntValue = msgSend(*const fn (c.id, c.SEL) callconv(.c) c_uint);
+    const display_id = unsignedIntValue(screen_number_value, sel("unsignedIntValue"));
+
+    // Get physical screen size in millimeters using CoreGraphics
+    const physical_size_mm = c.CGDisplayScreenSize(display_id);
+
+    // Get pixel dimensions of the display
+    const pixel_width = c.CGDisplayPixelsWide(display_id);
+    const pixel_height = c.CGDisplayPixelsHigh(display_id);
+
+    if (physical_size_mm.width <= 0 or physical_size_mm.height <= 0) {
+        // Fallback if physical dimensions unavailable
+        self.dpi = .{ 96, 96 };
+        return;
+    }
+
+    // Calculate physical DPI (pixels per inch), similar to Linux Wayland implementation
+    const millimeters_per_inch: f64 = 25.4;
+    const physical_dpi_x = @as(f64, @floatFromInt(pixel_width)) / (physical_size_mm.width / millimeters_per_inch);
+    const physical_dpi_y = @as(f64, @floatFromInt(pixel_height)) / (physical_size_mm.height / millimeters_per_inch);
+
+    // Apply backing scale factor (like Linux applies fractional scale)
+    self.dpi = .{
+        @intFromFloat(@round(physical_dpi_x)),
+        @intFromFloat(@round(physical_dpi_y)),
+    };
 
     std.log.debug(
-        "macOS screen DPI (fallback): {d}x{d}, scale factor: {d}",
-        .{ self.dpi[0], self.dpi[1], scale_factor },
+        "macOS screen DPI: {d}x{d}, physical size: {d:.1}x{d:.1}mm, pixels: {d}x{d}",
+        .{ self.dpi[0], self.dpi[1], physical_size_mm.width, physical_size_mm.height, pixel_width, pixel_height },
     );
 }
 
