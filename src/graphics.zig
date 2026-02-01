@@ -1911,7 +1911,7 @@ const ElementsPipeline = struct {
             .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .anisotropyEnable = c.VK_TRUE,
+            .anisotropyEnable = c.VK_FALSE,
             .maxAnisotropy = 1.0,
             .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_WHITE,
             .unnormalizedCoordinates = c.VK_FALSE,
@@ -2026,6 +2026,7 @@ const TextPipeline = struct {
         fontWeight: u32,
         glyphIndex: u32,
         fontKey: u64,
+        dpi: [2]u32,
     };
 
     pub const GlypRenderingShaderData = extern struct {
@@ -2700,9 +2701,9 @@ pub const Renderer = struct {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         } ++ switch (builtin.os.tag) {
-            // .macos => .{
-            //     "VK_KHR_portability_subset",
-            // },
+            .macos => .{
+                "VK_KHR_portability_subset",
+            },
             else => .{},
         });
 
@@ -3320,6 +3321,7 @@ pub const Renderer = struct {
 
         const layoutBoxCount = countTreeSize(rootLayoutBox);
         if (layoutBoxCount > self.elementsPipeline.elementsShaderData[0].len) {
+            try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
             try self.elementsPipeline.resizeConcurrentElementCapacity(
                 self.logicalDevice,
                 self.physicalDevice,
@@ -3377,6 +3379,7 @@ pub const Renderer = struct {
 
         if (totalShadowCount > 0) {
             if (totalShadowCount > self.shadowsPipeline.shadowShaderData[0].len) {
+                try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
                 try self.shadowsPipeline.resizeConcurrentShadowCapacity(
                     self.logicalDevice,
                     self.physicalDevice,
@@ -3480,6 +3483,7 @@ pub const Renderer = struct {
 
         if (totalGlyphCount > 0) {
             if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
+                try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
                 try self.textPipeline.resizeGlyphsCapacity(
                     self.logicalDevice,
                     self.physicalDevice,
@@ -3498,6 +3502,7 @@ pub const Renderer = struct {
                                 .fontWeight = layoutBox.style.fontWeight,
                                 .fontSize = layoutBox.style.fontSize,
                                 .glyphIndex = glyph.index,
+                                .dpi = dpi,
                             };
                             const glyphRenderingData = blk: {
                                 if (self.textPipeline.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
