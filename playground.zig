@@ -26,7 +26,7 @@ fn App() !void {
             .borderRadius = 20,
         }))({});
 
-        while (forbear.handleEvent()) |event| {
+        while (forbear.useNextEvent()) |event| {
             switch (event) {
                 .mouseOver => {
                     isHovering.* = true;

@@ -475,7 +475,10 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
         // can we make sure that the compiler will ensure that the parent here
         // always allows for children?
         std.debug.assert(parent.content == .element);
-        return .{ .ptr = try parent.content.element.children.addOne(arena), .index = parent.content.element.children.items.len - 1, };
+        return .{
+            .ptr = try parent.content.element.children.addOne(arena),
+            .index = parent.content.element.children.items.len - 1,
+        };
     } else {
         // Should we have a better treatment of the user doing multiple roots?
         // They might be confused about something? How can we make the design
@@ -577,12 +580,10 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
         .arenaAllocator = arena,
         .stateByteCursor = 0,
     };
-    var returnValue: ReturnType(function) = undefined;
-    if (hasProps) {
-        returnValue = try function(props);
-    } else {
-        returnValue = try function();
-    }
+    const returnValue = if (hasProps)
+        try function(props)
+    else
+        try function();
     if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.stateByteCursor != self.componentStates.get(componentKey).?.len) {
         return error.RulesOfHooksViolated;
     }
@@ -600,7 +601,7 @@ fn pushEvent(key: u64, event: Event) !void {
 }
 
 /// Returns the next event in the queue to handle for the current element key.
-pub fn handleEvent() ?Event {
+pub fn useNextEvent() ?Event {
     const self = getContext();
     if (self.previousPushedNode) |previous| {
         const key = previous.key;
