@@ -211,7 +211,7 @@ pub const Node = struct {
     content: union(enum) {
         element: Element,
         text: []const u8,
-    }
+    },
 };
 
 pub const Component = struct {
@@ -225,4 +225,3 @@ pub const Element = struct {
     style: IncompleteStyle,
     children: std.ArrayList(Node) = .empty,
 };
-
