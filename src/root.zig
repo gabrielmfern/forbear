@@ -125,24 +125,31 @@ test "Component resolution" {
             props.callCount.* += 1;
             const counter = try useState(u32, props.value);
             const innerArena = try useArena();
-            try std.testing.expectEqual(props.value, counter.*);
+            try std.testing.expectEqual(10, counter.*);
             (try element(innerArena, .{}))({
                 try text(innerArena, "Value {d}", .{counter.*});
             });
         }
     }).component;
 
-    try component(
-        arenaAllocator,
-        MyComponent,
-        MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
-    );
+    (try element(arenaAllocator, .{}))({
+        try component(
+            arenaAllocator,
+            MyComponent,
+            MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
+        );
+    });
     try std.testing.expectEqual(1, callCount);
-    try component(
-        arenaAllocator,
-        MyComponent,
-        MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
-    );
+
+    resetNodes();
+
+    (try element(arenaAllocator, .{}))({
+        try component(
+            arenaAllocator,
+            MyComponent,
+            MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
+        );
+    });
     try std.testing.expectEqual(2, callCount);
 }
 
@@ -564,6 +571,7 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
     const self = getContext();
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(std.mem.asBytes(&@intFromPtr(&function)));
+    // you are here, and you need to make the key for the component more unique.
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
     const componentKey = hasher.final();
 
@@ -654,11 +662,12 @@ pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Ve
     const timestamp = timestampSeconds();
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
     self.lastUpdateTime = timestamp;
+}
 
-    // I nede to investigate why there are segfaults if I don't clear this up.
-    // We're missing cleanup somewher else? (most likely)
+/// Resets the UI state, clearing the root frame node - and consequently - everything else.
+pub fn resetNodes() void {
+    const self = getContext();
     self.rootFrameNode = null;
-    // self.previousPushedNode = null;
 }
 
 fn timestampSeconds() f64 {

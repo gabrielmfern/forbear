@@ -71,6 +71,8 @@ fn renderingMain(
         try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
 
         try forbear.update(arena, &layoutBox, viewportSize);
+
+        forbear.resetNodes();
     }
     try renderer.waitIdle();
 }
