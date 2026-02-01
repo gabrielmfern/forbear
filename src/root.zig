@@ -94,8 +94,8 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .frameEventQueue = .init(allocator),
 
         .rootFrameNode = null,
-        .frameNodeParentStack = try std.ArrayList(*Node).initCapacity(allocator, 0),
-        .frameNodePath = try std.ArrayList(usize).initCapacity(allocator, 0),
+        .frameNodeParentStack = .empty,
+        .frameNodePath = .empty,
         .previousPushedNode = null,
 
         .images = std.StringHashMap(Image).init(allocator),
@@ -504,7 +504,7 @@ pub fn element(arena: std.mem.Allocator, style: IncompleteStyle) !*const fn (voi
             },
         },
     };
-    try self.frameNodeParentStack.append(self.allocator, result.ptr);
+    try self.frameNodeParentStack.append(arena, result.ptr);
     try self.frameNodePath.append(arena, result.index);
     return &popParentStack;
 }
@@ -664,8 +664,7 @@ pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Ve
     // I nede to investigate why there are segfaults if I don't clear this up.
     // We're missing cleanup somewher else? (most likely)
     self.rootFrameNode = null;
-    self.frameNodeParentStack.clearRetainingCapacity();
-    self.previousPushedNode = null;
+    // self.previousPushedNode = null;
 }
 
 fn timestampSeconds() f64 {
@@ -715,8 +714,6 @@ pub fn deinit() void {
         events.deinit(self.allocator);
     }
     self.frameEventQueue.deinit();
-
-    self.frameNodeParentStack.deinit(self.allocator);
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
