@@ -1911,7 +1911,7 @@ const ElementsPipeline = struct {
             .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .anisotropyEnable = c.VK_TRUE,
+            .anisotropyEnable = c.VK_FALSE,
             .maxAnisotropy = 1.0,
             .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_WHITE,
             .unnormalizedCoordinates = c.VK_FALSE,
@@ -2700,9 +2700,9 @@ pub const Renderer = struct {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         } ++ switch (builtin.os.tag) {
-            // .macos => .{
-            //     "VK_KHR_portability_subset",
-            // },
+            .macos => .{
+                "VK_KHR_portability_subset",
+            },
             else => .{},
         });
 
