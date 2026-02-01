@@ -72,7 +72,7 @@ fn renderingMain(
 
         try forbear.update(arena, &layoutBox, viewportSize);
 
-        forbear.resetNodes();
+        forbear.resetNodeTree();
     }
     try renderer.waitIdle();
 }
