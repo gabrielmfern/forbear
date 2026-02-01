@@ -1,55 +1,41 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
-fn App() !forbear.Node {
+fn App() !void {
     const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
-    return forbear.div(.{
-        .style = .{
-            .preferredWidth = .grow,
-            .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
-            .paddingInline = .{ 10, 10 },
-        },
-        .children = try forbear.children(arena, .{
-            forbear.component(forbear.FpsCounter, null, arena),
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;':\",.<>/?`~",
-            forbear.div(.{
-                .style = .{
-                    .preferredWidth = .{ .fixed = 100 },
-                    .preferredHeight = .{ .fixed = 100 },
-                    .background = .{
-                        .color = .{
-                            1.0,
-                            try forbear.useTransition(if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
-                            0.0,
-                            1.0,
-                        },
-                    },
-                    .borderRadius = 20,
+    (try forbear.element(arena, .{
+        .preferredWidth = .grow,
+        .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
+        .paddingInline = .{ 10, 10 },
+    }))({
+        try forbear.component(arena, forbear.FpsCounter, null);
+        try forbear.text(arena, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~", .{});
+        (try forbear.element(arena, .{
+            .preferredWidth = .{ .fixed = 100 },
+            .preferredHeight = .{ .fixed = 100 },
+            .background = .{
+                .color = .{
+                    1.0,
+                    try forbear.useTransition(if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
+                    0.0,
+                    1.0,
                 },
-                .handlers = .{
-                    .onMouseOver = .{
-                        .data = @ptrCast(@alignCast(isHovering)),
-                        .handler = &(struct {
-                            fn handler(_: *const forbear.LayoutBox, data: ?*anyopaque) anyerror!void {
-                                const isHoveringData: *bool = @ptrCast(data.?);
-                                isHoveringData.* = true;
-                            }
-                        }).handler,
-                    },
-                    .onMouseOut = .{
-                        .data = @ptrCast(@alignCast(isHovering)),
-                        .handler = &(struct {
-                            fn handler(_: *const forbear.LayoutBox, data: ?*anyopaque) anyerror!void {
-                                const isHoveringData: *bool = @ptrCast(data.?);
-                                isHoveringData.* = false;
-                            }
-                        }).handler,
-                    },
+            },
+            .borderRadius = 20,
+        }))({});
+
+        while (forbear.handleEvent()) |event| {
+            switch (event) {
+                .mouseOver => {
+                    isHovering.* = true;
                 },
-            }),
-        }),
+                .mouseOut => {
+                    isHovering.* = false;
+                },
+            }
+        }
     });
 }
 
@@ -66,12 +52,11 @@ fn renderingMain(
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
-        const node = try forbear.component(App, null, arena);
-        const treeNode = try forbear.resolve(node, arena);
+        try forbear.component(arena, App, null);
+
         const viewportSize = renderer.viewportSize();
         const layoutBox = try forbear.layout(
             arena,
-            treeNode,
             .{
                 .font = try forbear.useFont("Inter", @embedFile("Inter.ttf")),
                 .color = .{ 1.0, 1.0, 1.0, 1.0 },
@@ -85,7 +70,7 @@ fn renderingMain(
         );
         try renderer.drawFrame(&layoutBox, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
 
-        try forbear.update(&layoutBox, viewportSize, arena);
+        try forbear.update(arena, &layoutBox, viewportSize);
     }
     try renderer.waitIdle();
 }
@@ -135,5 +120,3 @@ pub fn main() !void {
 
     try window.handleEvents();
 }
-
-

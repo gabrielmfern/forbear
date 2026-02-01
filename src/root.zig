@@ -10,15 +10,12 @@ pub const layout = layouting.layout;
 pub const LayoutBox = layouting.LayoutBox;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
+pub const IncompleteStyle = nodeImport.IncompleteStyle;
+pub const Style = nodeImport.Style;
 pub const Component = nodeImport.Component;
-pub const component = nodeImport.component;
 pub const ComponentProps = nodeImport.ComponentProps;
 pub const Element = nodeImport.Element;
 pub const ElementProps = nodeImport.DivProps;
-pub const div = nodeImport.div;
-pub const children = nodeImport.children;
-pub const eventHandler = nodeImport.eventHandler;
-pub const EventHandler = nodeImport.EventHandler;
 pub const Window = @import("window/root.zig").Window;
 pub const components = @import("components.zig");
 pub const FpsCounter = components.FpsCounter;
@@ -34,6 +31,13 @@ const ComponentResolutionState = struct {
     stateByteCursor: usize,
     key: u64,
 };
+
+const Event = union(enum) {
+    mouseOver,
+    mouseOut,
+};
+
+const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
 
 allocator: std.mem.Allocator,
 mousePosition: Vec2,
@@ -56,6 +60,13 @@ viewportSize: Vec2,
 componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
 // images: std.StringHashMap(Image),
 componentResolutionState: ?ComponentResolutionState,
+
+frameEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
+
+rootFrameNode: ?Node,
+frameNodeParentStack: std.ArrayList(*Node),
+frameNodePath: std.ArrayList(usize),
+previousPushedNode: ?*const Node,
 
 images: std.StringHashMap(Image),
 fonts: std.StringHashMap(Font),
@@ -80,160 +91,67 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .componentStates = .init(allocator),
         .componentResolutionState = null,
 
+        .frameEventQueue = .init(allocator),
+
+        .rootFrameNode = null,
+        .frameNodeParentStack = try std.ArrayList(*Node).initCapacity(allocator, 0),
+        .frameNodePath = try std.ArrayList(usize).initCapacity(allocator, 0),
+        .previousPushedNode = null,
+
         .images = std.StringHashMap(Image).init(allocator),
         .fonts = std.StringHashMap(Font).init(allocator),
     };
 }
 
-/// TODO: inherit all properties from Node, and add the key and differnet
-/// children, as well as removing the component variant
-pub const TreeNode = struct {
-    key: u64,
-    node: Node,
-    children: ?[]TreeNode,
-};
-
-const Resolver = struct {
-    path: std.ArrayList(usize),
-    arenaAllocator: std.mem.Allocator,
-    resolvedComponentKeys: std.ArrayList(u64),
-
-    fn init(arenaAllocator: std.mem.Allocator) !@This() {
-        const forbear = getContext();
-
-        return .{
-            .arenaAllocator = arenaAllocator,
-            .path = try std.ArrayList(usize).initCapacity(arenaAllocator, 0),
-            .resolvedComponentKeys = try std.ArrayList(u64).initCapacity(arenaAllocator, forbear.componentStates.count()),
-        };
-    }
-
-    fn cleanup(self: @This()) void {
-        const forbear = getContext();
-
-        var stateKeysIterator = forbear.componentStates.keyIterator();
-        while (stateKeysIterator.next()) |key| {
-            if (std.mem.indexOfScalar(u64, self.resolvedComponentKeys, key) == null) {
-                std.log.debug("cleaning up component instance with key {d}", .{key});
-                forbear.componentStates.remove(key);
-            }
-        }
-    }
-
-    fn resolve(self: *@This(), node: Node) !TreeNode {
-        const forbear = getContext();
-
-        var hasher = std.hash.Wyhash.init(0);
-        hasher.update(std.mem.sliceAsBytes(self.path.items));
-        switch (node) {
-            .component => |comp| {
-                hasher.update(std.mem.asBytes(&comp.id));
-                const key = hasher.final();
-
-                const previousComponentResolutionState = forbear.componentResolutionState;
-                forbear.componentResolutionState = .{
-                    .key = key,
-                    .arenaAllocator = self.arenaAllocator,
-                    .stateByteCursor = 0,
-                };
-                const componentNode = try comp.function(comp.props);
-                if (forbear.componentStates.contains(key) and forbear.componentResolutionState.?.stateByteCursor != forbear.componentStates.get(key).?.len) {
-                    return error.RulesOfHooksViolated;
-                }
-                try self.resolvedComponentKeys.append(self.arenaAllocator, key);
-                forbear.componentResolutionState = previousComponentResolutionState;
-                // TODO: investigate if should we reuse the same key as above?
-                // Is it a problem that it creates a new key here?
-                return self.resolve(componentNode);
-            },
-            .element => {
-                if (node.element.children != null) {
-                    var treeChildren = try self.arenaAllocator.alloc(TreeNode, node.element.children.?.len);
-                    for (node.element.children.?, 0..) |child, i| {
-                        try self.path.append(self.arenaAllocator, i);
-                        defer _ = self.path.pop();
-                        treeChildren[i] = try self.resolve(child);
-                    }
-                    return .{
-                        .key = hasher.final(),
-                        .node = node,
-                        .children = treeChildren,
-                    };
-                } else {
-                    return .{
-                        .key = hasher.final(),
-                        .node = node,
-                        .children = null,
-                    };
-                }
-            },
-            .text => |text| {
-                hasher.update(text);
-                return .{
-                    .key = hasher.final(),
-                    .node = node,
-                    .children = null,
-                };
-            },
-        }
-    }
-};
-
-pub fn resolve(rootNode: Node, arenaAllocator: std.mem.Allocator) !TreeNode {
-    var resolver = try Resolver.init(arenaAllocator);
-
-    return resolver.resolve(rootNode);
-}
-
-test "Component resolution" {
-    const renderer: *Graphics.Renderer = undefined;
-    try init(std.testing.allocator, renderer);
-    defer deinit();
-
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var callCount: u32 = 0;
-
-    const MyComponentProps = struct {
-        callCount: *u32,
-        value: u32,
-        arenaAllocator: std.mem.Allocator,
-    };
-
-    const MyComponent = (struct {
-        fn component(props: MyComponentProps) !Node {
-            props.callCount.* += 1;
-            const counter = try useState(u32, props.value);
-            try std.testing.expectEqual(props.value, counter.*);
-            return div(.{
-                .children = try children(props.arenaAllocator, .{ "Value: ", counter.* }),
-            });
-        }
-    }).component;
-
-    const rootNode = div(.{
-        .children = try children(arenaAllocator, .{
-            try component(
-                MyComponent,
-                MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
-                arenaAllocator,
-            ),
-            try component(
-                MyComponent,
-                MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
-                arenaAllocator,
-            ),
-        }),
-    });
-
-    _ = try resolve(rootNode, arenaAllocator);
-    try std.testing.expectEqual(2, callCount);
-
-    _ = try resolve(rootNode, arenaAllocator);
-    try std.testing.expectEqual(4, callCount);
-}
+// test "Component resolution" {
+//     const renderer: *Graphics.Renderer = undefined;
+//     try init(std.testing.allocator, renderer);
+//     defer deinit();
+//
+//     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+//     defer arena.deinit();
+//     const arenaAllocator = arena.allocator();
+//
+//     var callCount: u32 = 0;
+//
+//     const MyComponentProps = struct {
+//         callCount: *u32,
+//         value: u32,
+//         arenaAllocator: std.mem.Allocator,
+//     };
+//
+//     const MyComponent = (struct {
+//         fn component(props: MyComponentProps) !Node {
+//             props.callCount.* += 1;
+//             const counter = try useState(u32, props.value);
+//             try std.testing.expectEqual(props.value, counter.*);
+//             return div(.{
+//                 .children = try children(props.arenaAllocator, .{ "Value: ", counter.* }),
+//             });
+//         }
+//     }).component;
+//
+//     const rootNode = div(.{
+//         .children = try children(arenaAllocator, .{
+//             try component(
+//                 MyComponent,
+//                 MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
+//                 arenaAllocator,
+//             ),
+//             try component(
+//                 MyComponent,
+//                 MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
+//                 arenaAllocator,
+//             ),
+//         }),
+//     });
+//
+//     _ = try resolve(rootNode, arenaAllocator);
+//     try std.testing.expectEqual(2, callCount);
+//
+//     _ = try resolve(rootNode, arenaAllocator);
+//     try std.testing.expectEqual(4, callCount);
+// }
 
 /// Embeds an image from the given path, or retrieves it from cache if already embedded.
 ///
@@ -536,15 +454,177 @@ test "State creation with manual handling" {
     }
 }
 
-pub fn update(root: *const LayoutBox, viewportSize: Vec2, arena: std.mem.Allocator) !void {
+/// This is meant to be returned as a function that will only run once the
+/// "block" is executed. It's a really smart trick from someone doing an
+/// immediate mode UI library in Zig as well from teh Zig Discord server.
+///
+/// TODO: share the github of the person I got this trick from
+fn popParentStack(block: void) void {
+    _ = block;
     const self = getContext();
+    std.debug.assert(self.frameNodeParentStack.items.len > 0);
+    self.previousPushedNode = self.frameNodeParentStack.pop();
+    _ = self.frameNodePath.pop();
+}
+
+fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
+    const self = getContext();
+    if (self.frameNodeParentStack.getLastOrNull()) |parent| {
+        std.debug.assert(self.rootFrameNode != null);
+        // How can we make sure that these asserts aren't really necessary? HOw
+        // can we make sure that the compiler will ensure that the parent here
+        // always allows for children?
+        std.debug.assert(parent.content == .element);
+        return .{ .ptr = try parent.content.element.children.addOne(arena), .index = parent.content.element.children.items.len - 1, };
+    } else {
+        // Should we have a better treatment of the user doing multiple roots?
+        // They might be confused about something? How can we make the design
+        // get it clearer to the user that there can only be one root?
+        std.debug.assert(self.rootFrameNode == null);
+        self.rootFrameNode = undefined;
+        return .{ .ptr = &self.rootFrameNode.?, .index = 0 };
+    }
+}
+
+pub fn element(arena: std.mem.Allocator, style: IncompleteStyle) !*const fn (void) void {
+    const self = getContext();
+
+    const result = try putNode(arena);
+
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
+    hasher.update(std.mem.asBytes(&result.index));
+
+    result.ptr.* = Node{
+        .key = hasher.final(),
+        .content = .{
+            .element = .{
+                .style = style,
+                .children = .empty,
+            },
+        },
+    };
+    try self.frameNodeParentStack.append(self.allocator, result.ptr);
+    try self.frameNodePath.append(arena, result.index);
+    return &popParentStack;
+}
+
+pub fn text(arena: std.mem.Allocator, comptime fmt: []const u8, args: anytype) !void {
+    const formatted = try std.fmt.allocPrint(arena, fmt, args);
+
+    const result = try putNode(arena);
+
+    const self = getContext();
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(formatted);
+    hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
+    hasher.update(std.mem.asBytes(&result.index));
+
+    result.ptr.* = Node{
+        .key = hasher.final(),
+        .content = .{
+            .text = formatted,
+        },
+    };
+    self.previousPushedNode = result.ptr;
+}
+
+inline fn ReturnType(comptime function: anytype) type {
+    const Function = @TypeOf(function);
+    const functionTypeInfo = @typeInfo(Function);
+    if (functionTypeInfo != .@"fn") {
+        @compileError("expected function to be a `fn`, but found " ++ @typeName(function));
+    }
+    if (functionTypeInfo.@"fn".return_type) |ReturnTypeT| {
+        const returnTypeInfo = @typeInfo(ReturnTypeT);
+        if (returnTypeInfo == .error_union) {
+            return returnTypeInfo.error_union.payload;
+        } else {
+            return ReturnTypeT;
+        }
+    }
+    return void;
+}
+
+pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, props: anytype) !ReturnType(function) {
+    const Function = @TypeOf(function);
+    const functionTypeInfo = @typeInfo(Function);
+    if (functionTypeInfo != .@"fn") {
+        @compileError("expected function to be a `fn`, but found " ++ @typeName(function));
+    }
+
+    if (functionTypeInfo.@"fn".params.len > 1) {
+        @compileError(
+            "function components can only have one parameter `props: struct`, found " ++ @typeName(functionTypeInfo.@"fn".params.len),
+        );
+    }
+
+    const hasProps = functionTypeInfo.@"fn".params.len == 1;
+
+    if (hasProps and functionTypeInfo.@"fn".params[0].type != @TypeOf(props)) {
+        @compileError("expected props to be of type " ++ @typeName(functionTypeInfo.@"fn".params[0].type orelse void) ++ ", but found " ++ @typeName(@TypeOf(props)));
+    }
+
+    const self = getContext();
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(std.mem.asBytes(&@intFromPtr(&function)));
+    hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
+    const componentKey = hasher.final();
+
+    const previousComponentResolutionState = self.componentResolutionState;
+    self.componentResolutionState = .{
+        .key = componentKey,
+        .arenaAllocator = arena,
+        .stateByteCursor = 0,
+    };
+    var returnValue: ReturnType(function) = undefined;
+    if (hasProps) {
+        returnValue = try function(props);
+    } else {
+        returnValue = try function();
+    }
+    if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.stateByteCursor != self.componentStates.get(componentKey).?.len) {
+        return error.RulesOfHooksViolated;
+    }
+    self.componentResolutionState = previousComponentResolutionState;
+    return returnValue;
+}
+
+fn pushEvent(key: u64, event: Event) !void {
+    const self = getContext();
+    const result = try self.frameEventQueue.getOrPut(key);
+    if (!result.found_existing) {
+        result.value_ptr.* = try std.ArrayList(Event).initCapacity(self.allocator, 1);
+    }
+    try result.value_ptr.*.append(self.allocator, event);
+}
+
+/// Returns the next event in the queue to handle for the current element key.
+pub fn handleEvent() ?Event {
+    const self = getContext();
+    if (self.previousPushedNode) |previous| {
+        const key = previous.key;
+        // std.log.debug("handling events for {}", .{key});
+        if (self.frameEventQueue.getPtr(key)) |eventQueue| {
+            return eventQueue.pop();
+        }
+    }
+    return null;
+}
+
+pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Vec2) !void {
+    const self = getContext();
+
+    var queueIterator = self.frameEventQueue.valueIterator();
+    while (queueIterator.next()) |events| {
+        events.clearRetainingCapacity();
+    }
 
     var iterator = try layouting.LayoutTreeIterator.init(arena, root);
 
     var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
     missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
 
-    var highestHoveredLayoutBox: ?*const LayoutBox = null;
     while (try iterator.next()) |layoutBox| {
         const isMouseAfter = layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1];
         const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
@@ -557,24 +637,14 @@ pub fn update(root: *const LayoutBox, viewportSize: Vec2, arena: std.mem.Allocat
         }
 
         if (isMouseInside) {
-            if (highestHoveredLayoutBox) |hoveredBox| {
-                if (layoutBox.z > hoveredBox.z) {
-                    highestHoveredLayoutBox = layoutBox;
-                }
-            } else {
-                highestHoveredLayoutBox = layoutBox;
-            }
-
             if (hoveredElementKeysIndexOpt == null) {
-                if (layoutBox.handlers.onMouseOver) |onMouseOver| {
-                    try onMouseOver.handler(layoutBox, onMouseOver.data);
-                }
+                try pushEvent(layoutBox.key, .mouseOver);
+
                 try self.hoveredElementKeys.append(self.allocator, layoutBox.key);
             }
         } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
-            if (layoutBox.handlers.onMouseOut) |onMouseOut| {
-                try onMouseOut.handler(layoutBox, onMouseOut.data);
-            }
+            try pushEvent(layoutBox.key, .mouseOut);
+
             _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
         }
     }
@@ -590,6 +660,12 @@ pub fn update(root: *const LayoutBox, viewportSize: Vec2, arena: std.mem.Allocat
     const timestamp = timestampSeconds();
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
     self.lastUpdateTime = timestamp;
+
+    // I nede to investigate why there are segfaults if I don't clear this up.
+    // We're missing cleanup somewher else? (most likely)
+    self.rootFrameNode = null;
+    self.frameNodeParentStack.clearRetainingCapacity();
+    self.previousPushedNode = null;
 }
 
 fn timestampSeconds() f64 {
@@ -625,11 +701,23 @@ pub fn setWindowHandlers(window: *Window) void {
 pub fn deinit() void {
     const self = getContext();
     std.debug.assert(self.componentResolutionState == null);
+
+    self.hoveredElementKeys.deinit(self.allocator);
+
     var componentStatesIterator = self.componentStates.valueIterator();
     while (componentStatesIterator.next()) |states| {
         self.allocator.free(states.*);
     }
     self.componentStates.deinit();
+
+    var eventQueueIterator = self.frameEventQueue.valueIterator();
+    while (eventQueueIterator.next()) |events| {
+        events.deinit(self.allocator);
+    }
+    self.frameEventQueue.deinit();
+
+    self.frameNodeParentStack.deinit(self.allocator);
+
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
         font.deinit();
@@ -640,7 +728,7 @@ pub fn deinit() void {
         image.deinit();
     }
     self.images.deinit();
-    self.hoveredElementKeys.deinit(self.allocator);
+
     context = null;
 }
 

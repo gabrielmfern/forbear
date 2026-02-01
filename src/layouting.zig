@@ -1,13 +1,12 @@
 const std = @import("std");
 
+const forbear = @import("root.zig");
 const BaseStyle = @import("node.zig").BaseStyle;
 const Direction = @import("node.zig").Direction;
 const Element = @import("node.zig").Element;
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
-const EventHandlers = @import("node.zig").ElementEventHandlers;
 const Node = @import("node.zig").Node;
 const Style = @import("node.zig").Style;
-const TreeNode = @import("root.zig").TreeNode;
 
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
@@ -46,7 +45,6 @@ pub const LayoutBox = struct {
     minSize: Vec2,
     children: ?Children,
 
-    handlers: EventHandlers,
     style: Style,
 
     pub fn getMinSize(self: @This(), direction: Direction) f32 {
@@ -460,12 +458,11 @@ const LayoutCreator = struct {
         };
     }
 
-    fn create(self: *@This(), treeNode: TreeNode, baseStyle: BaseStyle, z: u16, dpi: Vec2) !LayoutBox {
+    fn create(self: *@This(), node: Node, baseStyle: BaseStyle, z: u16, dpi: Vec2) !LayoutBox {
         const resolutionMultiplier = dpi / @as(Vec2, @splat(72));
-        var style = switch (treeNode.node) {
+        var style = switch (node.content) {
             .element => |element| element.style.completeWith(baseStyle),
             .text => (IncompleteStyle{}).completeWith(baseStyle),
-            .component => unreachable,
         };
         style.borderInlineWidth *= @splat(resolutionMultiplier[0]);
         style.borderBlockWidth *= @splat(resolutionMultiplier[1]);
@@ -481,7 +478,7 @@ const LayoutCreator = struct {
         style.marginBlock *= @splat(resolutionMultiplier[1]);
         style.borderRadius *= resolutionMultiplier[0];
 
-        switch (treeNode.node) {
+        switch (node.content) {
             .element => |element| {
                 var layoutBox = LayoutBox{
                     .position = if (style.placement == .manual) style.placement.manual else .{ 0.0, 0.0 },
@@ -500,25 +497,22 @@ const LayoutCreator = struct {
                         style.minWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else 0.0,
                         style.minHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else 0.0,
                     },
-                    .key = treeNode.key,
+                    .key = node.key,
                     .children = null,
-                    .handlers = element.handlers,
                     .style = style,
                 };
-                if (treeNode.children) |children| {
-                    layoutBox.children = .{ .layoutBoxes = try self.arenaAllocator.alloc(LayoutBox, children.len) };
-                    errdefer self.arenaAllocator.free(layoutBox.children.?.layoutBoxes);
-                    for (children, 0..) |child, index| {
-                        try self.path.append(self.arenaAllocator, index);
-                        defer _ = self.path.pop();
+                layoutBox.children = .{ .layoutBoxes = try self.arenaAllocator.alloc(LayoutBox, element.children.items.len) };
+                errdefer self.arenaAllocator.free(layoutBox.children.?.layoutBoxes);
+                for (element.children.items, 0..) |child, index| {
+                    try self.path.append(self.arenaAllocator, index);
+                    defer _ = self.path.pop();
 
-                        layoutBox.children.?.layoutBoxes[index] = try self.create(
-                            child,
-                            BaseStyle.from(style),
-                            if (layoutBox.z == std.math.maxInt(u16)) layoutBox.z else layoutBox.z + 1,
-                            dpi,
-                        );
-                    }
+                    layoutBox.children.?.layoutBoxes[index] = try self.create(
+                        child,
+                        BaseStyle.from(style),
+                        if (layoutBox.z == std.math.maxInt(u16)) layoutBox.z else layoutBox.z + 1,
+                        dpi,
+                    );
                 }
                 return layoutBox;
             },
@@ -571,15 +565,13 @@ const LayoutCreator = struct {
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
                     .z = z,
-                    .key = treeNode.key,
+                    .key = node.key,
                     .size = .{ cursor[0], pixelLineHeight },
                     .minSize = minSize,
                     .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight } },
                     .style = style,
-                    .handlers = .{},
                 };
             },
-            .component => unreachable,
         }
     }
 };
@@ -637,26 +629,31 @@ pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
 
 pub fn layout(
     arenaAllocator: std.mem.Allocator,
-    treeNode: TreeNode,
     baseStyle: BaseStyle,
     viewportSize: Vec2,
     dpi: Vec2,
 ) !LayoutBox {
-    var creator = try LayoutCreator.init(arenaAllocator);
-    var layoutBox = try creator.create(treeNode, baseStyle, 1, dpi);
-    fitWidth(&layoutBox);
-    fitHeight(&layoutBox);
-    if (layoutBox.style.preferredWidth == .grow) {
-        layoutBox.size[0] = viewportSize[0];
+    const context = forbear.getContext();
+    if (context.rootFrameNode) |rootFrameNode| {
+        var creator = try LayoutCreator.init(arenaAllocator);
+        var layoutBox = try creator.create(rootFrameNode, baseStyle, 1, dpi);
+        fitWidth(&layoutBox);
+        fitHeight(&layoutBox);
+        if (layoutBox.style.preferredWidth == .grow) {
+            layoutBox.size[0] = viewportSize[0];
+        }
+        if (layoutBox.style.preferredHeight == .grow) {
+            layoutBox.size[1] = viewportSize[1];
+        }
+        try growAndShrink(arenaAllocator, &layoutBox);
+        wrap(&layoutBox);
+        fitWidth(&layoutBox);
+        fitHeight(&layoutBox);
+        place(&layoutBox);
+        makeAbsolute(&layoutBox, .{ 0.0, 0.0 });
+        return layoutBox;
+    } else {
+        std.log.err("You need to define a root frame node before layouting. You can do so by just doing forbear.text(...), for example.", .{});
+        return error.NoRootFrameNode;
     }
-    if (layoutBox.style.preferredHeight == .grow) {
-        layoutBox.size[1] = viewportSize[1];
-    }
-    try growAndShrink(arenaAllocator, &layoutBox);
-    wrap(&layoutBox);
-    fitWidth(&layoutBox);
-    fitHeight(&layoutBox);
-    place(&layoutBox);
-    makeAbsolute(&layoutBox, .{ 0.0, 0.0 });
-    return layoutBox;
 }
