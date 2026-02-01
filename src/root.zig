@@ -103,55 +103,48 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
     };
 }
 
-// test "Component resolution" {
-//     const renderer: *Graphics.Renderer = undefined;
-//     try init(std.testing.allocator, renderer);
-//     defer deinit();
-//
-//     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-//     defer arena.deinit();
-//     const arenaAllocator = arena.allocator();
-//
-//     var callCount: u32 = 0;
-//
-//     const MyComponentProps = struct {
-//         callCount: *u32,
-//         value: u32,
-//         arenaAllocator: std.mem.Allocator,
-//     };
-//
-//     const MyComponent = (struct {
-//         fn component(props: MyComponentProps) !Node {
-//             props.callCount.* += 1;
-//             const counter = try useState(u32, props.value);
-//             try std.testing.expectEqual(props.value, counter.*);
-//             return div(.{
-//                 .children = try children(props.arenaAllocator, .{ "Value: ", counter.* }),
-//             });
-//         }
-//     }).component;
-//
-//     const rootNode = div(.{
-//         .children = try children(arenaAllocator, .{
-//             try component(
-//                 MyComponent,
-//                 MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
-//                 arenaAllocator,
-//             ),
-//             try component(
-//                 MyComponent,
-//                 MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
-//                 arenaAllocator,
-//             ),
-//         }),
-//     });
-//
-//     _ = try resolve(rootNode, arenaAllocator);
-//     try std.testing.expectEqual(2, callCount);
-//
-//     _ = try resolve(rootNode, arenaAllocator);
-//     try std.testing.expectEqual(4, callCount);
-// }
+test "Component resolution" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var callCount: u32 = 0;
+
+    const MyComponentProps = struct {
+        callCount: *u32,
+        value: u32,
+        arenaAllocator: std.mem.Allocator,
+    };
+
+    const MyComponent = (struct {
+        fn component(props: MyComponentProps) !void {
+            props.callCount.* += 1;
+            const counter = try useState(u32, props.value);
+            const innerArena = try useArena();
+            try std.testing.expectEqual(props.value, counter.*);
+            (try element(innerArena, .{}))({
+                try text(innerArena, "Value {d}", .{counter.*});
+            });
+        }
+    }).component;
+
+    try component(
+        arenaAllocator,
+        MyComponent,
+        MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
+    );
+    try std.testing.expectEqual(1, callCount);
+    try component(
+        arenaAllocator,
+        MyComponent,
+        MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
+    );
+    try std.testing.expectEqual(2, callCount);
+}
 
 /// Embeds an image from the given path, or retrieves it from cache if already embedded.
 ///
