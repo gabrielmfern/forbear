@@ -148,6 +148,45 @@ test "Element tree stack stability" {
     try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
     try std.testing.expectEqual(0, self.frameNodePath.items.len);
     try std.testing.expect(self.rootFrameNode != null);
+
+    // This acts like the end of a frame here
+    resetNodes();
+
+    (try element(arenaAllocator, .{}))({
+        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+        try std.testing.expectEqual(1, self.frameNodePath.items.len);
+        try component(arenaAllocator, FpsCounter, null);
+        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+        try std.testing.expectEqual(1, self.frameNodePath.items.len);
+        (try element(arenaAllocator, .{}))({
+            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+
+            try text(arenaAllocator, "Hello, world!", .{});
+            try std.testing.expectEqualDeep("Hello, world!", self.previousPushedNode.?.content.text);
+
+            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+
+            (try element(arenaAllocator, .{}))({
+                try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(3, self.frameNodePath.items.len);
+
+                try text(arenaAllocator, "Nested element", .{});
+                try std.testing.expectEqualDeep("Nested element", self.previousPushedNode.?.content.text);
+
+                try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(3, self.frameNodePath.items.len);
+            });
+
+            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+        });
+        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+    });
+    try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
+    try std.testing.expectEqual(0, self.frameNodePath.items.len);
+    try std.testing.expect(self.rootFrameNode != null);
 }
 
 test "Component resolution" {
