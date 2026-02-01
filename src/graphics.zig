@@ -3320,6 +3320,7 @@ pub const Renderer = struct {
 
         const layoutBoxCount = countTreeSize(rootLayoutBox);
         if (layoutBoxCount > self.elementsPipeline.elementsShaderData[0].len) {
+            try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
             try self.elementsPipeline.resizeConcurrentElementCapacity(
                 self.logicalDevice,
                 self.physicalDevice,
@@ -3377,6 +3378,7 @@ pub const Renderer = struct {
 
         if (totalShadowCount > 0) {
             if (totalShadowCount > self.shadowsPipeline.shadowShaderData[0].len) {
+                try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
                 try self.shadowsPipeline.resizeConcurrentShadowCapacity(
                     self.logicalDevice,
                     self.physicalDevice,
@@ -3480,6 +3482,7 @@ pub const Renderer = struct {
 
         if (totalGlyphCount > 0) {
             if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
+                try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
                 try self.textPipeline.resizeGlyphsCapacity(
                     self.logicalDevice,
                     self.physicalDevice,
