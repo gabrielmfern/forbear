@@ -13,7 +13,7 @@ var g_current_window: ?*Self = null;
 pub const Handlers = struct {
     pointerMotion: ?struct {
         data: *anyopaque,
-        function: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
+        function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
     } = null,
     resize: ?struct {
         data: *anyopaque,
@@ -456,34 +456,6 @@ pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
     // TODO: map to NSCursor.
 }
 
-pub fn setPointerMotionHandler(
-    self: *Self,
-    handler: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
-    data: *anyopaque,
-) void {
-    self.handlers.pointerMotion = .{
-        .data = data,
-        .function = handler,
-    };
-}
-
-pub fn setResizeHandler(
-    self: *Self,
-    handler: *const fn (
-        window: *Self,
-        newWidth: u32,
-        newHeight: u32,
-        newDpi: [2]u32,
-        data: *anyopaque,
-    ) void,
-    data: *anyopaque,
-) void {
-    self.handlers.resize = .{
-        .data = data,
-        .function = handler,
-    };
-}
-
 /// Returns the target frame time in nanoseconds based on the display's refresh rate.
 /// Falls back to 60Hz (~16.67ms) if the refresh rate cannot be determined.
 pub fn targetFrameTimeNs(self: *const Self) u64 {
@@ -555,12 +527,7 @@ fn processEvent(self: *Self, event: c.id) void {
             const x: f32 = @floatCast(location.x);
             const y: f32 = @as(f32, @floatCast(content_bounds.size.height)) - @as(f32, @floatCast(location.y));
 
-            // Get timestamp (in seconds since system startup, convert to milliseconds)
-            const getTimestamp = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
-            const timestamp = getTimestamp(event, sel("timestamp"));
-            const time_ms: u32 = @intFromFloat(timestamp * 1000.0);
-
-            handler.function(self, time_ms, x, y, handler.data);
+            handler.function(self, x, y, handler.data);
         }
     }
 }

@@ -20,7 +20,7 @@ const Self = @This();
 pub const Handlers = struct {
     pointerMotion: ?struct {
         data: *anyopaque,
-        function: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
+        function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
     } = null,
     resize: ?struct {
         data: *anyopaque,
@@ -153,7 +153,7 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                 const mouseX: u16 = @truncate(@as(u32, @intCast(lParam)));
                 const mouseY: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
                 if (self.handlers.pointerMotion) |handler| {
-                    handler.function(self, 0, @floatFromInt(mouseX), @floatFromInt(mouseY), handler.data);
+                    handler.function(self, @floatFromInt(mouseX), @floatFromInt(mouseY), handler.data);
                 }
             }
         },
@@ -198,34 +198,6 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
     }
 
     return 0;
-}
-
-pub fn setPointerMotionHandler(
-    self: *Self,
-    handler: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
-    data: *anyopaque,
-) void {
-    self.handlers.pointerMotion = .{
-        .data = data,
-        .function = handler,
-    };
-}
-
-pub fn setResizeHandler(
-    self: *@This(),
-    handler: *const fn (
-        window: *@This(),
-        newWidth: u32,
-        newHeight: u32,
-        newDpi: [2]u32,
-        data: *anyopaque,
-    ) void,
-    data: *anyopaque,
-) void {
-    self.handlers.resize = .{
-        .data = data,
-        .function = handler,
-    };
 }
 
 pub fn targetFrameTimeNs(self: *const @This()) u64 {
