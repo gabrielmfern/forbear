@@ -161,7 +161,6 @@ pub fn main() !void {
 
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
-    window.setResizeHandler(handleResize, @ptrCast(@alignCast(&renderer)));
 
     try forbear.init(allocator, &renderer);
     defer forbear.deinit();
@@ -181,11 +180,3 @@ pub fn main() !void {
     try window.handleEvents();
 }
 
-fn handleResize(window: *forbear.Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
-    _ = window;
-    _ = dpi;
-    const renderer: *forbear.Graphics.Renderer = @ptrCast(@alignCast(data));
-    renderer.handleResize(width, height) catch |err| {
-        std.log.err("Renderer could not handle window resize {}", .{err});
-    };
-}
