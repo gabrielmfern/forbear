@@ -103,9 +103,55 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
     };
 }
 
+test "Element tree stack stability" {
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    (try element(arenaAllocator, .{}))({
+        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+        try std.testing.expectEqual(1, self.frameNodePath.items.len);
+        try component(arenaAllocator, FpsCounter, null);
+        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+        try std.testing.expectEqual(1, self.frameNodePath.items.len);
+        (try element(arenaAllocator, .{}))({
+            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+
+            try text(arenaAllocator, "Hello, world!", .{});
+            try std.testing.expectEqualDeep("Hello, world!", self.previousPushedNode.?.content.text);
+
+            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+
+            (try element(arenaAllocator, .{}))({
+                try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(3, self.frameNodePath.items.len);
+
+                try text(arenaAllocator, "Nested element", .{});
+                try std.testing.expectEqualDeep("Nested element", self.previousPushedNode.?.content.text);
+
+                try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(3, self.frameNodePath.items.len);
+            });
+
+            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+        });
+        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+    });
+    try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
+    try std.testing.expectEqual(0, self.frameNodePath.items.len);
+    try std.testing.expect(self.rootFrameNode != null);
+}
+
 test "Component resolution" {
-    const renderer: *Graphics.Renderer = undefined;
-    try init(std.testing.allocator, renderer);
+    try init(std.testing.allocator, undefined);
     defer deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -571,7 +617,6 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
     const self = getContext();
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(std.mem.asBytes(&@intFromPtr(&function)));
-    // you are here, and you need to make the key for the component more unique.
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
     const componentKey = hasher.final();
 
