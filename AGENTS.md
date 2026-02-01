@@ -110,6 +110,42 @@ pub const Style = struct {
 };
 ```
 
+### Closures (Pseudo-Closures)
+
+**Zig does not support closures.** Inner functions cannot access surrounding variable context - everything must be passed down as parameters. The only way to "simulate" a closure is by explicitly passing values as parameters through a struct pattern:
+
+```zig
+const myValue: usize = 10;
+const pseudoClosure = (struct {
+    fn closure(value: usize) void {
+        // Use the passed value here
+        _ = value;
+    }
+}).closure(myValue);
+```
+
+**Important:** The inner parameter name cannot shadow the outer variable name. You cannot use the same name in both the outer scope and the inner function parameter:
+
+```zig
+// WRONG - won't compile
+const myValue: usize = 10;
+const pseudoClosure = (struct {
+    fn closure(myValue: usize) void {  // Error: shadows outer myValue
+        // ...
+    }
+}).closure(myValue);
+
+// CORRECT - different parameter name
+const myValue: usize = 10;
+const pseudoClosure = (struct {
+    fn closure(value: usize) void {  // OK: different name
+        // ...
+    }
+}).closure(myValue);
+```
+
+In practice, use regular functions and pass all context explicitly.
+
 ### Error Handling
 
 1. **Error Sets** - Define comprehensive error enums for each subsystem:
