@@ -611,6 +611,47 @@ test "State creation with manual handling" {
     }
 }
 
+test "Event queue dispatches events to correct elements" {
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    (try element(arenaAllocator, .{}))({
+        (try element(arenaAllocator, .{}))({});
+        const firstChildKey = self.previousPushedNode.?.key;
+
+        (try element(arenaAllocator, .{}))({});
+        const secondChildKey = self.previousPushedNode.?.key;
+
+        try std.testing.expect(firstChildKey != secondChildKey);
+
+        try pushEvent(firstChildKey, .mouseOver);
+        try pushEvent(firstChildKey, .mouseOut);
+        try pushEvent(secondChildKey, .mouseOver);
+    });
+
+    resetNodeTree();
+    _ = arena.reset(.retain_capacity);
+
+    (try element(arenaAllocator, .{}))({
+        (try element(arenaAllocator, .{}))({});
+
+        try std.testing.expectEqual(Event.mouseOut, useNextEvent().?);
+        try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
+        try std.testing.expectEqual(null, useNextEvent());
+
+        (try element(arenaAllocator, .{}))({});
+
+        try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
+        try std.testing.expectEqual(null, useNextEvent());
+    });
+}
+
 /// This is meant to be returned as a function that will only run once the
 /// "block" is executed. It's a really smart trick from someone doing an
 /// immediate mode UI library in Zig as well from teh Zig Discord server.
@@ -825,7 +866,7 @@ pub fn resetNodeTree() void {
     const self = getContext();
     self.rootFrameNode = null;
     self.frameNodeParentStack.clearRetainingCapacity();
-    self.framePath.clearRetainingCapacity();
+    self.frameNodePath.clearRetainingCapacity();
 }
 
 fn timestampSeconds() f64 {
