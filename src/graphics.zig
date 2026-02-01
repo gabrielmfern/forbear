@@ -2026,6 +2026,7 @@ const TextPipeline = struct {
         fontWeight: u32,
         glyphIndex: u32,
         fontKey: u64,
+        dpi: [2]u32,
     };
 
     pub const GlypRenderingShaderData = extern struct {
@@ -3501,6 +3502,7 @@ pub const Renderer = struct {
                                 .fontWeight = layoutBox.style.fontWeight,
                                 .fontSize = layoutBox.style.fontSize,
                                 .glyphIndex = glyph.index,
+                                .dpi = dpi,
                             };
                             const glyphRenderingData = blk: {
                                 if (self.textPipeline.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
