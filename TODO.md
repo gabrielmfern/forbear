@@ -20,6 +20,7 @@
 - [x] fix image anti aliasing to look more like the browser
 - [x] what do I need to have variant fonts?
 - [x] text wrapping
+- [x] fix button hovering issue in the button (uhoh.com has this too)
 - [ ] wrapped text should also conform to parent alignment
-- [ ] fix button hovering issue in the button (uhoh.com has this too)
+- [ ] fix parts of shadow that draw nothing going over parent borders
 
