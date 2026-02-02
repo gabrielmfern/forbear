@@ -210,26 +210,38 @@ fn growAndShrink(
     }
 }
 
-fn wrap(layoutBox: *LayoutBox) void {
+fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
                 for (childBoxes) |*child| {
-                    wrap(child);
+                    try wrap(arena, child);
                 }
             },
             .glyphs => |glyphs| {
                 if (layoutBox.style.textWrapping == .none) {
                     return;
                 }
+                const Line = struct {
+                    startIndex: usize,
+                    endIndex: usize,
+                    width: f32,
+                };
+                var lines = try std.ArrayList(Line).initCapacity(arena, 4);
+
                 const lineWidth = layoutBox.size[0];
                 var cursor: Vec2 = @splat(0.0);
                 switch (layoutBox.style.textWrapping) {
                     .character => {
-                        for (glyphs.slice) |*glyph| {
+                        for (glyphs.slice, 0..) |*glyph, index| {
                             if (cursor[0] + glyph.advance[0] > lineWidth) {
                                 cursor[0] = 0;
                                 cursor[1] += glyphs.lineHeight;
+                                try lines.append(arena, .{
+                                    .startIndex = index,
+                                    .endIndex = index + 1,
+                                    .width = cursor[0],
+                                });
                             }
                             glyph.position = cursor + glyph.offset;
                             cursor += glyph.advance;
@@ -240,6 +252,7 @@ fn wrap(layoutBox: *LayoutBox) void {
                             index: usize,
                             position: Vec2,
                         } = null;
+                        var lineStartIndex: ?usize = null;
                         for (glyphs.slice, 0..) |*glyph, index| {
                             if (cursor[0] + glyph.advance[0] > lineWidth) {
                                 if (lastSpaceInfoOpt) |lastSpaceInfo| {
@@ -247,6 +260,12 @@ fn wrap(layoutBox: *LayoutBox) void {
                                     cursor[1] += glyphs.lineHeight;
 
                                     const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
+                                    try lines.append(arena, .{
+                                        .startIndex = lineStartIndex orelse 0,
+                                        .endIndex = lastSpaceInfo.index,
+                                        .width = firstWordGlyph.position[0],
+                                    });
+
                                     for (lastSpaceInfo.index + 1..index) |reverseIndex| {
                                         const reverseGlyph = &glyphs.slice[reverseIndex];
                                         reverseGlyph.position[0] -= firstWordGlyph.position[0];
@@ -254,6 +273,7 @@ fn wrap(layoutBox: *LayoutBox) void {
 
                                         cursor += reverseGlyph.advance;
                                     }
+                                    lineStartIndex = lastSpaceInfo.index + 1;
                                     lastSpaceInfoOpt = null;
                                 }
                             }
@@ -269,6 +289,20 @@ fn wrap(layoutBox: *LayoutBox) void {
                         }
                     },
                     else => unreachable,
+                }
+                try lines.append(arena, .{
+                    .startIndex = if (lines.getLastOrNull()) |lastLine| lastLine.endIndex else 0,
+                    .endIndex = glyphs.slice.len,
+                    .width = cursor[0],
+                });
+                for (lines.items) |line| {
+                    for (glyphs.slice[line.startIndex..line.endIndex]) |*glyph| {
+                        switch (layoutBox.style.horizontalAlignment) {
+                            .start => {},
+                            .center => glyph.position[0] += (lineWidth - line.width) / 2.0,
+                            .end => glyph.position[0] += (lineWidth - line.width),
+                        }
+                    }
                 }
                 layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
             },
@@ -450,11 +484,13 @@ fn place(layoutBox: *LayoutBox) void {
 const LayoutCreator = struct {
     arenaAllocator: std.mem.Allocator,
     path: std.ArrayList(usize),
+    parent: ?LayoutBox,
 
     fn init(arenaAllocator: std.mem.Allocator) !@This() {
         return .{
             .arenaAllocator = arenaAllocator,
             .path = try std.ArrayList(usize).initCapacity(arenaAllocator, 0),
+            .parent = null,
         };
     }
 
@@ -462,7 +498,12 @@ const LayoutCreator = struct {
         const resolutionMultiplier = dpi / @as(Vec2, @splat(72));
         var style = switch (node.content) {
             .element => |element| element.style.completeWith(baseStyle),
-            .text => (IncompleteStyle{}).completeWith(baseStyle),
+            .text => (IncompleteStyle{
+                .horizontalAlignment = if (self.parent) |parent|
+                    parent.style.horizontalAlignment
+                else
+                    null,
+            }).completeWith(baseStyle),
         };
         style.borderInlineWidth *= @splat(resolutionMultiplier[0]);
         style.borderBlockWidth *= @splat(resolutionMultiplier[1]);
@@ -503,6 +544,8 @@ const LayoutCreator = struct {
                 };
                 layoutBox.children = .{ .layoutBoxes = try self.arenaAllocator.alloc(LayoutBox, element.children.items.len) };
                 errdefer self.arenaAllocator.free(layoutBox.children.?.layoutBoxes);
+                const previousParent = self.parent;
+                self.parent = layoutBox;
                 for (element.children.items, 0..) |child, index| {
                     try self.path.append(self.arenaAllocator, index);
                     defer _ = self.path.pop();
@@ -514,6 +557,7 @@ const LayoutCreator = struct {
                         dpi,
                     );
                 }
+                self.parent = previousParent;
                 return layoutBox;
             },
             .text => |text| {
@@ -628,14 +672,14 @@ pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
 }
 
 pub fn layout(
-    arenaAllocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     baseStyle: BaseStyle,
     viewportSize: Vec2,
     dpi: Vec2,
 ) !LayoutBox {
     const context = forbear.getContext();
     if (context.rootFrameNode) |rootFrameNode| {
-        var creator = try LayoutCreator.init(arenaAllocator);
+        var creator = try LayoutCreator.init(arena);
         var layoutBox = try creator.create(rootFrameNode, baseStyle, 1, dpi);
         fitWidth(&layoutBox);
         fitHeight(&layoutBox);
@@ -645,8 +689,8 @@ pub fn layout(
         if (layoutBox.style.preferredHeight == .grow) {
             layoutBox.size[1] = viewportSize[1];
         }
-        try growAndShrink(arenaAllocator, &layoutBox);
-        wrap(&layoutBox);
+        try growAndShrink(arena, &layoutBox);
+        try wrap(arena, &layoutBox);
         fitWidth(&layoutBox);
         fitHeight(&layoutBox);
         place(&layoutBox);
