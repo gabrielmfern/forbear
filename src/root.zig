@@ -756,7 +756,7 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
 
     if (functionTypeInfo.@"fn".params.len > 1) {
         @compileError(
-            "function components can only have one parameter `props: struct`, found " ++ @typeName(functionTypeInfo.@"fn".params.len),
+            "function components can only have one parameter `props: struct`, found " ++ std.fmt.comptimePrint("{d}", .{functionTypeInfo.@"fn".params.len}),
         );
     }
 
