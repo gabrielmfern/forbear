@@ -734,7 +734,7 @@ inline fn ReturnType(comptime function: anytype) type {
     const Function = @TypeOf(function);
     const functionTypeInfo = @typeInfo(Function);
     if (functionTypeInfo != .@"fn") {
-        @compileError("expected function to be a `fn`, but found " ++ @typeName(function));
+        @compileError("expected function to be a `fn`, but found " ++ @typeName(Function));
     }
     if (functionTypeInfo.@"fn".return_type) |ReturnTypeT| {
         const returnTypeInfo = @typeInfo(ReturnTypeT);
