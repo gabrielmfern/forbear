@@ -17,7 +17,7 @@ pub const Handlers = struct {
     } = null,
     pointerMotion: ?struct {
         data: *anyopaque,
-        function: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
+        function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
     } = null,
     pointerButton: ?struct {
         data: *anyopaque,
@@ -422,12 +422,12 @@ fn pointerHandleMotion(
     if (window.handlers.pointerMotion) |handler| {
         handler.function(
             window,
-            time,
             @floatCast(c.wl_fixed_to_double(surfaceX)),
             @floatCast(c.wl_fixed_to_double(surfaceY)),
             handler.data,
         );
     }
+    _ = time;
     _ = wlPointer;
 }
 
