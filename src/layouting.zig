@@ -418,7 +418,7 @@ fn place(layoutBox: *LayoutBox) void {
                         if (direction == .leftToRight) {
                             // Cross-axis alignment (Vertical)
                             switch (vAlign) {
-                                .start => child.position[1] = 0.0,
+                                .start => child.position[1] = child.style.marginBlock[0],
                                 .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
                                 .end => child.position[1] = (availableSize[1] - contributingSize[1]),
                             }
@@ -429,7 +429,7 @@ fn place(layoutBox: *LayoutBox) void {
                         } else {
                             // Cross-axis alignment (Horizontal)
                             switch (hAlign) {
-                                .start => child.position[0] = 0.0,
+                                .start => child.position[0] = child.style.marginInline[0],
                                 .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
                                 .end => child.position[0] = (availableSize[0] - contributingSize[0]),
                             }

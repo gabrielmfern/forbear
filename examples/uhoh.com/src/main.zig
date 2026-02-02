@@ -38,36 +38,39 @@ fn App() !void {
         try forbear.text(arena, "We see you’re really interested in our product. Why not give it a try?", .{});
         try forbear.text(arena, "You scrolled all the way here.", .{});
         (try forbear.element(arena, .{
-            .borderRadius = 6,
-            .borderInlineWidth = @splat(1.5),
-            .borderBlockWidth = @splat(1.5),
             .marginBlock = .{ 20.0, 0.0 },
-            .background = .{ .color = .{ 0.99, 0.98, 0.96, 1.0 } },
-            .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
-            .translate = .{
-                0.0,
-                try forbear.useTransition(if (isHovering.*) -4.5 else 0.0, 0.1, forbear.easeInOut),
-            },
-            .shadow = .{
-                .blurRadius = 0.0,
-                .spread = 0.0,
-                .color = .{ 0.0, 0.0, 0.0, 1.0 },
-                .offsetBlock = .{
-                    0.0,
-                    try forbear.useTransition(if (isHovering.*) 4.5 else 0.0, 0.1, forbear.easeInOut),
-                },
-                .offsetInline = @splat(0.0),
-            },
-            .paddingBlock = @splat(20),
-            .paddingInline = @splat(36),
-            .horizontalAlignment = .center,
-            .verticalAlignment = .center,
-            .direction = .topToBottom,
         }))({
-            (try forbear.element(arena, .{ .fontSize = 18 }))({
-                try forbear.text(arena, "Come on, click on this", .{});
+            (try forbear.element(arena, .{
+                .borderRadius = 6,
+                .borderInlineWidth = @splat(1.5),
+                .borderBlockWidth = @splat(1.5),
+                .background = .{ .color = .{ 0.99, 0.98, 0.96, 1.0 } },
+                .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
+                .translate = .{
+                    0.0,
+                    try forbear.useTransition(if (isHovering.*) -4.5 else 0.0, 0.1, forbear.easeInOut),
+                },
+                .shadow = .{
+                    .blurRadius = 0.0,
+                    .spread = 0.0,
+                    .color = .{ 0.0, 0.0, 0.0, 1.0 },
+                    .offsetBlock = .{
+                        0.0,
+                        try forbear.useTransition(if (isHovering.*) 4.5 else 0.0, 0.1, forbear.easeInOut),
+                    },
+                    .offsetInline = @splat(0.0),
+                },
+                .paddingBlock = @splat(20),
+                .paddingInline = @splat(36),
+                .horizontalAlignment = .center,
+                .verticalAlignment = .center,
+                .direction = .topToBottom,
+            }))({
+                (try forbear.element(arena, .{ .fontSize = 18 }))({
+                    try forbear.text(arena, "Come on, click on this", .{});
+                });
+                try forbear.text(arena, "Don't make me beg", .{});
             });
-            try forbear.text(arena, "Don't make me beg", .{});
         });
 
         while (forbear.useNextEvent()) |event| {
