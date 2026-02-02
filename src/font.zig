@@ -465,7 +465,7 @@ test "LRU Cache" {
     const entry_4 = lru.put(4, "4");
     std.debug.print("After adding the entry '4' beyond the capacity of the LRU:\n", .{});
     lru.print();
-    try std.testing.expectEqual(entry_4, lru.first.?);
+    try std.testing.expectEqual(entry_4.index, lru.first.?);
     // The entry for 2 should have been discarded completely
     try std.testing.expectEqual(entry_1.?, &lru.entries[lru.last.?]);
     try std.testing.expect(lru.get(2) == null);
@@ -485,7 +485,7 @@ test "LRU cache - update existing key" {
     const entry = lru.get(2);
     try std.testing.expect(entry != null);
     try std.testing.expectEqualSlices(u8, "TWO", entry.?.value);
-    try std.testing.expectEqual(updated_index, lru.first.?);
+    try std.testing.expectEqual(updated_index.index, lru.first.?);
     try std.testing.expectEqual(2, lru.entries[lru.first.?].key);
     try std.testing.expectEqual(3, lru.length);
 }
