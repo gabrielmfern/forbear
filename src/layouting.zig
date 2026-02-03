@@ -235,15 +235,17 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                 var cursor: Vec2 = @splat(0.0);
                 switch (layoutBox.style.textWrapping) {
                     .character => {
+                        var lineStartIndex: usize = 0;
                         for (glyphs.slice, 0..) |*glyph, index| {
                             if (cursor[0] + glyph.advance[0] > lineWidth) {
-                                cursor[0] = 0;
-                                cursor[1] += glyphs.lineHeight;
                                 try lines.append(arena, .{
-                                    .startIndex = index,
-                                    .endIndex = index + 1,
+                                    .startIndex = lineStartIndex,
+                                    .endIndex = index,
                                     .width = cursor[0],
                                 });
+                                lineStartIndex = index;
+                                cursor[0] = 0;
+                                cursor[1] += glyphs.lineHeight;
                             }
                             glyph.position = cursor + glyph.offset;
                             cursor += glyph.advance;
@@ -711,7 +713,7 @@ fn testWrapConfiguration(configuration: struct {
     lineWidth: f32,
     lineHeight: f32,
     glyphs: []LayoutGlyph,
-    expectedPositions: []Vec2,
+    expectedPositions: []const Vec2,
 }) !void {
     std.debug.assert(configuration.expectedPositions.len == configuration.glyphs.len);
     const allocator = std.testing.allocator;
@@ -731,7 +733,9 @@ fn testWrapConfiguration(configuration: struct {
                 .lineHeight = configuration.lineHeight,
             },
         },
-        .style = (IncompleteStyle{}).complete(BaseStyle{
+        .style = (IncompleteStyle{
+            .horizontalAlignment = configuration.alignment,
+        }).completeWith(BaseStyle{
             .font = undefined,
             .color = .{ 0.0, 0.0, 0.0, 1.0 },
             .fontSize = 16,
@@ -756,8 +760,8 @@ test "wrap - no wrapping when glyphs fit on single line" {
             .text = "a",
             .advance = .{ 10.0, 0.0 },
             .offset = .{ 0.0, 0.0 },
-        } ** 5,
-    };
+        },
+    } ** 5;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
         .alignment = .start,
@@ -770,7 +774,6 @@ test "wrap - no wrapping when glyphs fit on single line" {
             .{ 20.0, 0.0 },
             .{ 30.0, 0.0 },
             .{ 40.0, 0.0 },
-            .{ 50.0, 0.0 },
         },
     });
 }
@@ -783,8 +786,8 @@ test "wrap - character wrapping with small width" {
             .text = "a",
             .advance = .{ 15.0, 0.0 },
             .offset = .{ 0.0, 0.0 },
-        } ** 6,
-    };
+        },
+    } ** 6;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
         .alignment = .start,
@@ -796,237 +799,123 @@ test "wrap - character wrapping with small width" {
             .{ 15.0, 0.0 },
             .{ 0.0, 20.0 },
             .{ 15.0, 20.0 },
-            .{ 30.0, 20.0 },
+            .{ 0.0, 40.0 },
+            .{ 15.0, 40.0 },
+        },
+    });
+}
+
+test "wrap - word wrapping with small width" {
+    // Create glyphs representing "hello world" (11 glyphs including space)
+    var glyphs = [_]LayoutGlyph{
+        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "w", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+    };
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .start,
+        .mode = .word,
+        .lineWidth = 60.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 }, // h
+            .{ 10.0, 0.0 }, // e
+            .{ 20.0, 0.0 }, // l
+            .{ 30.0, 0.0 }, // l
+            .{ 40.0, 0.0 }, // o
+            .{ 50.0, 0.0 }, // (space)
+            .{ 0.0, 20.0 }, // w
+            .{ 10.0, 20.0 }, // o
+            .{ 20.0, 20.0 }, // r
+            .{ 30.0, 20.0 }, // l
+            .{ 40.0, 20.0 }, // d
+        },
+    });
+}
+
+test "wrap - alignment start" {
+    var glyphs = [_]LayoutGlyph{
+        .{
+            .index = 0,
+            .position = .{ 0.0, 0.0 },
+            .text = "a",
+            .advance = .{ 20.0, 0.0 },
+            .offset = .{ 0.0, 0.0 },
+        },
+    } ** 5;
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .start,
+        .mode = .character,
+        .lineWidth = 45.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 20.0, 0.0 },
+            .{ 0.0, 20.0 },
+            .{ 20.0, 20.0 },
             .{ 0.0, 40.0 },
         },
     });
 }
 
-// test "wrap - word wrapping with small width" {
-//     const allocator = std.testing.allocator;
-//     var arena = std.heap.ArenaAllocator.init(allocator);
-//     defer arena.deinit();
-//     const arenaAllocator = arena.allocator();
-//
-//     // Create glyphs representing "hello world" (11 glyphs including space)
-//     const texts = [_][]const u8{ "h", "e", "l", "l", "o", " ", "w", "o", "r", "l", "d" };
-//     const glyphs = try arenaAllocator.alloc(LayoutGlyph, texts.len);
-//     for (glyphs, 0..) |*glyph, i| {
-//         glyph.* = .{
-//             .index = @intCast(i),
-//             .position = .{ 0.0, 0.0 },
-//             .text = texts[i],
-//             .advance = .{ 10.0, 0.0 }, // Each character is 10px wide
-//             .offset = .{ 0.0, 0.0 },
-//         };
-//     }
-//
-//     const baseStyle = BaseStyle{
-//         .font = undefined,
-//         .color = .{ 0.0, 0.0, 0.0, 1.0 },
-//         .fontSize = 16,
-//         .fontWeight = 400,
-//         .lineHeight = 1.0,
-//         .textWrapping = .word,
-//     };
-//
-//     const incompleteStyle = IncompleteStyle{
-//         .preferredWidth = .{ .fixed = 60.0 },
-//         .preferredHeight = .{ .fixed = 20.0 },
-//     };
-//
-//     var layoutBox = LayoutBox{
-//         .key = 1,
-//         .position = .{ 0.0, 0.0 },
-//         .z = 0,
-//         .size = .{ 60.0, 20.0 }, // 60px wide - fits "hello " (6 chars) but not "hello world"
-//         .minSize = .{ 0.0, 20.0 },
-//         .children = .{
-//             .glyphs = Glyphs{
-//                 .slice = glyphs,
-//                 .lineHeight = 20.0,
-//             },
-//         },
-//         .style = incompleteStyle.completeWith(baseStyle),
-//     };
-//
-//     try wrap(arenaAllocator, &layoutBox);
-//
-//     // "hello " should be on line 0 (indices 0-5)
-//     for (0..6) |i| {
-//         try std.testing.expectApproxEqAbs(0.0, glyphs[i].position[1], 0.001);
-//     }
-//
-//     // "world" should be on line 1 (indices 6-10)
-//     for (6..11) |i| {
-//         try std.testing.expectApproxEqAbs(20.0, glyphs[i].position[1], 0.001);
-//     }
-//
-//     // "world" should start at x=0 on the second line
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[6].position[0], 0.001);
-//
-//     // Height should be 2 lines
-//     try std.testing.expectApproxEqAbs(40.0, layoutBox.size[1], 0.001);
-// }
-//
-// test "wrap - alignment start" {
-//     const allocator = std.testing.allocator;
-//     var arena = std.heap.ArenaAllocator.init(allocator);
-//     defer arena.deinit();
-//     const arenaAllocator = arena.allocator();
-//
-//     // Create glyphs that will wrap into 2 lines
-//     const glyphs = try arenaAllocator.alloc(LayoutGlyph, 3);
-//     for (glyphs, 0..) |*glyph, i| {
-//         glyph.* = .{
-//             .index = @intCast(i),
-//             .position = .{ 0.0, 0.0 },
-//             .text = "a",
-//             .advance = .{ 20.0, 0.0 },
-//             .offset = .{ 0.0, 0.0 },
-//         };
-//     }
-//
-//     const baseStyle = BaseStyle{
-//         .font = undefined,
-//         .color = .{ 0.0, 0.0, 0.0, 1.0 },
-//         .fontSize = 16,
-//         .fontWeight = 400,
-//         .lineHeight = 1.0,
-//         .textWrapping = .character,
-//     };
-//
-//     const incompleteStyle = IncompleteStyle{
-//         .preferredWidth = .{ .fixed = 100.0 },
-//         .preferredHeight = .{ .fixed = 20.0 },
-//         .horizontalAlignment = .start,
-//     };
-//
-//     var layoutBox = LayoutBox{
-//         .key = 1,
-//         .position = .{ 0.0, 0.0 },
-//         .z = 0,
-//         .size = .{ 100.0, 20.0 }, // 100px wide
-//         .minSize = .{ 0.0, 20.0 },
-//         .children = .{
-//             .glyphs = Glyphs{
-//                 .slice = glyphs,
-//                 .lineHeight = 20.0,
-//             },
-//         },
-//         .style = incompleteStyle.completeWith(baseStyle),
-//     };
-//
-//     try wrap(arenaAllocator, &layoutBox);
-//
-//     // With start alignment, all glyphs should start at x=0 for their respective lines
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[0].position[0], 0.001);
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[2].position[0], 0.001);
-// }
-//
-// test "wrap - alignment center" {
-//     const allocator = std.testing.allocator;
-//     var arena = std.heap.ArenaAllocator.init(allocator);
-//     defer arena.deinit();
-//     const arenaAllocator = arena.allocator();
-//
-//     // Create glyphs: 2 on first line, 1 on second line
-//     const glyphs = try arenaAllocator.alloc(LayoutGlyph, 3);
-//     for (glyphs, 0..) |*glyph, i| {
-//         glyph.* = .{
-//             .index = @intCast(i),
-//             .position = .{ 0.0, 0.0 },
-//             .text = "a",
-//             .advance = .{ 20.0, 0.0 }, // Each glyph is 20px wide
-//             .offset = .{ 0.0, 0.0 },
-//         };
-//     }
-//
-//     const baseStyle = BaseStyle{
-//         .font = undefined,
-//         .color = .{ 0.0, 0.0, 0.0, 1.0 },
-//         .fontSize = 16,
-//         .fontWeight = 400,
-//         .lineHeight = 1.0,
-//         .textWrapping = .character,
-//     };
-//
-//     const incompleteStyle = IncompleteStyle{
-//         .preferredWidth = .{ .fixed = 100.0 },
-//         .preferredHeight = .{ .fixed = 20.0 },
-//         .horizontalAlignment = .center,
-//     };
-//
-//     var layoutBox = LayoutBox{
-//         .key = 1,
-//         .position = .{ 0.0, 0.0 },
-//         .z = 0,
-//         .size = .{ 100.0, 20.0 }, // 100px wide - fits 4 glyphs, but we only have 3
-//         .minSize = .{ 0.0, 20.0 },
-//         .children = .{
-//             .glyphs = Glyphs{
-//                 .slice = glyphs,
-//                 .lineHeight = 20.0,
-//             },
-//         },
-//         .style = incompleteStyle.completeWith(baseStyle),
-//     };
-//
-//     try wrap(arenaAllocator, &layoutBox);
-//
-//     // Note: The commented-out alignment code in wrap function (lines 299-307)
-//     // means this currently doesn't apply alignment. When uncommented:
-//     // - Line 0 has 2 glyphs (40px), centered in 100px: offset = (100-40)/2 = 30px
-//     // - Line 1 has 1 glyph (20px), centered in 100px: offset = (100-20)/2 = 40px
-//
-//     // For now, test that wrapping at least happens correctly
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[0].position[1], 0.001);
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[1].position[1], 0.001);
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[2].position[1], 0.001);
-// }
-//
-// test "wrap - alignment end" {
-//     const allocator = std.testing.allocator;
-//     var arena = std.heap.ArenaAllocator.init(allocator);
-//     defer arena.deinit();
-//     const arenaAllocator = arena.allocator();
-//
-//     // Create glyphs: 2 on first line, 1 on second line
-//     const glyphs = try arenaAllocator.alloc(LayoutGlyph, 3);
-//     for (glyphs, 0..) |*glyph, i| {
-//         glyph.* = .{
-//             .index = @intCast(i),
-//             .position = .{ 0.0, 0.0 },
-//             .text = "a",
-//             .advance = .{ 20.0, 0.0 }, // Each glyph is 20px wide
-//             .offset = .{ 0.0, 0.0 },
-//         };
-//     }
-//
-//     var layoutBox = LayoutBox{
-//         .key = 1,
-//         .position = .{ 0.0, 0.0 },
-//         .z = 0,
-//         .size = .{ 40.0, 20.0 }, // 100px wide
-//         .minSize = .{ 0.0, 20.0 },
-//         .children = .{
-//             .glyphs = Glyphs{
-//                 .slice = glyphs,
-//                 .lineHeight = 30.0,
-//             },
-//         },
-//         .style = (IncompleteStyle{
-//             .horizontalAlignment = .end,
-//             .textWrapping = .character,
-//         }).completeWith(std.mem.zeroes(BaseStyle)),
-//     };
-//
-//     try wrap(arenaAllocator, &layoutBox);
-//
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[0].position[0], 0.001);
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[0].position[1], 0.001);
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[1].position[0], 20.001);
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[1].position[1], 0.001);
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[2].position[0], 80.001);
-//     try std.testing.expectApproxEqAbs(0.0, glyphs[2].position[1], 30.001);
-// }
+test "wrap - alignment center" {
+    var glyphs = [_]LayoutGlyph{
+        .{
+            .index = 0,
+            .position = .{ 0.0, 0.0 },
+            .text = "a",
+            .advance = .{ 20.0, 0.0 },
+            .offset = .{ 0.0, 0.0 },
+        },
+    } ** 5;
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .center,
+        .mode = .character,
+        .lineWidth = 45.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 2.5, 0.0 }, // line offest 2.5 (45 - 20 * 2) / 2
+            .{ 22.5, 0.0 },
+            .{ 2.5, 20.0 }, // line offest 2.5 (45 - 20 * 2) / 2
+            .{ 22.5, 20.0 },
+            .{ 12.5, 40.0 }, // line offset 12.5 (45 - 20) / 2
+        },
+    });
+}
+
+test "wrap - alignment end" {
+    var glyphs = [_]LayoutGlyph{
+        .{
+            .index = 0,
+            .position = .{ 0.0, 0.0 },
+            .text = "a",
+            .advance = .{ 20.0, 0.0 },
+            .offset = .{ 0.0, 0.0 },
+        },
+    } ** 5;
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .end,
+        .mode = .character,
+        .lineWidth = 45.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 5.0, 0.0 }, // line offset 5 = 45 - 20 * 2
+            .{ 25.0, 0.0 },
+            .{ 5.0, 20.0 }, // line offset 5 = 45 - 20 * 2
+            .{ 25.0, 20.0 },
+            .{ 25.0, 40.0 }, // line offset 25 = 45 - 20
+        },
+    });
+}
