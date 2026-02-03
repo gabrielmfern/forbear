@@ -1,12 +1,14 @@
 const std = @import("std");
 
-const forbear = @import("root.zig");
+const Alignment = @import("node.zig").Alignment;
 const BaseStyle = @import("node.zig").BaseStyle;
 const Direction = @import("node.zig").Direction;
 const Element = @import("node.zig").Element;
+const forbear = @import("root.zig");
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const Node = @import("node.zig").Node;
 const Style = @import("node.zig").Style;
+const TextWrapping = @import("node.zig").TextWrapping;
 
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
@@ -210,27 +212,40 @@ fn growAndShrink(
     }
 }
 
-fn wrap(layoutBox: *LayoutBox) void {
+fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
                 for (childBoxes) |*child| {
-                    wrap(child);
+                    try wrap(arena, child);
                 }
             },
             .glyphs => |glyphs| {
                 if (layoutBox.style.textWrapping == .none) {
                     return;
                 }
+                const Line = struct {
+                    startIndex: usize,
+                    endIndex: usize,
+                };
+                var lines = try std.ArrayList(Line).initCapacity(arena, 4);
+
                 const lineWidth = layoutBox.size[0];
                 var cursor: Vec2 = @splat(0.0);
+                var lineStartIndex: usize = 0;
                 switch (layoutBox.style.textWrapping) {
                     .character => {
-                        for (glyphs.slice) |*glyph| {
+                        for (glyphs.slice, 0..) |*glyph, index| {
                             if (cursor[0] + glyph.advance[0] > lineWidth) {
-                                cursor[0] = 0;
+                                try lines.append(arena, .{
+                                    .startIndex = lineStartIndex,
+                                    .endIndex = index - 1,
+                                });
+                                lineStartIndex = index;
+                                cursor[0] = 0.0;
                                 cursor[1] += glyphs.lineHeight;
                             }
+
                             glyph.position = cursor + glyph.offset;
                             cursor += glyph.advance;
                         }
@@ -247,6 +262,11 @@ fn wrap(layoutBox: *LayoutBox) void {
                                     cursor[1] += glyphs.lineHeight;
 
                                     const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
+                                    try lines.append(arena, .{
+                                        .startIndex = lineStartIndex,
+                                        .endIndex = lastSpaceInfo.index,
+                                    });
+
                                     for (lastSpaceInfo.index + 1..index) |reverseIndex| {
                                         const reverseGlyph = &glyphs.slice[reverseIndex];
                                         reverseGlyph.position[0] -= firstWordGlyph.position[0];
@@ -254,6 +274,7 @@ fn wrap(layoutBox: *LayoutBox) void {
 
                                         cursor += reverseGlyph.advance;
                                     }
+                                    lineStartIndex = lastSpaceInfo.index + 1;
                                     lastSpaceInfoOpt = null;
                                 }
                             }
@@ -269,6 +290,36 @@ fn wrap(layoutBox: *LayoutBox) void {
                         }
                     },
                     else => unreachable,
+                }
+                if (lines.getLastOrNull()) |lastLine| {
+                    if (lastLine.endIndex != glyphs.slice.len - 1) {
+                        try lines.append(arena, .{
+                            .startIndex = lastLine.endIndex + 1,
+                            .endIndex = glyphs.slice.len - 1,
+                        });
+                    }
+                } else {
+                    try lines.append(arena, .{
+                        .startIndex = 0,
+                        .endIndex = glyphs.slice.len - 1,
+                    });
+                }
+                for (lines.items) |line| {
+                    // std.debug.print("line start {}\n", .{line});
+                    const startX = glyphs.slice[line.startIndex].position[0];
+                    const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
+                    const width = endX - startX;
+                    for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
+                        // std.debug.print("glyph {}\n", .{glyph.*});
+                        switch (layoutBox.style.horizontalAlignment) {
+                            .start => {},
+                            .center => glyph.position[0] += (lineWidth - width) / 2.0,
+                            .end => glyph.position[0] += lineWidth - width,
+                        }
+                        // std.debug.print("glyph after {}\n", .{glyph.*});
+                        // std.debug.print("\n", .{});
+                    }
+                    // std.debug.print("\n", .{});
                 }
                 layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
             },
@@ -450,11 +501,13 @@ fn place(layoutBox: *LayoutBox) void {
 const LayoutCreator = struct {
     arenaAllocator: std.mem.Allocator,
     path: std.ArrayList(usize),
+    parent: ?LayoutBox,
 
     fn init(arenaAllocator: std.mem.Allocator) !@This() {
         return .{
             .arenaAllocator = arenaAllocator,
             .path = try std.ArrayList(usize).initCapacity(arenaAllocator, 0),
+            .parent = null,
         };
     }
 
@@ -462,7 +515,12 @@ const LayoutCreator = struct {
         const resolutionMultiplier = dpi / @as(Vec2, @splat(72));
         var style = switch (node.content) {
             .element => |element| element.style.completeWith(baseStyle),
-            .text => (IncompleteStyle{}).completeWith(baseStyle),
+            .text => (IncompleteStyle{
+                .horizontalAlignment = if (self.parent) |parent|
+                    parent.style.horizontalAlignment
+                else
+                    null,
+            }).completeWith(baseStyle),
         };
         style.borderInlineWidth *= @splat(resolutionMultiplier[0]);
         style.borderBlockWidth *= @splat(resolutionMultiplier[1]);
@@ -503,6 +561,8 @@ const LayoutCreator = struct {
                 };
                 layoutBox.children = .{ .layoutBoxes = try self.arenaAllocator.alloc(LayoutBox, element.children.items.len) };
                 errdefer self.arenaAllocator.free(layoutBox.children.?.layoutBoxes);
+                const previousParent = self.parent;
+                self.parent = layoutBox;
                 for (element.children.items, 0..) |child, index| {
                     try self.path.append(self.arenaAllocator, index);
                     defer _ = self.path.pop();
@@ -514,6 +574,7 @@ const LayoutCreator = struct {
                         dpi,
                     );
                 }
+                self.parent = previousParent;
                 return layoutBox;
             },
             .text => |text| {
@@ -628,14 +689,14 @@ pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
 }
 
 pub fn layout(
-    arenaAllocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     baseStyle: BaseStyle,
     viewportSize: Vec2,
     dpi: Vec2,
 ) !LayoutBox {
     const context = forbear.getContext();
     if (context.rootFrameNode) |rootFrameNode| {
-        var creator = try LayoutCreator.init(arenaAllocator);
+        var creator = try LayoutCreator.init(arena);
         var layoutBox = try creator.create(rootFrameNode, baseStyle, 1, dpi);
         fitWidth(&layoutBox);
         fitHeight(&layoutBox);
@@ -645,8 +706,8 @@ pub fn layout(
         if (layoutBox.style.preferredHeight == .grow) {
             layoutBox.size[1] = viewportSize[1];
         }
-        try growAndShrink(arenaAllocator, &layoutBox);
-        wrap(&layoutBox);
+        try growAndShrink(arena, &layoutBox);
+        try wrap(arena, &layoutBox);
         fitWidth(&layoutBox);
         fitHeight(&layoutBox);
         place(&layoutBox);
@@ -656,4 +717,376 @@ pub fn layout(
         std.log.err("You need to define a root frame node before layouting. You can do so by just doing forbear.text(...), for example.", .{});
         return error.NoRootFrameNode;
     }
+}
+
+fn testWrapConfiguration(configuration: struct {
+    mode: TextWrapping,
+    alignment: Alignment,
+    lineWidth: f32,
+    lineHeight: f32,
+    glyphs: []LayoutGlyph,
+    expectedPositions: []const Vec2,
+}) !void {
+    std.debug.assert(configuration.expectedPositions.len == configuration.glyphs.len);
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var layoutBox = LayoutBox{
+        .key = 1,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ configuration.lineWidth, configuration.lineHeight },
+        .minSize = .{ 0.0, 20.0 },
+        .children = .{
+            .glyphs = Glyphs{
+                .slice = configuration.glyphs,
+                .lineHeight = configuration.lineHeight,
+            },
+        },
+        .style = (IncompleteStyle{
+            .horizontalAlignment = configuration.alignment,
+        }).completeWith(BaseStyle{
+            .font = undefined,
+            .color = .{ 0.0, 0.0, 0.0, 1.0 },
+            .fontSize = 16,
+            .fontWeight = 400,
+            .lineHeight = 1.0,
+            .textWrapping = configuration.mode,
+        }),
+    };
+
+    try wrap(arenaAllocator, &layoutBox);
+
+    const glyphPositions = try arenaAllocator.alloc(Vec2, configuration.glyphs.len);
+    for (configuration.glyphs, 0..) |glyph, i| {
+        glyphPositions[i] = glyph.position;
+    }
+    try std.testing.expectEqualDeep(configuration.expectedPositions, glyphPositions);
+}
+
+test "wrap - no wrapping when glyphs fit on single line" {
+    var glyphs = [_]LayoutGlyph{
+        .{
+            .index = 0,
+            .position = .{ 0.0, 0.0 },
+            .text = "a",
+            .advance = .{ 10.0, 0.0 },
+            .offset = .{ 0.0, 0.0 },
+        },
+    } ** 5;
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .start,
+        .mode = .character,
+        .lineWidth = 100.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 10.0, 0.0 },
+            .{ 20.0, 0.0 },
+            .{ 30.0, 0.0 },
+            .{ 40.0, 0.0 },
+        },
+    });
+}
+
+test "wrap - character wrapping with small width" {
+    var glyphs = [_]LayoutGlyph{
+        .{
+            .index = 0,
+            .position = .{ 0.0, 0.0 },
+            .text = "a",
+            .advance = .{ 15.0, 0.0 },
+            .offset = .{ 0.0, 0.0 },
+        },
+    } ** 6;
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .start,
+        .mode = .character,
+        .lineWidth = 35.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 15.0, 0.0 },
+            .{ 0.0, 20.0 },
+            .{ 15.0, 20.0 },
+            .{ 0.0, 40.0 },
+            .{ 15.0, 40.0 },
+        },
+    });
+}
+
+test "wrap - word wrapping with small width" {
+    // Create glyphs representing "hello world" (11 glyphs including space)
+    var glyphs = [_]LayoutGlyph{
+        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "w", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+    };
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .start,
+        .mode = .word,
+        .lineWidth = 60.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 }, // h
+            .{ 10.0, 0.0 }, // e
+            .{ 20.0, 0.0 }, // l
+            .{ 30.0, 0.0 }, // l
+            .{ 40.0, 0.0 }, // o
+            .{ 50.0, 0.0 }, // (space)
+            .{ 0.0, 20.0 }, // w
+            .{ 10.0, 20.0 }, // o
+            .{ 20.0, 20.0 }, // r
+            .{ 30.0, 20.0 }, // l
+            .{ 40.0, 20.0 }, // d
+        },
+    });
+}
+
+test "wrap - alignment start" {
+    var glyphs = [_]LayoutGlyph{
+        .{
+            .index = 0,
+            .position = .{ 0.0, 0.0 },
+            .text = "a",
+            .advance = .{ 20.0, 0.0 },
+            .offset = .{ 0.0, 0.0 },
+        },
+    } ** 5;
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .start,
+        .mode = .character,
+        .lineWidth = 45.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 20.0, 0.0 },
+            .{ 0.0, 20.0 },
+            .{ 20.0, 20.0 },
+            .{ 0.0, 40.0 },
+        },
+    });
+}
+
+test "wrap - alignment center" {
+    var glyphs = [_]LayoutGlyph{
+        .{
+            .index = 0,
+            .position = .{ 0.0, 0.0 },
+            .text = "a",
+            .advance = .{ 20.0, 0.0 },
+            .offset = .{ 0.0, 0.0 },
+        },
+    } ** 5;
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .center,
+        .mode = .character,
+        .lineWidth = 45.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 2.5, 0.0 }, // line offest 2.5 (45 - 20 * 2) / 2
+            .{ 22.5, 0.0 },
+            .{ 2.5, 20.0 }, // line offest 2.5 (45 - 20 * 2) / 2
+            .{ 22.5, 20.0 },
+            .{ 12.5, 40.0 }, // line offset 12.5 (45 - 20) / 2
+        },
+    });
+}
+
+test "wrap - alignment end" {
+    var glyphs = [_]LayoutGlyph{
+        .{
+            .index = 0,
+            .position = .{ 0.0, 0.0 },
+            .text = "a",
+            .advance = .{ 20.0, 0.0 },
+            .offset = .{ 0.0, 0.0 },
+        },
+    } ** 5;
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .end,
+        .mode = .character,
+        .lineWidth = 45.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 5.0, 0.0 }, // line offset 5 = 45 - 20 * 2
+            .{ 25.0, 0.0 },
+            .{ 5.0, 20.0 }, // line offset 5 = 45 - 20 * 2
+            .{ 25.0, 20.0 },
+            .{ 25.0, 40.0 }, // line offset 25 = 45 - 20
+        },
+    });
+}
+
+test "wrap - word wrapping with alignment start" {
+    var glyphs = [_]LayoutGlyph{
+        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "w", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+    };
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .start,
+        .mode = .word,
+        .lineWidth = 60.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 }, // h - Line 0 starts at x=0
+            .{ 10.0, 0.0 }, // e
+            .{ 20.0, 0.0 }, // l
+            .{ 30.0, 0.0 }, // l
+            .{ 40.0, 0.0 }, // o
+            .{ 50.0, 0.0 }, // (space)
+            .{ 0.0, 20.0 }, // w - Line 1 starts at x=0
+            .{ 10.0, 20.0 }, // o
+            .{ 20.0, 20.0 }, // r
+            .{ 30.0, 20.0 }, // l
+            .{ 40.0, 20.0 }, // d
+        },
+    });
+}
+
+test "wrap - word wrapping with alignment center" {
+    var glyphs = [_]LayoutGlyph{
+        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "w", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+    };
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .center,
+        .mode = .word,
+        .lineWidth = 100.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            // Expected: "hello" on line 0 (centered), space stays in place, "world" on line 1 (centered)
+            .{ 20.0, 0.0 }, // h - placeholder, needs actual values
+            .{ 30.0, 0.0 }, // e
+            .{ 40.0, 0.0 }, // l
+            .{ 50.0, 0.0 }, // l
+            .{ 60.0, 0.0 }, // o
+            .{ 70.0, 0.0 }, // (space)
+            .{ 25.0, 20.0 }, // w
+            .{ 35.0, 20.0 }, // o
+            .{ 45.0, 20.0 }, // r
+            .{ 55.0, 20.0 }, // l
+            .{ 65.0, 20.0 }, // d
+        },
+    });
+}
+
+test "wrap - word wrapping with alignment end" {
+    var glyphs = [_]LayoutGlyph{
+        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "w", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+    };
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .end,
+        .mode = .word,
+        .lineWidth = 100.0,
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            // Expected: "hello" on line 0 (end-aligned), space stays in place, "world" on line 1 (end-aligned)
+            .{ 40.0, 0.0 }, // h - placeholder, needs actual values
+            .{ 50.0, 0.0 }, // e
+            .{ 60.0, 0.0 }, // l
+            .{ 70.0, 0.0 }, // l
+            .{ 80.0, 0.0 }, // o
+            .{ 90.0, 0.0 }, // (space)
+            .{ 50.0, 20.0 }, // w
+            .{ 60.0, 20.0 }, // o
+            .{ 70.0, 20.0 }, // r
+            .{ 80.0, 20.0 }, // l
+            .{ 90.0, 20.0 }, // d
+        },
+    });
+}
+
+test "wrap - word wrapping with very small line width causes negative positions" {
+    // Replicates bug where word wrapping with very small line width causes negative x positions
+    // Similar to the image showing "Dude, you're at the" with words split awkwardly
+    // When line width is smaller than a word, word wrapping can produce negative positions
+    var glyphs = [_]LayoutGlyph{
+        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "D", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "u", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = ",", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "y", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "u", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "'", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 11, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 12, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 13, .position = .{ 0.0, 0.0 }, .text = "a", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+        .{ .index = 14, .position = .{ 0.0, 0.0 }, .text = "t", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
+    };
+    try testWrapConfiguration(.{
+        .glyphs = &glyphs,
+        .alignment = .center,
+        .mode = .word,
+        .lineWidth = 25.0, // Very small width - can only fit 2-3 characters
+        .lineHeight = 20.0,
+        .expectedPositions = &.{
+            .{ -17.5, 0.0 }, // D
+            .{ -7.5, 0.0 }, // u
+            .{ 2.5, 0.0 }, // d
+            .{ 12.5, 0.0 }, // e
+            .{ 22.5, 0.0 }, // ,
+            .{ 32.5, 0.0 }, // (space)
+            .{ -22.5, 20.0 }, // y
+            .{ -12.5, 20.0 }, // o
+            .{ -2.5, 20.0 }, // u
+            .{ 7.5, 20.0 }, // '
+            .{ 17.5, 20.0 }, // r
+            .{ 27.5, 20.0 }, // e
+            .{ 37.5, 20.0 }, // (space)
+            .{ 2.5, 40.0 }, // a
+            .{ 12.5, 40.0 }, // t
+        },
+    });
 }
