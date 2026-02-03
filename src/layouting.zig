@@ -309,7 +309,7 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                     const startX = glyphs.slice[line.startIndex].position[0];
                     const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
                     const width = endX - startX;
-                    for (glyphs.slice[line.startIndex..line.endIndex + 1]) |*glyph| {
+                    for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
                         // std.debug.print("glyph {}\n", .{glyph.*});
                         switch (layoutBox.style.horizontalAlignment) {
                             .start => {},
