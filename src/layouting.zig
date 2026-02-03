@@ -239,8 +239,11 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                             if (cursor[0] + glyph.advance[0] > lineWidth) {
                                 try lines.append(arena, .{
                                     .startIndex = lineStartIndex,
-                                    .endIndex = index,
+                                    .endIndex = index - 1,
                                 });
+                                lineStartIndex = index;
+                                cursor[0] = 0.0;
+                                cursor[1] += glyphs.lineHeight;
                             }
 
                             glyph.position = cursor + glyph.offset;
@@ -261,10 +264,9 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                                     const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
                                     try lines.append(arena, .{
                                         .startIndex = lineStartIndex,
-                                        .endIndex = lastSpaceInfo.index + 1,
+                                        .endIndex = lastSpaceInfo.index,
                                     });
 
-                                    // you are here: for some reason text wrapping behaves weirdly at a certain small breakpoint
                                     for (lastSpaceInfo.index + 1..index) |reverseIndex| {
                                         const reverseGlyph = &glyphs.slice[reverseIndex];
                                         reverseGlyph.position[0] -= firstWordGlyph.position[0];
@@ -289,21 +291,35 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                     },
                     else => unreachable,
                 }
-                try lines.append(arena, .{
-                    .startIndex = if (lines.getLastOrNull()) |lastLine| lastLine.endIndex else 0,
-                    .endIndex = glyphs.slice.len,
-                });
+                if (lines.getLastOrNull()) |lastLine| {
+                    if (lastLine.endIndex != glyphs.slice.len - 1) {
+                        try lines.append(arena, .{
+                            .startIndex = lastLine.endIndex + 1,
+                            .endIndex = glyphs.slice.len - 1,
+                        });
+                    }
+                } else {
+                    try lines.append(arena, .{
+                        .startIndex = 0,
+                        .endIndex = glyphs.slice.len - 1,
+                    });
+                }
                 for (lines.items) |line| {
+                    // std.debug.print("line start {}\n", .{line});
                     const startX = glyphs.slice[line.startIndex].position[0];
-                    const endX = glyphs.slice[line.endIndex - 1].position[0];
+                    const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
                     const width = endX - startX;
-                    for (glyphs.slice[line.startIndex..line.endIndex]) |*glyph| {
+                    for (glyphs.slice[line.startIndex..line.endIndex + 1]) |*glyph| {
+                        // std.debug.print("glyph {}\n", .{glyph.*});
                         switch (layoutBox.style.horizontalAlignment) {
                             .start => {},
                             .center => glyph.position[0] += (lineWidth - width) / 2.0,
                             .end => glyph.position[0] += lineWidth - width,
                         }
+                        // std.debug.print("glyph after {}\n", .{glyph.*});
+                        // std.debug.print("\n", .{});
                     }
+                    // std.debug.print("\n", .{});
                 }
                 layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
             },
@@ -1056,21 +1072,21 @@ test "wrap - word wrapping with very small line width causes negative positions"
         .lineWidth = 25.0, // Very small width - can only fit 2-3 characters
         .lineHeight = 20.0,
         .expectedPositions = &.{
-            .{ -12.5, 0.0 }, // D
-            .{ -2.5, 0.0 }, // u
-            .{ -7.5, 0.0 }, // d
-            .{ 30.0, 0.0 }, // e
-            .{ 40.0, 0.0 }, // ,
-            .{ 0.0, 0.0 }, // (space)
-            .{ 0.0, 0.0 }, // y
-            .{ 0.0, 0.0 }, // o
-            .{ 0.0, 0.0 }, // u
-            .{ 0.0, 0.0 }, // '
-            .{ 0.0, 0.0 }, // r
-            .{ 0.0, 0.0 }, // e
-            .{ 0.0, 0.0 }, // (space)
-            .{ 0.0, 0.0 }, // a
-            .{ 0.0, 0.0 }, // t
+            .{ -17.5, 0.0 }, // D
+            .{ -7.5, 0.0 }, // u
+            .{ 2.5, 0.0 }, // d
+            .{ 12.5, 0.0 }, // e
+            .{ 22.5, 0.0 }, // ,
+            .{ 32.5, 0.0 }, // (space)
+            .{ -22.5, 20.0 }, // y
+            .{ -12.5, 20.0 }, // o
+            .{ -2.5, 20.0 }, // u
+            .{ 7.5, 20.0 }, // '
+            .{ 17.5, 20.0 }, // r
+            .{ 27.5, 20.0 }, // e
+            .{ 37.5, 20.0 }, // (space)
+            .{ 2.5, 40.0 }, // a
+            .{ 12.5, 40.0 }, // t
         },
     });
 }
