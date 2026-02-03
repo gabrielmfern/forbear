@@ -16,9 +16,9 @@ However, it came with a cost: performance.
 
 # Road Map
 
-- [~] Building out 10 complete examples of real-world UI that inspire me
-- [ ] Build out real, mostly open-source, applications to showcase it with
-- [ ] Support as many languages as possible
+1. Building out 10 complete examples of real-world UI that inspire me (right now)
+2. Build out real, mostly open-source, applications to showcase it with
+3. Support as many languages as possible
 
 The full road ahead can't quite be defined yet, but those are some of the main
 milestones I want to reach. This is a multiyear project, so I do not want to
