@@ -22,6 +22,6 @@
 - [x] text wrapping
 - [x] fix button hovering issue in the button (uhoh.com has this too)
 - [x] text wrapping only breaking at the beginning of characters 
-- [ ] wrapped text should also conform to parent alignment
+- [x] wrapped text should also conform to parent alignment
 - [ ] fix parts of shadow that draw nothing going over parent borders
 
