@@ -13,9 +13,7 @@ pub const Node = nodeImport.Node;
 pub const IncompleteStyle = nodeImport.IncompleteStyle;
 pub const Style = nodeImport.Style;
 pub const Component = nodeImport.Component;
-pub const ComponentProps = nodeImport.ComponentProps;
 pub const Element = nodeImport.Element;
-pub const ElementProps = nodeImport.DivProps;
 pub const Window = @import("window/root.zig").Window;
 pub const components = @import("components.zig");
 pub const FpsCounter = components.FpsCounter;
@@ -936,4 +934,8 @@ pub fn deinit() void {
 
 pub fn getContext() *@This() {
     return &context.?;
+}
+
+test {
+    _ = std.testing.refAllDecls(@This());
 }

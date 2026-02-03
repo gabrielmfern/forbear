@@ -32,6 +32,7 @@ fn App() !void {
             .fontWeight = 700,
             .fontSize = 30,
             .marginBlock = .{ 10, 10 },
+            .horizontalAlignment = .center,
         }))({
             try forbear.text(arena, "Dude, you’re at the bottom of our landing page.", .{});
         });
