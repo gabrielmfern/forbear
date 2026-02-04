@@ -1506,6 +1506,106 @@ const ShadowsPipeline = struct {
         };
     }
 
+    fn draw(
+        self: *@This(),
+        shadowCount: usize,
+        frameIndex: usize,
+        commandBuffer: c.VkCommandBuffer,
+        rectangleModel: *Model,
+    ) void {
+        c.vkCmdBindPipeline(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.graphicsPipeline,
+        );
+
+        c.vkCmdBindDescriptorSets(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.pipelineLayout,
+            0,
+            1,
+            &self.descriptorSets[frameIndex],
+            0,
+            null,
+        );
+
+        c.vkCmdBindVertexBuffers(
+            commandBuffer,
+            0,
+            1,
+            &rectangleModel.vertexBuffer.handle,
+            &@intCast(0),
+        );
+        c.vkCmdDraw(
+            commandBuffer,
+            rectangleModel.vertexCount,
+            @intCast(shadowCount),
+            0,
+            0,
+        );
+    }
+
+    fn prepareForDraw(
+        self: *@This(),
+        iterator: *LayoutTreeIterator,
+        projectionMatrix: zmath.Mat,
+        frameIndex: usize,
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+    ) !usize {
+        var totalShadowCount: usize = 0;
+        while (try iterator.next()) |layoutBox| {
+            if (layoutBox.style.shadow != null) {
+                totalShadowCount += 1;
+            }
+        }
+        try iterator.reset();
+
+        if (totalShadowCount > 0) {
+            if (totalShadowCount > self.shadowShaderData[0].len) {
+                try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
+                try self.resizeConcurrentShadowCapacity(
+                    logicalDevice,
+                    physicalDevice,
+                    try std.math.ceilPowerOfTwo(usize, totalShadowCount),
+                );
+            }
+            var shadowIndex: usize = 0;
+            while (try iterator.next()) |layoutBox| {
+                if (layoutBox.style.shadow) |shadow| {
+                    const padding = Vec2{
+                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
+                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    };
+                    const position = Vec2{
+                        layoutBox.position[0] - padding[0] - shadow.offsetInline[0] + shadow.offsetInline[1],
+                        layoutBox.position[1] - padding[1] - shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    };
+                    const size = layoutBox.size + padding * Vec2{ 2, 2 };
+                    self.shadowShaderData[frameIndex][shadowIndex] = ShadowRenderingData{
+                        .modelViewProjectionMatrix = zmath.mul(
+                            zmath.mul(
+                                zmath.scaling(size[0], size[1], 1.0),
+                                zmath.translation(position[0], position[1], 0.0),
+                            ),
+                            projectionMatrix,
+                        ),
+                        .color = srgbToLinearColor(shadow.color),
+                        .blur = shadow.blurRadius,
+                        .spread = shadow.spread,
+                        .elementSize = layoutBox.size,
+                        .size = size,
+                        .borderRadius = layoutBox.style.borderRadius,
+                    };
+                    shadowIndex += 1;
+                }
+            }
+        }
+
+        return totalShadowCount;
+    }
+
     fn resizeConcurrentShadowCapacity(
         self: *@This(),
         logicalDevice: c.VkDevice,
@@ -1581,6 +1681,8 @@ const ElementRenderingData = extern struct {
 };
 
 const ElementsPipeline = struct {
+    allocator: std.mem.Allocator,
+
     pipelineLayout: c.VkPipelineLayout,
     graphicsPipeline: c.VkPipeline,
 
@@ -1591,6 +1693,7 @@ const ElementsPipeline = struct {
     elementsShaderDataBuffer: [maxFramesInFlight]Buffer,
     elementsShaderData: [maxFramesInFlight][]ElementRenderingData,
 
+    registeredImages: std.ArrayList(*const Image),
     sampler: c.VkSampler,
 
     const maxImages = 1024;
@@ -1599,6 +1702,7 @@ const ElementsPipeline = struct {
     const elementFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_fragment_shader")));
 
     fn init(
+        allocator: std.mem.Allocator,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         renderPass: c.VkRenderPass,
@@ -1898,6 +2002,8 @@ const ElementsPipeline = struct {
         }, null, &sampler));
 
         return ElementsPipeline{
+            .allocator = allocator,
+
             .pipelineLayout = pipelineLayout,
             .graphicsPipeline = graphicsPipeline,
 
@@ -1907,7 +2013,141 @@ const ElementsPipeline = struct {
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
             .sampler = sampler,
+            .registeredImages = try std.ArrayList(*const Image).initCapacity(allocator, 16),
         };
+    }
+
+    fn registerImage(self: *@This(), image: *const Image, logicalDevice: c.VkDevice) !u32 {
+        for (self.registeredImages.items, 0..) |registered, i| {
+            if (registered == image) return @intCast(i);
+        }
+
+        const index = self.registeredImages.items.len;
+        if (index >= ElementsPipeline.maxImages) return error.TooManyImages;
+
+        try self.registeredImages.append(self.allocator, image);
+
+        for (0..maxFramesInFlight) |i| {
+            const imageInfo = c.VkDescriptorImageInfo{
+                .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = image.imageView,
+                .sampler = self.sampler,
+            };
+
+            const descriptorWrite = c.VkWriteDescriptorSet{
+                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = null,
+                .dstSet = self.descriptorSets[i],
+                .dstBinding = 1,
+                .dstArrayElement = @intCast(index),
+                .descriptorCount = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .pImageInfo = &imageInfo,
+                .pBufferInfo = null,
+                .pTexelBufferView = null,
+            };
+
+            c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+        }
+
+        return @intCast(index);
+    }
+
+    fn draw(
+        self: *@This(),
+        elementCount: usize,
+        frameIndex: usize,
+        commandBuffer: c.VkCommandBuffer,
+        rectangleModel: *Model,
+    ) void {
+        c.vkCmdBindPipeline(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.graphicsPipeline,
+        );
+        c.vkCmdBindDescriptorSets(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.pipelineLayout,
+            0,
+            1,
+            &self.descriptorSets[frameIndex],
+            0,
+            null,
+        );
+        c.vkCmdBindVertexBuffers(
+            commandBuffer,
+            0,
+            1,
+            &rectangleModel.vertexBuffer.handle,
+            &@intCast(0),
+        );
+        c.vkCmdDraw(
+            commandBuffer,
+            rectangleModel.vertexCount,
+            @intCast(elementCount),
+            0,
+            0,
+        );
+    }
+
+    fn prepareForDraw(
+        self: *@This(),
+        iterator: *LayoutTreeIterator,
+        frameIndex: usize,
+        projectionMatrix: zmath.Mat,
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+    ) !usize {
+        var layoutBoxCount: usize = 0;
+        while (try iterator.next() != null) {
+            layoutBoxCount += 1;
+        }
+
+        if (layoutBoxCount > self.elementsShaderData[0].len) {
+            try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
+            try self.resizeConcurrentElementCapacity(
+                logicalDevice,
+                physicalDevice,
+                try std.math.ceilPowerOfTwo(usize, layoutBoxCount),
+            );
+        }
+
+        try iterator.reset();
+        var i: usize = 0;
+        while (try iterator.next()) |layoutBox| {
+            const textureIndex: i32 = switch (layoutBox.style.background) {
+                .color => -1,
+                .image => |imgPtr| @intCast(try self.registerImage(imgPtr, logicalDevice)),
+            };
+            self.elementsShaderData[frameIndex][i] = ElementRenderingData{
+                .modelViewProjectionMatrix = zmath.mul(
+                    zmath.mul(
+                        zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
+                        zmath.translation(layoutBox.position[0], layoutBox.position[1], 0.0),
+                    ),
+                    projectionMatrix,
+                ),
+                .backgroundColor = switch (layoutBox.style.background) {
+                    .color => |color| srgbToLinearColor(color),
+                    .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
+                },
+                .size = layoutBox.size,
+                .borderRadius = layoutBox.style.borderRadius,
+                .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
+                .borderSize = .{
+                    layoutBox.style.borderBlockWidth[0],
+                    layoutBox.style.borderBlockWidth[1],
+                    layoutBox.style.borderInlineWidth[0],
+                    layoutBox.style.borderInlineWidth[1],
+                },
+                .imageIndex = textureIndex,
+            };
+
+            i += 1;
+        }
+
+        return layoutBoxCount;
     }
 
     fn resizeConcurrentElementCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
@@ -1955,7 +2195,9 @@ const ElementsPipeline = struct {
         }
     }
 
-    fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+    fn deinit(self: *@This(), logicalDevice: c.VkDevice) void {
+        self.registeredImages.deinit(self.allocator);
+
         c.vkDestroySampler(logicalDevice, self.sampler, null);
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
 
@@ -2001,7 +2243,7 @@ const TextPipeline = struct {
         dpi: [2]u32,
     };
 
-    pub const GlypRenderingShaderData = extern struct {
+    const GlypRenderingShaderData = extern struct {
         modelViewProjectionMatrix: zmath.Mat,
         color: Vec4,
         uvOffset: [2]f32,
@@ -2011,7 +2253,7 @@ const TextPipeline = struct {
     const textVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_vertex_shader")));
     const textFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_fragment_shader")));
 
-    pub fn init(
+    fn init(
         allocator: std.mem.Allocator,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
@@ -2364,7 +2606,164 @@ const TextPipeline = struct {
         };
     }
 
-    pub fn resizeGlyphsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
+    fn draw(
+        self: *@This(),
+        glyphCount: usize,
+        frameIndex: usize,
+        commandBuffer: c.VkCommandBuffer,
+        rectangleModel: *Model,
+    ) void {
+        c.vkCmdBindPipeline(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.graphicsPipeline,
+        );
+
+        c.vkCmdBindDescriptorSets(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.pipelineLayout,
+            0,
+            1,
+            &self.descriptorSets[frameIndex],
+            0,
+            null,
+        );
+
+        c.vkCmdBindVertexBuffers(
+            commandBuffer,
+            0,
+            1,
+            &rectangleModel.vertexBuffer.handle,
+            &@intCast(0),
+        );
+        c.vkCmdDraw(
+            commandBuffer,
+            rectangleModel.vertexCount,
+            @intCast(glyphCount),
+            0,
+            0,
+        );
+    }
+
+    fn prepareForDraw(
+        self: *@This(),
+        allocator: std.mem.Allocator,
+        iterator: *LayoutTreeIterator,
+        projectionMatrix: zmath.Mat,
+        dpi: [2]u32,
+        frameIndex: usize,
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+    ) !usize {
+        var totalGlyphCount: usize = 0;
+        while (try iterator.next()) |layoutBox| {
+            if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
+                totalGlyphCount += layoutBox.children.?.glyphs.slice.len;
+            }
+        }
+        try iterator.reset();
+
+        if (totalGlyphCount > 0) {
+            if (totalGlyphCount > self.shaderBuffersMapped[0].len) {
+                try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
+                try self.resizeGlyphsCapacity(
+                    logicalDevice,
+                    physicalDevice,
+                    try std.math.ceilPowerOfTwo(usize, totalGlyphCount),
+                );
+            }
+
+            var glyphIndex: usize = 0;
+            while (try iterator.next()) |layoutBox| {
+                if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
+                    for (layoutBox.children.?.glyphs.slice) |glyph| {
+                        const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
+                            .dpi = dpi,
+                            .fontKey = layoutBox.style.font.key,
+                            .fontSize = layoutBox.style.fontSize,
+                            .fontWeight = layoutBox.style.fontWeight,
+                            .glyphIndex = glyph.index,
+                        };
+                        const glyphRenderingData = blk: {
+                            // TOOD: render glyphs in the GPU using the font texture atlas a frame buffer
+                            if (self.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
+                                break :blk data;
+                            } else {
+                                try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, allocator);
+                                const rasterizedGlyph = try layoutBox.style.font.rasterize(
+                                    glyph.index,
+                                    dpi,
+                                    @intCast(layoutBox.style.fontSize),
+                                );
+
+                                const textureCoordinates = try self.fontTextureAtlas.upload(
+                                    allocator,
+                                    rasterizedGlyph.bitmap,
+                                    @intCast(rasterizedGlyph.width),
+                                    @intCast(rasterizedGlyph.height),
+                                    @intCast(@abs(rasterizedGlyph.pitch)),
+                                );
+                                // FreeType LCD mode: width is 3x the actual pixel width (RGB bytes)
+                                // Convert to actual pixel width for rendering
+                                const pixelWidth = rasterizedGlyph.width / 3;
+                                const data = TextPipeline.GlyphRenderingData{
+                                    .bitmapTop = @intCast(rasterizedGlyph.top),
+                                    .bitmapLeft = @intCast(rasterizedGlyph.left),
+                                    .bitmapWidth = @intCast(pixelWidth),
+                                    .bitmapHeight = @intCast(rasterizedGlyph.height),
+                                    .textureCoordinates = textureCoordinates,
+                                };
+                                try self.glyphRenderingDataCache.put(glyphRenderingKey, data);
+                                break :blk data;
+                            }
+                        };
+
+                        const left: f32 = @floatFromInt(glyphRenderingData.bitmapLeft);
+                        const top: f32 = @floatFromInt(glyphRenderingData.bitmapTop);
+                        const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
+                        const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
+
+                        const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
+                        const resolutionMultiplier = Vec2{
+                            @as(f32, @floatFromInt(dpi[0])) / 72.0,
+                            @as(f32, @floatFromInt(dpi[1])) / 72.0,
+                        };
+                        const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
+                        const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize * resolutionMultiplier[0];
+
+                        self.shaderBuffersMapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
+                            .modelViewProjectionMatrix = zmath.mul(
+                                zmath.mul(
+                                    zmath.scaling(width, height, 1.0),
+                                    zmath.translation(
+                                        glyph.position[0] + left,
+                                        glyph.position[1] + pixelAscent - top,
+                                        0.0,
+                                    ),
+                                ),
+                                projectionMatrix,
+                            ),
+                            .color = srgbToLinearColor(layoutBox.style.color),
+                            .uvOffset = .{
+                                glyphRenderingData.textureCoordinates.u / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.width)),
+                                glyphRenderingData.textureCoordinates.v / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.height)),
+                            },
+                            .uvSize = .{
+                                glyphRenderingData.textureCoordinates.w / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.width)),
+                                glyphRenderingData.textureCoordinates.h / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.height)),
+                            },
+                        };
+                        glyphIndex += 1;
+                    }
+                }
+            }
+        }
+
+        return totalGlyphCount;
+    }
+
+    fn resizeGlyphsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
         std.log.debug("increasing concurrent glyph capacity from {d} to {d}", .{ self.shaderBuffersMapped[0].len, newCapacity });
         for (self.shaderBuffers) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
@@ -2429,7 +2828,7 @@ const TextPipeline = struct {
         }
     }
 
-    pub fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
+    fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
         self.fontTextureAtlas.deinit(allocator, logicalDevice);
         c.vkDestroySampler(logicalDevice, self.sampler, null);
@@ -2487,8 +2886,6 @@ pub const Renderer = struct {
     textPipeline: TextPipeline,
     renderPass: c.VkRenderPass,
     rectangleModel: Model,
-
-    registeredImages: std.ArrayList(*const Image),
 
     commandPool: c.VkCommandPool,
     commandBuffers: [maxFramesInFlight]c.VkCommandBuffer,
@@ -2613,42 +3010,6 @@ pub const Renderer = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         return .{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
-    }
-
-    fn registerImage(self: *Self, image: *const Image) !u32 {
-        for (self.registeredImages.items, 0..) |registered, i| {
-            if (registered == image) return @intCast(i);
-        }
-
-        const index = self.registeredImages.items.len;
-        if (index >= ElementsPipeline.maxImages) return error.TooManyImages;
-
-        try self.registeredImages.append(self.allocator, image);
-
-        for (0..maxFramesInFlight) |i| {
-            const imageInfo = c.VkDescriptorImageInfo{
-                .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .imageView = image.imageView,
-                .sampler = self.elementsPipeline.sampler,
-            };
-
-            const descriptorWrite = c.VkWriteDescriptorSet{
-                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = null,
-                .dstSet = self.elementsPipeline.descriptorSets[i],
-                .dstBinding = 1,
-                .dstArrayElement = @intCast(index),
-                .descriptorCount = 1,
-                .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &imageInfo,
-                .pBufferInfo = null,
-                .pTexelBufferView = null,
-            };
-
-            c.vkUpdateDescriptorSets(self.logicalDevice, 1, &descriptorWrite, 0, null);
-        }
-
-        return @intCast(index);
     }
 
     fn init(
@@ -2906,7 +3267,8 @@ pub const Renderer = struct {
             commandPool,
         );
 
-        const elementsPipeline = try ElementsPipeline.init(
+        var elementsPipeline = try ElementsPipeline.init(
+            graphics.allocator,
             logicalDevice,
             physicalDevice,
             renderPass,
@@ -3023,8 +3385,6 @@ pub const Renderer = struct {
             .rectangleModel = rectangleModel,
             .renderPass = renderPass,
 
-            .registeredImages = try std.ArrayList(*const Image).initCapacity(graphics.allocator, 16),
-
             .commandPool = commandPool,
             .commandBuffers = commandBuffers,
 
@@ -3120,7 +3480,6 @@ pub const Renderer = struct {
         c.vkDestroyCommandPool(self.logicalDevice, self.commandPool, null);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
         self.elementsPipeline.deinit(self.logicalDevice);
-        self.registeredImages.deinit(self.allocator);
         self.textPipeline.deinit(self.logicalDevice, self.allocator);
         self.shadowsPipeline.deinit(self.logicalDevice);
         self.rectangleModel.deinit(self.logicalDevice);
@@ -3256,297 +3615,54 @@ pub const Renderer = struct {
             1.0,
         );
 
-        const layoutBoxCount = countTreeSize(rootLayoutBox);
-        if (layoutBoxCount > self.elementsPipeline.elementsShaderData[0].len) {
-            try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
-            try self.elementsPipeline.resizeConcurrentElementCapacity(
-                self.logicalDevice,
-                self.physicalDevice,
-                try std.math.ceilPowerOfTwo(usize, layoutBoxCount),
-            );
-        }
-
-        var totalGlyphCount: usize = 0;
-        var totalShadowCount: usize = 0;
-
         var layoutTreeIterator = try LayoutTreeIterator.init(self.allocator, rootLayoutBox);
         defer layoutTreeIterator.deinit();
-        var i: usize = 0;
-        while (try layoutTreeIterator.next()) |layoutBox| {
-            const textureIndex: i32 = switch (layoutBox.style.background) {
-                .color => -1,
-                .image => |imgPtr| @intCast(try self.registerImage(imgPtr)),
-            };
-            self.elementsPipeline.elementsShaderData[self.framesRenderedInSwapchain % maxFramesInFlight][i] = ElementRenderingData{
-                .modelViewProjectionMatrix = zmath.mul(
-                    zmath.mul(
-                        zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
-                        zmath.translation(layoutBox.position[0], layoutBox.position[1], 0.0),
-                    ),
-                    projectionMatrix,
-                ),
-                .backgroundColor = switch (layoutBox.style.background) {
-                    .color => |color| srgbToLinearColor(color),
-                    .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
-                },
-                .size = layoutBox.size,
-                .borderRadius = layoutBox.style.borderRadius,
-                .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
-                .borderSize = .{
-                    layoutBox.style.borderBlockWidth[0],
-                    layoutBox.style.borderBlockWidth[1],
-                    layoutBox.style.borderInlineWidth[0],
-                    layoutBox.style.borderInlineWidth[1],
-                },
-                .imageIndex = textureIndex,
-            };
 
-            if (layoutBox.style.shadow != null) {
-                totalShadowCount += 1;
-            }
-
-            if (layoutBox.children) |children| {
-                if (children == .glyphs) {
-                    totalGlyphCount += children.glyphs.slice.len;
-                }
-            }
-
-            i += 1;
-        }
-
-        if (totalShadowCount > 0) {
-            if (totalShadowCount > self.shadowsPipeline.shadowShaderData[0].len) {
-                try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
-                try self.shadowsPipeline.resizeConcurrentShadowCapacity(
-                    self.logicalDevice,
-                    self.physicalDevice,
-                    try std.math.ceilPowerOfTwo(usize, totalShadowCount),
-                );
-            }
-            try layoutTreeIterator.reset();
-            var shadowIndex: usize = 0;
-            while (try layoutTreeIterator.next()) |layoutBox| {
-                if (layoutBox.style.shadow) |shadow| {
-                    const padding = Vec2{
-                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
-                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
-                    };
-                    const position = Vec2{
-                        layoutBox.position[0] - padding[0] - shadow.offsetInline[0] + shadow.offsetInline[1],
-                        layoutBox.position[1] - padding[1] - shadow.offsetBlock[0] + shadow.offsetBlock[1],
-                    };
-                    const size = layoutBox.size + padding * Vec2{ 2, 2 };
-                    self.shadowsPipeline.shadowShaderData[self.framesRenderedInSwapchain % maxFramesInFlight][shadowIndex] = ShadowRenderingData{
-                        .modelViewProjectionMatrix = zmath.mul(
-                            zmath.mul(
-                                zmath.scaling(size[0], size[1], 1.0),
-                                zmath.translation(position[0], position[1], 0.0),
-                            ),
-                            projectionMatrix,
-                        ),
-                        .color = srgbToLinearColor(shadow.color),
-                        .blur = shadow.blurRadius,
-                        .spread = shadow.spread,
-                        .elementSize = layoutBox.size,
-                        .size = size,
-                        .borderRadius = layoutBox.style.borderRadius,
-                    };
-                    shadowIndex += 1;
-                }
-            }
-
-            c.vkCmdBindPipeline(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.shadowsPipeline.graphicsPipeline,
-            );
-
-            c.vkCmdBindDescriptorSets(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.shadowsPipeline.pipelineLayout,
-                0,
-                1,
-                &self.shadowsPipeline.descriptorSets[self.framesRenderedInSwapchain % maxFramesInFlight],
-                0,
-                null,
-            );
-
-            c.vkCmdBindVertexBuffers(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                0,
-                1,
-                &self.rectangleModel.vertexBuffer.handle,
-                &@intCast(0),
-            );
-            c.vkCmdDraw(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                self.rectangleModel.vertexCount,
-                @intCast(totalShadowCount),
-                0,
-                0,
-            );
-        }
-
-        c.vkCmdBindPipeline(
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            self.elementsPipeline.graphicsPipeline,
+        const shadowCount = try self.shadowsPipeline.prepareForDraw(
+            &layoutTreeIterator,
+            projectionMatrix,
+            self.framesRenderedInSwapchain % maxFramesInFlight,
+            self.logicalDevice,
+            self.physicalDevice,
         );
-        c.vkCmdBindDescriptorSets(
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            self.elementsPipeline.pipelineLayout,
-            0,
-            1,
-            &self.elementsPipeline.descriptorSets[self.framesRenderedInSwapchain % maxFramesInFlight],
-            0,
-            null,
+        try layoutTreeIterator.reset();
+        const layoutBoxCount = try self.elementsPipeline.prepareForDraw(
+            &layoutTreeIterator,
+            self.framesRenderedInSwapchain % maxFramesInFlight,
+            projectionMatrix,
+            self.logicalDevice,
+            self.physicalDevice,
         );
-        c.vkCmdBindVertexBuffers(
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            0,
-            1,
-            &self.rectangleModel.vertexBuffer.handle,
-            &@intCast(0),
+        try layoutTreeIterator.reset();
+        const glyphCount = try self.textPipeline.prepareForDraw(
+            self.allocator,
+            &layoutTreeIterator,
+            projectionMatrix,
+            dpi,
+            self.framesRenderedInSwapchain % maxFramesInFlight,
+            self.logicalDevice,
+            self.physicalDevice,
         );
-        c.vkCmdDraw(
+        try layoutTreeIterator.reset();
+
+        self.shadowsPipeline.draw(
+            shadowCount,
+            self.framesRenderedInSwapchain % maxFramesInFlight,
             self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            self.rectangleModel.vertexCount,
-            @intCast(layoutBoxCount),
-            0,
-            0,
+            &self.rectangleModel,
         );
-
-        if (totalGlyphCount > 0) {
-            if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
-                try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
-                try self.textPipeline.resizeGlyphsCapacity(
-                    self.logicalDevice,
-                    self.physicalDevice,
-                    try std.math.ceilPowerOfTwo(usize, totalGlyphCount),
-                );
-            }
-
-            var glyphIndex: usize = 0;
-            try layoutTreeIterator.reset();
-            while (try layoutTreeIterator.next()) |layoutBox| {
-                if (layoutBox.children) |children| {
-                    if (children == .glyphs) {
-                        for (children.glyphs.slice) |glyph| {
-                            const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
-                                .fontKey = layoutBox.style.font.key,
-                                .fontWeight = layoutBox.style.fontWeight,
-                                .fontSize = layoutBox.style.fontSize,
-                                .glyphIndex = glyph.index,
-                                .dpi = dpi,
-                            };
-                            const glyphRenderingData = blk: {
-                                if (self.textPipeline.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
-                                    break :blk data;
-                                } else {
-                                    try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, self.allocator);
-                                    const rasterizedGlyph = try layoutBox.style.font.rasterize(
-                                        glyph.index,
-                                        dpi,
-                                        @intCast(layoutBox.style.fontSize),
-                                    );
-
-                                    const textureCoordinates = try self.textPipeline.fontTextureAtlas.upload(
-                                        self.allocator,
-                                        rasterizedGlyph.bitmap,
-                                        @intCast(rasterizedGlyph.width),
-                                        @intCast(rasterizedGlyph.height),
-                                        @intCast(@abs(rasterizedGlyph.pitch)),
-                                    );
-                                    // FreeType LCD mode: width is 3x the actual pixel width (RGB bytes)
-                                    // Convert to actual pixel width for rendering
-                                    const pixelWidth = rasterizedGlyph.width / 3;
-                                    const data = TextPipeline.GlyphRenderingData{
-                                        .bitmapTop = @intCast(rasterizedGlyph.top),
-                                        .bitmapLeft = @intCast(rasterizedGlyph.left),
-                                        .bitmapWidth = @intCast(pixelWidth),
-                                        .bitmapHeight = @intCast(rasterizedGlyph.height),
-                                        .textureCoordinates = textureCoordinates,
-                                    };
-                                    try self.textPipeline.glyphRenderingDataCache.put(glyphRenderingKey, data);
-                                    break :blk data;
-                                }
-                            };
-
-                            const left: f32 = @floatFromInt(glyphRenderingData.bitmapLeft);
-                            const top: f32 = @floatFromInt(glyphRenderingData.bitmapTop);
-                            const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
-                            const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
-
-                            const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
-                            const resolutionMultiplier = Vec2{
-                                @as(f32, @floatFromInt(dpi[0])) / 72.0,
-                                @as(f32, @floatFromInt(dpi[1])) / 72.0,
-                            };
-                            const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
-                            const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize * resolutionMultiplier[0];
-
-                            self.textPipeline.shaderBuffersMapped[self.framesRenderedInSwapchain % maxFramesInFlight][glyphIndex] = TextPipeline.GlypRenderingShaderData{
-                                .modelViewProjectionMatrix = zmath.mul(
-                                    zmath.mul(
-                                        zmath.scaling(width, height, 1.0),
-                                        zmath.translation(
-                                            glyph.position[0] + left,
-                                            glyph.position[1] + pixelAscent - top,
-                                            0.0,
-                                        ),
-                                    ),
-                                    projectionMatrix,
-                                ),
-                                .color = srgbToLinearColor(layoutBox.style.color),
-                                .uvOffset = .{
-                                    glyphRenderingData.textureCoordinates.u / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width)),
-                                    glyphRenderingData.textureCoordinates.v / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height)),
-                                },
-                                .uvSize = .{
-                                    glyphRenderingData.textureCoordinates.w / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width)),
-                                    glyphRenderingData.textureCoordinates.h / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height)),
-                                },
-                            };
-                            glyphIndex += 1;
-                        }
-                    }
-                }
-            }
-
-            c.vkCmdBindPipeline(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.textPipeline.graphicsPipeline,
-            );
-
-            c.vkCmdBindDescriptorSets(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.textPipeline.pipelineLayout,
-                0,
-                1,
-                &self.textPipeline.descriptorSets[self.framesRenderedInSwapchain % maxFramesInFlight],
-                0,
-                null,
-            );
-
-            c.vkCmdBindVertexBuffers(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                0,
-                1,
-                &self.rectangleModel.vertexBuffer.handle,
-                &@intCast(0),
-            );
-            c.vkCmdDraw(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                self.rectangleModel.vertexCount,
-                @intCast(totalGlyphCount),
-                0,
-                0,
-            );
-        }
+        self.elementsPipeline.draw(
+            layoutBoxCount,
+            self.framesRenderedInSwapchain % maxFramesInFlight,
+            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+            &self.rectangleModel,
+        );
+        self.textPipeline.draw(
+            glyphCount,
+            self.framesRenderedInSwapchain % maxFramesInFlight,
+            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+            &self.rectangleModel,
+        );
 
         c.vkCmdEndRenderPass(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]);
         try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]));
@@ -3871,7 +3987,7 @@ pub const Renderer = struct {
         }
 
         for (imageViews, 0..) |imageView, i| {
-            const framebufferAttachments = [_]c.VkImageView{ imageView };
+            const framebufferAttachments = [_]c.VkImageView{imageView};
             try ensureNoError(c.vkCreateFramebuffer(
                 logicalDevice,
                 &c.VkFramebufferCreateInfo{

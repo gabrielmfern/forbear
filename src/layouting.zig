@@ -678,16 +678,6 @@ pub const LayoutTreeIterator = struct {
     }
 };
 
-pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
-    var count: usize = 1;
-    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
-        for (layoutBox.children.?.layoutBoxes) |*child| {
-            count += countTreeSize(child);
-        }
-    }
-    return count;
-}
-
 pub fn layout(
     arena: std.mem.Allocator,
     baseStyle: BaseStyle,
