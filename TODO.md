@@ -6,7 +6,8 @@
     - [ ] https://x.com/60fpsdesign/status/2008787492561097035?s=20
     - [ ] https://ui.sh/
 - [ ] implement scrolling 
-- [ ] I need a way to define the width that an element should take up on the
+- [ ] I need a way to define the percentage width that an element would take 
+  of its parent
 - [ ] a way to define children for components
     - most likely using a "slotting" solution where
       `forbear.componentChildrenSlot()` would mark the parent/path to slot
