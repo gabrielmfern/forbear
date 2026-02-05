@@ -267,16 +267,24 @@ const StderrCapture = struct {
         return buf[0..bytesRead];
     }
 
+    /// Monotonic counter to ensure unique filenames within the same process.
+    var captureCounter: u32 = 0;
+
     fn createCaptureFile() ?std.posix.fd_t {
         if (comptime builtin.os.tag == .linux) {
             // Anonymous in-memory file — ideal on Linux, avoids pipe buffer limits
             return std.posix.memfd_create("test_capture", 0) catch null;
         } else {
-            // Fallback: open an unlinked temp file.
-            const path = "/tmp/.forbear_test_capture";
-            const fd = std.posix.openZ(path, .{ .ACCMODE = .RDWR, .CREAT = true, .TRUNC = true }, 0o600) catch return null;
+            // Fallback: open an unlinked temp file with a unique name derived
+            // from the PID and a counter, using EXCL to fail if it already exists.
+            const pid = std.posix.getpid();
+            const seq = @atomicRmw(u32, &captureCounter, .Add, 1, .monotonic);
+            var path: [127:0]u8 = undefined;
+            const written = std.fmt.bufPrint(&path, "/tmp/.forbear_test_{d}_{d}", .{ pid, seq }) catch return null;
+            path[written.len] = 0;
+            const fd = std.posix.openZ(path[0..written.len :0], .{ .ACCMODE = .RDWR, .CREAT = true, .EXCL = true }, 0o600) catch return null;
             // Unlink immediately so it's cleaned up when the fd is closed
-            std.posix.unlinkZ(path) catch {};
+            std.posix.unlinkZ(path[0..written.len :0]) catch {};
             return fd;
         }
     }
