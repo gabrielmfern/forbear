@@ -12,11 +12,16 @@
 //       TEST_VERBOSE=true    (default) show each test name and timing
 //       TEST_FAIL_FIRST=true stop after the first failure
 //       TEST_FILTER=pattern  only run tests whose name contains the pattern
+//
+// Works on Linux, macOS, and Windows.
 
 const std = @import("std");
 const builtin = @import("builtin");
+const native_os = builtin.os.tag;
+const windows = std.os.windows;
 
 const Allocator = std.mem.Allocator;
+const File = std.fs.File;
 
 const border = "=" ** 80;
 const thinBorder = "-" ** 80;
@@ -24,8 +29,8 @@ const thinBorder = "-" ** 80;
 /// Used by the custom panic handler to report which test panicked.
 var currentTest: ?[]const u8 = null;
 
-/// The real stderr fd, saved before any redirection.
-var realStderrFd: ?std.posix.fd_t = null;
+/// The real stderr, saved before any redirection.
+var realStderr: ?File = null;
 
 pub fn main() !void {
     var mem: [8192]u8 = undefined;
@@ -44,8 +49,8 @@ pub fn main() !void {
     var skip: usize = 0;
     var leak: usize = 0;
 
-    // Save the real stderr fd for later restoration.
-    realStderrFd = std.posix.dup(std.posix.STDERR_FILENO) catch null;
+    // Save the real stderr for later restoration.
+    realStderr = StderrCapture.duplicateStderr();
 
     // Clear current line (write to real stderr)
     writeToRealStderr("\r\x1b[0K");
@@ -84,7 +89,7 @@ pub fn main() !void {
         std.testing.allocator_instance = .{};
 
         // Redirect stderr to capture test output
-        const captureFd = StderrCapture.start();
+        const captureFile = StderrCapture.start();
 
         slowest.startTiming();
         const result = t.func();
@@ -93,7 +98,7 @@ pub fn main() !void {
 
         // Restore stderr and read captured output
         var capturedBuf: [4096]u8 = undefined;
-        const captured = StderrCapture.finish(captureFd, &capturedBuf);
+        const captured = StderrCapture.finish(captureFile, &capturedBuf);
 
         const ms = @as(f64, @floatFromInt(nsTaken)) / 1_000_000.0;
 
@@ -131,7 +136,7 @@ pub fn main() !void {
                     }
                     Printer.dim("  {d:.2}ms", .{ms});
                     Printer.raw("\n", .{});
-                    printCapturedOutput(captured, false);
+                    printCapturedOutput(captured);
                 },
                 .skip => {
                     Printer.status(.skip, "  SKIP ", .{});
@@ -164,7 +169,7 @@ pub fn main() !void {
                             }
                         },
                     }
-                    printCapturedOutput(captured, true);
+                    printCapturedOutput(captured);
                     Printer.raw("\n", .{});
                 },
                 .text => {},
@@ -225,79 +230,114 @@ pub fn main() !void {
 }
 
 // ---------------------------------------------------------------------------
-// Stderr capture via fd redirection
+// Stderr capture via fd/handle redirection
 // ---------------------------------------------------------------------------
 
 const StderrCapture = struct {
-    /// Redirects stderr to a temporary file and returns the capture fd (or null on failure).
-    fn start() ?std.posix.fd_t {
-        if (realStderrFd == null) return null;
+    /// Duplicates the current stderr file descriptor / handle and returns it.
+    fn duplicateStderr() ?File {
+        if (native_os == .windows) {
+            const stderr_handle = windows.peb().ProcessParameters.hStdError;
+            var duplicated: windows.HANDLE = undefined;
+            const current_process = windows.GetCurrentProcess();
+            const DUPLICATE_SAME_ACCESS = 0x00000002;
+            const rc = windows.kernel32.DuplicateHandle(
+                current_process,
+                stderr_handle,
+                current_process,
+                &duplicated,
+                0,
+                windows.FALSE,
+                DUPLICATE_SAME_ACCESS,
+            );
+            if (rc == windows.FALSE) return null;
+            return .{ .handle = duplicated };
+        } else {
+            const duped = std.posix.dup(std.posix.STDERR_FILENO) catch return null;
+            return .{ .handle = duped };
+        }
+    }
 
-        // Create a seekable file to capture output.
-        // Using a file (rather than a pipe) avoids buffer-full deadlocks when
-        // tests write more than the pipe capacity.
-        const captureFd = createCaptureFile() orelse return null;
+    /// Redirects stderr to a temporary capture file and returns it (or null on failure).
+    fn start() ?File {
+        if (realStderr == null) return null;
 
-        // Redirect stderr (fd 2) to our capture file
-        std.posix.dup2(captureFd, std.posix.STDERR_FILENO) catch {
-            std.posix.close(captureFd);
-            return null;
-        };
+        const captureFile = createCaptureFile() orelse return null;
 
-        return captureFd;
+        if (native_os == .windows) {
+            // On Windows, std.debug.print reads hStdError from the PEB each time.
+            // Swap it to point to our capture file.
+            windows.peb().ProcessParameters.hStdError = captureFile.handle;
+        } else {
+            // On POSIX, redirect fd 2 to the capture file.
+            std.posix.dup2(captureFile.handle, std.posix.STDERR_FILENO) catch {
+                captureFile.close();
+                return null;
+            };
+        }
+
+        return captureFile;
     }
 
     /// Restores stderr and returns the captured content as a slice (or empty).
-    fn finish(captureFd: ?std.posix.fd_t, buf: []u8) []const u8 {
-        const fd = captureFd orelse return "";
-        const savedFd = realStderrFd orelse return "";
+    fn finish(captureFile: ?File, buf: []u8) []const u8 {
+        const file = captureFile orelse return "";
+        const saved = realStderr orelse return "";
 
         // Restore the real stderr
-        std.posix.dup2(savedFd, std.posix.STDERR_FILENO) catch {};
+        if (native_os == .windows) {
+            windows.peb().ProcessParameters.hStdError = saved.handle;
+        } else {
+            std.posix.dup2(saved.handle, std.posix.STDERR_FILENO) catch {};
+        }
 
         // Seek to beginning and read what was captured
-        std.posix.lseek_SET(fd, 0) catch {
-            std.posix.close(fd);
+        file.seekTo(0) catch {
+            file.close();
             return "";
         };
 
-        const bytesRead = std.posix.read(fd, buf) catch 0;
-        std.posix.close(fd);
+        const bytesRead = file.read(buf) catch 0;
+        file.close();
 
         return buf[0..bytesRead];
     }
 
-    /// Monotonic counter to ensure unique filenames within the same process.
-    var captureCounter: u32 = 0;
-
-    fn createCaptureFile() ?std.posix.fd_t {
-        if (comptime builtin.os.tag == .linux) {
-            // Anonymous in-memory file — ideal on Linux, avoids pipe buffer limits
-            return std.posix.memfd_create("test_capture", 0) catch null;
-        } else {
-            // Fallback: open an unlinked temp file with a unique name derived
-            // from the PID and a counter, using EXCL to fail if it already exists.
-            const pid = std.posix.getpid();
-            const seq = @atomicRmw(u32, &captureCounter, .Add, 1, .monotonic);
-            var path: [127:0]u8 = undefined;
-            const written = std.fmt.bufPrint(&path, "/tmp/.forbear_test_{d}_{d}", .{ pid, seq }) catch return null;
-            path[written.len] = 0;
-            const fd = std.posix.openZ(path[0..written.len :0], .{ .ACCMODE = .RDWR, .CREAT = true, .EXCL = true }, 0o600) catch return null;
-            // Unlink immediately so it's cleaned up when the fd is closed
-            std.posix.unlinkZ(path[0..written.len :0]) catch {};
-            return fd;
+    fn createCaptureFile() ?File {
+        if (native_os == .linux) {
+            // Anonymous in-memory file — ideal on Linux, avoids temp file I/O
+            const fd = std.posix.memfd_create("test_capture", 0) catch return null;
+            return .{ .handle = fd };
         }
+
+        // Cross-platform fallback: create a temp file in .zig-cache/tmp/.
+        // This directory is used by Zig's own test infrastructure and is
+        // expected to exist during builds.
+        const cwd = std.fs.cwd();
+        var cache_dir = cwd.makeOpenPath(".zig-cache" ++ std.fs.path.sep_str ++ "tmp", .{}) catch return null;
+        defer cache_dir.close();
+
+        // Generate a unique filename using random bytes.
+        var random_bytes: [8]u8 = undefined;
+        std.crypto.random.bytes(&random_bytes);
+        var name_buf: [24]u8 = undefined;
+        const encoded = std.fs.base64_encoder.encode(&name_buf, &random_bytes);
+
+        const file = cache_dir.createFile(encoded, .{ .read = true }) catch return null;
+
+        // Delete the directory entry immediately; the file stays alive as long
+        // as the handle is open. On Windows, deleteFile may fail (file is open),
+        // but that's acceptable — the .zig-cache/tmp/ directory is ephemeral.
+        cache_dir.deleteFile(encoded) catch {};
+
+        return file;
     }
 };
 
 /// Prints captured test output, indented and dimmed, under the test line.
-fn printCapturedOutput(captured: []const u8, alwaysShow: bool) void {
+fn printCapturedOutput(captured: []const u8) void {
     const trimmed = std.mem.trimRight(u8, captured, " \t\n\r");
     if (trimmed.len == 0) return;
-
-    // For passing tests, show output collapsed (dimmed).
-    // For failing tests, always show (they likely want to see it).
-    _ = alwaysShow;
 
     var lineIt = std.mem.splitScalar(u8, trimmed, '\n');
     while (lineIt.next()) |line| {
@@ -309,7 +349,7 @@ fn printCapturedOutput(captured: []const u8, alwaysShow: bool) void {
 // Printer — always writes to the *real* stderr
 // ---------------------------------------------------------------------------
 
-/// Formats and writes directly to the real stderr fd, bypassing any redirection.
+/// Formats and writes directly to the real stderr, bypassing any redirection.
 fn printToRealStderr(comptime format: []const u8, args: anytype) void {
     var buf: [4096]u8 = undefined;
     const formatted = std.fmt.bufPrint(&buf, format, args) catch return;
@@ -317,8 +357,8 @@ fn printToRealStderr(comptime format: []const u8, args: anytype) void {
 }
 
 fn writeToRealStderr(msg: []const u8) void {
-    const fd = realStderrFd orelse std.posix.STDERR_FILENO;
-    _ = std.posix.write(fd, msg) catch {};
+    const file = realStderr orelse File.stderr();
+    _ = file.write(msg) catch {};
 }
 
 const Printer = struct {
@@ -475,8 +515,12 @@ const Env = struct {
 pub const panic = std.debug.FullPanic(struct {
     pub fn panicFn(msg: []const u8, firstTraceAddr: ?usize) noreturn {
         // Restore real stderr before panicking so output is visible
-        if (realStderrFd) |fd| {
-            std.posix.dup2(fd, std.posix.STDERR_FILENO) catch {};
+        if (realStderr) |saved| {
+            if (native_os == .windows) {
+                windows.peb().ProcessParameters.hStdError = saved.handle;
+            } else {
+                std.posix.dup2(saved.handle, std.posix.STDERR_FILENO) catch {};
+            }
         }
         if (currentTest) |ct| {
             std.debug.print("\n\x1b[31m{s}\npanic running \"{s}\"\n{s}\x1b[0m\n", .{ border, ct, border });
