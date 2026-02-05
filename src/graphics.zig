@@ -1551,19 +1551,21 @@ const ShadowsPipeline = struct {
 
     fn prepareForDraw(
         self: *@This(),
-        iterator: *LayoutTreeIterator,
+        arena: std.mem.Allocator,
+        orderedLayoutBoxes: []*const LayoutBox,
         projectionMatrix: zmath.Mat,
         frameIndex: usize,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-    ) !usize {
+    ) ![]LayerInterval {
         var totalShadowCount: usize = 0;
-        while (try iterator.next()) |layoutBox| {
+        for (orderedLayoutBoxes) |layoutBox| {
             if (layoutBox.style.shadow != null) {
                 totalShadowCount += 1;
             }
         }
-        try iterator.reset();
+
+        const intervals = try std.ArrayList(LayerInterval).initCapacity(arena, 4);
 
         if (totalShadowCount > 0) {
             if (totalShadowCount > self.shadowShaderData[0].len) {
@@ -1575,8 +1577,26 @@ const ShadowsPipeline = struct {
                 );
             }
             var shadowIndex: usize = 0;
-            while (try iterator.next()) |layoutBox| {
+            for (orderedLayoutBoxes) |layoutBox| {
                 if (layoutBox.style.shadow) |shadow| {
+                    if (intervals.getLastOrNull()) |lastInterval| {
+                        if (lastInterval.z == layoutBox.z) {
+                            std.debug.assert(lastInterval.end + 1 == shadowIndex);
+                            lastInterval.end = shadowIndex;
+                        } else {
+                            try intervals.append(LayerInterval{
+                                .z = layoutBox.z,
+                                .start = shadowIndex,
+                                .end = shadowIndex,
+                            });
+                        }
+                    } else {
+                        try intervals.append(LayerInterval{
+                            .z = layoutBox.z,
+                            .start = shadowIndex,
+                            .end = shadowIndex,
+                        });
+                    }
                     const padding = Vec2{
                         shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
                         shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
@@ -1606,7 +1626,7 @@ const ShadowsPipeline = struct {
             }
         }
 
-        return totalShadowCount;
+        return try intervals.toOwnedSlice(arena);
     }
 
     fn resizeConcurrentShadowCapacity(
@@ -3619,18 +3639,16 @@ pub const Renderer = struct {
             1.0,
         );
 
-        // var flatLayoutTree = std.ArrayList(*const LayoutBox).empty;
-        // try flatTreeInto(arena, &flatLayoutTree, rootLayoutBox);
-        // std.mem.sort(*const LayoutBox, flatLayoutTree.items, null, (struct {
-        //     fn lessThan(_: @TypeOf(null), lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
-        //         return lhs.z > rhs.z;
-        //     }
-        // }).lessThan);
-        //
-        // var layerIntervals = std.ArrayList(LayerInterval).empty;
-        // try computeLayerIntervals(arena, &layerIntervals, flatLayoutTree.items);
+        var flatLayoutTree = std.ArrayList(*const LayoutBox).empty;
+        try flatTreeInto(arena, &flatLayoutTree, rootLayoutBox);
+        std.mem.sort(*const LayoutBox, flatLayoutTree.items, null, (struct {
+            fn lessThan(_: @TypeOf(null), lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
+                return lhs.z > rhs.z;
+            }
+        }).lessThan);
 
-        var layoutTreeIterator = LayoutTreeIterator.init(arena, rootLayoutBox);
+        var layerIntervals = std.ArrayList(LayerInterval).empty;
+        try computeLayerIntervals(arena, &layerIntervals, flatLayoutTree.items);
 
         const shadowCount = try self.shadowsPipeline.prepareForDraw(
             &layoutTreeIterator,
