@@ -646,11 +646,6 @@ pub fn flattenTreeInto(allocator: std.mem.Allocator, list: *std.ArrayList(*const
     }
 }
 
-pub const LayerInterval = struct {
-    start: usize,
-    end: usize,
-};
-
 pub const LayoutTreeIterator = struct {
     stack: std.ArrayList(*const LayoutBox),
     allocator: std.mem.Allocator,

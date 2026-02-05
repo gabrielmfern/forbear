@@ -10,8 +10,12 @@ const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
 const flatTreeInto = layouting.flattenTreeInto;
-const LayerInterval = layouting.LayerInterval;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
+
+const LayerInterval = struct {
+    start: usize,
+    end: usize,
+};
 const Window = @import("window/root.zig").Window;
 
 const Vec4 = @Vector(4, f32);
@@ -1566,7 +1570,7 @@ const ShadowsPipeline = struct {
             }
         }
 
-        const intervals = std.AutoHashMap(u16, LayerInterval).init(arena);
+        var intervals = std.AutoHashMap(u16, LayerInterval).init(arena);
         if (totalShadowCount > 0) {
             if (totalShadowCount > self.shadowShaderData[0].len) {
                 try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
@@ -1588,7 +1592,6 @@ const ShadowsPipeline = struct {
                         getOrPutResult.value_ptr.* = LayerInterval{
                             .start = shadowIndex,
                             .end = shadowIndex,
-                            .z = layoutBox.z,
                         };
                     }
                     const padding = Vec2{
@@ -2116,7 +2119,7 @@ const ElementsPipeline = struct {
         projectionMatrix: zmath.Mat,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-    ) ![]LayerInterval {
+    ) !std.AutoHashMap(u16, LayerInterval) {
         const layoutBoxCount = orderedLayoutBoxes.len;
 
         if (layoutBoxCount > self.elementsShaderData[0].len) {
@@ -2128,26 +2131,18 @@ const ElementsPipeline = struct {
             );
         }
 
-        const intervals = try std.ArrayList(LayerInterval).initCapacity(arena, 4);
+        var intervals = std.AutoHashMap(u16, LayerInterval).init(arena);
 
         for (orderedLayoutBoxes, 0..) |layoutBox, i| {
-            if (intervals.getLastOrNull()) |lastInterval| {
-                if (lastInterval.z == layoutBox.z) {
-                    std.debug.assert(lastInterval.end + 1 == i);
-                    lastInterval.end = i;
-                } else {
-                    try intervals.append(arena, LayerInterval{
-                        .z = layoutBox.z,
-                        .start = i,
-                        .end = i,
-                    });
-                }
+            const getOrPutResult = try intervals.getOrPut(layoutBox.z);
+            if (getOrPutResult.found_existing) {
+                std.debug.assert(getOrPutResult.value_ptr.end + 1 == i);
+                getOrPutResult.value_ptr.end = i;
             } else {
-                try intervals.append(arena, LayerInterval{
-                    .z = layoutBox.z,
+                getOrPutResult.value_ptr.* = LayerInterval{
                     .start = i,
                     .end = i,
-                });
+                };
             }
 
             const textureIndex: i32 = switch (layoutBox.style.background) {
@@ -2179,7 +2174,7 @@ const ElementsPipeline = struct {
             };
         }
 
-        return try intervals.toOwnedSlice(arena);
+        return intervals;
     }
 
     fn resizeConcurrentElementCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
@@ -2687,7 +2682,7 @@ const TextPipeline = struct {
         frameIndex: usize,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-    ) ![]LayerInterval {
+    ) !std.AutoHashMap(u16, LayerInterval) {
         var totalGlyphCount: usize = 0;
         for (orderedLayoutBoxes) |layoutBox| {
             if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
@@ -2695,7 +2690,7 @@ const TextPipeline = struct {
             }
         }
 
-        const intervals = try std.ArrayList(LayerInterval).initCapacity(arena, 4);
+        var intervals = std.AutoHashMap(u16, LayerInterval).init(arena);
 
         if (totalGlyphCount > 0) {
             if (totalGlyphCount > self.shaderBuffersMapped[0].len) {
@@ -2711,23 +2706,15 @@ const TextPipeline = struct {
             for (orderedLayoutBoxes) |layoutBox| {
                 if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
                     for (layoutBox.children.?.glyphs.slice) |glyph| {
-                        if (intervals.getLastOrNull()) |lastInterval| {
-                            if (lastInterval.z == layoutBox.z) {
-                                std.debug.assert(lastInterval.end + 1 == glyphIndex);
-                                lastInterval.end = glyphIndex;
-                            } else {
-                                try intervals.append(arena, LayerInterval{
-                                    .z = layoutBox.z,
-                                    .start = glyphIndex,
-                                    .end = glyphIndex,
-                                });
-                            }
+                        const getOrPutResult = try intervals.getOrPut(layoutBox.z);
+                        if (getOrPutResult.found_existing) {
+                            std.debug.assert(getOrPutResult.value_ptr.end + 1 == glyphIndex);
+                            getOrPutResult.value_ptr.end = glyphIndex;
                         } else {
-                            try intervals.append(LayerInterval{
-                                .z = layoutBox.z,
+                            getOrPutResult.value_ptr.* = LayerInterval{
                                 .start = glyphIndex,
                                 .end = glyphIndex,
-                            });
+                            };
                         }
 
                         const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
@@ -2811,7 +2798,7 @@ const TextPipeline = struct {
             }
         }
 
-        return try intervals.toOwnedSlice(arena);
+        return intervals;
     }
 
     fn resizeGlyphsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
@@ -3669,8 +3656,8 @@ pub const Renderer = struct {
 
         var flatLayoutTree = std.ArrayList(*const LayoutBox).empty;
         try flatTreeInto(arena, &flatLayoutTree, rootLayoutBox);
-        std.mem.sort(*const LayoutBox, flatLayoutTree.items, null, (struct {
-            fn lessThan(_: @TypeOf(null), lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
+        std.mem.sort(*const LayoutBox, flatLayoutTree.items, {}, (struct {
+            fn lessThan(_: void, lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
                 return lhs.z > rhs.z;
             }
         }).lessThan);
@@ -3683,7 +3670,6 @@ pub const Renderer = struct {
             self.logicalDevice,
             self.physicalDevice,
         );
-        defer shadowIntervals.deinit();
         const elementIntervals = try self.elementsPipeline.prepareForDraw(
             arena,
             flatLayoutTree.items,
@@ -3692,7 +3678,6 @@ pub const Renderer = struct {
             self.logicalDevice,
             self.physicalDevice,
         );
-        defer elementIntervals.deinit();
         const textIntervals = try self.textPipeline.prepareForDraw(
             arena,
             flatLayoutTree.items,
@@ -3702,11 +3687,11 @@ pub const Renderer = struct {
             self.logicalDevice,
             self.physicalDevice,
         );
-        defer textIntervals.deinit();
-
-        var elementIntervalsIterator = elementIntervals.valueIterator();
-        for (elementIntervalsIterator.next()) |elementInterval| {
-            if (shadowIntervals.get(elementInterval.z)) |shadowInterval| {
+        var elementIntervalsIterator = elementIntervals.iterator();
+        while (elementIntervalsIterator.next()) |entry| {
+            const z = entry.key_ptr.*;
+            const elementInterval = entry.value_ptr.*;
+            if (shadowIntervals.get(z)) |shadowInterval| {
                 self.shadowsPipeline.draw(
                     shadowInterval,
                     self.framesRenderedInSwapchain % maxFramesInFlight,
@@ -3720,7 +3705,7 @@ pub const Renderer = struct {
                 self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
                 &self.rectangleModel,
             );
-            if (textIntervals.get(elementInterval.z)) |glyphInterval| {
+            if (textIntervals.get(z)) |glyphInterval| {
                 self.textPipeline.draw(
                     glyphInterval,
                     self.framesRenderedInSwapchain % maxFramesInFlight,
