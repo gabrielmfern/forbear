@@ -10,6 +10,8 @@ const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
 const flatTreeInto = layouting.flattenTreeInto;
+const LayerInterval = layouting.LayerInterval;
+const computeLayerIntervals = layouting.computeLayerIntervals;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
 const Window = @import("window/root.zig").Window;
 
@@ -3617,42 +3619,18 @@ pub const Renderer = struct {
             1.0,
         );
 
-        var flatLayoutTree = std.ArrayList(*const LayoutBox).empty;
-        try flatTreeInto(arena, &flatLayoutTree, rootLayoutBox);
-        std.mem.sort(*const LayoutBox, flatLayoutTree.items, null, (struct {
-            fn lessThan(lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
-                if (lhs.z > rhs.z) {
-                    return true;
-                } else {
-                    return false;
-                }
-            }
-        }).lessThan);
+        // var flatLayoutTree = std.ArrayList(*const LayoutBox).empty;
+        // try flatTreeInto(arena, &flatLayoutTree, rootLayoutBox);
+        // std.mem.sort(*const LayoutBox, flatLayoutTree.items, null, (struct {
+        //     fn lessThan(_: @TypeOf(null), lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
+        //         return lhs.z > rhs.z;
+        //     }
+        // }).lessThan);
+        //
+        // var layerIntervals = std.ArrayList(LayerInterval).empty;
+        // try computeLayerIntervals(arena, &layerIntervals, flatLayoutTree.items);
 
-        const LayerInterval = struct {
-            start: usize,
-            end: usize,
-        };
-        const layerIntervals = try std.ArrayList(LayerInterval).initCapacity(arena, 16);
-        for (flatLayoutTree.items, 0..) |box, i| {
-            if (layerIntervals.items.len == 0) {
-                try layerIntervals.append(LayerInterval{
-                    .start = i,
-                    .end = i,
-                });
-            } else {
-                const lastIntervalIndex = layerIntervals.items.len - 1;
-                const intervalStart = layerIntervals.items[lastIntervalIndex].start;
-                if (box.z == flatLayoutTree.items[intervalStart].z) {
-                    layerIntervals.items[lastIntervalIndex].end += 1;
-                } else {
-                    try layerIntervals.append(LayerInterval{
-                        .start = i,
-                        .end = i,
-                    });
-                }
-            }
-        }
+        var layoutTreeIterator = LayoutTreeIterator.init(arena, rootLayoutBox);
 
         const shadowCount = try self.shadowsPipeline.prepareForDraw(
             &layoutTreeIterator,

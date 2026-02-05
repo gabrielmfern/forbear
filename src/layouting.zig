@@ -646,6 +646,37 @@ pub fn flattenTreeInto(allocator: std.mem.Allocator, list: *std.ArrayList(*const
     }
 }
 
+pub const LayerInterval = struct {
+    start: usize,
+    end: usize,
+};
+
+pub fn computeLayerIntervals(
+    allocator: std.mem.Allocator,
+    intervals: *std.ArrayList(LayerInterval),
+    flatTree: []*const LayoutBox,
+) !void {
+    for (flatTree, 0..) |box, i| {
+        if (intervals.items.len == 0) {
+            try intervals.append(allocator, LayerInterval{
+                .start = i,
+                .end = i,
+            });
+        } else {
+            const lastIntervalIndex = intervals.items.len - 1;
+            const intervalStart = intervals.items[lastIntervalIndex].start;
+            if (box.z == flatTree[intervalStart].z) {
+                intervals.items[lastIntervalIndex].end += 1;
+            } else {
+                try intervals.append(allocator, LayerInterval{
+                    .start = i,
+                    .end = i,
+                });
+            }
+        }
+    }
+}
+
 pub const LayoutTreeIterator = struct {
     stack: std.ArrayList(*const LayoutBox),
     allocator: std.mem.Allocator,
@@ -1051,6 +1082,119 @@ test "wrap - word wrapping with alignment end" {
             .{ 90.0, 20.0 }, // d
         },
     });
+}
+
+fn makeTestLayoutBox(z: u16) LayoutBox {
+    return LayoutBox{
+        .key = 0,
+        .position = .{ 0.0, 0.0 },
+        .z = z,
+        .size = .{ 0.0, 0.0 },
+        .minSize = .{ 0.0, 0.0 },
+        .children = null,
+        .style = (IncompleteStyle{}).completeWith(BaseStyle{
+            .font = undefined,
+            .color = .{ 0.0, 0.0, 0.0, 1.0 },
+            .fontSize = 16,
+            .fontWeight = 400,
+            .lineHeight = 1.0,
+            .textWrapping = .none,
+        }),
+    };
+}
+
+test "computeLayerIntervals - groups consecutive items with same z" {
+    var boxes = [_]LayoutBox{
+        makeTestLayoutBox(3),
+        makeTestLayoutBox(3),
+        makeTestLayoutBox(1),
+        makeTestLayoutBox(1),
+        makeTestLayoutBox(1),
+        makeTestLayoutBox(0),
+    };
+    var ptrs = [_]*const LayoutBox{ &boxes[0], &boxes[1], &boxes[2], &boxes[3], &boxes[4], &boxes[5] };
+
+    var intervals = std.ArrayList(LayerInterval).empty;
+    const allocator = std.testing.allocator;
+    defer intervals.deinit(allocator);
+    try computeLayerIntervals(allocator, &intervals, &ptrs);
+
+    try std.testing.expectEqual(@as(usize, 3), intervals.items.len);
+    // z=3 group
+    try std.testing.expectEqual(@as(usize, 0), intervals.items[0].start);
+    try std.testing.expectEqual(@as(usize, 1), intervals.items[0].end);
+    // z=1 group
+    try std.testing.expectEqual(@as(usize, 2), intervals.items[1].start);
+    try std.testing.expectEqual(@as(usize, 4), intervals.items[1].end);
+    // z=0 group
+    try std.testing.expectEqual(@as(usize, 5), intervals.items[2].start);
+    try std.testing.expectEqual(@as(usize, 5), intervals.items[2].end);
+}
+
+test "computeLayerIntervals - single element" {
+    var boxes = [_]LayoutBox{makeTestLayoutBox(5)};
+    var ptrs = [_]*const LayoutBox{&boxes[0]};
+
+    var intervals = std.ArrayList(LayerInterval).empty;
+    const allocator = std.testing.allocator;
+    defer intervals.deinit(allocator);
+    try computeLayerIntervals(allocator, &intervals, &ptrs);
+
+    try std.testing.expectEqual(@as(usize, 1), intervals.items.len);
+    try std.testing.expectEqual(@as(usize, 0), intervals.items[0].start);
+    try std.testing.expectEqual(@as(usize, 0), intervals.items[0].end);
+}
+
+test "computeLayerIntervals - all different z values" {
+    var boxes = [_]LayoutBox{
+        makeTestLayoutBox(3),
+        makeTestLayoutBox(2),
+        makeTestLayoutBox(1),
+    };
+    var ptrs = [_]*const LayoutBox{ &boxes[0], &boxes[1], &boxes[2] };
+
+    var intervals = std.ArrayList(LayerInterval).empty;
+    const allocator = std.testing.allocator;
+    defer intervals.deinit(allocator);
+    try computeLayerIntervals(allocator, &intervals, &ptrs);
+
+    try std.testing.expectEqual(@as(usize, 3), intervals.items.len);
+    try std.testing.expectEqual(@as(usize, 0), intervals.items[0].start);
+    try std.testing.expectEqual(@as(usize, 0), intervals.items[0].end);
+    try std.testing.expectEqual(@as(usize, 1), intervals.items[1].start);
+    try std.testing.expectEqual(@as(usize, 1), intervals.items[1].end);
+    try std.testing.expectEqual(@as(usize, 2), intervals.items[2].start);
+    try std.testing.expectEqual(@as(usize, 2), intervals.items[2].end);
+}
+
+test "computeLayerIntervals - all same z value" {
+    var boxes = [_]LayoutBox{
+        makeTestLayoutBox(1),
+        makeTestLayoutBox(1),
+        makeTestLayoutBox(1),
+        makeTestLayoutBox(1),
+    };
+    var ptrs = [_]*const LayoutBox{ &boxes[0], &boxes[1], &boxes[2], &boxes[3] };
+
+    var intervals = std.ArrayList(LayerInterval).empty;
+    const allocator = std.testing.allocator;
+    defer intervals.deinit(allocator);
+    try computeLayerIntervals(allocator, &intervals, &ptrs);
+
+    try std.testing.expectEqual(@as(usize, 1), intervals.items.len);
+    try std.testing.expectEqual(@as(usize, 0), intervals.items[0].start);
+    try std.testing.expectEqual(@as(usize, 3), intervals.items[0].end);
+}
+
+test "computeLayerIntervals - empty input" {
+    var ptrs = [_]*const LayoutBox{};
+
+    var intervals = std.ArrayList(LayerInterval).empty;
+    const allocator = std.testing.allocator;
+    defer intervals.deinit(allocator);
+    try computeLayerIntervals(allocator, &intervals, &ptrs);
+
+    try std.testing.expectEqual(@as(usize, 0), intervals.items.len);
 }
 
 test "wrap - word wrapping with very small line width causes negative positions" {
