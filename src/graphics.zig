@@ -11,7 +11,6 @@ const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
 const flatTreeInto = layouting.flattenTreeInto;
 const LayerInterval = layouting.LayerInterval;
-const computeLayerIntervals = layouting.computeLayerIntervals;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
 const Window = @import("window/root.zig").Window;
 
@@ -681,6 +680,7 @@ pub const Image = struct {
 };
 
 const FontTextureAtlas = struct {
+    allocator: std.mem.Allocator,
     image: c.VkImage,
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
@@ -863,6 +863,8 @@ const FontTextureAtlas = struct {
         @memset(imageDataSlice, 0);
 
         return @This(){
+            .allocator = allocator,
+
             .image = image,
             .imageView = imageView,
             .memory = memory,
@@ -911,7 +913,6 @@ const FontTextureAtlas = struct {
     /// The texture atlas uses RGBA format (4 bytes per pixel) for dual-source blending.
     fn upload(
         self: *@This(),
-        allocator: std.mem.Allocator,
         data: ?[]u8,
         uploadWidth: usize,
         uploadHeight: usize,
@@ -942,7 +943,7 @@ const FontTextureAtlas = struct {
         // most area
         if (freeRectangle.width > pixelWidth) {
             try self.freeRectangles.append(
-                allocator,
+                self.allocator,
                 FreeRectangle{
                     .u = freeRectangle.u + pixelWidth,
                     .v = freeRectangle.v,
@@ -953,7 +954,7 @@ const FontTextureAtlas = struct {
         }
         if (freeRectangle.height > uploadHeight) {
             try self.freeRectangles.append(
-                allocator,
+                self.allocator,
                 FreeRectangle{
                     .u = freeRectangle.u,
                     .v = freeRectangle.v + uploadHeight,
@@ -1511,7 +1512,7 @@ const ShadowsPipeline = struct {
 
     fn draw(
         self: *@This(),
-        shadowCount: usize,
+        layerInterval: LayerInterval,
         frameIndex: usize,
         commandBuffer: c.VkCommandBuffer,
         rectangleModel: *Model,
@@ -1543,9 +1544,9 @@ const ShadowsPipeline = struct {
         c.vkCmdDraw(
             commandBuffer,
             rectangleModel.vertexCount,
-            @intCast(shadowCount),
+            @intCast(layerInterval.end - layerInterval.start),
             0,
-            0,
+            @intCast(layerInterval.start),
         );
     }
 
@@ -1557,7 +1558,7 @@ const ShadowsPipeline = struct {
         frameIndex: usize,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-    ) ![]LayerInterval {
+    ) !std.AutoHashMap(u16, LayerInterval) {
         var totalShadowCount: usize = 0;
         for (orderedLayoutBoxes) |layoutBox| {
             if (layoutBox.style.shadow != null) {
@@ -1565,8 +1566,7 @@ const ShadowsPipeline = struct {
             }
         }
 
-        const intervals = try std.ArrayList(LayerInterval).initCapacity(arena, 4);
-
+        const intervals = std.AutoHashMap(u16, LayerInterval).init(arena);
         if (totalShadowCount > 0) {
             if (totalShadowCount > self.shadowShaderData[0].len) {
                 try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
@@ -1579,23 +1579,17 @@ const ShadowsPipeline = struct {
             var shadowIndex: usize = 0;
             for (orderedLayoutBoxes) |layoutBox| {
                 if (layoutBox.style.shadow) |shadow| {
-                    if (intervals.getLastOrNull()) |lastInterval| {
-                        if (lastInterval.z == layoutBox.z) {
-                            std.debug.assert(lastInterval.end + 1 == shadowIndex);
-                            lastInterval.end = shadowIndex;
-                        } else {
-                            try intervals.append(LayerInterval{
-                                .z = layoutBox.z,
-                                .start = shadowIndex,
-                                .end = shadowIndex,
-                            });
-                        }
+                    const getOrPutResult = try intervals.getOrPut(layoutBox.z);
+                    if (getOrPutResult.found_existing) {
+                        // we expect them to be ordered
+                        std.debug.assert(getOrPutResult.value_ptr.end + 1 == shadowIndex);
+                        getOrPutResult.value_ptr.end = shadowIndex;
                     } else {
-                        try intervals.append(LayerInterval{
-                            .z = layoutBox.z,
+                        getOrPutResult.value_ptr.* = LayerInterval{
                             .start = shadowIndex,
                             .end = shadowIndex,
-                        });
+                            .z = layoutBox.z,
+                        };
                     }
                     const padding = Vec2{
                         shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
@@ -1626,7 +1620,7 @@ const ShadowsPipeline = struct {
             }
         }
 
-        return try intervals.toOwnedSlice(arena);
+        return intervals;
     }
 
     fn resizeConcurrentShadowCapacity(
@@ -2078,7 +2072,7 @@ const ElementsPipeline = struct {
 
     fn draw(
         self: *@This(),
-        elementCount: usize,
+        layerInterval: LayerInterval,
         frameIndex: usize,
         commandBuffer: c.VkCommandBuffer,
         rectangleModel: *Model,
@@ -2108,24 +2102,22 @@ const ElementsPipeline = struct {
         c.vkCmdDraw(
             commandBuffer,
             rectangleModel.vertexCount,
-            @intCast(elementCount),
+            @intCast(layerInterval.end - layerInterval.start),
             0,
-            0,
+            @intCast(layerInterval.start),
         );
     }
 
     fn prepareForDraw(
         self: *@This(),
-        iterator: *LayoutTreeIterator,
+        arena: std.mem.Allocator,
+        orderedLayoutBoxes: []*const LayoutBox,
         frameIndex: usize,
         projectionMatrix: zmath.Mat,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-    ) !usize {
-        var layoutBoxCount: usize = 0;
-        while (try iterator.next() != null) {
-            layoutBoxCount += 1;
-        }
+    ) ![]LayerInterval {
+        const layoutBoxCount = orderedLayoutBoxes.len;
 
         if (layoutBoxCount > self.elementsShaderData[0].len) {
             try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
@@ -2136,9 +2128,28 @@ const ElementsPipeline = struct {
             );
         }
 
-        try iterator.reset();
-        var i: usize = 0;
-        while (try iterator.next()) |layoutBox| {
+        const intervals = try std.ArrayList(LayerInterval).initCapacity(arena, 4);
+
+        for (orderedLayoutBoxes, 0..) |layoutBox, i| {
+            if (intervals.getLastOrNull()) |lastInterval| {
+                if (lastInterval.z == layoutBox.z) {
+                    std.debug.assert(lastInterval.end + 1 == i);
+                    lastInterval.end = i;
+                } else {
+                    try intervals.append(arena, LayerInterval{
+                        .z = layoutBox.z,
+                        .start = i,
+                        .end = i,
+                    });
+                }
+            } else {
+                try intervals.append(arena, LayerInterval{
+                    .z = layoutBox.z,
+                    .start = i,
+                    .end = i,
+                });
+            }
+
             const textureIndex: i32 = switch (layoutBox.style.background) {
                 .color => -1,
                 .image => |imgPtr| @intCast(try self.registerImage(imgPtr, logicalDevice)),
@@ -2166,11 +2177,9 @@ const ElementsPipeline = struct {
                 },
                 .imageIndex = textureIndex,
             };
-
-            i += 1;
         }
 
-        return layoutBoxCount;
+        return try intervals.toOwnedSlice(arena);
     }
 
     fn resizeConcurrentElementCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
@@ -2631,7 +2640,7 @@ const TextPipeline = struct {
 
     fn draw(
         self: *@This(),
-        glyphCount: usize,
+        layerInterval: LayerInterval,
         frameIndex: usize,
         commandBuffer: c.VkCommandBuffer,
         rectangleModel: *Model,
@@ -2663,29 +2672,30 @@ const TextPipeline = struct {
         c.vkCmdDraw(
             commandBuffer,
             rectangleModel.vertexCount,
-            @intCast(glyphCount),
+            @intCast(layerInterval.end - layerInterval.start),
             0,
-            0,
+            @intCast(layerInterval.start),
         );
     }
 
     fn prepareForDraw(
         self: *@This(),
-        allocator: std.mem.Allocator,
-        iterator: *LayoutTreeIterator,
+        arena: std.mem.Allocator,
+        orderedLayoutBoxes: []*const LayoutBox,
         projectionMatrix: zmath.Mat,
         dpi: [2]u32,
         frameIndex: usize,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-    ) !usize {
+    ) ![]LayerInterval {
         var totalGlyphCount: usize = 0;
-        while (try iterator.next()) |layoutBox| {
+        for (orderedLayoutBoxes) |layoutBox| {
             if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
                 totalGlyphCount += layoutBox.children.?.glyphs.slice.len;
             }
         }
-        try iterator.reset();
+
+        const intervals = try std.ArrayList(LayerInterval).initCapacity(arena, 4);
 
         if (totalGlyphCount > 0) {
             if (totalGlyphCount > self.shaderBuffersMapped[0].len) {
@@ -2698,9 +2708,28 @@ const TextPipeline = struct {
             }
 
             var glyphIndex: usize = 0;
-            while (try iterator.next()) |layoutBox| {
+            for (orderedLayoutBoxes) |layoutBox| {
                 if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
                     for (layoutBox.children.?.glyphs.slice) |glyph| {
+                        if (intervals.getLastOrNull()) |lastInterval| {
+                            if (lastInterval.z == layoutBox.z) {
+                                std.debug.assert(lastInterval.end + 1 == glyphIndex);
+                                lastInterval.end = glyphIndex;
+                            } else {
+                                try intervals.append(arena, LayerInterval{
+                                    .z = layoutBox.z,
+                                    .start = glyphIndex,
+                                    .end = glyphIndex,
+                                });
+                            }
+                        } else {
+                            try intervals.append(LayerInterval{
+                                .z = layoutBox.z,
+                                .start = glyphIndex,
+                                .end = glyphIndex,
+                            });
+                        }
+
                         const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
                             .dpi = dpi,
                             .fontKey = layoutBox.style.font.key,
@@ -2713,7 +2742,7 @@ const TextPipeline = struct {
                             if (self.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
                                 break :blk data;
                             } else {
-                                try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, allocator);
+                                try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, arena);
                                 const rasterizedGlyph = try layoutBox.style.font.rasterize(
                                     glyph.index,
                                     dpi,
@@ -2721,7 +2750,6 @@ const TextPipeline = struct {
                                 );
 
                                 const textureCoordinates = try self.fontTextureAtlas.upload(
-                                    allocator,
                                     rasterizedGlyph.bitmap,
                                     @intCast(rasterizedGlyph.width),
                                     @intCast(rasterizedGlyph.height),
@@ -2783,7 +2811,7 @@ const TextPipeline = struct {
             }
         }
 
-        return totalGlyphCount;
+        return try intervals.toOwnedSlice(arena);
     }
 
     fn resizeGlyphsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
@@ -3647,54 +3675,60 @@ pub const Renderer = struct {
             }
         }).lessThan);
 
-        var layerIntervals = std.ArrayList(LayerInterval).empty;
-        try computeLayerIntervals(arena, &layerIntervals, flatLayoutTree.items);
-
-        const shadowCount = try self.shadowsPipeline.prepareForDraw(
-            &layoutTreeIterator,
+        const shadowIntervals = try self.shadowsPipeline.prepareForDraw(
+            arena,
+            flatLayoutTree.items,
             projectionMatrix,
             self.framesRenderedInSwapchain % maxFramesInFlight,
             self.logicalDevice,
             self.physicalDevice,
         );
-        try layoutTreeIterator.reset();
-        const layoutBoxCount = try self.elementsPipeline.prepareForDraw(
-            &layoutTreeIterator,
+        defer shadowIntervals.deinit();
+        const elementIntervals = try self.elementsPipeline.prepareForDraw(
+            arena,
+            flatLayoutTree.items,
             self.framesRenderedInSwapchain % maxFramesInFlight,
             projectionMatrix,
             self.logicalDevice,
             self.physicalDevice,
         );
-        try layoutTreeIterator.reset();
-        const glyphCount = try self.textPipeline.prepareForDraw(
-            self.allocator,
-            &layoutTreeIterator,
+        defer elementIntervals.deinit();
+        const textIntervals = try self.textPipeline.prepareForDraw(
+            arena,
+            flatLayoutTree.items,
             projectionMatrix,
             dpi,
             self.framesRenderedInSwapchain % maxFramesInFlight,
             self.logicalDevice,
             self.physicalDevice,
         );
-        try layoutTreeIterator.reset();
+        defer textIntervals.deinit();
 
-        self.shadowsPipeline.draw(
-            shadowCount,
-            self.framesRenderedInSwapchain % maxFramesInFlight,
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            &self.rectangleModel,
-        );
-        self.elementsPipeline.draw(
-            layoutBoxCount,
-            self.framesRenderedInSwapchain % maxFramesInFlight,
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            &self.rectangleModel,
-        );
-        self.textPipeline.draw(
-            glyphCount,
-            self.framesRenderedInSwapchain % maxFramesInFlight,
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            &self.rectangleModel,
-        );
+        var elementIntervalsIterator = elementIntervals.valueIterator();
+        for (elementIntervalsIterator.next()) |elementInterval| {
+            if (shadowIntervals.get(elementInterval.z)) |shadowInterval| {
+                self.shadowsPipeline.draw(
+                    shadowInterval,
+                    self.framesRenderedInSwapchain % maxFramesInFlight,
+                    self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                    &self.rectangleModel,
+                );
+            }
+            self.elementsPipeline.draw(
+                elementInterval,
+                self.framesRenderedInSwapchain % maxFramesInFlight,
+                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                &self.rectangleModel,
+            );
+            if (textIntervals.get(elementInterval.z)) |glyphInterval| {
+                self.textPipeline.draw(
+                    glyphInterval,
+                    self.framesRenderedInSwapchain % maxFramesInFlight,
+                    self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                    &self.rectangleModel,
+                );
+            }
+        }
 
         c.vkCmdEndRenderPass(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]);
         try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]));
