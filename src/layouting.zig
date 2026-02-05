@@ -637,6 +637,15 @@ const LayoutCreator = struct {
     }
 };
 
+pub fn flattenTreeInto(allocator: std.mem.Allocator, list: *std.ArrayList(*const LayoutBox), layoutBox: *const LayoutBox) !void {
+    try list.append(allocator, layoutBox);
+    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
+        for (layoutBox.children.?.layoutBoxes) |*child| {
+            try flattenTreeInto(list, child);
+        }
+    }
+}
+
 pub const LayoutTreeIterator = struct {
     stack: std.ArrayList(*const LayoutBox),
     allocator: std.mem.Allocator,
@@ -677,6 +686,16 @@ pub const LayoutTreeIterator = struct {
         return current;
     }
 };
+
+pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
+    var count: usize = 1;
+    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
+        for (layoutBox.children.?.layoutBoxes) |*child| {
+            count += countTreeSize(child);
+        }
+    }
+    return count;
+}
 
 pub fn layout(
     arena: std.mem.Allocator,

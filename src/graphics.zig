@@ -9,6 +9,7 @@ const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
+const flatTreeInto = layouting.flattenTreeInto;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
 const Window = @import("window/root.zig").Window;
 
@@ -3513,6 +3514,7 @@ pub const Renderer = struct {
 
     pub fn drawFrame(
         self: *Self,
+        arena: std.mem.Allocator,
         rootLayoutBox: *const LayoutBox,
         clearColor: Vec4,
         dpi: [2]u32,
@@ -3615,8 +3617,42 @@ pub const Renderer = struct {
             1.0,
         );
 
-        var layoutTreeIterator = try LayoutTreeIterator.init(self.allocator, rootLayoutBox);
-        defer layoutTreeIterator.deinit();
+        var flatLayoutTree = std.ArrayList(*const LayoutBox).empty;
+        try flatTreeInto(arena, &flatLayoutTree, rootLayoutBox);
+        std.mem.sort(*const LayoutBox, flatLayoutTree.items, null, (struct {
+            fn lessThan(lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
+                if (lhs.z > rhs.z) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        }).lessThan);
+
+        const LayerInterval = struct {
+            start: usize,
+            end: usize,
+        };
+        const layerIntervals = try std.ArrayList(LayerInterval).initCapacity(arena, 16);
+        for (flatLayoutTree.items, 0..) |box, i| {
+            if (layerIntervals.items.len == 0) {
+                try layerIntervals.append(LayerInterval{
+                    .start = i,
+                    .end = i,
+                });
+            } else {
+                const lastIntervalIndex = layerIntervals.items.len - 1;
+                const intervalStart = layerIntervals.items[lastIntervalIndex].start;
+                if (box.z == flatLayoutTree.items[intervalStart].z) {
+                    layerIntervals.items[lastIntervalIndex].end += 1;
+                } else {
+                    try layerIntervals.append(LayerInterval{
+                        .start = i,
+                        .end = i,
+                    });
+                }
+            }
+        }
 
         const shadowCount = try self.shadowsPipeline.prepareForDraw(
             &layoutTreeIterator,
