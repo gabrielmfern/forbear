@@ -1548,7 +1548,7 @@ const ShadowsPipeline = struct {
         c.vkCmdDraw(
             commandBuffer,
             rectangleModel.vertexCount,
-            @intCast(layerInterval.end - layerInterval.start),
+            @intCast(layerInterval.end - layerInterval.start + 1),
             0,
             @intCast(layerInterval.start),
         );
@@ -2105,7 +2105,7 @@ const ElementsPipeline = struct {
         c.vkCmdDraw(
             commandBuffer,
             rectangleModel.vertexCount,
-            @intCast(layerInterval.end - layerInterval.start),
+            @intCast(layerInterval.end - layerInterval.start + 1),
             0,
             @intCast(layerInterval.start),
         );
@@ -2667,7 +2667,7 @@ const TextPipeline = struct {
         c.vkCmdDraw(
             commandBuffer,
             rectangleModel.vertexCount,
-            @intCast(layerInterval.end - layerInterval.start),
+            @intCast(layerInterval.end - layerInterval.start + 1),
             0,
             @intCast(layerInterval.start),
         );
@@ -3658,7 +3658,7 @@ pub const Renderer = struct {
         try flatTreeInto(arena, &flatLayoutTree, rootLayoutBox);
         std.mem.sort(*const LayoutBox, flatLayoutTree.items, {}, (struct {
             fn lessThan(_: void, lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
-                return lhs.z > rhs.z;
+                return lhs.z < rhs.z;
             }
         }).lessThan);
 
@@ -3687,10 +3687,18 @@ pub const Renderer = struct {
             self.logicalDevice,
             self.physicalDevice,
         );
-        var elementIntervalsIterator = elementIntervals.iterator();
-        while (elementIntervalsIterator.next()) |entry| {
-            const z = entry.key_ptr.*;
-            const elementInterval = entry.value_ptr.*;
+        const zLayers = try arena.alloc(u16, elementIntervals.count());
+        {
+            var it = elementIntervals.keyIterator();
+            var i: usize = 0;
+            while (it.next()) |key| {
+                zLayers[i] = key.*;
+                i += 1;
+            }
+        }
+        std.mem.sort(u16, zLayers, {}, std.sort.asc(u16));
+
+        for (zLayers) |z| {
             if (shadowIntervals.get(z)) |shadowInterval| {
                 self.shadowsPipeline.draw(
                     shadowInterval,
@@ -3700,7 +3708,7 @@ pub const Renderer = struct {
                 );
             }
             self.elementsPipeline.draw(
-                elementInterval,
+                elementIntervals.get(z).?,
                 self.framesRenderedInSwapchain % maxFramesInFlight,
                 self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
                 &self.rectangleModel,
