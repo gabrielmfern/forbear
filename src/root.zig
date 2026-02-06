@@ -680,7 +680,10 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
         // They might be confused about something? How can we make the design
         // get it clearer to the user that there can only be one root?
         std.debug.assert(self.rootFrameNode == null);
-        self.rootFrameNode = undefined;
+        self.rootFrameNode = Node{
+            .content = undefined,
+            .key = undefined,
+        };
         return .{ .ptr = &self.rootFrameNode.?, .index = 0 };
     }
 }
