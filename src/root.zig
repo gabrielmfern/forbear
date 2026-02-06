@@ -101,6 +101,22 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
     };
 }
 
+test "rootNode is properly set" {
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    (try element(arenaAllocator, .{}))({
+        try std.testing.expect(self.rootFrameNode != null);
+    });
+    try std.testing.expect(self.rootFrameNode != null);
+}
+
 test "Element tree stack stability" {
     try init(std.testing.allocator, undefined);
     defer deinit();
@@ -142,10 +158,12 @@ test "Element tree stack stability" {
             try std.testing.expectEqual(2, self.frameNodePath.items.len);
         });
         try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+        try std.testing.expectEqual(1, self.frameNodePath.items.len);
     });
     try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
     try std.testing.expectEqual(0, self.frameNodePath.items.len);
-    try std.testing.expect(self.rootFrameNode != null);
+
+    std.debug.assert(self.rootFrameNode != null);
 
     // This acts like the end of a frame here
     resetNodeTree();
@@ -185,7 +203,8 @@ test "Element tree stack stability" {
     });
     try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
     try std.testing.expectEqual(0, self.frameNodePath.items.len);
-    try std.testing.expect(self.rootFrameNode != null);
+
+    std.debug.assert(self.rootFrameNode != null);
 }
 
 test "Element key stability across frames" {
@@ -655,7 +674,7 @@ test "Event queue dispatches events to correct elements" {
 /// immediate mode UI library in Zig as well from teh Zig Discord server.
 ///
 /// TODO: share the github of the person I got this trick from
-fn popParentStack(block: void) void {
+noinline fn popParentStack(block: void) void {
     _ = block;
     const self = getContext();
     std.debug.assert(self.frameNodeParentStack.items.len > 0);
@@ -776,7 +795,8 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
         .arenaAllocator = arena,
         .stateByteCursor = 0,
     };
-    const returnValue = try @call(.auto, function, if (hasProps) .{props} else .{});
+    const returnValue =
+        try @call(.auto, function, if (hasProps) .{props} else .{});
     if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.stateByteCursor != self.componentStates.get(componentKey).?.len) {
         return error.RulesOfHooksViolated;
     }
