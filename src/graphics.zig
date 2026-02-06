@@ -1562,7 +1562,7 @@ const ShadowsPipeline = struct {
         frameIndex: usize,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-    ) !std.AutoHashMap(u16, LayerInterval) {
+    ) ![]const ?LayerInterval {
         var totalShadowCount: usize = 0;
         for (orderedLayoutBoxes) |layoutBox| {
             if (layoutBox.style.shadow != null) {
@@ -1570,7 +1570,11 @@ const ShadowsPipeline = struct {
             }
         }
 
-        var intervals = std.AutoHashMap(u16, LayerInterval).init(arena);
+        const maxZ = orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z;
+        var intervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        for (intervals) |*interval| {
+            interval.* = null;
+        }
         if (totalShadowCount > 0) {
             if (totalShadowCount > self.shadowShaderData[0].len) {
                 try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
@@ -1583,13 +1587,12 @@ const ShadowsPipeline = struct {
             var shadowIndex: usize = 0;
             for (orderedLayoutBoxes) |layoutBox| {
                 if (layoutBox.style.shadow) |shadow| {
-                    const getOrPutResult = try intervals.getOrPut(layoutBox.z);
-                    if (getOrPutResult.found_existing) {
+                    if (intervals[layoutBox.z - 1]) |*interval| {
                         // we expect them to be ordered
-                        std.debug.assert(getOrPutResult.value_ptr.end + 1 == shadowIndex);
-                        getOrPutResult.value_ptr.end = shadowIndex;
+                        std.debug.assert(interval.end + 1 == shadowIndex);
+                        interval.end = shadowIndex;
                     } else {
-                        getOrPutResult.value_ptr.* = LayerInterval{
+                        intervals[layoutBox.z - 1] = LayerInterval{
                             .start = shadowIndex,
                             .end = shadowIndex,
                         };
@@ -1622,7 +1625,6 @@ const ShadowsPipeline = struct {
                 }
             }
         }
-
         return intervals;
     }
 
@@ -2119,7 +2121,7 @@ const ElementsPipeline = struct {
         projectionMatrix: zmath.Mat,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-    ) !std.AutoHashMap(u16, LayerInterval) {
+    ) ![]const ?LayerInterval {
         const layoutBoxCount = orderedLayoutBoxes.len;
 
         if (layoutBoxCount > self.elementsShaderData[0].len) {
@@ -2131,15 +2133,19 @@ const ElementsPipeline = struct {
             );
         }
 
-        var intervals = std.AutoHashMap(u16, LayerInterval).init(arena);
+        const maxZ = orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z;
+        var intervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        for (intervals) |*interval| {
+            interval.* = null;
+        }
 
         for (orderedLayoutBoxes, 0..) |layoutBox, i| {
-            const getOrPutResult = try intervals.getOrPut(layoutBox.z);
-            if (getOrPutResult.found_existing) {
-                std.debug.assert(getOrPutResult.value_ptr.end + 1 == i);
-                getOrPutResult.value_ptr.end = i;
+            if (intervals[layoutBox.z - 1]) |*interval| {
+                // we expect them to be ordered
+                std.debug.assert(interval.end + 1 == i);
+                interval.end = i;
             } else {
-                getOrPutResult.value_ptr.* = LayerInterval{
+                intervals[layoutBox.z - 1] = LayerInterval{
                     .start = i,
                     .end = i,
                 };
@@ -2682,7 +2688,7 @@ const TextPipeline = struct {
         frameIndex: usize,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-    ) !std.AutoHashMap(u16, LayerInterval) {
+    ) ![]const ?LayerInterval {
         var totalGlyphCount: usize = 0;
         for (orderedLayoutBoxes) |layoutBox| {
             if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
@@ -2690,8 +2696,11 @@ const TextPipeline = struct {
             }
         }
 
-        var intervals = std.AutoHashMap(u16, LayerInterval).init(arena);
-
+        const maxZ = orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z;
+        var intervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        for (intervals) |*interval| {
+            interval.* = null;
+        }
         if (totalGlyphCount > 0) {
             if (totalGlyphCount > self.shaderBuffersMapped[0].len) {
                 try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
@@ -2706,12 +2715,12 @@ const TextPipeline = struct {
             for (orderedLayoutBoxes) |layoutBox| {
                 if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
                     for (layoutBox.children.?.glyphs.slice) |glyph| {
-                        const getOrPutResult = try intervals.getOrPut(layoutBox.z);
-                        if (getOrPutResult.found_existing) {
-                            std.debug.assert(getOrPutResult.value_ptr.end + 1 == glyphIndex);
-                            getOrPutResult.value_ptr.end = glyphIndex;
+                        if (intervals[layoutBox.z - 1]) |*interval| {
+                            // we expect them to be ordered
+                            std.debug.assert(interval.end + 1 == glyphIndex);
+                            interval.end = glyphIndex;
                         } else {
-                            getOrPutResult.value_ptr.* = LayerInterval{
+                            intervals[layoutBox.z - 1] = LayerInterval{
                                 .start = glyphIndex,
                                 .end = glyphIndex,
                             };
@@ -2797,7 +2806,6 @@ const TextPipeline = struct {
                 }
             }
         }
-
         return intervals;
     }
 
@@ -3687,19 +3695,11 @@ pub const Renderer = struct {
             self.logicalDevice,
             self.physicalDevice,
         );
-        const zLayers = try arena.alloc(u16, elementIntervals.count());
-        {
-            var it = elementIntervals.keyIterator();
-            var i: usize = 0;
-            while (it.next()) |key| {
-                zLayers[i] = key.*;
-                i += 1;
-            }
-        }
-        std.mem.sort(u16, zLayers, {}, std.sort.asc(u16));
 
-        for (zLayers) |z| {
-            if (shadowIntervals.get(z)) |shadowInterval| {
+        std.debug.assert(shadowIntervals.len == elementIntervals.len);
+        std.debug.assert(textIntervals.len == elementIntervals.len);
+        for (0..elementIntervals.len) |i| {
+            if (shadowIntervals[i]) |shadowInterval| {
                 self.shadowsPipeline.draw(
                     shadowInterval,
                     self.framesRenderedInSwapchain % maxFramesInFlight,
@@ -3707,13 +3707,15 @@ pub const Renderer = struct {
                     &self.rectangleModel,
                 );
             }
-            self.elementsPipeline.draw(
-                elementIntervals.get(z).?,
-                self.framesRenderedInSwapchain % maxFramesInFlight,
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                &self.rectangleModel,
-            );
-            if (textIntervals.get(z)) |glyphInterval| {
+            if (elementIntervals[i]) |elementInterval| {
+                self.elementsPipeline.draw(
+                    elementInterval,
+                    self.framesRenderedInSwapchain % maxFramesInFlight,
+                    self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                    &self.rectangleModel,
+                );
+            }
+            if (textIntervals[i]) |glyphInterval| {
                 self.textPipeline.draw(
                     glyphInterval,
                     self.framesRenderedInSwapchain % maxFramesInFlight,
