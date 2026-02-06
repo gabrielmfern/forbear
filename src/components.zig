@@ -12,7 +12,7 @@ pub fn FpsCounter() !void {
     (try forbear.element(arena, .{
         .placement = .{ .manual = .{ 10, 10 } },
         .zIndex = 10,
-        .background = .{ .color = .{ 0.0, 0.0, 0.0, 0.5 } },
+        .background = .{ .color = .{ 0.0, 0.0, 0.0, 0.9 } },
         .fontSize = 12,
         .paddingBlock = .{ 4, 4 },
         .paddingInline = .{ 4, 4 },

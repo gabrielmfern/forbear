@@ -9,7 +9,13 @@ const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
+const flatTreeInto = layouting.flattenTreeInto;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
+
+const LayerInterval = struct {
+    start: usize,
+    end: usize,
+};
 const Window = @import("window/root.zig").Window;
 
 const Vec4 = @Vector(4, f32);
@@ -678,6 +684,7 @@ pub const Image = struct {
 };
 
 const FontTextureAtlas = struct {
+    allocator: std.mem.Allocator,
     image: c.VkImage,
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
@@ -860,6 +867,8 @@ const FontTextureAtlas = struct {
         @memset(imageDataSlice, 0);
 
         return @This(){
+            .allocator = allocator,
+
             .image = image,
             .imageView = imageView,
             .memory = memory,
@@ -908,7 +917,6 @@ const FontTextureAtlas = struct {
     /// The texture atlas uses RGBA format (4 bytes per pixel) for dual-source blending.
     fn upload(
         self: *@This(),
-        allocator: std.mem.Allocator,
         data: ?[]u8,
         uploadWidth: usize,
         uploadHeight: usize,
@@ -939,7 +947,7 @@ const FontTextureAtlas = struct {
         // most area
         if (freeRectangle.width > pixelWidth) {
             try self.freeRectangles.append(
-                allocator,
+                self.allocator,
                 FreeRectangle{
                     .u = freeRectangle.u + pixelWidth,
                     .v = freeRectangle.v,
@@ -950,7 +958,7 @@ const FontTextureAtlas = struct {
         }
         if (freeRectangle.height > uploadHeight) {
             try self.freeRectangles.append(
-                allocator,
+                self.allocator,
                 FreeRectangle{
                     .u = freeRectangle.u,
                     .v = freeRectangle.v + uploadHeight,
@@ -1410,20 +1418,6 @@ const ShadowsPipeline = struct {
                     },
                     .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
                 },
-                .pDepthStencilState = &c.VkPipelineDepthStencilStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .depthTestEnable = c.VK_TRUE,
-                    .depthWriteEnable = c.VK_TRUE,
-                    .depthCompareOp = c.VK_COMPARE_OP_LESS_OR_EQUAL,
-                    .depthBoundsTestEnable = c.VK_FALSE,
-                    .stencilTestEnable = c.VK_FALSE,
-                    .front = undefined,
-                    .back = undefined,
-                    .minDepthBounds = 0.0,
-                    .maxDepthBounds = 1.0,
-                },
                 .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
                     .pNext = null,
@@ -1520,6 +1514,120 @@ const ShadowsPipeline = struct {
         };
     }
 
+    fn draw(
+        self: *@This(),
+        layerInterval: LayerInterval,
+        frameIndex: usize,
+        commandBuffer: c.VkCommandBuffer,
+        rectangleModel: *Model,
+    ) void {
+        c.vkCmdBindPipeline(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.graphicsPipeline,
+        );
+
+        c.vkCmdBindDescriptorSets(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.pipelineLayout,
+            0,
+            1,
+            &self.descriptorSets[frameIndex],
+            0,
+            null,
+        );
+
+        c.vkCmdBindVertexBuffers(
+            commandBuffer,
+            0,
+            1,
+            &rectangleModel.vertexBuffer.handle,
+            &@intCast(0),
+        );
+        c.vkCmdDraw(
+            commandBuffer,
+            rectangleModel.vertexCount,
+            @intCast(layerInterval.end - layerInterval.start + 1),
+            0,
+            @intCast(layerInterval.start),
+        );
+    }
+
+    fn prepareForDraw(
+        self: *@This(),
+        arena: std.mem.Allocator,
+        orderedLayoutBoxes: []*const LayoutBox,
+        projectionMatrix: zmath.Mat,
+        frameIndex: usize,
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+    ) ![]const ?LayerInterval {
+        var totalShadowCount: usize = 0;
+        for (orderedLayoutBoxes) |layoutBox| {
+            if (layoutBox.style.shadow != null) {
+                totalShadowCount += 1;
+            }
+        }
+
+        const maxZ = orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z;
+        var intervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        for (intervals) |*interval| {
+            interval.* = null;
+        }
+        if (totalShadowCount > 0) {
+            if (totalShadowCount > self.shadowShaderData[0].len) {
+                try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
+                try self.resizeConcurrentShadowCapacity(
+                    logicalDevice,
+                    physicalDevice,
+                    try std.math.ceilPowerOfTwo(usize, totalShadowCount),
+                );
+            }
+            var shadowIndex: usize = 0;
+            for (orderedLayoutBoxes) |layoutBox| {
+                if (layoutBox.style.shadow) |shadow| {
+                    if (intervals[layoutBox.z - 1]) |*interval| {
+                        // we expect them to be ordered
+                        std.debug.assert(interval.end + 1 == shadowIndex);
+                        interval.end = shadowIndex;
+                    } else {
+                        intervals[layoutBox.z - 1] = LayerInterval{
+                            .start = shadowIndex,
+                            .end = shadowIndex,
+                        };
+                    }
+                    const padding = Vec2{
+                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
+                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    };
+                    const position = Vec2{
+                        layoutBox.position[0] - padding[0] - shadow.offsetInline[0] + shadow.offsetInline[1],
+                        layoutBox.position[1] - padding[1] - shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    };
+                    const size = layoutBox.size + padding * Vec2{ 2, 2 };
+                    self.shadowShaderData[frameIndex][shadowIndex] = ShadowRenderingData{
+                        .modelViewProjectionMatrix = zmath.mul(
+                            zmath.mul(
+                                zmath.scaling(size[0], size[1], 1.0),
+                                zmath.translation(position[0], position[1], 0.0),
+                            ),
+                            projectionMatrix,
+                        ),
+                        .color = srgbToLinearColor(shadow.color),
+                        .blur = shadow.blurRadius,
+                        .spread = shadow.spread,
+                        .elementSize = layoutBox.size,
+                        .size = size,
+                        .borderRadius = layoutBox.style.borderRadius,
+                    };
+                    shadowIndex += 1;
+                }
+            }
+        }
+        return intervals;
+    }
+
     fn resizeConcurrentShadowCapacity(
         self: *@This(),
         logicalDevice: c.VkDevice,
@@ -1595,6 +1703,8 @@ const ElementRenderingData = extern struct {
 };
 
 const ElementsPipeline = struct {
+    allocator: std.mem.Allocator,
+
     pipelineLayout: c.VkPipelineLayout,
     graphicsPipeline: c.VkPipeline,
 
@@ -1605,6 +1715,7 @@ const ElementsPipeline = struct {
     elementsShaderDataBuffer: [maxFramesInFlight]Buffer,
     elementsShaderData: [maxFramesInFlight][]ElementRenderingData,
 
+    registeredImages: std.ArrayList(*const Image),
     sampler: c.VkSampler,
 
     const maxImages = 1024;
@@ -1613,6 +1724,7 @@ const ElementsPipeline = struct {
     const elementFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("element_fragment_shader")));
 
     fn init(
+        allocator: std.mem.Allocator,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         renderPass: c.VkRenderPass,
@@ -1801,20 +1913,6 @@ const ElementsPipeline = struct {
                     },
                     .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
                 },
-                .pDepthStencilState = &c.VkPipelineDepthStencilStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .depthTestEnable = c.VK_TRUE,
-                    .depthWriteEnable = c.VK_TRUE,
-                    .depthCompareOp = c.VK_COMPARE_OP_LESS_OR_EQUAL,
-                    .depthBoundsTestEnable = c.VK_FALSE,
-                    .stencilTestEnable = c.VK_FALSE,
-                    .front = undefined,
-                    .back = undefined,
-                    .minDepthBounds = 0.0,
-                    .maxDepthBounds = 1.0,
-                },
                 .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
                     .pNext = null,
@@ -1926,6 +2024,8 @@ const ElementsPipeline = struct {
         }, null, &sampler));
 
         return ElementsPipeline{
+            .allocator = allocator,
+
             .pipelineLayout = pipelineLayout,
             .graphicsPipeline = graphicsPipeline,
 
@@ -1935,7 +2035,152 @@ const ElementsPipeline = struct {
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
             .sampler = sampler,
+            .registeredImages = try std.ArrayList(*const Image).initCapacity(allocator, 16),
         };
+    }
+
+    fn registerImage(self: *@This(), image: *const Image, logicalDevice: c.VkDevice) !u32 {
+        for (self.registeredImages.items, 0..) |registered, i| {
+            if (registered == image) return @intCast(i);
+        }
+
+        const index = self.registeredImages.items.len;
+        if (index >= ElementsPipeline.maxImages) return error.TooManyImages;
+
+        try self.registeredImages.append(self.allocator, image);
+
+        for (0..maxFramesInFlight) |i| {
+            const imageInfo = c.VkDescriptorImageInfo{
+                .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = image.imageView,
+                .sampler = self.sampler,
+            };
+
+            const descriptorWrite = c.VkWriteDescriptorSet{
+                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = null,
+                .dstSet = self.descriptorSets[i],
+                .dstBinding = 1,
+                .dstArrayElement = @intCast(index),
+                .descriptorCount = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .pImageInfo = &imageInfo,
+                .pBufferInfo = null,
+                .pTexelBufferView = null,
+            };
+
+            c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+        }
+
+        return @intCast(index);
+    }
+
+    fn draw(
+        self: *@This(),
+        layerInterval: LayerInterval,
+        frameIndex: usize,
+        commandBuffer: c.VkCommandBuffer,
+        rectangleModel: *Model,
+    ) void {
+        c.vkCmdBindPipeline(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.graphicsPipeline,
+        );
+        c.vkCmdBindDescriptorSets(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.pipelineLayout,
+            0,
+            1,
+            &self.descriptorSets[frameIndex],
+            0,
+            null,
+        );
+        c.vkCmdBindVertexBuffers(
+            commandBuffer,
+            0,
+            1,
+            &rectangleModel.vertexBuffer.handle,
+            &@intCast(0),
+        );
+        c.vkCmdDraw(
+            commandBuffer,
+            rectangleModel.vertexCount,
+            @intCast(layerInterval.end - layerInterval.start + 1),
+            0,
+            @intCast(layerInterval.start),
+        );
+    }
+
+    fn prepareForDraw(
+        self: *@This(),
+        arena: std.mem.Allocator,
+        orderedLayoutBoxes: []*const LayoutBox,
+        frameIndex: usize,
+        projectionMatrix: zmath.Mat,
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+    ) ![]const ?LayerInterval {
+        const layoutBoxCount = orderedLayoutBoxes.len;
+
+        if (layoutBoxCount > self.elementsShaderData[0].len) {
+            try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
+            try self.resizeConcurrentElementCapacity(
+                logicalDevice,
+                physicalDevice,
+                try std.math.ceilPowerOfTwo(usize, layoutBoxCount),
+            );
+        }
+
+        const maxZ = orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z;
+        var intervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        for (intervals) |*interval| {
+            interval.* = null;
+        }
+
+        for (orderedLayoutBoxes, 0..) |layoutBox, i| {
+            if (intervals[layoutBox.z - 1]) |*interval| {
+                // we expect them to be ordered
+                std.debug.assert(interval.end + 1 == i);
+                interval.end = i;
+            } else {
+                intervals[layoutBox.z - 1] = LayerInterval{
+                    .start = i,
+                    .end = i,
+                };
+            }
+
+            const textureIndex: i32 = switch (layoutBox.style.background) {
+                .color => -1,
+                .image => |imgPtr| @intCast(try self.registerImage(imgPtr, logicalDevice)),
+            };
+            self.elementsShaderData[frameIndex][i] = ElementRenderingData{
+                .modelViewProjectionMatrix = zmath.mul(
+                    zmath.mul(
+                        zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
+                        zmath.translation(layoutBox.position[0], layoutBox.position[1], 0.0),
+                    ),
+                    projectionMatrix,
+                ),
+                .backgroundColor = switch (layoutBox.style.background) {
+                    .color => |color| srgbToLinearColor(color),
+                    .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
+                },
+                .size = layoutBox.size,
+                .borderRadius = layoutBox.style.borderRadius,
+                .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
+                .borderSize = .{
+                    layoutBox.style.borderBlockWidth[0],
+                    layoutBox.style.borderBlockWidth[1],
+                    layoutBox.style.borderInlineWidth[0],
+                    layoutBox.style.borderInlineWidth[1],
+                },
+                .imageIndex = textureIndex,
+            };
+        }
+
+        return intervals;
     }
 
     fn resizeConcurrentElementCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
@@ -1983,7 +2228,9 @@ const ElementsPipeline = struct {
         }
     }
 
-    fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+    fn deinit(self: *@This(), logicalDevice: c.VkDevice) void {
+        self.registeredImages.deinit(self.allocator);
+
         c.vkDestroySampler(logicalDevice, self.sampler, null);
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
 
@@ -2029,7 +2276,7 @@ const TextPipeline = struct {
         dpi: [2]u32,
     };
 
-    pub const GlypRenderingShaderData = extern struct {
+    const GlypRenderingShaderData = extern struct {
         modelViewProjectionMatrix: zmath.Mat,
         color: Vec4,
         uvOffset: [2]f32,
@@ -2039,7 +2286,7 @@ const TextPipeline = struct {
     const textVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_vertex_shader")));
     const textFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_fragment_shader")));
 
-    pub fn init(
+    fn init(
         allocator: std.mem.Allocator,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
@@ -2237,20 +2484,6 @@ const TextPipeline = struct {
                     },
                     .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
                 },
-                .pDepthStencilState = &c.VkPipelineDepthStencilStateCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .depthTestEnable = c.VK_TRUE,
-                    .depthWriteEnable = c.VK_TRUE,
-                    .depthCompareOp = c.VK_COMPARE_OP_LESS_OR_EQUAL,
-                    .depthBoundsTestEnable = c.VK_FALSE,
-                    .stencilTestEnable = c.VK_FALSE,
-                    .front = undefined,
-                    .back = undefined,
-                    .minDepthBounds = 0.0,
-                    .maxDepthBounds = 1.0,
-                },
                 .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
                     .pNext = null,
@@ -2406,7 +2639,177 @@ const TextPipeline = struct {
         };
     }
 
-    pub fn resizeGlyphsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
+    fn draw(
+        self: *@This(),
+        layerInterval: LayerInterval,
+        frameIndex: usize,
+        commandBuffer: c.VkCommandBuffer,
+        rectangleModel: *Model,
+    ) void {
+        c.vkCmdBindPipeline(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.graphicsPipeline,
+        );
+
+        c.vkCmdBindDescriptorSets(
+            commandBuffer,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.pipelineLayout,
+            0,
+            1,
+            &self.descriptorSets[frameIndex],
+            0,
+            null,
+        );
+
+        c.vkCmdBindVertexBuffers(
+            commandBuffer,
+            0,
+            1,
+            &rectangleModel.vertexBuffer.handle,
+            &@intCast(0),
+        );
+        c.vkCmdDraw(
+            commandBuffer,
+            rectangleModel.vertexCount,
+            @intCast(layerInterval.end - layerInterval.start + 1),
+            0,
+            @intCast(layerInterval.start),
+        );
+    }
+
+    fn prepareForDraw(
+        self: *@This(),
+        arena: std.mem.Allocator,
+        orderedLayoutBoxes: []*const LayoutBox,
+        projectionMatrix: zmath.Mat,
+        dpi: [2]u32,
+        frameIndex: usize,
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+    ) ![]const ?LayerInterval {
+        var totalGlyphCount: usize = 0;
+        for (orderedLayoutBoxes) |layoutBox| {
+            if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
+                totalGlyphCount += layoutBox.children.?.glyphs.slice.len;
+            }
+        }
+
+        const maxZ = orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z;
+        var intervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        for (intervals) |*interval| {
+            interval.* = null;
+        }
+        if (totalGlyphCount > 0) {
+            if (totalGlyphCount > self.shaderBuffersMapped[0].len) {
+                try ensureNoError(c.vkDeviceWaitIdle(logicalDevice));
+                try self.resizeGlyphsCapacity(
+                    logicalDevice,
+                    physicalDevice,
+                    try std.math.ceilPowerOfTwo(usize, totalGlyphCount),
+                );
+            }
+
+            var glyphIndex: usize = 0;
+            for (orderedLayoutBoxes) |layoutBox| {
+                if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
+                    for (layoutBox.children.?.glyphs.slice) |glyph| {
+                        if (intervals[layoutBox.z - 1]) |*interval| {
+                            // we expect them to be ordered
+                            std.debug.assert(interval.end + 1 == glyphIndex);
+                            interval.end = glyphIndex;
+                        } else {
+                            intervals[layoutBox.z - 1] = LayerInterval{
+                                .start = glyphIndex,
+                                .end = glyphIndex,
+                            };
+                        }
+
+                        const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
+                            .dpi = dpi,
+                            .fontKey = layoutBox.style.font.key,
+                            .fontSize = layoutBox.style.fontSize,
+                            .fontWeight = layoutBox.style.fontWeight,
+                            .glyphIndex = glyph.index,
+                        };
+                        const glyphRenderingData = blk: {
+                            // TOOD: render glyphs in the GPU using the font texture atlas a frame buffer
+                            if (self.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
+                                break :blk data;
+                            } else {
+                                try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, arena);
+                                const rasterizedGlyph = try layoutBox.style.font.rasterize(
+                                    glyph.index,
+                                    dpi,
+                                    @intCast(layoutBox.style.fontSize),
+                                );
+
+                                const textureCoordinates = try self.fontTextureAtlas.upload(
+                                    rasterizedGlyph.bitmap,
+                                    @intCast(rasterizedGlyph.width),
+                                    @intCast(rasterizedGlyph.height),
+                                    @intCast(@abs(rasterizedGlyph.pitch)),
+                                );
+                                // FreeType LCD mode: width is 3x the actual pixel width (RGB bytes)
+                                // Convert to actual pixel width for rendering
+                                const pixelWidth = rasterizedGlyph.width / 3;
+                                const data = TextPipeline.GlyphRenderingData{
+                                    .bitmapTop = @intCast(rasterizedGlyph.top),
+                                    .bitmapLeft = @intCast(rasterizedGlyph.left),
+                                    .bitmapWidth = @intCast(pixelWidth),
+                                    .bitmapHeight = @intCast(rasterizedGlyph.height),
+                                    .textureCoordinates = textureCoordinates,
+                                };
+                                try self.glyphRenderingDataCache.put(glyphRenderingKey, data);
+                                break :blk data;
+                            }
+                        };
+
+                        const left: f32 = @floatFromInt(glyphRenderingData.bitmapLeft);
+                        const top: f32 = @floatFromInt(glyphRenderingData.bitmapTop);
+                        const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
+                        const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
+
+                        const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
+                        const resolutionMultiplier = Vec2{
+                            @as(f32, @floatFromInt(dpi[0])) / 72.0,
+                            @as(f32, @floatFromInt(dpi[1])) / 72.0,
+                        };
+                        const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
+                        const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize * resolutionMultiplier[0];
+
+                        self.shaderBuffersMapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
+                            .modelViewProjectionMatrix = zmath.mul(
+                                zmath.mul(
+                                    zmath.scaling(width, height, 1.0),
+                                    zmath.translation(
+                                        glyph.position[0] + left,
+                                        glyph.position[1] + pixelAscent - top,
+                                        0.0,
+                                    ),
+                                ),
+                                projectionMatrix,
+                            ),
+                            .color = srgbToLinearColor(layoutBox.style.color),
+                            .uvOffset = .{
+                                glyphRenderingData.textureCoordinates.u / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.width)),
+                                glyphRenderingData.textureCoordinates.v / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.height)),
+                            },
+                            .uvSize = .{
+                                glyphRenderingData.textureCoordinates.w / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.width)),
+                                glyphRenderingData.textureCoordinates.h / @as(f32, @floatFromInt(self.fontTextureAtlas.capacityExtent.height)),
+                            },
+                        };
+                        glyphIndex += 1;
+                    }
+                }
+            }
+        }
+        return intervals;
+    }
+
+    fn resizeGlyphsCapacity(self: *@This(), logicalDevice: c.VkDevice, physicalDevice: c.VkPhysicalDevice, newCapacity: usize) !void {
         std.log.debug("increasing concurrent glyph capacity from {d} to {d}", .{ self.shaderBuffersMapped[0].len, newCapacity });
         for (self.shaderBuffers) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
@@ -2471,7 +2874,7 @@ const TextPipeline = struct {
         }
     }
 
-    pub fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
+    fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
         self.fontTextureAtlas.deinit(allocator, logicalDevice);
         c.vkDestroySampler(logicalDevice, self.sampler, null);
@@ -2529,8 +2932,6 @@ pub const Renderer = struct {
     textPipeline: TextPipeline,
     renderPass: c.VkRenderPass,
     rectangleModel: Model,
-
-    registeredImages: std.ArrayList(*const Image),
 
     commandPool: c.VkCommandPool,
     commandBuffers: [maxFramesInFlight]c.VkCommandBuffer,
@@ -2655,42 +3056,6 @@ pub const Renderer = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         return .{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
-    }
-
-    fn registerImage(self: *Self, image: *const Image) !u32 {
-        for (self.registeredImages.items, 0..) |registered, i| {
-            if (registered == image) return @intCast(i);
-        }
-
-        const index = self.registeredImages.items.len;
-        if (index >= ElementsPipeline.maxImages) return error.TooManyImages;
-
-        try self.registeredImages.append(self.allocator, image);
-
-        for (0..maxFramesInFlight) |i| {
-            const imageInfo = c.VkDescriptorImageInfo{
-                .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .imageView = image.imageView,
-                .sampler = self.elementsPipeline.sampler,
-            };
-
-            const descriptorWrite = c.VkWriteDescriptorSet{
-                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = null,
-                .dstSet = self.elementsPipeline.descriptorSets[i],
-                .dstBinding = 1,
-                .dstArrayElement = @intCast(index),
-                .descriptorCount = 1,
-                .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &imageInfo,
-                .pBufferInfo = null,
-                .pTexelBufferView = null,
-            };
-
-            c.vkUpdateDescriptorSets(self.logicalDevice, 1, &descriptorWrite, 0, null);
-        }
-
-        return @intCast(index);
     }
 
     fn init(
@@ -2870,10 +3235,10 @@ pub const Renderer = struct {
             c.VkSubpassDependency{
                 .srcSubpass = c.VK_SUBPASS_EXTERNAL,
                 .dstSubpass = 0,
-                .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                 .srcAccessMask = 0,
-                .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             },
         };
 
@@ -2888,18 +3253,6 @@ pub const Renderer = struct {
                 .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
                 .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                .flags = 0,
-            },
-            // Depth attachment
-            c.VkAttachmentDescription{
-                .format = swapchain.depthFormat,
-                .samples = c.VK_SAMPLE_COUNT_1_BIT,
-                .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                 .flags = 0,
             },
         };
@@ -2919,10 +3272,7 @@ pub const Renderer = struct {
                         .attachment = 0,
                         .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                     },
-                    .pDepthStencilAttachment = &c.VkAttachmentReference{
-                        .attachment = 1,
-                        .layout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    },
+                    .pDepthStencilAttachment = null,
                 },
                 .flags = 0,
                 .dependencyCount = @intCast(renderPassDependencies.len),
@@ -2963,7 +3313,8 @@ pub const Renderer = struct {
             commandPool,
         );
 
-        const elementsPipeline = try ElementsPipeline.init(
+        var elementsPipeline = try ElementsPipeline.init(
+            graphics.allocator,
             logicalDevice,
             physicalDevice,
             renderPass,
@@ -3080,8 +3431,6 @@ pub const Renderer = struct {
             .rectangleModel = rectangleModel,
             .renderPass = renderPass,
 
-            .registeredImages = try std.ArrayList(*const Image).initCapacity(graphics.allocator, 16),
-
             .commandPool = commandPool,
             .commandBuffers = commandBuffers,
 
@@ -3177,7 +3526,6 @@ pub const Renderer = struct {
         c.vkDestroyCommandPool(self.logicalDevice, self.commandPool, null);
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
         self.elementsPipeline.deinit(self.logicalDevice);
-        self.registeredImages.deinit(self.allocator);
         self.textPipeline.deinit(self.logicalDevice, self.allocator);
         self.shadowsPipeline.deinit(self.logicalDevice);
         self.rectangleModel.deinit(self.logicalDevice);
@@ -3211,6 +3559,7 @@ pub const Renderer = struct {
 
     pub fn drawFrame(
         self: *Self,
+        arena: std.mem.Allocator,
         rootLayoutBox: *const LayoutBox,
         clearColor: Vec4,
         dpi: [2]u32,
@@ -3271,12 +3620,6 @@ pub const Renderer = struct {
                     .float32 = srgbToLinearColor(clearColor),
                 },
             },
-            c.VkClearValue{
-                .depthStencil = c.VkClearDepthStencilValue{
-                    .depth = 1.0,
-                    .stencil = 0,
-                },
-            },
         };
 
         c.vkCmdBeginRenderPass(
@@ -3315,300 +3658,71 @@ pub const Renderer = struct {
             @floatFromInt(self.swapchain.extent.width),
             @floatFromInt(self.swapchain.extent.height),
             0.0,
-            -32768.0,
-            32768.0,
+            -1.0,
+            1.0,
         );
 
-        const layoutBoxCount = countTreeSize(rootLayoutBox);
-        if (layoutBoxCount > self.elementsPipeline.elementsShaderData[0].len) {
-            try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
-            try self.elementsPipeline.resizeConcurrentElementCapacity(
-                self.logicalDevice,
-                self.physicalDevice,
-                try std.math.ceilPowerOfTwo(usize, layoutBoxCount),
-            );
-        }
-
-        var totalGlyphCount: usize = 0;
-        var totalShadowCount: usize = 0;
-
-        var layoutTreeIterator = try LayoutTreeIterator.init(self.allocator, rootLayoutBox);
-        defer layoutTreeIterator.deinit();
-        var i: usize = 0;
-        while (try layoutTreeIterator.next()) |layoutBox| {
-            const textureIndex: i32 = switch (layoutBox.style.background) {
-                .color => -1,
-                .image => |imgPtr| @intCast(try self.registerImage(imgPtr)),
-            };
-            self.elementsPipeline.elementsShaderData[self.framesRenderedInSwapchain % maxFramesInFlight][i] = ElementRenderingData{
-                .modelViewProjectionMatrix = zmath.mul(
-                    zmath.mul(
-                        zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
-                        zmath.translation(layoutBox.position[0], layoutBox.position[1], @as(f32, @floatFromInt(layoutBox.z)) - 32768),
-                    ),
-                    projectionMatrix,
-                ),
-                .backgroundColor = switch (layoutBox.style.background) {
-                    .color => |color| srgbToLinearColor(color),
-                    .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
-                },
-                .size = layoutBox.size,
-                .borderRadius = layoutBox.style.borderRadius,
-                .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
-                .borderSize = .{
-                    layoutBox.style.borderBlockWidth[0],
-                    layoutBox.style.borderBlockWidth[1],
-                    layoutBox.style.borderInlineWidth[0],
-                    layoutBox.style.borderInlineWidth[1],
-                },
-                .imageIndex = textureIndex,
-            };
-
-            if (layoutBox.style.shadow != null) {
-                totalShadowCount += 1;
+        var flatLayoutTree = std.ArrayList(*const LayoutBox).empty;
+        try flatTreeInto(arena, &flatLayoutTree, rootLayoutBox);
+        std.mem.sort(*const LayoutBox, flatLayoutTree.items, {}, (struct {
+            fn lessThan(_: void, lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
+                return lhs.z < rhs.z;
             }
+        }).lessThan);
 
-            if (layoutBox.children) |children| {
-                if (children == .glyphs) {
-                    totalGlyphCount += children.glyphs.slice.len;
-                }
-            }
+        const shadowIntervals = try self.shadowsPipeline.prepareForDraw(
+            arena,
+            flatLayoutTree.items,
+            projectionMatrix,
+            self.framesRenderedInSwapchain % maxFramesInFlight,
+            self.logicalDevice,
+            self.physicalDevice,
+        );
+        const elementIntervals = try self.elementsPipeline.prepareForDraw(
+            arena,
+            flatLayoutTree.items,
+            self.framesRenderedInSwapchain % maxFramesInFlight,
+            projectionMatrix,
+            self.logicalDevice,
+            self.physicalDevice,
+        );
+        const textIntervals = try self.textPipeline.prepareForDraw(
+            arena,
+            flatLayoutTree.items,
+            projectionMatrix,
+            dpi,
+            self.framesRenderedInSwapchain % maxFramesInFlight,
+            self.logicalDevice,
+            self.physicalDevice,
+        );
 
-            i += 1;
-        }
-
-        if (totalShadowCount > 0) {
-            if (totalShadowCount > self.shadowsPipeline.shadowShaderData[0].len) {
-                try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
-                try self.shadowsPipeline.resizeConcurrentShadowCapacity(
-                    self.logicalDevice,
-                    self.physicalDevice,
-                    try std.math.ceilPowerOfTwo(usize, totalShadowCount),
+        std.debug.assert(shadowIntervals.len == elementIntervals.len);
+        std.debug.assert(textIntervals.len == elementIntervals.len);
+        for (0..elementIntervals.len) |i| {
+            if (shadowIntervals[i]) |shadowInterval| {
+                self.shadowsPipeline.draw(
+                    shadowInterval,
+                    self.framesRenderedInSwapchain % maxFramesInFlight,
+                    self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                    &self.rectangleModel,
                 );
             }
-            try layoutTreeIterator.reset();
-            var shadowIndex: usize = 0;
-            while (try layoutTreeIterator.next()) |layoutBox| {
-                if (layoutBox.style.shadow) |shadow| {
-                    const padding = Vec2{
-                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
-                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
-                    };
-                    const position = Vec2{
-                        layoutBox.position[0] - padding[0] - shadow.offsetInline[0] + shadow.offsetInline[1],
-                        layoutBox.position[1] - padding[1] - shadow.offsetBlock[0] + shadow.offsetBlock[1],
-                    };
-                    const size = layoutBox.size + padding * Vec2{ 2, 2 };
-                    self.shadowsPipeline.shadowShaderData[self.framesRenderedInSwapchain % maxFramesInFlight][shadowIndex] = ShadowRenderingData{
-                        .modelViewProjectionMatrix = zmath.mul(
-                            zmath.mul(
-                                zmath.scaling(size[0], size[1], 1.0),
-                                zmath.translation(position[0], position[1], @as(f32, @floatFromInt(layoutBox.z)) - 32768),
-                            ),
-                            projectionMatrix,
-                        ),
-                        .color = srgbToLinearColor(shadow.color),
-                        .blur = shadow.blurRadius,
-                        .spread = shadow.spread,
-                        .elementSize = layoutBox.size,
-                        .size = size,
-                        .borderRadius = layoutBox.style.borderRadius,
-                    };
-                    shadowIndex += 1;
-                }
-            }
-
-            c.vkCmdBindPipeline(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.shadowsPipeline.graphicsPipeline,
-            );
-
-            c.vkCmdBindDescriptorSets(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.shadowsPipeline.pipelineLayout,
-                0,
-                1,
-                &self.shadowsPipeline.descriptorSets[self.framesRenderedInSwapchain % maxFramesInFlight],
-                0,
-                null,
-            );
-
-            c.vkCmdBindVertexBuffers(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                0,
-                1,
-                &self.rectangleModel.vertexBuffer.handle,
-                &@intCast(0),
-            );
-            c.vkCmdDraw(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                self.rectangleModel.vertexCount,
-                @intCast(totalShadowCount),
-                0,
-                0,
-            );
-        }
-
-        c.vkCmdBindPipeline(
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            self.elementsPipeline.graphicsPipeline,
-        );
-        c.vkCmdBindDescriptorSets(
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            self.elementsPipeline.pipelineLayout,
-            0,
-            1,
-            &self.elementsPipeline.descriptorSets[self.framesRenderedInSwapchain % maxFramesInFlight],
-            0,
-            null,
-        );
-        c.vkCmdBindVertexBuffers(
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            0,
-            1,
-            &self.rectangleModel.vertexBuffer.handle,
-            &@intCast(0),
-        );
-        c.vkCmdDraw(
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-            self.rectangleModel.vertexCount,
-            @intCast(layoutBoxCount),
-            0,
-            0,
-        );
-
-        if (totalGlyphCount > 0) {
-            if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
-                try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
-                try self.textPipeline.resizeGlyphsCapacity(
-                    self.logicalDevice,
-                    self.physicalDevice,
-                    try std.math.ceilPowerOfTwo(usize, totalGlyphCount),
+            if (elementIntervals[i]) |elementInterval| {
+                self.elementsPipeline.draw(
+                    elementInterval,
+                    self.framesRenderedInSwapchain % maxFramesInFlight,
+                    self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                    &self.rectangleModel,
                 );
             }
-
-            var glyphIndex: usize = 0;
-            try layoutTreeIterator.reset();
-            while (try layoutTreeIterator.next()) |layoutBox| {
-                if (layoutBox.children) |children| {
-                    if (children == .glyphs) {
-                        for (children.glyphs.slice) |glyph| {
-                            const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
-                                .fontKey = layoutBox.style.font.key,
-                                .fontWeight = layoutBox.style.fontWeight,
-                                .fontSize = layoutBox.style.fontSize,
-                                .glyphIndex = glyph.index,
-                                .dpi = dpi,
-                            };
-                            const glyphRenderingData = blk: {
-                                if (self.textPipeline.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
-                                    break :blk data;
-                                } else {
-                                    try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, self.allocator);
-                                    const rasterizedGlyph = try layoutBox.style.font.rasterize(
-                                        glyph.index,
-                                        dpi,
-                                        @intCast(layoutBox.style.fontSize),
-                                    );
-
-                                    const textureCoordinates = try self.textPipeline.fontTextureAtlas.upload(
-                                        self.allocator,
-                                        rasterizedGlyph.bitmap,
-                                        @intCast(rasterizedGlyph.width),
-                                        @intCast(rasterizedGlyph.height),
-                                        @intCast(@abs(rasterizedGlyph.pitch)),
-                                    );
-                                    // FreeType LCD mode: width is 3x the actual pixel width (RGB bytes)
-                                    // Convert to actual pixel width for rendering
-                                    const pixelWidth = rasterizedGlyph.width / 3;
-                                    const data = TextPipeline.GlyphRenderingData{
-                                        .bitmapTop = @intCast(rasterizedGlyph.top),
-                                        .bitmapLeft = @intCast(rasterizedGlyph.left),
-                                        .bitmapWidth = @intCast(pixelWidth),
-                                        .bitmapHeight = @intCast(rasterizedGlyph.height),
-                                        .textureCoordinates = textureCoordinates,
-                                    };
-                                    try self.textPipeline.glyphRenderingDataCache.put(glyphRenderingKey, data);
-                                    break :blk data;
-                                }
-                            };
-
-                            const left: f32 = @floatFromInt(glyphRenderingData.bitmapLeft);
-                            const top: f32 = @floatFromInt(glyphRenderingData.bitmapTop);
-                            const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
-                            const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
-
-                            const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
-                            const resolutionMultiplier = Vec2{
-                                @as(f32, @floatFromInt(dpi[0])) / 72.0,
-                                @as(f32, @floatFromInt(dpi[1])) / 72.0,
-                            };
-                            const fontSize: f32 = @floatFromInt(layoutBox.style.fontSize);
-                            const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSize * resolutionMultiplier[0];
-
-                            self.textPipeline.shaderBuffersMapped[self.framesRenderedInSwapchain % maxFramesInFlight][glyphIndex] = TextPipeline.GlypRenderingShaderData{
-                                .modelViewProjectionMatrix = zmath.mul(
-                                    zmath.mul(
-                                        zmath.scaling(width, height, 1.0),
-                                        zmath.translation(
-                                            glyph.position[0] + left,
-                                            glyph.position[1] + pixelAscent - top,
-                                            @as(f32, @floatFromInt(layoutBox.z)) - 32768,
-                                        ),
-                                    ),
-                                    projectionMatrix,
-                                ),
-                                .color = srgbToLinearColor(layoutBox.style.color),
-                                .uvOffset = .{
-                                    glyphRenderingData.textureCoordinates.u / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width)),
-                                    glyphRenderingData.textureCoordinates.v / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height)),
-                                },
-                                .uvSize = .{
-                                    glyphRenderingData.textureCoordinates.w / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width)),
-                                    glyphRenderingData.textureCoordinates.h / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height)),
-                                },
-                            };
-                            glyphIndex += 1;
-                        }
-                    }
-                }
+            if (textIntervals[i]) |glyphInterval| {
+                self.textPipeline.draw(
+                    glyphInterval,
+                    self.framesRenderedInSwapchain % maxFramesInFlight,
+                    self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                    &self.rectangleModel,
+                );
             }
-
-            c.vkCmdBindPipeline(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.textPipeline.graphicsPipeline,
-            );
-
-            c.vkCmdBindDescriptorSets(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.textPipeline.pipelineLayout,
-                0,
-                1,
-                &self.textPipeline.descriptorSets[self.framesRenderedInSwapchain % maxFramesInFlight],
-                0,
-                null,
-            );
-
-            c.vkCmdBindVertexBuffers(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                0,
-                1,
-                &self.rectangleModel.vertexBuffer.handle,
-                &@intCast(0),
-            );
-            c.vkCmdDraw(
-                self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
-                self.rectangleModel.vertexCount,
-                @intCast(totalGlyphCount),
-                0,
-                0,
-            );
         }
 
         c.vkCmdEndRenderPass(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]);
@@ -3700,21 +3814,6 @@ pub const Renderer = struct {
         return error.NoSupportedFormat;
     }
 
-    fn findDepthFormat(physicalDevice: c.VkPhysicalDevice) !c.VkFormat {
-        const candidates = [_]c.VkFormat{
-            c.VK_FORMAT_D32_SFLOAT,
-            c.VK_FORMAT_D32_SFLOAT_S8_UINT,
-            c.VK_FORMAT_D24_UNORM_S8_UINT,
-        };
-
-        return findSupportedFormat(
-            physicalDevice,
-            &candidates,
-            c.VK_IMAGE_TILING_OPTIMAL,
-            c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        );
-    }
-
     const Swapchain = struct {
         handle: c.VkSwapchainKHR,
         surfaceFormat: c.VkSurfaceFormatKHR,
@@ -3723,11 +3822,6 @@ pub const Renderer = struct {
 
         images: []c.VkImage,
         imageViews: []c.VkImageView,
-
-        depthImage: c.VkImage,
-        depthImageMemory: c.VkDeviceMemory,
-        depthImageView: c.VkImageView,
-        depthFormat: c.VkFormat,
 
         allocator: std.mem.Allocator,
 
@@ -3909,90 +4003,6 @@ pub const Renderer = struct {
                 ));
             }
 
-            // Create depth resources
-            const depthFormat = try findDepthFormat(physicalDevice);
-
-            var depthImage: c.VkImage = undefined;
-            try ensureNoError(c.vkCreateImage(
-                logicalDevice,
-                &c.VkImageCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .imageType = c.VK_IMAGE_TYPE_2D,
-                    .format = depthFormat,
-                    .extent = c.VkExtent3D{
-                        .width = swapchainExtent.width,
-                        .height = swapchainExtent.height,
-                        .depth = 1,
-                    },
-                    .mipLevels = 1,
-                    .arrayLayers = 1,
-                    .samples = c.VK_SAMPLE_COUNT_1_BIT,
-                    .tiling = c.VK_IMAGE_TILING_OPTIMAL,
-                    .usage = c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                    .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
-                    .queueFamilyIndexCount = 0,
-                    .pQueueFamilyIndices = null,
-                    .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-                },
-                null,
-                &depthImage,
-            ));
-            errdefer c.vkDestroyImage(logicalDevice, depthImage, null);
-
-            var memRequirements: c.VkMemoryRequirements = undefined;
-            c.vkGetImageMemoryRequirements(logicalDevice, depthImage, &memRequirements);
-
-            var depthImageMemory: c.VkDeviceMemory = undefined;
-            try ensureNoError(c.vkAllocateMemory(
-                logicalDevice,
-                &c.VkMemoryAllocateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                    .pNext = null,
-                    .allocationSize = memRequirements.size,
-                    .memoryTypeIndex = try findMemoryType(
-                        memRequirements.memoryTypeBits,
-                        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                        physicalDevice,
-                    ),
-                },
-                null,
-                &depthImageMemory,
-            ));
-            errdefer c.vkFreeMemory(logicalDevice, depthImageMemory, null);
-
-            try ensureNoError(c.vkBindImageMemory(logicalDevice, depthImage, depthImageMemory, 0));
-
-            var depthImageView: c.VkImageView = undefined;
-            try ensureNoError(c.vkCreateImageView(
-                logicalDevice,
-                &c.VkImageViewCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                    .pNext = null,
-                    .flags = 0,
-                    .image = depthImage,
-                    .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
-                    .format = depthFormat,
-                    .components = c.VkComponentMapping{
-                        .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                        .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                        .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                        .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                    },
-                    .subresourceRange = c.VkImageSubresourceRange{
-                        .aspectMask = c.VK_IMAGE_ASPECT_DEPTH_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-                },
-                null,
-                &depthImageView,
-            ));
-            errdefer c.vkDestroyImageView(logicalDevice, depthImageView, null);
-
             return Swapchain{
                 .handle = swapchain,
                 .surfaceFormat = surfaceFormat,
@@ -4000,19 +4010,11 @@ pub const Renderer = struct {
                 .extent = swapchainExtent,
                 .images = swapChainImages,
                 .imageViews = imageViews,
-                .depthImage = depthImage,
-                .depthImageMemory = depthImageMemory,
-                .depthImageView = depthImageView,
-                .depthFormat = depthFormat,
                 .allocator = allocator,
             };
         }
 
         fn deinit(self: Swapchain, logicalDevice: c.VkDevice) void {
-            c.vkDestroyImageView(logicalDevice, self.depthImageView, null);
-            c.vkDestroyImage(logicalDevice, self.depthImage, null);
-            c.vkFreeMemory(logicalDevice, self.depthImageMemory, null);
-
             for (self.imageViews) |imageView| {
                 c.vkDestroyImageView(logicalDevice, imageView, null);
             }
@@ -4046,7 +4048,7 @@ pub const Renderer = struct {
         }
 
         for (imageViews, 0..) |imageView, i| {
-            const framebufferAttachments = [_]c.VkImageView{ imageView, swapchain.depthImageView };
+            const framebufferAttachments = [_]c.VkImageView{imageView};
             try ensureNoError(c.vkCreateFramebuffer(
                 logicalDevice,
                 &c.VkFramebufferCreateInfo{
