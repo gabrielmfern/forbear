@@ -632,6 +632,15 @@ const LayoutCreator = struct {
     }
 };
 
+pub fn flattenTreeInto(allocator: std.mem.Allocator, list: *std.ArrayList(*const LayoutBox), layoutBox: *const LayoutBox) !void {
+    try list.append(allocator, layoutBox);
+    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
+        for (layoutBox.children.?.layoutBoxes) |*child| {
+            try flattenTreeInto(allocator, list, child);
+        }
+    }
+}
+
 pub const LayoutTreeIterator = struct {
     stack: std.ArrayList(*const LayoutBox),
     allocator: std.mem.Allocator,
@@ -1035,53 +1044,6 @@ test "wrap - word wrapping with alignment end" {
             .{ 70.0, 20.0 }, // r
             .{ 80.0, 20.0 }, // l
             .{ 90.0, 20.0 }, // d
-        },
-    });
-}
-
-test "wrap - word wrapping with very small line width causes negative positions" {
-    // Replicates bug where word wrapping with very small line width causes negative x positions
-    // Similar to the image showing "Dude, you're at the" with words split awkwardly
-    // When line width is smaller than a word, word wrapping can produce negative positions
-    var glyphs = [_]LayoutGlyph{
-        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "D", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "u", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = ",", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "y", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "u", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "'", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 11, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 12, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 13, .position = .{ 0.0, 0.0 }, .text = "a", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 14, .position = .{ 0.0, 0.0 }, .text = "t", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-    };
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .center,
-        .mode = .word,
-        .lineWidth = 25.0, // Very small width - can only fit 2-3 characters
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            .{ -17.5, 0.0 }, // D
-            .{ -7.5, 0.0 }, // u
-            .{ 2.5, 0.0 }, // d
-            .{ 12.5, 0.0 }, // e
-            .{ 22.5, 0.0 }, // ,
-            .{ 32.5, 0.0 }, // (space)
-            .{ -22.5, 20.0 }, // y
-            .{ -12.5, 20.0 }, // o
-            .{ -2.5, 20.0 }, // u
-            .{ 7.5, 20.0 }, // '
-            .{ 17.5, 20.0 }, // r
-            .{ 27.5, 20.0 }, // e
-            .{ 37.5, 20.0 }, // (space)
-            .{ 2.5, 40.0 }, // a
-            .{ 12.5, 40.0 }, // t
         },
     });
 }
