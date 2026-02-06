@@ -7,7 +7,7 @@ Forbear is a Zig-based UI framework with Vulkan graphics backend, supporting Lin
 
 - **Language**: Zig (minimum version 0.15.2)
 - **Graphics**: Vulkan with GLSL shaders (compiled via glslangValidator)
-- **Platforms**: Linux (Wayland), macOS (Metal surface via MoltenVK)
+- **Platforms**: Linux (Wayland), macOS (Metal surface via MoltenVK), Windows
 - **Dependencies**: FreeType (font rendering), kb_text_shape (text shaping), zmath (math), stb_image
 
 ## Build Commands
@@ -306,4 +306,81 @@ This command:
 
 - Linux: `src/window/linux.zig` (Wayland)
 - macOS: `src/window/macos.zig`
+- Windows: `src/window/windows.zig`
 - Shared: Use `builtin.os.tag` switches
+
+### Custom Test Runner
+
+Tests use a custom runner at `test_runner.zig`, wired in `build.zig` via:
+```zig
+.test_runner = .{ .path = b.path("test_runner.zig"), .mode = .simple },
+```
+
+Environment variables: `TEST_VERBOSE` (default true), `TEST_FAIL_FIRST`, `TEST_FILTER`.
+
+## Zig 0.15 Standard Library Notes
+
+Key API details for Zig 0.15.2 that differ from earlier versions or have platform-specific behavior:
+
+### Cross-Platform File I/O
+
+Use `std.fs.File` for cross-platform file operations — it wraps POSIX `fd_t` (integer) on Unix and Windows `HANDLE` on Windows behind a unified type. The methods `read()`, `write()`, `seekTo()`, `close()` all work on every platform.
+
+```zig
+const File = std.fs.File;
+const stderr = File.stderr();  // cross-platform
+_ = try stderr.write("hello");
+```
+
+`std.fs.File.writer()` in 0.15 takes a buffer parameter:
+```zig
+var buf: [256]u8 = undefined;
+const w = file.writer(&buf);
+```
+There is no free-standing `std.io.bufferedWriter()` — it was removed/restructured in 0.15.
+
+### POSIX APIs That Do NOT Work on Windows
+
+These `std.posix` functions only compile on POSIX systems (Linux, macOS):
+
+- `std.posix.dup()`, `std.posix.dup2()` — no Windows implementation
+- `std.posix.STDERR_FILENO` — not defined on Windows
+- `std.posix.memfd_create()` — Linux only
+- `std.posix.openZ()`, `std.posix.unlinkZ()` — POSIX only
+- `std.posix.getpid()` — Linux/Plan9 only
+
+These `std.posix` functions DO work on Windows (they dispatch to Windows APIs internally):
+
+- `std.posix.exit()` — calls `kernel32.ExitProcess` on Windows
+- `std.posix.lseek_SET()` — calls `SetFilePointerEx` on Windows
+- `std.posix.read()` / `std.posix.write()` / `std.posix.close()` — dispatch to Windows equivalents
+
+When writing cross-platform code, prefer `std.fs.File` methods over raw `std.posix` calls.
+
+### Windows Handle Duplication
+
+Windows equivalent of `dup()` is `kernel32.DuplicateHandle()`:
+```zig
+const windows = std.os.windows;
+var duplicated: windows.HANDLE = undefined;
+const proc = windows.GetCurrentProcess();
+const DUPLICATE_SAME_ACCESS = 0x00000002;
+_ = windows.kernel32.DuplicateHandle(proc, handle, proc, &duplicated, 0, windows.FALSE, DUPLICATE_SAME_ACCESS);
+```
+
+### Windows Stderr Redirection
+
+`std.debug.print` reads `peb().ProcessParameters.hStdError` on each call (the PEB field is `HANDLE`, not optional). To redirect stderr on Windows, overwrite this field directly:
+```zig
+windows.peb().ProcessParameters.hStdError = new_handle;
+```
+On POSIX, use `dup2(new_fd, STDERR_FILENO)` instead.
+
+### Temporary Files
+
+- **Linux**: `std.posix.memfd_create("name", 0)` creates an anonymous in-memory file (no filesystem path needed).
+- **Cross-platform**: Use `std.fs.Dir.createFile()` on a temp directory. The `.zig-cache/tmp/` directory is conventional for build-time temp files. Generate unique names via `std.crypto.random.bytes()` + `std.fs.base64_encoder.encode()`.
+
+### PEB Struct Fields
+
+`RTL_USER_PROCESS_PARAMETERS.hStdError` is `HANDLE` (non-optional). The similar-looking `STARTUPINFOW.hStdError` is `?HANDLE` (optional). Don't confuse them — the PEB version doesn't need `orelse`.

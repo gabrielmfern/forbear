@@ -500,13 +500,11 @@ fn place(layoutBox: *LayoutBox) void {
 
 const LayoutCreator = struct {
     arenaAllocator: std.mem.Allocator,
-    path: std.ArrayList(usize),
     parent: ?LayoutBox,
 
     fn init(arenaAllocator: std.mem.Allocator) !@This() {
         return .{
             .arenaAllocator = arenaAllocator,
-            .path = try std.ArrayList(usize).initCapacity(arenaAllocator, 0),
             .parent = null,
         };
     }
@@ -564,9 +562,6 @@ const LayoutCreator = struct {
                 const previousParent = self.parent;
                 self.parent = layoutBox;
                 for (element.children.items, 0..) |child, index| {
-                    try self.path.append(self.arenaAllocator, index);
-                    defer _ = self.path.pop();
-
                     layoutBox.children.?.layoutBoxes[index] = try self.create(
                         child,
                         BaseStyle.from(style),
