@@ -776,10 +776,7 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
         .arenaAllocator = arena,
         .stateByteCursor = 0,
     };
-    const returnValue = if (hasProps)
-        try function(props)
-    else
-        try function();
+    const returnValue = try @call(.auto, function, if (hasProps) .{props} else .{});
     if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.stateByteCursor != self.componentStates.get(componentKey).?.len) {
         return error.RulesOfHooksViolated;
     }
