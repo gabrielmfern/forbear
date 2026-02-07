@@ -38,8 +38,10 @@ const Event = union(enum) {
 const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
 
 allocator: std.mem.Allocator,
+
 mousePosition: Vec2,
 hoveredElementKeys: std.ArrayList(u64),
+scrollPosition: Vec2,
 
 renderer: *Graphics.Renderer,
 
@@ -75,9 +77,11 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
     }
 
     context = @This(){
-        .mousePosition = .{ 0.0, 0.0 },
-        .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .allocator = allocator,
+
+        .mousePosition = @splat(0.0),
+        .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
+        .scrollPosition = @splat(0.0),
 
         .renderer = renderer,
 
@@ -894,6 +898,30 @@ pub fn setWindowHandlers(window: *Window) void {
                 ctx.renderer.handleResize(width, height) catch |err| {
                     std.log.err("Renderer failed to handle resize: {}", .{err});
                 };
+            }
+        }).handler,
+        .data = @ptrCast(@alignCast(self)),
+    };
+    window.handlers.scroll = .{
+        .function = &(struct {
+            fn handler(wnd: *Window, axis: Window.ScrollAxis, offset: f32, data: *anyopaque) void {
+                const ctx: *Context = @ptrCast(@alignCast(data));
+                // Would be nice if we could calculate this to be 3x the line height of the font in the base style, but currently they're not tied together.
+                const scrollMultiplier = 3.0;
+
+                // Browser-like behavior: Shift + vertical scroll = horizontal scroll
+                const shiftHeld = wnd.modifiers.shift;
+                const shiftAccordingAxis = if (shiftHeld and axis == .vertical)
+                    .horizontal
+                else if (shiftHeld and axis == .horizontal)
+                    .vertical
+                else
+                    axis;
+
+                switch (shiftAccordingAxis) {
+                    .horizontal => ctx.scrollPosition[0] += offset * scrollMultiplier,
+                    .vertical => ctx.scrollPosition[1] += offset * scrollMultiplier,
+                }
             }
         }).handler,
         .data = @ptrCast(@alignCast(self)),
