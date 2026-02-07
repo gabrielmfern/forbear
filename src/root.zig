@@ -553,6 +553,432 @@ test "ease" {
     try std.testing.expectEqual(0.0, ease(0.0));
 }
 
+test "useSpringTransition - basic convergence" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const target = 100.0;
+    const dt = 0.016; // ~60fps
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    // First frame: value should start at target when initialized
+    var value = try useSpringTransition(target, config);
+    try std.testing.expectEqual(target, value);
+
+    // Change target and simulate several frames
+    const newTarget = 200.0;
+    const initialValue = value;
+
+    // Simulate spring physics over multiple frames
+    for (0..100) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(newTarget, config);
+    }
+
+    // After 100 frames, should be very close or converged to target
+    const epsilon = 0.001;
+    try std.testing.expect(@abs(value - newTarget) < epsilon);
+    // Value should have changed from initial
+    try std.testing.expect(value != initialValue);
+}
+
+test "useSpringTransition - zero delta time" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const target = 50.0;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = 0.0;
+
+    // First frame with zero dt
+    const value1 = try useSpringTransition(target, config);
+    try std.testing.expectEqual(target, value1);
+
+    // Second frame with zero dt - should return current value unchanged
+    self.componentResolutionState.?.useStateCursor = 0;
+    const value2 = try useSpringTransition(target + 100.0, config);
+    try std.testing.expectEqual(target, value2);
+}
+
+test "useSpringTransition - null delta time" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const target = 75.0;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = null;
+
+    // With null delta time, should return current value
+    const value = try useSpringTransition(target, config);
+    try std.testing.expectEqual(target, value);
+}
+
+test "useSpringTransition - small delta time" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const initialTarget = 0.0;
+    const newTarget = 100.0;
+    const smallDt = 0.001; // 1ms - very small time step
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = smallDt;
+
+    // Initialize
+    var value = try useSpringTransition(initialTarget, config);
+    try std.testing.expectEqual(initialTarget, value);
+
+    // Change target with small dt
+    self.componentResolutionState.?.useStateCursor = 0;
+    value = try useSpringTransition(newTarget, config);
+
+    // Should have moved, but only slightly due to small dt
+    try std.testing.expect(value != initialTarget);
+    try std.testing.expect(value < newTarget);
+    // Movement should be small
+    try std.testing.expect(@abs(value - initialTarget) < 10.0);
+}
+
+test "useSpringTransition - large delta time" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const initialTarget = 0.0;
+    const newTarget = 100.0;
+    const largeDt = 1.0; // 1 second - very large frame time
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = largeDt;
+
+    // Initialize
+    var value = try useSpringTransition(initialTarget, config);
+    try std.testing.expectEqual(initialTarget, value);
+
+    // Change target with large dt - spring should handle it gracefully
+    self.componentResolutionState.?.useStateCursor = 0;
+    value = try useSpringTransition(newTarget, config);
+
+    // Should have moved significantly (physics are stable)
+    try std.testing.expect(value != initialTarget);
+}
+
+test "useSpringTransition - convergence threshold" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const initialTarget = 0.0;
+    const newTarget = 100.0;
+    const dt = 0.016;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    // Initialize
+    var value = try useSpringTransition(initialTarget, config);
+    try std.testing.expectEqual(initialTarget, value);
+
+    // Animate towards target
+    var converged = false;
+    for (0..1000) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(newTarget, config);
+
+        // Check if converged (should snap to exact target within epsilon)
+        if (value == newTarget) {
+            converged = true;
+            break;
+        }
+    }
+
+    try std.testing.expect(converged);
+    try std.testing.expectEqual(newTarget, value);
+}
+
+test "useSpringTransition - different spring configurations" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const dt = 0.016;
+    self.deltaTime = dt;
+
+    // Test stiff spring (high stiffness, high damping)
+    {
+        self.componentResolutionState = ComponentResolutionState{
+            .useStateCursor = 0,
+            .key = 1,
+            .arenaAllocator = std.testing.allocator,
+        };
+
+        const stiffConfig = SpringConfig{
+            .stiffness = 400.0,
+            .damping = 40.0,
+            .mass = 1.0,
+        };
+
+        var value = try useSpringTransition(0.0, stiffConfig);
+        try std.testing.expectEqual(0.0, value);
+
+        // Should converge quickly
+        for (0..50) |_| {
+            self.componentResolutionState.?.useStateCursor = 0;
+            value = try useSpringTransition(100.0, stiffConfig);
+        }
+
+        const epsilon = 0.1;
+        try std.testing.expect(@abs(value - 100.0) < epsilon);
+    }
+
+    // Test soft spring (low stiffness, low damping)
+    {
+        self.componentResolutionState = ComponentResolutionState{
+            .useStateCursor = 0,
+            .key = 2,
+            .arenaAllocator = std.testing.allocator,
+        };
+
+        const softConfig = SpringConfig{
+            .stiffness = 50.0,
+            .damping = 5.0,
+            .mass = 1.0,
+        };
+
+        var value = try useSpringTransition(0.0, softConfig);
+        try std.testing.expectEqual(0.0, value);
+
+        // Should move more slowly
+        for (0..10) |_| {
+            self.componentResolutionState.?.useStateCursor = 0;
+            value = try useSpringTransition(100.0, softConfig);
+        }
+
+        // After 10 frames, should not be fully converged yet
+        try std.testing.expect(@abs(value - 100.0) > 1.0);
+    }
+}
+
+test "useSpringTransition - heavy mass" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const heavyConfig = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 10.0, // Heavy mass
+    };
+    const dt = 0.016;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    var value = try useSpringTransition(0.0, heavyConfig);
+    try std.testing.expectEqual(0.0, value);
+
+    // Heavy mass should result in slower acceleration
+    self.componentResolutionState.?.useStateCursor = 0;
+    value = try useSpringTransition(100.0, heavyConfig);
+
+    // After one frame, movement should be relatively small due to mass
+    try std.testing.expect(@abs(value) < 50.0);
+}
+
+test "useSpringTransition - target changes during animation" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const dt = 0.016;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    // Initialize at 0
+    var value = try useSpringTransition(0.0, config);
+    try std.testing.expectEqual(0.0, value);
+
+    // Animate towards 100 for a few frames
+    for (0..10) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(100.0, config);
+    }
+    const valueAfter10Frames = value;
+
+    // Suddenly change target to 200
+    for (0..20) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(200.0, config);
+    }
+
+    // Should have moved past the first target
+    try std.testing.expect(value > valueAfter10Frames);
+    try std.testing.expect(value > 100.0);
+}
+
+test "useSpringTransition - negative values" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const dt = 0.016;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    // Initialize at positive value
+    var value = try useSpringTransition(100.0, config);
+    try std.testing.expectEqual(100.0, value);
+
+    // Transition to negative target
+    for (0..100) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(-50.0, config);
+    }
+
+    // Should converge to negative target
+    const epsilon = 0.1;
+    try std.testing.expect(@abs(value - (-50.0)) < epsilon);
+}
+
+test "useSpringTransition - state persistence across frames" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const dt = 0.016;
+    self.deltaTime = dt;
+
+    // Frame 1
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    const value1 = try useSpringTransition(0.0, config);
+    try std.testing.expectEqual(0.0, value1);
+
+    // Frame 2 - change target
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    const value2 = try useSpringTransition(100.0, config);
+
+    // Frame 3 - should continue from where it left off
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    const value3 = try useSpringTransition(100.0, config);
+
+    // Value should continue progressing
+    try std.testing.expect(value3 >= value2 or @abs(value3 - 100.0) < 0.0001);
+}
+
 /// Equivalent to CSS's ease timing function
 pub fn easeInOut(progress: f32) f32 {
     return cubicBezier(0.42, 0.0, 0.58, 1.0, progress);
