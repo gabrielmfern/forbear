@@ -308,7 +308,8 @@ test "Component resolution" {
     try std.testing.expectEqual(2, callCount);
 }
 
-/// Embeds a font from the given path. Only deinits when the forbear context is deinited.
+/// Registers a font from the given embedded byte contents. The font is associated with
+/// `uniqueIdentifier` and only deinits when the forbear context is deinited.
 pub fn registerFont(uniqueIdentifier: []const u8, comptime contents: []const u8) !void {
     const self = getContext();
     const result = try self.fonts.getOrPut(uniqueIdentifier);
