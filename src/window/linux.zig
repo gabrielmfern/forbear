@@ -6,6 +6,11 @@ const c = @import("../c.zig").c;
 
 const Self = @This();
 
+pub const ScrollAxis = enum(u32) {
+    vertical = 0,
+    horizontal = 1,
+};
+
 pub const Handlers = struct {
     pointerEnter: ?struct {
         data: *anyopaque,
@@ -23,9 +28,9 @@ pub const Handlers = struct {
         data: *anyopaque,
         function: *const fn (window: *Self, serial: u32, time: u32, button: u32, state: u32, data: *anyopaque) void,
     } = null,
-    pointerAxis: ?struct {
+    scroll: ?struct {
         data: *anyopaque,
-        function: *const fn (window: *Self, time: u32, axis: u32, value: c.wl_fixed_t, data: *anyopaque) void,
+        function: *const fn (window: *Self, axis: ScrollAxis, offset: f32, data: *anyopaque) void,
     } = null,
     resize: ?struct {
         data: *anyopaque,
@@ -86,6 +91,14 @@ refreshRate: u32 = 60000, // in millihertz (mHz), default 60Hz
 allocator: std.mem.Allocator,
 
 handlers: Handlers,
+
+// Keyboard modifier state
+modifiers: struct {
+    shift: bool = false,
+    ctrl: bool = false,
+    alt: bool = false,
+    super: bool = false,
+} = .{},
 
 fn BindingInfo(T: type) type {
     return struct {
@@ -501,9 +514,15 @@ fn pointerHandleAxis(
     value: c.wl_fixed_t,
 ) callconv(.c) void {
     const window: *Self = @ptrCast(@alignCast(data));
-    if (window.handlers.pointerAxis) |handler| {
-        handler.function(window, time, axis, value, handler.data);
+    if (window.handlers.scroll) |handler| {
+        handler.function(
+            window,
+            @enumFromInt(axis),
+            @floatCast(c.wl_fixed_to_double(value)),
+            handler.data,
+        );
     }
+    _ = time;
     _ = wlPointer;
 }
 
@@ -672,22 +691,23 @@ fn keyboardHandleModifiers(
     group: u32,
 ) callconv(.c) void {
     _ = wl_keyboard;
-    const window: *Self = @ptrCast(@alignCast(data));
-    // window.modifiers = .{
-    //     .mods_depressed = mods_depressed,
-    //     .mods_latched = mods_latched,
-    //     .mods_locked = mods_locked,
-    //     .group = group,
-    // };
-    _ = window;
-    _ = mods_depressed;
+    _ = serial;
     _ = mods_latched;
     _ = mods_locked;
     _ = group;
-    _ = serial;
-    // if (window.handlers.keyboard_modifiers) |handler| {
-    //     handler.function(window, serial, mods_depressed, mods_latched, mods_locked, group, handler.data);
-    // }
+
+    const window: *Self = @ptrCast(@alignCast(data));
+
+    // Standard XKB modifier bit positions
+    const SHIFT_MASK: u32 = 1 << 0;
+    const CTRL_MASK: u32 = 1 << 2;
+    const ALT_MASK: u32 = 1 << 3; // Mod1
+    const SUPER_MASK: u32 = 1 << 6; // Mod4
+
+    window.modifiers.shift = (mods_depressed & SHIFT_MASK) != 0;
+    window.modifiers.ctrl = (mods_depressed & CTRL_MASK) != 0;
+    window.modifiers.alt = (mods_depressed & ALT_MASK) != 0;
+    window.modifiers.super = (mods_depressed & SUPER_MASK) != 0;
 }
 
 fn keyboardHandleRepeatInfo(
