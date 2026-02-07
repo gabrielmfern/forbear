@@ -33,8 +33,8 @@
 const builtin = @import("builtin");
 
 pub const Window = switch (builtin.os.tag) {
-    .windows => @import("windows.zig"),
     .linux => @import("linux.zig"),
+    .windows => @import("windows.zig"),
     .macos => @import("macos.zig"),
     else => @compileError("Unsupported OS"),
 };

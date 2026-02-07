@@ -38,8 +38,14 @@ const Event = union(enum) {
 const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
 
 allocator: std.mem.Allocator,
+
 mousePosition: Vec2,
 hoveredElementKeys: std.ArrayList(u64),
+/// The eased in value of `effectiveScrollPosition`
+scrollPosition: Vec2,
+/// The final value of the scrolling, without considering any animations, snaps
+/// exactly into place.
+effectiveScrollPosition: Vec2,
 
 renderer: *Graphics.Renderer,
 
@@ -71,9 +77,12 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
     }
 
     context = @This(){
-        .mousePosition = .{ 0.0, 0.0 },
-        .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .allocator = allocator,
+
+        .mousePosition = @splat(0.0),
+        .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
+        .scrollPosition = @splat(0.0),
+        .effectiveScrollPosition = @splat(0.0),
 
         .renderer = renderer,
 
@@ -401,26 +410,59 @@ pub const Animation = struct {
 };
 
 pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) !f32 {
-    const valueToTransitionFrom = try useState(f32, value);
+    const startValue = try useState(f32, value);
+    const currentValue = try useState(f32, value);
+    const targetValue = try useState(f32, value);
     const animation = try useAnimation(duration);
+    const epsilon: f32 = 0.0001;
 
-    if (value != valueToTransitionFrom.*) {
-        if (!animation.isRunning()) {
-            animation.start();
-        }
+    if (targetValue.* != currentValue.*) {
         if (animation.progress()) |progress| {
-            if (progress == 1.0) {
-                valueToTransitionFrom.* = value;
+            if (progress < 1.0) {
+                currentValue.* = startValue.* + (targetValue.* - startValue.*) * easing(progress);
+            } else {
+                currentValue.* = targetValue.*;
+                startValue.* = targetValue.*;
                 animation.reset();
-                return value;
             }
-            return valueToTransitionFrom.* + (value - valueToTransitionFrom.*) * easing(progress);
-        } else {
-            return value;
         }
     }
 
-    return value;
+    if (@abs(value - targetValue.*) > epsilon) {
+        targetValue.* = value;
+        startValue.* = currentValue.*;
+        animation.start();
+    }
+
+    return currentValue.*;
+}
+
+pub const SpringConfig = struct {
+    stiffness: f32,
+    damping: f32,
+    mass: f32,
+};
+
+pub fn useSpringTransition(target: f32, config: SpringConfig) !f32 {
+    const self = getContext();
+    const value = try useState(f32, target);
+    const velocity = try useState(f32, 0.0);
+
+    const dt: f32 = @floatCast(self.deltaTime orelse 0.0);
+    if (dt == 0.0) return value.*;
+
+    const displacement = target - value.*;
+    const acceleration = (config.stiffness * displacement - config.damping * velocity.*) / config.mass;
+    velocity.* += acceleration * dt;
+    value.* += velocity.* * dt;
+
+    const epsilon = 0.0001;
+    if (@abs(displacement) <= epsilon and @abs(velocity.*) <= epsilon) {
+        value.* = target;
+        velocity.* = 0.0;
+    }
+
+    return value.*;
 }
 
 pub fn useAnimation(duration: f32) !Animation {
@@ -509,6 +551,432 @@ test "easeInOut" {
 test "ease" {
     try std.testing.expectEqual(1.0, ease(1.0));
     try std.testing.expectEqual(0.0, ease(0.0));
+}
+
+test "useSpringTransition - basic convergence" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const target = 100.0;
+    const dt = 0.016; // ~60fps
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    // First frame: value should start at target when initialized
+    var value = try useSpringTransition(target, config);
+    try std.testing.expectEqual(target, value);
+
+    // Change target and simulate several frames
+    const newTarget = 200.0;
+    const initialValue = value;
+
+    // Simulate spring physics over multiple frames
+    for (0..100) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(newTarget, config);
+    }
+
+    // After 100 frames, should be very close or converged to target
+    const epsilon = 0.001;
+    try std.testing.expect(@abs(value - newTarget) < epsilon);
+    // Value should have changed from initial
+    try std.testing.expect(value != initialValue);
+}
+
+test "useSpringTransition - zero delta time" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const target = 50.0;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = 0.0;
+
+    // First frame with zero dt
+    const value1 = try useSpringTransition(target, config);
+    try std.testing.expectEqual(target, value1);
+
+    // Second frame with zero dt - should return current value unchanged
+    self.componentResolutionState.?.useStateCursor = 0;
+    const value2 = try useSpringTransition(target + 100.0, config);
+    try std.testing.expectEqual(target, value2);
+}
+
+test "useSpringTransition - null delta time" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const target = 75.0;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = null;
+
+    // With null delta time, should return current value
+    const value = try useSpringTransition(target, config);
+    try std.testing.expectEqual(target, value);
+}
+
+test "useSpringTransition - small delta time" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const initialTarget = 0.0;
+    const newTarget = 100.0;
+    const smallDt = 0.001; // 1ms - very small time step
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = smallDt;
+
+    // Initialize
+    var value = try useSpringTransition(initialTarget, config);
+    try std.testing.expectEqual(initialTarget, value);
+
+    // Change target with small dt
+    self.componentResolutionState.?.useStateCursor = 0;
+    value = try useSpringTransition(newTarget, config);
+
+    // Should have moved, but only slightly due to small dt
+    try std.testing.expect(value != initialTarget);
+    try std.testing.expect(value < newTarget);
+    // Movement should be small
+    try std.testing.expect(@abs(value - initialTarget) < 10.0);
+}
+
+test "useSpringTransition - large delta time" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const initialTarget = 0.0;
+    const newTarget = 100.0;
+    const largeDt = 1.0; // 1 second - very large frame time
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = largeDt;
+
+    // Initialize
+    var value = try useSpringTransition(initialTarget, config);
+    try std.testing.expectEqual(initialTarget, value);
+
+    // Change target with large dt - spring should handle it gracefully
+    self.componentResolutionState.?.useStateCursor = 0;
+    value = try useSpringTransition(newTarget, config);
+
+    // Should have moved significantly (physics are stable)
+    try std.testing.expect(value != initialTarget);
+}
+
+test "useSpringTransition - convergence threshold" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const initialTarget = 0.0;
+    const newTarget = 100.0;
+    const dt = 0.016;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    // Initialize
+    var value = try useSpringTransition(initialTarget, config);
+    try std.testing.expectEqual(initialTarget, value);
+
+    // Animate towards target
+    var converged = false;
+    for (0..1000) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(newTarget, config);
+
+        // Check if converged (should snap to exact target within epsilon)
+        if (value == newTarget) {
+            converged = true;
+            break;
+        }
+    }
+
+    try std.testing.expect(converged);
+    try std.testing.expectEqual(newTarget, value);
+}
+
+test "useSpringTransition - different spring configurations" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const dt = 0.016;
+    self.deltaTime = dt;
+
+    // Test stiff spring (high stiffness, high damping)
+    {
+        self.componentResolutionState = ComponentResolutionState{
+            .useStateCursor = 0,
+            .key = 1,
+            .arenaAllocator = std.testing.allocator,
+        };
+
+        const stiffConfig = SpringConfig{
+            .stiffness = 400.0,
+            .damping = 40.0,
+            .mass = 1.0,
+        };
+
+        var value = try useSpringTransition(0.0, stiffConfig);
+        try std.testing.expectEqual(0.0, value);
+
+        // Should converge quickly
+        for (0..50) |_| {
+            self.componentResolutionState.?.useStateCursor = 0;
+            value = try useSpringTransition(100.0, stiffConfig);
+        }
+
+        const epsilon = 0.1;
+        try std.testing.expect(@abs(value - 100.0) < epsilon);
+    }
+
+    // Test soft spring (low stiffness, low damping)
+    {
+        self.componentResolutionState = ComponentResolutionState{
+            .useStateCursor = 0,
+            .key = 2,
+            .arenaAllocator = std.testing.allocator,
+        };
+
+        const softConfig = SpringConfig{
+            .stiffness = 50.0,
+            .damping = 5.0,
+            .mass = 1.0,
+        };
+
+        var value = try useSpringTransition(0.0, softConfig);
+        try std.testing.expectEqual(0.0, value);
+
+        // Should move more slowly
+        for (0..10) |_| {
+            self.componentResolutionState.?.useStateCursor = 0;
+            value = try useSpringTransition(100.0, softConfig);
+        }
+
+        // After 10 frames, should not be fully converged yet
+        try std.testing.expect(@abs(value - 100.0) > 1.0);
+    }
+}
+
+test "useSpringTransition - heavy mass" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const heavyConfig = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 10.0, // Heavy mass
+    };
+    const dt = 0.016;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    var value = try useSpringTransition(0.0, heavyConfig);
+    try std.testing.expectEqual(0.0, value);
+
+    // Heavy mass should result in slower acceleration
+    self.componentResolutionState.?.useStateCursor = 0;
+    value = try useSpringTransition(100.0, heavyConfig);
+
+    // After one frame, movement should be relatively small due to mass
+    try std.testing.expect(@abs(value) < 50.0);
+}
+
+test "useSpringTransition - target changes during animation" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const dt = 0.016;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    // Initialize at 0
+    var value = try useSpringTransition(0.0, config);
+    try std.testing.expectEqual(0.0, value);
+
+    // Animate towards 100 for a few frames
+    for (0..10) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(100.0, config);
+    }
+    const valueAfter10Frames = value;
+
+    // Suddenly change target to 200
+    for (0..20) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(200.0, config);
+    }
+
+    // Should have moved past the first target
+    try std.testing.expect(value > valueAfter10Frames);
+    try std.testing.expect(value > 100.0);
+}
+
+test "useSpringTransition - negative values" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const dt = 0.016;
+
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    self.deltaTime = dt;
+
+    // Initialize at positive value
+    var value = try useSpringTransition(100.0, config);
+    try std.testing.expectEqual(100.0, value);
+
+    // Transition to negative target
+    for (0..100) |_| {
+        self.componentResolutionState.?.useStateCursor = 0;
+        value = try useSpringTransition(-50.0, config);
+    }
+
+    // Should converge to negative target
+    const epsilon = 0.1;
+    try std.testing.expect(@abs(value - (-50.0)) < epsilon);
+}
+
+test "useSpringTransition - state persistence across frames" {
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    const config = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 20.0,
+        .mass = 1.0,
+    };
+    const dt = 0.016;
+    self.deltaTime = dt;
+
+    // Frame 1
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    const value1 = try useSpringTransition(0.0, config);
+    try std.testing.expectEqual(0.0, value1);
+
+    // Frame 2 - change target
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    const value2 = try useSpringTransition(100.0, config);
+
+    // Frame 3 - should continue from where it left off
+    self.componentResolutionState = ComponentResolutionState{
+        .useStateCursor = 0,
+        .key = 1,
+        .arenaAllocator = std.testing.allocator,
+    };
+    const value3 = try useSpringTransition(100.0, config);
+
+    // Value should continue progressing
+    try std.testing.expect(value3 >= value2 or @abs(value3 - 100.0) < 0.0001);
 }
 
 /// Equivalent to CSS's ease timing function
@@ -828,7 +1296,24 @@ inline fn ReturnType(comptime function: anytype) type {
     return void;
 }
 
-pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, props: anytype) !ReturnType(function) {
+pub inline fn PropsOf(comptime function: anytype) type {
+    const Function = @TypeOf(function);
+    const functionTypeInfo = @typeInfo(Function);
+    if (functionTypeInfo != .@"fn") {
+        @compileError("expected function to be a `fn`, but found " ++ @typeName(Function));
+    }
+    if (functionTypeInfo.@"fn".params.len == 0) {
+        return @TypeOf(null);
+    } else if (functionTypeInfo.@"fn".params.len == 1) {
+        return functionTypeInfo.@"fn".params[0].type orelse void;
+    } else {
+        @compileError(
+            "function components can only have one parameter `props: struct`, found " ++ std.fmt.comptimePrint("{d}", .{functionTypeInfo.@"fn".params.len}),
+        );
+    }
+}
+
+pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, props: PropsOf(function)) !ReturnType(function) {
     const Function = @TypeOf(function);
     const functionTypeInfo = @typeInfo(Function);
     if (functionTypeInfo != .@"fn") {
@@ -905,7 +1390,14 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
     var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
     missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
 
+    var uiEdges: Vec2 = @splat(0.0);
+
     while (try iterator.next()) |layoutBox| {
+        if (layoutBox.style.placement == .standard) {
+            // this +scrollPosition term feels hacky to do, it's only required
+            // because layouting adds in the scroll position
+            uiEdges = @max(uiEdges, layoutBox.position + self.scrollPosition + layoutBox.size);
+        }
         const isMouseAfter = layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1];
         const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
         const isMouseInside = isMouseAfter and isMouseBefore;
@@ -940,6 +1432,28 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
     const timestamp = timestampSeconds();
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
     self.lastUpdateTime = timestamp;
+
+    try component(arena, Scrolling, .{ .uiEdges = uiEdges });
+}
+
+fn Scrolling(props: struct { uiEdges: Vec2 }) !void {
+    const self = getContext();
+    const viewportSize = useViewportSize();
+
+    const spring = SpringConfig{
+        .stiffness = 320.0,
+        .damping = 32.0,
+        .mass = 1.0,
+    };
+
+    const identity: Vec2 = @splat(0.0);
+    self.effectiveScrollPosition = @min(
+        @max(self.effectiveScrollPosition, identity),
+        @max(props.uiEdges - viewportSize, identity),
+    );
+
+    self.scrollPosition[0] = try useSpringTransition(self.effectiveScrollPosition[0], spring);
+    self.scrollPosition[1] = try useSpringTransition(self.effectiveScrollPosition[1], spring);
 }
 
 /// Resets the UI state, clearing the root frame node - and consequently - everything else.
@@ -965,6 +1479,29 @@ pub fn setWindowHandlers(window: *Window) void {
                 ctx.renderer.handleResize(width, height) catch |err| {
                     std.log.err("Renderer failed to handle resize: {}", .{err});
                 };
+            }
+        }).handler,
+        .data = @ptrCast(@alignCast(self)),
+    };
+    window.handlers.scroll = .{
+        .function = &(struct {
+            fn handler(wnd: *Window, axis: Window.ScrollAxis, nativeOffset: f32, data: *anyopaque) void {
+                const ctx: *Context = @ptrCast(@alignCast(data));
+                // TODO: calculate the final scrolling position to be 3x the line height of the main font
+                const offset = 100.0 * std.math.sign(nativeOffset);
+
+                // Browser-like behavior: Shift + vertical scroll = horizontal scroll
+                const shiftAccordingAxis = if (wnd.isHoldingShift() and axis == .vertical)
+                    .horizontal
+                else if (wnd.isHoldingShift() and axis == .horizontal)
+                    .vertical
+                else
+                    axis;
+
+                switch (shiftAccordingAxis) {
+                    .horizontal => ctx.effectiveScrollPosition[0] += offset,
+                    .vertical => ctx.effectiveScrollPosition[1] += offset,
+                }
             }
         }).handler,
         .data = @ptrCast(@alignCast(self)),
