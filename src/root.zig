@@ -53,10 +53,8 @@ deltaTime: ?f64,
 lastUpdateTime: ?f64,
 viewportSize: Vec2,
 
-// TODO: The alignment here is probably messed up, we should find a way to fix
-// it later
-/// A literal string of bytes that have the size of some state, and then the
-/// actual state
+// TODO: The alignment here is probably messed up, we should find a way to fix it later
+/// A literal string of bytes that have the size of some state, and then the actual state
 componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
 // images: std.StringHashMap(Image),
 componentResolutionState: ?ComponentResolutionState,
@@ -906,7 +904,7 @@ pub fn setWindowHandlers(window: *Window) void {
         .function = &(struct {
             fn handler(wnd: *Window, axis: Window.ScrollAxis, offset: f32, data: *anyopaque) void {
                 const ctx: *Context = @ptrCast(@alignCast(data));
-                // Would be nice if we could calculate this to be 3x the line height of the font in the base style, but currently they're not tied together.
+                // TODO: calculate the final scrolling position to be 3x the line height of the main font
                 const scrollMultiplier = 3.0;
 
                 // Browser-like behavior: Shift + vertical scroll = horizontal scroll
