@@ -42,7 +42,11 @@ void main() {
     vec2 innerShift = vec2(borderLeft - borderRight, borderTop - borderBottom) * 0.5;
     vec2 innerPos = p - innerShift;
 
-    float cornerInset = min(min(borderTop, borderBottom), min(borderLeft, borderRight));
+    bool top = p.y < 0.0;
+    bool left = p.x < 0.0;
+    float cornerInset = top
+        ? (left ? min(borderTop, borderLeft) : min(borderTop, borderRight))
+        : (left ? min(borderBottom, borderLeft) : min(borderBottom, borderRight));
     float rInner = max(rOuter - cornerInset, 0.0);
     rInner = min(rInner, min(innerHalfSize.x, innerHalfSize.y));
 
