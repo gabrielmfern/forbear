@@ -1240,6 +1240,7 @@ const ShadowsPipeline = struct {
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         renderPass: c.VkRenderPass,
+        msaaSamples: c.VkSampleCountFlagBits,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
         try ensureNoError(c.vkCreateShaderModule(
@@ -1391,7 +1392,7 @@ const ShadowsPipeline = struct {
                 .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                     .sampleShadingEnable = c.VK_FALSE,
-                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .rasterizationSamples = msaaSamples,
                     .minSampleShading = 1.0,
                     .pSampleMask = null,
                     .alphaToCoverageEnable = c.VK_FALSE,
@@ -1728,6 +1729,7 @@ const ElementsPipeline = struct {
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         renderPass: c.VkRenderPass,
+        msaaSamples: c.VkSampleCountFlagBits,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
         try ensureNoError(c.vkCreateShaderModule(
@@ -1886,7 +1888,7 @@ const ElementsPipeline = struct {
                 .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                     .sampleShadingEnable = c.VK_FALSE,
-                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .rasterizationSamples = msaaSamples,
                     .minSampleShading = 1.0,
                     .pSampleMask = null,
                     .alphaToCoverageEnable = c.VK_FALSE,
@@ -2293,6 +2295,7 @@ const TextPipeline = struct {
         graphicsQueue: c.VkQueue,
         commandPool: c.VkCommandPool,
         renderPass: c.VkRenderPass,
+        msaaSamples: c.VkSampleCountFlagBits,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
         try ensureNoError(c.vkCreateShaderModule(
@@ -2451,7 +2454,7 @@ const TextPipeline = struct {
                 .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                     .sampleShadingEnable = c.VK_FALSE,
-                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .rasterizationSamples = msaaSamples,
                     .minSampleShading = 1.0,
                     .pSampleMask = null,
                     .alphaToCoverageEnable = c.VK_FALSE,
@@ -2916,6 +2919,7 @@ pub const Renderer = struct {
     graphics: *const Graphics,
 
     physicalDevice: c.VkPhysicalDevice,
+    physicalDeviceProperties: c.VkPhysicalDeviceProperties,
     logicalDevice: c.VkDevice,
     graphicsQueue: c.VkQueue,
     graphicsQueueFamilyIndex: u32,
@@ -2974,6 +2978,7 @@ pub const Renderer = struct {
             self.swapchain = try Swapchain.init(
                 self.allocator,
                 self.physicalDevice,
+                self.physicalDeviceProperties,
                 self.logicalDevice,
                 self.surface,
                 width,
@@ -2984,6 +2989,7 @@ pub const Renderer = struct {
             self.swapchain = try Swapchain.init(
                 self.allocator,
                 self.physicalDevice,
+                self.physicalDeviceProperties,
                 self.logicalDevice,
                 self.surface,
                 width,
@@ -3152,6 +3158,7 @@ pub const Renderer = struct {
             return error.NoSuitablePhysicalDevice;
         }
         const physicalDevice = preferred.?.device.physicalDevice;
+        const physicalDeviceProperties = preferred.?.device.deviceProperties;
         const graphicsQueueFamilyIndex = preferred.?.graphicsQueueFamilyIndex;
         const presentationQueueFamilyIndex = preferred.?.presentationQueueFamilyIndex;
 
@@ -3223,6 +3230,7 @@ pub const Renderer = struct {
         const swapchain = try Swapchain.init(
             graphics.allocator,
             physicalDevice,
+            physicalDeviceProperties,
             logicalDevice,
             surface,
             window.width,
@@ -3242,12 +3250,26 @@ pub const Renderer = struct {
             },
         };
 
+        const msaaSampleCount = getMaxUsableSampleCount(physicalDeviceProperties);
+
         const attachments = [_]c.VkAttachmentDescription{
-            // Color attachment
+            // Attachment 0: MSAA color attachment (multisampled, not stored directly)
+            c.VkAttachmentDescription{
+                .format = swapchain.surfaceFormat.format,
+                .samples = msaaSampleCount,
+                .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .flags = 0,
+            },
+            // Attachment 1: Resolve attachment (swapchain image, presented after resolve)
             c.VkAttachmentDescription{
                 .format = swapchain.surfaceFormat.format,
                 .samples = c.VK_SAMPLE_COUNT_1_BIT,
-                .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .loadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
                 .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -3270,6 +3292,10 @@ pub const Renderer = struct {
                     .colorAttachmentCount = 1,
                     .pColorAttachments = &c.VkAttachmentReference{
                         .attachment = 0,
+                        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    },
+                    .pResolveAttachments = &c.VkAttachmentReference{
+                        .attachment = 1,
                         .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                     },
                     .pDepthStencilAttachment = null,
@@ -3318,6 +3344,7 @@ pub const Renderer = struct {
             logicalDevice,
             physicalDevice,
             renderPass,
+            msaaSampleCount,
         );
         errdefer elementsPipeline.deinit(logicalDevice);
 
@@ -3328,6 +3355,7 @@ pub const Renderer = struct {
             graphicsQueue,
             commandPool,
             renderPass,
+            msaaSampleCount,
         );
         errdefer textPipeline.deinit(logicalDevice, graphics.allocator);
 
@@ -3335,6 +3363,7 @@ pub const Renderer = struct {
             logicalDevice,
             physicalDevice,
             renderPass,
+            msaaSampleCount,
         );
         errdefer shadowsPipeline.deinit(logicalDevice);
 
@@ -3415,6 +3444,7 @@ pub const Renderer = struct {
             .mutex = std.Thread.Mutex{},
 
             .physicalDevice = physicalDevice,
+            .physicalDeviceProperties = physicalDeviceProperties,
             .logicalDevice = logicalDevice,
             .graphicsQueue = graphicsQueue,
             .graphicsQueueFamilyIndex = graphicsQueueFamilyIndex,
@@ -3794,6 +3824,28 @@ pub const Renderer = struct {
         }
     }
 
+    fn getMaxUsableSampleCount(properties: c.VkPhysicalDeviceProperties) c.VkSampleCountFlagBits {
+        const counts = properties.limits.framebufferColorSampleCounts &
+            properties.limits.framebufferDepthSampleCounts &
+            properties.limits.framebufferStencilSampleCounts;
+
+        if ((counts & c.VK_SAMPLE_COUNT_64_BIT) != 0) {
+            return c.VK_SAMPLE_COUNT_64_BIT;
+        } else if ((counts & c.VK_SAMPLE_COUNT_32_BIT) != 0) {
+            return c.VK_SAMPLE_COUNT_32_BIT;
+        } else if ((counts & c.VK_SAMPLE_COUNT_16_BIT) != 0) {
+            return c.VK_SAMPLE_COUNT_16_BIT;
+        } else if ((counts & c.VK_SAMPLE_COUNT_8_BIT) != 0) {
+            return c.VK_SAMPLE_COUNT_8_BIT;
+        } else if ((counts & c.VK_SAMPLE_COUNT_4_BIT) != 0) {
+            return c.VK_SAMPLE_COUNT_4_BIT;
+        } else if ((counts & c.VK_SAMPLE_COUNT_2_BIT) != 0) {
+            return c.VK_SAMPLE_COUNT_2_BIT;
+        } else {
+            return c.VK_SAMPLE_COUNT_1_BIT;
+        }
+    }
+
     fn findSupportedFormat(
         physicalDevice: c.VkPhysicalDevice,
         candidates: []const c.VkFormat,
@@ -3823,6 +3875,10 @@ pub const Renderer = struct {
         images: []c.VkImage,
         imageViews: []c.VkImageView,
 
+        msaaImages: []c.VkImage,
+        msaaImageViews: []c.VkImageView,
+        msaaImageMemory: []c.VkDeviceMemory,
+
         allocator: std.mem.Allocator,
 
         const SwapchainSupportDetails = struct {
@@ -3841,6 +3897,7 @@ pub const Renderer = struct {
         fn init(
             allocator: std.mem.Allocator,
             physicalDevice: c.VkPhysicalDevice,
+            physicalDeviceProperties: c.VkPhysicalDeviceProperties,
             logicalDevice: c.VkDevice,
             surface: c.VkSurfaceKHR,
             width: u32,
@@ -4003,6 +4060,105 @@ pub const Renderer = struct {
                 ));
             }
 
+            // Create MSAA color images (one per swapchain image) for multisampled rendering.
+            // These serve as the color attachment that gets resolved to the swapchain image.
+            const msaaSampleCount = getMaxUsableSampleCount(physicalDeviceProperties);
+
+            const msaaImages = try allocator.alloc(c.VkImage, swapChainImages.len);
+            errdefer allocator.free(msaaImages);
+            @memset(msaaImages, null);
+
+            const msaaImageMemory = try allocator.alloc(c.VkDeviceMemory, swapChainImages.len);
+            errdefer allocator.free(msaaImageMemory);
+            @memset(msaaImageMemory, null);
+
+            const msaaImageViews = try allocator.alloc(c.VkImageView, swapChainImages.len);
+            errdefer {
+                for (msaaImageViews) |view| {
+                    if (view != null) {
+                        c.vkDestroyImageView(logicalDevice, view, null);
+                    }
+                }
+                allocator.free(msaaImageViews);
+            }
+            @memset(msaaImageViews, null);
+
+            errdefer {
+                for (msaaImages, msaaImageMemory) |image, memory| {
+                    if (image != null) {
+                        c.vkDestroyImage(logicalDevice, image, null);
+                    }
+                    if (memory != null) {
+                        c.vkFreeMemory(logicalDevice, memory, null);
+                    }
+                }
+            }
+
+            for (0..swapChainImages.len) |i| {
+                try ensureNoError(c.vkCreateImage(logicalDevice, &c.VkImageCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                    .imageType = c.VK_IMAGE_TYPE_2D,
+                    .extent = c.VkExtent3D{
+                        .width = swapchainExtent.width,
+                        .height = swapchainExtent.height,
+                        .depth = 1,
+                    },
+                    .mipLevels = 1,
+                    .arrayLayers = 1,
+                    .format = surfaceFormat.format,
+                    .tiling = c.VK_IMAGE_TILING_OPTIMAL,
+                    .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                    .usage = c.VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                    .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+                    .samples = msaaSampleCount,
+                    .flags = 0,
+                    .pNext = null,
+                }, null, &msaaImages[i]));
+
+                var memRequirements: c.VkMemoryRequirements = undefined;
+                c.vkGetImageMemoryRequirements(logicalDevice, msaaImages[i], &memRequirements);
+
+                try ensureNoError(c.vkAllocateMemory(logicalDevice, &c.VkMemoryAllocateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    .pNext = null,
+                    .allocationSize = memRequirements.size,
+                    .memoryTypeIndex = try findMemoryType(
+                        memRequirements.memoryTypeBits,
+                        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        physicalDevice,
+                    ),
+                }, null, &msaaImageMemory[i]));
+
+                try ensureNoError(c.vkBindImageMemory(logicalDevice, msaaImages[i], msaaImageMemory[i], 0));
+
+                try ensureNoError(c.vkCreateImageView(
+                    logicalDevice,
+                    &c.VkImageViewCreateInfo{
+                        .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                        .image = msaaImages[i],
+                        .pNext = null,
+                        .flags = 0,
+                        .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+                        .format = surfaceFormat.format,
+                        .components = c.VkComponentMapping{
+                            .r = c.VK_COMPONENT_SWIZZLE_R,
+                            .g = c.VK_COMPONENT_SWIZZLE_G,
+                            .b = c.VK_COMPONENT_SWIZZLE_B,
+                            .a = c.VK_COMPONENT_SWIZZLE_A,
+                        },
+                        .subresourceRange = c.VkImageSubresourceRange{
+                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                        },
+                    },
+                    null,
+                    &msaaImageViews[i],
+                ));
+            }
+
             return Swapchain{
                 .handle = swapchain,
                 .surfaceFormat = surfaceFormat,
@@ -4010,11 +4166,25 @@ pub const Renderer = struct {
                 .extent = swapchainExtent,
                 .images = swapChainImages,
                 .imageViews = imageViews,
+                .msaaImages = msaaImages,
+                .msaaImageViews = msaaImageViews,
+                .msaaImageMemory = msaaImageMemory,
                 .allocator = allocator,
             };
         }
 
         fn deinit(self: Swapchain, logicalDevice: c.VkDevice) void {
+            for (self.msaaImageViews) |view| {
+                c.vkDestroyImageView(logicalDevice, view, null);
+            }
+            for (self.msaaImages, self.msaaImageMemory) |image, memory| {
+                c.vkDestroyImage(logicalDevice, image, null);
+                c.vkFreeMemory(logicalDevice, memory, null);
+            }
+            self.allocator.free(self.msaaImageViews);
+            self.allocator.free(self.msaaImages);
+            self.allocator.free(self.msaaImageMemory);
+
             for (self.imageViews) |imageView| {
                 c.vkDestroyImageView(logicalDevice, imageView, null);
             }
@@ -4047,8 +4217,11 @@ pub const Renderer = struct {
             framebuffer.* = null;
         }
 
-        for (imageViews, 0..) |imageView, i| {
-            const framebufferAttachments = [_]c.VkImageView{imageView};
+        for (imageViews, swapchain.msaaImageViews, 0..) |imageView, msaaImageView, i| {
+            const framebufferAttachments = [_]c.VkImageView{
+                msaaImageView, // Attachment 0: MSAA color
+                imageView, // Attachment 1: Resolve (swapchain)
+            };
             try ensureNoError(c.vkCreateFramebuffer(
                 logicalDevice,
                 &c.VkFramebufferCreateInfo{
