@@ -104,13 +104,13 @@ fn BindingInfo(T: type) type {
             return std.mem.eql(u8, interface_name, selfName);
         }
 
-        fn bind(self: @This(), registry: ?*c.wl_registry, name: u32) *T {
+        fn bind(self: @This(), registry: ?*c.wl_registry, name: u32, advertisedVersion: u32) *T {
             return @ptrCast(@alignCast(
                 c.wl_registry_bind(
                     registry,
                     name,
                     self.interface,
-                    self.version,
+                    @min(self.version, advertisedVersion),
                 ) orelse @panic("could not bind global from registry - it was a null pointer"),
             ));
         }
@@ -253,29 +253,27 @@ fn global(
     interface_ptr: [*c]const u8,
     version: u32,
 ) callconv(.c) void {
-    _ = version;
-
     const window: *Self = @ptrCast(@alignCast(data.?));
 
     const compositor = BindingInfo(c.wl_compositor).new(
         &c.wl_compositor_interface,
-        4,
+        6,
     );
     const output = BindingInfo(c.wl_output).new(
         &c.wl_output_interface,
-        3,
+        4,
     );
     const shm = BindingInfo(c.wl_shm).new(
         &c.wl_shm_interface,
-        1,
+        2,
     );
     const xdgWmBase = BindingInfo(c.xdg_wm_base).new(
         &c.xdg_wm_base_interface,
-        5,
+        6,
     );
     const seat = BindingInfo(c.wl_seat).new(
         &c.wl_seat_interface,
-        1,
+        9,
     );
     const fractionalScaleManager = BindingInfo(c.wp_fractional_scale_manager_v1).new(
         &c.wp_fractional_scale_manager_v1_interface,
@@ -293,18 +291,18 @@ fn global(
     const interfaceName: []const u8 = interface_ptr[0..std.mem.len(interface_ptr)];
 
     if (compositor.is(interfaceName)) {
-        window.wlCompositor = compositor.bind(registry, name);
+        window.wlCompositor = compositor.bind(registry, name, version);
     } else if (shm.is(interfaceName)) {
-        window.wlShm = shm.bind(registry, name);
+        window.wlShm = shm.bind(registry, name, version);
     } else if (xdgWmBase.is(interfaceName)) {
-        window.xdgWmBase = xdgWmBase.bind(registry, name);
+        window.xdgWmBase = xdgWmBase.bind(registry, name, version);
         _ = c.xdg_wm_base_add_listener(
             window.xdgWmBase,
             &xdgWmBaseListener,
             data,
         );
     } else if (seat.is(interfaceName)) {
-        window.wlSeat = seat.bind(registry, name);
+        window.wlSeat = seat.bind(registry, name, version);
 
         window.wlPointer = c.wl_seat_get_pointer(window.wlSeat) orelse @panic("could not get wl_pointer from wl_seat");
         _ = c.wl_pointer_add_listener(window.wlPointer, &wlPointerListener, data);
@@ -312,15 +310,15 @@ fn global(
         window.wlKeyboard = c.wl_seat_get_keyboard(window.wlSeat) orelse @panic("could not get wl_keyboard from wl_seat");
         _ = c.wl_keyboard_add_listener(window.wlKeyboard, &wlKeyboardListener, data);
     } else if (output.is(interfaceName)) {
-        window.wlOutput = output.bind(registry, name);
+        window.wlOutput = output.bind(registry, name, version);
 
         _ = c.wl_output_add_listener(window.wlOutput, &outputListener, data);
     } else if (fractionalScaleManager.is(interfaceName)) {
-        window.wpFractionalScaleManager = fractionalScaleManager.bind(registry, name);
+        window.wpFractionalScaleManager = fractionalScaleManager.bind(registry, name, version);
     } else if (viewporter.is(interfaceName)) {
-        window.wpViewporter = viewporter.bind(registry, name);
+        window.wpViewporter = viewporter.bind(registry, name, version);
     } else if (decorationManager.is(interfaceName)) {
-        window.xdgDecorationManager = decorationManager.bind(registry, name);
+        window.xdgDecorationManager = decorationManager.bind(registry, name, version);
     }
 }
 
@@ -509,12 +507,84 @@ fn pointerHandleAxis(
     _ = wlPointer;
 }
 
+fn pointerHandleFrame(
+    data: ?*anyopaque,
+    wlPointer: ?*c.wl_pointer,
+) callconv(.c) void {
+    _ = data;
+    _ = wlPointer;
+}
+
+fn pointerHandleAxisSource(
+    data: ?*anyopaque,
+    wlPointer: ?*c.wl_pointer,
+    axisSource: u32,
+) callconv(.c) void {
+    _ = data;
+    _ = wlPointer;
+    _ = axisSource;
+}
+
+fn pointerHandleAxisStop(
+    data: ?*anyopaque,
+    wlPointer: ?*c.wl_pointer,
+    time: u32,
+    axis: u32,
+) callconv(.c) void {
+    _ = data;
+    _ = wlPointer;
+    _ = time;
+    _ = axis;
+}
+
+fn pointerHandleAxisDiscrete(
+    data: ?*anyopaque,
+    wlPointer: ?*c.wl_pointer,
+    axis: u32,
+    discrete: i32,
+) callconv(.c) void {
+    _ = data;
+    _ = wlPointer;
+    _ = axis;
+    _ = discrete;
+}
+
+fn pointerHandleAxisValue120(
+    data: ?*anyopaque,
+    wlPointer: ?*c.wl_pointer,
+    axis: u32,
+    value120: i32,
+) callconv(.c) void {
+    _ = data;
+    _ = wlPointer;
+    _ = axis;
+    _ = value120;
+}
+
+fn pointerHandleAxisRelativeDirection(
+    data: ?*anyopaque,
+    wlPointer: ?*c.wl_pointer,
+    axis: u32,
+    direction: u32,
+) callconv(.c) void {
+    _ = data;
+    _ = wlPointer;
+    _ = axis;
+    _ = direction;
+}
+
 const wlPointerListener: c.wl_pointer_listener = .{
     .enter = pointerHandleEnter,
     .leave = pointerHandleLeave,
     .motion = pointerHandleMotion,
     .button = pointerHandleButton,
     .axis = pointerHandleAxis,
+    .frame = pointerHandleFrame,
+    .axis_source = pointerHandleAxisSource,
+    .axis_stop = pointerHandleAxisStop,
+    .axis_discrete = pointerHandleAxisDiscrete,
+    .axis_value120 = pointerHandleAxisValue120,
+    .axis_relative_direction = pointerHandleAxisRelativeDirection,
 };
 
 fn keyboardHandleKeymap(
