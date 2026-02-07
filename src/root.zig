@@ -908,10 +908,9 @@ pub fn setWindowHandlers(window: *Window) void {
                 const scrollMultiplier = 3.0;
 
                 // Browser-like behavior: Shift + vertical scroll = horizontal scroll
-                const shiftHeld = wnd.modifiers.shift;
-                const shiftAccordingAxis = if (shiftHeld and axis == .vertical)
+                const shiftAccordingAxis = if (wnd.isHoldingShift() and axis == .vertical)
                     .horizontal
-                else if (shiftHeld and axis == .horizontal)
+                else if (wnd.isHoldingShift() and axis == .horizontal)
                     .vertical
                 else
                     axis;

@@ -54,9 +54,14 @@ xdgWmBase: *c.xdg_wm_base,
 wpFractionalScaleManager: ?*c.wp_fractional_scale_manager_v1 = null,
 wpViewporter: ?*c.wp_viewporter = null,
 
+// Keyboard
+xkbContext: *c.xkb_context,
+xkbKeymap: *c.xkb_keymap,
+xkbState: *c.xkb_state,
+wlKeyboard: *c.wl_keyboard,
+
 // cursor
 wlPointer: *c.wl_pointer,
-wlKeyboard: *c.wl_keyboard,
 wlCursorTheme: *c.wl_cursor_theme,
 cursorWlSurface: *c.wl_surface,
 defaultWlCursor: *c.wl_cursor,
@@ -91,14 +96,6 @@ refreshRate: u32 = 60000, // in millihertz (mHz), default 60Hz
 allocator: std.mem.Allocator,
 
 handlers: Handlers,
-
-// Keyboard modifier state
-modifiers: struct {
-    shift: bool = false,
-    ctrl: bool = false,
-    alt: bool = false,
-    super: bool = false,
-} = .{},
 
 fn BindingInfo(T: type) type {
     return struct {
@@ -614,20 +611,33 @@ fn keyboardHandleKeymap(
     size: u32,
 ) callconv(.c) void {
     std.debug.assert(format == c.WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
+    const window: *Self = @ptrCast(@alignCast(data));
 
-    // std.posix.mmap(
-    //     null,
-    //     size,
-    //     undefined,
-    //     undefined,
-    //     fd,
-    //     0,
-    // ) catch @panic("failed to read the given keymap");
+    const mapSharedMemory = std.posix.mmap(
+        null,
+        @intCast(size),
+        std.os.linux.PROT.READ,
+        std.os.linux.MAP{ .TYPE = .PRIVATE },
+        fd,
+        0,
+    ) catch |err| {
+        std.log.err("failed to mmap keymap shared memory: {}", .{err});
+        @panic("Could not mmap keymap shared memory");
+    };
 
-    _ = fd;
-    _ = size;
+    window.xkbKeymap = c.xkb_keymap_new_from_string(
+        window.xkbContext,
+        mapSharedMemory.ptr,
+        c.XKB_KEYMAP_FORMAT_TEXT_V1,
+        c.XKB_KEYMAP_COMPILE_NO_FLAGS,
+    ) orelse @panic("failed to create xkb keymap from string");
+
+    window.xkbState = c.xkb_state_new(window.xkbKeymap) orelse @panic("failed to create xkb state from keymap");
+
+    std.posix.munmap(mapSharedMemory);
+    std.posix.close(fd);
+
     _ = wlKeyboard;
-    _ = data;
 }
 
 fn keyboardHandleEnter(
@@ -692,22 +702,10 @@ fn keyboardHandleModifiers(
 ) callconv(.c) void {
     _ = wl_keyboard;
     _ = serial;
-    _ = mods_latched;
-    _ = mods_locked;
-    _ = group;
 
     const window: *Self = @ptrCast(@alignCast(data));
 
-    // Standard XKB modifier bit positions
-    const SHIFT_MASK: u32 = 1 << 0;
-    const CTRL_MASK: u32 = 1 << 2;
-    const ALT_MASK: u32 = 1 << 3; // Mod1
-    const SUPER_MASK: u32 = 1 << 6; // Mod4
-
-    window.modifiers.shift = (mods_depressed & SHIFT_MASK) != 0;
-    window.modifiers.ctrl = (mods_depressed & CTRL_MASK) != 0;
-    window.modifiers.alt = (mods_depressed & ALT_MASK) != 0;
-    window.modifiers.super = (mods_depressed & SUPER_MASK) != 0;
+    _ = c.xkb_state_update_mask(window.xkbState, mods_depressed, mods_latched, mods_locked, 0, 0, group);
 }
 
 fn keyboardHandleRepeatInfo(
@@ -770,6 +768,8 @@ pub fn init(
     window.running = true;
 
     window.handlers = .{};
+
+    window.xkbContext = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse return error.FailedToCreateXkbContext;
 
     // Initialize optional fields to null before the registry roundtrip,
     // since allocator.create does not zero-initialize memory.
@@ -914,6 +914,10 @@ pub fn handleEvents(self: *Self) !void {
     }
 }
 
+pub fn isHoldingShift(self: *const Self) bool {
+    return c.xkb_state_mod_name_is_active(self.xkbState, c.XKB_MOD_NAME_SHIFT, c.XKB_STATE_MODS_EFFECTIVE) != 0;
+}
+
 /// Returns the target frame time in nanoseconds based on the monitor's refresh rate.
 /// For example, 60Hz returns ~16,666,666 ns.
 pub fn targetFrameTimeNs(self: *const Self) u64 {
@@ -954,6 +958,10 @@ pub fn deinit(self: *Self) void {
     c.wl_registry_destroy(self.wlRegistry);
 
     c.wl_display_disconnect(self.wlDisplay);
+
+    c.xkb_state_unref(self.xkbState);
+    c.xkb_keymap_unref(self.xkbKeymap);
+    c.xkb_context_unref(self.xkbContext);
 
     self.allocator.destroy(self);
 }
