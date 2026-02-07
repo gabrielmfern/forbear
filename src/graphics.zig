@@ -1393,7 +1393,7 @@ const ShadowsPipeline = struct {
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                     .sampleShadingEnable = c.VK_TRUE,
                     .rasterizationSamples = msaaSamples,
-                    .minSampleShading = 1.0,
+                    .minSampleShading = 0.2,
                     .pSampleMask = null,
                     .alphaToCoverageEnable = c.VK_FALSE,
                     .alphaToOneEnable = c.VK_FALSE,
@@ -1889,7 +1889,7 @@ const ElementsPipeline = struct {
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                     .sampleShadingEnable = c.VK_TRUE,
                     .rasterizationSamples = msaaSamples,
-                    .minSampleShading = 1.0,
+                    .minSampleShading = 0.2,
                     .pSampleMask = null,
                     .alphaToCoverageEnable = c.VK_FALSE,
                     .alphaToOneEnable = c.VK_FALSE,
@@ -2295,7 +2295,6 @@ const TextPipeline = struct {
         graphicsQueue: c.VkQueue,
         commandPool: c.VkCommandPool,
         renderPass: c.VkRenderPass,
-        msaaSamples: c.VkSampleCountFlagBits,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
         try ensureNoError(c.vkCreateShaderModule(
@@ -2451,10 +2450,19 @@ const TextPipeline = struct {
                     .depthBiasClamp = 0.0,
                     .depthBiasSlopeFactor = 0.0,
                 },
+                // Text uses VK_SAMPLE_COUNT_1_BIT even when the render pass is
+                // multisampled. The text pipeline uses dual-source blending with
+                // per-channel (RGB) subpixel coverage from the font atlas. MSAA
+                // resolve averages samples, which corrupts the independent channel
+                // weights and produces visible color fringing at glyph edges.
+                // Using 1x samples broadcasts the single result to all MSAA samples,
+                // preserving correct subpixel blending. Text quads are axis-aligned
+                // so MSAA geometry smoothing provides no benefit — all glyph
+                // anti-aliasing comes from FreeType's subpixel rasterizer.
                 .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                    .sampleShadingEnable = c.VK_TRUE,
-                    .rasterizationSamples = msaaSamples,
+                    .sampleShadingEnable = c.VK_FALSE,
+                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
                     .minSampleShading = 1.0,
                     .pSampleMask = null,
                     .alphaToCoverageEnable = c.VK_FALSE,
@@ -3358,7 +3366,6 @@ pub const Renderer = struct {
             graphicsQueue,
             commandPool,
             renderPass,
-            msaaSampleCount,
         );
         errdefer textPipeline.deinit(logicalDevice, graphics.allocator);
 
