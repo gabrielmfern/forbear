@@ -710,7 +710,9 @@ fn keyboardHandleModifiers(
 
     const window: *Self = @ptrCast(@alignCast(data));
 
-    _ = c.xkb_state_update_mask(window.xkbState, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+    if (window.xkbState) |xkbState| {
+        _ = c.xkb_state_update_mask(xkbState, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+    }
 }
 
 fn keyboardHandleRepeatInfo(
@@ -923,7 +925,10 @@ pub fn handleEvents(self: *Self) !void {
 }
 
 pub fn isHoldingShift(self: *const Self) bool {
-    return c.xkb_state_mod_name_is_active(self.xkbState, c.XKB_MOD_NAME_SHIFT, c.XKB_STATE_MODS_EFFECTIVE) != 0;
+    if (self.xkbState) |xkbState| {
+        return c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_SHIFT, c.XKB_STATE_MODS_EFFECTIVE) != 0;
+    }
+    return false;
 }
 
 /// Returns the target frame time in nanoseconds based on the monitor's refresh rate.
@@ -967,8 +972,12 @@ pub fn deinit(self: *Self) void {
 
     c.wl_display_disconnect(self.wlDisplay);
 
-    c.xkb_state_unref(self.xkbState);
-    c.xkb_keymap_unref(self.xkbKeymap);
+    if (self.xkbState) |xkbState| {
+        c.xkb_state_unref(xkbState);
+    }
+    if (self.xkbKeymap) |xkbKeymap| {
+        c.xkb_keymap_unref(xkbKeymap);
+    }
     c.xkb_context_unref(self.xkbContext);
 
     self.allocator.destroy(self);
