@@ -25,13 +25,14 @@ void main() {
     float adjustedDist = d - spread;
 
     // Calculate alpha based on distance and blur
+    float aa = max(fwidth(adjustedDist), 0.0001);
     float alpha;
     if (blur > 0.0) {
         // Smooth falloff from inside to outside over the blur radius
-        alpha = 1.0 - smoothstep(0.0, blur, adjustedDist);
+        alpha = 1.0 - smoothstep(-aa, blur + aa, adjustedDist);
     } else {
-        // Hard edge when no blur
-        alpha = adjustedDist < 0.0 ? 1.0 : 0.0;
+        // Anti-aliased hard edge when no blur
+        alpha = 1.0 - smoothstep(-aa, aa, adjustedDist);
     }
 
     outColor = vertexColor;
