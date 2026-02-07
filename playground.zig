@@ -49,6 +49,8 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
+    try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
+
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
@@ -58,7 +60,7 @@ fn renderingMain(
         const layoutBox = try forbear.layout(
             arena,
             .{
-                .font = try forbear.useFont("Inter", @embedFile("Inter.ttf")),
+                .font = try forbear.useFont("Inter"),
                 .color = .{ 1.0, 1.0, 1.0, 1.0 },
                 .textWrapping = .character,
                 .fontSize = 32,
