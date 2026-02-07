@@ -57,7 +57,7 @@ fn renderingMain(
         try forbear.component(arena, App, null);
 
         const viewportSize = renderer.viewportSize();
-        const layoutBox = try forbear.layout(
+        const layoutBoxes = try forbear.layout(
             arena,
             .{
                 .font = try forbear.useFont("Inter"),
@@ -70,9 +70,9 @@ fn renderingMain(
             viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         );
-        try renderer.drawFrame(arena, &layoutBox, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
+        try renderer.drawFrame(arena, layoutBoxes, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
 
-        try forbear.update(arena, &layoutBox, viewportSize);
+        try forbear.update(arena, layoutBoxes, viewportSize);
 
         forbear.resetNodeTree();
     }
