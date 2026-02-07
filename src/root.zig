@@ -695,7 +695,7 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
             .index = parent.content.element.children.items.len - 1,
         };
     } else {
-        return .{ .ptr = try self.rootNodes.addOne(arena), .index = 0 };
+        return .{ .ptr = try self.rootNodes.addOne(self.allocator), .index = 0 };
     }
 }
 
@@ -927,6 +927,7 @@ pub fn deinit() void {
     }
     self.frameEventQueue.deinit();
 
+    self.rootNodes.deinit(self.allocator);
     self.frameNodeParentStack.deinit(self.allocator);
     self.frameNodePath.deinit(self.allocator);
 
