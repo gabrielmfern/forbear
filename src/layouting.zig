@@ -65,7 +65,9 @@ pub const LayoutBox = struct {
 };
 
 fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
-    layoutBox.position += base;
+    if (layoutBox.style.placement != .manual) {
+        layoutBox.position += base;
+    }
 
     if (layoutBox.children != null) {
         switch (layoutBox.children.?) {
@@ -712,7 +714,7 @@ pub fn layout(
             fitWidth(&layoutBox);
             fitHeight(&layoutBox);
             place(&layoutBox);
-            makeAbsolute(&layoutBox, .{ 0.0, 0.0 });
+            makeAbsolute(&layoutBox, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
             layoutBoxes[index] = layoutBox;
         }
         return layoutBoxes;
