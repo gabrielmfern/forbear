@@ -1391,7 +1391,7 @@ const ShadowsPipeline = struct {
                 },
                 .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                    .sampleShadingEnable = c.VK_FALSE,
+                    .sampleShadingEnable = c.VK_TRUE,
                     .rasterizationSamples = msaaSamples,
                     .minSampleShading = 1.0,
                     .pSampleMask = null,
@@ -1887,7 +1887,7 @@ const ElementsPipeline = struct {
                 },
                 .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                    .sampleShadingEnable = c.VK_FALSE,
+                    .sampleShadingEnable = c.VK_TRUE,
                     .rasterizationSamples = msaaSamples,
                     .minSampleShading = 1.0,
                     .pSampleMask = null,
@@ -2453,7 +2453,7 @@ const TextPipeline = struct {
                 },
                 .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                    .sampleShadingEnable = c.VK_FALSE,
+                    .sampleShadingEnable = c.VK_TRUE,
                     .rasterizationSamples = msaaSamples,
                     .minSampleShading = 1.0,
                     .pSampleMask = null,
@@ -3210,6 +3210,8 @@ pub const Renderer = struct {
                     .shaderInt64 = c.VK_TRUE,
                     // Enable dual-source blending for subpixel text rendering
                     .dualSrcBlend = c.VK_TRUE,
+                    // Enable sample rate shading for higher quality MSAA
+                    .sampleRateShading = c.VK_TRUE,
                 },
                 .ppEnabledExtensionNames = requiredDeviceExtensions.ptr,
                 .enabledExtensionCount = @intCast(requiredDeviceExtensions.len),
