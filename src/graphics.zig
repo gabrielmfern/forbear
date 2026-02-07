@@ -3251,6 +3251,7 @@ pub const Renderer = struct {
         };
 
         const msaaSampleCount = getMaxUsableSampleCount(physicalDeviceProperties);
+        std.log.debug("using {d} samples for MSAA", .{msaaSampleCount});
 
         const attachments = [_]c.VkAttachmentDescription{
             // Attachment 0: MSAA color attachment (multisampled, not stored directly)
