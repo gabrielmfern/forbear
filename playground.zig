@@ -11,7 +11,7 @@ fn App() !void {
         .paddingInline = .{ 10, 10 },
     }))({
         try forbear.component(arena, forbear.FpsCounter, null);
-        try forbear.text(arena, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~", .{});
+        try forbear.text(arena, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
         (try forbear.element(arena, .{
             .preferredWidth = .{ .fixed = 100 },
             .preferredHeight = .{ .fixed = 100 },
