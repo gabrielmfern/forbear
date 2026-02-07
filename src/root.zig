@@ -330,7 +330,7 @@ pub fn useFont(uniqueIdentifier: []const u8) !*Font {
     };
 }
 
-/// Embeds a image from the given path. Only deinits when the forbear context is deinited.
+/// Embeds an image from the given path. Only deinits when the forbear context is deinited.
 pub fn registerImage(uniqueIdentifier: []const u8, comptime contents: []const u8, format: Graphics.Image.Format) !void {
     const self = getContext();
     const result = try self.images.getOrPut(uniqueIdentifier);
