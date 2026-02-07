@@ -26,7 +26,7 @@ var context: ?@This() = null;
 
 const ComponentResolutionState = struct {
     arenaAllocator: std.mem.Allocator,
-    stateByteCursor: usize,
+    useStateCursor: usize,
     key: u64,
 };
 
@@ -51,11 +51,7 @@ deltaTime: ?f64,
 lastUpdateTime: ?f64,
 viewportSize: Vec2,
 
-// TODO: The alignment here is probably messed up, we should find a way to fix
-// it later
-/// A literal string of bytes that have the size of some state, and then the
-/// actual state
-componentStates: std.AutoHashMap(u64, []align(@alignOf(usize)) u8),
+componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
 // images: std.StringHashMap(Image),
 componentResolutionState: ?ComponentResolutionState,
 
@@ -561,22 +557,22 @@ pub fn useState(T: type, initialValue: T) !*T {
     const self = getContext();
     if (self.componentResolutionState) |*state| {
         const stateResult = try self.componentStates.getOrPut(state.key);
-        const alignedCursor = std.mem.alignForward(usize, state.stateByteCursor, @alignOf(T));
-        const requiredLen = alignedCursor + @sizeOf(T);
-        defer state.stateByteCursor = requiredLen;
         if (stateResult.found_existing) {
-            if (alignedCursor < stateResult.value_ptr.*.len) {
-                return @ptrCast(@alignCast(stateResult.value_ptr.*[alignedCursor..requiredLen]));
+            if (stateResult.value_ptr.items.len >= state.useStateCursor) {
+                return @ptrCast(@alignCast(stateResult.value_ptr.*.items[state.useStateCursor]));
             }
-            stateResult.value_ptr.* = try self.allocator.realloc(stateResult.value_ptr.*, requiredLen);
         } else {
-            stateResult.value_ptr.* = try self.allocator.alignedAlloc(u8, stateAlignment, requiredLen);
+            stateResult.value_ptr.* = .empty;
         }
+        try stateResult.value_ptr.*.append(
+            self.allocator,
+            try self.allocator.alignedAlloc(u8, stateAlignment, @sizeOf(T)),
+        );
         @memcpy(
-            stateResult.value_ptr.*[alignedCursor..requiredLen],
+            stateResult.value_ptr.*.items[state.useStateCursor],
             std.mem.asBytes(&initialValue),
         );
-        return @ptrCast(@alignCast(stateResult.value_ptr.*[alignedCursor..requiredLen]));
+        return @ptrCast(@alignCast(stateResult.value_ptr.*.items[state.useStateCursor]));
     } else {
         if (!builtin.is_test) {
             std.log.err("You might be calling a hook (useState) outside of a component, and forbear cannot track things outside of one.", .{});
@@ -593,14 +589,14 @@ test "State creation with manual handling" {
     {
         // First run that should allocate RAM, and still allow reading and writing the values
         self.componentResolutionState = ComponentResolutionState{
-            .stateByteCursor = 0,
+            .useStateCursor = 0,
             .key = 1,
             .arenaAllocator = std.testing.allocator,
         };
         const state1 = try useState(i32, 42);
-        try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(1).?.len);
+        try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(1).?.items.len);
         const state2 = try useState(f32, 3.14);
-        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.len);
+        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.items.len);
         try std.testing.expectEqual(42, state1.*);
         try std.testing.expectEqual(3.14, state2.*);
         state1.* = 100;
@@ -611,14 +607,14 @@ test "State creation with manual handling" {
     {
         // Second run that should not allcoate new memory
         self.componentResolutionState = ComponentResolutionState{
-            .stateByteCursor = 0,
+            .useStateCursor = 0,
             .key = 1,
             .arenaAllocator = std.testing.allocator,
         };
         const state1 = try useState(i32, 42);
-        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.len);
+        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.items.len);
         const state2 = try useState(f32, 3.14);
-        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.len);
+        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.items.len);
         try std.testing.expectEqual(100, state1.*);
         try std.testing.expectEqual(6.28, state2.*);
     }
@@ -786,13 +782,13 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
     self.componentResolutionState = .{
         .key = componentKey,
         .arenaAllocator = arena,
-        .stateByteCursor = 0,
+        .useStateCursor = 0,
     };
     const returnValue = if (hasProps)
         try function(props)
     else
         try function();
-    if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.stateByteCursor != self.componentStates.get(componentKey).?.len) {
+    if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.useStateCursor != self.componentStates.get(componentKey).?.items.len) {
         return error.RulesOfHooksViolated;
     }
     self.componentResolutionState = previousComponentResolutionState;
@@ -917,7 +913,10 @@ pub fn deinit() void {
 
     var componentStatesIterator = self.componentStates.valueIterator();
     while (componentStatesIterator.next()) |states| {
-        self.allocator.free(states.*);
+        for (states.items) |state| {
+            self.allocator.free(state);
+        }
+        states.deinit(self.allocator);
     }
     self.componentStates.deinit();
 
