@@ -624,6 +624,72 @@ test "State creation with manual handling" {
     }
 }
 
+test "Multiple useState pointers remain valid after realloc (useTransition pattern)" {
+    // This test reproduces the useTransition scenario: three sequential useState
+    // calls in the same component on the first frame. If realloc moves the buffer,
+    // earlier pointers would be invalidated causing a segfault.
+    const renderer: *Graphics.Renderer = undefined;
+    try init(std.testing.allocator, renderer);
+    defer deinit();
+    const self = getContext();
+
+    {
+        // First frame: all three useState calls allocate/grow the buffer
+        self.componentResolutionState = ComponentResolutionState{
+            .useStateCursor = 0,
+            .key = 99,
+            .arenaAllocator = std.testing.allocator,
+        };
+        defer self.componentResolutionState = null;
+
+        // Mimics useTransition's calls:
+        //   const valueToTransitionFrom = try useState(f32, value);
+        //   const valueToTransitionTo = try useState(f32, value);
+        //   const animation = try useAnimation(duration);  -> useState(?AnimationState, null)
+        const valueToTransitionFrom = try useState(f32, 1.0);
+        try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
+        const valueToTransitionTo = try useState(f32, 1.0);
+        try std.testing.expectEqual(1.0, valueToTransitionTo.*);
+        const animationState = try useState(?AnimationState, null);
+        try std.testing.expectEqual(null, animationState.*);
+
+        // These dereferences should not segfault — if realloc moved the buffer,
+        // earlier pointers would be dangling and this would crash or read garbage.
+        try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
+        try std.testing.expectEqual(1.0, valueToTransitionTo.*);
+        try std.testing.expectEqual(null, animationState.*);
+
+        // Simulate the comparison from useTransition line 419:
+        //   if (value != valueToTransitionTo.*) { ... }
+        const value: f32 = 2.0;
+        if (value != valueToTransitionTo.*) {
+            valueToTransitionTo.* = value;
+        }
+        try std.testing.expectEqual(2.0, valueToTransitionTo.*);
+        // The first pointer should still be valid and unchanged
+        try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
+    }
+
+    {
+        // Second frame: buffer already exists at full size, no realloc needed
+        self.componentResolutionState = ComponentResolutionState{
+            .useStateCursor = 0,
+            .key = 99,
+            .arenaAllocator = std.testing.allocator,
+        };
+        defer self.componentResolutionState = null;
+
+        const valueToTransitionFrom = try useState(f32, 1.0);
+        const valueToTransitionTo = try useState(f32, 1.0);
+        const animationState = try useState(?AnimationState, null);
+
+        // Second frame should preserve mutated state from first frame
+        try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
+        try std.testing.expectEqual(2.0, valueToTransitionTo.*);
+        try std.testing.expectEqual(null, animationState.*);
+    }
+}
+
 test "Event queue dispatches events to correct elements" {
     try init(std.testing.allocator, undefined);
     defer deinit();
