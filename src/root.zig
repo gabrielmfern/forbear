@@ -854,7 +854,6 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
     const componentKey = hasher.final();
 
     const previousComponentResolutionState = self.componentResolutionState;
-    std.log.debug("previous comp state is null {}", .{previousComponentResolutionState == null});
     self.componentResolutionState = .{
         .key = componentKey,
         .arenaAllocator = arena,
@@ -867,8 +866,6 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
     if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.useStateCursor != self.componentStates.get(componentKey).?.items.len) {
         return error.RulesOfHooksViolated;
     }
-    std.log.debug("previous comp state is null {}", .{previousComponentResolutionState == null});
-    std.log.debug("current comp state is null {}", .{self.componentResolutionState == null});
     self.componentResolutionState = previousComponentResolutionState;
     return returnValue;
 }
