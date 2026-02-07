@@ -441,10 +441,9 @@ pub const SpringConfig = struct {
     stiffness: f32,
     damping: f32,
     mass: f32,
-    epsilon: f32,
 };
 
-pub fn useSpring(target: f32, config: SpringConfig) !f32 {
+pub fn useSpringTransition(target: f32, config: SpringConfig) !f32 {
     const self = getContext();
     const value = try useState(f32, target);
     const velocity = try useState(f32, 0.0);
@@ -457,7 +456,8 @@ pub fn useSpring(target: f32, config: SpringConfig) !f32 {
     velocity.* += acceleration * dt;
     value.* += velocity.* * dt;
 
-    if (@abs(displacement) <= config.epsilon and @abs(velocity.*) <= config.epsilon) {
+    const epsilon = 0.0001;
+    if (@abs(displacement) <= epsilon and @abs(velocity.*) <= epsilon) {
         value.* = target;
         velocity.* = 0.0;
     }
@@ -993,11 +993,10 @@ fn Scrolling() !void {
         .stiffness = 200.0,
         .damping = 26.0,
         .mass = 1.0,
-        .epsilon = 0.01,
     };
 
-    self.scrollPosition[0] = try useSpring(self.effectiveScrollPosition[0], spring);
-    self.scrollPosition[1] = try useSpring(self.effectiveScrollPosition[1], spring);
+    self.scrollPosition[0] = try useSpringTransition(self.effectiveScrollPosition[0], spring);
+    self.scrollPosition[1] = try useSpringTransition(self.effectiveScrollPosition[1], spring);
 }
 
 /// Resets the UI state, clearing the root frame node - and consequently - everything else.
