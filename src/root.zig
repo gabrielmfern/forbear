@@ -43,7 +43,7 @@ mousePosition: Vec2,
 hoveredElementKeys: std.ArrayList(u64),
 /// The eased in value of `effectiveScrollPosition`
 scrollPosition: Vec2,
-/// The final value of the scrolling, withuot considering any animations, snaps
+/// The final value of the scrolling, without considering any animations, snaps
 /// exactly into place.
 effectiveScrollPosition: Vec2,
 
