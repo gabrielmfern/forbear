@@ -68,21 +68,9 @@ fn App() !void {
                         try forbear.text(arena, "Pricing");
                     });
                     // TODO: responsive hamburger nav for smaller widths.
-                    (try forbear.element(arena, .{
-                        .background = .{ .color = theme.Colors.accent },
-                        .borderRadius = theme.px(10.0),
-                        .paddingBlock = .{ theme.px(10.0), theme.px(10.0) },
-                        .paddingInline = .{ theme.px(18.0), theme.px(18.0) },
-                        .horizontalAlignment = .center,
-                        .verticalAlignment = .center,
-                    }))({
-                        (try forbear.element(arena, .{
-                            .fontWeight = 600,
-                            .fontSize = theme.pxInt(14.0),
-                            .color = .{ 1.0, 1.0, 1.0, 1.0 },
-                        }))({
-                            try forbear.text(arena, "Get a free trial");
-                        });
+                    try forbear.component(arena, Button, ButtonProps{
+                        .sizing = .small,
+                        .text = "Get a free trial",
                     });
                 });
             });
@@ -294,7 +282,7 @@ fn App() !void {
                 }))({
                     try forbear.text(arena, "Don't take our word for it.");
                 });
-                inline for (testimonials) |testimonial| {
+                for (testimonials) |testimonial| {
                     (try forbear.element(arena, .{
                         .preferredWidth = .grow,
                         .background = .{ .color = theme.Colors.card },
@@ -946,34 +934,34 @@ fn renderingMain(
     try forbear.registerFont("SpaceGrotesk", @embedFile("SpaceGrotesk.ttf"));
 
     // Image registrations for uhoh.com layout
-    try forbear.registerImage("uhoh-logo", @embedFile("static/6866e1f2f5db9ee9aafa5d7a_logo%20simple%20uhoh.png"), .png);
-    try forbear.registerImage("uhoh-hero", @embedFile("static/6866e24ffd32a1a430a254a8_hero%20genie.png"), .png);
-    try forbear.registerImage("uhoh-check", @embedFile("static/6839de52b9ef2a42b344edfd_check%20mark%20green.png"), .png);
-    try forbear.registerImage("uhoh-problem", @embedFile("static/6839de537624ed14a719d8f3_problem.png"), .png);
-    try forbear.registerImage("uhoh-x-red", @embedFile("static/6839de525b136144e236cfae_x%20red.png"), .png);
-    try forbear.registerImage("uhoh-testimonial-1", @embedFile("static/6839de52571827f6f40dce2e_testimonial%201.png"), .png);
-    try forbear.registerImage("uhoh-testimonial-2", @embedFile("static/683a841cc0ff2b611c4712cd_1692617660614.png"), .png);
-    try forbear.registerImage("uhoh-testimonial-moses", @embedFile("static/68dc1100b21bf5c9f12feb4b_Moses.png"), .png);
-    try forbear.registerImage("uhoh-testimonial-alex", @embedFile("static/68dc10dc1d80e7512b86a59c_Alex.png"), .png);
-    try forbear.registerImage("uhoh-testimonial-stephanie", @embedFile("static/68dc10f4a5f41b9c533efb64_Stephanie.png"), .png);
-    try forbear.registerImage("uhoh-testimonial-enoch", @embedFile("static/68dc18cf3463b42d907cbad2_enoch%20smoking-20.png"), .png);
-    try forbear.registerImage("uhoh-partner-badge", @embedFile("static/6887ccdcceef4ce74922f28d_partner-badge-color.png"), .png);
-    try forbear.registerImage("uhoh-google-logo", @embedFile("static/6887cdd83980b0eb55153ff8_Google%202015%20Logo.png"), .png);
-    try forbear.registerImage("uhoh-microsoft-logo", @embedFile("static/6887ce1645602ebfc60604a1_Microsoft%20Logo%202012.png"), .png);
-    try forbear.registerImage("uhoh-partner-logo", @embedFile("static/68dc19265ee1bddc2beacfce_logo.png"), .png);
-    try forbear.registerImage("uhoh-zoho-logo", @embedFile("static/6887ce2d2b1e71bca0d7c3e0_Zoho%20Logo%202023.png"), .png);
-    try forbear.registerImage("uhoh-solution", @embedFile("static/6839de5260bd5f09ac1d4c04_solution.png"), .png);
-    try forbear.registerImage("uhoh-offer-46", @embedFile("static/6887d46e661f2c6c886de440_image%2046.png"), .png);
-    try forbear.registerImage("uhoh-offer-47", @embedFile("static/6887d46e21d194b42c4d578e_image%2047.png"), .png);
-    try forbear.registerImage("uhoh-offer-50", @embedFile("static/6887d46e617ef31b88670ddc_image%2050.png"), .png);
-    try forbear.registerImage("uhoh-offer-49", @embedFile("static/6887d46edc5b564755bf39db_image%2049.png"), .png);
-    try forbear.registerImage("uhoh-offer-51", @embedFile("static/6887d46e4fc6f6dd34403d0c_image%2051.png"), .png);
-    try forbear.registerImage("uhoh-offer-53", @embedFile("static/6887d46e69c172360a248ec7_image%2053.png"), .png);
-    try forbear.registerImage("uhoh-jon-avatar", @embedFile("static/6839de5260bd5f09ac1d4be3_jon%20sturgeon%20avatar.png"), .png);
-    try forbear.registerImage("uhoh-how-it-works", @embedFile("static/6839de520709f5e6039d6426_how%20it%20works.png"), .png);
-    try forbear.registerImage("uhoh-group-21", @embedFile("static/6866eaee9e1b6f866ec51700_Group%2021.png"), .png);
-    try forbear.registerImage("uhoh-failure", @embedFile("static/6839de527c6db7ab25880f81_failure%20statement.png"), .png);
-    try forbear.registerImage("uhoh-bottom-cta", @embedFile("static/6866e71baffe39601803502b_6BB3AB81-8718-47EF-8AA6-BF58C1A5FC65.png"), .png);
+    try forbear.registerImage("uhoh-logo", @embedFile("static/uhoh-logo.png"), .png);
+    try forbear.registerImage("uhoh-hero", @embedFile("static/uhoh-hero.png"), .png);
+    try forbear.registerImage("uhoh-check", @embedFile("static/uhoh-check.png"), .png);
+    try forbear.registerImage("uhoh-problem", @embedFile("static/uhoh-problem.png"), .png);
+    try forbear.registerImage("uhoh-x-red", @embedFile("static/uhoh-x-red.png"), .png);
+    try forbear.registerImage("uhoh-testimonial-1", @embedFile("static/uhoh-testimonial-1.png"), .png);
+    try forbear.registerImage("uhoh-testimonial-2", @embedFile("static/uhoh-testimonial-2.png"), .png);
+    try forbear.registerImage("uhoh-testimonial-moses", @embedFile("static/uhoh-testimonial-moses.png"), .png);
+    try forbear.registerImage("uhoh-testimonial-alex", @embedFile("static/uhoh-testimonial-alex.png"), .png);
+    try forbear.registerImage("uhoh-testimonial-stephanie", @embedFile("static/uhoh-testimonial-stephanie.png"), .png);
+    try forbear.registerImage("uhoh-testimonial-enoch", @embedFile("static/uhoh-testimonial-enoch.png"), .png);
+    try forbear.registerImage("uhoh-partner-badge", @embedFile("static/uhoh-partner-badge.png"), .png);
+    try forbear.registerImage("uhoh-google-logo", @embedFile("static/uhoh-google-logo.png"), .png);
+    try forbear.registerImage("uhoh-microsoft-logo", @embedFile("static/uhoh-microsoft-logo.png"), .png);
+    try forbear.registerImage("uhoh-partner-logo", @embedFile("static/uhoh-partner-logo.png"), .png);
+    try forbear.registerImage("uhoh-zoho-logo", @embedFile("static/uhoh-zoho-logo.png"), .png);
+    try forbear.registerImage("uhoh-solution", @embedFile("static/uhoh-solution.png"), .png);
+    try forbear.registerImage("uhoh-offer-46", @embedFile("static/uhoh-offer-46.png"), .png);
+    try forbear.registerImage("uhoh-offer-47", @embedFile("static/uhoh-offer-47.png"), .png);
+    try forbear.registerImage("uhoh-offer-50", @embedFile("static/uhoh-offer-50.png"), .png);
+    try forbear.registerImage("uhoh-offer-49", @embedFile("static/uhoh-offer-49.png"), .png);
+    try forbear.registerImage("uhoh-offer-51", @embedFile("static/uhoh-offer-51.png"), .png);
+    try forbear.registerImage("uhoh-offer-53", @embedFile("static/uhoh-offer-53.png"), .png);
+    try forbear.registerImage("uhoh-jon-avatar", @embedFile("static/uhoh-jon-avatar.png"), .png);
+    try forbear.registerImage("uhoh-how-it-works", @embedFile("static/uhoh-how-it-works.png"), .png);
+    try forbear.registerImage("uhoh-group-21", @embedFile("static/uhoh-group-21.png"), .png);
+    try forbear.registerImage("uhoh-failure", @embedFile("static/uhoh-failure.png"), .png);
+    try forbear.registerImage("uhoh-bottom-cta", @embedFile("static/uhoh-bottom-cta.png"), .png);
 
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
