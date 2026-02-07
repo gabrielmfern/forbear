@@ -870,7 +870,24 @@ inline fn ReturnType(comptime function: anytype) type {
     return void;
 }
 
-pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, props: anytype) !ReturnType(function) {
+pub inline fn PropsOf(comptime function: anytype) type {
+    const Function = @TypeOf(function);
+    const functionTypeInfo = @typeInfo(Function);
+    if (functionTypeInfo != .@"fn") {
+        @compileError("expected function to be a `fn`, but found " ++ @typeName(Function));
+    }
+    if (functionTypeInfo.@"fn".params.len == 0) {
+        return @TypeOf(null);
+    } else if (functionTypeInfo.@"fn".params.len == 1) {
+        return functionTypeInfo.@"fn".params[0].type orelse void;
+    } else {
+        @compileError(
+            "function components can only have one parameter `props: struct`, found " ++ std.fmt.comptimePrint("{d}", .{functionTypeInfo.@"fn".params.len}),
+        );
+    }
+}
+
+pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, props: PropsOf(function)) !ReturnType(function) {
     const Function = @TypeOf(function);
     const functionTypeInfo = @typeInfo(Function);
     if (functionTypeInfo != .@"fn") {
@@ -947,7 +964,10 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
     var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
     missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
 
+    var uiEdges: Vec2 = @splat(0.0);
+
     while (try iterator.next()) |layoutBox| {
+        uiEdges = @max(uiEdges, layoutBox.position + self.scrollPosition + layoutBox.size);
         const isMouseAfter = layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1];
         const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
         const isMouseInside = isMouseAfter and isMouseBefore;
@@ -983,17 +1003,24 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
     self.lastUpdateTime = timestamp;
 
-    try component(arena, Scrolling, null);
+    try component(arena, Scrolling, .{ .uiEdges = uiEdges });
 }
 
-fn Scrolling() !void {
+fn Scrolling(props: struct { uiEdges: Vec2 }) !void {
     const self = getContext();
+    const viewportSize = useViewportSize();
 
     const spring = SpringConfig{
-        .stiffness = 200.0,
-        .damping = 26.0,
+        .stiffness = 320.0,
+        .damping = 32.0,
         .mass = 1.0,
     };
+
+    const identity: Vec2 = @splat(0.0);
+    self.effectiveScrollPosition = @min(
+        @max(self.effectiveScrollPosition, identity),
+        @max(props.uiEdges - viewportSize, identity),
+    );
 
     self.scrollPosition[0] = try useSpringTransition(self.effectiveScrollPosition[0], spring);
     self.scrollPosition[1] = try useSpringTransition(self.effectiveScrollPosition[1], spring);
