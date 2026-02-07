@@ -2,7 +2,7 @@
     - Not doing it for now since it's not central to build the app I want yet
 - [ ] find a way to avoid having to use `try` everwhere
 - [ ] implement 10 examples of UI that I find inspiring
-    - [x] uhoh.com
+    - [ ] uhoh.com
     - [ ] https://x.com/60fpsdesign/status/2008787492561097035?s=20
     - [ ] https://ui.sh/
 - [ ] implement scrolling 
@@ -25,4 +25,36 @@
 - [x] text wrapping only breaking at the beginning of characters 
 - [x] wrapped text should also conform to parent alignment
 - [x] fix parts of shadow that draw nothing going over parent borders
+
+missing things for the entire uhoh.com website:
+- [ ] page scrolling
+- [ ] gradients
+- [ ] blend multiply
+- [ ] svg support
+- [ ] linear gradient support
+- [ ] maxWidth + preferredWidth grow support
+- [ ] component children slotting
+- [ ] support for underlined text
+
+problems:
+- vulkan error with multi sampling being disabled for text
+- fps has been destroyed, lower than 165 for a non changing layout
+    - we should start caching the layouts from the nodes
+- can't make an element fully transparent?
+- sea of parenthesis
+    - having to try before actually calling the children block eating function
+      lol
+- had a hard time with `useFont`/`useImage` having the files contents in the
+  arguments
+- new `registerFont`/`registerImage` functions are now heavily repeated and
+  there's really no type-safety in `useFont`/`useImage` 
+- didn't really figure out that components can be used, and defined weird
+  `render` functions all over the place
+- could not figure out what `useNextEvent` was for, and just ignored it leaving
+  it inplace
+- created a utilty for px so that it didn't have to calculte the proper value
+- forbear.text requires comptime fmt, so users can't plug in dynamic text
+- not being able to center align just a single element, without affecting
+  others
+
 
