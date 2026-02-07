@@ -3,8 +3,7 @@
 - [ ] find a way to avoid having to use `try` everwhere
 - [ ] implement 10 examples of UI that I find inspiring
     - [ ] uhoh.com
-    - [ ] https://x.com/60fpsdesign/status/2008787492561097035?s=20
-    - [ ] https://ui.sh/
+    - [ ] https://wayland-book.com
 - [ ] implement scrolling 
 - [ ] I need a way to define the percentage width that an element would take 
   of its parent
