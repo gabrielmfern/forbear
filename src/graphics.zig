@@ -9,7 +9,6 @@ const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
-const flatTreeInto = layouting.flattenTreeInto;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
 
 const LayerInterval = struct {
@@ -3597,10 +3596,23 @@ pub const Renderer = struct {
         try self.recreateSwapchain(capabilities.currentExtent.width, capabilities.currentExtent.height);
     }
 
+    pub fn flattenTreeInto(
+        allocator: std.mem.Allocator,
+        list: *std.ArrayList(*const LayoutBox),
+        layoutBox: *const LayoutBox,
+    ) !void {
+        try list.append(allocator, layoutBox);
+        if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
+            for (layoutBox.children.?.layoutBoxes) |*child| {
+                try flattenTreeInto(allocator, list, child);
+            }
+        }
+    }
+
     pub fn drawFrame(
         self: *Self,
         arena: std.mem.Allocator,
-        rootLayoutBox: *const LayoutBox,
+        layoutBoxes: []const LayoutBox,
         clearColor: Vec4,
         dpi: [2]u32,
         targetFrameTimeNs: u64,
@@ -3703,7 +3715,9 @@ pub const Renderer = struct {
         );
 
         var flatLayoutTree = std.ArrayList(*const LayoutBox).empty;
-        try flatTreeInto(arena, &flatLayoutTree, rootLayoutBox);
+        for (layoutBoxes) |*layoutBox| {
+            try flattenTreeInto(arena, &flatLayoutTree, layoutBox);
+        }
         std.mem.sort(*const LayoutBox, flatLayoutTree.items, {}, (struct {
             fn lessThan(_: void, lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
                 return lhs.z < rhs.z;

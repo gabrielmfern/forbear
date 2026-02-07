@@ -61,7 +61,7 @@ componentResolutionState: ?ComponentResolutionState,
 
 frameEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 
-rootFrameNode: ?Node,
+rootNodes: std.ArrayList(Node),
 frameNodeParentStack: std.ArrayList(*Node),
 frameNodePath: std.ArrayList(usize),
 previousPushedNode: ?*const Node,
@@ -91,7 +91,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
 
         .frameEventQueue = .init(allocator),
 
-        .rootFrameNode = null,
+        .rootNodes = .empty,
         .frameNodeParentStack = .empty,
         .frameNodePath = .empty,
         .previousPushedNode = null,
@@ -121,7 +121,7 @@ test "Element tree stack stability" {
             try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
             try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-            try text(arenaAllocator, "Hello, world!", .{});
+            try text(arenaAllocator, "Hello, world!");
             try std.testing.expectEqualDeep("Hello, world!", self.previousPushedNode.?.content.text);
 
             try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
@@ -131,7 +131,7 @@ test "Element tree stack stability" {
                 try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
                 try std.testing.expectEqual(3, self.frameNodePath.items.len);
 
-                try text(arenaAllocator, "Nested element", .{});
+                try text(arenaAllocator, "Nested element");
                 try std.testing.expectEqualDeep("Nested element", self.previousPushedNode.?.content.text);
 
                 try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
@@ -145,7 +145,7 @@ test "Element tree stack stability" {
     });
     try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
     try std.testing.expectEqual(0, self.frameNodePath.items.len);
-    try std.testing.expect(self.rootFrameNode != null);
+    try std.testing.expectEqual(1, self.rootNodes.items.len);
 
     // This acts like the end of a frame here
     resetNodeTree();
@@ -161,7 +161,7 @@ test "Element tree stack stability" {
             try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
             try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-            try text(arenaAllocator, "Hello, world!", .{});
+            try text(arenaAllocator, "Hello, world!");
             try std.testing.expectEqualDeep("Hello, world!", self.previousPushedNode.?.content.text);
 
             try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
@@ -171,7 +171,7 @@ test "Element tree stack stability" {
                 try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
                 try std.testing.expectEqual(3, self.frameNodePath.items.len);
 
-                try text(arenaAllocator, "Nested element", .{});
+                try text(arenaAllocator, "Nested element");
                 try std.testing.expectEqualDeep("Nested element", self.previousPushedNode.?.content.text);
 
                 try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
@@ -185,7 +185,7 @@ test "Element tree stack stability" {
     });
     try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
     try std.testing.expectEqual(0, self.frameNodePath.items.len);
-    try std.testing.expect(self.rootFrameNode != null);
+    try std.testing.expectEqual(1, self.rootNodes.items.len);
 }
 
 test "Element key stability across frames" {
@@ -225,7 +225,7 @@ test "Element key stability across frames" {
 
     var firstFrameKeys = try std.ArrayList(u64).initCapacity(std.testing.allocator, 8);
     defer firstFrameKeys.deinit(std.testing.allocator);
-    try collectKeys(std.testing.allocator, &self.rootFrameNode.?, &firstFrameKeys);
+    try collectKeys(std.testing.allocator, &self.rootNodes.items[0], &firstFrameKeys);
 
     // Simulate frame boundary (just resetNodes, no arena reset - arena is reused across frames)
     resetNodeTree();
@@ -242,7 +242,7 @@ test "Element key stability across frames" {
 
     var secondFrameKeys = try std.ArrayList(u64).initCapacity(std.testing.allocator, 8);
     defer secondFrameKeys.deinit(std.testing.allocator);
-    try collectKeys(std.testing.allocator, &self.rootFrameNode.?, &secondFrameKeys);
+    try collectKeys(std.testing.allocator, &self.rootNodes.items[0], &secondFrameKeys);
 
     // Keys should be identical across frames for the same structure
     try std.testing.expectEqual(firstFrameKeys.items.len, secondFrameKeys.items.len);
@@ -282,7 +282,7 @@ test "Component resolution" {
             const innerArena = try useArena();
             try std.testing.expectEqual(10, counter.*);
             (try element(innerArena, .{}))({
-                try text(innerArena, "Value {d}", .{counter.*});
+                try text(innerArena, try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
             });
         }
     }).component;
@@ -685,7 +685,7 @@ fn popParentStack(block: void) void {
 fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
     const self = getContext();
     if (self.frameNodeParentStack.getLastOrNull()) |parent| {
-        std.debug.assert(self.rootFrameNode != null);
+        std.debug.assert(self.rootNodes.items.len > 0);
         // How can we make sure that these asserts aren't really necessary? HOw
         // can we make sure that the compiler will ensure that the parent here
         // always allows for children?
@@ -695,15 +695,7 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
             .index = parent.content.element.children.items.len - 1,
         };
     } else {
-        // Should we have a better treatment of the user doing multiple roots?
-        // They might be confused about something? How can we make the design
-        // get it clearer to the user that there can only be one root?
-        std.debug.assert(self.rootFrameNode == null);
-        self.rootFrameNode = Node{
-            .content = undefined,
-            .key = undefined,
-        };
-        return .{ .ptr = &self.rootFrameNode.?, .index = 0 };
+        return .{ .ptr = try self.rootNodes.addOne(arena), .index = 0 };
     }
 }
 
@@ -730,21 +722,19 @@ pub fn element(arena: std.mem.Allocator, style: IncompleteStyle) !*const fn (voi
     return &popParentStack;
 }
 
-pub fn text(arena: std.mem.Allocator, comptime fmt: []const u8, args: anytype) !void {
-    const formatted = try std.fmt.allocPrint(arena, fmt, args);
-
+pub fn text(arena: std.mem.Allocator, content: []const u8) !void {
     const result = try putNode(arena);
 
     const self = getContext();
     var hasher = std.hash.Wyhash.init(0);
-    hasher.update(formatted);
+    hasher.update(content);
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
     hasher.update(std.mem.asBytes(&result.index));
 
     result.ptr.* = Node{
         .key = hasher.final(),
         .content = .{
-            .text = formatted,
+            .text = content,
         },
     };
     self.previousPushedNode = result.ptr;
@@ -831,7 +821,7 @@ pub fn useNextEvent() ?Event {
     return null;
 }
 
-pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Vec2) !void {
+pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: Vec2) !void {
     const self = getContext();
 
     var queueIterator = self.frameEventQueue.valueIterator();
@@ -839,7 +829,7 @@ pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Ve
         events.clearRetainingCapacity();
     }
 
-    var iterator = try layouting.LayoutTreeIterator.init(arena, root);
+    var iterator = try layouting.LayoutTreeIterator.init(arena, roots);
 
     var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
     missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
@@ -884,7 +874,7 @@ pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Ve
 /// Resets the UI state, clearing the root frame node - and consequently - everything else.
 pub fn resetNodeTree() void {
     const self = getContext();
-    self.rootFrameNode = null;
+    self.rootNodes.clearRetainingCapacity();
     self.frameNodeParentStack.clearRetainingCapacity();
     self.frameNodePath.clearRetainingCapacity();
 }

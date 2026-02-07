@@ -20,7 +20,7 @@ pub fn FpsCounter() !void {
         .color = .{ 1.0, 1.0, 0.0, 1.0 },
         .direction = .topToBottom,
     }))({
-        try forbear.text(arena, "FPS: {d:.1}", .{fps});
-        try forbear.text(arena, "delta time: {d:.1}ms", .{deltaTime * 1000.0});
+        try forbear.text(arena, try std.fmt.allocPrint(arena, "FPS: {d:.1}", .{fps}));
+        try forbear.text(arena, try std.fmt.allocPrint(arena, "delta time: {d:.1}ms", .{deltaTime * 1000.0}));
     });
 }
