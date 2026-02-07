@@ -436,6 +436,34 @@ pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) !f32 {
     return value;
 }
 
+pub const SpringConfig = struct {
+    stiffness: f32,
+    damping: f32,
+    mass: f32,
+    epsilon: f32,
+};
+
+pub fn useSpring(target: f32, config: SpringConfig) !f32 {
+    const self = getContext();
+    const value = try useState(f32, target);
+    const velocity = try useState(f32, 0.0);
+
+    const dt: f32 = @floatCast(self.deltaTime orelse 0.0);
+    if (dt == 0.0) return value.*;
+
+    const displacement = target - value.*;
+    const acceleration = (config.stiffness * displacement - config.damping * velocity.*) / config.mass;
+    velocity.* += acceleration * dt;
+    value.* += velocity.* * dt;
+
+    if (@abs(displacement) <= config.epsilon and @abs(velocity.*) <= config.epsilon) {
+        value.* = target;
+        velocity.* = 0.0;
+    }
+
+    return value.*;
+}
+
 pub fn useAnimation(duration: f32) !Animation {
     const self = getContext();
     const state = try useState(?AnimationState, null);
@@ -960,8 +988,15 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
 fn Scrolling() !void {
     const self = getContext();
 
-    self.scrollPosition[0] = try useTransition(self.effectiveScrollPosition[0], 0.15, easeInOut);
-    self.scrollPosition[1] = try useTransition(self.effectiveScrollPosition[1], 0.15, easeInOut);
+    const spring = SpringConfig{
+        .stiffness = 200.0,
+        .damping = 26.0,
+        .mass = 1.0,
+        .epsilon = 0.01,
+    };
+
+    self.scrollPosition[0] = try useSpring(self.effectiveScrollPosition[0], spring);
+    self.scrollPosition[1] = try useSpring(self.effectiveScrollPosition[1], spring);
 }
 
 /// Resets the UI state, clearing the root frame node - and consequently - everything else.
