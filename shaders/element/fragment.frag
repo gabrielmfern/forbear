@@ -23,7 +23,7 @@ void main() {
     float rOuter = min(borderRadius, min(halfSize.x, halfSize.y));
 
     float dOuter = sdfRoundRect(p, halfSize, rOuter);
-    float outerAa = fwidth(dOuter);
+    float outerAa = max(fwidth(dOuter), 0.0001);
     float outerFill = 1.0 - smoothstep(-outerAa, outerAa, dOuter);
 
     vec4 color = vertexColor;
@@ -51,7 +51,7 @@ void main() {
     rInner = min(rInner, min(innerHalfSize.x, innerHalfSize.y));
 
     float dInner = sdfRoundRect(innerPos, innerHalfSize, rInner);
-    float innerAa = fwidth(dInner);
+    float innerAa = max(fwidth(dInner), 0.0001);
     float innerFill = 1.0 - smoothstep(-innerAa, innerAa, dInner);
     float hasInner = step(0.0001, min(innerSize.x, innerSize.y));
     innerFill *= hasInner;
