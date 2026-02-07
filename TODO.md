@@ -27,34 +27,29 @@
 - [x] fix parts of shadow that draw nothing going over parent borders
 
 missing things for the entire uhoh.com website:
+- [x] forbear.text requires comptime fmt, so users can't plug in dynamic text
+- [x] vulkan error with multi sampling being disabled for text
 - [ ] page scrolling
+- [ ] fps has been destroyed, lower than 165 for a non changing layout
+    - we should start caching the layouts from the nodes
 - [ ] gradients
+- [ ] can't make an element fully transparent?
 - [ ] blend multiply
+- [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
+    - is having lots of them bad? I understand having no type-safety though
+- not being able to center align just a single element, without affecting others
 - [ ] svg support
+    - Some library for SVG rendering that we can then plop into a texture atlas?
 - [ ] linear gradient support
-- [ ] maxWidth + preferredWidth grow support
+- [ ] maxWidth to limit a growing element support
 - [ ] component children slotting
 - [ ] support for underlined text
 
 problems:
-- vulkan error with multi sampling being disabled for text
-- fps has been destroyed, lower than 165 for a non changing layout
-    - we should start caching the layouts from the nodes
-- can't make an element fully transparent?
 - sea of parenthesis
-    - having to try before actually calling the children block eating function
-      lol
-- had a hard time with `useFont`/`useImage` having the files contents in the
-  arguments
-- new `registerFont`/`registerImage` functions are now heavily repeated and
-  there's really no type-safety in `useFont`/`useImage` 
-- didn't really figure out that components can be used, and defined weird
-  `render` functions all over the place
-- could not figure out what `useNextEvent` was for, and just ignored it leaving
-  it inplace
-- created a utilty for px so that it didn't have to calculte the proper value
-- forbear.text requires comptime fmt, so users can't plug in dynamic text
-- not being able to center align just a single element, without affecting
-  others
-
+    - having to try before actually calling the children block eating function lol
+- components usage is confusing
+- could not figure out what `useNextEvent` was for, and just ignored it leaving it in place
+- created a utilty for px so that it didn't have to calculate the proper value
+    - should we maybe have px as the default value? I've noticed that the DPI isn't as reliable as I thought, as it can be used for scaling for example
 
