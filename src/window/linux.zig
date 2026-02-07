@@ -65,6 +65,8 @@ xdgSurface: *c.xdg_surface,
 xdgToplevel: *c.xdg_toplevel,
 wpFractionalScale: ?*c.wp_fractional_scale_v1 = null,
 wpViewport: ?*c.wp_viewport = null,
+xdgDecorationManager: ?*c.zxdg_decoration_manager_v1 = null,
+xdgToplevelDecoration: ?*c.zxdg_toplevel_decoration_v1 = null,
 
 // Window state
 width: u32,
@@ -269,7 +271,7 @@ fn global(
     );
     const xdgWmBase = BindingInfo(c.xdg_wm_base).new(
         &c.xdg_wm_base_interface,
-        1,
+        5,
     );
     const seat = BindingInfo(c.wl_seat).new(
         &c.wl_seat_interface,
@@ -281,6 +283,10 @@ fn global(
     );
     const viewporter = BindingInfo(c.wp_viewporter).new(
         &c.wp_viewporter_interface,
+        1,
+    );
+    const decorationManager = BindingInfo(c.zxdg_decoration_manager_v1).new(
+        &c.zxdg_decoration_manager_v1_interface,
         1,
     );
 
@@ -313,6 +319,8 @@ fn global(
         window.wpFractionalScaleManager = fractionalScaleManager.bind(registry, name);
     } else if (viewporter.is(interfaceName)) {
         window.wpViewporter = viewporter.bind(registry, name);
+    } else if (decorationManager.is(interfaceName)) {
+        window.xdgDecorationManager = decorationManager.bind(registry, name);
     }
 }
 
@@ -333,11 +341,11 @@ const xdgWmBaseListener: c.xdg_wm_base_listener = .{
 fn xdg_surface_configure(data: ?*anyopaque, xdgSurface: ?*c.xdg_surface, serial: u32) callconv(.c) void {
     std.log.debug("xdg surface configuration", .{});
     const window: *Self = @ptrCast(@alignCast(data));
-    _ = window;
     c.xdg_surface_ack_configure(
         xdgSurface,
         serial,
     );
+    c.wl_surface_commit(window.wlSurface);
 }
 
 const xdgSurfaceListener: c.xdg_surface_listener = .{
@@ -373,9 +381,50 @@ fn xdgToplevelClose(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel) callconv(.
     window.running = false;
 }
 
+fn xdgToplevelConfigureBounds(
+    data: ?*anyopaque,
+    xdgToplevel: ?*c.xdg_toplevel,
+    width: i32,
+    height: i32,
+) callconv(.c) void {
+    _ = data;
+    _ = xdgToplevel;
+    std.log.debug("xdg toplevel configure bounds: {}x{}", .{ width, height });
+}
+
+fn xdgToplevelWmCapabilities(
+    data: ?*anyopaque,
+    xdgToplevel: ?*c.xdg_toplevel,
+    capabilities: [*c]c.wl_array,
+) callconv(.c) void {
+    _ = data;
+    _ = xdgToplevel;
+    _ = capabilities;
+}
+
 const xdgToplevelListener: c.xdg_toplevel_listener = .{
     .configure = xdgToplevelConfigure,
     .close = xdgToplevelClose,
+    .configure_bounds = xdgToplevelConfigureBounds,
+    .wm_capabilities = xdgToplevelWmCapabilities,
+};
+
+fn xdgToplevelDecorationConfigure(
+    data: ?*anyopaque,
+    decoration: ?*c.zxdg_toplevel_decoration_v1,
+    mode: u32,
+) callconv(.c) void {
+    _ = data;
+    _ = decoration;
+    if (mode == c.ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE) {
+        std.log.warn("compositor fell back to client-side decorations", .{});
+    } else {
+        std.log.debug("using server-side decorations", .{});
+    }
+}
+
+const xdgToplevelDecorationListener: c.zxdg_toplevel_decoration_v1_listener = .{
+    .configure = xdgToplevelDecorationConfigure,
 };
 
 fn pointerHandleEnter(
@@ -629,6 +678,15 @@ pub fn init(
 
     window.handlers = .{};
 
+    // Initialize optional fields to null before the registry roundtrip,
+    // since allocator.create does not zero-initialize memory.
+    window.wpFractionalScaleManager = null;
+    window.wpViewporter = null;
+    window.xdgDecorationManager = null;
+    window.xdgToplevelDecoration = null;
+    window.wpFractionalScale = null;
+    window.wpViewport = null;
+
     window.wlDisplay = c.wl_display_connect(
         null,
     ) orelse return error.UnableToConnectToWaylandDisplay;
@@ -669,6 +727,14 @@ pub fn init(
     c.xdg_toplevel_set_title(window.xdgToplevel, title.ptr);
     c.xdg_toplevel_set_app_id(window.xdgToplevel, app_id.ptr);
 
+    if (window.xdgDecorationManager) |manager| {
+        window.xdgToplevelDecoration = c.zxdg_decoration_manager_v1_get_toplevel_decoration(manager, window.xdgToplevel);
+        if (window.xdgToplevelDecoration) |decoration| {
+            c.zxdg_toplevel_decoration_v1_set_mode(decoration, c.ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+            _ = c.zxdg_toplevel_decoration_v1_add_listener(decoration, &xdgToplevelDecorationListener, @ptrCast(@alignCast(window)));
+        }
+    }
+
     if (window.wpFractionalScaleManager) |manager| {
         window.wpFractionalScale = c.wp_fractional_scale_manager_v1_get_fractional_scale(manager, window.wlSurface);
         _ = c.wp_fractional_scale_v1_add_listener(window.wpFractionalScale, &fractionalScaleListener, @ptrCast(@alignCast(window)));
@@ -680,6 +746,7 @@ pub fn init(
     }
 
     c.wl_surface_commit(window.wlSurface);
+    _ = c.wl_display_roundtrip(window.wlDisplay);
 
     // gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     // gl.enable(gl.BLEND);
@@ -772,6 +839,7 @@ pub fn targetFrameTimeNs(self: *const Self) u64 {
 // }
 
 pub fn deinit(self: *Self) void {
+    if (self.xdgToplevelDecoration) |decoration| c.zxdg_toplevel_decoration_v1_destroy(decoration);
     if (self.wpFractionalScale) |fs| c.wp_fractional_scale_v1_destroy(fs);
     if (self.wpViewport) |vp| c.wp_viewport_destroy(vp);
 
@@ -781,6 +849,7 @@ pub fn deinit(self: *Self) void {
     c.wl_cursor_theme_destroy(self.wlCursorTheme);
     c.wl_pointer_destroy(self.wlPointer);
     c.wl_keyboard_destroy(self.wlKeyboard);
+    if (self.xdgDecorationManager) |dm| c.zxdg_decoration_manager_v1_destroy(dm);
     if (self.wpFractionalScaleManager) |fsm| c.wp_fractional_scale_manager_v1_destroy(fsm);
     if (self.wpViewporter) |vp| c.wp_viewporter_destroy(vp);
     c.wl_shm_destroy(self.wlShm);

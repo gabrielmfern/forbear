@@ -28,6 +28,7 @@ pub const c = @cImport({
             @cInclude("xdg-shell-client-protocol.h");
             @cInclude("fractional-scale-v1-client-protocol.h");
             @cInclude("viewporter-client-protocol.h");
+            @cInclude("xdg-decoration-unstable-v1-client-protocol.h");
         },
         .macos => {
             @cInclude("objc/objc.h");
