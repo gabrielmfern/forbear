@@ -1058,7 +1058,7 @@ pub fn setWindowHandlers(window: *Window) void {
             fn handler(wnd: *Window, axis: Window.ScrollAxis, nativeOffset: f32, data: *anyopaque) void {
                 const ctx: *Context = @ptrCast(@alignCast(data));
                 // TODO: calculate the final scrolling position to be 3x the line height of the main font
-                const offset = 100.0 * nativeOffset / @abs(nativeOffset);
+                const offset = 100.0 * std.math.sign(nativeOffset);
 
                 // Browser-like behavior: Shift + vertical scroll = horizontal scroll
                 const shiftAccordingAxis = if (wnd.isHoldingShift() and axis == .vertical)
