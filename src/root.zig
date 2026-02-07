@@ -967,7 +967,11 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
     var uiEdges: Vec2 = @splat(0.0);
 
     while (try iterator.next()) |layoutBox| {
-        uiEdges = @max(uiEdges, layoutBox.position + self.scrollPosition + layoutBox.size);
+        if (layoutBox.style.placement == .standard) {
+            // this +scrollPosition term feels hacky to do, it's only required
+            // because layouting adds in the scroll position
+            uiEdges = @max(uiEdges, layoutBox.position + self.scrollPosition + layoutBox.size);
+        }
         const isMouseAfter = layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1];
         const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
         const isMouseInside = isMouseAfter and isMouseBefore;
