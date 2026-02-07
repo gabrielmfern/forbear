@@ -116,7 +116,7 @@ fn renderingMain(
             viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         );
-        try renderer.drawFrame(arenaAllocator, &layoutBox, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
+        try renderer.drawFrame(arena, &layoutBox, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
         try forbear.update(arena, &layoutBox, viewportSize);
 
         forbear.resetNodeTree();
