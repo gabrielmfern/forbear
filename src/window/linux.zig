@@ -754,6 +754,9 @@ pub fn init(
     title: [:0]const u8,
     app_id: [:0]const u8,
 ) !*Self {
+    // I really dislike that we need to keep this in the heap, I feel like this
+    // is an artifact from libwayland and might not really be a problem if we
+    // implemented our own wayland client from scratch
     const window = try allocator.create(Self);
     errdefer allocator.destroy(window);
     window.allocator = allocator;
