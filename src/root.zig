@@ -878,6 +878,15 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
     const timestamp = timestampSeconds();
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
     self.lastUpdateTime = timestamp;
+
+    try component(arena, Scrolling, null);
+}
+
+fn Scrolling() !void {
+    const self = getContext();
+
+    self.scrollPosition[0] = try useTransition(self.effectiveScrollPosition[0], 0.15, easeInOut);
+    self.scrollPosition[1] = try useTransition(self.effectiveScrollPosition[1], 0.15, easeInOut);
 }
 
 /// Resets the UI state, clearing the root frame node - and consequently - everything else.
@@ -909,10 +918,10 @@ pub fn setWindowHandlers(window: *Window) void {
     };
     window.handlers.scroll = .{
         .function = &(struct {
-            fn handler(wnd: *Window, axis: Window.ScrollAxis, offset: f32, data: *anyopaque) void {
+            fn handler(wnd: *Window, axis: Window.ScrollAxis, nativeOffset: f32, data: *anyopaque) void {
                 const ctx: *Context = @ptrCast(@alignCast(data));
                 // TODO: calculate the final scrolling position to be 3x the line height of the main font
-                const scrollMultiplier = 3.0;
+                const offset = 100.0 * nativeOffset / @abs(nativeOffset);
 
                 // Browser-like behavior: Shift + vertical scroll = horizontal scroll
                 const shiftAccordingAxis = if (wnd.isHoldingShift() and axis == .vertical)
@@ -923,8 +932,8 @@ pub fn setWindowHandlers(window: *Window) void {
                     axis;
 
                 switch (shiftAccordingAxis) {
-                    .horizontal => ctx.scrollPosition[0] += offset * scrollMultiplier,
-                    .vertical => ctx.scrollPosition[1] += offset * scrollMultiplier,
+                    .horizontal => ctx.effectiveScrollPosition[0] += offset,
+                    .vertical => ctx.effectiveScrollPosition[1] += offset,
                 }
             }
         }).handler,
