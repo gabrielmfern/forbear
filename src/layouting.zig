@@ -65,7 +65,9 @@ pub const LayoutBox = struct {
 };
 
 fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
-    layoutBox.position += base;
+    if (layoutBox.style.placement != .manual) {
+        layoutBox.position += base;
+    }
 
     if (layoutBox.children != null) {
         switch (layoutBox.children.?) {
