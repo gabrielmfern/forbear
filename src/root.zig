@@ -308,34 +308,52 @@ test "Component resolution" {
     try std.testing.expectEqual(2, callCount);
 }
 
-/// Embeds an image from the given path, or retrieves it from cache if already embedded.
-///
-/// Only deinits when the forbear context is deinited.
-pub fn useFont(name: []const u8, comptime contents: []const u8) !*Font {
+/// Embeds a font from the given path. Only deinits when the forbear context is deinited.
+pub fn registerFont(uniqueIdentifier: []const u8, comptime contents: []const u8) !void {
     const self = getContext();
-    const result = try self.fonts.getOrPut(name);
+    const result = try self.fonts.getOrPut(uniqueIdentifier);
     if (!result.found_existing) {
-        result.value_ptr.* = try Font.init(self.allocator, name, contents);
+        result.value_ptr.* = try Font.init(self.allocator, uniqueIdentifier, contents);
     }
-    return result.value_ptr;
 }
 
-/// Embeds an image from the given path, using the component's renderer.
-pub fn useImage(
-    uniqueIdentifier: []const u8,
-    comptime contents: []const u8,
-    format: Graphics.Image.Format,
-) !*const Image {
+/// Returns a pointer to the font registered with the given unique identifier.
+/// Returns an error if no font was registered with that identifier.
+///
+/// Before using this, call `registerFont` with the same unique identifier to
+/// ensure the font is loaded and available.
+pub fn useFont(uniqueIdentifier: []const u8) !*Font {
     const self = getContext();
-    const getOrPutResult = try self.images.getOrPut(uniqueIdentifier);
-    if (!getOrPutResult.found_existing) {
-        getOrPutResult.value_ptr.* = try Graphics.Image.init(
+    return self.fonts.getPtr(uniqueIdentifier) orelse {
+        std.log.err("Could not find font by the unique identifier {s}", .{uniqueIdentifier});
+        return error.FontNotFound;
+    };
+}
+
+/// Embeds a image from the given path. Only deinits when the forbear context is deinited.
+pub fn registerImage(uniqueIdentifier: []const u8, comptime contents: []const u8, format: Graphics.Image.Format) !void {
+    const self = getContext();
+    const result = try self.images.getOrPut(uniqueIdentifier);
+    if (!result.found_existing) {
+        result.value_ptr.* = try Graphics.Image.init(
             contents,
             format,
             self.renderer,
         );
     }
-    return getOrPutResult.value_ptr;
+}
+
+/// Returns a pointer to the image registered with the given unique identifier.
+/// Returns an error if no image was registered with that identifier.
+///
+/// Before using this, call `registerImage` with the same unique identifier to
+/// ensure the image is loaded and available.
+pub fn useImage(uniqueIdentifier: []const u8) !*const Image {
+    const self = getContext();
+    return self.images.getPtr(uniqueIdentifier) orelse {
+        std.log.err("Could not find image by the unique identifier {s}", .{uniqueIdentifier});
+        return error.ImageNotFound;
+    };
 }
 
 const AnimationState = struct {

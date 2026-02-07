@@ -1,26 +1,20 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
-const spaceGroteskTtf = @embedFile("SpaceGrotesk.ttf");
-
 fn App() !void {
     const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
-
-    const spaceGrotesk = try forbear.useFont("SpaceGrotesk", spaceGroteskTtf);
-    const comeOnImage = try forbear.useImage("come-on", @embedFile("come-on.png"), .png);
 
     (try forbear.element(arena, .{
         .preferredWidth = .grow,
         .direction = .topToBottom,
         .horizontalAlignment = .center,
-        .font = spaceGrotesk,
         .fontWeight = 500,
         .fontSize = 12,
     }))({
         try forbear.component(arena, forbear.FpsCounter, null);
         (try forbear.element(arena, .{
-            .background = .{ .image = comeOnImage },
+            .background = .{ .image = try forbear.useImage("Come On") },
             .preferredWidth = .{
                 .fixed = 165,
             },
@@ -97,6 +91,9 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
+    try forbear.registerFont("SpaceGrotesk", @embedFile("SpaceGrotesk.ttf"));
+    try forbear.registerImage("Come On", @embedFile("come-on.png"), .png);
+
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
@@ -106,7 +103,7 @@ fn renderingMain(
         const layoutBox = try forbear.layout(
             arena,
             .{
-                .font = try forbear.useFont("SpaceGrotesk", spaceGroteskTtf),
+                .font = try forbear.useFont("SpaceGrotesk"),
                 .color = .{ 0.0, 0.0, 0.0, 1.0 },
                 .fontSize = 16,
                 .textWrapping = .word,
