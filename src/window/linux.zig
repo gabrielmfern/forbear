@@ -56,8 +56,8 @@ wpViewporter: ?*c.wp_viewporter = null,
 
 // Keyboard
 xkbContext: *c.xkb_context,
-xkbKeymap: *c.xkb_keymap,
-xkbState: *c.xkb_state,
+xkbKeymap: ?*c.xkb_keymap,
+xkbState: ?*c.xkb_state,
 wlKeyboard: *c.wl_keyboard,
 
 // cursor
@@ -624,7 +624,12 @@ fn keyboardHandleKeymap(
         std.log.err("failed to mmap keymap shared memory: {}", .{err});
         @panic("Could not mmap keymap shared memory");
     };
+    defer std.posix.munmap(mapSharedMemory);
+    defer std.posix.close(fd);
 
+    if (window.xkbKeymap) |previousKeymap| {
+        c.xkb_keymap_unref(previousKeymap);
+    }
     window.xkbKeymap = c.xkb_keymap_new_from_string(
         window.xkbContext,
         mapSharedMemory.ptr,
@@ -632,10 +637,10 @@ fn keyboardHandleKeymap(
         c.XKB_KEYMAP_COMPILE_NO_FLAGS,
     ) orelse @panic("failed to create xkb keymap from string");
 
+    if (window.xkbState) |previousState| {
+        c.xkb_state_unref(previousState);
+    }
     window.xkbState = c.xkb_state_new(window.xkbKeymap) orelse @panic("failed to create xkb state from keymap");
-
-    std.posix.munmap(mapSharedMemory);
-    std.posix.close(fd);
 
     _ = wlKeyboard;
 }
@@ -770,6 +775,9 @@ pub fn init(
     window.handlers = .{};
 
     window.xkbContext = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse return error.FailedToCreateXkbContext;
+    errdefer c.xkb_context_unref(window.xkbContext);
+    window.xkbKeymap = null;
+    window.xkbState = null;
 
     // Initialize optional fields to null before the registry roundtrip,
     // since allocator.create does not zero-initialize memory.
