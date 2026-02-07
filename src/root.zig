@@ -410,30 +410,31 @@ pub const Animation = struct {
 };
 
 pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) !f32 {
-    const valueToTransitionFrom = try useState(f32, value);
-    const valueToTransitionTo = try useState(f32, value);
+    const startValue = try useState(f32, value);
+    const currentValue = try useState(f32, value);
+    const targetValue = try useState(f32, value);
     const animation = try useAnimation(duration);
+    const epsilon: f32 = 0.0001;
 
-    if (value != valueToTransitionTo.*) {
-        valueToTransitionTo.* = value;
+    if (targetValue.* != currentValue.*) {
         if (animation.progress()) |progress| {
-            valueToTransitionFrom.* = valueToTransitionFrom.* + (valueToTransitionTo.* - valueToTransitionFrom.*) * easing(progress);
+            if (progress < 1.0) {
+                currentValue.* = startValue.* + (targetValue.* - startValue.*) * easing(progress);
+            } else {
+                currentValue.* = targetValue.*;
+                startValue.* = targetValue.*;
+                animation.reset();
+            }
         }
+    }
+
+    if (@abs(value - targetValue.*) > epsilon) {
+        targetValue.* = value;
+        startValue.* = currentValue.*;
         animation.start();
     }
 
-    if (valueToTransitionTo.* != valueToTransitionFrom.*) {
-        if (animation.progress()) |progress| {
-            if (progress >= 1.0) {
-                valueToTransitionFrom.* = valueToTransitionTo.*;
-                animation.reset();
-                return valueToTransitionTo.*;
-            }
-            return valueToTransitionFrom.* + (valueToTransitionTo.* - valueToTransitionFrom.*) * easing(progress);
-        }
-    }
-
-    return value;
+    return currentValue.*;
 }
 
 pub const SpringConfig = struct {
