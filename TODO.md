@@ -2,7 +2,7 @@
     - Not doing it for now since it's not central to build the app I want yet
 - [ ] find a way to avoid having to use `try` everwhere
 - [ ] implement 10 examples of UI that I find inspiring
-    - [ ] uhoh.com
+    - [x] uhoh.com
     - [ ] https://x.com/60fpsdesign/status/2008787492561097035?s=20
     - [ ] https://ui.sh/
 - [ ] implement scrolling 
@@ -24,5 +24,5 @@
 - [x] fix button hovering issue in the button (uhoh.com has this too)
 - [x] text wrapping only breaking at the beginning of characters 
 - [x] wrapped text should also conform to parent alignment
-- [ ] fix parts of shadow that draw nothing going over parent borders
+- [x] fix parts of shadow that draw nothing going over parent borders
 
