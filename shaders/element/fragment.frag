@@ -56,7 +56,8 @@ void main() {
     float hasInner = step(0.0001, min(innerSize.x, innerSize.y));
     innerFill *= hasInner;
 
-    float mixFactor = clamp(innerFill / max(outerFill, 0.0001), 0.0, 1.0);
+    float denom = max(max(outerFill, innerFill), 0.0001);
+    float mixFactor = clamp(innerFill / denom, 0.0, 1.0);
     outColor = mix(borderColor, color, mixFactor);
     outColor.a *= outerFill;
 }
