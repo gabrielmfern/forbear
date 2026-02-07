@@ -41,7 +41,11 @@ allocator: std.mem.Allocator,
 
 mousePosition: Vec2,
 hoveredElementKeys: std.ArrayList(u64),
+/// The eased in value of `effectiveScrollPosition`
 scrollPosition: Vec2,
+/// The final value of the scrolling, withuot considering any animations, snaps
+/// exactly into place.
+effectiveScrollPosition: Vec2,
 
 renderer: *Graphics.Renderer,
 
@@ -80,6 +84,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .mousePosition = @splat(0.0),
         .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .scrollPosition = @splat(0.0),
+        .effectiveScrollPosition = @splat(0.0),
 
         .renderer = renderer,
 
@@ -408,21 +413,23 @@ pub const Animation = struct {
 
 pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) !f32 {
     const valueToTransitionFrom = try useState(f32, value);
+    const valueToTransitionTo = try useState(f32, value);
     const animation = try useAnimation(duration);
 
-    if (value != valueToTransitionFrom.*) {
-        if (!animation.isRunning()) {
-            animation.start();
-        }
+    if (value != valueToTransitionTo.*) {
+        valueToTransitionTo.* = value;
+        animation.start();
+    }
+
+    if (valueToTransitionTo.* != valueToTransitionFrom.*) {
         if (animation.progress()) |progress| {
             if (progress == 1.0) {
-                valueToTransitionFrom.* = value;
+                valueToTransitionFrom.* = valueToTransitionTo.*;
                 animation.reset();
-                return value;
+                return valueToTransitionTo.*;
             }
-            return valueToTransitionFrom.* + (value - valueToTransitionFrom.*) * easing(progress);
-        } else {
-            return value;
+            valueToTransitionFrom.* = valueToTransitionFrom.* + (valueToTransitionTo.* - valueToTransitionFrom.*) * easing(progress);
+            return valueToTransitionFrom.*;
         }
     }
 
