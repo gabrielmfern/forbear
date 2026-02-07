@@ -1440,20 +1440,23 @@ fn Scrolling(props: struct { uiEdges: Vec2 }) !void {
     const self = getContext();
     const viewportSize = useViewportSize();
 
-    const spring = SpringConfig{
-        .stiffness = 320.0,
-        .damping = 32.0,
-        .mass = 1.0,
-    };
-
     const identity: Vec2 = @splat(0.0);
     self.effectiveScrollPosition = @min(
         @max(self.effectiveScrollPosition, identity),
         @max(props.uiEdges - viewportSize, identity),
     );
 
-    self.scrollPosition[0] = try useSpringTransition(self.effectiveScrollPosition[0], spring);
-    self.scrollPosition[1] = try useSpringTransition(self.effectiveScrollPosition[1], spring);
+    if (builtin.os.tag == .macos) {
+        self.scrollPosition = self.effectiveScrollPosition;
+    } else {
+        const spring = SpringConfig{
+            .stiffness = 320.0,
+            .damping = 32.0,
+            .mass = 1.0,
+        };
+        self.scrollPosition[0] = try useSpringTransition(self.effectiveScrollPosition[0], spring);
+        self.scrollPosition[1] = try useSpringTransition(self.effectiveScrollPosition[1], spring);
+    }
 }
 
 /// Resets the UI state, clearing the root frame node - and consequently - everything else.
@@ -1487,8 +1490,14 @@ pub fn setWindowHandlers(window: *Window) void {
         .function = &(struct {
             fn handler(wnd: *Window, axis: Window.ScrollAxis, nativeOffset: f32, data: *anyopaque) void {
                 const ctx: *Context = @ptrCast(@alignCast(data));
-                // TODO: calculate the final scrolling position to be 3x the line height of the main font
-                const offset = 100.0 * std.math.sign(nativeOffset);
+                // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
+                // values from the trackpad/mouse, so we use them directly.
+                // On other platforms, the native offset is a raw axis value where
+                // only the direction matters, so we use a fixed step size.
+                const offset = if (builtin.os.tag == .macos)
+                    nativeOffset
+                else
+                    100.0 * std.math.sign(nativeOffset);
 
                 // Browser-like behavior: Shift + vertical scroll = horizontal scroll
                 const shiftAccordingAxis = if (wnd.isHoldingShift() and axis == .vertical)
