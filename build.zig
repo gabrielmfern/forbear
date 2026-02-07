@@ -135,9 +135,13 @@ pub fn build(b: *std.Build) void {
                 .name = "viewporter",
                 .xmlPath = "/usr/share/wayland-protocols/stable/viewporter/viewporter.xml",
             },
+            Protocol{
+                .name = "xdg-decoration-unstable-v1",
+                .xmlPath = "/usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml",
+            },
         };
+        const wf = b.addWriteFiles();
         inline for (waylandProtocols) |protocol| {
-            const wf = b.addWriteFiles();
             const cCommand = b.addSystemCommand(&.{
                 "wayland-scanner",
                 "private-code",
@@ -154,9 +158,9 @@ pub fn build(b: *std.Build) void {
             const headerFile = headerCommand.addOutputFileArg(protocol.name ++ "-client-protocol.h");
             _ = wf.addCopyFile(headerFile, protocol.name ++ "-client-protocol.h");
 
-            forbear.addIncludePath(wf.getDirectory());
             forbear.addCSourceFile(.{ .file = protocolCPath, .flags = &.{} });
         }
+        forbear.addIncludePath(wf.getDirectory());
     }
 
     addShaderImport(b, forbear, "shaders/element/vertex.vert", "element_vertex_shader");
