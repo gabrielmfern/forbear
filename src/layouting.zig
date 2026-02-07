@@ -712,7 +712,7 @@ pub fn layout(
             fitWidth(&layoutBox);
             fitHeight(&layoutBox);
             place(&layoutBox);
-            makeAbsolute(&layoutBox, .{ 0.0, 0.0 });
+            makeAbsolute(&layoutBox, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
             layoutBoxes[index] = layoutBox;
         }
         return layoutBoxes;
