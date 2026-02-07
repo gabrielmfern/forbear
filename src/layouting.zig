@@ -632,28 +632,21 @@ const LayoutCreator = struct {
     }
 };
 
-pub fn flattenTreeInto(allocator: std.mem.Allocator, list: *std.ArrayList(*const LayoutBox), layoutBox: *const LayoutBox) !void {
-    try list.append(allocator, layoutBox);
-    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
-        for (layoutBox.children.?.layoutBoxes) |*child| {
-            try flattenTreeInto(allocator, list, child);
-        }
-    }
-}
-
 pub const LayoutTreeIterator = struct {
     stack: std.ArrayList(*const LayoutBox),
     allocator: std.mem.Allocator,
 
-    root: *const LayoutBox,
+    roots: []const LayoutBox,
 
-    pub fn init(allocator: std.mem.Allocator, root: *const LayoutBox) !@This() {
+    pub fn init(allocator: std.mem.Allocator, roots: []const LayoutBox) !@This() {
         var iterator = @This(){
             .stack = try std.ArrayList(*const LayoutBox).initCapacity(allocator, 16),
             .allocator = allocator,
-            .root = root,
+            .roots = roots,
         };
-        try iterator.stack.append(allocator, root);
+        for (roots) |*root| {
+            try iterator.stack.append(allocator, root);
+        }
         return iterator;
     }
 
@@ -663,7 +656,9 @@ pub const LayoutTreeIterator = struct {
 
     pub fn reset(self: *@This()) !void {
         self.stack.clearRetainingCapacity();
-        try self.stack.append(self.allocator, self.root);
+        for (self.roots) |*root| {
+            try self.stack.append(self.allocator, root);
+        }
     }
 
     pub fn next(self: *@This()) !?*const LayoutBox {
@@ -697,26 +692,30 @@ pub fn layout(
     baseStyle: BaseStyle,
     viewportSize: Vec2,
     dpi: Vec2,
-) !LayoutBox {
+) ![]LayoutBox {
     const context = forbear.getContext();
-    if (context.rootFrameNode) |rootFrameNode| {
-        var creator = try LayoutCreator.init(arena);
-        var layoutBox = try creator.create(rootFrameNode, baseStyle, 1, dpi);
-        fitWidth(&layoutBox);
-        fitHeight(&layoutBox);
-        if (layoutBox.style.preferredWidth == .grow) {
-            layoutBox.size[0] = viewportSize[0];
+    if (context.rootNodes.items.len > 0) {
+        var layoutBoxes = try arena.alloc(LayoutBox, context.rootNodes.items.len);
+        for (context.rootNodes.items, 0..) |node, index| {
+            var creator = try LayoutCreator.init(arena);
+            var layoutBox = try creator.create(node, baseStyle, 1, dpi);
+            fitWidth(&layoutBox);
+            fitHeight(&layoutBox);
+            if (layoutBox.style.preferredWidth == .grow) {
+                layoutBox.size[0] = viewportSize[0];
+            }
+            if (layoutBox.style.preferredHeight == .grow) {
+                layoutBox.size[1] = viewportSize[1];
+            }
+            try growAndShrink(arena, &layoutBox);
+            try wrap(arena, &layoutBox);
+            fitWidth(&layoutBox);
+            fitHeight(&layoutBox);
+            place(&layoutBox);
+            makeAbsolute(&layoutBox, .{ 0.0, 0.0 });
+            layoutBoxes[index] = layoutBox;
         }
-        if (layoutBox.style.preferredHeight == .grow) {
-            layoutBox.size[1] = viewportSize[1];
-        }
-        try growAndShrink(arena, &layoutBox);
-        try wrap(arena, &layoutBox);
-        fitWidth(&layoutBox);
-        fitHeight(&layoutBox);
-        place(&layoutBox);
-        makeAbsolute(&layoutBox, .{ 0.0, 0.0 });
-        return layoutBox;
+        return layoutBoxes;
     } else {
         std.log.err("You need to define a root frame node before layouting. You can do so by just doing forbear.text(...), for example.", .{});
         return error.NoRootFrameNode;
