@@ -7,6 +7,11 @@ extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;
 
 const Self = @This();
 
+pub const ScrollAxis = enum(u32) {
+    vertical = 0,
+    horizontal = 1,
+};
+
 // Global variable to hold the current window instance for delegate callbacks
 var g_current_window: ?*Self = null;
 
@@ -14,6 +19,10 @@ pub const Handlers = struct {
     pointerMotion: ?struct {
         data: *anyopaque,
         function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
+    } = null,
+    scroll: ?struct {
+        data: *anyopaque,
+        function: *const fn (window: *Self, axis: ScrollAxis, offset: f32, data: *anyopaque) void,
     } = null,
     resize: ?struct {
         data: *anyopaque,
@@ -62,6 +71,10 @@ const NSEventTypeMouseMoved: NSUInteger = 5;
 const NSEventTypeLeftMouseDragged: NSUInteger = 6;
 const NSEventTypeRightMouseDragged: NSUInteger = 7;
 const NSEventTypeOtherMouseDragged: NSUInteger = 27;
+const NSEventTypeScrollWheel: NSUInteger = 22;
+
+// NSEventModifierFlags
+const NSEventModifierFlagShift: NSUInteger = 1 << 17;
 
 const NSWindowStyleMaskTitled: NSUInteger = 1 << 0;
 const NSWindowStyleMaskClosable: NSUInteger = 1 << 1;
@@ -449,6 +462,13 @@ const Cursor = enum {
     pointer,
 };
 
+pub fn isHoldingShift(_: *const Self) bool {
+    const NSEvent = getClass("NSEvent");
+    const modifierFlags = msgSend(*const fn (c.Class, c.SEL) callconv(.c) NSUInteger);
+    const flags = modifierFlags(NSEvent, sel("modifierFlags"));
+    return (flags & NSEventModifierFlagShift) != 0;
+}
+
 pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
     _ = self;
     _ = cursor;
@@ -528,6 +548,35 @@ fn processEvent(self: *Self, event: c.id) void {
             const y: f32 = @as(f32, @floatCast(content_bounds.size.height)) - @as(f32, @floatCast(location.y));
 
             handler.function(self, x, y, handler.data);
+        }
+    }
+
+    // Handle scroll wheel events
+    if (event_type == NSEventTypeScrollWheel) {
+        if (self.handlers.scroll) |handler| {
+            const scrollingDeltaY = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
+            var deltaY: f32 = @floatCast(scrollingDeltaY(event, sel("scrollingDeltaY")));
+
+            const scrollingDeltaX = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
+            var deltaX: f32 = @floatCast(scrollingDeltaX(event, sel("scrollingDeltaX")));
+
+            // With natural scrolling enabled, macOS inverts the direction:
+            // swiping up gives positive deltaY (meaning "scroll content up"),
+            // but our convention expects positive = scroll content down.
+            // When natural scrolling is off, the direction already matches.
+            // We negate when natural scrolling is on to match the expected convention.
+            const isDirectionInverted = msgSend(*const fn (c.id, c.SEL) callconv(.c) BOOL);
+            if (isDirectionInverted(event, sel("isDirectionInvertedFromDevice"))) {
+                deltaY = -deltaY;
+                deltaX = -deltaX;
+            }
+
+            if (deltaY != 0) {
+                handler.function(self, .vertical, deltaY, handler.data);
+            }
+            if (deltaX != 0) {
+                handler.function(self, .horizontal, deltaX, handler.data);
+            }
         }
     }
 }
