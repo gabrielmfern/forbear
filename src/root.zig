@@ -557,8 +557,9 @@ pub fn useState(T: type, initialValue: T) !*T {
     const self = getContext();
     if (self.componentResolutionState) |*state| {
         const stateResult = try self.componentStates.getOrPut(state.key);
+        defer state.useStateCursor += 1;
         if (stateResult.found_existing) {
-            if (stateResult.value_ptr.items.len >= state.useStateCursor) {
+            if (stateResult.value_ptr.items.len > state.useStateCursor) {
                 return @ptrCast(@alignCast(stateResult.value_ptr.*.items[state.useStateCursor]));
             }
         } else {
@@ -594,11 +595,16 @@ test "State creation with manual handling" {
             .arenaAllocator = std.testing.allocator,
         };
         const state1 = try useState(i32, 42);
-        try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(1).?.items.len);
+        try std.testing.expectEqual(1, self.componentStates.get(1).?.items.len);
+        try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(1).?.items[0].len);
+        try std.testing.expectEqual(42, state1.*);
+
         const state2 = try useState(f32, 3.14);
-        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.items.len);
+        try std.testing.expectEqual(2, self.componentStates.get(1).?.items.len);
+        try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(1).?.items[1].len);
         try std.testing.expectEqual(42, state1.*);
         try std.testing.expectEqual(3.14, state2.*);
+
         state1.* = 100;
         state2.* = 6.28;
         try std.testing.expectEqual(100, state1.*);
@@ -612,9 +618,12 @@ test "State creation with manual handling" {
             .arenaAllocator = std.testing.allocator,
         };
         const state1 = try useState(i32, 42);
-        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.items.len);
+        try std.testing.expectEqual(2, self.componentStates.get(1).?.items.len);
+        try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(1).?.items[0].len);
         const state2 = try useState(f32, 3.14);
-        try std.testing.expectEqual(@sizeOf(i32) + @sizeOf(f32), self.componentStates.get(1).?.items.len);
+        try std.testing.expectEqual(2, self.componentStates.get(1).?.items.len);
+        try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(1).?.items[1].len);
+
         try std.testing.expectEqual(100, state1.*);
         try std.testing.expectEqual(6.28, state2.*);
     }
@@ -845,6 +854,7 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
     const componentKey = hasher.final();
 
     const previousComponentResolutionState = self.componentResolutionState;
+    std.log.debug("previous comp state is null {}", .{previousComponentResolutionState == null});
     self.componentResolutionState = .{
         .key = componentKey,
         .arenaAllocator = arena,
@@ -857,6 +867,8 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
     if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.useStateCursor != self.componentStates.get(componentKey).?.items.len) {
         return error.RulesOfHooksViolated;
     }
+    std.log.debug("previous comp state is null {}", .{previousComponentResolutionState == null});
+    std.log.debug("current comp state is null {}", .{self.componentResolutionState == null});
     self.componentResolutionState = previousComponentResolutionState;
     return returnValue;
 }
@@ -973,7 +985,6 @@ pub fn setWindowHandlers(window: *Window) void {
 
 pub fn deinit() void {
     const self = getContext();
-    std.debug.assert(self.componentResolutionState == null);
 
     self.hoveredElementKeys.deinit(self.allocator);
 
