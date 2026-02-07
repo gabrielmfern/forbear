@@ -416,18 +416,20 @@ pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) !f32 {
 
     if (value != valueToTransitionTo.*) {
         valueToTransitionTo.* = value;
+        if (animation.progress()) |progress| {
+            valueToTransitionFrom.* = valueToTransitionFrom.* + (valueToTransitionTo.* - valueToTransitionFrom.*) * easing(progress);
+        }
         animation.start();
     }
 
     if (valueToTransitionTo.* != valueToTransitionFrom.*) {
         if (animation.progress()) |progress| {
-            if (progress == 1.0) {
+            if (progress >= 1.0) {
                 valueToTransitionFrom.* = valueToTransitionTo.*;
                 animation.reset();
                 return valueToTransitionTo.*;
             }
-            valueToTransitionFrom.* = valueToTransitionFrom.* + (valueToTransitionTo.* - valueToTransitionFrom.*) * easing(progress);
-            return valueToTransitionFrom.*;
+            return valueToTransitionFrom.* + (valueToTransitionTo.* - valueToTransitionFrom.*) * easing(progress);
         }
     }
 
