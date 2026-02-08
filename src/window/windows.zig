@@ -11,16 +11,29 @@ className: [:0]const u16,
 running: bool,
 dpi: [2]u32,
 
+keysDown: struct {
+    shift: bool,
+},
+
 handlers: Handlers,
 
 allocator: std.mem.Allocator,
 
 const Self = @This();
 
+pub const ScrollAxis = enum {
+    vertical,
+    horizontal,
+};
+
 pub const Handlers = struct {
     pointerMotion: ?struct {
         data: *anyopaque,
         function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
+    } = null,
+    scroll: ?struct {
+        data: *anyopaque,
+        function: *const fn (window: *Self, axis: ScrollAxis, offset: f32, data: *anyopaque) void,
     } = null,
     resize: ?struct {
         data: *anyopaque,
@@ -51,6 +64,10 @@ pub fn init(
     window.className = try std.unicode.utf8ToUtf16LeAllocZ(allocator, app_id);
     errdefer allocator.free(window.className);
     window.running = true;
+
+    window.keysDown = .{
+        .shift = false,
+    };
 
     window.allocator = allocator;
 
@@ -129,7 +146,6 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
         win32.WM_WINDOWPOSCHANGED => {
             if (window) |self| {
                 const windowpos: *win32.WINDOWPOS = @ptrFromInt(@as(usize, @intCast(lParam)));
-                std.log.debug("windowpos.flags & win32.SWP_NOSIZE {}", .{windowpos.flags & win32.SWP_NOSIZE});
                 if ((windowpos.flags & win32.SWP_NOSIZE) == 0) {
                     var rect: win32.RECT = undefined;
                     if (win32.GetClientRect(hwnd, &rect) != 0) {
@@ -157,19 +173,36 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                 }
             }
         },
-        // win32.WM_SIZE => {
-        //     if (window) |self| {
-        //         const newWidth: u16 = @truncate(@as(u32, @intCast(lParam)));
-        //         const newHeight: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
-        //         if (self.width != @as(u32, @intCast(newWidth)) or self.height != @as(u32, @intCast(newHeight))) {
-        //             self.width = @intCast(newWidth);
-        //             self.height = @intCast(newHeight);
-        //             if (self.handlers.resize) |handler| {
-        //                 handler.function(self, self.width, self.height, self.dpi, handler.data);
-        //             }
-        //         }
-        //     }
-        // },
+        win32.WM_MOUSEWHEEL => {
+            if (window) |self| {
+                // this value is positive when going up and negative going down
+                // see https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mousewheel
+                const offset: i16 = @bitCast(@as(u16, @truncate(wParam >> 16)));
+                if (self.handlers.scroll) |handler| {
+                    handler.function(self, .vertical, @floatFromInt(-1 * offset), handler.data);
+                }
+            }
+        },
+        win32.WM_KEYDOWN => {
+            if (window) |self| {
+                switch (wParam) {
+                    win32.VK_SHIFT => {
+                        self.keysDown.shift = true;
+                    },
+                    else => {}
+                }
+            }
+        },
+        win32.WM_KEYUP => {
+            if (window) |self| {
+                switch (wParam) {
+                    win32.VK_SHIFT => {
+                        self.keysDown.shift = false;
+                    },
+                    else => {}
+                }
+            }
+        },
         win32.WM_DPICHANGED => {
             if (window) |self| {
                 const dpi: u16 = @truncate(@as(u32, @intCast(lParam)));
@@ -228,6 +261,10 @@ pub fn targetFrameTimeNs(self: *const @This()) u64 {
     }
 
     return @divTrunc(1_000_000_000, @as(u64, refreshRate));
+}
+
+pub fn isHoldingShift(self: *const Self) bool {
+    return self.keysDown.shift;
 }
 
 pub fn handleEvents(self: *@This()) !void {

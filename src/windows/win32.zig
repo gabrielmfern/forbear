@@ -166,6 +166,9 @@ pub const WM_MBUTTONUP: UINT = 0x0208;
 pub const WM_MBUTTONDBLCLK: UINT = 0x0209;
 pub const WM_MOUSEWHEEL: UINT = 0x020A;
 
+// Virtual Keycodes https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+pub const VK_SHIFT: usize = 0x10;
+
 // CW_USEDEFAULT
 pub const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
 
