@@ -30,7 +30,7 @@ missing things for the entire uhoh.com website:
 - [x] vulkan error with multi sampling being disabled for text
 - [x] page scrolling
 - [ ] fps has been destroyed, lower than 165 for a non changing layout
-    - we should start caching the layouts from the nodes
+    - we could start caching the layouts from the nodes
 - [ ] gradients
 - [ ] can't make an element fully transparent?
 - [ ] blend multiply
