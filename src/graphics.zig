@@ -3556,15 +3556,22 @@ pub const Renderer = struct {
         try self.recreateSwapchain(capabilities.currentExtent.width, capabilities.currentExtent.height);
     }
 
-    pub fn flattenTreeInto(
+    /// Flattens the entire layout tree, and also filters out the layouts outside of the viewport
+    fn prepareLayoutTree(
+        self: *const Self,
         allocator: std.mem.Allocator,
         list: *std.ArrayList(*const LayoutBox),
         layoutBox: *const LayoutBox,
     ) !void {
+        const viewport = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
+        const insideView = layoutBox.position[0] + layoutBox.size[0] > 0.0 and layoutBox.position[1] + layoutBox.size[1] > 0.0 and viewport[0] > layoutBox.position[0] and viewport[1] > layoutBox.position[1];
+        if (!insideView) {
+            return;
+        }
         try list.append(allocator, layoutBox);
         if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
             for (layoutBox.children.?.layoutBoxes) |*child| {
-                try flattenTreeInto(allocator, list, child);
+                try self.prepareLayoutTree(allocator, list, child);
             }
         }
     }
@@ -3674,11 +3681,11 @@ pub const Renderer = struct {
             1.0,
         );
 
-        var flatLayoutTree = std.ArrayList(*const LayoutBox).empty;
+        var layoutTreeToRender = std.ArrayList(*const LayoutBox).empty;
         for (layoutBoxes) |*layoutBox| {
-            try flattenTreeInto(arena, &flatLayoutTree, layoutBox);
+            try self.prepareLayoutTree(arena, &layoutTreeToRender, layoutBox);
         }
-        std.mem.sort(*const LayoutBox, flatLayoutTree.items, {}, (struct {
+        std.mem.sort(*const LayoutBox, layoutTreeToRender.items, {}, (struct {
             fn lessThan(_: void, lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
                 return lhs.z < rhs.z;
             }
@@ -3686,7 +3693,7 @@ pub const Renderer = struct {
 
         const shadowIntervals = try self.shadowsPipeline.prepareForDraw(
             arena,
-            flatLayoutTree.items,
+            layoutTreeToRender.items,
             projectionMatrix,
             self.framesRenderedInSwapchain % maxFramesInFlight,
             self.logicalDevice,
@@ -3694,7 +3701,7 @@ pub const Renderer = struct {
         );
         const elementIntervals = try self.elementsPipeline.prepareForDraw(
             arena,
-            flatLayoutTree.items,
+            layoutTreeToRender.items,
             self.framesRenderedInSwapchain % maxFramesInFlight,
             projectionMatrix,
             self.logicalDevice,
@@ -3702,7 +3709,7 @@ pub const Renderer = struct {
         );
         const textIntervals = try self.textPipeline.prepareForDraw(
             arena,
-            flatLayoutTree.items,
+            layoutTreeToRender.items,
             projectionMatrix,
             dpi,
             self.framesRenderedInSwapchain % maxFramesInFlight,
