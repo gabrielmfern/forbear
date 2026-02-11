@@ -2844,6 +2844,10 @@ pub const Renderer = struct {
                     }
                 }
                 if (supported == false) {
+                    std.log.info("Skipping device '{s}': missing required extension '{s}'", .{
+                        std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
+                        extensionSlice,
+                    });
                     continue :blk;
                 }
             }
@@ -2912,6 +2916,11 @@ pub const Renderer = struct {
             }
 
             if (graphicsQueueFamilyIndex == null or presentationQueueFamilyIndex == null) {
+                std.log.info("Skipping device '{s}': missing required queue family (graphics={}, presentation={})", .{
+                    std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
+                    graphicsQueueFamilyIndex != null,
+                    presentationQueueFamilyIndex != null,
+                });
                 continue;
             }
 
