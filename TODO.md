@@ -29,7 +29,7 @@ missing things for the entire uhoh.com website:
 - [x] forbear.text requires comptime fmt, so users can't plug in dynamic text
 - [x] vulkan error with multi sampling being disabled for text
 - [x] page scrolling
-- [ ] fps has been destroyed, lower than 165 for a non changing layout
+- [x] fps has been destroyed, lower than 165 for a non changing layout
     - we could start caching the layouts from the nodes
 - [ ] gradients
 - [ ] can't make an element fully transparent?
