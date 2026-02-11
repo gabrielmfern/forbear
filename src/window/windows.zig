@@ -189,7 +189,7 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                     win32.VK_SHIFT => {
                         self.keysDown.shift = true;
                     },
-                    else => {}
+                    else => {},
                 }
             }
         },
@@ -199,7 +199,7 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                     win32.VK_SHIFT => {
                         self.keysDown.shift = false;
                     },
-                    else => {}
+                    else => {},
                 }
             }
         },
