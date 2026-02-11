@@ -2127,7 +2127,8 @@ const TextPipeline = struct {
     descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
 
     fontTextureAtlas: FontTextureAtlas,
-    glyphRenderingDataCache: std.AutoHashMap(GlyphRenderingKey, GlyphRenderingData),
+    allocator: std.mem.Allocator,
+    glyphPageCache: std.AutoHashMap(GlyphPageKey, GlyphPage),
     sampler: c.VkSampler,
 
     shaderBuffers: [maxFramesInFlight]Buffer,
@@ -2141,13 +2142,14 @@ const TextPipeline = struct {
         bitmapTop: i32,
     };
 
-    const GlyphRenderingKey = struct {
+    const GlyphPageKey = struct {
         fontSize: u32,
         fontWeight: u32,
-        glyphIndex: u32,
         fontKey: u64,
         dpi: [2]u32,
     };
+
+    const GlyphPage = Font.LRU(c_uint, GlyphRenderingData, 256, std.hash_map.AutoContext(c_uint));
 
     const GlypRenderingShaderData = extern struct {
         modelViewProjectionMatrix: zmath.Mat,
@@ -2506,7 +2508,8 @@ const TextPipeline = struct {
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
 
-            .glyphRenderingDataCache = std.AutoHashMap(GlyphRenderingKey, GlyphRenderingData).init(allocator),
+            .allocator = allocator,
+            .glyphPageCache = std.AutoHashMap(GlyphPageKey, GlyphPage).init(allocator),
             .fontTextureAtlas = fontTextureAtlas,
             .sampler = sampler,
         };
@@ -2625,7 +2628,11 @@ const TextPipeline = struct {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
         self.fontTextureAtlas.deinit(allocator, logicalDevice);
         c.vkDestroySampler(logicalDevice, self.sampler, null);
-        self.glyphRenderingDataCache.deinit();
+        var pageIterator = self.glyphPageCache.valueIterator();
+        while (pageIterator.next()) |page| {
+            page.deinit();
+        }
+        self.glyphPageCache.deinit();
 
         for (self.shaderBuffers) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
@@ -3557,18 +3564,25 @@ pub const Renderer = struct {
                 const fontSizeF: f32 = @floatFromInt(layoutBox.style.fontSize);
                 const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSizeF * resolutionMultiplier[0];
 
+                // Outer lookup: once per layout box (per font/size/weight/dpi combo)
+                const glyphPageKey = TextPipeline.GlyphPageKey{
+                    .dpi = dpi,
+                    .fontKey = layoutBox.style.font.key,
+                    .fontSize = layoutBox.style.fontSize,
+                    .fontWeight = layoutBox.style.fontWeight,
+                };
+                const glyphPageGetResult = try self.textPipeline.glyphPageCache.getOrPut(glyphPageKey);
+                if (!glyphPageGetResult.found_existing) {
+                    glyphPageGetResult.value_ptr.* = try TextPipeline.GlyphPage.init(self.textPipeline.allocator);
+                }
+                const glyphPage = glyphPageGetResult.value_ptr;
+
                 for (glyphs) |glyph| {
+                    // Inner lookup: LRU per glyph index (no hashing of the full key)
                     const glyphRenderingData = blk: {
-                        const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
-                            .dpi = dpi,
-                            .fontKey = layoutBox.style.font.key,
-                            .fontSize = layoutBox.style.fontSize,
-                            .fontWeight = layoutBox.style.fontWeight,
-                            .glyphIndex = glyph.index,
-                        };
                         // TODO: render glyphs in the GPU using the font texture atlas as frame buffer
-                        if (self.textPipeline.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
-                            break :blk data;
+                        if (glyphPage.get(glyph.index)) |entry| {
+                            break :blk entry.value;
                         } else {
                             try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, arena);
                             const rasterizedGlyph = try layoutBox.style.font.rasterize(
@@ -3591,7 +3605,7 @@ pub const Renderer = struct {
                                 .bitmapHeight = @intCast(rasterizedGlyph.height),
                                 .textureCoordinates = textureCoordinates,
                             };
-                            try self.textPipeline.glyphRenderingDataCache.put(glyphRenderingKey, data);
+                            _ = glyphPage.put(glyph.index, data);
                             break :blk data;
                         }
                     };
