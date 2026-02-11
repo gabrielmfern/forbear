@@ -3642,7 +3642,7 @@ pub const Renderer = struct {
             }
         }
 
-        if (std.time.milliTimestamp() - start > 1000) {
+        if (std.time.microTimestamp() - start > 1000) {
             std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, std.time.microTimestamp() - start });
         }
 
