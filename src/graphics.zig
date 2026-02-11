@@ -2847,6 +2847,41 @@ pub const Renderer = struct {
                     continue :blk;
                 }
             }
+
+            var vulkan12Features = c.VkPhysicalDeviceVulkan12Features{
+                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+            };
+            var deviceFeatures2 = c.VkPhysicalDeviceFeatures2{
+                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                .pNext = &vulkan12Features,
+            };
+            c.vkGetPhysicalDeviceFeatures2(device.physicalDevice, &deviceFeatures2);
+
+            if (vulkan12Features.bufferDeviceAddress != c.VK_TRUE or
+                vulkan12Features.shaderInt8 != c.VK_TRUE or
+                vulkan12Features.descriptorIndexing != c.VK_TRUE or
+                vulkan12Features.shaderSampledImageArrayNonUniformIndexing != c.VK_TRUE or
+                vulkan12Features.descriptorBindingPartiallyBound != c.VK_TRUE or
+                vulkan12Features.descriptorBindingSampledImageUpdateAfterBind != c.VK_TRUE or
+                vulkan12Features.descriptorBindingUpdateUnusedWhilePending != c.VK_TRUE or
+                vulkan12Features.runtimeDescriptorArray != c.VK_TRUE)
+            {
+                std.log.info("Skipping device '{s}': missing required Vulkan 1.2 descriptor indexing features", .{
+                    std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
+                });
+                continue :blk;
+            }
+
+            if (deviceFeatures2.features.shaderInt16 != c.VK_TRUE or
+                deviceFeatures2.features.shaderInt64 != c.VK_TRUE or
+                deviceFeatures2.features.dualSrcBlend != c.VK_TRUE)
+            {
+                std.log.info("Skipping device '{s}': missing required base features (shaderInt16, shaderInt64, or dualSrcBlend)", .{
+                    std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
+                });
+                continue :blk;
+            }
+
             var score: u32 = device.deviceProperties.limits.maxImageDimension2D;
             if (device.deviceProperties.deviceType == c.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
                 score += 1000;
@@ -2957,7 +2992,6 @@ pub const Renderer = struct {
                 .pEnabledFeatures = &c.VkPhysicalDeviceFeatures{
                     .shaderInt16 = c.VK_TRUE,
                     .shaderInt64 = c.VK_TRUE,
-                    // Enable dual-source blending for subpixel text rendering
                     .dualSrcBlend = c.VK_TRUE,
                 },
                 .ppEnabledExtensionNames = requiredDeviceExtensions.ptr,
