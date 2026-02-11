@@ -1727,12 +1727,26 @@ const ElementsPipeline = struct {
             },
         };
 
+        const bindingFlags = [_]c.VkDescriptorBindingFlags{
+            0,
+            c.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+                c.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+                c.VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
+        };
+
+        const bindingFlagsCreateInfo = c.VkDescriptorSetLayoutBindingFlagsCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+            .pNext = null,
+            .bindingCount = bindings.len,
+            .pBindingFlags = &bindingFlags,
+        };
+
         var shaderBufferDescriptorSetLayout: c.VkDescriptorSetLayout = undefined;
         try ensureNoError(c.vkCreateDescriptorSetLayout(
             logicalDevice,
             &c.VkDescriptorSetLayoutCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = null,
+                .pNext = &bindingFlagsCreateInfo,
                 .flags = c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
                 .bindingCount = bindings.len,
                 .pBindings = &bindings,
@@ -1974,7 +1988,7 @@ const ElementsPipeline = struct {
 
         try self.registeredImages.append(self.allocator, image);
 
-        for (0..maxFramesInFlight) |i| {
+        for (0..maxFramesInFlight) |frameIndex| {
             const imageInfo = c.VkDescriptorImageInfo{
                 .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .imageView = image.imageView,
@@ -1984,7 +1998,7 @@ const ElementsPipeline = struct {
             const descriptorWrite = c.VkWriteDescriptorSet{
                 .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = null,
-                .dstSet = self.descriptorSets[i],
+                .dstSet = self.descriptorSets[frameIndex],
                 .dstBinding = 1,
                 .dstArrayElement = @intCast(index),
                 .descriptorCount = 1,
@@ -2918,6 +2932,8 @@ pub const Renderer = struct {
                     .descriptorIndexing = c.VK_TRUE,
                     .shaderSampledImageArrayNonUniformIndexing = c.VK_TRUE,
                     .descriptorBindingPartiallyBound = c.VK_TRUE,
+                    .descriptorBindingSampledImageUpdateAfterBind = c.VK_TRUE,
+                    .descriptorBindingUpdateUnusedWhilePending = c.VK_TRUE,
                     .runtimeDescriptorArray = c.VK_TRUE,
                 },
                 .flags = 0,
@@ -3323,14 +3339,6 @@ pub const Renderer = struct {
 
         try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0));
 
-        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
-            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .pNext = null,
-            .flags = 0,
-            .pInheritanceInfo = null,
-        }));
-        self.executingFrame = true;
-
         var start = std.time.milliTimestamp();
         var imageIndex: u32 = undefined;
         ensureNoError(c.vkAcquireNextImageKHR(
@@ -3358,6 +3366,273 @@ pub const Renderer = struct {
 
         const framebuffers = self.swapchainFramebuffers;
         const framebufferIndex: usize = @intCast(imageIndex);
+
+        const projectionMatrix = zmath.orthographicOffCenterRh(
+            0.0,
+            @floatFromInt(self.swapchain.extent.width),
+            @floatFromInt(self.swapchain.extent.height),
+            0.0,
+            -1.0,
+            1.0,
+        );
+
+        var layoutTreeToRender = std.ArrayList(*const LayoutBox).empty;
+        for (layoutBoxes) |*layoutBox| {
+            try self.prepareLayoutTree(arena, &layoutTreeToRender, layoutBox);
+        }
+        std.mem.sort(*const LayoutBox, layoutTreeToRender.items, {}, (struct {
+            fn lessThan(_: void, lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
+                return lhs.z < rhs.z;
+            }
+        }).lessThan);
+
+        const orderedLayoutBoxes = layoutTreeToRender.items;
+        const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
+
+        start = std.time.microTimestamp();
+        // --- Resize pass: single iteration to count shadows, elements,
+        // glyphs and then allocate enough memory on the shader buffers ---
+        var totalShadowCount: usize = 0;
+        var totalGlyphCount: usize = 0;
+        const totalElementCount: usize = orderedLayoutBoxes.len;
+        for (orderedLayoutBoxes) |layoutBox| {
+            if (layoutBox.style.shadow != null) {
+                totalShadowCount += 1;
+            }
+            if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
+                totalGlyphCount += layoutBox.children.?.glyphs.slice.len;
+            }
+        }
+
+        {
+            if (totalShadowCount > self.shadowsPipeline.shadowShaderData[0].len or totalElementCount > self.elementsPipeline.elementsShaderData[0].len or totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
+                try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
+            }
+            if (totalShadowCount > self.shadowsPipeline.shadowShaderData[0].len) {
+                try self.shadowsPipeline.resizeConcurrentShadowCapacity(
+                    self.logicalDevice,
+                    self.physicalDevice,
+                    try std.math.ceilPowerOfTwo(usize, totalShadowCount),
+                );
+            }
+            if (totalElementCount > self.elementsPipeline.elementsShaderData[0].len) {
+                try self.elementsPipeline.resizeConcurrentElementCapacity(
+                    self.logicalDevice,
+                    self.physicalDevice,
+                    try std.math.ceilPowerOfTwo(usize, totalElementCount),
+                );
+            }
+            if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
+                try self.textPipeline.resizeGlyphsCapacity(
+                    self.logicalDevice,
+                    self.physicalDevice,
+                    try std.math.ceilPowerOfTwo(usize, totalGlyphCount),
+                );
+            }
+        }
+
+        const maxZ = if (orderedLayoutBoxes.len > 0)
+            orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z
+        else
+            0;
+        var shadowIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        var elementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        var textIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        for (shadowIntervals) |*interval| interval.* = null;
+        for (elementIntervals) |*interval| interval.* = null;
+        for (textIntervals) |*interval| interval.* = null;
+
+        const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
+        const atlasHeightInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height));
+        const resolutionMultiplier = Vec2{
+            @as(f32, @floatFromInt(dpi[0])) / 72.0,
+            @as(f32, @floatFromInt(dpi[1])) / 72.0,
+        };
+
+        var shadowIndex: usize = 0;
+        var glyphIndex: usize = 0;
+
+        for (orderedLayoutBoxes, 0..) |layoutBox, elementIndex| {
+            if (elementIntervals[layoutBox.z - 1]) |*interval| {
+                std.debug.assert(interval.end + 1 == elementIndex);
+                interval.end = elementIndex;
+            } else {
+                elementIntervals[layoutBox.z - 1] = LayerInterval{
+                    .start = elementIndex,
+                    .end = elementIndex,
+                };
+            }
+
+            const textureIndex: i32 = switch (layoutBox.style.background) {
+                .color => -1,
+                .image => |imgPtr| @intCast(try self.elementsPipeline.registerImage(imgPtr, self.logicalDevice)),
+            };
+            self.elementsPipeline.elementsShaderData[frameIndex][elementIndex] = ElementRenderingData{
+                .modelViewProjectionMatrix = zmath.mul(
+                    zmath.mul(
+                        zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
+                        zmath.translation(layoutBox.position[0], layoutBox.position[1], 0.0),
+                    ),
+                    projectionMatrix,
+                ),
+                .backgroundColor = switch (layoutBox.style.background) {
+                    .color => |color| srgbToLinearColor(color),
+                    .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
+                },
+                .size = layoutBox.size,
+                .borderRadius = layoutBox.style.borderRadius,
+                .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
+                .borderSize = .{
+                    layoutBox.style.borderBlockWidth[0],
+                    layoutBox.style.borderBlockWidth[1],
+                    layoutBox.style.borderInlineWidth[0],
+                    layoutBox.style.borderInlineWidth[1],
+                },
+                .imageIndex = textureIndex,
+            };
+
+            if (layoutBox.style.shadow) |shadow| {
+                if (shadowIntervals[layoutBox.z - 1]) |*interval| {
+                    std.debug.assert(interval.end + 1 == shadowIndex);
+                    interval.end = shadowIndex;
+                } else {
+                    shadowIntervals[layoutBox.z - 1] = LayerInterval{
+                        .start = shadowIndex,
+                        .end = shadowIndex,
+                    };
+                }
+                const padding = Vec2{
+                    shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
+                    shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                };
+                const position = Vec2{
+                    layoutBox.position[0] - padding[0] - shadow.offsetInline[0] + shadow.offsetInline[1],
+                    layoutBox.position[1] - padding[1] - shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                };
+                const size = layoutBox.size + padding * Vec2{ 2, 2 };
+                self.shadowsPipeline.shadowShaderData[frameIndex][shadowIndex] = ShadowRenderingData{
+                    .modelViewProjectionMatrix = zmath.mul(
+                        zmath.mul(
+                            zmath.scaling(size[0], size[1], 1.0),
+                            zmath.translation(position[0], position[1], 0.0),
+                        ),
+                        projectionMatrix,
+                    ),
+                    .color = srgbToLinearColor(shadow.color),
+                    .blur = shadow.blurRadius,
+                    .spread = shadow.spread,
+                    .elementSize = layoutBox.size,
+                    .size = size,
+                    .borderRadius = layoutBox.style.borderRadius,
+                };
+                shadowIndex += 1;
+            }
+
+            if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
+                const glyphs = layoutBox.children.?.glyphs.slice;
+                const glyphCount = glyphs.len;
+
+                if (glyphCount > 0) {
+                    const startIdx = glyphIndex;
+                    const endIdx = glyphIndex + glyphCount - 1;
+                    if (textIntervals[layoutBox.z - 1]) |*interval| {
+                        std.debug.assert(interval.end + 1 == startIdx);
+                        interval.end = endIdx;
+                    } else {
+                        textIntervals[layoutBox.z - 1] = LayerInterval{
+                            .start = startIdx,
+                            .end = endIdx,
+                        };
+                    }
+                }
+
+                const linearColor = srgbToLinearColor(layoutBox.style.color);
+                const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
+                const fontSizeF: f32 = @floatFromInt(layoutBox.style.fontSize);
+                const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSizeF * resolutionMultiplier[0];
+
+                for (glyphs) |glyph| {
+                    const glyphRenderingData = blk: {
+                        const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
+                            .dpi = dpi,
+                            .fontKey = layoutBox.style.font.key,
+                            .fontSize = layoutBox.style.fontSize,
+                            .fontWeight = layoutBox.style.fontWeight,
+                            .glyphIndex = glyph.index,
+                        };
+                        // TODO: render glyphs in the GPU using the font texture atlas as frame buffer
+                        if (self.textPipeline.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
+                            break :blk data;
+                        } else {
+                            try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, arena);
+                            const rasterizedGlyph = try layoutBox.style.font.rasterize(
+                                glyph.index,
+                                dpi,
+                                @intCast(layoutBox.style.fontSize),
+                            );
+
+                            const textureCoordinates = try self.textPipeline.fontTextureAtlas.upload(
+                                rasterizedGlyph.bitmap,
+                                @intCast(rasterizedGlyph.width),
+                                @intCast(rasterizedGlyph.height),
+                                @intCast(@abs(rasterizedGlyph.pitch)),
+                            );
+                            const pixelWidth = rasterizedGlyph.width / 3;
+                            const data = TextPipeline.GlyphRenderingData{
+                                .bitmapTop = @intCast(rasterizedGlyph.top),
+                                .bitmapLeft = @intCast(rasterizedGlyph.left),
+                                .bitmapWidth = @intCast(pixelWidth),
+                                .bitmapHeight = @intCast(rasterizedGlyph.height),
+                                .textureCoordinates = textureCoordinates,
+                            };
+                            try self.textPipeline.glyphRenderingDataCache.put(glyphRenderingKey, data);
+                            break :blk data;
+                        }
+                    };
+
+                    const left: f32 = @floatFromInt(glyphRenderingData.bitmapLeft);
+                    const top: f32 = @floatFromInt(glyphRenderingData.bitmapTop);
+                    const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
+                    const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
+
+                    self.textPipeline.shaderBuffersMapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
+                        .modelViewProjectionMatrix = zmath.mul(
+                            zmath.mul(
+                                zmath.scaling(width, height, 1.0),
+                                zmath.translation(
+                                    glyph.position[0] + left,
+                                    glyph.position[1] + pixelAscent - top,
+                                    0.0,
+                                ),
+                            ),
+                            projectionMatrix,
+                        ),
+                        .color = linearColor,
+                        .uvOffset = .{
+                            glyphRenderingData.textureCoordinates.u * atlasWidthInv,
+                            glyphRenderingData.textureCoordinates.v * atlasHeightInv,
+                        },
+                        .uvSize = .{
+                            glyphRenderingData.textureCoordinates.w * atlasWidthInv,
+                            glyphRenderingData.textureCoordinates.h * atlasHeightInv,
+                        },
+                    };
+                    glyphIndex += 1;
+                }
+            }
+        }
+
+        if (std.time.milliTimestamp() - start > 1000) {
+            std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, std.time.microTimestamp() - start });
+        }
+
+        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = null,
+            .flags = 0,
+            .pInheritanceInfo = null,
+        }));
+        self.executingFrame = true;
 
         const clearValues = [_]c.VkClearValue{
             c.VkClearValue{
@@ -3398,288 +3673,30 @@ pub const Renderer = struct {
             .extent = self.swapchain.extent,
         }});
 
-        const projectionMatrix = zmath.orthographicOffCenterRh(
-            0.0,
-            @floatFromInt(self.swapchain.extent.width),
-            @floatFromInt(self.swapchain.extent.height),
-            0.0,
-            -1.0,
-            1.0,
-        );
-
-        var layoutTreeToRender = std.ArrayList(*const LayoutBox).empty;
-        for (layoutBoxes) |*layoutBox| {
-            try self.prepareLayoutTree(arena, &layoutTreeToRender, layoutBox);
-        }
-        std.mem.sort(*const LayoutBox, layoutTreeToRender.items, {}, (struct {
-            fn lessThan(_: void, lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
-                return lhs.z < rhs.z;
+        for (0..elementIntervals.len) |i| {
+            if (shadowIntervals[i]) |shadowInterval| {
+                self.shadowsPipeline.draw(
+                    shadowInterval,
+                    frameIndex,
+                    self.commandBuffers[frameIndex],
+                    &self.rectangleModel,
+                );
             }
-        }).lessThan);
-
-        const orderedLayoutBoxes = layoutTreeToRender.items;
-        const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
-
-        if (orderedLayoutBoxes.len > 0) {
-            start = std.time.microTimestamp();
-            // --- Resize pass: single iteration to count shadows, elements,
-            // glyphs and then allocate enough memory on the shader buffers ---
-            var totalShadowCount: usize = 0;
-            var totalGlyphCount: usize = 0;
-            const totalElementCount: usize = orderedLayoutBoxes.len;
-            for (orderedLayoutBoxes) |layoutBox| {
-                if (layoutBox.style.shadow != null) {
-                    totalShadowCount += 1;
-                }
-                if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
-                    totalGlyphCount += layoutBox.children.?.glyphs.slice.len;
-                }
+            if (elementIntervals[i]) |elementInterval| {
+                self.elementsPipeline.draw(
+                    elementInterval,
+                    frameIndex,
+                    self.commandBuffers[frameIndex],
+                    &self.rectangleModel,
+                );
             }
-
-            {
-                if (totalShadowCount > self.shadowsPipeline.shadowShaderData[0].len or totalElementCount > self.elementsPipeline.elementsShaderData[0].len or totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
-                    try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
-                }
-                if (totalShadowCount > self.shadowsPipeline.shadowShaderData[0].len) {
-                    try self.shadowsPipeline.resizeConcurrentShadowCapacity(
-                        self.logicalDevice,
-                        self.physicalDevice,
-                        try std.math.ceilPowerOfTwo(usize, totalShadowCount),
-                    );
-                }
-                if (totalElementCount > self.elementsPipeline.elementsShaderData[0].len) {
-                    try self.elementsPipeline.resizeConcurrentElementCapacity(
-                        self.logicalDevice,
-                        self.physicalDevice,
-                        try std.math.ceilPowerOfTwo(usize, totalElementCount),
-                    );
-                }
-                if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[0].len) {
-                    try self.textPipeline.resizeGlyphsCapacity(
-                        self.logicalDevice,
-                        self.physicalDevice,
-                        try std.math.ceilPowerOfTwo(usize, totalGlyphCount),
-                    );
-                }
-            }
-
-            const maxZ = orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z;
-            var shadowIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-            var elementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-            var textIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-            for (shadowIntervals) |*interval| interval.* = null;
-            for (elementIntervals) |*interval| interval.* = null;
-            for (textIntervals) |*interval| interval.* = null;
-
-            const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
-            const atlasHeightInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height));
-            const resolutionMultiplier = Vec2{
-                @as(f32, @floatFromInt(dpi[0])) / 72.0,
-                @as(f32, @floatFromInt(dpi[1])) / 72.0,
-            };
-
-            var shadowIndex: usize = 0;
-            var glyphIndex: usize = 0;
-
-            for (orderedLayoutBoxes, 0..) |layoutBox, elementIndex| {
-                if (elementIntervals[layoutBox.z - 1]) |*interval| {
-                    std.debug.assert(interval.end + 1 == elementIndex);
-                    interval.end = elementIndex;
-                } else {
-                    elementIntervals[layoutBox.z - 1] = LayerInterval{
-                        .start = elementIndex,
-                        .end = elementIndex,
-                    };
-                }
-
-                const textureIndex: i32 = switch (layoutBox.style.background) {
-                    .color => -1,
-                    .image => |imgPtr| @intCast(try self.elementsPipeline.registerImage(imgPtr, self.logicalDevice)),
-                };
-                self.elementsPipeline.elementsShaderData[frameIndex][elementIndex] = ElementRenderingData{
-                    .modelViewProjectionMatrix = zmath.mul(
-                        zmath.mul(
-                            zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
-                            zmath.translation(layoutBox.position[0], layoutBox.position[1], 0.0),
-                        ),
-                        projectionMatrix,
-                    ),
-                    .backgroundColor = switch (layoutBox.style.background) {
-                        .color => |color| srgbToLinearColor(color),
-                        .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
-                    },
-                    .size = layoutBox.size,
-                    .borderRadius = layoutBox.style.borderRadius,
-                    .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
-                    .borderSize = .{
-                        layoutBox.style.borderBlockWidth[0],
-                        layoutBox.style.borderBlockWidth[1],
-                        layoutBox.style.borderInlineWidth[0],
-                        layoutBox.style.borderInlineWidth[1],
-                    },
-                    .imageIndex = textureIndex,
-                };
-
-                if (layoutBox.style.shadow) |shadow| {
-                    if (shadowIntervals[layoutBox.z - 1]) |*interval| {
-                        std.debug.assert(interval.end + 1 == shadowIndex);
-                        interval.end = shadowIndex;
-                    } else {
-                        shadowIntervals[layoutBox.z - 1] = LayerInterval{
-                            .start = shadowIndex,
-                            .end = shadowIndex,
-                        };
-                    }
-                    const padding = Vec2{
-                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
-                        shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
-                    };
-                    const position = Vec2{
-                        layoutBox.position[0] - padding[0] - shadow.offsetInline[0] + shadow.offsetInline[1],
-                        layoutBox.position[1] - padding[1] - shadow.offsetBlock[0] + shadow.offsetBlock[1],
-                    };
-                    const size = layoutBox.size + padding * Vec2{ 2, 2 };
-                    self.shadowsPipeline.shadowShaderData[frameIndex][shadowIndex] = ShadowRenderingData{
-                        .modelViewProjectionMatrix = zmath.mul(
-                            zmath.mul(
-                                zmath.scaling(size[0], size[1], 1.0),
-                                zmath.translation(position[0], position[1], 0.0),
-                            ),
-                            projectionMatrix,
-                        ),
-                        .color = srgbToLinearColor(shadow.color),
-                        .blur = shadow.blurRadius,
-                        .spread = shadow.spread,
-                        .elementSize = layoutBox.size,
-                        .size = size,
-                        .borderRadius = layoutBox.style.borderRadius,
-                    };
-                    shadowIndex += 1;
-                }
-
-                if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
-                    const glyphs = layoutBox.children.?.glyphs.slice;
-                    const glyphCount = glyphs.len;
-
-                    if (glyphCount > 0) {
-                        const startIdx = glyphIndex;
-                        const endIdx = glyphIndex + glyphCount - 1;
-                        if (textIntervals[layoutBox.z - 1]) |*interval| {
-                            std.debug.assert(interval.end + 1 == startIdx);
-                            interval.end = endIdx;
-                        } else {
-                            textIntervals[layoutBox.z - 1] = LayerInterval{
-                                .start = startIdx,
-                                .end = endIdx,
-                            };
-                        }
-                    }
-
-                    const linearColor = srgbToLinearColor(layoutBox.style.color);
-                    const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
-                    const fontSizeF: f32 = @floatFromInt(layoutBox.style.fontSize);
-                    const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSizeF * resolutionMultiplier[0];
-
-                    for (glyphs) |glyph| {
-                        const glyphRenderingData = blk: {
-                            const glyphRenderingKey = TextPipeline.GlyphRenderingKey{
-                                .dpi = dpi,
-                                .fontKey = layoutBox.style.font.key,
-                                .fontSize = layoutBox.style.fontSize,
-                                .fontWeight = layoutBox.style.fontWeight,
-                                .glyphIndex = glyph.index,
-                            };
-                            // TODO: render glyphs in the GPU using the font texture atlas as frame buffer
-                            if (self.textPipeline.glyphRenderingDataCache.get(glyphRenderingKey)) |data| {
-                                break :blk data;
-                            } else {
-                                try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, arena);
-                                const rasterizedGlyph = try layoutBox.style.font.rasterize(
-                                    glyph.index,
-                                    dpi,
-                                    @intCast(layoutBox.style.fontSize),
-                                );
-
-                                const textureCoordinates = try self.textPipeline.fontTextureAtlas.upload(
-                                    rasterizedGlyph.bitmap,
-                                    @intCast(rasterizedGlyph.width),
-                                    @intCast(rasterizedGlyph.height),
-                                    @intCast(@abs(rasterizedGlyph.pitch)),
-                                );
-                                const pixelWidth = rasterizedGlyph.width / 3;
-                                const data = TextPipeline.GlyphRenderingData{
-                                    .bitmapTop = @intCast(rasterizedGlyph.top),
-                                    .bitmapLeft = @intCast(rasterizedGlyph.left),
-                                    .bitmapWidth = @intCast(pixelWidth),
-                                    .bitmapHeight = @intCast(rasterizedGlyph.height),
-                                    .textureCoordinates = textureCoordinates,
-                                };
-                                try self.textPipeline.glyphRenderingDataCache.put(glyphRenderingKey, data);
-                                break :blk data;
-                            }
-                        };
-
-                        const left: f32 = @floatFromInt(glyphRenderingData.bitmapLeft);
-                        const top: f32 = @floatFromInt(glyphRenderingData.bitmapTop);
-                        const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
-                        const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
-
-                        self.textPipeline.shaderBuffersMapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
-                            .modelViewProjectionMatrix = zmath.mul(
-                                zmath.mul(
-                                    zmath.scaling(width, height, 1.0),
-                                    zmath.translation(
-                                        glyph.position[0] + left,
-                                        glyph.position[1] + pixelAscent - top,
-                                        0.0,
-                                    ),
-                                ),
-                                projectionMatrix,
-                            ),
-                            .color = linearColor,
-                            .uvOffset = .{
-                                glyphRenderingData.textureCoordinates.u * atlasWidthInv,
-                                glyphRenderingData.textureCoordinates.v * atlasHeightInv,
-                            },
-                            .uvSize = .{
-                                glyphRenderingData.textureCoordinates.w * atlasWidthInv,
-                                glyphRenderingData.textureCoordinates.h * atlasHeightInv,
-                            },
-                        };
-                        glyphIndex += 1;
-                    }
-                }
-            }
-
-            if (std.time.milliTimestamp() - start > 1000) {
-                std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, std.time.microTimestamp() - start });
-            }
-
-            for (0..elementIntervals.len) |i| {
-                if (shadowIntervals[i]) |shadowInterval| {
-                    self.shadowsPipeline.draw(
-                        shadowInterval,
-                        frameIndex,
-                        self.commandBuffers[frameIndex],
-                        &self.rectangleModel,
-                    );
-                }
-                if (elementIntervals[i]) |elementInterval| {
-                    self.elementsPipeline.draw(
-                        elementInterval,
-                        frameIndex,
-                        self.commandBuffers[frameIndex],
-                        &self.rectangleModel,
-                    );
-                }
-                if (textIntervals[i]) |glyphInterval| {
-                    self.textPipeline.draw(
-                        glyphInterval,
-                        frameIndex,
-                        self.commandBuffers[frameIndex],
-                        &self.rectangleModel,
-                    );
-                }
+            if (textIntervals[i]) |glyphInterval| {
+                self.textPipeline.draw(
+                    glyphInterval,
+                    frameIndex,
+                    self.commandBuffers[frameIndex],
+                    &self.rectangleModel,
+                );
             }
         }
 
