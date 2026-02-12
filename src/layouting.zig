@@ -44,6 +44,7 @@ pub const LayoutBox = struct {
     position: Vec2,
     z: u16,
     size: Vec2,
+    maxSize: Vec2,
     minSize: Vec2,
     children: ?Children,
 
@@ -54,6 +55,13 @@ pub const LayoutBox = struct {
             return self.minSize[0];
         }
         return self.minSize[1];
+    }
+
+    pub fn getMaxSize(self: @This(), direction: Direction) f32 {
+        if (direction == .leftToRight) {
+            return self.maxSize[0];
+        }
+        return self.maxSize[1];
     }
 
     pub fn getSize(self: @This(), direction: Direction) f32 {
@@ -101,11 +109,11 @@ fn growAndShrink(
                 remaining -= child.getSize(direction);
                 if (direction.perpendicular() == .topToBottom) {
                     if (child.style.preferredHeight == .grow or (child.size[1] > layoutBox.size[1] and child.minSize[1] < child.size[1])) {
-                        child.size[1] = @max(layoutBox.size[1], child.minSize[1]);
+                        child.size[1] = @max(@min(layoutBox.size[1], child.maxSize[1]), child.minSize[1]);
                     }
                 } else if (direction.perpendicular() == .leftToRight) {
                     if (child.style.preferredWidth == .grow or (child.size[0] > layoutBox.size[0] and child.minSize[0] < child.size[0])) {
-                        child.size[0] = @max(layoutBox.size[0], child.minSize[0]);
+                        child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
                     }
                 }
                 if (child.style.getPreferredSize(direction) == .grow) {
@@ -118,9 +126,9 @@ fn growAndShrink(
                 var smallest = remaining;
                 var secondSmallest = std.math.inf(f32);
                 for (toGrowGradually.items) |child| {
-                    if (child.getSize(direction) < smallest) {
+                    if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
                         smallest = child.getSize(direction);
-                    } else if (child.getSize(direction) < secondSmallest) {
+                    } else if (child.getSize(direction) < secondSmallest and child.getSize(direction) < child.getMaxSize(direction)) {
                         secondSmallest = child.getSize(direction);
                     }
                 }
@@ -137,12 +145,12 @@ fn growAndShrink(
                 }
                 for (toGrowGradually.items) |child| {
                     if (direction == .leftToRight) {
-                        if (child.size[0] == smallest) {
+                        if (child.size[0] == smallest and child.size[0] < child.maxSize[0]) {
                             child.size[0] += toAdd;
                             remaining -= toAdd;
                         }
                     } else {
-                        if (child.size[1] == smallest) {
+                        if (child.size[1] == smallest and child.size[1] < child.maxSize[1]) {
                             child.size[1] += toAdd;
                             remaining -= toAdd;
                         }
@@ -555,6 +563,10 @@ const LayoutCreator = struct {
                         style.minWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else 0.0,
                         style.minHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else 0.0,
                     },
+                    .maxSize = .{
+                        style.maxWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else std.math.inf(f32),
+                        style.maxHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else std.math.inf(f32),
+                    },
                     .key = node.key,
                     .children = null,
                     .style = style,
@@ -577,9 +589,8 @@ const LayoutCreator = struct {
             .text => |text| {
                 const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
-                const fontSize: f32 = @floatFromInt(style.fontSize);
-                const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * resolutionMultiplier;
-                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
+                const pixelSizeVec2: Vec2 = @as(Vec2, @splat(style.fontSize)) * resolutionMultiplier;
+                const pixelLineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * pixelSizeVec2[1];
 
                 const shapedGlyphs = try style.font.shape(text);
                 var layoutGlyphs = try self.arenaAllocator.alloc(LayoutGlyph, shapedGlyphs.len);
@@ -587,6 +598,7 @@ const LayoutCreator = struct {
                 var cursor: Vec2 = @splat(0.0);
 
                 var minSize: Vec2 = .{ 0.0, pixelLineHeight };
+                var maxSize: Vec2 = .{ 0.0, pixelLineHeight };
 
                 var wordStart: usize = 0;
                 var wordAdvance: Vec2 = @splat(0.0);
@@ -613,12 +625,16 @@ const LayoutCreator = struct {
                             wordAdvance += advance;
                         }
                         minSize = @max(minSize, wordAdvance);
+                        maxSize[1] += pixelLineHeight;
                     } else if (style.textWrapping == .character) {
                         minSize = @max(minSize, advance);
+                        maxSize[1] += pixelLineHeight;
                     } else if (style.textWrapping == .none) {
                         minSize = cursor;
+                        maxSize[1] += pixelLineHeight;
                     }
                 }
+                maxSize[0] = cursor[0];
 
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
@@ -626,6 +642,7 @@ const LayoutCreator = struct {
                     .key = node.key,
                     .size = .{ cursor[0], pixelLineHeight },
                     .minSize = minSize,
+                    .maxSize = maxSize,
                     .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight } },
                     .style = style,
                 };

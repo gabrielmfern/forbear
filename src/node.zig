@@ -65,7 +65,7 @@ pub const Style = struct {
     /// Will do nothing if the font is not a variable font. If you don't have a
     /// variable font, you should use differnet fonts for different weights.
     fontWeight: u32,
-    fontSize: u32,
+    fontSize: f32,
     lineHeight: f32,
     textWrapping: TextWrapping,
 
@@ -73,7 +73,9 @@ pub const Style = struct {
     zIndex: ?u16 = null,
 
     minWidth: ?f32 = null,
+    maxWidth: ?f32 = null,
     preferredWidth: Sizing,
+    maxHeight: ?f32 = null,
     minHeight: ?f32 = null,
     preferredHeight: Sizing,
 
@@ -99,7 +101,7 @@ pub const Style = struct {
 pub const BaseStyle = struct {
     font: *Font,
     color: Vec4,
-    fontSize: u32,
+    fontSize: f32,
     fontWeight: u32,
     lineHeight: f32,
     textWrapping: TextWrapping,
@@ -142,7 +144,7 @@ pub const IncompleteStyle = struct {
 
     font: ?*Font = null,
     fontWeight: ?u32 = null,
-    fontSize: ?u32 = null,
+    fontSize: ?f32 = null,
     lineHeight: ?f32 = null,
     textWrapping: ?TextWrapping = null,
 
@@ -150,8 +152,10 @@ pub const IncompleteStyle = struct {
     zIndex: ?u16 = null,
 
     minWidth: ?f32 = null,
+    maxWidth: ?f32 = null,
     preferredWidth: Sizing = .fit,
     minHeight: ?f32 = null,
+    maxHeight: ?f32 = null,
     preferredHeight: Sizing = .fit,
 
     translate: ?Vec2 = null,
@@ -187,9 +191,11 @@ pub const IncompleteStyle = struct {
             .zIndex = self.zIndex,
 
             .minWidth = self.minWidth,
+            .maxWidth = self.maxWidth,
             .preferredWidth = self.preferredWidth,
 
             .minHeight = self.minHeight,
+            .maxHeight = self.maxHeight,
             .preferredHeight = self.preferredHeight,
 
             .translate = self.translate orelse @splat(0.0),
