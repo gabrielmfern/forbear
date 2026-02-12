@@ -1,9 +1,13 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
+const Vec4 = @Vector(4, f32);
+
 const theme = @import("components/theme.zig");
 const ButtonProps = @import("components/button.zig").ButtonProps;
 const Button = @import("components/button.zig").Button;
+
+const black: Vec4 = .{ 0.01, 0.019, 0.07, 1.0 };
 
 fn App() !void {
     const arena = try forbear.useArena();
@@ -17,20 +21,19 @@ fn App() !void {
         .background = .{ .color = theme.Colors.page },
         .font = try forbear.useFont("SpaceGrotesk"),
         .fontWeight = 400,
-        .fontSize = theme.pxInt(16.0),
-        .lineHeight = 1.3,
+        .fontSize = 12.0,
         .color = theme.Colors.text,
     }))({
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
-            .background = .{ .color = theme.Colors.accent },
+            .preferredWidth = .grow,
+            .background = .{ .color = black },
             .paddingBlock = .{ theme.px(8.0), theme.px(8.0) },
             .horizontalAlignment = .center,
             .verticalAlignment = .center,
         }))({
             (try forbear.element(arena, .{
                 .fontWeight = 500,
-                .fontSize = theme.pxInt(14.0),
+                .fontSize = theme.px(14.0),
                 .color = .{ 1.0, 1.0, 1.0, 1.0 },
             }))({
                 // TODO: gradient background bar once gradient backgrounds are supported.
@@ -39,12 +42,12 @@ fn App() !void {
         });
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(18.0), theme.px(18.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .leftToRight,
                 .horizontalAlignment = .start,
                 .verticalAlignment = .center,
@@ -62,7 +65,7 @@ fn App() !void {
                 }))({
                     (try forbear.element(arena, .{
                         .fontWeight = 500,
-                        .fontSize = theme.pxInt(14.0),
+                        .fontSize = theme.px(14.0),
                         .marginInline = .{ 0.0, theme.px(18.0) },
                     }))({
                         try forbear.text(arena, "Pricing");
@@ -76,41 +79,40 @@ fn App() !void {
             });
         });
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(50.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = wideWidth },
                 .direction = .leftToRight,
                 .horizontalAlignment = .start,
                 .verticalAlignment = .center,
             }))({
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = theme.px(520.0) },
                     .direction = .topToBottom,
                 }))({
                     (try forbear.element(arena, .{
                         .fontWeight = 700,
-                        .fontSize = theme.pxInt(46.0),
-                        .lineHeight = 1.05,
+                        .fontSize = 46,
+                        .lineHeight = 0.70,
+                        .marginBlock = .{ 0.0, 18.0 },
                     }))({
-                        // TODO: typewriter animation for this heading when animations for text are available.
                         try forbear.text(arena, "You're the boss, why are you still fixing tech issues?");
                     });
                     (try forbear.element(arena, .{
-                        .fontSize = theme.pxInt(20.0),
-                        .color = theme.Colors.muted,
+                        .fontSize = theme.px(20.0),
+                        .color = black,
+                        .fontWeight = 500,
                         .marginBlock = .{ theme.px(16.0), theme.px(20.0) },
                     }))({
                         try forbear.text(arena, "It doesn't just annoy you. It slows you and your staff down. That's our job now.");
                     });
                     try forbear.component(arena, Button, ButtonProps{ .text = "Let us prove it*" });
                     (try forbear.element(arena, .{
-                        .fontSize = theme.pxInt(12.0),
-                        .color = theme.Colors.muted,
+                        .fontSize = theme.px(12.0),
+                        .color = black,
                         .marginBlock = .{ theme.px(14.0), 0.0 },
-                        .preferredWidth = .{ .fixed = theme.px(360.0) },
                     }))({
                         try forbear.text(
                             arena,
@@ -133,18 +135,17 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(16.0), theme.px(32.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .leftToRight,
                 .horizontalAlignment = .start,
             }))({
                 inline for (statements) |statement| {
                     (try forbear.element(arena, .{
-                        .preferredWidth = .{ .fixed = theme.px(300.0) },
                         .direction = .leftToRight,
                         .verticalAlignment = .center,
                         .marginInline = .{ 0.0, theme.px(24.0) },
@@ -157,7 +158,7 @@ fn App() !void {
                         }))({});
                         (try forbear.element(arena, .{
                             .fontWeight = 500,
-                            .fontSize = theme.pxInt(16.0),
+                            .fontSize = theme.px(16.0),
                         }))({
                             try forbear.text(arena, statement);
                         });
@@ -173,12 +174,12 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(40.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = wideWidth },
                 .direction = .leftToRight,
                 .horizontalAlignment = .start,
                 .verticalAlignment = .center,
@@ -189,20 +190,17 @@ fn App() !void {
                     .background = .{ .image = try forbear.useImage("uhoh-problem") },
                     .marginInline = .{ 0.0, theme.px(32.0) },
                 }))({});
-                (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = theme.px(520.0) },
-                    .direction = .topToBottom,
-                }))({
+                (try forbear.element(arena, .{ .direction = .topToBottom }))({
                     (try forbear.element(arena, .{
                         .fontWeight = 600,
-                        .fontSize = theme.pxInt(14.0),
+                        .fontSize = theme.px(14.0),
                         .color = theme.Colors.muted,
                     }))({
                         try forbear.text(arena, "You're a growing business.");
                     });
                     (try forbear.element(arena, .{
                         .fontWeight = 700,
-                        .fontSize = theme.pxInt(32.0),
+                        .fontSize = theme.px(32.0),
                         .marginBlock = .{ theme.px(6.0), theme.px(16.0) },
                     }))({
                         try forbear.text(arena, "But your day-to-day has some of this BS in it:");
@@ -220,13 +218,13 @@ fn App() !void {
                                 .background = .{ .image = try forbear.useImage("uhoh-x-red") },
                                 .marginInline = .{ 0.0, theme.px(10.0) },
                             }))({});
-                            (try forbear.element(arena, .{ .fontSize = theme.pxInt(16.0) }))({
+                            (try forbear.element(arena, .{ .fontSize = theme.px(16.0) }))({
                                 try forbear.text(arena, issue);
                             });
                         });
                     }
                     (try forbear.element(arena, .{
-                        .fontSize = theme.pxInt(16.0),
+                        .fontSize = theme.px(16.0),
                         .marginBlock = .{ theme.px(16.0), theme.px(20.0) },
                     }))({
                         try forbear.text(arena, "Imagine if you could delegate all these issues to a genie?");
@@ -266,18 +264,18 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(40.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .topToBottom,
                 .horizontalAlignment = .center,
             }))({
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
-                    .fontSize = theme.pxInt(30.0),
+                    .fontSize = theme.px(30.0),
                     .marginBlock = .{ 0.0, theme.px(20.0) },
                 }))({
                     try forbear.text(arena, "Don't take our word for it.");
@@ -303,7 +301,7 @@ fn App() !void {
                             .marginInline = .{ 0.0, theme.px(14.0) },
                         }))({});
                         (try forbear.element(arena, .{
-                            .fontSize = theme.pxInt(15.0),
+                            .fontSize = theme.px(15.0),
                             .lineHeight = 1.4,
                         }))({
                             try forbear.text(arena, testimonial.body);
@@ -321,18 +319,18 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(40.0) },
             .background = .{ .color = theme.Colors.soft },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .topToBottom,
             }))({
                 (try forbear.element(arena, .{
                     .fontWeight = 600,
-                    .fontSize = theme.pxInt(18.0),
+                    .fontSize = theme.px(18.0),
                     .marginBlock = .{ 0.0, theme.px(18.0) },
                 }))({
                     try forbear.text(arena, "Our partners");
@@ -355,12 +353,12 @@ fn App() !void {
         });
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(40.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .topToBottom,
                 .horizontalAlignment = .center,
             }))({
@@ -371,15 +369,14 @@ fn App() !void {
                 }))({});
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
-                    .fontSize = theme.pxInt(30.0),
+                    .fontSize = theme.px(30.0),
                     .marginBlock = .{ theme.px(18.0), theme.px(10.0) },
                 }))({
                     try forbear.text(arena, "We're here to reinvent how tech gets done.");
                 });
                 (try forbear.element(arena, .{
-                    .fontSize = theme.pxInt(16.0),
+                    .fontSize = theme.px(16.0),
                     .color = theme.Colors.muted,
-                    .preferredWidth = .{ .fixed = theme.px(540.0) },
                     .horizontalAlignment = .center,
                 }))({
                     try forbear.text(arena, "We're replacing clunky IT with clean, fast, and flexible support. Built for startups and teams that just want things to work.");
@@ -498,14 +495,12 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(50.0) },
         }))({
-            (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = wideWidth },
-                .direction = .topToBottom,
-            }))({
+            (try forbear.element(arena, .{ .direction = .topToBottom }))({
                 inline for (offerings) |offering| {
                     (try forbear.element(arena, .{
                         .preferredWidth = .grow,
@@ -532,7 +527,7 @@ fn App() !void {
                             }))({});
                             (try forbear.element(arena, .{
                                 .fontWeight = 700,
-                                .fontSize = theme.pxInt(22.0),
+                                .fontSize = theme.px(22.0),
                             }))({
                                 try forbear.text(arena, offering.title);
                             });
@@ -550,7 +545,7 @@ fn App() !void {
                                     .borderRadius = theme.px(4.0),
                                     .marginInline = .{ 0.0, theme.px(10.0) },
                                 }))({});
-                                (try forbear.element(arena, .{ .fontSize = theme.pxInt(15.0) }))({
+                                (try forbear.element(arena, .{ .fontSize = theme.px(15.0) }))({
                                     try forbear.text(arena, bullet);
                                 });
                             });
@@ -564,13 +559,13 @@ fn App() !void {
                         }))({
                             (try forbear.element(arena, .{
                                 .fontWeight = 600,
-                                .fontSize = theme.pxInt(16.0),
+                                .fontSize = theme.px(16.0),
                                 .marginBlock = .{ 0.0, theme.px(6.0) },
                             }))({
                                 try forbear.text(arena, offering.addonTitle);
                             });
                             (try forbear.element(arena, .{
-                                .fontSize = theme.pxInt(14.0),
+                                .fontSize = theme.px(14.0),
                                 .color = theme.Colors.muted,
                             }))({
                                 try forbear.text(arena, offering.addonBody);
@@ -582,12 +577,12 @@ fn App() !void {
         });
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(20.0), theme.px(40.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .leftToRight,
                 .verticalAlignment = .start,
             }))({
@@ -602,13 +597,13 @@ fn App() !void {
                     .direction = .topToBottom,
                 }))({
                     (try forbear.element(arena, .{
-                        .fontSize = theme.pxInt(18.0),
+                        .fontSize = theme.px(18.0),
                         .lineHeight = 1.4,
                     }))({
                         try forbear.text(arena, "I literally built this because I needed it for myself... it has to be fast, incredibly good and insanely affordable. It's usually impossible to get all three, but we figured it out and we're willing to go to great lengths to let you experience that for yourself.");
                     });
                     (try forbear.element(arena, .{
-                        .fontSize = theme.pxInt(14.0),
+                        .fontSize = theme.px(14.0),
                         .color = theme.Colors.muted,
                         .marginBlock = .{ theme.px(12.0), 0.0 },
                     }))({
@@ -627,12 +622,12 @@ fn App() !void {
         const step_numbers = [_][]const u8{ "1", "2", "3" };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(40.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .topToBottom,
                 .horizontalAlignment = .center,
             }))({
@@ -643,7 +638,7 @@ fn App() !void {
                 }))({});
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
-                    .fontSize = theme.pxInt(28.0),
+                    .fontSize = theme.px(28.0),
                     .marginBlock = .{ theme.px(18.0), theme.px(18.0) },
                 }))({
                     try forbear.text(arena, "Your new IT department. On demand.");
@@ -660,13 +655,13 @@ fn App() !void {
                         }))({
                             (try forbear.element(arena, .{
                                 .fontWeight = 700,
-                                .fontSize = theme.pxInt(20.0),
+                                .fontSize = theme.px(20.0),
                                 .marginBlock = .{ 0.0, theme.px(6.0) },
                             }))({
                                 const label = step_numbers[index];
                                 try forbear.text(arena, label);
                             });
-                            (try forbear.element(arena, .{ .fontSize = theme.pxInt(16.0) }))({
+                            (try forbear.element(arena, .{ .fontSize = theme.px(16.0) }))({
                                 try forbear.text(arena, step);
                             });
                         });
@@ -683,7 +678,7 @@ fn App() !void {
                     }))({
                         (try forbear.element(arena, .{
                             .fontWeight = 600,
-                            .fontSize = theme.pxInt(16.0),
+                            .fontSize = theme.px(16.0),
                             .color = .{ 1.0, 1.0, 1.0, 1.0 },
                         }))({
                             try forbear.text(arena, "Start today (30-Day Money Back Guarantee)");
@@ -702,12 +697,12 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(40.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = wideWidth },
                 .direction = .leftToRight,
                 .horizontalAlignment = .start,
                 .verticalAlignment = .center,
@@ -718,7 +713,7 @@ fn App() !void {
                 }))({
                     (try forbear.element(arena, .{
                         .fontWeight = 700,
-                        .fontSize = theme.pxInt(30.0),
+                        .fontSize = theme.px(30.0),
                         .marginBlock = .{ 0.0, theme.px(14.0) },
                     }))({
                         try forbear.text(arena, "Your tech works. People are happy. Time comes back.");
@@ -736,7 +731,7 @@ fn App() !void {
                                 .borderRadius = theme.px(4.0),
                                 .marginInline = .{ 0.0, theme.px(10.0) },
                             }))({});
-                            (try forbear.element(arena, .{ .fontSize = theme.pxInt(16.0) }))({
+                            (try forbear.element(arena, .{ .fontSize = theme.px(16.0) }))({
                                 try forbear.text(arena, benefit);
                             });
                         });
@@ -750,7 +745,6 @@ fn App() !void {
                 }))({});
             });
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .leftToRight,
                 .verticalAlignment = .center,
                 .marginBlock = .{ theme.px(18.0), 0.0 },
@@ -762,7 +756,7 @@ fn App() !void {
                     .marginInline = .{ 0.0, theme.px(14.0) },
                 }))({});
                 (try forbear.element(arena, .{
-                    .fontSize = theme.pxInt(16.0),
+                    .fontSize = theme.px(16.0),
                     .color = theme.Colors.muted,
                 }))({
                     try forbear.text(arena, "Or keep asking your most tech-savvy employee to fix the WiFi. You could save money, time, and headaches - or keep duct-taping your IT together until it breaks.");
@@ -793,17 +787,15 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(40.0) },
         }))({
-            (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
-                .direction = .topToBottom,
-            }))({
+            (try forbear.element(arena, .{ .direction = .topToBottom }))({
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
-                    .fontSize = theme.pxInt(28.0),
+                    .fontSize = theme.px(28.0),
                     .marginBlock = .{ 0.0, theme.px(18.0) },
                 }))({
                     try forbear.text(arena, "FAQ");
@@ -821,13 +813,13 @@ fn App() !void {
                     }))({
                         (try forbear.element(arena, .{
                             .fontWeight = 600,
-                            .fontSize = theme.pxInt(16.0),
+                            .fontSize = theme.px(16.0),
                             .marginBlock = .{ 0.0, theme.px(8.0) },
                         }))({
                             try forbear.text(arena, faq.question);
                         });
                         (try forbear.element(arena, .{
-                            .fontSize = theme.pxInt(14.0),
+                            .fontSize = theme.px(14.0),
                             .color = theme.Colors.muted,
                         }))({
                             try forbear.text(arena, faq.answer);
@@ -839,12 +831,12 @@ fn App() !void {
         });
 
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(30.0), theme.px(50.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .topToBottom,
                 .horizontalAlignment = .center,
             }))({
@@ -855,13 +847,13 @@ fn App() !void {
                 }))({});
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
-                    .fontSize = theme.pxInt(30.0),
+                    .fontSize = theme.px(30.0),
                     .marginBlock = .{ theme.px(18.0), theme.px(10.0) },
                 }))({
                     try forbear.text(arena, "Dude, you're at the bottom of our landing page.");
                 });
                 (try forbear.element(arena, .{
-                    .fontSize = theme.pxInt(16.0),
+                    .fontSize = theme.px(16.0),
                     .color = theme.Colors.muted,
                     .marginBlock = .{ 0.0, 20.0 },
                 }))({
@@ -874,13 +866,13 @@ fn App() !void {
             });
         });
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 1080 },
+            .preferredWidth = .grow,
+            .maxWidth = 810.0,
             .background = .{ .color = theme.Colors.soft },
             .horizontalAlignment = .center,
             .paddingBlock = .{ theme.px(20.0), theme.px(26.0) },
         }))({
             (try forbear.element(arena, .{
-                // .preferredWidth = .{ .fixed = maxWidth },
                 .direction = .topToBottom,
             }))({
                 (try forbear.element(arena, .{
@@ -893,7 +885,7 @@ fn App() !void {
                         .background = .{ .image = try forbear.useImage("uhoh-logo") },
                         .marginInline = .{ 0.0, theme.px(12.0) },
                     }))({});
-                    (try forbear.element(arena, .{ .fontSize = theme.pxInt(12.0) }))({
+                    (try forbear.element(arena, .{ .fontSize = theme.px(12.0) }))({
                         try forbear.text(arena, "Privacy Policy");
                     });
                 });
@@ -903,14 +895,14 @@ fn App() !void {
                     .marginBlock = .{ theme.px(16.0), 0.0 },
                 }))({
                     (try forbear.element(arena, .{
-                        .fontSize = theme.pxInt(12.0),
+                        .fontSize = theme.px(12.0),
                         .color = theme.Colors.muted,
                         .marginInline = .{ 0.0, theme.px(20.0) },
                     }))({
                         try forbear.text(arena, "© 2025 uhoh. All rights reserved.");
                     });
                     (try forbear.element(arena, .{
-                        .fontSize = theme.pxInt(12.0),
+                        .fontSize = theme.px(12.0),
                         .color = theme.Colors.muted,
                     }))({
                         try forbear.text(arena, "Designed by your lover, Loogart");
