@@ -31,16 +31,16 @@ missing things for the entire uhoh.com website:
 - [x] page scrolling
 - [x] fps has been destroyed, lower than 165 for a non changing layout
     - we could start caching the layouts from the nodes
-- [ ] gradients
+- [ ] maxWidth/maxHeight to limit a growing element's size
+- [ ] allow to center align just a single element, without affecting others
 - [ ] can't make an element fully transparent?
 - [ ] blend multiply
 - [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
     - is having lots of them bad? I understand having no type-safety though
-- not being able to center align just a single element, without affecting others
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
+- [ ] gradients
 - [ ] linear gradient support
-- [ ] maxWidth to limit a growing element support
 - [ ] component children slotting
 - [ ] support for underlined text
 
