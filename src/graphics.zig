@@ -3525,9 +3525,18 @@ pub const Renderer = struct {
                 .image => |imgPtr| @intCast(try self.elementsPipeline.registerImage(imgPtr, self.logicalDevice)),
                 else => -1,
             };
-            // if (layoutBox.style.background == .gradient) {
-            //     std.log.debug("{}", .{layoutBox.style.background.gradient});
-            // }
+            var gradient: LinearGradient = undefined;
+            if (layoutBox.style.background == .gradient) {
+                gradient = layoutBox.style.background.gradient;
+                for (&gradient.stops) |*stop| {
+                    stop.color = srgbToLinearColor(stop.color);
+                }
+            } else {
+                gradient = LinearGradient{
+                    .angle = 0.0,
+                    .stops = .{LinearGradient.Stop.ignore()} ** 16,
+                };
+            }
             self.elementsPipeline.elementsShaderData[frameIndex][elementIndex] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
@@ -3540,13 +3549,7 @@ pub const Renderer = struct {
                     .color => |color| srgbToLinearColor(color),
                     else => Vec4{ 1.0, 1.0, 1.0, 1.0 },
                 },
-                .gradient = if (layoutBox.style.background == .gradient)
-                    layoutBox.style.background.gradient
-                else
-                    LinearGradient{
-                        .angle = 0.0,
-                        .stops = .{LinearGradient.Stop.ignore()} ** 16,
-                    },
+                .gradient = gradient,
                 .size = layoutBox.size,
                 .borderRadius = layoutBox.style.borderRadius,
                 .borderColor = srgbToLinearColor(layoutBox.style.borderColor),

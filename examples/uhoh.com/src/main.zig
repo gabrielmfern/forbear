@@ -23,7 +23,17 @@ fn App() !void {
     }))({
         (try forbear.element(arena, .{
             .preferredWidth = .{ .fixed = 1080 },
-            .background = .{ .color = theme.Colors.accent },
+            .background = .{
+                .gradient = forbear.linearGradient(0.0, .{
+                    .{ .start = 0.0 / 7.0, .color = .{ 0.96862745, 0.42352942, 0.6392157, 1.0 } }, // #f76ca3
+                    .{ .start = 1.0 / 7.0, .color = .{ 1.0, 0.6039216, 0.26666668, 1.0 } }, // #ff9a44
+                    .{ .start = 2.0 / 7.0, .color = .{ 1.0, 0.8862745, 0.43529412, 1.0 } }, // #ffe26f
+                    .{ .start = 3.0 / 7.0, .color = .{ 0.48235294, 0.89411765, 0.58431375, 1.0 } }, // #7be495
+                    .{ .start = 4.0 / 7.0, .color = .{ 0.3882353, 0.78039217, 0.9764706, 1.0 } }, // #63c7f9
+                    .{ .start = 5.0 / 7.0, .color = .{ 0.54509807, 0.53333336, 0.972549, 1.0 } }, // #8b88f8
+                    .{ .start = 6.0 / 7.0, .color = .{ 0.84313726, 0.5411765, 1.0, 1.0 } }, // #d78aff
+                }),
+            },
             .paddingBlock = .{ theme.px(8.0), theme.px(8.0) },
             .horizontalAlignment = .center,
             .verticalAlignment = .center,
@@ -32,27 +42,6 @@ fn App() !void {
                 .fontWeight = 500,
                 .fontSize = theme.pxInt(14.0),
                 .color = .{ 1.0, 1.0, 1.0, 1.0 },
-                //linear-gradient(
-                //   to right,
-                //   #f76ca3,  /* soft pink-red */
-                //   #ff9a44,  /* warm orange */
-                //   #ffe26f,  /* pastel yellow */
-                //   #7be495,  /* soft green */
-                //   #63c7f9,  /* light blue */
-                //   #8b88f8,  /* soft purple */
-                //   #d78aff   /* magenta */
-                //)
-                .background = .{
-                    .gradient = forbear.linearGradient(0.0, .{
-                        .{ .start = 0.0 / 7.0, .color = .{ 0.96862745, 0.42352942, 0.6392157, 1.0 } }, // #f76ca3
-                        .{ .start = 1.0 / 7.0, .color = .{ 1.0, 0.6039216, 0.26666668, 1.0 } }, // #ff9a44
-                        .{ .start = 2.0 / 7.0, .color = .{ 1.0, 0.8862745, 0.43529412, 1.0 } }, // #ffe26f
-                        .{ .start = 3.0 / 7.0, .color = .{ 0.48235294, 0.89411765, 0.58431375, 1.0 } }, // #7be495
-                        .{ .start = 4.0 / 7.0, .color = .{ 0.3882353, 0.78039217, 0.9764706, 1.0 } }, // #63c7f9
-                        .{ .start = 5.0 / 7.0, .color = .{ 0.54509807, 0.53333336, 0.972549, 1.0 } }, // #8b88f8
-                        .{ .start = 6.0 / 7.0, .color = .{ 0.84313726, 0.5411765, 1.0, 1.0 } }, // #d78aff
-                    }),
-                },
             }))({
                 try forbear.text(arena, "-> Book a 15 minute meeting today.");
             });
