@@ -116,8 +116,125 @@ pub const BaseStyle = struct {
     }
 };
 
+pub const LinearGradient = extern struct {
+    pub const Stop = extern struct {
+        /// percentage
+        start: f32,
+        color: Vec4,
+        /// used as a flag to ignore the remaining steps
+        startIgnoring: i32 = 0,
+
+        pub fn ignore() @This() {
+            return .{
+                .start = 0.0,
+                .color = .{ 0.0, 0.0, 0.0, 0.0 },
+                .startIgnoring = 1,
+            };
+        }
+    };
+
+    pub fn none() @This() {
+        return .{
+            .angle = 0.0,
+            .stops = .{Stop.ignore()} ** 16,
+        };
+    }
+
+    /// Radians for the direction at which the gradient propagates
+    angle: f32,
+    stops: [16]Stop,
+};
+
+pub fn linearGradient(angle: f32, definition: anytype) LinearGradient {
+    var stops: [16]LinearGradient.Stop = .{LinearGradient.Stop.ignore()} ** 16;
+
+    const DefType = @TypeOf(definition);
+    const type_info = @typeInfo(DefType);
+
+    if (type_info == .@"struct" and type_info.@"struct".is_tuple) {
+        const fields = type_info.@"struct".fields;
+        if (fields.len > 16) {
+            std.log.warn("Gradients can only have 16 steps, this one has {d}, the remaining ones will be ignored", .{fields.len});
+        }
+        inline for (0..fields.len) |i| {
+            if (i < 16) {
+                const entry = definition[i];
+                stops[i] = .{
+                    .start = entry.start,
+                    .color = entry.color,
+                    .startIgnoring = if (@hasField(@TypeOf(entry), "startIgnoring")) entry.startIgnoring else 0,
+                };
+            }
+        }
+    } else {
+        if (definition.len > 16) {
+            std.log.warn("Gradients can only have 16 steps, this one has {d}, the remaining ones will be ignored", .{definition.len});
+        }
+        for (0..16) |i| {
+            if (i < definition.len) {
+                stops[i] = definition[i];
+            }
+        }
+    }
+
+    return .{
+        .angle = angle,
+        .stops = stops,
+    };
+}
+
+test "linearGradient" {
+    try std.testing.expectEqualDeep(
+        LinearGradient{
+            .angle = std.math.pi / 2.0,
+            .stops = .{
+                .{
+                    .start = 0.0,
+                    .color = .{ 1.0, 0.0, 0.0, 1.0 },
+                },
+                .{
+                    .start = 1 / 3,
+                    .color = .{ 0.0, 1.0, 0.0, 1.0 },
+                },
+                .{
+                    .start = 2 / 3,
+                    .color = .{ 0.0, 0.0, 1.0, 1.0 },
+                },
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+                .ignore(),
+            },
+        },
+        linearGradient(std.math.pi / 2.0, .{
+            .{
+                .start = 0.0,
+                .color = .{ 1.0, 0.0, 0.0, 1.0 },
+            },
+            .{
+                .start = 1 / 3,
+                .color = .{ 0.0, 1.0, 0.0, 1.0 },
+            },
+            .{
+                .start = 2 / 3,
+                .color = .{ 0.0, 0.0, 1.0, 1.0 },
+            },
+        }),
+    );
+}
+
 pub const Background = union(enum) {
     image: *const Graphics.Image,
+    gradient: LinearGradient,
     color: Vec4,
 };
 

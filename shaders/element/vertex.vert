@@ -1,17 +1,29 @@
 #version 450
 
+struct Stop {
+    float start;
+    vec4 color;
+    int startIgnoring;
+};
+
+struct LinearGradient {
+    float angle;
+    Stop stops[16];
+};
+
 layout(location = 0) in vec3 vertexPosition;
 layout(location = 0) out vec4 vertexColor;
 layout(location = 1) out float borderRadius;
 layout(location = 2) out vec4 localPos;
 layout(location = 3) out vec2 size;
-
 layout(location = 4) out flat int imageIndex;
 layout(location = 5) out vec4 borderColor;
 layout(location = 6) out vec4 borderSize;
+layout(location = 7) out flat LinearGradient gradient;
 
 struct ElementRenderingData {
     vec4 backgroundColor;
+    LinearGradient gradient;
     vec4 borderColor;
     float borderRadius;
     vec4 borderSize;
@@ -29,6 +41,7 @@ void main() {
 
     gl_Position = d.modelViewProjectionMatrix * vec4(vertexPosition, 1.0);
     vertexColor = d.backgroundColor;
+    gradient = d.gradient;
     borderSize = d.borderSize;
     borderColor = d.borderColor;
     borderRadius = d.borderRadius;

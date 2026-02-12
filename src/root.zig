@@ -10,6 +10,7 @@ pub const layout = layouting.layout;
 pub const LayoutBox = layouting.LayoutBox;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
+pub const linearGradient = nodeImport.linearGradient;
 pub const IncompleteStyle = nodeImport.IncompleteStyle;
 pub const Style = nodeImport.Style;
 pub const Component = nodeImport.Component;

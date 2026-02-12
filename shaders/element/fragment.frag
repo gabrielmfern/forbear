@@ -1,6 +1,17 @@
 #version 450
 #extension GL_EXT_nonuniform_qualifier : enable
 
+struct Stop {
+    float start;
+    vec4 color;
+    int startIgnoring;
+};
+
+struct LinearGradient {
+    float angle;
+    Stop stops[16];
+};
+
 layout(location = 0) in vec4 vertexColor;
 layout(location = 1) in float borderRadius;
 layout(location = 2) in vec4 localPos;
@@ -8,6 +19,8 @@ layout(location = 3) in vec2 size;
 layout(location = 4) in flat int imageIndex;
 layout(location = 5) in vec4 borderColor;
 layout(location = 6) in vec4 borderSize;
+layout(location = 7) in flat LinearGradient gradient;
+
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 1) uniform sampler2D textures[];
@@ -29,6 +42,44 @@ void main() {
     vec4 color = vertexColor;
     if (imageIndex >= 0) {
         color *= texture(textures[nonuniformEXT(imageIndex)], localPos.xy);
+    } else if (gradient.stops[0].startIgnoring == 0) {
+        vec2 direction = normalize(vec2(cos(gradient.angle), sin(gradient.angle)));
+        float projectionRange = dot(abs(direction), halfSize);
+        float t = projectionRange > 0.0
+            ? (dot(p, direction) + projectionRange) / (2.0 * projectionRange)
+            : 0.0;
+        t = clamp(t, 0.0, 1.0);
+
+        Stop previous = gradient.stops[0];
+        vec4 gradientColor = previous.color;
+
+        if (t > previous.start) {
+            bool foundSegment = false;
+
+            for (int i = 1; i < 16; i += 1) {
+                Stop current = gradient.stops[i];
+
+                if (current.startIgnoring != 0) {
+                    break;
+                }
+
+                if (t <= current.start) {
+                    float segmentLength = max(current.start - previous.start, 0.0001);
+                    float segmentT = clamp((t - previous.start) / segmentLength, 0.0, 1.0);
+                    gradientColor = mix(previous.color, current.color, segmentT);
+                    foundSegment = true;
+                    break;
+                }
+
+                previous = current;
+            }
+
+            if (!foundSegment) {
+                gradientColor = previous.color;
+            }
+        }
+
+        color *= gradientColor;
     }
 
     float borderTop = borderSize.x;
