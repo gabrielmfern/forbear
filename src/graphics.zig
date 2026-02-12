@@ -6,6 +6,7 @@ const zmath = @import("zmath");
 const c = @import("c.zig").c;
 const win32 = @import("windows/win32.zig");
 const Font = @import("font.zig");
+const LinearGradient = @import("node.zig").LinearGradient;
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
@@ -1619,6 +1620,7 @@ const ShadowsPipeline = struct {
 
 const ElementRenderingData = extern struct {
     backgroundColor: Vec4,
+    gradient: LinearGradient,
     borderColor: Vec4,
     borderRadius: f32,
     borderSize: Vec4,
@@ -3520,9 +3522,12 @@ pub const Renderer = struct {
             }
 
             const textureIndex: i32 = switch (layoutBox.style.background) {
-                .color => -1,
                 .image => |imgPtr| @intCast(try self.elementsPipeline.registerImage(imgPtr, self.logicalDevice)),
+                else => -1,
             };
+            // if (layoutBox.style.background == .gradient) {
+            //     std.log.debug("{}", .{layoutBox.style.background.gradient});
+            // }
             self.elementsPipeline.elementsShaderData[frameIndex][elementIndex] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
@@ -3533,8 +3538,15 @@ pub const Renderer = struct {
                 ),
                 .backgroundColor = switch (layoutBox.style.background) {
                     .color => |color| srgbToLinearColor(color),
-                    .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
+                    else => Vec4{ 1.0, 1.0, 1.0, 1.0 },
                 },
+                .gradient = if (layoutBox.style.background == .gradient)
+                    layoutBox.style.background.gradient
+                else
+                    LinearGradient{
+                        .angle = 0.0,
+                        .stops = .{LinearGradient.Stop.ignore()} ** 16,
+                    },
                 .size = layoutBox.size,
                 .borderRadius = layoutBox.style.borderRadius,
                 .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
