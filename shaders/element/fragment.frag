@@ -43,41 +43,43 @@ void main() {
     if (imageIndex >= 0) {
         color *= texture(textures[nonuniformEXT(imageIndex)], localPos.xy);
     } else if (gradient.stops[0].startIgnoring == 0) {
-        float angleRad = radians(gradient.angle);
-        vec2 dir = vec2(cos(angleRad), sin(angleRad));
-        float len = dot(size, abs(dir));
-        float halfLen = len * 0.5;
-        vec2 gradStart = vec2(0.5) - dir * halfLen;
-        vec2 gradEnd = vec2(0.5) + dir * halfLen;
-        vec2 gradVec = gradEnd - gradStart;
-        float gradLenSq = dot(gradVec, gradVec);
-        float t = dot(localPos.xy - gradStart, gradVec) / gradLenSq;
+        vec2 direction = normalize(vec2(cos(gradient.angle), sin(gradient.angle)));
+        float projectionRange = dot(abs(direction), halfSize);
+        float t = projectionRange > 0.0
+            ? (dot(p, direction) + projectionRange) / (2.0 * projectionRange)
+            : 0.0;
         t = clamp(t, 0.0, 1.0);
 
-        // Find the two stops surrounding t
-        Stop stopA = gradient.stops[0];
-        Stop stopB = gradient.stops[0];
-        for (int i = 1; i < 16; ++i) {
-            if (gradient.stops[i].startIgnoring == 0) {
-                if (t < gradient.stops[i].start) {
+        Stop previous = gradient.stops[0];
+        vec4 gradientColor = previous.color;
+
+        if (t > previous.start) {
+            bool foundSegment = false;
+
+            for (int i = 1; i < 16; i += 1) {
+                Stop current = gradient.stops[i];
+
+                if (current.startIgnoring != 0) {
                     break;
                 }
-                stopA = gradient.stops[i];
-                stopB = gradient.stops[i];
+
+                if (t <= current.start) {
+                    float segmentLength = max(current.start - previous.start, 0.0001);
+                    float segmentT = clamp((t - previous.start) / segmentLength, 0.0, 1.0);
+                    gradientColor = mix(previous.color, current.color, segmentT);
+                    foundSegment = true;
+                    break;
+                }
+
+                previous = current;
             }
-        }
-        for (int i = 0; i < 16; ++i) {
-            if (gradient.stops[i].startIgnoring == 0 && gradient.stops[i].start > stopA.start) {
-                stopB = gradient.stops[i];
-                break;
+
+            if (!foundSegment) {
+                gradientColor = previous.color;
             }
         }
 
-        float range = stopB.start - stopA.start;
-        float localT = (range > 0.0) ? (t - stopA.start) / range : 0.0;
-        localT = clamp(localT, 0.0, 1.0);
-        vec4 gradColor = mix(stopA.color, stopB.color, localT);
-        color *= gradColor;
+        color *= gradientColor;
     }
 
     float borderTop = borderSize.x;
