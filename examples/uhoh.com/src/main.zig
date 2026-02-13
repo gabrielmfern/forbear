@@ -95,7 +95,7 @@ fn App() !void {
                     (try forbear.element(arena, .{
                         .fontWeight = 700,
                         .fontSize = 46,
-                        .lineHeight = 0.70,
+                        .lineHeight = 0.75,
                         .marginBlock = .{ 0.0, 18.0 },
                     }))({
                         try forbear.text(arena, "You're the boss, why are you still fixing tech issues?");
