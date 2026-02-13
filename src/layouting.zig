@@ -7,6 +7,7 @@ const Element = @import("node.zig").Element;
 const forbear = @import("root.zig");
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const Node = @import("node.zig").Node;
+const Sizing = @import("node.zig").Sizing;
 const Style = @import("node.zig").Style;
 const TextWrapping = @import("node.zig").TextWrapping;
 
@@ -791,6 +792,264 @@ fn testWrapConfiguration(configuration: struct {
         glyphPositions[i] = glyph.position;
     }
     try std.testing.expectEqualDeep(configuration.expectedPositions, glyphPositions);
+}
+
+const defaultBaseStyle = BaseStyle{
+    .font = undefined,
+    .color = .{ 0.0, 0.0, 0.0, 1.0 },
+    .fontSize = 16,
+    .fontWeight = 400,
+    .lineHeight = 1.0,
+    .textWrapping = .none,
+};
+
+const TestChild = struct {
+    preferredWidth: Sizing = .fit,
+    preferredHeight: Sizing = .fit,
+    size: Vec2,
+    minSize: Vec2 = .{ 0.0, 0.0 },
+    maxSize: Vec2 = .{ std.math.inf(f32), std.math.inf(f32) },
+};
+
+fn testGrowAndShrinkConfiguration(configuration: struct {
+    direction: Direction,
+    parentSize: Vec2,
+    children: []const TestChild,
+    expectedSizes: []const Vec2,
+}) !void {
+    std.debug.assert(configuration.children.len == configuration.expectedSizes.len);
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const childBoxes = try arenaAllocator.alloc(LayoutBox, configuration.children.len);
+    for (configuration.children, 0..) |child, i| {
+        childBoxes[i] = LayoutBox{
+            .key = @intCast(i),
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = child.size,
+            .minSize = child.minSize,
+            .maxSize = child.maxSize,
+            .children = null,
+            .style = (IncompleteStyle{
+                .preferredWidth = child.preferredWidth,
+                .preferredHeight = child.preferredHeight,
+            }).completeWith(defaultBaseStyle),
+        };
+    }
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = configuration.parentSize,
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = configuration.parentSize,
+        .children = .{ .layoutBoxes = childBoxes },
+        .style = (IncompleteStyle{
+            .direction = configuration.direction,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    try growAndShrink(arenaAllocator, &parent);
+
+    const actualSizes = try arenaAllocator.alloc(Vec2, configuration.children.len);
+    for (parent.children.?.layoutBoxes, 0..) |child, i| {
+        actualSizes[i] = child.size;
+    }
+    std.log.info("Expecting {any}", .{configuration.expectedSizes});
+    std.log.info("Finding {any}", .{actualSizes});
+    try std.testing.expectEqualDeep(configuration.expectedSizes, actualSizes);
+}
+
+test "growAndShrink - single grow child fills remaining space horizontally" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - all grow children at maxSize with remaining space" {
+    // Both grow children reach maxSize (40 each) but parent is 200 wide,
+    // leaving 120 remaining. The loop must terminate even though no child
+    // can grow further.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 40.0, 50.0 },
+            .{ 40.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - grow child clamped by maxSize" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 80.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 80.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - grow child respects minSize when parent is small" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 60.0, 0.0 } },
+            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 40.0, 0.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 60.0, 50.0 },
+            .{ 40.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - two grow children split space equally" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 50.0 },
+            .{ 100.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - two grow children with different maxSize" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 60.0, 50.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 60.0, 50.0 },
+            .{ 140.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - shrink respects minSize" {
+    // Two fixed children that together exceed parent width; shrink should
+    // reduce them but not below their minSize.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
+            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 50.0, 50.0 },
+            .{ 50.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - grow vertically with maxSize constraint" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .topToBottom,
+        .parentSize = .{ 100.0, 300.0 },
+        .children = &.{
+            .{ .preferredHeight = .grow, .size = .{ 100.0, 0.0 }, .maxSize = .{ 100.0, 120.0 } },
+            .{ .preferredHeight = .grow, .size = .{ 100.0, 0.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 120.0 },
+            .{ 100.0, 180.0 },
+        },
+    });
+}
+
+test "growAndShrink - grow with both minSize and maxSize" {
+    // Three grow children: one clamped by maxSize, one has a minSize floor,
+    // one unconstrained. Parent has 300 width.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 300.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 50.0, 50.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 50.0, 50.0 },
+            .{ 125.0, 50.0 },
+            .{ 125.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - shrink with asymmetric minSize" {
+    // Two children overflow by 80. One has a high minSize so the other must
+    // absorb more of the shrink.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 120.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 90.0, 0.0 } },
+            .{ .preferredWidth = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 20.0, 0.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 90.0, 50.0 },
+            .{ 30.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - cross-axis grow clamped by maxSize" {
+    // Direction is leftToRight, so cross-axis is height. Child has
+    // preferredHeight = .grow, which should expand to parent height but
+    // be clamped by maxSize.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 100.0 },
+        .children = &.{
+            .{ .preferredWidth = .{ .fixed = 200.0 }, .preferredHeight = .grow, .size = .{ 200.0, 30.0 }, .maxSize = .{ 200.0, 60.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 200.0, 60.0 },
+        },
+    });
+}
+
+test "growAndShrink - cross-axis grow respects minSize" {
+    // Direction is topToBottom, cross-axis is width. Child has
+    // preferredWidth = .grow with a minSize larger than parent — minSize wins.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .topToBottom,
+        .parentSize = .{ 80.0, 200.0 },
+        .children = &.{
+            .{ .preferredHeight = .{ .fixed = 200.0 }, .preferredWidth = .grow, .size = .{ 50.0, 200.0 }, .minSize = .{ 100.0, 0.0 }, .maxSize = .{ 200.0, 200.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 200.0 },
+        },
+    });
 }
 
 test "wrap - no wrapping when glyphs fit on single line" {
