@@ -12,19 +12,15 @@ pub fn Button(props: ButtonProps) !void {
 
     (try forbear.element(arena, .{}))({
         (try forbear.element(arena, .{
-            .borderRadius = switch (props.sizing) {
-                .small => 4,
-                .medium => 6,
-                .large => 8,
-            },
+            .borderRadius = 6.0,
             .borderInlineWidth = @splat(1.5),
             .borderBlockWidth = @splat(1.5),
             .background = .{ .color = .{ 0.99, 0.98, 0.96, 1.0 } },
             .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
             .fontSize = switch (props.sizing) {
-                .small => 14,
+                .small => 12,
                 .medium => 16,
-                .large => 18,
+                .large => 20,
             },
             .translate = .{
                 0.0,
@@ -41,12 +37,12 @@ pub fn Button(props: ButtonProps) !void {
                 .offsetInline = @splat(0.0),
             },
             .paddingBlock = switch (props.sizing) {
-                .small => @splat(12),
+                .small => @splat(10),
                 .medium => @splat(20),
                 .large => @splat(28),
             },
             .paddingInline = switch (props.sizing) {
-                .small => @splat(24),
+                .small => @splat(20),
                 .medium => @splat(36),
                 .large => @splat(48),
             },
