@@ -840,7 +840,7 @@ pub fn rasterize(
     try ensureNoError(c.FT_Set_Char_Size(
         self.handle,
         0,
-        @intFromFloat(size * 64.0),
+        @intFromFloat(@round(size * 64.0)),
         @intCast(dpi[0]),
         @intCast(dpi[1]),
     ));
