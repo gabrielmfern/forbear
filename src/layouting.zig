@@ -122,56 +122,54 @@ fn growAndShrink(
                 }
             }
         }
-        if (toGrowGradually.items.len > 0) {
-            while (remaining > 0 and toGrowGradually.items.len > 0) {
-                var smallest: f32 = std.math.inf(f32);
-                var secondSmallest = std.math.inf(f32);
+        while (remaining > 0 and toGrowGradually.items.len > 0) {
+            var smallest: f32 = std.math.inf(f32);
+            var secondSmallest = std.math.inf(f32);
 
-                var index: usize = 0;
-                while (index < toGrowGradually.items.len) {
-                    const child = toGrowGradually.items[index];
-                    if (child.getSize(direction) == child.getMaxSize(direction)) {
-                        _ = toGrowGradually.orderedRemove(index);
-                        continue;
+            var index: usize = 0;
+            while (index < toGrowGradually.items.len) {
+                const child = toGrowGradually.items[index];
+                if (child.getSize(direction) == child.getMaxSize(direction)) {
+                    _ = toGrowGradually.orderedRemove(index);
+                    continue;
+                }
+                if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
+                    smallest = child.getSize(direction);
+                } else if (child.getSize(direction) < secondSmallest and child.getSize(direction) < child.getMaxSize(direction)) {
+                    secondSmallest = child.getSize(direction);
+                }
+                index += 1;
+            }
+            // This ensures these two elements don't become so large that the remaining
+            // space ends up not being shared across all of the elements
+            var toAdd = @min(
+                secondSmallest - smallest,
+                remaining / @as(f32, @floatFromInt(toGrowGradually.items.len)),
+            );
+            // This avoids an infinte loop. It means all the children are the same size and
+            // we can simply share the remaining space across all of them
+            if (toAdd == 0) {
+                toAdd = remaining / @as(f32, @floatFromInt(toGrowGradually.items.len));
+            }
+            const remainingBeforeLoop = remaining;
+            for (toGrowGradually.items) |child| {
+                if (child.getSize(direction) == smallest) {
+                    const allowedDifference = @min(
+                        @max(child.getSize(direction) + toAdd, child.getMinSize(direction)),
+                        child.getMaxSize(direction),
+                    ) - child.getSize(direction);
+                    if (direction == .leftToRight) {
+                        child.size[0] += allowedDifference;
+                    } else {
+                        child.size[1] += allowedDifference;
                     }
-                    if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
-                        smallest = child.getSize(direction);
-                    } else if (child.getSize(direction) < secondSmallest and child.getSize(direction) < child.getMaxSize(direction)) {
-                        secondSmallest = child.getSize(direction);
-                    }
-                    index += 1;
+                    remaining -= allowedDifference;
                 }
-                // This ensures these two elements don't become so large that the remaining
-                // space ends up not being shared across all of the elements
-                var toAdd = @min(
-                    secondSmallest - smallest,
-                    remaining / @as(f32, @floatFromInt(toGrowGradually.items.len)),
-                );
-                // This avoids an infinte loop. It means all the children are the same size and
-                // we can simply share the remaining space across all of them
-                if (toAdd == 0) {
-                    toAdd = remaining / @as(f32, @floatFromInt(toGrowGradually.items.len));
-                }
-                const remainingBeforeLoop = remaining;
-                for (toGrowGradually.items) |child| {
-                    if (child.getSize(direction) == smallest) {
-                        const allowedDifference = @min(
-                            @max(child.getSize(direction) + toAdd, child.getMinSize(direction)),
-                            child.getMaxSize(direction),
-                        ) - child.getSize(direction);
-                        if (direction == .leftToRight) {
-                            child.size[0] += allowedDifference;
-                        } else {
-                            child.size[1] += allowedDifference;
-                        }
-                        remaining -= allowedDifference;
-                    }
-                }
-                if (remaining == remainingBeforeLoop) {
-                    // This means that some constraint is impeding the growth
-                    // of the childen, so we do this to avoid an infinte loop
-                    break;
-                }
+            }
+            if (remaining == remainingBeforeLoop) {
+                // This means that some constraint is impeding the growth
+                // of the childen, so we do this to avoid an infinte loop
+                break;
             }
         }
 
@@ -185,7 +183,7 @@ fn growAndShrink(
                     }
                 }
             }
-            while (remaining < -0.0000001 and toShrinkGradually.items.len > 0) {
+            while (remaining < -0.001 and toShrinkGradually.items.len > 0) {
                 var largest: f32 = toShrinkGradually.items[0].getSize(direction);
                 var secondLargest: f32 = 0.0;
 
