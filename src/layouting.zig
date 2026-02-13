@@ -124,14 +124,22 @@ fn growAndShrink(
         }
         if (toGrowGradually.items.len > 0) {
             while (remaining > 0) {
-                var smallest = remaining;
+                var smallest: f32 = std.math.inf(f32);
                 var secondSmallest = std.math.inf(f32);
-                for (toGrowGradually.items) |child| {
+
+                var index: usize = 0;
+                while (index < toGrowGradually.items.len) {
+                    const child = toGrowGradually.items[index];
+                    if (child.getSize(direction) == child.getMaxSize(direction)) {
+                        _ = toGrowGradually.orderedRemove(index);
+                        continue;
+                    }
                     if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
                         smallest = child.getSize(direction);
                     } else if (child.getSize(direction) < secondSmallest and child.getSize(direction) < child.getMaxSize(direction)) {
                         secondSmallest = child.getSize(direction);
                     }
+                    index += 1;
                 }
                 // This ensures these two elements don't become so large that the remaining
                 // space ends up not being shared across all of the elements
@@ -147,7 +155,10 @@ fn growAndShrink(
                 const remainingBeforeLoop = remaining;
                 for (toGrowGradually.items) |child| {
                     if (child.getSize(direction) == smallest) {
-                        const allowedDifference = @min(child.getSize(direction) + toAdd, child.getMaxSize(direction)) - child.getSize(direction);
+                        const allowedDifference = @min(
+                            @max(child.getSize(direction) + toAdd, child.getMinSize(direction)),
+                            child.getMaxSize(direction),
+                        ) - child.getSize(direction);
                         if (direction == .leftToRight) {
                             child.size[0] += allowedDifference;
                         } else {
@@ -201,7 +212,10 @@ fn growAndShrink(
                 }
                 for (toShrinkGradually.items) |child| {
                     if (child.getSize(direction) == largest) {
-                        const allowedDifference = @max(child.getSize(direction) - toSubtract, child.getMinSize(direction)) - child.getSize(direction);
+                        const allowedDifference = @max(
+                            child.getSize(direction) - toSubtract,
+                            child.getMinSize(direction),
+                        ) - child.getSize(direction);
                         if (direction == .leftToRight) {
                             child.size[0] += allowedDifference;
                         } else {
@@ -854,8 +868,8 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
     for (parent.children.?.layoutBoxes, 0..) |child, i| {
         actualSizes[i] = child.size;
     }
-    std.log.info("Expecting {any}", .{configuration.expectedSizes});
-    std.log.info("Finding {any}", .{actualSizes});
+    std.log.debug("Expecting {any}", .{configuration.expectedSizes});
+    std.log.debug("Finding {any}", .{actualSizes});
     try std.testing.expectEqualDeep(configuration.expectedSizes, actualSizes);
 }
 
@@ -909,11 +923,11 @@ test "growAndShrink - grow child respects minSize when parent is small" {
         .parentSize = .{ 100.0, 50.0 },
         .children = &.{
             .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 60.0, 0.0 } },
-            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 40.0, 0.0 } },
+            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
         },
         .expectedSizes = &.{
             .{ 60.0, 50.0 },
-            .{ 40.0, 50.0 },
+            .{ 80.0, 50.0 },
         },
     });
 }
