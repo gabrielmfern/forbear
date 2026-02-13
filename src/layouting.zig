@@ -122,7 +122,7 @@ fn growAndShrink(
                 }
             }
         }
-        while (remaining > 0 and toGrowGradually.items.len > 0) {
+        while (remaining > 0.001 and toGrowGradually.items.len > 0) {
             var smallest: f32 = std.math.inf(f32);
             var secondSmallest = std.math.inf(f32);
 
@@ -173,7 +173,7 @@ fn growAndShrink(
             }
         }
 
-        if (remaining < 0) {
+        if (remaining < -0.001) {
             var toShrinkGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
             defer toShrinkGradually.deinit(allocator);
             for (children) |*child| {
