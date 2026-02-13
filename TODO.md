@@ -31,7 +31,7 @@ missing things for the entire uhoh.com website:
 - [x] page scrolling
 - [x] fps has been destroyed, lower than 165 for a non changing layout
     - we could start caching the layouts from the nodes
-- [ ] maxWidth/maxHeight to limit a growing element's size
+- [x] maxWidth/maxHeight to limit a growing element's size
 - [ ] allow to center align just a single element, without affecting others
 - [ ] can't make an element fully transparent?
 - [ ] blend multiply
