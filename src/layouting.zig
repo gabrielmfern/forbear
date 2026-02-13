@@ -192,7 +192,7 @@ fn growAndShrink(
                     const child = toShrinkGradually.items[index];
                     if (child.getSize(direction) == child.getMinSize(direction)) {
                         _ = toShrinkGradually.orderedRemove(index);
-                        if (index == 0) {
+                        if (index == 0 and toGrowGradually.items.len > 0) {
                             largest = toShrinkGradually.items[0].getSize(direction);
                         }
                         continue;
