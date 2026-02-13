@@ -3624,7 +3624,7 @@ pub const Renderer = struct {
 
                 const linearColor = srgbToLinearColor(layoutBox.style.color);
                 const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
-                const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * layoutBox.style.lineHeight * layoutBox.style.fontSize * resolutionMultiplier[0];
+                const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[0];
 
                 // Outer lookup: once per layout box (per font/size/weight/dpi combo)
                 const glyphPageKey = TextPipeline.GlyphPageKey{
