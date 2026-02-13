@@ -123,7 +123,7 @@ fn growAndShrink(
             }
         }
         if (toGrowGradually.items.len > 0) {
-            while (remaining > 0) {
+            while (remaining > 0 and toGrowGradually.items.len > 0) {
                 var smallest: f32 = std.math.inf(f32);
                 var secondSmallest = std.math.inf(f32);
 
