@@ -754,12 +754,18 @@ fn testWrapConfiguration(configuration: struct {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
+    var totalAdvanceX: f32 = 0.0;
+    for (configuration.glyphs) |glyph| {
+        totalAdvanceX += glyph.advance[0];
+    }
+
     var layoutBox = LayoutBox{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ configuration.lineWidth, configuration.lineHeight },
         .minSize = .{ 0.0, 20.0 },
+        .maxSize = .{ totalAdvanceX, configuration.lineHeight * @as(f32, @floatFromInt(configuration.glyphs.len)) },
         .children = .{
             .glyphs = Glyphs{
                 .slice = configuration.glyphs,
