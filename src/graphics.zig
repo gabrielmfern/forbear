@@ -2119,6 +2119,26 @@ const ElementsPipeline = struct {
 };
 
 const TextPipeline = struct {
+    const GlyphPageCache = std.HashMap(
+        GlyphPageKey,
+        GlyphPage,
+        struct {
+            pub fn hash(_: @This(), key: GlyphPageKey) u64 {
+                var hasher = std.hash.Wyhash.init(0);
+                // GlyphPageKey uses f32, which doesn't generally have a unique
+                // representation, meaning this hash can be non-unique, but
+                // since the values for font size are always >= 0, we know this
+                // is then unique.
+                hasher.update(std.mem.asBytes(&key));
+                return hasher.final();
+            }
+            pub fn eql(_: @This(), a: GlyphPageKey, b: GlyphPageKey) bool {
+                return std.meta.eql(a, b);
+            }
+        },
+        std.hash_map.default_max_load_percentage,
+    );
+
     pipelineLayout: c.VkPipelineLayout,
     graphicsPipeline: c.VkPipeline,
 
@@ -2128,7 +2148,7 @@ const TextPipeline = struct {
 
     fontTextureAtlas: FontTextureAtlas,
     allocator: std.mem.Allocator,
-    glyphPageCache: std.AutoHashMap(GlyphPageKey, GlyphPage),
+    glyphPageCache: GlyphPageCache,
     sampler: c.VkSampler,
 
     shaderBuffers: [maxFramesInFlight]Buffer,
@@ -2143,7 +2163,7 @@ const TextPipeline = struct {
     };
 
     const GlyphPageKey = struct {
-        fontSize: u32,
+        fontSize: f32,
         fontWeight: u32,
         fontKey: u64,
         dpi: [2]u32,
@@ -2509,7 +2529,7 @@ const TextPipeline = struct {
             .descriptorPool = descriptorPool,
 
             .allocator = allocator,
-            .glyphPageCache = std.AutoHashMap(GlyphPageKey, GlyphPage).init(allocator),
+            .glyphPageCache = GlyphPageCache.init(allocator),
             .fontTextureAtlas = fontTextureAtlas,
             .sampler = sampler,
         };
@@ -3604,8 +3624,7 @@ pub const Renderer = struct {
 
                 const linearColor = srgbToLinearColor(layoutBox.style.color);
                 const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
-                const fontSizeF: f32 = @floatFromInt(layoutBox.style.fontSize);
-                const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * fontSizeF * resolutionMultiplier[0];
+                const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[0];
 
                 // Outer lookup: once per layout box (per font/size/weight/dpi combo)
                 const glyphPageKey = TextPipeline.GlyphPageKey{
@@ -3631,7 +3650,7 @@ pub const Renderer = struct {
                             const rasterizedGlyph = try layoutBox.style.font.rasterize(
                                 glyph.index,
                                 dpi,
-                                @intCast(layoutBox.style.fontSize),
+                                layoutBox.style.fontSize,
                             );
 
                             const textureCoordinates = try self.textPipeline.fontTextureAtlas.upload(

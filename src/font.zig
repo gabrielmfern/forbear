@@ -835,12 +835,12 @@ pub fn rasterize(
     self: @This(),
     glyphIndex: c_uint,
     dpi: [2]u32,
-    size: c_long,
+    size: f32,
 ) FreetypeError!RasterizedGlyph {
     try ensureNoError(c.FT_Set_Char_Size(
         self.handle,
         0,
-        size * 64,
+        @intFromFloat(@round(size * 64.0)),
         @intCast(dpi[0]),
         @intCast(dpi[1]),
     ));

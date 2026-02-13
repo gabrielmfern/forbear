@@ -1,13 +1,5 @@
 pub const dpiScale = 72.0 / 96.0;
 
-pub fn px(value: f32) f32 {
-    return value * dpiScale;
-}
-
-pub fn pxInt(value: f32) u32 {
-    return @intFromFloat(value * dpiScale);
-}
-
 pub const Colors = struct {
     pub const page = .{ 0.99, 0.98, 0.95, 1.0 };
     pub const text = .{ 0.1, 0.1, 0.1, 1.0 };

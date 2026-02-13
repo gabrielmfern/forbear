@@ -7,6 +7,7 @@ const Element = @import("node.zig").Element;
 const forbear = @import("root.zig");
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const Node = @import("node.zig").Node;
+const Sizing = @import("node.zig").Sizing;
 const Style = @import("node.zig").Style;
 const TextWrapping = @import("node.zig").TextWrapping;
 
@@ -44,6 +45,7 @@ pub const LayoutBox = struct {
     position: Vec2,
     z: u16,
     size: Vec2,
+    maxSize: Vec2,
     minSize: Vec2,
     children: ?Children,
 
@@ -54,6 +56,13 @@ pub const LayoutBox = struct {
             return self.minSize[0];
         }
         return self.minSize[1];
+    }
+
+    pub fn getMaxSize(self: @This(), direction: Direction) f32 {
+        if (direction == .leftToRight) {
+            return self.maxSize[0];
+        }
+        return self.maxSize[1];
     }
 
     pub fn getSize(self: @This(), direction: Direction) f32 {
@@ -85,6 +94,10 @@ fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
     }
 }
 
+fn approxEq(a: f32, b: f32) bool {
+    return @abs(a - b) < 0.001;
+}
+
 fn growAndShrink(
     allocator: std.mem.Allocator,
     layoutBox: *LayoutBox,
@@ -101,57 +114,70 @@ fn growAndShrink(
                 remaining -= child.getSize(direction);
                 if (direction.perpendicular() == .topToBottom) {
                     if (child.style.preferredHeight == .grow or (child.size[1] > layoutBox.size[1] and child.minSize[1] < child.size[1])) {
-                        child.size[1] = @max(layoutBox.size[1], child.minSize[1]);
+                        child.size[1] = @max(@min(layoutBox.size[1], child.maxSize[1]), child.minSize[1]);
                     }
                 } else if (direction.perpendicular() == .leftToRight) {
                     if (child.style.preferredWidth == .grow or (child.size[0] > layoutBox.size[0] and child.minSize[0] < child.size[0])) {
-                        child.size[0] = @max(layoutBox.size[0], child.minSize[0]);
+                        child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
                     }
                 }
-                if (child.style.getPreferredSize(direction) == .grow) {
+                if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
                     try toGrowGradually.append(allocator, child);
                 }
             }
         }
-        if (toGrowGradually.items.len > 0) {
-            while (remaining > 0) {
-                var smallest = remaining;
-                var secondSmallest = std.math.inf(f32);
-                for (toGrowGradually.items) |child| {
-                    if (child.getSize(direction) < smallest) {
-                        smallest = child.getSize(direction);
-                    } else if (child.getSize(direction) < secondSmallest) {
-                        secondSmallest = child.getSize(direction);
-                    }
+        while (remaining > 0.001 and toGrowGradually.items.len > 0) {
+            var smallest: f32 = std.math.inf(f32);
+            var secondSmallest = std.math.inf(f32);
+
+            var index: usize = 0;
+            while (index < toGrowGradually.items.len) {
+                const child = toGrowGradually.items[index];
+                if (approxEq(child.getSize(direction), child.getMaxSize(direction))) {
+                    _ = toGrowGradually.orderedRemove(index);
+                    continue;
                 }
-                // This ensures these two elements don't become so large that the remaining
-                // space ends up not being shared across all of the elements
-                var toAdd = @min(
-                    secondSmallest - smallest,
-                    remaining / @as(f32, @floatFromInt(toGrowGradually.items.len)),
-                );
-                // This avoids an infinte loop. It means all the children are the same size and
-                // we can simply share the remaining space across all of them
-                if (toAdd == 0) {
-                    toAdd = remaining / @as(f32, @floatFromInt(toGrowGradually.items.len));
+                if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
+                    smallest = child.getSize(direction);
+                } else if (child.getSize(direction) < secondSmallest and child.getSize(direction) < child.getMaxSize(direction)) {
+                    secondSmallest = child.getSize(direction);
                 }
-                for (toGrowGradually.items) |child| {
+                index += 1;
+            }
+            // This ensures these two elements don't become so large that the remaining
+            // space ends up not being shared across all of the elements
+            var toAdd = @min(
+                secondSmallest - smallest,
+                remaining / @as(f32, @floatFromInt(toGrowGradually.items.len)),
+            );
+            // This avoids an infinte loop. It means all the children are the same size and
+            // we can simply share the remaining space across all of them
+            if (toAdd == 0) {
+                toAdd = remaining / @as(f32, @floatFromInt(toGrowGradually.items.len));
+            }
+            const remainingBeforeLoop = remaining;
+            for (toGrowGradually.items) |child| {
+                if (approxEq(child.getSize(direction), smallest)) {
+                    const allowedDifference = @min(
+                        @max(child.getSize(direction) + toAdd, child.getMinSize(direction)),
+                        child.getMaxSize(direction),
+                    ) - child.getSize(direction);
                     if (direction == .leftToRight) {
-                        if (child.size[0] == smallest) {
-                            child.size[0] += toAdd;
-                            remaining -= toAdd;
-                        }
+                        child.size[0] += allowedDifference;
                     } else {
-                        if (child.size[1] == smallest) {
-                            child.size[1] += toAdd;
-                            remaining -= toAdd;
-                        }
+                        child.size[1] += allowedDifference;
                     }
+                    remaining -= allowedDifference;
                 }
+            }
+            if (remaining == remainingBeforeLoop) {
+                // This means that some constraint is impeding the growth
+                // of the childen, so we do this to avoid an infinte loop
+                break;
             }
         }
 
-        if (remaining < 0) {
+        if (remaining < -0.001) {
             var toShrinkGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
             defer toShrinkGradually.deinit(allocator);
             for (children) |*child| {
@@ -161,15 +187,18 @@ fn growAndShrink(
                     }
                 }
             }
-            while (remaining < -0.0000001 and toShrinkGradually.items.len > 0) {
+            while (remaining < -0.001 and toShrinkGradually.items.len > 0) {
                 var largest: f32 = toShrinkGradually.items[0].getSize(direction);
                 var secondLargest: f32 = 0.0;
 
                 var index: usize = 0;
                 while (index < toShrinkGradually.items.len) {
                     const child = toShrinkGradually.items[index];
-                    if (child.getSize(direction) == child.getMinSize(direction)) {
+                    if (approxEq(child.getSize(direction), child.getMinSize(direction))) {
                         _ = toShrinkGradually.orderedRemove(index);
+                        if (index == 0 and toGrowGradually.items.len > 0) {
+                            largest = toShrinkGradually.items[0].getSize(direction);
+                        }
                         continue;
                     }
                     if (child.getSize(direction) > largest) {
@@ -187,23 +216,17 @@ fn growAndShrink(
                     toSubtract = -remaining / @as(f32, @floatFromInt(toShrinkGradually.items.len));
                 }
                 for (toShrinkGradually.items) |child| {
-                    if (child.getSize(direction) == largest) {
-                        if (child.getSize(direction) - toSubtract <= child.minSize[0]) {
-                            if (direction == .leftToRight) {
-                                child.size[0] = child.minSize[0];
-                                remaining += @abs(toSubtract - child.minSize[0]);
-                            } else {
-                                child.size[1] = child.minSize[1];
-                                remaining += @abs(toSubtract - child.minSize[1]);
-                            }
+                    if (approxEq(child.getSize(direction), largest)) {
+                        const allowedDifference = @max(
+                            child.getSize(direction) - toSubtract,
+                            child.getMinSize(direction),
+                        ) - child.getSize(direction);
+                        if (direction == .leftToRight) {
+                            child.size[0] += allowedDifference;
                         } else {
-                            if (direction == .leftToRight) {
-                                child.size[0] = child.size[0] - toSubtract;
-                            } else {
-                                child.size[1] = child.size[1] - toSubtract;
-                            }
-                            remaining += toSubtract;
+                            child.size[1] += allowedDifference;
                         }
+                        remaining -= allowedDifference;
                     }
                 }
             }
@@ -555,6 +578,10 @@ const LayoutCreator = struct {
                         style.minWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else 0.0,
                         style.minHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else 0.0,
                     },
+                    .maxSize = .{
+                        style.maxWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else std.math.inf(f32),
+                        style.maxHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else std.math.inf(f32),
+                    },
                     .key = node.key,
                     .children = null,
                     .style = style,
@@ -577,9 +604,8 @@ const LayoutCreator = struct {
             .text => |text| {
                 const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
                 const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
-                const fontSize: f32 = @floatFromInt(style.fontSize);
-                const pixelSizeVec2: Vec2 = @as(Vec2, @splat(fontSize)) * resolutionMultiplier;
-                const pixelLineHeight = style.font.lineHeight() / unitsPerEm * pixelSizeVec2[1];
+                const pixelSizeVec2: Vec2 = @as(Vec2, @splat(style.fontSize)) * resolutionMultiplier;
+                const pixelLineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * pixelSizeVec2[1];
 
                 const shapedGlyphs = try style.font.shape(text);
                 var layoutGlyphs = try self.arenaAllocator.alloc(LayoutGlyph, shapedGlyphs.len);
@@ -587,6 +613,7 @@ const LayoutCreator = struct {
                 var cursor: Vec2 = @splat(0.0);
 
                 var minSize: Vec2 = .{ 0.0, pixelLineHeight };
+                var maxSize: Vec2 = .{ 0.0, pixelLineHeight };
 
                 var wordStart: usize = 0;
                 var wordAdvance: Vec2 = @splat(0.0);
@@ -613,12 +640,15 @@ const LayoutCreator = struct {
                             wordAdvance += advance;
                         }
                         minSize = @max(minSize, wordAdvance);
+                        maxSize[1] += pixelLineHeight;
                     } else if (style.textWrapping == .character) {
                         minSize = @max(minSize, advance);
+                        maxSize[1] += pixelLineHeight;
                     } else if (style.textWrapping == .none) {
                         minSize = cursor;
                     }
                 }
+                maxSize[0] = cursor[0];
 
                 return LayoutBox{
                     .position = .{ 0.0, 0.0 },
@@ -626,6 +656,7 @@ const LayoutCreator = struct {
                     .key = node.key,
                     .size = .{ cursor[0], pixelLineHeight },
                     .minSize = minSize,
+                    .maxSize = maxSize,
                     .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight } },
                     .style = style,
                 };
@@ -738,12 +769,18 @@ fn testWrapConfiguration(configuration: struct {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
+    var totalAdvanceX: f32 = 0.0;
+    for (configuration.glyphs) |glyph| {
+        totalAdvanceX += glyph.advance[0];
+    }
+
     var layoutBox = LayoutBox{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ configuration.lineWidth, configuration.lineHeight },
         .minSize = .{ 0.0, 20.0 },
+        .maxSize = .{ totalAdvanceX, configuration.lineHeight * @as(f32, @floatFromInt(configuration.glyphs.len)) },
         .children = .{
             .glyphs = Glyphs{
                 .slice = configuration.glyphs,
@@ -769,6 +806,264 @@ fn testWrapConfiguration(configuration: struct {
         glyphPositions[i] = glyph.position;
     }
     try std.testing.expectEqualDeep(configuration.expectedPositions, glyphPositions);
+}
+
+const defaultBaseStyle = BaseStyle{
+    .font = undefined,
+    .color = .{ 0.0, 0.0, 0.0, 1.0 },
+    .fontSize = 16,
+    .fontWeight = 400,
+    .lineHeight = 1.0,
+    .textWrapping = .none,
+};
+
+const TestChild = struct {
+    preferredWidth: Sizing = .fit,
+    preferredHeight: Sizing = .fit,
+    size: Vec2,
+    minSize: Vec2 = .{ 0.0, 0.0 },
+    maxSize: Vec2 = .{ std.math.inf(f32), std.math.inf(f32) },
+};
+
+fn testGrowAndShrinkConfiguration(configuration: struct {
+    direction: Direction,
+    parentSize: Vec2,
+    children: []const TestChild,
+    expectedSizes: []const Vec2,
+}) !void {
+    std.debug.assert(configuration.children.len == configuration.expectedSizes.len);
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const childBoxes = try arenaAllocator.alloc(LayoutBox, configuration.children.len);
+    for (configuration.children, 0..) |child, i| {
+        childBoxes[i] = LayoutBox{
+            .key = @intCast(i),
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = child.size,
+            .minSize = child.minSize,
+            .maxSize = child.maxSize,
+            .children = null,
+            .style = (IncompleteStyle{
+                .preferredWidth = child.preferredWidth,
+                .preferredHeight = child.preferredHeight,
+            }).completeWith(defaultBaseStyle),
+        };
+    }
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = configuration.parentSize,
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = configuration.parentSize,
+        .children = .{ .layoutBoxes = childBoxes },
+        .style = (IncompleteStyle{
+            .direction = configuration.direction,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    try growAndShrink(arenaAllocator, &parent);
+
+    const actualSizes = try arenaAllocator.alloc(Vec2, configuration.children.len);
+    for (parent.children.?.layoutBoxes, 0..) |child, i| {
+        actualSizes[i] = child.size;
+    }
+    std.log.debug("Expecting {any}", .{configuration.expectedSizes});
+    std.log.debug("Finding {any}", .{actualSizes});
+    try std.testing.expectEqualDeep(configuration.expectedSizes, actualSizes);
+}
+
+test "growAndShrink - single grow child fills remaining space horizontally" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - all grow children at maxSize with remaining space" {
+    // Both grow children reach maxSize (40 each) but parent is 200 wide,
+    // leaving 120 remaining. The loop must terminate even though no child
+    // can grow further.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 40.0, 50.0 },
+            .{ 40.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - grow child clamped by maxSize" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 80.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 80.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - grow child respects minSize when parent is small" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 60.0, 0.0 } },
+            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 60.0, 50.0 },
+            .{ 80.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - two grow children split space equally" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 50.0 },
+            .{ 100.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - two grow children with different maxSize" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 60.0, 50.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 60.0, 50.0 },
+            .{ 140.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - shrink respects minSize" {
+    // Two fixed children that together exceed parent width; shrink should
+    // reduce them but not below their minSize.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
+            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 50.0, 50.0 },
+            .{ 50.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - grow vertically with maxSize constraint" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .topToBottom,
+        .parentSize = .{ 100.0, 300.0 },
+        .children = &.{
+            .{ .preferredHeight = .grow, .size = .{ 100.0, 0.0 }, .maxSize = .{ 100.0, 120.0 } },
+            .{ .preferredHeight = .grow, .size = .{ 100.0, 0.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 120.0 },
+            .{ 100.0, 180.0 },
+        },
+    });
+}
+
+test "growAndShrink - grow with both minSize and maxSize" {
+    // Three grow children: one clamped by maxSize, one has a minSize floor,
+    // one unconstrained. Parent has 300 width.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 300.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 50.0, 50.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
+            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 50.0, 50.0 },
+            .{ 125.0, 50.0 },
+            .{ 125.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - shrink with asymmetric minSize" {
+    // Two children overflow by 80. One has a high minSize so the other must
+    // absorb more of the shrink.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 120.0, 50.0 },
+        .children = &.{
+            .{ .preferredWidth = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 90.0, 0.0 } },
+            .{ .preferredWidth = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 20.0, 0.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 90.0, 50.0 },
+            .{ 30.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - cross-axis grow clamped by maxSize" {
+    // Direction is leftToRight, so cross-axis is height. Child has
+    // preferredHeight = .grow, which should expand to parent height but
+    // be clamped by maxSize.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 200.0, 100.0 },
+        .children = &.{
+            .{ .preferredWidth = .{ .fixed = 200.0 }, .preferredHeight = .grow, .size = .{ 200.0, 30.0 }, .maxSize = .{ 200.0, 60.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 200.0, 60.0 },
+        },
+    });
+}
+
+test "growAndShrink - cross-axis grow respects minSize" {
+    // Direction is topToBottom, cross-axis is width. Child has
+    // preferredWidth = .grow with a minSize larger than parent — minSize wins.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .topToBottom,
+        .parentSize = .{ 80.0, 200.0 },
+        .children = &.{
+            .{ .preferredHeight = .{ .fixed = 200.0 }, .preferredWidth = .grow, .size = .{ 50.0, 200.0 }, .minSize = .{ 100.0, 0.0 }, .maxSize = .{ 200.0, 200.0 } },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 200.0 },
+        },
+    });
 }
 
 test "wrap - no wrapping when glyphs fit on single line" {
