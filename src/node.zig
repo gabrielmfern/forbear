@@ -63,7 +63,7 @@ pub const Style = struct {
 
     font: *Font,
     /// Will do nothing if the font is not a variable font. If you don't have a
-    /// variable font, you should use differnet fonts for different weights.
+    /// variable font, you should use different fonts for different weights.
     fontWeight: u32,
     fontSize: f32,
     lineHeight: f32,
