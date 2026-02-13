@@ -631,7 +631,6 @@ const LayoutCreator = struct {
                         maxSize[1] += pixelLineHeight;
                     } else if (style.textWrapping == .none) {
                         minSize = cursor;
-                        maxSize[1] += pixelLineHeight;
                     }
                 }
                 maxSize[0] = cursor[0];
