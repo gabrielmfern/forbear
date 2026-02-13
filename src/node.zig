@@ -34,10 +34,49 @@ pub const Shadow = struct {
     color: Vec4,
 };
 
-pub const Alignment = enum {
-    start,
-    center,
-    end,
+pub const Alignment = struct {
+    const Value = enum {
+        start,
+        center,
+        end,
+    };
+
+    x: Value,
+    y: Value,
+
+    /// Defines a new alignment where `vertical` is `.start`, and vertical is the given value
+    pub inline fn horizontal(value: Value) @This() {
+        return .{
+            .x = value,
+            .y = .start,
+        };
+    }
+
+    /// Defines a new alignment where `horizontal` is `.start`, and vertical is the given value
+    pub inline fn vertical(value: Value) @This() {
+        return .{
+            .x = .start,
+            .y = value,
+        };
+    }
+
+    /// Places horizontally and vertically at the start
+    pub const start = @This(){
+        .x = .start,
+        .y = .start,
+    };
+
+    /// Centers horizontally and veritcally
+    pub const center = @This(){
+        .x = .center,
+        .y = .center,
+    };
+
+    /// Places horizontally and vertically at the end
+    pub const end = @This(){
+        .x = .end,
+        .y = .end,
+    };
 };
 
 /// Will modify the min size of layout boxes that wrap text accordingly
@@ -87,8 +126,7 @@ pub const Style = struct {
     marginBlock: Vec2,
 
     direction: Direction,
-    horizontalAlignment: Alignment,
-    verticalAlignment: Alignment,
+    alignment: Alignment,
 
     pub fn getPreferredSize(self: @This(), direction: Direction) Sizing {
         if (direction == .leftToRight) {
@@ -165,8 +203,7 @@ pub const IncompleteStyle = struct {
     marginInline: ?Vec2 = null,
     marginBlock: ?Vec2 = null,
 
-    horizontalAlignment: ?Alignment = null,
-    verticalAlignment: ?Alignment = null,
+    alignment: ?Alignment = null,
     direction: ?Direction = null,
 
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
@@ -206,8 +243,7 @@ pub const IncompleteStyle = struct {
             .marginBlock = self.marginBlock orelse @splat(0.0),
 
             .direction = self.direction orelse .leftToRight,
-            .horizontalAlignment = self.horizontalAlignment orelse .start,
-            .verticalAlignment = self.verticalAlignment orelse .start,
+            .alignment = self.alignment orelse Alignment.start,
         };
     }
 };

@@ -330,21 +330,16 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                     });
                 }
                 for (lines.items) |line| {
-                    // std.debug.print("line start {}\n", .{line});
                     const startX = glyphs.slice[line.startIndex].position[0];
                     const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
                     const width = endX - startX;
                     for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
-                        // std.debug.print("glyph {}\n", .{glyph.*});
-                        switch (layoutBox.style.horizontalAlignment) {
+                        switch (layoutBox.style.alignment.x) {
                             .start => {},
                             .center => glyph.position[0] += (lineWidth - width) / 2.0,
                             .end => glyph.position[0] += lineWidth - width,
                         }
-                        // std.debug.print("glyph after {}\n", .{glyph.*});
-                        // std.debug.print("\n", .{});
                     }
-                    // std.debug.print("\n", .{});
                 }
                 layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
             },
@@ -442,8 +437,8 @@ fn place(layoutBox: *LayoutBox) void {
         switch (layoutBox.children.?) {
             .layoutBoxes => |children| {
                 const direction = layoutBox.style.direction;
-                const hAlign = layoutBox.style.horizontalAlignment;
-                const vAlign = layoutBox.style.verticalAlignment;
+                const hAlign = layoutBox.style.alignment.x;
+                const vAlign = layoutBox.style.alignment.y;
 
                 const availableSize = .{
                     layoutBox.size[0] - (layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1]) - (layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1]),
@@ -539,10 +534,10 @@ const LayoutCreator = struct {
         var style = switch (node.content) {
             .element => |element| element.style.completeWith(baseStyle),
             .text => (IncompleteStyle{
-                .horizontalAlignment = if (self.parent) |parent|
-                    parent.style.horizontalAlignment
-                else
-                    null,
+                .alignment = if (self.parent) |parent| .{
+                    .x = parent.style.alignment.x,
+                    .y = .start,
+                } else null,
             }).completeWith(baseStyle),
         };
         style.borderInlineWidth *= @splat(resolutionMultiplier[0]);

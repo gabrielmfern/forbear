@@ -46,8 +46,7 @@ pub fn Button(props: ButtonProps) !void {
                 .medium => @splat(36),
                 .large => @splat(48),
             },
-            .horizontalAlignment = .center,
-            .verticalAlignment = .center,
+            .alignment = .center,
             .direction = .topToBottom,
         }))({
             try forbear.text(arena, props.text);
