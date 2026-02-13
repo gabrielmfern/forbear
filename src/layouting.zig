@@ -94,6 +94,10 @@ fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
     }
 }
 
+fn approxEq(a: f32, b: f32) bool {
+    return @abs(a - b) < 0.001;
+}
+
 fn growAndShrink(
     allocator: std.mem.Allocator,
     layoutBox: *LayoutBox,
@@ -129,7 +133,7 @@ fn growAndShrink(
             var index: usize = 0;
             while (index < toGrowGradually.items.len) {
                 const child = toGrowGradually.items[index];
-                if (child.getSize(direction) == child.getMaxSize(direction)) {
+                if (approxEq(child.getSize(direction), child.getMaxSize(direction))) {
                     _ = toGrowGradually.orderedRemove(index);
                     continue;
                 }
@@ -153,7 +157,7 @@ fn growAndShrink(
             }
             const remainingBeforeLoop = remaining;
             for (toGrowGradually.items) |child| {
-                if (child.getSize(direction) == smallest) {
+                if (approxEq(child.getSize(direction), smallest)) {
                     const allowedDifference = @min(
                         @max(child.getSize(direction) + toAdd, child.getMinSize(direction)),
                         child.getMaxSize(direction),
@@ -190,7 +194,7 @@ fn growAndShrink(
                 var index: usize = 0;
                 while (index < toShrinkGradually.items.len) {
                     const child = toShrinkGradually.items[index];
-                    if (child.getSize(direction) == child.getMinSize(direction)) {
+                    if (approxEq(child.getSize(direction), child.getMinSize(direction))) {
                         _ = toShrinkGradually.orderedRemove(index);
                         if (index == 0 and toGrowGradually.items.len > 0) {
                             largest = toShrinkGradually.items[0].getSize(direction);
@@ -212,7 +216,7 @@ fn growAndShrink(
                     toSubtract = -remaining / @as(f32, @floatFromInt(toShrinkGradually.items.len));
                 }
                 for (toShrinkGradually.items) |child| {
-                    if (child.getSize(direction) == largest) {
+                    if (approxEq(child.getSize(direction), largest)) {
                         const allowedDifference = @max(
                             child.getSize(direction) - toSubtract,
                             child.getMinSize(direction),
