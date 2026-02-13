@@ -117,7 +117,7 @@ fn growAndShrink(
                         child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
                     }
                 }
-                if (child.style.getPreferredSize(direction) == .grow) {
+                if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
                     try toGrowGradually.append(allocator, child);
                 }
             }
@@ -144,18 +144,22 @@ fn growAndShrink(
                 if (toAdd == 0) {
                     toAdd = remaining / @as(f32, @floatFromInt(toGrowGradually.items.len));
                 }
+                const remainingBeforeLoop = remaining;
                 for (toGrowGradually.items) |child| {
-                    if (direction == .leftToRight) {
-                        if (child.size[0] == smallest and child.size[0] < child.maxSize[0]) {
-                            child.size[0] += toAdd;
-                            remaining -= toAdd;
+                    if (child.getSize(direction) == smallest) {
+                        const allowedDifference = @min(child.getSize(direction) + toAdd, child.getMaxSize(direction)) - child.getSize(direction);
+                        if (direction == .leftToRight) {
+                            child.size[0] += allowedDifference;
+                        } else {
+                            child.size[1] += allowedDifference;
                         }
-                    } else {
-                        if (child.size[1] == smallest and child.size[1] < child.maxSize[1]) {
-                            child.size[1] += toAdd;
-                            remaining -= toAdd;
-                        }
+                        remaining -= allowedDifference;
                     }
+                }
+                if (remaining == remainingBeforeLoop) {
+                    // This means that some constraint is impeding the growth
+                    // of the childen, so we do this to avoid an infinte loop
+                    break;
                 }
             }
         }
@@ -197,22 +201,13 @@ fn growAndShrink(
                 }
                 for (toShrinkGradually.items) |child| {
                     if (child.getSize(direction) == largest) {
-                        if (child.getSize(direction) - toSubtract <= child.minSize[0]) {
-                            if (direction == .leftToRight) {
-                                child.size[0] = child.minSize[0];
-                                remaining += @abs(toSubtract - child.minSize[0]);
-                            } else {
-                                child.size[1] = child.minSize[1];
-                                remaining += @abs(toSubtract - child.minSize[1]);
-                            }
+                        const allowedDifference = @max(child.getSize(direction) - toSubtract, child.getMinSize(direction)) - child.getSize(direction);
+                        if (direction == .leftToRight) {
+                            child.size[0] += allowedDifference;
                         } else {
-                            if (direction == .leftToRight) {
-                                child.size[0] = child.size[0] - toSubtract;
-                            } else {
-                                child.size[1] = child.size[1] - toSubtract;
-                            }
-                            remaining += toSubtract;
+                            child.size[1] += allowedDifference;
                         }
+                        remaining -= allowedDifference;
                     }
                 }
             }
