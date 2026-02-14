@@ -956,7 +956,7 @@ fn renderingMain(
                 .textWrapping = .word,
                 .fontWeight = 400,
                 .lineHeight = 1.0,
-                .blendMode = .add,
+                .blendMode = .normal,
             },
             viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },

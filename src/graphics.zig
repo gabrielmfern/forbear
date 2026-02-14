@@ -1649,6 +1649,7 @@ const ElementRenderingData = extern struct {
     borderRadius: f32,
     borderSize: Vec4,
     imageIndex: i32,
+    blendMode: u32,
     modelViewProjectionMatrix: zmath.Mat,
     size: [2]f32,
 };
@@ -3739,6 +3740,7 @@ pub const Renderer = struct {
                     layoutBox.style.borderWidth.x[1],
                 },
                 .imageIndex = textureIndex,
+                .blendMode = @intCast(@intFromEnum(layoutBox.style.blendMode)),
             };
 
             if (layoutBox.style.shadow) |shadow| {

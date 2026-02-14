@@ -298,9 +298,9 @@ pub const Margin = struct {
 
 pub const BorderWidth = Padding;
 
-pub const BlendMode = enum {
-    normal,
-    multiply,
+pub const BlendMode = enum(u32) {
+    normal = 0,
+    multiply = 1,
 };
 
 pub const Style = struct {
