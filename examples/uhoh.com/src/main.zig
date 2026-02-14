@@ -43,14 +43,14 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .padding = .block(13.5),
+            .padding = .block(11.25),
             .alignment = .center,
         }))({
             (try forbear.element(arena, .{
                 .width = .{ .fixed = 67.5 },
                 .height = .{ .fixed = 21.0 },
                 .background = .{ .image = try forbear.useImage("uhoh-logo") },
-                .margin = forbear.Margin.inLine(0.0).withRight(24.0),
+                .margin = forbear.Margin.right(24.0),
             }))({});
             (try forbear.element(arena, .{
                 .width = .grow,
@@ -114,6 +114,7 @@ fn App() !void {
                     .width = .{ .fixed = 270.0 },
                     .height = .{ .fixed = 285.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-hero") },
+                    .blendMode = .multiply,
                 }))({});
             });
         });
@@ -147,6 +148,7 @@ fn App() !void {
                             .width = .{ .fixed = 16.5 },
                             .height = .{ .fixed = 16.5 },
                             .background = .{ .image = try forbear.useImage("uhoh-check") },
+                            .blendMode = .multiply,
                             .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                         }))({});
                         (try forbear.element(arena, .{
@@ -180,6 +182,7 @@ fn App() !void {
                     .width = .{ .fixed = 240.0 },
                     .height = .{ .fixed = 255.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-problem") },
+                    .blendMode = .multiply,
                     .margin = forbear.Margin.inLine(0.0).withRight(24.0),
                 }))({});
                 (try forbear.element(arena, .{ .direction = .topToBottom }))({
@@ -207,6 +210,7 @@ fn App() !void {
                                 .width = .{ .fixed = 13.5 },
                                 .height = .{ .fixed = 13.5 },
                                 .background = .{ .image = try forbear.useImage("uhoh-x-red") },
+                                .blendMode = .multiply,
                                 .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                             }))({});
                             (try forbear.element(arena, .{ .fontSize = 12.0 }))({
@@ -329,6 +333,7 @@ fn App() !void {
                     .alignment = .centerLeft,
                 }))({
                     for (logos) |id| {
+                        // TODO: apply a grayscale filter to these logos
                         (try forbear.element(arena, .{
                             .width = .{ .fixed = 120.0 },
                             .height = .{ .fixed = 42.0 },
@@ -354,6 +359,7 @@ fn App() !void {
                     .width = .{ .fixed = 270.0 },
                     .height = .{ .fixed = 165.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-solution") },
+                    .blendMode = .multiply,
                 }))({});
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
@@ -508,6 +514,7 @@ fn App() !void {
                             (try forbear.element(arena, .{
                                 .width = .{ .fixed = 30.0 },
                                 .height = .{ .fixed = 30.0 },
+                                .blendMode = .multiply,
                                 .background = .{ .image = try forbear.useImage(offering.imageId) },
                                 .margin = forbear.Margin.inLine(0.0).withRight(9.0),
                             }))({});
@@ -618,6 +625,7 @@ fn App() !void {
                     .width = .{ .fixed = 165.0 },
                     .height = .{ .fixed = 135.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-how-it-works") },
+                    .blendMode = .multiply,
                 }))({});
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
@@ -720,6 +728,7 @@ fn App() !void {
                     .width = .{ .fixed = 270.0 },
                     .height = .{ .fixed = 225.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-group-21") },
+                    .blendMode = .multiply,
                     .margin = forbear.Margin.inLine(24.0).withRight(0.0),
                 }))({});
             });
@@ -732,13 +741,14 @@ fn App() !void {
                     .width = .{ .fixed = 90.0 },
                     .height = .{ .fixed = 60.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-failure") },
+                    .blendMode = .multiply,
                     .margin = forbear.Margin.inLine(0.0).withRight(10.5),
                 }))({});
                 (try forbear.element(arena, .{
                     .fontSize = 12.0,
                     .color = theme.Colors.muted,
                 }))({
-                    try forbear.text(arena, "Or keep asking your most tech-savvy employee to fix the WiFi. You could save money, time, and headaches - or keep duct-taping your IT together until it breaks.");
+                    try forbear.text(arena, "Or... keep asking your most tech-savvy employee to fix the WiFi. You could save money, time, and headaches - or keep duct-taping your IT together until it breaks.");
                 });
             });
         });
@@ -821,6 +831,7 @@ fn App() !void {
                     .width = .{ .fixed = 315.0 },
                     .height = .{ .fixed = 180.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-bottom-cta") },
+                    .blendMode = .multiply,
                 }))({});
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
@@ -945,6 +956,7 @@ fn renderingMain(
                 .textWrapping = .word,
                 .fontWeight = 400,
                 .lineHeight = 1.0,
+                .blendMode = .normal,
             },
             viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },

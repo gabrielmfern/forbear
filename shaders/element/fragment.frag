@@ -8,6 +8,7 @@ layout(location = 3) in vec2 size;
 layout(location = 4) in flat int imageIndex;
 layout(location = 5) in vec4 borderColor;
 layout(location = 6) in vec4 borderSize;
+layout(location = 7) in flat uint blendMode;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 1) uniform sampler2D textures[];
@@ -60,4 +61,11 @@ void main() {
     float mixFactor = clamp(innerFill / denom, 0.0, 1.0);
     outColor = mix(borderColor, color, mixFactor);
     outColor.a *= outerFill;
+
+    // .multiply is enum value 1 in node.zig.
+    // For multiply blending, RGB must be premultiplied by alpha to avoid
+    // transparent/antialiased pixels darkening the destination.
+    if (blendMode == 1) {
+        outColor.rgb *= outColor.a;
+    }
 }

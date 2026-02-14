@@ -791,6 +791,7 @@ fn testWrapConfiguration(configuration: struct {
             .fontWeight = 400,
             .lineHeight = 1.0,
             .textWrapping = configuration.mode,
+            .blendMode = .normal,
         }),
     };
 
@@ -810,6 +811,7 @@ const defaultBaseStyle = BaseStyle{
     .fontWeight = 400,
     .lineHeight = 1.0,
     .textWrapping = .none,
+    .blendMode = .normal,
 };
 
 const TestChild = struct {
