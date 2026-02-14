@@ -1962,14 +1962,20 @@ const ElementsPipeline = struct {
                     .logicOpEnable = c.VK_FALSE,
                     .logicOp = c.VK_LOGIC_OP_COPY,
                     .attachmentCount = 1,
+                    // Multiply blend with source alpha: the fragment shader
+                    // outputs premultiplied alpha (src_rgb = α_s * Cs), so:
+                    //   color = src_rgb * Cb + (1 - α_s) * Cb
+                    //         = α_s * Cs * Cb + (1 - α_s) * Cb
+                    // This matches the CSS multiply compositing formula.
+                    // Fully transparent pixels leave the framebuffer unchanged.
                     .pAttachments = &c.VkPipelineColorBlendAttachmentState{
                         .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
                         .blendEnable = c.VK_TRUE,
                         .srcColorBlendFactor = c.VK_BLEND_FACTOR_DST_COLOR,
-                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                         .colorBlendOp = c.VK_BLEND_OP_ADD,
                         .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
-                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                         .alphaBlendOp = c.VK_BLEND_OP_ADD,
                     },
                     .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
