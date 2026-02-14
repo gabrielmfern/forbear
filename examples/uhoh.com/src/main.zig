@@ -54,7 +54,7 @@ fn App() !void {
                     .preferredWidth = .{ .fixed = 67.5 },
                     .preferredHeight = .{ .fixed = 21.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-logo") },
-                    .marginInline = .{ 0.0, 24.0 },
+                    .margin = forbear.Margin.inLine(0.0).withRight(24.0),
                 }))({});
                 (try forbear.element(arena, .{
                     .direction = .leftToRight,
@@ -63,7 +63,7 @@ fn App() !void {
                     (try forbear.element(arena, .{
                         .fontWeight = 500,
                         .fontSize = 10.5,
-                        .marginInline = .{ 0.0, 13.5 },
+                        .margin = forbear.Margin.inLine(0.0).withRight(13.5),
                     }))({
                         try forbear.text(arena, "Pricing");
                     });
@@ -92,7 +92,7 @@ fn App() !void {
                         .fontWeight = 700,
                         .fontSize = 46,
                         .lineHeight = 0.75,
-                        .marginBlock = .{ 0.0, 18.0 },
+                        .margin = forbear.Margin.block(0.0).withBottom(18.0),
                     }))({
                         try forbear.text(arena, "You're the boss, why are you still fixing tech issues?");
                     });
@@ -100,7 +100,7 @@ fn App() !void {
                         .fontSize = 15.0,
                         .color = black,
                         .fontWeight = 500,
-                        .marginBlock = .{ 12.0, 15.0 },
+                        .margin = forbear.Margin.block(12.0).withBottom(15.0),
                     }))({
                         try forbear.text(arena, "It doesn't just annoy you. It slows you and your staff down. That's our job now.");
                     });
@@ -108,7 +108,7 @@ fn App() !void {
                     (try forbear.element(arena, .{
                         .fontSize = 9.0,
                         .color = black,
-                        .marginBlock = .{ 10.5, 0.0 },
+                        .margin = forbear.Margin.block(10.5).withBottom(0.0),
                     }))({
                         try forbear.text(
                             arena,
@@ -147,13 +147,13 @@ fn App() !void {
                     (try forbear.element(arena, .{
                         .direction = .leftToRight,
                         .alignment = .centerLeft,
-                        .marginInline = .{ 0.0, 18.0 },
+                        .margin = forbear.Margin.inLine(0.0).withRight(18.0),
                     }))({
                         (try forbear.element(arena, .{
                             .preferredWidth = .{ .fixed = 16.5 },
                             .preferredHeight = .{ .fixed = 16.5 },
                             .background = .{ .image = try forbear.useImage("uhoh-check") },
-                            .marginInline = .{ 0.0, 7.5 },
+                            .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                         }))({});
                         (try forbear.element(arena, .{
                             .fontWeight = 500,
@@ -186,7 +186,7 @@ fn App() !void {
                     .preferredWidth = .{ .fixed = 240.0 },
                     .preferredHeight = .{ .fixed = 255.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-problem") },
-                    .marginInline = .{ 0.0, 24.0 },
+                    .margin = forbear.Margin.inLine(0.0).withRight(24.0),
                 }))({});
                 (try forbear.element(arena, .{ .direction = .topToBottom }))({
                     (try forbear.element(arena, .{
@@ -199,7 +199,7 @@ fn App() !void {
                     (try forbear.element(arena, .{
                         .fontWeight = 700,
                         .fontSize = 24.0,
-                        .marginBlock = .{ 4.5, 12.0 },
+                        .margin = forbear.Margin.block(4.5).withBottom(12.0),
                     }))({
                         try forbear.text(arena, "But your day-to-day has some of this BS in it:");
                     });
@@ -207,13 +207,13 @@ fn App() !void {
                     for (issues) |issue| {
                         (try forbear.element(arena, .{
                             .direction = .leftToRight,
-                            .marginBlock = .{ 0.0, 7.5 },
+                            .margin = forbear.Margin.block(0.0).withBottom(7.5),
                         }))({
                             (try forbear.element(arena, .{
                                 .preferredWidth = .{ .fixed = 13.5 },
                                 .preferredHeight = .{ .fixed = 13.5 },
                                 .background = .{ .image = try forbear.useImage("uhoh-x-red") },
-                                .marginInline = .{ 0.0, 7.5 },
+                                .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                             }))({});
                             (try forbear.element(arena, .{ .fontSize = 12.0 }))({
                                 try forbear.text(arena, issue);
@@ -222,7 +222,7 @@ fn App() !void {
                     }
                     (try forbear.element(arena, .{
                         .fontSize = 12.0,
-                        .marginBlock = .{ 12.0, 15.0 },
+                        .margin = forbear.Margin.block(12.0).withBottom(15.0),
                     }))({
                         try forbear.text(arena, "Imagine if you could delegate all these issues to a genie?");
                     });
@@ -273,7 +273,7 @@ fn App() !void {
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
                     .fontSize = 22.5,
-                    .marginBlock = .{ 0.0, 15.0 },
+                    .margin = forbear.Margin.block(0.0).withBottom(15.0),
                 }))({
                     try forbear.text(arena, "Don't take our word for it.");
                 });
@@ -286,7 +286,7 @@ fn App() !void {
                         .borderInlineWidth = @splat(0.75),
                         .borderBlockWidth = @splat(0.75),
                         .padding = .all(13.5),
-                        .marginBlock = .{ 0.0, 12.0 },
+                        .margin = forbear.Margin.block(0.0).withBottom(12.0),
                         .direction = .leftToRight,
                     }))({
                         (try forbear.element(arena, .{
@@ -294,7 +294,7 @@ fn App() !void {
                             .preferredHeight = .{ .fixed = 42.0 },
                             .background = .{ .image = try forbear.useImage(testimonial.imageId) },
                             .borderRadius = 21.0,
-                            .marginInline = .{ 0.0, 10.5 },
+                            .margin = forbear.Margin.inLine(0.0).withRight(10.5),
                         }))({});
                         (try forbear.element(arena, .{
                             .fontSize = 11.25,
@@ -327,7 +327,7 @@ fn App() !void {
                 (try forbear.element(arena, .{
                     .fontWeight = 600,
                     .fontSize = 13.5,
-                    .marginBlock = .{ 0.0, 13.5 },
+                    .margin = forbear.Margin.block(0.0).withBottom(13.5),
                 }))({
                     try forbear.text(arena, "Our partners");
                 });
@@ -340,7 +340,7 @@ fn App() !void {
                             .preferredWidth = .{ .fixed = 120.0 },
                             .preferredHeight = .{ .fixed = 42.0 },
                             .background = .{ .image = try forbear.useImage(id) },
-                            .marginInline = .{ 0.0, 13.5 },
+                            .margin = forbear.Margin.inLine(0.0).withRight(13.5),
                         }))({});
                     }
                 });
@@ -365,7 +365,7 @@ fn App() !void {
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
                     .fontSize = 22.5,
-                    .marginBlock = .{ 13.5, 7.5 },
+                    .margin = forbear.Margin.block(13.5).withBottom(7.5),
                 }))({
                     try forbear.text(arena, "We're here to reinvent how tech gets done.");
                 });
@@ -505,19 +505,19 @@ fn App() !void {
                         .borderInlineWidth = @splat(0.75),
                         .borderBlockWidth = @splat(0.75),
                         .padding = .all(15.0),
-                        .marginBlock = .{ 0.0, 12.0 },
+                        .margin = forbear.Margin.block(0.0).withBottom(12.0),
                         .direction = .topToBottom,
                     }))({
                         (try forbear.element(arena, .{
                             .direction = .leftToRight,
                             .alignment = .centerLeft,
-                            .marginBlock = .{ 0.0, 9.0 },
+                            .margin = forbear.Margin.block(0.0).withBottom(9.0),
                         }))({
                             (try forbear.element(arena, .{
                                 .preferredWidth = .{ .fixed = 30.0 },
                                 .preferredHeight = .{ .fixed = 30.0 },
                                 .background = .{ .image = try forbear.useImage(offering.imageId) },
-                                .marginInline = .{ 0.0, 9.0 },
+                                .margin = forbear.Margin.inLine(0.0).withRight(9.0),
                             }))({});
                             (try forbear.element(arena, .{
                                 .fontWeight = 700,
@@ -529,14 +529,14 @@ fn App() !void {
                         inline for (offering.bullets) |bullet| {
                             (try forbear.element(arena, .{
                                 .direction = .leftToRight,
-                                .marginBlock = .{ 0.0, 4.5 },
+                                .margin = forbear.Margin.block(0.0).withBottom(4.5),
                             }))({
                                 (try forbear.element(arena, .{
                                     .preferredWidth = .{ .fixed = 6.0 },
                                     .preferredHeight = .{ .fixed = 6.0 },
                                     .background = .{ .color = theme.Colors.accentDark },
                                     .borderRadius = 3.0,
-                                    .marginInline = .{ 0.0, 7.5 },
+                                    .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                                 }))({});
                                 (try forbear.element(arena, .{ .fontSize = 11.25 }))({
                                     try forbear.text(arena, bullet);
@@ -547,12 +547,12 @@ fn App() !void {
                             .background = .{ .color = theme.Colors.soft },
                             .borderRadius = 9.0,
                             .padding = .all(9.0),
-                            .marginBlock = .{ 10.5, 0.0 },
+                            .margin = forbear.Margin.block(10.5).withBottom(0.0),
                         }))({
                             (try forbear.element(arena, .{
                                 .fontWeight = 600,
                                 .fontSize = 12.0,
-                                .marginBlock = .{ 0.0, 4.5 },
+                                .margin = forbear.Margin.block(0.0).withBottom(4.5),
                             }))({
                                 try forbear.text(arena, offering.addonTitle);
                             });
@@ -582,7 +582,7 @@ fn App() !void {
                     .preferredHeight = .{ .fixed = 60.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-jon-avatar") },
                     .borderRadius = 30.0,
-                    .marginInline = .{ 0.0, 12.0 },
+                    .margin = forbear.Margin.inLine(0.0).withRight(12.0),
                 }))({});
                 (try forbear.element(arena, .{
                     .direction = .topToBottom,
@@ -596,7 +596,7 @@ fn App() !void {
                     (try forbear.element(arena, .{
                         .fontSize = 10.5,
                         .color = theme.Colors.muted,
-                        .marginBlock = .{ 9.0, 0.0 },
+                        .margin = forbear.Margin.block(9.0).withBottom(0.0),
                     }))({
                         try forbear.text(arena, "- Jon Sturgeon, CEO of Dingus & Zazzy & Co-Founder of uhoh");
                     });
@@ -630,7 +630,7 @@ fn App() !void {
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
                     .fontSize = 21.0,
-                    .marginBlock = .{ 13.5, 13.5 },
+                    .margin = forbear.Margin.block(13.5),
                 }))({
                     try forbear.text(arena, "Your new IT department. On demand.");
                 });
@@ -641,12 +641,12 @@ fn App() !void {
                         (try forbear.element(arena, .{
                             .preferredWidth = .{ .fixed = 225.0 },
                             .direction = .topToBottom,
-                            .marginInline = .{ 0.0, 18.0 },
+                            .margin = forbear.Margin.inLine(0.0).withRight(18.0),
                         }))({
                             (try forbear.element(arena, .{
                                 .fontWeight = 700,
                                 .fontSize = 15.0,
-                                .marginBlock = .{ 0.0, 4.5 },
+                                .margin = forbear.Margin.block(0.0).withBottom(4.5),
                             }))({
                                 const label = step_numbers[index];
                                 try forbear.text(arena, label);
@@ -657,7 +657,7 @@ fn App() !void {
                         });
                     }
                 });
-                (try forbear.element(arena, .{ .marginBlock = .{ 15.0, 0.0 } }))({
+                (try forbear.element(arena, .{ .margin = forbear.Margin.block(15.0).withBottom(0.0) }))({
                     (try forbear.element(arena, .{
                         .background = .{ .color = theme.Colors.accent },
                         .borderRadius = 7.5,
@@ -701,14 +701,14 @@ fn App() !void {
                     (try forbear.element(arena, .{
                         .fontWeight = 700,
                         .fontSize = 22.5,
-                        .marginBlock = .{ 0.0, 10.5 },
+                        .margin = forbear.Margin.block(0.0).withBottom(10.5),
                     }))({
                         try forbear.text(arena, "Your tech works. People are happy. Time comes back.");
                     });
                     inline for (benefits) |benefit| {
                         (try forbear.element(arena, .{
                             .direction = .leftToRight,
-                            .marginBlock = .{ 0.0, 6.0 },
+                            .margin = forbear.Margin.block(0.0).withBottom(6.0),
                             .alignment = .centerLeft,
                         }))({
                             (try forbear.element(arena, .{
@@ -716,7 +716,7 @@ fn App() !void {
                                 .preferredHeight = .{ .fixed = 6.0 },
                                 .background = .{ .color = theme.Colors.accentDark },
                                 .borderRadius = 3.0,
-                                .marginInline = .{ 0.0, 7.5 },
+                                .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                             }))({});
                             (try forbear.element(arena, .{ .fontSize = 12.0 }))({
                                 try forbear.text(arena, benefit);
@@ -728,19 +728,19 @@ fn App() !void {
                     .preferredWidth = .{ .fixed = 270.0 },
                     .preferredHeight = .{ .fixed = 225.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-group-21") },
-                    .marginInline = .{ 24.0, 0.0 },
+                    .margin = forbear.Margin.inLine(24.0).withRight(0.0),
                 }))({});
             });
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
                 .alignment = .centerLeft,
-                .marginBlock = .{ 13.5, 0.0 },
+                .margin = forbear.Margin.block(13.5).withBottom(0.0),
             }))({
                 (try forbear.element(arena, .{
                     .preferredWidth = .{ .fixed = 90.0 },
                     .preferredHeight = .{ .fixed = 60.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-failure") },
-                    .marginInline = .{ 0.0, 10.5 },
+                    .margin = forbear.Margin.inLine(0.0).withRight(10.5),
                 }))({});
                 (try forbear.element(arena, .{
                     .fontSize = 12.0,
@@ -783,7 +783,7 @@ fn App() !void {
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
                     .fontSize = 21.0,
-                    .marginBlock = .{ 0.0, 13.5 },
+                    .margin = forbear.Margin.block(0.0).withBottom(13.5),
                 }))({
                     try forbear.text(arena, "FAQ");
                 });
@@ -795,12 +795,12 @@ fn App() !void {
                         .borderInlineWidth = @splat(0.75),
                         .borderBlockWidth = @splat(0.75),
                         .padding = .all(12.0),
-                        .marginBlock = .{ 0.0, 9.0 },
+                        .margin = forbear.Margin.block(0.0).withBottom(9.0),
                     }))({
                         (try forbear.element(arena, .{
                             .fontWeight = 600,
                             .fontSize = 12.0,
-                            .marginBlock = .{ 0.0, 6.0 },
+                            .margin = forbear.Margin.block(0.0).withBottom(6.0),
                         }))({
                             try forbear.text(arena, faq.question);
                         });
@@ -834,14 +834,14 @@ fn App() !void {
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
                     .fontSize = 22.5,
-                    .marginBlock = .{ 13.5, 7.5 },
+                    .margin = forbear.Margin.block(13.5).withBottom(7.5),
                 }))({
                     try forbear.text(arena, "Dude, you're at the bottom of our landing page.");
                 });
                 (try forbear.element(arena, .{
                     .fontSize = 12.0,
                     .color = theme.Colors.muted,
-                    .marginBlock = .{ 0.0, 20.0 },
+                    .margin = forbear.Margin.block(0.0).withBottom(20.0),
                 }))({
                     try forbear.text(arena, "Just get the free trial already if you're that interested. You scrolled all the way here.");
                 });
@@ -869,7 +869,7 @@ fn App() !void {
                         .preferredWidth = .{ .fixed = 67.5 },
                         .preferredHeight = .{ .fixed = 21.0 },
                         .background = .{ .image = try forbear.useImage("uhoh-logo") },
-                        .marginInline = .{ 0.0, 9.0 },
+                        .margin = forbear.Margin.inLine(0.0).withRight(9.0),
                     }))({});
                     (try forbear.element(arena, .{ .fontSize = 9.0 }))({
                         try forbear.text(arena, "Privacy Policy");
@@ -877,12 +877,12 @@ fn App() !void {
                 });
                 (try forbear.element(arena, .{
                     .direction = .leftToRight,
-                    .marginBlock = .{ 12.0, 0.0 },
+                    .margin = forbear.Margin.block(12.0).withBottom(0.0),
                 }))({
                     (try forbear.element(arena, .{
                         .fontSize = 9.0,
                         .color = theme.Colors.muted,
-                        .marginInline = .{ 0.0, 15.0 },
+                        .margin = forbear.Margin.inLine(0.0).withRight(15.0),
                     }))({
                         try forbear.text(arena, "© 2025 uhoh. All rights reserved.");
                     });

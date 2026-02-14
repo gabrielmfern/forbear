@@ -199,6 +199,103 @@ pub const Padding = struct {
     }
 };
 
+pub const Margin = struct {
+    x: Vec2,
+    y: Vec2,
+
+    pub inline fn all(value: f32) @This() {
+        return .{
+            .x = @splat(value),
+            .y = @splat(value),
+        };
+    }
+
+    /// `inLine` because `inline` is a reserved keyword in Zig
+    pub inline fn inLine(value: f32) @This() {
+        return .{
+            .x = @splat(value),
+            .y = @splat(0.0),
+        };
+    }
+
+    pub fn withInLine(self: @This(), value: f32) @This() {
+        return .{
+            .x = @splat(value),
+            .y = self.y,
+        };
+    }
+
+    pub inline fn block(value: f32) @This() {
+        return .{
+            .x = @splat(0.0),
+            .y = @splat(value),
+        };
+    }
+
+    pub fn withBlock(self: @This(), value: f32) @This() {
+        return .{
+            .x = self.x,
+            .y = @splat(value),
+        };
+    }
+
+    pub inline fn left(value: f32) @This() {
+        return .{
+            .x = .{ value, 0.0 },
+            .y = @splat(0.0),
+        };
+    }
+
+    pub fn withLeft(self: @This(), value: f32) @This() {
+        return .{
+            .x = .{ value, self.x[1] },
+            .y = self.y,
+        };
+    }
+
+    pub inline fn right(value: f32) @This() {
+        return .{
+            .x = .{ 0.0, value },
+            .y = @splat(0.0),
+        };
+    }
+
+    pub fn withRight(self: @This(), value: f32) @This() {
+        return .{
+            .x = .{ self.x[0], value },
+            .y = self.y,
+        };
+    }
+
+    pub inline fn top(value: f32) @This() {
+        return .{
+            .x = @splat(0.0),
+            .y = .{ value, 0.0 },
+        };
+    }
+
+    pub fn withTop(self: @This(), value: f32) @This() {
+        return .{
+            .x = self.x,
+            .y = .{ value, self.y[1] },
+        };
+    }
+
+    pub inline fn bottom(value: f32) @This() {
+        return .{
+            .x = @splat(0.0),
+            .y = .{ 0.0, value },
+        };
+    }
+
+    pub fn withBottom(self: @This(), value: f32) @This() {
+        return .{
+            .x = self.x,
+            .y = .{ self.y[0], value },
+        };
+    }
+};
+
 pub const Style = struct {
     background: Background,
     color: Vec4,
@@ -230,8 +327,7 @@ pub const Style = struct {
     translate: Vec2,
 
     padding: Padding,
-    marginInline: Vec2,
-    marginBlock: Vec2,
+    margin: Margin,
 
     direction: Direction,
     alignment: Alignment,
@@ -307,8 +403,7 @@ pub const IncompleteStyle = struct {
     translate: ?Vec2 = null,
 
     padding: ?Padding = null,
-    marginInline: ?Vec2 = null,
-    marginBlock: ?Vec2 = null,
+    margin: ?Margin = null,
 
     alignment: ?Alignment = null,
     direction: ?Direction = null,
@@ -345,8 +440,7 @@ pub const IncompleteStyle = struct {
             .translate = self.translate orelse @splat(0.0),
 
             .padding = self.padding orelse .all(0.0),
-            .marginInline = self.marginInline orelse @splat(0.0),
-            .marginBlock = self.marginBlock orelse @splat(0.0),
+            .margin = self.margin orelse .all(0.0),
 
             .direction = self.direction orelse .leftToRight,
             .alignment = self.alignment orelse Alignment.topLeft,

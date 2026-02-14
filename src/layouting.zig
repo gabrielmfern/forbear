@@ -364,7 +364,7 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                 for (childBoxes) |*child| {
                     fitHeight(child);
                     if (child.style.placement == .standard) {
-                        const childMargins = child.style.marginBlock[0] + child.style.marginBlock[1];
+                        const childMargins = child.style.margin.y[0] + child.style.margin.y[1];
                         if (direction == .topToBottom) {
                             if (layoutBox.style.preferredHeight == .fit) {
                                 layoutBox.size[1] += childMargins + child.size[1];
@@ -406,7 +406,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                 for (childBoxes) |*child| {
                     fitWidth(child);
                     if (child.style.placement == .standard) {
-                        const childMargins = child.style.marginInline[0] + child.style.marginInline[1];
+                        const childMargins = child.style.margin.x[0] + child.style.margin.x[1];
                         if (direction == .leftToRight) {
                             if (layoutBox.style.preferredWidth == .fit) {
                                 layoutBox.size[0] += childMargins + child.size[0];
@@ -449,8 +449,8 @@ fn place(layoutBox: *LayoutBox) void {
                 for (children) |child| {
                     if (child.style.placement == .standard) {
                         const contributingSize = Vec2{
-                            child.size[0] + child.style.marginInline[0] + child.style.marginInline[1],
-                            child.size[1] + child.style.marginBlock[0] + child.style.marginBlock[1],
+                            child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
                         };
                         if (direction == .leftToRight) {
                             childrenSize[0] += contributingSize[0];
@@ -483,31 +483,31 @@ fn place(layoutBox: *LayoutBox) void {
                 for (children) |*child| {
                     if (child.style.placement == .standard) {
                         const contributingSize = Vec2{
-                            child.size[0] + child.style.marginInline[0] + child.style.marginInline[1],
-                            child.size[1] + child.style.marginBlock[0] + child.style.marginBlock[1],
+                            child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
                         };
                         if (direction == .leftToRight) {
                             // Cross-axis alignment (Vertical)
                             switch (vAlign) {
-                                .start => child.position[1] = child.style.marginBlock[0],
+                                .start => child.position[1] = child.style.margin.y[0],
                                 .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
                                 .end => child.position[1] = (availableSize[1] - contributingSize[1]),
                             }
 
-                            cursor[0] += child.style.marginInline[0];
+                            cursor[0] += child.style.margin.x[0];
                             child.position += cursor;
-                            cursor[0] += child.size[0] + child.style.marginInline[1];
+                            cursor[0] += child.size[0] + child.style.margin.x[1];
                         } else {
                             // Cross-axis alignment (Horizontal)
                             switch (hAlign) {
-                                .start => child.position[0] = child.style.marginInline[0],
+                                .start => child.position[0] = child.style.margin.x[0],
                                 .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
                                 .end => child.position[0] = (availableSize[0] - contributingSize[0]),
                             }
 
-                            cursor[1] += child.style.marginBlock[0];
+                            cursor[1] += child.style.margin.y[0];
                             child.position += cursor;
-                            cursor[1] += child.size[1] + child.style.marginBlock[1];
+                            cursor[1] += child.size[1] + child.style.margin.y[1];
                         }
                     }
                     place(child);
@@ -550,8 +550,8 @@ const LayoutCreator = struct {
         }
         style.padding.x *= @splat(resolutionMultiplier[0]);
         style.padding.y *= @splat(resolutionMultiplier[1]);
-        style.marginInline *= @splat(resolutionMultiplier[0]);
-        style.marginBlock *= @splat(resolutionMultiplier[1]);
+        style.margin.x *= @splat(resolutionMultiplier[0]);
+        style.margin.y *= @splat(resolutionMultiplier[1]);
         style.borderRadius *= resolutionMultiplier[0];
 
         switch (node.content) {

@@ -12,6 +12,7 @@ const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
 pub const Alignment = nodeImport.Alignment;
 pub const Padding = nodeImport.Padding;
+pub const Margin = nodeImport.Margin;
 pub const IncompleteStyle = nodeImport.IncompleteStyle;
 pub const Style = nodeImport.Style;
 pub const Component = nodeImport.Component;
