@@ -308,8 +308,6 @@ pub const Style = struct {
     shadow: ?Shadow = null,
 
     font: *Font,
-    /// Will do nothing if the font is not a variable font. If you don't have a
-    /// variable font, you should use different fonts for different weights.
     fontWeight: u32,
     fontSize: f32,
     lineHeight: f32,
@@ -331,7 +329,7 @@ pub const Style = struct {
     margin: Margin,
 
     direction: Direction,
-    alignment: Alignment,
+    childrenAlignment: Alignment,
 
     pub fn getPreferredSize(self: @This(), direction: Direction) Sizing {
         if (direction == .leftToRight) {
@@ -385,6 +383,8 @@ pub const IncompleteStyle = struct {
     shadow: ?Shadow = null,
 
     font: ?*Font = null,
+    /// Will do nothing if the font is not a variable font. If you don't have a
+    /// variable font, you should use different fonts for different weights.
     fontWeight: ?u32 = null,
     fontSize: ?f32 = null,
     lineHeight: ?f32 = null,
@@ -405,7 +405,7 @@ pub const IncompleteStyle = struct {
     padding: ?Padding = null,
     margin: ?Margin = null,
 
-    alignment: ?Alignment = null,
+    childrenAlignment: ?Alignment = null,
     direction: ?Direction = null,
 
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
@@ -442,7 +442,7 @@ pub const IncompleteStyle = struct {
             .margin = self.margin orelse .all(0.0),
 
             .direction = self.direction orelse .leftToRight,
-            .alignment = self.alignment orelse Alignment.topLeft,
+            .childrenAlignment = self.childrenAlignment orelse Alignment.topLeft,
         };
     }
 };

@@ -334,7 +334,7 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                     const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
                     const width = endX - startX;
                     for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
-                        switch (layoutBox.style.alignment.x) {
+                        switch (layoutBox.style.childrenAlignment.x) {
                             .start => {},
                             .center => glyph.position[0] += (lineWidth - width) / 2.0,
                             .end => glyph.position[0] += lineWidth - width,
@@ -437,8 +437,8 @@ fn place(layoutBox: *LayoutBox) void {
         switch (layoutBox.children.?) {
             .layoutBoxes => |children| {
                 const direction = layoutBox.style.direction;
-                const hAlign = layoutBox.style.alignment.x;
-                const vAlign = layoutBox.style.alignment.y;
+                const hAlign = layoutBox.style.childrenAlignment.x;
+                const vAlign = layoutBox.style.childrenAlignment.y;
 
                 const availableSize = .{
                     layoutBox.size[0] - (layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1]) - (layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1]),
@@ -534,8 +534,8 @@ const LayoutCreator = struct {
         var style = switch (node.content) {
             .element => |element| element.style.completeWith(baseStyle),
             .text => (IncompleteStyle{
-                .alignment = if (self.parent) |parent| .{
-                    .x = parent.style.alignment.x,
+                .childrenAlignment = if (self.parent) |parent| .{
+                    .x = parent.style.childrenAlignment.x,
                     .y = .start,
                 } else null,
             }).completeWith(baseStyle),
@@ -783,7 +783,7 @@ fn testWrapConfiguration(configuration: struct {
             },
         },
         .style = (IncompleteStyle{
-            .alignment = configuration.alignment,
+            .childrenAlignment = configuration.alignment,
         }).completeWith(BaseStyle{
             .font = undefined,
             .color = .{ 0.0, 0.0, 0.0, 1.0 },

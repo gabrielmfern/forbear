@@ -17,7 +17,7 @@ fn App() !void {
     (try forbear.element(arena, .{
         .width = .grow,
         .direction = .topToBottom,
-        .alignment = .topCenter,
+        .childrenAlignment = .topCenter,
         .background = .{ .color = theme.Colors.page },
         .font = try forbear.useFont("SpaceGrotesk"),
         .fontWeight = 400,
@@ -28,7 +28,7 @@ fn App() !void {
             .width = .grow,
             .background = .{ .color = black },
             .padding = .block(6.0),
-            .alignment = .center,
+            .childrenAlignment = .center,
         }))({
             (try forbear.element(arena, .{
                 .fontWeight = 500,
@@ -43,12 +43,12 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = .block(13.5),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
-                .alignment = .centerLeft,
+                .childrenAlignment = .centerLeft,
             }))({
                 (try forbear.element(arena, .{
                     .width = .{ .fixed = 67.5 },
@@ -58,7 +58,7 @@ fn App() !void {
                 }))({});
                 (try forbear.element(arena, .{
                     .direction = .leftToRight,
-                    .alignment = .topRight,
+                    .childrenAlignment = .topRight,
                 }))({
                     (try forbear.element(arena, .{
                         .fontWeight = 500,
@@ -78,12 +78,12 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(37.5),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
-                .alignment = .centerLeft,
+                .childrenAlignment = .centerLeft,
             }))({
                 (try forbear.element(arena, .{
                     .direction = .topToBottom,
@@ -133,7 +133,7 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             // We can't use just .top here, which seems to be a bug in Zig,
             // src/main.zig:137:25: error: type '@Type(.enum_literal)' not a function
             // .padding = .top(12.0).withBottom(24.0),
@@ -146,7 +146,7 @@ fn App() !void {
                 inline for (statements) |statement| {
                     (try forbear.element(arena, .{
                         .direction = .leftToRight,
-                        .alignment = .centerLeft,
+                        .childrenAlignment = .centerLeft,
                         .margin = forbear.Margin.inLine(0.0).withRight(18.0),
                     }))({
                         (try forbear.element(arena, .{
@@ -175,12 +175,12 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
-                .alignment = .centerLeft,
+                .childrenAlignment = .centerLeft,
             }))({
                 (try forbear.element(arena, .{
                     .width = .{ .fixed = 240.0 },
@@ -263,12 +263,12 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .topToBottom,
-                .alignment = .topCenter,
+                .childrenAlignment = .topCenter,
             }))({
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
@@ -316,7 +316,7 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
             .background = .{ .color = theme.Colors.soft },
         }))({
@@ -332,7 +332,7 @@ fn App() !void {
                 });
                 (try forbear.element(arena, .{
                     .direction = .leftToRight,
-                    .alignment = .centerLeft,
+                    .childrenAlignment = .centerLeft,
                 }))({
                     for (logos) |id| {
                         (try forbear.element(arena, .{
@@ -349,12 +349,12 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .topToBottom,
-                .alignment = .topCenter,
+                .childrenAlignment = .topCenter,
             }))({
                 (try forbear.element(arena, .{
                     .width = .{ .fixed = 270.0 },
@@ -371,7 +371,7 @@ fn App() !void {
                 (try forbear.element(arena, .{
                     .fontSize = 12.0,
                     .color = theme.Colors.muted,
-                    .alignment = .topCenter,
+                    .childrenAlignment = .topCenter,
                 }))({
                     try forbear.text(arena, "We're replacing clunky IT with clean, fast, and flexible support. Built for startups and teams that just want things to work.");
                 });
@@ -491,7 +491,7 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(37.5),
         }))({
             (try forbear.element(arena, .{ .direction = .topToBottom }))({
@@ -508,7 +508,7 @@ fn App() !void {
                     }))({
                         (try forbear.element(arena, .{
                             .direction = .leftToRight,
-                            .alignment = .centerLeft,
+                            .childrenAlignment = .centerLeft,
                             .margin = forbear.Margin.block(0.0).withBottom(9.0),
                         }))({
                             (try forbear.element(arena, .{
@@ -569,7 +569,7 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(15.0).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
@@ -613,12 +613,12 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .topToBottom,
-                .alignment = .topCenter,
+                .childrenAlignment = .topCenter,
             }))({
                 (try forbear.element(arena, .{
                     .width = .{ .fixed = 165.0 },
@@ -660,7 +660,7 @@ fn App() !void {
                         .background = .{ .color = theme.Colors.accent },
                         .borderRadius = 7.5,
                         .padding = forbear.Padding.block(9.0).withInLine(18.0),
-                        .alignment = .center,
+                        .childrenAlignment = .center,
                     }))({
                         (try forbear.element(arena, .{
                             .fontWeight = 600,
@@ -685,12 +685,12 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
-                .alignment = .centerLeft,
+                .childrenAlignment = .centerLeft,
             }))({
                 (try forbear.element(arena, .{
                     .width = .{ .fixed = 390.0 },
@@ -707,7 +707,7 @@ fn App() !void {
                         (try forbear.element(arena, .{
                             .direction = .leftToRight,
                             .margin = forbear.Margin.block(0.0).withBottom(6.0),
-                            .alignment = .centerLeft,
+                            .childrenAlignment = .centerLeft,
                         }))({
                             (try forbear.element(arena, .{
                                 .width = .{ .fixed = 6.0 },
@@ -731,7 +731,7 @@ fn App() !void {
             });
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
-                .alignment = .centerLeft,
+                .childrenAlignment = .centerLeft,
                 .margin = forbear.Margin.block(13.5).withBottom(0.0),
             }))({
                 (try forbear.element(arena, .{
@@ -774,7 +774,7 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{ .direction = .topToBottom }))({
@@ -816,12 +816,12 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(37.5),
         }))({
             (try forbear.element(arena, .{
                 .direction = .topToBottom,
-                .alignment = .topCenter,
+                .childrenAlignment = .topCenter,
             }))({
                 (try forbear.element(arena, .{
                     .width = .{ .fixed = 315.0 },
@@ -852,7 +852,7 @@ fn App() !void {
             .width = .grow,
             .maxWidth = 810.0,
             .background = .{ .color = theme.Colors.soft },
-            .alignment = .topCenter,
+            .childrenAlignment = .topCenter,
             .padding = forbear.Padding.top(15.0).withBottom(19.5),
         }))({
             (try forbear.element(arena, .{
@@ -860,7 +860,7 @@ fn App() !void {
             }))({
                 (try forbear.element(arena, .{
                     .direction = .leftToRight,
-                    .alignment = .center,
+                    .childrenAlignment = .center,
                 }))({
                     (try forbear.element(arena, .{
                         .width = .{ .fixed = 67.5 },

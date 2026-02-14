@@ -38,7 +38,7 @@ pub fn Button(props: ButtonProps) !void {
                 .medium => forbear.Padding.block(20).withInLine(36),
                 .large => forbear.Padding.block(28).withInLine(48),
             },
-            .alignment = .center,
+            .childrenAlignment = .center,
             .direction = .topToBottom,
         }))({
             try forbear.text(arena, props.text);
