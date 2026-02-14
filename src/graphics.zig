@@ -208,7 +208,7 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
         }
     }
 
-    const instanceLayers: []const [*c]const u8 = if (builtin.mode == .Debug)
+    var instanceLayers: []const [*c]const u8 = if (builtin.mode == .Debug)
         &.{"VK_LAYER_KHRONOS_validation"}
     else
         &.{};
@@ -230,6 +230,7 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
     }
 
     if (!hasValidationLayer) {
+        instanceLayers = &.{};
         std.log.warn("Vulkan validation layer not found; continuing without it", .{});
     }
 
@@ -244,12 +245,12 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
                 .pNext = null,
                 .pApplicationName = application_name.ptr,
                 .applicationVersion = c.VK_MAKE_VERSION(1, 0, 0),
-                .pEngineName = "No Engine",
+                .pEngineName = "forbear",
                 .engineVersion = c.VK_MAKE_VERSION(1, 0, 0),
                 .apiVersion = c.VK_API_VERSION_1_2,
             },
-            .enabledLayerCount = if (hasValidationLayer) @intCast(instanceLayers.len) else 0,
-            .ppEnabledLayerNames = if (hasValidationLayer) instanceLayers.ptr else null,
+            .enabledLayerCount = @intCast(instanceLayers.len),
+            .ppEnabledLayerNames = instanceLayers.ptr,
             .enabledExtensionCount = @intCast(requestedInstanceExtensions.len),
             .ppEnabledExtensionNames = requestedInstanceExtensions.ptr,
         },
