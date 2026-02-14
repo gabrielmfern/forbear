@@ -2151,7 +2151,7 @@ const ElementsPipeline = struct {
     ) void {
         const graphicsPipeline = switch (blendMode) {
             .multiply => self.blendMultiplyGraphicsPipeline,
-            .add => self.blendAddGraphicsPipeline
+            .add => self.blendAddGraphicsPipeline,
         };
         c.vkCmdBindPipeline(
             commandBuffer,
