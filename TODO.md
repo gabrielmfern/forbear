@@ -35,7 +35,7 @@ missing things for the entire uhoh.com website:
 - [x] allow to center align just a single element, without affecting others
 - [x] startup is slow
 - [x] can't make an element fully transparent?
-- [ ] blend multiply
+- [x] blend multiply
 - [ ] images are quite awkaward, specifically when it comes to sizing
     - lazily decompressing images causes huge frame drops for large images
     - we should probably have `forbear.image` instead of always using backgroundImage, and have its size calculated from the aspect ratio while filling up the parent
