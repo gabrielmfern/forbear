@@ -481,13 +481,130 @@ pub const Image = struct {
     };
 
     image: c.VkImage,
+    imageExtent: c.VkExtent3D,
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
+
+    /// The original received contents in `init`, kept around for when the
+    /// image is actually decompressed on use
+    contents: []const u8,
+    loaded: bool,
 
     width: c_int,
     height: c_int,
 
     renderer: *const Renderer,
+
+    pub fn load(self: *@This()) !void {
+        self.loaded = true;
+        const imageSize: usize = @intCast(self.width * self.height * 4);
+
+        const stagingBuffer = try Buffer.init(
+            self.renderer.logicalDevice,
+            self.renderer.physicalDevice,
+            imageSize,
+            c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        );
+        defer stagingBuffer.deinit(self.renderer.logicalDevice);
+
+        var width: c_int = undefined;
+        var height: c_int = undefined;
+        var channels: c_int = undefined;
+        // stb_image doesn't allow to not pass in the width, hegith and channel pointers
+        const pixelsPtr = stb_image.stbi_load_from_memory(self.contents.ptr, @intCast(self.contents.len), &width, &height, &channels, 4);
+        if (pixelsPtr == null) return error.ImageLoadFailed;
+        std.debug.assert(self.width == width);
+        std.debug.assert(self.height == height);
+
+        defer stb_image.stbi_image_free(pixelsPtr);
+        try stagingBuffer.set(self.renderer.logicalDevice, pixelsPtr[0..imageSize]);
+
+        var commandBuffer: c.VkCommandBuffer = undefined;
+        try ensureNoError(c.vkAllocateCommandBuffers(self.renderer.logicalDevice, &c.VkCommandBufferAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandPool = self.renderer.commandPool,
+            .commandBufferCount = 1,
+            .pNext = null,
+        }, &commandBuffer));
+
+        try ensureNoError(c.vkBeginCommandBuffer(commandBuffer, &c.VkCommandBufferBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            .pNext = null,
+            .pInheritanceInfo = null,
+        }));
+
+        const barrier1 = c.VkImageMemoryBarrier{
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+            .image = self.image,
+            .subresourceRange = .{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .srcAccessMask = 0,
+            .dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT,
+            .pNext = null,
+        };
+
+        c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, c.VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, &barrier1);
+
+        const region = c.VkBufferImageCopy{
+            .bufferOffset = 0,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource = .{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .imageOffset = .{ .x = 0, .y = 0, .z = 0 },
+            .imageExtent = self.imageExtent,
+        };
+
+        c.vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.handle, self.image, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        const barrier2 = c.VkImageMemoryBarrier{
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+            .image = self.image,
+            .subresourceRange = .{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT,
+            .pNext = null,
+        };
+
+        c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, null, 0, null, 1, &barrier2);
+
+        try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
+
+        try ensureNoError(c.vkQueueSubmit(self.renderer.graphicsQueue, 1, &c.VkSubmitInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &commandBuffer,
+            .pNext = null,
+        }, null));
+        try ensureNoError(c.vkQueueWaitIdle(self.renderer.graphicsQueue));
+        c.vkFreeCommandBuffers(self.renderer.logicalDevice, self.renderer.commandPool, 1, &commandBuffer);
+    }
 
     pub fn init(contents: []const u8, format: Format, renderer: *const Renderer) !@This() {
         switch (format) {
@@ -495,21 +612,9 @@ pub const Image = struct {
                 var width: c_int = undefined;
                 var height: c_int = undefined;
                 var channels: c_int = undefined;
-                const pixelsPtr = stb_image.stbi_load_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels, 4);
-                if (pixelsPtr == null) return error.ImageLoadFailed;
-                defer stb_image.stbi_image_free(pixelsPtr);
-
-                const imageSize: usize = @intCast(width * height * 4);
-
-                const stagingBuffer = try Buffer.init(
-                    renderer.logicalDevice,
-                    renderer.physicalDevice,
-                    imageSize,
-                    c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                );
-                defer stagingBuffer.deinit(renderer.logicalDevice);
-                try stagingBuffer.set(renderer.logicalDevice, pixelsPtr[0..imageSize]);
+                if (stb_image.stbi_info_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels) == 0) {
+                    return error.ImageInfoLoadFailed;
+                }
 
                 const extent = c.VkExtent3D{
                     .width = @intCast(width),
@@ -553,93 +658,6 @@ pub const Image = struct {
 
                 try ensureNoError(c.vkBindImageMemory(renderer.logicalDevice, image, memory, 0));
 
-                {
-                    var commandBuffer: c.VkCommandBuffer = undefined;
-                    try ensureNoError(c.vkAllocateCommandBuffers(renderer.logicalDevice, &c.VkCommandBufferAllocateInfo{
-                        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                        .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                        .commandPool = renderer.commandPool,
-                        .commandBufferCount = 1,
-                        .pNext = null,
-                    }, &commandBuffer));
-
-                    try ensureNoError(c.vkBeginCommandBuffer(commandBuffer, &c.VkCommandBufferBeginInfo{
-                        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                        .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-                        .pNext = null,
-                        .pInheritanceInfo = null,
-                    }));
-
-                    const barrier1 = c.VkImageMemoryBarrier{
-                        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                        .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-                        .newLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
-                        .image = image,
-                        .subresourceRange = .{
-                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = 1,
-                            .baseArrayLayer = 0,
-                            .layerCount = 1,
-                        },
-                        .srcAccessMask = 0,
-                        .dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT,
-                        .pNext = null,
-                    };
-
-                    c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, c.VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, &barrier1);
-
-                    const region = c.VkBufferImageCopy{
-                        .bufferOffset = 0,
-                        .bufferRowLength = 0,
-                        .bufferImageHeight = 0,
-                        .imageSubresource = .{
-                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                            .mipLevel = 0,
-                            .baseArrayLayer = 0,
-                            .layerCount = 1,
-                        },
-                        .imageOffset = .{ .x = 0, .y = 0, .z = 0 },
-                        .imageExtent = extent,
-                    };
-
-                    c.vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.handle, image, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-                    const barrier2 = c.VkImageMemoryBarrier{
-                        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                        .oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        .newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
-                        .image = image,
-                        .subresourceRange = .{
-                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = 1,
-                            .baseArrayLayer = 0,
-                            .layerCount = 1,
-                        },
-                        .srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT,
-                        .dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT,
-                        .pNext = null,
-                    };
-
-                    c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, null, 0, null, 1, &barrier2);
-
-                    try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
-
-                    try ensureNoError(c.vkQueueSubmit(renderer.graphicsQueue, 1, &c.VkSubmitInfo{
-                        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                        .commandBufferCount = 1,
-                        .pCommandBuffers = &commandBuffer,
-                        .pNext = null,
-                    }, null));
-                    try ensureNoError(c.vkQueueWaitIdle(renderer.graphicsQueue));
-                    c.vkFreeCommandBuffers(renderer.logicalDevice, renderer.commandPool, 1, &commandBuffer);
-                }
-
                 var imageView: c.VkImageView = undefined;
                 try ensureNoError(c.vkCreateImageView(renderer.logicalDevice, &c.VkImageViewCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -665,10 +683,16 @@ pub const Image = struct {
 
                 return @This(){
                     .image = image,
+                    .imageExtent = extent,
                     .imageView = imageView,
                     .memory = memory,
+
+                    .contents = contents,
+                    .loaded = false,
+
                     .width = width,
                     .height = height,
+
                     .renderer = renderer,
                 };
             },
@@ -1978,13 +2002,17 @@ const ElementsPipeline = struct {
         };
     }
 
-    fn registerImage(self: *@This(), image: *const Image, logicalDevice: c.VkDevice) !u32 {
+    fn registerImage(self: *@This(), image: *Image, logicalDevice: c.VkDevice) !u32 {
         for (self.registeredImages.items, 0..) |registered, i| {
             if (registered == image) return @intCast(i);
         }
 
         const index = self.registeredImages.items.len;
         if (index >= ElementsPipeline.maxImages) return error.TooManyImages;
+
+        if (!image.loaded) {
+            try image.load();
+        }
 
         try self.registeredImages.append(self.allocator, image);
 
