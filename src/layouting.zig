@@ -462,76 +462,26 @@ fn place(layoutBox: *LayoutBox) void {
                     }
                 }
 
-                var selfAlignmentIndex: ?usize = null;
-                for (children, 0..) |child, index| {
-                    if (child.style.placement == .standard and child.style.alignment != null) {
-                        selfAlignmentIndex = index;
-                        break;
-                    }
-                }
-
-                var selfAlignmentOffset: f32 = 0.0;
-                if (selfAlignmentIndex) |index| {
-                    var sizeBefore: f32 = 0.0;
-                    var alignedSize: f32 = 0.0;
-                    for (children, 0..) |child, childIndex| {
-                        if (child.style.placement == .standard) {
-                            const contributingSize = Vec2{
-                                child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
-                                child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                            };
-                            const contribution = if (direction == .leftToRight) contributingSize[0] else contributingSize[1];
-                            if (childIndex < index) {
-                                sizeBefore += contribution;
-                            } else {
-                                alignedSize += contribution;
-                            }
-                        }
-                    }
-
-                    const availableMainAxis = if (direction == .leftToRight) availableSize[0] else availableSize[1];
-                    const alignment = children[index].style.alignment.?;
-                    const mainAxisAlignment = if (direction == .leftToRight) alignment.x else alignment.y;
-                    const desiredStart = switch (mainAxisAlignment) {
-                        .start => sizeBefore,
-                        .center => (availableMainAxis - alignedSize) / 2.0,
-                        .end => availableMainAxis - alignedSize,
-                    };
-                    selfAlignmentOffset = @max(desiredStart - sizeBefore, 0.0);
-                }
-
                 var cursor: Vec2 = .{
                     layoutBox.style.padding.x[0] + layoutBox.style.borderWidth.x[0],
                     layoutBox.style.padding.y[0] + layoutBox.style.borderWidth.y[0],
                 };
-                if (selfAlignmentIndex == null) {
-                    if (direction == .leftToRight) {
-                        switch (hAlign) {
-                            .start => {},
-                            .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
-                            .end => cursor[0] += (availableSize[0] - childrenSize[0]),
-                        }
-                    } else {
-                        switch (vAlign) {
-                            .start => {},
-                            .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
-                            .end => cursor[1] += (availableSize[1] - childrenSize[1]),
-                        }
+                if (direction == .leftToRight) {
+                    switch (hAlign) {
+                        .start => {},
+                        .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
+                        .end => cursor[0] += (availableSize[0] - childrenSize[0]),
+                    }
+                } else {
+                    switch (vAlign) {
+                        .start => {},
+                        .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
+                        .end => cursor[1] += (availableSize[1] - childrenSize[1]),
                     }
                 }
 
-                for (children, 0..) |*child, index| {
+                for (children) |*child| {
                     if (child.style.placement == .standard) {
-                        if (selfAlignmentIndex) |alignedIndex| {
-                            if (index == alignedIndex) {
-                                if (direction == .leftToRight) {
-                                    cursor[0] += selfAlignmentOffset;
-                                } else {
-                                    cursor[1] += selfAlignmentOffset;
-                                }
-                            }
-                        }
-
                         const contributingSize = Vec2{
                             child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
                             child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
