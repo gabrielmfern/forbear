@@ -8,6 +8,7 @@ const forbear = @import("root.zig");
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const Node = @import("node.zig").Node;
 const Sizing = @import("node.zig").Sizing;
+const SelfAlignment = @import("node.zig").SelfAlignment;
 const Style = @import("node.zig").Style;
 const TextWrapping = @import("node.zig").TextWrapping;
 
@@ -815,10 +816,65 @@ const defaultBaseStyle = BaseStyle{
 const TestChild = struct {
     width: Sizing = .fit,
     height: Sizing = .fit,
+    alignment: ?SelfAlignment = null,
     size: Vec2,
     minSize: Vec2 = .{ 0.0, 0.0 },
     maxSize: Vec2 = .{ std.math.inf(f32), std.math.inf(f32) },
 };
+
+fn testPlaceConfiguration(configuration: struct {
+    direction: Direction,
+    parentSize: Vec2,
+    childrenAlignment: Alignment,
+    children: []const TestChild,
+    expectedPositions: []const Vec2,
+}) !void {
+    std.debug.assert(configuration.children.len == configuration.expectedPositions.len);
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const childBoxes = try arenaAllocator.alloc(LayoutBox, configuration.children.len);
+    for (configuration.children, 0..) |child, i| {
+        childBoxes[i] = LayoutBox{
+            .key = @intCast(i),
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = child.size,
+            .minSize = child.minSize,
+            .maxSize = child.maxSize,
+            .children = null,
+            .style = (IncompleteStyle{
+                .width = child.width,
+                .height = child.height,
+                .alignment = child.alignment,
+            }).completeWith(defaultBaseStyle),
+        };
+    }
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = configuration.parentSize,
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = configuration.parentSize,
+        .children = .{ .layoutBoxes = childBoxes },
+        .style = (IncompleteStyle{
+            .direction = configuration.direction,
+            .childrenAlignment = configuration.childrenAlignment,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    place(&parent);
+
+    const actualPositions = try arenaAllocator.alloc(Vec2, configuration.children.len);
+    for (parent.children.?.layoutBoxes, 0..) |child, i| {
+        actualPositions[i] = child.position;
+    }
+    try std.testing.expectEqualDeep(configuration.expectedPositions, actualPositions);
+}
 
 fn testGrowAndShrinkConfiguration(configuration: struct {
     direction: Direction,
@@ -1335,6 +1391,42 @@ test "wrap - word wrapping with alignment end" {
             .{ 70.0, 20.0 }, // r
             .{ 80.0, 20.0 }, // l
             .{ 90.0, 20.0 }, // d
+        },
+    });
+}
+
+test "place - self alignment end in row pushes current and following children" {
+    try testPlaceConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 20.0 },
+        .childrenAlignment = .center,
+        .children = &.{
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .alignment = .end, .size = .{ 20.0, 20.0 } },
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 60.0, 0.0 },
+            .{ 80.0, 0.0 },
+        },
+    });
+}
+
+test "place - self alignment end in column pushes current and following children" {
+    try testPlaceConfiguration(.{
+        .direction = .topToBottom,
+        .parentSize = .{ 20.0, 100.0 },
+        .childrenAlignment = .center,
+        .children = &.{
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .alignment = .end, .size = .{ 20.0, 20.0 } },
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 0.0, 60.0 },
+            .{ 0.0, 80.0 },
         },
     });
 }
