@@ -92,6 +92,12 @@ pub const Alignment = struct {
     };
 };
 
+pub const SelfAlignment = enum {
+    start,
+    center,
+    end,
+};
+
 /// Will modify the min size of layout boxes that wrap text accordingly
 /// character => largest character
 /// word => largest word
@@ -330,6 +336,7 @@ pub const Style = struct {
 
     direction: Direction,
     childrenAlignment: Alignment,
+    alignment: ?SelfAlignment,
 
     pub fn getPreferredSize(self: @This(), direction: Direction) Sizing {
         if (direction == .leftToRight) {
@@ -406,6 +413,7 @@ pub const IncompleteStyle = struct {
     margin: ?Margin = null,
 
     childrenAlignment: ?Alignment = null,
+    alignment: ?SelfAlignment = null,
     direction: ?Direction = null,
 
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
@@ -443,6 +451,7 @@ pub const IncompleteStyle = struct {
 
             .direction = self.direction orelse .leftToRight,
             .childrenAlignment = self.childrenAlignment orelse Alignment.topLeft,
+            .alignment = self.alignment,
         };
     }
 };
