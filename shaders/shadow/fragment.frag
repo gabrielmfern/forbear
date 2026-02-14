@@ -25,15 +25,16 @@ void main() {
     // Apply spread: positive spread expands shadow, negative contracts
     float adjustedDist = d - spread;
 
-    // Calculate alpha based on distance and blur
+    // Calculate alpha based on distance and blur. Keep the edge fully opaque
+    // so the element AA edge does not reveal a bright seam.
     float aa = max(fwidth(adjustedDist), 0.0001);
     float alpha;
     if (blur > 0.0) {
-        // Smooth falloff from inside to outside over the blur radius
-        alpha = 1.0 - smoothstep(-aa, blur + aa, adjustedDist);
+        // Smooth falloff from the edge outward over the blur radius.
+        alpha = 1.0 - smoothstep(0.0, blur + aa, adjustedDist);
     } else {
-        // Anti-aliased hard edge when no blur
-        alpha = 1.0 - smoothstep(-aa, aa, adjustedDist);
+        // Anti-aliased hard edge when no blur.
+        alpha = 1.0 - smoothstep(0.0, aa, adjustedDist);
     }
 
     // Keep only the region outside the original element so transparent
@@ -42,9 +43,9 @@ void main() {
     vec2 eq = abs(elementLocalPos) - elementSize * 0.5 + r;
     float dElement = length(max(eq, 0.0)) + min(max(eq.x, eq.y), 0.0) - r;
     float shapeAa = max(fwidth(dElement), 0.0001);
-    // Use a one-sided transition so the mask reaches full strength at the
-    // element edge, avoiding a visible gap/halo between border and shadow.
-    float outsideMask = smoothstep(-shapeAa, 0.0, dElement);
+    // Push the cutout transition one AA-width inward so shadow coverage stays
+    // solid under the element's outer AA fringe, avoiding a bright halo.
+    float outsideMask = smoothstep(-2.0 * shapeAa, -shapeAa, dElement);
     alpha *= outsideMask;
 
     outColor = vertexColor;
