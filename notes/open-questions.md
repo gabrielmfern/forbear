@@ -20,3 +20,4 @@
 - How can I avoid the foot guns of not calling the returning parent stack popping function from `forbear.element`?
 - Should maxWidth and maxHeight overwrite the preferredWidth/preferreHeight?
     - https://github.com/gabrielmfern/forbear/pull/25#discussion_r2804268067
+- Should alignment be inherited?

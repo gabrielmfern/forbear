@@ -27,17 +27,69 @@ pub const Sizing = union(enum) {
 };
 
 pub const Shadow = struct {
-    offsetBlock: Vec2,
-    offsetInline: Vec2,
+    pub const Offset = Padding;
+
+    offset: Offset,
     blurRadius: f32,
     spread: f32,
     color: Vec4,
 };
 
-pub const Alignment = enum {
-    start,
-    center,
-    end,
+pub const Alignment = struct {
+    const Value = enum {
+        start,
+        center,
+        end,
+    };
+
+    x: Value,
+    y: Value,
+
+    pub const topLeft = @This(){
+        .x = .start,
+        .y = .start,
+    };
+
+    pub const topCenter = @This(){
+        .x = .center,
+        .y = .start,
+    };
+
+    pub const topRight = @This(){
+        .x = .end,
+        .y = .start,
+    };
+
+    pub const centerLeft = @This(){
+        .x = .start,
+        .y = .center,
+    };
+
+    /// Centered across all axis
+    pub const center = @This(){
+        .x = .center,
+        .y = .center,
+    };
+
+    pub const centerRight = @This(){
+        .x = .end,
+        .y = .center,
+    };
+
+    pub const bottomLeft = @This(){
+        .x = .start,
+        .y = .end,
+    };
+
+    pub const bottomCenter = @This(){
+        .x = .center,
+        .y = .end,
+    };
+
+    pub const bottomRight = @This(){
+        .x = .end,
+        .y = .end,
+    };
 };
 
 /// Will modify the min size of layout boxes that wrap text accordingly
@@ -51,13 +103,207 @@ pub const TextWrapping = enum {
     none,
 };
 
+pub const Padding = struct {
+    x: Vec2,
+    y: Vec2,
+
+    pub inline fn all(value: f32) @This() {
+        return .{
+            .x = @splat(value),
+            .y = @splat(value),
+        };
+    }
+
+    /// `inLine` because `inline` is a reserved keyword in Zig
+    pub inline fn inLine(value: f32) @This() {
+        return .{
+            .x = @splat(value),
+            .y = @splat(0.0),
+        };
+    }
+
+    pub fn withInLine(self: @This(), value: f32) @This() {
+        return .{
+            .x = @splat(value),
+            .y = self.y,
+        };
+    }
+
+    pub inline fn block(value: f32) @This() {
+        return .{
+            .x = @splat(0.0),
+            .y = @splat(value),
+        };
+    }
+
+    pub fn withBlock(self: @This(), value: f32) @This() {
+        return .{
+            .x = self.x,
+            .y = @splat(value),
+        };
+    }
+
+    pub inline fn left(value: f32) @This() {
+        return .{
+            .x = .{ value, 0.0 },
+            .y = @splat(0.0),
+        };
+    }
+
+    pub fn withLeft(self: @This(), value: f32) @This() {
+        return .{
+            .x = .{ value, self.x[1] },
+            .y = self.y,
+        };
+    }
+
+    pub inline fn right(value: f32) @This() {
+        return .{
+            .x = .{ 0.0, value },
+            .y = @splat(0.0),
+        };
+    }
+
+    pub fn withRight(self: @This(), value: f32) @This() {
+        return .{
+            .x = .{ self.x[0], value },
+            .y = self.y,
+        };
+    }
+
+    pub inline fn top(value: f32) @This() {
+        return .{
+            .x = @splat(0.0),
+            .y = .{ value, 0.0 },
+        };
+    }
+
+    pub fn withTop(self: @This(), value: f32) @This() {
+        return .{
+            .x = self.x,
+            .y = .{ value, self.y[1] },
+        };
+    }
+
+    pub inline fn bottom(value: f32) @This() {
+        return .{
+            .x = @splat(0.0),
+            .y = .{ 0.0, value },
+        };
+    }
+
+    pub fn withBottom(self: @This(), value: f32) @This() {
+        return .{
+            .x = self.x,
+            .y = .{ self.y[0], value },
+        };
+    }
+};
+
+pub const Margin = struct {
+    x: Vec2,
+    y: Vec2,
+
+    pub inline fn all(value: f32) @This() {
+        return .{
+            .x = @splat(value),
+            .y = @splat(value),
+        };
+    }
+
+    pub inline fn inLine(value: f32) @This() {
+        return .{
+            .x = @splat(value),
+            .y = @splat(0.0),
+        };
+    }
+
+    pub fn withInLine(self: @This(), value: f32) @This() {
+        return .{
+            .x = @splat(value),
+            .y = self.y,
+        };
+    }
+
+    pub inline fn block(value: f32) @This() {
+        return .{
+            .x = @splat(0.0),
+            .y = @splat(value),
+        };
+    }
+
+    pub fn withBlock(self: @This(), value: f32) @This() {
+        return .{
+            .x = self.x,
+            .y = @splat(value),
+        };
+    }
+
+    pub inline fn left(value: f32) @This() {
+        return .{
+            .x = .{ value, 0.0 },
+            .y = @splat(0.0),
+        };
+    }
+
+    pub fn withLeft(self: @This(), value: f32) @This() {
+        return .{
+            .x = .{ value, self.x[1] },
+            .y = self.y,
+        };
+    }
+
+    pub inline fn right(value: f32) @This() {
+        return .{
+            .x = .{ 0.0, value },
+            .y = @splat(0.0),
+        };
+    }
+
+    pub fn withRight(self: @This(), value: f32) @This() {
+        return .{
+            .x = .{ self.x[0], value },
+            .y = self.y,
+        };
+    }
+
+    pub inline fn top(value: f32) @This() {
+        return .{
+            .x = @splat(0.0),
+            .y = .{ value, 0.0 },
+        };
+    }
+
+    pub fn withTop(self: @This(), value: f32) @This() {
+        return .{
+            .x = self.x,
+            .y = .{ value, self.y[1] },
+        };
+    }
+
+    pub inline fn bottom(value: f32) @This() {
+        return .{
+            .x = @splat(0.0),
+            .y = .{ 0.0, value },
+        };
+    }
+
+    pub fn withBottom(self: @This(), value: f32) @This() {
+        return .{
+            .x = self.x,
+            .y = .{ self.y[0], value },
+        };
+    }
+};
+
+pub const BorderWidth = Padding;
+
 pub const Style = struct {
     background: Background,
     color: Vec4,
     borderRadius: f32,
     borderColor: Vec4,
-    borderBlockWidth: Vec2,
-    borderInlineWidth: Vec2,
+    borderWidth: BorderWidth,
 
     shadow: ?Shadow = null,
 
@@ -74,27 +320,24 @@ pub const Style = struct {
 
     minWidth: ?f32 = null,
     maxWidth: ?f32 = null,
-    preferredWidth: Sizing,
+    width: Sizing,
     maxHeight: ?f32 = null,
     minHeight: ?f32 = null,
-    preferredHeight: Sizing,
+    height: Sizing,
 
     translate: Vec2,
 
-    paddingInline: Vec2,
-    paddingBlock: Vec2,
-    marginInline: Vec2,
-    marginBlock: Vec2,
+    padding: Padding,
+    margin: Margin,
 
     direction: Direction,
-    horizontalAlignment: Alignment,
-    verticalAlignment: Alignment,
+    alignment: Alignment,
 
     pub fn getPreferredSize(self: @This(), direction: Direction) Sizing {
         if (direction == .leftToRight) {
-            return self.preferredWidth;
+            return self.width;
         }
-        return self.preferredHeight;
+        return self.height;
     }
 };
 
@@ -127,7 +370,7 @@ pub const Placement = union(enum) {
     /// When defined, explictily overrides layout positioning, taking it
     /// outside of the normal element flow, it won't affect the sizing of its
     /// parent, nor the placement of its siblings. To define width and height,
-    /// use preferredWidth and preferredHeight.
+    /// use width and height.
     manual: Vec2,
     standard,
 };
@@ -137,8 +380,7 @@ pub const IncompleteStyle = struct {
     color: ?Vec4 = null,
     borderRadius: ?f32 = null,
     borderColor: ?Vec4 = null,
-    borderBlockWidth: ?Vec2 = null,
-    borderInlineWidth: ?Vec2 = null,
+    borderWidth: ?BorderWidth = null,
 
     shadow: ?Shadow = null,
 
@@ -153,20 +395,17 @@ pub const IncompleteStyle = struct {
 
     minWidth: ?f32 = null,
     maxWidth: ?f32 = null,
-    preferredWidth: Sizing = .fit,
+    width: Sizing = .fit,
     minHeight: ?f32 = null,
     maxHeight: ?f32 = null,
-    preferredHeight: Sizing = .fit,
+    height: Sizing = .fit,
 
     translate: ?Vec2 = null,
 
-    paddingInline: ?Vec2 = null,
-    paddingBlock: ?Vec2 = null,
-    marginInline: ?Vec2 = null,
-    marginBlock: ?Vec2 = null,
+    padding: ?Padding = null,
+    margin: ?Margin = null,
 
-    horizontalAlignment: ?Alignment = null,
-    verticalAlignment: ?Alignment = null,
+    alignment: ?Alignment = null,
     direction: ?Direction = null,
 
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
@@ -176,8 +415,7 @@ pub const IncompleteStyle = struct {
 
             .borderRadius = self.borderRadius orelse 0.0,
             .borderColor = self.borderColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 },
-            .borderBlockWidth = self.borderBlockWidth orelse @splat(0.0),
-            .borderInlineWidth = self.borderInlineWidth orelse @splat(0.0),
+            .borderWidth = self.borderWidth orelse .all(0.0),
 
             .shadow = self.shadow,
 
@@ -192,22 +430,19 @@ pub const IncompleteStyle = struct {
 
             .minWidth = self.minWidth,
             .maxWidth = self.maxWidth,
-            .preferredWidth = self.preferredWidth,
+            .width = self.width,
 
             .minHeight = self.minHeight,
             .maxHeight = self.maxHeight,
-            .preferredHeight = self.preferredHeight,
+            .height = self.height,
 
             .translate = self.translate orelse @splat(0.0),
 
-            .paddingInline = self.paddingInline orelse @splat(0.0),
-            .paddingBlock = self.paddingBlock orelse @splat(0.0),
-            .marginInline = self.marginInline orelse @splat(0.0),
-            .marginBlock = self.marginBlock orelse @splat(0.0),
+            .padding = self.padding orelse .all(0.0),
+            .margin = self.margin orelse .all(0.0),
 
             .direction = self.direction orelse .leftToRight,
-            .horizontalAlignment = self.horizontalAlignment orelse .start,
-            .verticalAlignment = self.verticalAlignment orelse .start,
+            .alignment = self.alignment orelse Alignment.topLeft,
         };
     }
 };

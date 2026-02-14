@@ -3559,10 +3559,10 @@ pub const Renderer = struct {
                 .borderRadius = layoutBox.style.borderRadius,
                 .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
                 .borderSize = .{
-                    layoutBox.style.borderBlockWidth[0],
-                    layoutBox.style.borderBlockWidth[1],
-                    layoutBox.style.borderInlineWidth[0],
-                    layoutBox.style.borderInlineWidth[1],
+                    layoutBox.style.borderWidth.y[0],
+                    layoutBox.style.borderWidth.y[1],
+                    layoutBox.style.borderWidth.x[0],
+                    layoutBox.style.borderWidth.x[1],
                 },
                 .imageIndex = textureIndex,
             };
@@ -3578,12 +3578,12 @@ pub const Renderer = struct {
                     };
                 }
                 const padding = Vec2{
-                    shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
-                    shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.x[1],
+                    shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.y[1],
                 };
                 const position = Vec2{
-                    layoutBox.position[0] - padding[0] - shadow.offsetInline[0] + shadow.offsetInline[1],
-                    layoutBox.position[1] - padding[1] - shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    layoutBox.position[0] - padding[0] - shadow.offset.x[0] + shadow.offset.x[1],
+                    layoutBox.position[1] - padding[1] - shadow.offset.y[0] + shadow.offset.y[1],
                 };
                 const size = layoutBox.size + padding * Vec2{ 2, 2 };
                 self.shadowsPipeline.shadowShaderData[frameIndex][shadowIndex] = ShadowRenderingData{
