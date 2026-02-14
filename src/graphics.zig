@@ -521,8 +521,8 @@ const FontTextureAtlas = struct {
         graphicsQueue: c.VkQueue,
     ) !@This() {
         const extent = c.VkExtent3D{
-            .width = 4096,
-            .height = 4096,
+            .width = 1024,
+            .height = 1024,
             .depth = 1,
         };
 
