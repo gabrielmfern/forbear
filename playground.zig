@@ -6,15 +6,15 @@ fn App() !void {
     const isHovering = try forbear.useState(bool, false);
 
     (try forbear.element(arena, .{
-        .preferredWidth = .grow,
+        .width = .grow,
         .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
         .padding = .inLine(10),
     }))({
         try forbear.component(arena, forbear.FpsCounter, null);
         try forbear.text(arena, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
         (try forbear.element(arena, .{
-            .preferredWidth = .{ .fixed = 100 },
-            .preferredHeight = .{ .fixed = 100 },
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
             .background = .{
                 .color = .{
                     1.0,

@@ -319,10 +319,10 @@ pub const Style = struct {
 
     minWidth: ?f32 = null,
     maxWidth: ?f32 = null,
-    preferredWidth: Sizing,
+    width: Sizing,
     maxHeight: ?f32 = null,
     minHeight: ?f32 = null,
-    preferredHeight: Sizing,
+    height: Sizing,
 
     translate: Vec2,
 
@@ -334,9 +334,9 @@ pub const Style = struct {
 
     pub fn getPreferredSize(self: @This(), direction: Direction) Sizing {
         if (direction == .leftToRight) {
-            return self.preferredWidth;
+            return self.width;
         }
-        return self.preferredHeight;
+        return self.height;
     }
 };
 
@@ -369,7 +369,7 @@ pub const Placement = union(enum) {
     /// When defined, explictily overrides layout positioning, taking it
     /// outside of the normal element flow, it won't affect the sizing of its
     /// parent, nor the placement of its siblings. To define width and height,
-    /// use preferredWidth and preferredHeight.
+    /// use width and height.
     manual: Vec2,
     standard,
 };
@@ -394,10 +394,10 @@ pub const IncompleteStyle = struct {
 
     minWidth: ?f32 = null,
     maxWidth: ?f32 = null,
-    preferredWidth: Sizing = .fit,
+    width: Sizing = .fit,
     minHeight: ?f32 = null,
     maxHeight: ?f32 = null,
-    preferredHeight: Sizing = .fit,
+    height: Sizing = .fit,
 
     translate: ?Vec2 = null,
 
@@ -429,11 +429,11 @@ pub const IncompleteStyle = struct {
 
             .minWidth = self.minWidth,
             .maxWidth = self.maxWidth,
-            .preferredWidth = self.preferredWidth,
+            .width = self.width,
 
             .minHeight = self.minHeight,
             .maxHeight = self.maxHeight,
-            .preferredHeight = self.preferredHeight,
+            .height = self.height,
 
             .translate = self.translate orelse @splat(0.0),
 

@@ -15,7 +15,7 @@ fn App() !void {
     try forbear.component(arena, forbear.FpsCounter, null);
 
     (try forbear.element(arena, .{
-        .preferredWidth = .grow,
+        .width = .grow,
         .direction = .topToBottom,
         .alignment = .topCenter,
         .background = .{ .color = theme.Colors.page },
@@ -25,7 +25,7 @@ fn App() !void {
         .color = theme.Colors.text,
     }))({
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .background = .{ .color = black },
             .padding = .block(6.0),
             .alignment = .center,
@@ -41,7 +41,7 @@ fn App() !void {
         });
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = .block(13.5),
@@ -51,8 +51,8 @@ fn App() !void {
                 .alignment = .centerLeft,
             }))({
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 67.5 },
-                    .preferredHeight = .{ .fixed = 21.0 },
+                    .width = .{ .fixed = 67.5 },
+                    .height = .{ .fixed = 21.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-logo") },
                     .margin = forbear.Margin.inLine(0.0).withRight(24.0),
                 }))({});
@@ -76,7 +76,7 @@ fn App() !void {
             });
         });
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(37.5),
@@ -117,8 +117,8 @@ fn App() !void {
                     });
                 });
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 270.0 },
-                    .preferredHeight = .{ .fixed = 285.0 },
+                    .width = .{ .fixed = 270.0 },
+                    .height = .{ .fixed = 285.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-hero") },
                 }))({});
             });
@@ -131,7 +131,7 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             // We can't use just .top here, which seems to be a bug in Zig,
@@ -150,8 +150,8 @@ fn App() !void {
                         .margin = forbear.Margin.inLine(0.0).withRight(18.0),
                     }))({
                         (try forbear.element(arena, .{
-                            .preferredWidth = .{ .fixed = 16.5 },
-                            .preferredHeight = .{ .fixed = 16.5 },
+                            .width = .{ .fixed = 16.5 },
+                            .height = .{ .fixed = 16.5 },
                             .background = .{ .image = try forbear.useImage("uhoh-check") },
                             .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                         }))({});
@@ -173,7 +173,7 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -183,8 +183,8 @@ fn App() !void {
                 .alignment = .centerLeft,
             }))({
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 240.0 },
-                    .preferredHeight = .{ .fixed = 255.0 },
+                    .width = .{ .fixed = 240.0 },
+                    .height = .{ .fixed = 255.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-problem") },
                     .margin = forbear.Margin.inLine(0.0).withRight(24.0),
                 }))({});
@@ -210,8 +210,8 @@ fn App() !void {
                             .margin = forbear.Margin.block(0.0).withBottom(7.5),
                         }))({
                             (try forbear.element(arena, .{
-                                .preferredWidth = .{ .fixed = 13.5 },
-                                .preferredHeight = .{ .fixed = 13.5 },
+                                .width = .{ .fixed = 13.5 },
+                                .height = .{ .fixed = 13.5 },
                                 .background = .{ .image = try forbear.useImage("uhoh-x-red") },
                                 .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                             }))({});
@@ -261,7 +261,7 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -279,7 +279,7 @@ fn App() !void {
                 });
                 for (testimonials) |testimonial| {
                     (try forbear.element(arena, .{
-                        .preferredWidth = .grow,
+                        .width = .grow,
                         .background = .{ .color = theme.Colors.card },
                         .borderRadius = 12.0,
                         .borderColor = theme.Colors.border,
@@ -289,8 +289,8 @@ fn App() !void {
                         .direction = .leftToRight,
                     }))({
                         (try forbear.element(arena, .{
-                            .preferredWidth = .{ .fixed = 42.0 },
-                            .preferredHeight = .{ .fixed = 42.0 },
+                            .width = .{ .fixed = 42.0 },
+                            .height = .{ .fixed = 42.0 },
                             .background = .{ .image = try forbear.useImage(testimonial.imageId) },
                             .borderRadius = 21.0,
                             .margin = forbear.Margin.inLine(0.0).withRight(10.5),
@@ -314,7 +314,7 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -336,8 +336,8 @@ fn App() !void {
                 }))({
                     for (logos) |id| {
                         (try forbear.element(arena, .{
-                            .preferredWidth = .{ .fixed = 120.0 },
-                            .preferredHeight = .{ .fixed = 42.0 },
+                            .width = .{ .fixed = 120.0 },
+                            .height = .{ .fixed = 42.0 },
                             .background = .{ .image = try forbear.useImage(id) },
                             .margin = forbear.Margin.inLine(0.0).withRight(13.5),
                         }))({});
@@ -347,7 +347,7 @@ fn App() !void {
         });
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -357,8 +357,8 @@ fn App() !void {
                 .alignment = .topCenter,
             }))({
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 270.0 },
-                    .preferredHeight = .{ .fixed = 165.0 },
+                    .width = .{ .fixed = 270.0 },
+                    .height = .{ .fixed = 165.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-solution") },
                 }))({});
                 (try forbear.element(arena, .{
@@ -489,7 +489,7 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(37.5),
@@ -497,7 +497,7 @@ fn App() !void {
             (try forbear.element(arena, .{ .direction = .topToBottom }))({
                 inline for (offerings) |offering| {
                     (try forbear.element(arena, .{
-                        .preferredWidth = .grow,
+                        .width = .grow,
                         .background = .{ .color = theme.Colors.card },
                         .borderRadius = 12.0,
                         .borderColor = theme.Colors.border,
@@ -512,8 +512,8 @@ fn App() !void {
                             .margin = forbear.Margin.block(0.0).withBottom(9.0),
                         }))({
                             (try forbear.element(arena, .{
-                                .preferredWidth = .{ .fixed = 30.0 },
-                                .preferredHeight = .{ .fixed = 30.0 },
+                                .width = .{ .fixed = 30.0 },
+                                .height = .{ .fixed = 30.0 },
                                 .background = .{ .image = try forbear.useImage(offering.imageId) },
                                 .margin = forbear.Margin.inLine(0.0).withRight(9.0),
                             }))({});
@@ -530,8 +530,8 @@ fn App() !void {
                                 .margin = forbear.Margin.block(0.0).withBottom(4.5),
                             }))({
                                 (try forbear.element(arena, .{
-                                    .preferredWidth = .{ .fixed = 6.0 },
-                                    .preferredHeight = .{ .fixed = 6.0 },
+                                    .width = .{ .fixed = 6.0 },
+                                    .height = .{ .fixed = 6.0 },
                                     .background = .{ .color = theme.Colors.accentDark },
                                     .borderRadius = 3.0,
                                     .margin = forbear.Margin.inLine(0.0).withRight(7.5),
@@ -567,7 +567,7 @@ fn App() !void {
         });
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(15.0).withBottom(30.0),
@@ -576,8 +576,8 @@ fn App() !void {
                 .direction = .leftToRight,
             }))({
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 60.0 },
-                    .preferredHeight = .{ .fixed = 60.0 },
+                    .width = .{ .fixed = 60.0 },
+                    .height = .{ .fixed = 60.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-jon-avatar") },
                     .borderRadius = 30.0,
                     .margin = forbear.Margin.inLine(0.0).withRight(12.0),
@@ -611,7 +611,7 @@ fn App() !void {
         const step_numbers = [_][]const u8{ "1", "2", "3" };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -621,8 +621,8 @@ fn App() !void {
                 .alignment = .topCenter,
             }))({
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 165.0 },
-                    .preferredHeight = .{ .fixed = 135.0 },
+                    .width = .{ .fixed = 165.0 },
+                    .height = .{ .fixed = 135.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-how-it-works") },
                 }))({});
                 (try forbear.element(arena, .{
@@ -637,7 +637,7 @@ fn App() !void {
                 }))({
                     inline for (steps, 0..) |step, index| {
                         (try forbear.element(arena, .{
-                            .preferredWidth = .{ .fixed = 225.0 },
+                            .width = .{ .fixed = 225.0 },
                             .direction = .topToBottom,
                             .margin = forbear.Margin.inLine(0.0).withRight(18.0),
                         }))({
@@ -683,7 +683,7 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -693,7 +693,7 @@ fn App() !void {
                 .alignment = .centerLeft,
             }))({
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 390.0 },
+                    .width = .{ .fixed = 390.0 },
                     .direction = .topToBottom,
                 }))({
                     (try forbear.element(arena, .{
@@ -710,8 +710,8 @@ fn App() !void {
                             .alignment = .centerLeft,
                         }))({
                             (try forbear.element(arena, .{
-                                .preferredWidth = .{ .fixed = 6.0 },
-                                .preferredHeight = .{ .fixed = 6.0 },
+                                .width = .{ .fixed = 6.0 },
+                                .height = .{ .fixed = 6.0 },
                                 .background = .{ .color = theme.Colors.accentDark },
                                 .borderRadius = 3.0,
                                 .margin = forbear.Margin.inLine(0.0).withRight(7.5),
@@ -723,8 +723,8 @@ fn App() !void {
                     }
                 });
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 270.0 },
-                    .preferredHeight = .{ .fixed = 225.0 },
+                    .width = .{ .fixed = 270.0 },
+                    .height = .{ .fixed = 225.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-group-21") },
                     .margin = forbear.Margin.inLine(24.0).withRight(0.0),
                 }))({});
@@ -735,8 +735,8 @@ fn App() !void {
                 .margin = forbear.Margin.block(13.5).withBottom(0.0),
             }))({
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 90.0 },
-                    .preferredHeight = .{ .fixed = 60.0 },
+                    .width = .{ .fixed = 90.0 },
+                    .height = .{ .fixed = 60.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-failure") },
                     .margin = forbear.Margin.inLine(0.0).withRight(10.5),
                 }))({});
@@ -772,7 +772,7 @@ fn App() !void {
         };
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -814,7 +814,7 @@ fn App() !void {
         });
 
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
             .padding = forbear.Padding.top(22.5).withBottom(37.5),
@@ -824,8 +824,8 @@ fn App() !void {
                 .alignment = .topCenter,
             }))({
                 (try forbear.element(arena, .{
-                    .preferredWidth = .{ .fixed = 315.0 },
-                    .preferredHeight = .{ .fixed = 180.0 },
+                    .width = .{ .fixed = 315.0 },
+                    .height = .{ .fixed = 180.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-bottom-cta") },
                 }))({});
                 (try forbear.element(arena, .{
@@ -849,7 +849,7 @@ fn App() !void {
             });
         });
         (try forbear.element(arena, .{
-            .preferredWidth = .grow,
+            .width = .grow,
             .maxWidth = 810.0,
             .background = .{ .color = theme.Colors.soft },
             .alignment = .topCenter,
@@ -863,8 +863,8 @@ fn App() !void {
                     .alignment = .center,
                 }))({
                     (try forbear.element(arena, .{
-                        .preferredWidth = .{ .fixed = 67.5 },
-                        .preferredHeight = .{ .fixed = 21.0 },
+                        .width = .{ .fixed = 67.5 },
+                        .height = .{ .fixed = 21.0 },
                         .background = .{ .image = try forbear.useImage("uhoh-logo") },
                         .margin = forbear.Margin.inLine(0.0).withRight(9.0),
                     }))({});
