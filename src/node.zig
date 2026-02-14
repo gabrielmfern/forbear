@@ -44,36 +44,48 @@ pub const Alignment = struct {
     x: Value,
     y: Value,
 
-    /// Defines a new alignment where `vertical` is `.start`, and vertical is the given value
-    pub inline fn horizontal(value: Value) @This() {
-        return .{
-            .x = value,
-            .y = .start,
-        };
-    }
-
-    /// Defines a new alignment where `horizontal` is `.start`, and vertical is the given value
-    pub inline fn vertical(value: Value) @This() {
-        return .{
-            .x = .start,
-            .y = value,
-        };
-    }
-
-    /// Places horizontally and vertically at the start
-    pub const start = @This(){
+    pub const topLeft = @This(){
         .x = .start,
         .y = .start,
     };
 
-    /// Centers horizontally and veritcally
+    pub const topCenter = @This(){
+        .x = .center,
+        .y = .start,
+    };
+
+    pub const topRight = @This(){
+        .x = .end,
+        .y = .start,
+    };
+
+    pub const centerLeft = @This(){
+        .x = .start,
+        .y = .center,
+    };
+
+    /// Centered across all axis
     pub const center = @This(){
         .x = .center,
         .y = .center,
     };
 
-    /// Places horizontally and vertically at the end
-    pub const end = @This(){
+    pub const centerRight = @This(){
+        .x = .end,
+        .y = .center,
+    };
+
+    pub const bottomLeft = @This(){
+        .x = .start,
+        .y = .end,
+    };
+
+    pub const bottomCenter = @This(){
+        .x = .center,
+        .y = .end,
+    };
+
+    pub const bottomRight = @This(){
         .x = .end,
         .y = .end,
     };
