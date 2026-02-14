@@ -2157,7 +2157,7 @@ const ElementsPipeline = struct {
     ) void {
         const graphicsPipeline = switch (blendMode) {
             .multiply => self.blendMultiplyGraphicsPipeline,
-            .add => self.blendAddGraphicsPipeline,
+            .normal => self.blendAddGraphicsPipeline,
         };
         c.vkCmdBindPipeline(
             commandBuffer,
@@ -3670,7 +3670,7 @@ pub const Renderer = struct {
         var glyphIndex: usize = 0;
         var totalBlendAddElementCount: usize = 0;
         for (orderedLayoutBoxes) |layoutBox| {
-            if (layoutBox.style.blendMode == .add) {
+            if (layoutBox.style.blendMode == .normal) {
                 totalBlendAddElementCount += 1;
             }
         }
@@ -3679,7 +3679,7 @@ pub const Renderer = struct {
 
         for (orderedLayoutBoxes) |layoutBox| {
             const elementIndex = switch (layoutBox.style.blendMode) {
-                .add => blk: {
+                .normal => blk: {
                     const idx = blendAddElementIndex;
                     blendAddElementIndex += 1;
 
@@ -3947,7 +3947,7 @@ pub const Renderer = struct {
             if (blendAddElementIntervals[i]) |elementInterval| {
                 self.elementsPipeline.draw(
                     elementInterval,
-                    .add,
+                    .normal,
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,

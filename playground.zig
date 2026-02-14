@@ -60,7 +60,7 @@ fn renderingMain(
         const layoutBoxes = try forbear.layout(
             arena,
             .{
-                .blendMode = .add,
+                .blendMode = .normal,
                 .font = try forbear.useFont("Inter"),
                 .color = .{ 1.0, 1.0, 1.0, 1.0 },
                 .textWrapping = .character,

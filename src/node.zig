@@ -299,7 +299,7 @@ pub const Margin = struct {
 pub const BorderWidth = Padding;
 
 pub const BlendMode = enum {
-    add,
+    normal,
     multiply,
 };
 
