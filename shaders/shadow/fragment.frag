@@ -7,6 +7,7 @@ layout(location = 3) in vec2 size;
 layout(location = 4) in vec2 elementSize;
 layout(location = 5) in float blur;
 layout(location = 6) in float spread;
+layout(location = 7) in vec2 elementOffset;
 
 layout(location = 0) out vec4 outColor;
 
@@ -34,6 +35,17 @@ void main() {
         // Anti-aliased hard edge when no blur
         alpha = 1.0 - smoothstep(-aa, aa, adjustedDist);
     }
+
+    // Keep only the region outside the original element so transparent
+    // elements do not have their interior filled by the shadow.
+    vec2 elementLocalPos = p - elementOffset;
+    vec2 eq = abs(elementLocalPos) - elementSize * 0.5 + r;
+    float dElement = length(max(eq, 0.0)) + min(max(eq.x, eq.y), 0.0) - r;
+    float shapeAa = max(fwidth(dElement), 0.0001);
+    // Use a one-sided transition so the mask reaches full strength at the
+    // element edge, avoiding a visible gap/halo between border and shadow.
+    float outsideMask = smoothstep(-shapeAa, 0.0, dElement);
+    alpha *= outsideMask;
 
     outColor = vertexColor;
     outColor.a *= alpha;

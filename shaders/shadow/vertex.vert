@@ -9,6 +9,7 @@ layout(location = 3) out vec2 size;
 layout(location = 4) out vec2 elementSize;
 layout(location = 5) out float blur;
 layout(location = 6) out float spread;
+layout(location = 7) out vec2 elementOffset;
 
 struct ShadowRenderingData {
     float blur;
@@ -16,6 +17,7 @@ struct ShadowRenderingData {
     vec4 color;
     mat4 modelViewProjectionMatrix;
     vec2 elementSize;
+    vec2 elementOffset;
     vec2 size;
     float spread;
 };
@@ -35,4 +37,5 @@ void main() {
     localPos = vec4(vertexPosition, 1.0);
     blur = data.blur;
     spread = data.spread;
+    elementOffset = data.elementOffset;
 }
