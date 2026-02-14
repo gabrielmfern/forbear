@@ -27,7 +27,7 @@ fn App() !void {
         (try forbear.element(arena, .{
             .preferredWidth = .grow,
             .background = .{ .color = black },
-            .paddingBlock = .{ 6.0, 6.0 },
+            .padding = .block(6.0),
             .alignment = .center,
         }))({
             (try forbear.element(arena, .{
@@ -44,7 +44,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 13.5, 13.5 },
+            .padding = .block(13.5),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
@@ -79,7 +79,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 37.5 },
+            .padding = forbear.Padding.top(22.5).withBottom(37.5),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
@@ -134,7 +134,11 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 12.0, 24.0 },
+            // We can't use just .top here, which seems to be a bug in Zig,
+            // src/main.zig:137:25: error: type '@Type(.enum_literal)' not a function
+            // .padding = .top(12.0).withBottom(24.0),
+            //            ~^~~
+            .padding = forbear.Padding.top(12.0).withBottom(24.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
@@ -172,7 +176,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 30.0 },
+            .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
@@ -260,7 +264,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 30.0 },
+            .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .topToBottom,
@@ -281,8 +285,7 @@ fn App() !void {
                         .borderColor = theme.Colors.border,
                         .borderInlineWidth = @splat(0.75),
                         .borderBlockWidth = @splat(0.75),
-                        .paddingBlock = .{ 13.5, 13.5 },
-                        .paddingInline = .{ 13.5, 13.5 },
+                        .padding = .all(13.5),
                         .marginBlock = .{ 0.0, 12.0 },
                         .direction = .leftToRight,
                     }))({
@@ -315,7 +318,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 30.0 },
+            .padding = forbear.Padding.top(22.5).withBottom(30.0),
             .background = .{ .color = theme.Colors.soft },
         }))({
             (try forbear.element(arena, .{
@@ -348,7 +351,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 30.0 },
+            .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .topToBottom,
@@ -490,7 +493,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 37.5 },
+            .padding = forbear.Padding.top(22.5).withBottom(37.5),
         }))({
             (try forbear.element(arena, .{ .direction = .topToBottom }))({
                 inline for (offerings) |offering| {
@@ -501,8 +504,7 @@ fn App() !void {
                         .borderColor = theme.Colors.border,
                         .borderInlineWidth = @splat(0.75),
                         .borderBlockWidth = @splat(0.75),
-                        .paddingBlock = .{ 15.0, 15.0 },
-                        .paddingInline = .{ 15.0, 15.0 },
+                        .padding = .all(15.0),
                         .marginBlock = .{ 0.0, 12.0 },
                         .direction = .topToBottom,
                     }))({
@@ -544,8 +546,7 @@ fn App() !void {
                         (try forbear.element(arena, .{
                             .background = .{ .color = theme.Colors.soft },
                             .borderRadius = 9.0,
-                            .paddingBlock = .{ 9.0, 9.0 },
-                            .paddingInline = .{ 9.0, 9.0 },
+                            .padding = .all(9.0),
                             .marginBlock = .{ 10.5, 0.0 },
                         }))({
                             (try forbear.element(arena, .{
@@ -571,7 +572,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 15.0, 30.0 },
+            .padding = forbear.Padding.top(15.0).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
@@ -615,7 +616,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 30.0 },
+            .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .topToBottom,
@@ -660,8 +661,7 @@ fn App() !void {
                     (try forbear.element(arena, .{
                         .background = .{ .color = theme.Colors.accent },
                         .borderRadius = 7.5,
-                        .paddingBlock = .{ 9.0, 9.0 },
-                        .paddingInline = .{ 18.0, 18.0 },
+                        .padding = forbear.Padding.block(9.0).withInLine(18.0),
                         .alignment = .center,
                     }))({
                         (try forbear.element(arena, .{
@@ -688,7 +688,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 30.0 },
+            .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
@@ -777,7 +777,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 30.0 },
+            .padding = forbear.Padding.top(22.5).withBottom(30.0),
         }))({
             (try forbear.element(arena, .{ .direction = .topToBottom }))({
                 (try forbear.element(arena, .{
@@ -794,8 +794,7 @@ fn App() !void {
                         .borderColor = theme.Colors.border,
                         .borderInlineWidth = @splat(0.75),
                         .borderBlockWidth = @splat(0.75),
-                        .paddingBlock = .{ 12.0, 12.0 },
-                        .paddingInline = .{ 12.0, 12.0 },
+                        .padding = .all(12.0),
                         .marginBlock = .{ 0.0, 9.0 },
                     }))({
                         (try forbear.element(arena, .{
@@ -821,7 +820,7 @@ fn App() !void {
             .preferredWidth = .grow,
             .maxWidth = 810.0,
             .alignment = .topCenter,
-            .paddingBlock = .{ 22.5, 37.5 },
+            .padding = forbear.Padding.top(22.5).withBottom(37.5),
         }))({
             (try forbear.element(arena, .{
                 .direction = .topToBottom,
@@ -857,14 +856,14 @@ fn App() !void {
             .maxWidth = 810.0,
             .background = .{ .color = theme.Colors.soft },
             .alignment = .topCenter,
-            .paddingBlock = .{ 15.0, 19.5 },
+            .padding = forbear.Padding.top(15.0).withBottom(19.5),
         }))({
             (try forbear.element(arena, .{
                 .direction = .topToBottom,
             }))({
                 (try forbear.element(arena, .{
                     .direction = .leftToRight,
-                    .alignment = .centerLeft,
+                    .alignment = .center,
                 }))({
                     (try forbear.element(arena, .{
                         .preferredWidth = .{ .fixed = 67.5 },

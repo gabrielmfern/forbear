@@ -353,7 +353,7 @@ fn fitHeight(layoutBox: *LayoutBox) void {
             .layoutBoxes => |childBoxes| {
                 const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
                 const direction = layoutBox.style.direction;
-                const padding = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1];
+                const padding = layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1];
                 const border = layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1];
                 if (layoutBox.style.preferredHeight == .fit) {
                     layoutBox.size[1] = padding + border;
@@ -395,7 +395,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
             .layoutBoxes => |childBoxes| {
                 const shouldFitMin = layoutBox.style.preferredWidth != .fixed and layoutBox.style.minWidth == null;
                 const direction = layoutBox.style.direction;
-                const padding = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1];
+                const padding = layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1];
                 const border = layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
                 if (layoutBox.style.preferredWidth == .fit) {
                     layoutBox.size[0] = padding + border;
@@ -441,8 +441,8 @@ fn place(layoutBox: *LayoutBox) void {
                 const vAlign = layoutBox.style.alignment.y;
 
                 const availableSize = .{
-                    layoutBox.size[0] - (layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1]) - (layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1]),
-                    layoutBox.size[1] - (layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1]) - (layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1]),
+                    layoutBox.size[0] - (layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1]) - (layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1]),
+                    layoutBox.size[1] - (layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1]) - (layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1]),
                 };
 
                 var childrenSize: Vec2 = @splat(0.0);
@@ -463,8 +463,8 @@ fn place(layoutBox: *LayoutBox) void {
                 }
 
                 var cursor: Vec2 = .{
-                    layoutBox.style.paddingInline[0] + layoutBox.style.borderInlineWidth[0],
-                    layoutBox.style.paddingBlock[0] + layoutBox.style.borderBlockWidth[0],
+                    layoutBox.style.padding.x[0] + layoutBox.style.borderInlineWidth[0],
+                    layoutBox.style.padding.y[0] + layoutBox.style.borderBlockWidth[0],
                 };
                 if (direction == .leftToRight) {
                     switch (hAlign) {
@@ -548,8 +548,8 @@ const LayoutCreator = struct {
             shadow.blurRadius *= resolutionMultiplier[0];
             shadow.spread *= resolutionMultiplier[0];
         }
-        style.paddingInline *= @splat(resolutionMultiplier[0]);
-        style.paddingBlock *= @splat(resolutionMultiplier[1]);
+        style.padding.x *= @splat(resolutionMultiplier[0]);
+        style.padding.y *= @splat(resolutionMultiplier[1]);
         style.marginInline *= @splat(resolutionMultiplier[0]);
         style.marginBlock *= @splat(resolutionMultiplier[1]);
         style.borderRadius *= resolutionMultiplier[0];
@@ -783,7 +783,7 @@ fn testWrapConfiguration(configuration: struct {
             },
         },
         .style = (IncompleteStyle{
-            .horizontalAlignment = configuration.alignment,
+            .alignment = configuration.alignment,
         }).completeWith(BaseStyle{
             .font = undefined,
             .color = .{ 0.0, 0.0, 0.0, 1.0 },
@@ -1073,7 +1073,7 @@ test "wrap - no wrapping when glyphs fit on single line" {
     } ** 5;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .character,
         .lineWidth = 100.0,
         .lineHeight = 20.0,
@@ -1099,7 +1099,7 @@ test "wrap - character wrapping with small width" {
     } ** 6;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .character,
         .lineWidth = 35.0,
         .lineHeight = 20.0,
@@ -1131,7 +1131,7 @@ test "wrap - word wrapping with small width" {
     };
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .word,
         .lineWidth = 60.0,
         .lineHeight = 20.0,
@@ -1163,7 +1163,7 @@ test "wrap - alignment start" {
     } ** 5;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .character,
         .lineWidth = 45.0,
         .lineHeight = 20.0,
@@ -1215,7 +1215,7 @@ test "wrap - alignment end" {
     } ** 5;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .end,
+        .alignment = .topRight,
         .mode = .character,
         .lineWidth = 45.0,
         .lineHeight = 20.0,
@@ -1245,7 +1245,7 @@ test "wrap - word wrapping with alignment start" {
     };
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .word,
         .lineWidth = 60.0,
         .lineHeight = 20.0,
@@ -1318,7 +1318,7 @@ test "wrap - word wrapping with alignment end" {
     };
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .end,
+        .alignment = .topRight,
         .mode = .word,
         .lineWidth = 100.0,
         .lineHeight = 20.0,

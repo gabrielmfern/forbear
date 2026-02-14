@@ -8,7 +8,7 @@ fn App() !void {
     (try forbear.element(arena, .{
         .preferredWidth = .grow,
         .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
-        .paddingInline = .{ 10, 10 },
+        .padding = .inLine(10),
     }))({
         try forbear.component(arena, forbear.FpsCounter, null);
         try forbear.text(arena, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");

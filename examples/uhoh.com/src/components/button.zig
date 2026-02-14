@@ -36,15 +36,10 @@ pub fn Button(props: ButtonProps) !void {
                 },
                 .offsetInline = @splat(0.0),
             },
-            .paddingBlock = switch (props.sizing) {
-                .small => @splat(10),
-                .medium => @splat(20),
-                .large => @splat(28),
-            },
-            .paddingInline = switch (props.sizing) {
-                .small => @splat(20),
-                .medium => @splat(36),
-                .large => @splat(48),
+            .padding = switch (props.sizing) {
+                .small => forbear.Padding.block(10).withInLine(20),
+                .medium => forbear.Padding.block(20).withInLine(36),
+                .large => forbear.Padding.block(28).withInLine(48),
             },
             .alignment = .center,
             .direction = .topToBottom,
