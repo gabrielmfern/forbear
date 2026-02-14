@@ -8,7 +8,6 @@ const forbear = @import("root.zig");
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const Node = @import("node.zig").Node;
 const Sizing = @import("node.zig").Sizing;
-const SelfAlignment = @import("node.zig").SelfAlignment;
 const Style = @import("node.zig").Style;
 const TextWrapping = @import("node.zig").TextWrapping;
 
@@ -491,7 +490,9 @@ fn place(layoutBox: *LayoutBox) void {
                     }
 
                     const availableMainAxis = if (direction == .leftToRight) availableSize[0] else availableSize[1];
-                    const desiredStart = switch (children[index].style.alignment.?) {
+                    const alignment = children[index].style.alignment.?;
+                    const mainAxisAlignment = if (direction == .leftToRight) alignment.x else alignment.y;
+                    const desiredStart = switch (mainAxisAlignment) {
                         .start => sizeBefore,
                         .center => (availableMainAxis - alignedSize) / 2.0,
                         .end => availableMainAxis - alignedSize,
@@ -537,7 +538,8 @@ fn place(layoutBox: *LayoutBox) void {
                         };
                         if (direction == .leftToRight) {
                             // Cross-axis alignment (Vertical)
-                            switch (vAlign) {
+                            const crossAxisAlignment = if (child.style.alignment) |alignment| alignment.y else vAlign;
+                            switch (crossAxisAlignment) {
                                 .start => child.position[1] = child.style.margin.y[0],
                                 .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
                                 .end => child.position[1] = (availableSize[1] - contributingSize[1]),
@@ -548,7 +550,8 @@ fn place(layoutBox: *LayoutBox) void {
                             cursor[0] += child.size[0] + child.style.margin.x[1];
                         } else {
                             // Cross-axis alignment (Horizontal)
-                            switch (hAlign) {
+                            const crossAxisAlignment = if (child.style.alignment) |alignment| alignment.x else hAlign;
+                            switch (crossAxisAlignment) {
                                 .start => child.position[0] = child.style.margin.x[0],
                                 .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
                                 .end => child.position[0] = (availableSize[0] - contributingSize[0]),
@@ -864,7 +867,7 @@ const defaultBaseStyle = BaseStyle{
 const TestChild = struct {
     width: Sizing = .fit,
     height: Sizing = .fit,
-    alignment: ?SelfAlignment = null,
+    alignment: ?Alignment = null,
     size: Vec2,
     minSize: Vec2 = .{ 0.0, 0.0 },
     maxSize: Vec2 = .{ std.math.inf(f32), std.math.inf(f32) },
@@ -1450,7 +1453,7 @@ test "place - self alignment end in row pushes current and following children" {
         .childrenAlignment = .center,
         .children = &.{
             .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
-            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .alignment = .end, .size = .{ 20.0, 20.0 } },
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .alignment = .bottomRight, .size = .{ 20.0, 20.0 } },
             .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
         },
         .expectedPositions = &.{
@@ -1468,13 +1471,45 @@ test "place - self alignment end in column pushes current and following children
         .childrenAlignment = .center,
         .children = &.{
             .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
-            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .alignment = .end, .size = .{ 20.0, 20.0 } },
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .alignment = .bottomRight, .size = .{ 20.0, 20.0 } },
             .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
         },
         .expectedPositions = &.{
             .{ 0.0, 0.0 },
             .{ 0.0, 60.0 },
             .{ 0.0, 80.0 },
+        },
+    });
+}
+
+test "place - self alignment overrides vertical cross-axis in row" {
+    try testPlaceConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 100.0 },
+        .childrenAlignment = .topLeft,
+        .children = &.{
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .alignment = .bottomLeft, .size = .{ 20.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 20.0, 80.0 },
+        },
+    });
+}
+
+test "place - self alignment overrides horizontal cross-axis in column" {
+    try testPlaceConfiguration(.{
+        .direction = .topToBottom,
+        .parentSize = .{ 100.0, 100.0 },
+        .childrenAlignment = .topLeft,
+        .children = &.{
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .alignment = .topRight, .size = .{ 20.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 80.0, 20.0 },
         },
     });
 }

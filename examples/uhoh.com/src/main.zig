@@ -48,30 +48,26 @@ fn App() !void {
         }))({
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
+                .width = .grow,
                 .childrenAlignment = .centerLeft,
             }))({
                 (try forbear.element(arena, .{
                     .width = .{ .fixed = 67.5 },
                     .height = .{ .fixed = 21.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-logo") },
-                    .margin = forbear.Margin.inLine(0.0).withRight(24.0),
+                    .margin = forbear.Margin.right(24.0),
                 }))({});
                 (try forbear.element(arena, .{
-                    .direction = .leftToRight,
-                    .childrenAlignment = .topRight,
+                    .fontWeight = 500,
+                    .fontSize = 10.5,
+                    .margin = forbear.Margin.right(13.5),
+                    .alignment = .centerRight,
                 }))({
-                    (try forbear.element(arena, .{
-                        .fontWeight = 500,
-                        .fontSize = 10.5,
-                        .margin = forbear.Margin.inLine(0.0).withRight(13.5),
-                    }))({
-                        try forbear.text(arena, "Pricing");
-                    });
-                    // TODO: responsive hamburger nav for smaller widths.
-                    try forbear.component(arena, Button, ButtonProps{
-                        .sizing = .small,
-                        .text = "Get a free trial",
-                    });
+                    try forbear.text(arena, "Pricing");
+                });
+                try forbear.component(arena, Button, ButtonProps{
+                    .sizing = .small,
+                    .text = "Get a free trial",
                 });
             });
         });
