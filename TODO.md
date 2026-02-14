@@ -35,7 +35,11 @@ missing things for the entire uhoh.com website:
 - [x] allow to center align just a single element, without affecting others
 - [x] startup is slow
 - [x] can't make an element fully transparent?
-- [ ] blend multiply
+- [x] blend multiply
+- [ ] images are quite awkaward, specifically when it comes to sizing
+    - lazily decompressing images causes huge frame drops for large images
+    - we should probably have `forbear.image` instead of always using backgroundImage, and have its size calculated from the aspect ratio while filling up the parent
+- [ ] support for filter: grayscale()
 - [ ] after something like one frame the size of things seem to change
 - [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
     - is having lots of them bad? I understand having no type-safety though
