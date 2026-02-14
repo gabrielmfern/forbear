@@ -113,11 +113,11 @@ fn growAndShrink(
             if (child.style.placement == .standard) {
                 remaining -= child.getSize(direction);
                 if (direction.perpendicular() == .topToBottom) {
-                    if (child.style.preferredHeight == .grow or (child.size[1] > layoutBox.size[1] and child.minSize[1] < child.size[1])) {
+                    if (child.style.height == .grow or (child.size[1] > layoutBox.size[1] and child.minSize[1] < child.size[1])) {
                         child.size[1] = @max(@min(layoutBox.size[1], child.maxSize[1]), child.minSize[1]);
                     }
                 } else if (direction.perpendicular() == .leftToRight) {
-                    if (child.style.preferredWidth == .grow or (child.size[0] > layoutBox.size[0] and child.minSize[0] < child.size[0])) {
+                    if (child.style.width == .grow or (child.size[0] > layoutBox.size[0] and child.minSize[0] < child.size[0])) {
                         child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
                     }
                 }
@@ -330,21 +330,16 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                     });
                 }
                 for (lines.items) |line| {
-                    // std.debug.print("line start {}\n", .{line});
                     const startX = glyphs.slice[line.startIndex].position[0];
                     const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
                     const width = endX - startX;
                     for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
-                        // std.debug.print("glyph {}\n", .{glyph.*});
-                        switch (layoutBox.style.horizontalAlignment) {
+                        switch (layoutBox.style.alignment.x) {
                             .start => {},
                             .center => glyph.position[0] += (lineWidth - width) / 2.0,
                             .end => glyph.position[0] += lineWidth - width,
                         }
-                        // std.debug.print("glyph after {}\n", .{glyph.*});
-                        // std.debug.print("\n", .{});
                     }
-                    // std.debug.print("\n", .{});
                 }
                 layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
             },
@@ -356,11 +351,11 @@ fn fitHeight(layoutBox: *LayoutBox) void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
-                const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
+                const shouldFitMin = layoutBox.style.height != .fixed and layoutBox.style.minHeight == null;
                 const direction = layoutBox.style.direction;
-                const padding = layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1];
-                const border = layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1];
-                if (layoutBox.style.preferredHeight == .fit) {
+                const padding = layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1];
+                const border = layoutBox.style.borderWidth.y[0] + layoutBox.style.borderWidth.y[1];
+                if (layoutBox.style.height == .fit) {
                     layoutBox.size[1] = padding + border;
                 }
                 if (shouldFitMin) {
@@ -369,9 +364,9 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                 for (childBoxes) |*child| {
                     fitHeight(child);
                     if (child.style.placement == .standard) {
-                        const childMargins = child.style.marginBlock[0] + child.style.marginBlock[1];
+                        const childMargins = child.style.margin.y[0] + child.style.margin.y[1];
                         if (direction == .topToBottom) {
-                            if (layoutBox.style.preferredHeight == .fit) {
+                            if (layoutBox.style.height == .fit) {
                                 layoutBox.size[1] += childMargins + child.size[1];
                             }
                             if (shouldFitMin) {
@@ -379,7 +374,7 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                             }
                         }
                         if (direction == .leftToRight) {
-                            if (layoutBox.style.preferredHeight == .fit) {
+                            if (layoutBox.style.height == .fit) {
                                 layoutBox.size[1] = @max(childMargins + padding + border + child.size[1], layoutBox.size[1]);
                             }
                             if (shouldFitMin) {
@@ -398,11 +393,11 @@ fn fitWidth(layoutBox: *LayoutBox) void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
-                const shouldFitMin = layoutBox.style.preferredWidth != .fixed and layoutBox.style.minWidth == null;
+                const shouldFitMin = layoutBox.style.width != .fixed and layoutBox.style.minWidth == null;
                 const direction = layoutBox.style.direction;
-                const padding = layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1];
-                const border = layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
-                if (layoutBox.style.preferredWidth == .fit) {
+                const padding = layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1];
+                const border = layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1];
+                if (layoutBox.style.width == .fit) {
                     layoutBox.size[0] = padding + border;
                 }
                 if (shouldFitMin) {
@@ -411,9 +406,9 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                 for (childBoxes) |*child| {
                     fitWidth(child);
                     if (child.style.placement == .standard) {
-                        const childMargins = child.style.marginInline[0] + child.style.marginInline[1];
+                        const childMargins = child.style.margin.x[0] + child.style.margin.x[1];
                         if (direction == .leftToRight) {
-                            if (layoutBox.style.preferredWidth == .fit) {
+                            if (layoutBox.style.width == .fit) {
                                 layoutBox.size[0] += childMargins + child.size[0];
                             }
                             if (shouldFitMin) {
@@ -421,7 +416,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                             }
                         }
                         if (direction == .topToBottom) {
-                            if (layoutBox.style.preferredWidth == .fit) {
+                            if (layoutBox.style.width == .fit) {
                                 layoutBox.size[0] = @max(childMargins + padding + border + child.size[0], layoutBox.size[0]);
                             }
                             if (shouldFitMin) {
@@ -442,20 +437,20 @@ fn place(layoutBox: *LayoutBox) void {
         switch (layoutBox.children.?) {
             .layoutBoxes => |children| {
                 const direction = layoutBox.style.direction;
-                const hAlign = layoutBox.style.horizontalAlignment;
-                const vAlign = layoutBox.style.verticalAlignment;
+                const hAlign = layoutBox.style.alignment.x;
+                const vAlign = layoutBox.style.alignment.y;
 
                 const availableSize = .{
-                    layoutBox.size[0] - (layoutBox.style.paddingInline[0] + layoutBox.style.paddingInline[1]) - (layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1]),
-                    layoutBox.size[1] - (layoutBox.style.paddingBlock[0] + layoutBox.style.paddingBlock[1]) - (layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1]),
+                    layoutBox.size[0] - (layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1]) - (layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1]),
+                    layoutBox.size[1] - (layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1]) - (layoutBox.style.borderWidth.y[0] + layoutBox.style.borderWidth.y[1]),
                 };
 
                 var childrenSize: Vec2 = @splat(0.0);
                 for (children) |child| {
                     if (child.style.placement == .standard) {
                         const contributingSize = Vec2{
-                            child.size[0] + child.style.marginInline[0] + child.style.marginInline[1],
-                            child.size[1] + child.style.marginBlock[0] + child.style.marginBlock[1],
+                            child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
                         };
                         if (direction == .leftToRight) {
                             childrenSize[0] += contributingSize[0];
@@ -468,8 +463,8 @@ fn place(layoutBox: *LayoutBox) void {
                 }
 
                 var cursor: Vec2 = .{
-                    layoutBox.style.paddingInline[0] + layoutBox.style.borderInlineWidth[0],
-                    layoutBox.style.paddingBlock[0] + layoutBox.style.borderBlockWidth[0],
+                    layoutBox.style.padding.x[0] + layoutBox.style.borderWidth.x[0],
+                    layoutBox.style.padding.y[0] + layoutBox.style.borderWidth.y[0],
                 };
                 if (direction == .leftToRight) {
                     switch (hAlign) {
@@ -488,31 +483,31 @@ fn place(layoutBox: *LayoutBox) void {
                 for (children) |*child| {
                     if (child.style.placement == .standard) {
                         const contributingSize = Vec2{
-                            child.size[0] + child.style.marginInline[0] + child.style.marginInline[1],
-                            child.size[1] + child.style.marginBlock[0] + child.style.marginBlock[1],
+                            child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
                         };
                         if (direction == .leftToRight) {
                             // Cross-axis alignment (Vertical)
                             switch (vAlign) {
-                                .start => child.position[1] = child.style.marginBlock[0],
+                                .start => child.position[1] = child.style.margin.y[0],
                                 .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
                                 .end => child.position[1] = (availableSize[1] - contributingSize[1]),
                             }
 
-                            cursor[0] += child.style.marginInline[0];
+                            cursor[0] += child.style.margin.x[0];
                             child.position += cursor;
-                            cursor[0] += child.size[0] + child.style.marginInline[1];
+                            cursor[0] += child.size[0] + child.style.margin.x[1];
                         } else {
                             // Cross-axis alignment (Horizontal)
                             switch (hAlign) {
-                                .start => child.position[0] = child.style.marginInline[0],
+                                .start => child.position[0] = child.style.margin.x[0],
                                 .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
                                 .end => child.position[0] = (availableSize[0] - contributingSize[0]),
                             }
 
-                            cursor[1] += child.style.marginBlock[0];
+                            cursor[1] += child.style.margin.y[0];
                             child.position += cursor;
-                            cursor[1] += child.size[1] + child.style.marginBlock[1];
+                            cursor[1] += child.size[1] + child.style.margin.y[1];
                         }
                     }
                     place(child);
@@ -539,24 +534,24 @@ const LayoutCreator = struct {
         var style = switch (node.content) {
             .element => |element| element.style.completeWith(baseStyle),
             .text => (IncompleteStyle{
-                .horizontalAlignment = if (self.parent) |parent|
-                    parent.style.horizontalAlignment
-                else
-                    null,
+                .alignment = if (self.parent) |parent| .{
+                    .x = parent.style.alignment.x,
+                    .y = .start,
+                } else null,
             }).completeWith(baseStyle),
         };
-        style.borderInlineWidth *= @splat(resolutionMultiplier[0]);
-        style.borderBlockWidth *= @splat(resolutionMultiplier[1]);
+        style.borderWidth.x *= @splat(resolutionMultiplier[0]);
+        style.borderWidth.y *= @splat(resolutionMultiplier[1]);
         if (style.shadow) |*shadow| {
-            shadow.offsetInline *= @splat(resolutionMultiplier[0]);
-            shadow.offsetBlock *= @splat(resolutionMultiplier[1]);
+            shadow.offset.x *= @splat(resolutionMultiplier[0]);
+            shadow.offset.y *= @splat(resolutionMultiplier[1]);
             shadow.blurRadius *= resolutionMultiplier[0];
             shadow.spread *= resolutionMultiplier[0];
         }
-        style.paddingInline *= @splat(resolutionMultiplier[0]);
-        style.paddingBlock *= @splat(resolutionMultiplier[1]);
-        style.marginInline *= @splat(resolutionMultiplier[0]);
-        style.marginBlock *= @splat(resolutionMultiplier[1]);
+        style.padding.x *= @splat(resolutionMultiplier[0]);
+        style.padding.y *= @splat(resolutionMultiplier[1]);
+        style.margin.x *= @splat(resolutionMultiplier[0]);
+        style.margin.y *= @splat(resolutionMultiplier[1]);
         style.borderRadius *= resolutionMultiplier[0];
 
         switch (node.content) {
@@ -565,22 +560,22 @@ const LayoutCreator = struct {
                     .position = if (style.placement == .manual) style.placement.manual else .{ 0.0, 0.0 },
                     .z = if (style.zIndex) |zIndex| zIndex else z,
                     .size = .{
-                        switch (style.preferredWidth) {
+                        switch (style.width) {
                             .fixed => |width| width,
                             .fit, .grow => 0.0,
                         },
-                        switch (style.preferredHeight) {
+                        switch (style.height) {
                             .fixed => |height| height,
                             .fit, .grow => 0.0,
                         },
                     },
                     .minSize = .{
-                        style.minWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else 0.0,
-                        style.minHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else 0.0,
+                        style.minWidth orelse if (style.width == .fixed) style.width.fixed else 0.0,
+                        style.minHeight orelse if (style.height == .fixed) style.height.fixed else 0.0,
                     },
                     .maxSize = .{
-                        style.maxWidth orelse if (style.preferredWidth == .fixed) style.preferredWidth.fixed else std.math.inf(f32),
-                        style.maxHeight orelse if (style.preferredHeight == .fixed) style.preferredHeight.fixed else std.math.inf(f32),
+                        style.maxWidth orelse if (style.width == .fixed) style.width.fixed else std.math.inf(f32),
+                        style.maxHeight orelse if (style.height == .fixed) style.height.fixed else std.math.inf(f32),
                     },
                     .key = node.key,
                     .children = null,
@@ -734,10 +729,10 @@ pub fn layout(
             var layoutBox = try creator.create(node, baseStyle, 1, dpi);
             fitWidth(&layoutBox);
             fitHeight(&layoutBox);
-            if (layoutBox.style.preferredWidth == .grow) {
+            if (layoutBox.style.width == .grow) {
                 layoutBox.size[0] = viewportSize[0];
             }
-            if (layoutBox.style.preferredHeight == .grow) {
+            if (layoutBox.style.height == .grow) {
                 layoutBox.size[1] = viewportSize[1];
             }
             try growAndShrink(arena, &layoutBox);
@@ -788,7 +783,7 @@ fn testWrapConfiguration(configuration: struct {
             },
         },
         .style = (IncompleteStyle{
-            .horizontalAlignment = configuration.alignment,
+            .alignment = configuration.alignment,
         }).completeWith(BaseStyle{
             .font = undefined,
             .color = .{ 0.0, 0.0, 0.0, 1.0 },
@@ -818,8 +813,8 @@ const defaultBaseStyle = BaseStyle{
 };
 
 const TestChild = struct {
-    preferredWidth: Sizing = .fit,
-    preferredHeight: Sizing = .fit,
+    width: Sizing = .fit,
+    height: Sizing = .fit,
     size: Vec2,
     minSize: Vec2 = .{ 0.0, 0.0 },
     maxSize: Vec2 = .{ std.math.inf(f32), std.math.inf(f32) },
@@ -848,8 +843,8 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
             .maxSize = child.maxSize,
             .children = null,
             .style = (IncompleteStyle{
-                .preferredWidth = child.preferredWidth,
-                .preferredHeight = child.preferredHeight,
+                .width = child.width,
+                .height = child.height,
             }).completeWith(defaultBaseStyle),
         };
     }
@@ -883,7 +878,7 @@ test "growAndShrink - single grow child fills remaining space horizontally" {
         .direction = .leftToRight,
         .parentSize = .{ 100.0, 50.0 },
         .children = &.{
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
         },
         .expectedSizes = &.{
             .{ 100.0, 50.0 },
@@ -899,8 +894,8 @@ test "growAndShrink - all grow children at maxSize with remaining space" {
         .direction = .leftToRight,
         .parentSize = .{ 200.0, 50.0 },
         .children = &.{
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
         },
         .expectedSizes = &.{
             .{ 40.0, 50.0 },
@@ -914,7 +909,7 @@ test "growAndShrink - grow child clamped by maxSize" {
         .direction = .leftToRight,
         .parentSize = .{ 200.0, 50.0 },
         .children = &.{
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 80.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 80.0, 50.0 } },
         },
         .expectedSizes = &.{
             .{ 80.0, 50.0 },
@@ -927,8 +922,8 @@ test "growAndShrink - grow child respects minSize when parent is small" {
         .direction = .leftToRight,
         .parentSize = .{ 100.0, 50.0 },
         .children = &.{
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 60.0, 0.0 } },
-            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 60.0, 0.0 } },
+            .{ .width = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
         },
         .expectedSizes = &.{
             .{ 60.0, 50.0 },
@@ -942,8 +937,8 @@ test "growAndShrink - two grow children split space equally" {
         .direction = .leftToRight,
         .parentSize = .{ 200.0, 50.0 },
         .children = &.{
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
         },
         .expectedSizes = &.{
             .{ 100.0, 50.0 },
@@ -957,8 +952,8 @@ test "growAndShrink - two grow children with different maxSize" {
         .direction = .leftToRight,
         .parentSize = .{ 200.0, 50.0 },
         .children = &.{
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 60.0, 50.0 } },
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 60.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
         },
         .expectedSizes = &.{
             .{ 60.0, 50.0 },
@@ -974,8 +969,8 @@ test "growAndShrink - shrink respects minSize" {
         .direction = .leftToRight,
         .parentSize = .{ 100.0, 50.0 },
         .children = &.{
-            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
-            .{ .preferredWidth = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
+            .{ .width = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
+            .{ .width = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
         },
         .expectedSizes = &.{
             .{ 50.0, 50.0 },
@@ -989,8 +984,8 @@ test "growAndShrink - grow vertically with maxSize constraint" {
         .direction = .topToBottom,
         .parentSize = .{ 100.0, 300.0 },
         .children = &.{
-            .{ .preferredHeight = .grow, .size = .{ 100.0, 0.0 }, .maxSize = .{ 100.0, 120.0 } },
-            .{ .preferredHeight = .grow, .size = .{ 100.0, 0.0 } },
+            .{ .height = .grow, .size = .{ 100.0, 0.0 }, .maxSize = .{ 100.0, 120.0 } },
+            .{ .height = .grow, .size = .{ 100.0, 0.0 } },
         },
         .expectedSizes = &.{
             .{ 100.0, 120.0 },
@@ -1006,9 +1001,9 @@ test "growAndShrink - grow with both minSize and maxSize" {
         .direction = .leftToRight,
         .parentSize = .{ 300.0, 50.0 },
         .children = &.{
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 50.0, 50.0 } },
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
-            .{ .preferredWidth = .grow, .size = .{ 0.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 50.0, 50.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
+            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
         },
         .expectedSizes = &.{
             .{ 50.0, 50.0 },
@@ -1025,8 +1020,8 @@ test "growAndShrink - shrink with asymmetric minSize" {
         .direction = .leftToRight,
         .parentSize = .{ 120.0, 50.0 },
         .children = &.{
-            .{ .preferredWidth = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 90.0, 0.0 } },
-            .{ .preferredWidth = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 20.0, 0.0 } },
+            .{ .width = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 90.0, 0.0 } },
+            .{ .width = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 20.0, 0.0 } },
         },
         .expectedSizes = &.{
             .{ 90.0, 50.0 },
@@ -1043,7 +1038,7 @@ test "growAndShrink - cross-axis grow clamped by maxSize" {
         .direction = .leftToRight,
         .parentSize = .{ 200.0, 100.0 },
         .children = &.{
-            .{ .preferredWidth = .{ .fixed = 200.0 }, .preferredHeight = .grow, .size = .{ 200.0, 30.0 }, .maxSize = .{ 200.0, 60.0 } },
+            .{ .width = .{ .fixed = 200.0 }, .height = .grow, .size = .{ 200.0, 30.0 }, .maxSize = .{ 200.0, 60.0 } },
         },
         .expectedSizes = &.{
             .{ 200.0, 60.0 },
@@ -1058,7 +1053,7 @@ test "growAndShrink - cross-axis grow respects minSize" {
         .direction = .topToBottom,
         .parentSize = .{ 80.0, 200.0 },
         .children = &.{
-            .{ .preferredHeight = .{ .fixed = 200.0 }, .preferredWidth = .grow, .size = .{ 50.0, 200.0 }, .minSize = .{ 100.0, 0.0 }, .maxSize = .{ 200.0, 200.0 } },
+            .{ .height = .{ .fixed = 200.0 }, .width = .grow, .size = .{ 50.0, 200.0 }, .minSize = .{ 100.0, 0.0 }, .maxSize = .{ 200.0, 200.0 } },
         },
         .expectedSizes = &.{
             .{ 100.0, 200.0 },
@@ -1078,7 +1073,7 @@ test "wrap - no wrapping when glyphs fit on single line" {
     } ** 5;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .character,
         .lineWidth = 100.0,
         .lineHeight = 20.0,
@@ -1104,7 +1099,7 @@ test "wrap - character wrapping with small width" {
     } ** 6;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .character,
         .lineWidth = 35.0,
         .lineHeight = 20.0,
@@ -1136,7 +1131,7 @@ test "wrap - word wrapping with small width" {
     };
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .word,
         .lineWidth = 60.0,
         .lineHeight = 20.0,
@@ -1168,7 +1163,7 @@ test "wrap - alignment start" {
     } ** 5;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .character,
         .lineWidth = 45.0,
         .lineHeight = 20.0,
@@ -1220,7 +1215,7 @@ test "wrap - alignment end" {
     } ** 5;
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .end,
+        .alignment = .topRight,
         .mode = .character,
         .lineWidth = 45.0,
         .lineHeight = 20.0,
@@ -1250,7 +1245,7 @@ test "wrap - word wrapping with alignment start" {
     };
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .start,
+        .alignment = .topLeft,
         .mode = .word,
         .lineWidth = 60.0,
         .lineHeight = 20.0,
@@ -1323,7 +1318,7 @@ test "wrap - word wrapping with alignment end" {
     };
     try testWrapConfiguration(.{
         .glyphs = &glyphs,
-        .alignment = .end,
+        .alignment = .topRight,
         .mode = .word,
         .lineWidth = 100.0,
         .lineHeight = 20.0,

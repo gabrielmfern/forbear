@@ -13,8 +13,7 @@ pub fn Button(props: ButtonProps) !void {
     (try forbear.element(arena, .{}))({
         (try forbear.element(arena, .{
             .borderRadius = 6.0,
-            .borderInlineWidth = @splat(1.5),
-            .borderBlockWidth = @splat(1.5),
+            .borderWidth = forbear.BorderWidth.all(1.5),
             .background = .{ .color = .{ 0.99, 0.98, 0.96, 1.0 } },
             .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
             .fontSize = switch (props.sizing) {
@@ -30,24 +29,16 @@ pub fn Button(props: ButtonProps) !void {
                 .blurRadius = 0.0,
                 .spread = 0.0,
                 .color = .{ 0.0, 0.0, 0.0, 1.0 },
-                .offsetBlock = .{
-                    0.0,
+                .offset = forbear.Offset.bottom(
                     try forbear.useTransition(if (isHovering.*) 4.5 else 0.0, 0.1, forbear.easeInOut),
-                },
-                .offsetInline = @splat(0.0),
+                ),
             },
-            .paddingBlock = switch (props.sizing) {
-                .small => @splat(10),
-                .medium => @splat(20),
-                .large => @splat(28),
+            .padding = switch (props.sizing) {
+                .small => forbear.Padding.block(10).withInLine(20),
+                .medium => forbear.Padding.block(20).withInLine(36),
+                .large => forbear.Padding.block(28).withInLine(48),
             },
-            .paddingInline = switch (props.sizing) {
-                .small => @splat(20),
-                .medium => @splat(36),
-                .large => @splat(48),
-            },
-            .horizontalAlignment = .center,
-            .verticalAlignment = .center,
+            .alignment = .center,
             .direction = .topToBottom,
         }))({
             try forbear.text(arena, props.text);
