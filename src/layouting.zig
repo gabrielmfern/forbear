@@ -543,8 +543,8 @@ const LayoutCreator = struct {
         style.borderWidth.x *= @splat(resolutionMultiplier[0]);
         style.borderWidth.y *= @splat(resolutionMultiplier[1]);
         if (style.shadow) |*shadow| {
-            shadow.offsetInline *= @splat(resolutionMultiplier[0]);
-            shadow.offsetBlock *= @splat(resolutionMultiplier[1]);
+            shadow.offset.x *= @splat(resolutionMultiplier[0]);
+            shadow.offset.y *= @splat(resolutionMultiplier[1]);
             shadow.blurRadius *= resolutionMultiplier[0];
             shadow.spread *= resolutionMultiplier[0];
         }

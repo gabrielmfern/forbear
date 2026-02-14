@@ -29,11 +29,9 @@ pub fn Button(props: ButtonProps) !void {
                 .blurRadius = 0.0,
                 .spread = 0.0,
                 .color = .{ 0.0, 0.0, 0.0, 1.0 },
-                .offsetBlock = .{
-                    0.0,
+                .offset = forbear.Offset.bottom(
                     try forbear.useTransition(if (isHovering.*) 4.5 else 0.0, 0.1, forbear.easeInOut),
-                },
-                .offsetInline = @splat(0.0),
+                ),
             },
             .padding = switch (props.sizing) {
                 .small => forbear.Padding.block(10).withInLine(20),

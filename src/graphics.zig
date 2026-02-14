@@ -3578,12 +3578,12 @@ pub const Renderer = struct {
                     };
                 }
                 const padding = Vec2{
-                    shadow.blurRadius + @abs(shadow.spread) + shadow.offsetInline[0] + shadow.offsetInline[1],
-                    shadow.blurRadius + @abs(shadow.spread) + shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.x[1],
+                    shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.y[1],
                 };
                 const position = Vec2{
-                    layoutBox.position[0] - padding[0] - shadow.offsetInline[0] + shadow.offsetInline[1],
-                    layoutBox.position[1] - padding[1] - shadow.offsetBlock[0] + shadow.offsetBlock[1],
+                    layoutBox.position[0] - padding[0] - shadow.offset.x[0] + shadow.offset.x[1],
+                    layoutBox.position[1] - padding[1] - shadow.offset.y[0] + shadow.offset.y[1],
                 };
                 const size = layoutBox.size + padding * Vec2{ 2, 2 };
                 self.shadowsPipeline.shadowShaderData[frameIndex][shadowIndex] = ShadowRenderingData{

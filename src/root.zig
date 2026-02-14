@@ -14,6 +14,7 @@ pub const Alignment = nodeImport.Alignment;
 pub const Padding = nodeImport.Padding;
 pub const Margin = nodeImport.Margin;
 pub const BorderWidth = nodeImport.BorderWidth;
+pub const Offset = nodeImport.Shadow.Offset;
 pub const IncompleteStyle = nodeImport.IncompleteStyle;
 pub const Style = nodeImport.Style;
 pub const Component = nodeImport.Component;
