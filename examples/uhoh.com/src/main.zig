@@ -43,36 +43,30 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .alignment = .topCenter,
             .padding = .block(13.5),
+            .alignment = .center,
         }))({
             (try forbear.element(arena, .{
-                .direction = .leftToRight,
-                .alignment = .centerLeft,
+                .width = .{ .fixed = 67.5 },
+                .height = .{ .fixed = 21.0 },
+                .background = .{ .image = try forbear.useImage("uhoh-logo") },
+                .margin = forbear.Margin.inLine(0.0).withRight(24.0),
+            }))({});
+            (try forbear.element(arena, .{
+                .width = .grow,
+                .background = .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
+            }))({});
+            (try forbear.element(arena, .{
+                .fontWeight = 500,
+                .fontSize = 10.5,
+                .margin = forbear.Margin.right(13.5),
             }))({
-                (try forbear.element(arena, .{
-                    .width = .{ .fixed = 67.5 },
-                    .height = .{ .fixed = 21.0 },
-                    .background = .{ .image = try forbear.useImage("uhoh-logo") },
-                    .margin = forbear.Margin.inLine(0.0).withRight(24.0),
-                }))({});
-                (try forbear.element(arena, .{
-                    .direction = .leftToRight,
-                    .alignment = .topRight,
-                }))({
-                    (try forbear.element(arena, .{
-                        .fontWeight = 500,
-                        .fontSize = 10.5,
-                        .margin = forbear.Margin.inLine(0.0).withRight(13.5),
-                    }))({
-                        try forbear.text(arena, "Pricing");
-                    });
-                    // TODO: responsive hamburger nav for smaller widths.
-                    try forbear.component(arena, Button, ButtonProps{
-                        .sizing = .small,
-                        .text = "Get a free trial",
-                    });
-                });
+                try forbear.text(arena, "Pricing");
+            });
+            // TODO: responsive hamburger nav for smaller widths.
+            try forbear.component(arena, Button, ButtonProps{
+                .sizing = .small,
+                .text = "Get a free trial",
             });
         });
         (try forbear.element(arena, .{
