@@ -3,20 +3,20 @@ const builtin = @import("builtin");
 
 const zmath = @import("zmath");
 
+const BlendMode = @import("node.zig").BlendMode;
 const c = @import("c.zig").c;
-const win32 = @import("windows/win32.zig");
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
 const countTreeSize = layouting.countTreeSize;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
+const Window = @import("window/root.zig").Window;
+const win32 = @import("windows/win32.zig");
 
 const LayerInterval = struct {
     start: usize,
     end: usize,
 };
-const Window = @import("window/root.zig").Window;
-
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
@@ -2144,14 +2144,19 @@ const ElementsPipeline = struct {
     fn draw(
         self: *@This(),
         layerInterval: LayerInterval,
+        blendMode: BlendMode,
         frameIndex: usize,
         commandBuffer: c.VkCommandBuffer,
         rectangleModel: *Model,
     ) void {
+        const graphicsPipeline = switch (blendMode) {
+            .multiply => self.blendMultiplyGraphicsPipeline,
+            .add => self.blendAddGraphicsPipeline
+        };
         c.vkCmdBindPipeline(
             commandBuffer,
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            self.blendAddGraphicsPipeline,
+            graphicsPipeline,
         );
         c.vkCmdBindDescriptorSets(
             commandBuffer,
@@ -3640,10 +3645,12 @@ pub const Renderer = struct {
         else
             0;
         var shadowIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        var elementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        var blendAddElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        var blendMultiplyElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
         var textIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
         for (shadowIntervals) |*interval| interval.* = null;
-        for (elementIntervals) |*interval| interval.* = null;
+        for (blendAddElementIntervals) |*interval| interval.* = null;
+        for (blendMultiplyElementIntervals) |*interval| interval.* = null;
         for (textIntervals) |*interval| interval.* = null;
 
         const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
@@ -3655,17 +3662,50 @@ pub const Renderer = struct {
 
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
-
-        for (orderedLayoutBoxes, 0..) |layoutBox, elementIndex| {
-            if (elementIntervals[layoutBox.z - 1]) |*interval| {
-                std.debug.assert(interval.end + 1 == elementIndex);
-                interval.end = elementIndex;
-            } else {
-                elementIntervals[layoutBox.z - 1] = LayerInterval{
-                    .start = elementIndex,
-                    .end = elementIndex,
-                };
+        var totalBlendAddElementCount: usize = 0;
+        for (orderedLayoutBoxes) |layoutBox| {
+            if (layoutBox.style.blendMode == .add) {
+                totalBlendAddElementCount += 1;
             }
+        }
+        var blendAddElementIndex: usize = 0;
+        var blendMultiplyElementIndex: usize = totalBlendAddElementCount;
+
+        for (orderedLayoutBoxes) |layoutBox| {
+            const elementIndex = switch (layoutBox.style.blendMode) {
+                .add => blk: {
+                    const idx = blendAddElementIndex;
+                    blendAddElementIndex += 1;
+
+                    if (blendAddElementIntervals[layoutBox.z - 1]) |*interval| {
+                        std.debug.assert(interval.end + 1 == idx);
+                        interval.end = idx;
+                    } else {
+                        blendAddElementIntervals[layoutBox.z - 1] = LayerInterval{
+                            .start = idx,
+                            .end = idx,
+                        };
+                    }
+
+                    break :blk idx;
+                },
+                .multiply => blk: {
+                    const idx = blendMultiplyElementIndex;
+                    blendMultiplyElementIndex += 1;
+
+                    if (blendMultiplyElementIntervals[layoutBox.z - 1]) |*interval| {
+                        std.debug.assert(interval.end + 1 == idx);
+                        interval.end = idx;
+                    } else {
+                        blendMultiplyElementIntervals[layoutBox.z - 1] = LayerInterval{
+                            .start = idx,
+                            .end = idx,
+                        };
+                    }
+
+                    break :blk idx;
+                },
+            };
 
             const textureIndex: i32 = switch (layoutBox.style.background) {
                 .color => -1,
@@ -3835,6 +3875,8 @@ pub const Renderer = struct {
                 }
             }
         }
+        std.debug.assert(blendAddElementIndex == totalBlendAddElementCount);
+        std.debug.assert(blendMultiplyElementIndex == totalElementCount);
 
         if (std.time.microTimestamp() - start > 1000) {
             std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, std.time.microTimestamp() - start });
@@ -3887,7 +3929,7 @@ pub const Renderer = struct {
             .extent = self.swapchain.extent,
         }});
 
-        for (0..elementIntervals.len) |i| {
+        for (0..blendAddElementIntervals.len) |i| {
             if (shadowIntervals[i]) |shadowInterval| {
                 self.shadowsPipeline.draw(
                     shadowInterval,
@@ -3896,9 +3938,19 @@ pub const Renderer = struct {
                     &self.rectangleModel,
                 );
             }
-            if (elementIntervals[i]) |elementInterval| {
+            if (blendAddElementIntervals[i]) |elementInterval| {
                 self.elementsPipeline.draw(
                     elementInterval,
+                    .add,
+                    frameIndex,
+                    self.commandBuffers[frameIndex],
+                    &self.rectangleModel,
+                );
+            }
+            if (blendMultiplyElementIntervals[i]) |elementInterval| {
+                self.elementsPipeline.draw(
+                    elementInterval,
+                    .multiply,
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,

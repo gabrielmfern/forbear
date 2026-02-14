@@ -508,6 +508,7 @@ fn App() !void {
                             (try forbear.element(arena, .{
                                 .width = .{ .fixed = 30.0 },
                                 .height = .{ .fixed = 30.0 },
+                                .blendMode = .multiply,
                                 .background = .{ .image = try forbear.useImage(offering.imageId) },
                                 .margin = forbear.Margin.inLine(0.0).withRight(9.0),
                             }))({});
@@ -732,13 +733,14 @@ fn App() !void {
                     .width = .{ .fixed = 90.0 },
                     .height = .{ .fixed = 60.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-failure") },
+                    .blendMode = .multiply,
                     .margin = forbear.Margin.inLine(0.0).withRight(10.5),
                 }))({});
                 (try forbear.element(arena, .{
                     .fontSize = 12.0,
                     .color = theme.Colors.muted,
                 }))({
-                    try forbear.text(arena, "Or keep asking your most tech-savvy employee to fix the WiFi. You could save money, time, and headaches - or keep duct-taping your IT together until it breaks.");
+                    try forbear.text(arena, "Or... keep asking your most tech-savvy employee to fix the WiFi. You could save money, time, and headaches - or keep duct-taping your IT together until it breaks.");
                 });
             });
         });
@@ -821,6 +823,7 @@ fn App() !void {
                     .width = .{ .fixed = 315.0 },
                     .height = .{ .fixed = 180.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-bottom-cta") },
+                    .blendMode = .multiply,
                 }))({});
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
