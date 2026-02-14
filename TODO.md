@@ -34,7 +34,7 @@ missing things for the entire uhoh.com website:
 - [x] maxWidth/maxHeight to limit a growing element's size
 - [x] allow to center align just a single element, without affecting others
 - [x] startup is slow
-- [ ] can't make an element fully transparent?
+- [x] can't make an element fully transparent?
 - [ ] blend multiply
 - [ ] after something like one frame the size of things seem to change
 - [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
