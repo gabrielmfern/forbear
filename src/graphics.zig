@@ -1242,6 +1242,7 @@ const ShadowRenderingData = extern struct {
     color: Vec4,
     modelViewProjectionMatrix: zmath.Mat,
     elementSize: [2]f32,
+    elementOffset: [2]f32,
     size: [2]f32,
     spread: f32,
 };
@@ -3608,13 +3609,16 @@ pub const Renderer = struct {
                 }
                 const padding = Vec2{
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.x[1],
-                    shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.y[1],
+                    shadow.blurRadius + @abs(shadow.spread) + shadow.offset.y[0] + shadow.offset.y[1],
                 };
                 const position = Vec2{
                     layoutBox.position[0] - padding[0] - shadow.offset.x[0] + shadow.offset.x[1],
                     layoutBox.position[1] - padding[1] - shadow.offset.y[0] + shadow.offset.y[1],
                 };
                 const size = layoutBox.size + padding * Vec2{ 2, 2 };
+                const shadowCenter = position + size * Vec2{ 0.5, 0.5 };
+                const elementCenter = layoutBox.position + layoutBox.size * Vec2{ 0.5, 0.5 };
+                const elementOffset = elementCenter - shadowCenter;
                 self.shadowsPipeline.shadowShaderData[frameIndex][shadowIndex] = ShadowRenderingData{
                     .modelViewProjectionMatrix = zmath.mul(
                         zmath.mul(
@@ -3627,6 +3631,7 @@ pub const Renderer = struct {
                     .blur = shadow.blurRadius,
                     .spread = shadow.spread,
                     .elementSize = layoutBox.size,
+                    .elementOffset = .{ elementOffset[0], elementOffset[1] },
                     .size = size,
                     .borderRadius = layoutBox.style.borderRadius,
                 };
