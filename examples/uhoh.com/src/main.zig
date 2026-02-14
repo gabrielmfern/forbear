@@ -43,15 +43,14 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
-            .padding = .block(13.5),
+            .padding = .block(11.25),
             .alignment = .center,
         }))({
             (try forbear.element(arena, .{
                 .width = .{ .fixed = 67.5 },
                 .height = .{ .fixed = 21.0 },
                 .background = .{ .image = try forbear.useImage("uhoh-logo") },
-                .blendMode = .multiply,
-                .margin = forbear.Margin.inLine(0.0).withRight(24.0),
+                .margin = forbear.Margin.right(24.0),
             }))({});
             (try forbear.element(arena, .{
                 .width = .grow,
@@ -291,7 +290,6 @@ fn App() !void {
                             .width = .{ .fixed = 42.0 },
                             .height = .{ .fixed = 42.0 },
                             .background = .{ .image = try forbear.useImage(testimonial.imageId) },
-                            .blendMode = .multiply,
                             .borderRadius = 21.0,
                             .margin = forbear.Margin.inLine(0.0).withRight(10.5),
                         }))({});
@@ -335,11 +333,11 @@ fn App() !void {
                     .alignment = .centerLeft,
                 }))({
                     for (logos) |id| {
+                        // TODO: apply a grayscale filter to these logos
                         (try forbear.element(arena, .{
                             .width = .{ .fixed = 120.0 },
                             .height = .{ .fixed = 42.0 },
                             .background = .{ .image = try forbear.useImage(id) },
-                            .blendMode = .multiply,
                             .margin = forbear.Margin.inLine(0.0).withRight(13.5),
                         }))({});
                     }
@@ -582,7 +580,6 @@ fn App() !void {
                     .width = .{ .fixed = 60.0 },
                     .height = .{ .fixed = 60.0 },
                     .background = .{ .image = try forbear.useImage("uhoh-jon-avatar") },
-                    .blendMode = .multiply,
                     .borderRadius = 30.0,
                     .margin = forbear.Margin.inLine(0.0).withRight(12.0),
                 }))({});
@@ -874,7 +871,6 @@ fn App() !void {
                         .width = .{ .fixed = 67.5 },
                         .height = .{ .fixed = 21.0 },
                         .background = .{ .image = try forbear.useImage("uhoh-logo") },
-                        .blendMode = .multiply,
                         .margin = forbear.Margin.inLine(0.0).withRight(9.0),
                     }))({});
                     (try forbear.element(arena, .{ .fontSize = 9.0 }))({
