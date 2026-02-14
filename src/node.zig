@@ -210,7 +210,6 @@ pub const Margin = struct {
         };
     }
 
-    /// `inLine` because `inline` is a reserved keyword in Zig
     pub inline fn inLine(value: f32) @This() {
         return .{
             .x = @splat(value),
@@ -296,13 +295,14 @@ pub const Margin = struct {
     }
 };
 
+pub const BorderWidth = Padding;
+
 pub const Style = struct {
     background: Background,
     color: Vec4,
     borderRadius: f32,
     borderColor: Vec4,
-    borderBlockWidth: Vec2,
-    borderInlineWidth: Vec2,
+    borderWidth: BorderWidth,
 
     shadow: ?Shadow = null,
 
@@ -379,8 +379,7 @@ pub const IncompleteStyle = struct {
     color: ?Vec4 = null,
     borderRadius: ?f32 = null,
     borderColor: ?Vec4 = null,
-    borderBlockWidth: ?Vec2 = null,
-    borderInlineWidth: ?Vec2 = null,
+    borderWidth: ?BorderWidth = null,
 
     shadow: ?Shadow = null,
 
@@ -415,8 +414,7 @@ pub const IncompleteStyle = struct {
 
             .borderRadius = self.borderRadius orelse 0.0,
             .borderColor = self.borderColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 },
-            .borderBlockWidth = self.borderBlockWidth orelse @splat(0.0),
-            .borderInlineWidth = self.borderInlineWidth orelse @splat(0.0),
+            .borderWidth = self.borderWidth orelse .all(0.0),
 
             .shadow = self.shadow,
 

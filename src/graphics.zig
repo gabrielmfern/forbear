@@ -3559,10 +3559,10 @@ pub const Renderer = struct {
                 .borderRadius = layoutBox.style.borderRadius,
                 .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
                 .borderSize = .{
-                    layoutBox.style.borderBlockWidth[0],
-                    layoutBox.style.borderBlockWidth[1],
-                    layoutBox.style.borderInlineWidth[0],
-                    layoutBox.style.borderInlineWidth[1],
+                    layoutBox.style.borderWidth.y[0],
+                    layoutBox.style.borderWidth.y[1],
+                    layoutBox.style.borderWidth.x[0],
+                    layoutBox.style.borderWidth.x[1],
                 },
                 .imageIndex = textureIndex,
             };

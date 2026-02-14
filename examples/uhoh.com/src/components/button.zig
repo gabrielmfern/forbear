@@ -13,8 +13,7 @@ pub fn Button(props: ButtonProps) !void {
     (try forbear.element(arena, .{}))({
         (try forbear.element(arena, .{
             .borderRadius = 6.0,
-            .borderInlineWidth = @splat(1.5),
-            .borderBlockWidth = @splat(1.5),
+            .borderWidth = forbear.BorderWidth.all(1.5),
             .background = .{ .color = .{ 0.99, 0.98, 0.96, 1.0 } },
             .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
             .fontSize = switch (props.sizing) {

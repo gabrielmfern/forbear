@@ -354,7 +354,7 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                 const shouldFitMin = layoutBox.style.preferredHeight != .fixed and layoutBox.style.minHeight == null;
                 const direction = layoutBox.style.direction;
                 const padding = layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1];
-                const border = layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1];
+                const border = layoutBox.style.borderWidth.y[0] + layoutBox.style.borderWidth.y[1];
                 if (layoutBox.style.preferredHeight == .fit) {
                     layoutBox.size[1] = padding + border;
                 }
@@ -396,7 +396,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                 const shouldFitMin = layoutBox.style.preferredWidth != .fixed and layoutBox.style.minWidth == null;
                 const direction = layoutBox.style.direction;
                 const padding = layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1];
-                const border = layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1];
+                const border = layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1];
                 if (layoutBox.style.preferredWidth == .fit) {
                     layoutBox.size[0] = padding + border;
                 }
@@ -441,8 +441,8 @@ fn place(layoutBox: *LayoutBox) void {
                 const vAlign = layoutBox.style.alignment.y;
 
                 const availableSize = .{
-                    layoutBox.size[0] - (layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1]) - (layoutBox.style.borderInlineWidth[0] + layoutBox.style.borderInlineWidth[1]),
-                    layoutBox.size[1] - (layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1]) - (layoutBox.style.borderBlockWidth[0] + layoutBox.style.borderBlockWidth[1]),
+                    layoutBox.size[0] - (layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1]) - (layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1]),
+                    layoutBox.size[1] - (layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1]) - (layoutBox.style.borderWidth.y[0] + layoutBox.style.borderWidth.y[1]),
                 };
 
                 var childrenSize: Vec2 = @splat(0.0);
@@ -463,8 +463,8 @@ fn place(layoutBox: *LayoutBox) void {
                 }
 
                 var cursor: Vec2 = .{
-                    layoutBox.style.padding.x[0] + layoutBox.style.borderInlineWidth[0],
-                    layoutBox.style.padding.y[0] + layoutBox.style.borderBlockWidth[0],
+                    layoutBox.style.padding.x[0] + layoutBox.style.borderWidth.x[0],
+                    layoutBox.style.padding.y[0] + layoutBox.style.borderWidth.y[0],
                 };
                 if (direction == .leftToRight) {
                     switch (hAlign) {
@@ -540,8 +540,8 @@ const LayoutCreator = struct {
                 } else null,
             }).completeWith(baseStyle),
         };
-        style.borderInlineWidth *= @splat(resolutionMultiplier[0]);
-        style.borderBlockWidth *= @splat(resolutionMultiplier[1]);
+        style.borderWidth.x *= @splat(resolutionMultiplier[0]);
+        style.borderWidth.y *= @splat(resolutionMultiplier[1]);
         if (style.shadow) |*shadow| {
             shadow.offsetInline *= @splat(resolutionMultiplier[0]);
             shadow.offsetBlock *= @splat(resolutionMultiplier[1]);
