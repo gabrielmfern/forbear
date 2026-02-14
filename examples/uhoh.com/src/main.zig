@@ -907,7 +907,6 @@ fn renderingMain(
 
     try forbear.registerFont("SpaceGrotesk", @embedFile("SpaceGrotesk.ttf"));
 
-    // Image registrations for uhoh.com layout
     try forbear.registerImage("uhoh-logo", @embedFile("static/uhoh-logo.png"), .png);
     try forbear.registerImage("uhoh-hero", @embedFile("static/uhoh-hero.png"), .png);
     try forbear.registerImage("uhoh-check", @embedFile("static/uhoh-check.png"), .png);
