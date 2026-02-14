@@ -298,8 +298,15 @@ pub const Margin = struct {
 
 pub const BorderWidth = Padding;
 
+pub const BlendMode = enum {
+    add,
+    multiply,
+};
+
 pub const Style = struct {
     background: Background,
+    blendMode: BlendMode,
+
     color: Vec4,
     borderRadius: f32,
     borderColor: Vec4,
@@ -348,6 +355,7 @@ pub const BaseStyle = struct {
     fontWeight: u32,
     lineHeight: f32,
     textWrapping: TextWrapping,
+    blendMode: BlendMode,
 
     pub fn from(style: Style) @This() {
         return @This(){
@@ -357,6 +365,7 @@ pub const BaseStyle = struct {
             .fontWeight = style.fontWeight,
             .lineHeight = style.lineHeight,
             .textWrapping = style.textWrapping,
+            .blendMode = style.blendMode,
         };
     }
 };
@@ -377,6 +386,8 @@ pub const Placement = union(enum) {
 
 pub const IncompleteStyle = struct {
     background: ?Background = null,
+    blendMode: ?BlendMode = null,
+
     color: ?Vec4 = null,
     borderRadius: ?f32 = null,
     borderColor: ?Vec4 = null,
@@ -411,6 +422,8 @@ pub const IncompleteStyle = struct {
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
         return Style{
             .background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } },
+            .blendMode = self.blendMode orelse base.blendMode,
+
             .color = self.color orelse base.color,
 
             .borderRadius = self.borderRadius orelse 0.0,

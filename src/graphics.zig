@@ -1657,7 +1657,8 @@ const ElementsPipeline = struct {
     allocator: std.mem.Allocator,
 
     pipelineLayout: c.VkPipelineLayout,
-    graphicsPipeline: c.VkPipeline,
+    blendAddGraphicsPipeline: c.VkPipeline,
+    blendMultiplyGraphicsPipeline: c.VkPipeline,
 
     shaderBufferDescriptorSetLayout: c.VkDescriptorSetLayout,
     descriptorPool: c.VkDescriptorPool,
@@ -1801,7 +1802,7 @@ const ElementsPipeline = struct {
         const bindingDescription = Vertex.getBindingDescription();
         const attributeDescriptions = Vertex.getAttributeDescriptions();
 
-        var graphicsPipeline: c.VkPipeline = undefined;
+        var blendAddGraphicsPipeline: c.VkPipeline = undefined;
         try ensureNoError(c.vkCreateGraphicsPipelines(
             logicalDevice,
             null,
@@ -1892,9 +1893,104 @@ const ElementsPipeline = struct {
                 .basePipelineIndex = -1,
             },
             null,
-            &graphicsPipeline,
+            &blendAddGraphicsPipeline,
         ));
-        errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
+        errdefer c.vkDestroyPipeline(logicalDevice, blendAddGraphicsPipeline, null);
+
+        var blendMultiplyGraphicsPipeline: c.VkPipeline = undefined;
+        try ensureNoError(c.vkCreateGraphicsPipelines(
+            logicalDevice,
+            null,
+            1,
+            &c.VkGraphicsPipelineCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .stageCount = @intCast(shaderStages.len),
+                .pStages = shaderStages.ptr,
+                .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .vertexBindingDescriptionCount = 1,
+                    .pVertexBindingDescriptions = &bindingDescription,
+                    .vertexAttributeDescriptionCount = attributeDescriptions.len,
+                    .pVertexAttributeDescriptions = &attributeDescriptions,
+                },
+                .pInputAssemblyState = &c.VkPipelineInputAssemblyStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                    .primitiveRestartEnable = c.VK_FALSE,
+                },
+                .pViewportState = &c.VkPipelineViewportStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .viewportCount = 1,
+                    .scissorCount = 1,
+                },
+                .pRasterizationState = &c.VkPipelineRasterizationStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .depthClampEnable = c.VK_FALSE,
+                    .rasterizerDiscardEnable = c.VK_FALSE,
+                    .polygonMode = c.VK_POLYGON_MODE_FILL,
+                    .cullMode = c.VK_CULL_MODE_BACK_BIT,
+                    .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
+                    .lineWidth = 1.0,
+                    .depthBiasEnable = c.VK_FALSE,
+                    .depthBiasConstantFactor = 0.0,
+                    .depthBiasClamp = 0.0,
+                    .depthBiasSlopeFactor = 0.0,
+                },
+                .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                    .sampleShadingEnable = c.VK_FALSE,
+                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .minSampleShading = 1.0,
+                    .pSampleMask = null,
+                    .alphaToCoverageEnable = c.VK_FALSE,
+                    .alphaToOneEnable = c.VK_FALSE,
+                    .pNext = null,
+                    .flags = 0,
+                },
+                .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .logicOpEnable = c.VK_FALSE,
+                    .logicOp = c.VK_LOGIC_OP_COPY,
+                    .attachmentCount = 1,
+                    .pAttachments = &c.VkPipelineColorBlendAttachmentState{
+                        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
+                        .blendEnable = c.VK_TRUE,
+                        .srcColorBlendFactor = c.VK_BLEND_FACTOR_DST_COLOR,
+                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .colorBlendOp = c.VK_BLEND_OP_ADD,
+                        .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .alphaBlendOp = c.VK_BLEND_OP_ADD,
+                    },
+                    .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
+                },
+                .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .dynamicStateCount = @intCast(dynamicStates.len),
+                    .pDynamicStates = dynamicStates.ptr,
+                },
+                .layout = pipelineLayout,
+                .renderPass = renderPass,
+                .subpass = 0,
+                .basePipelineHandle = null,
+                .basePipelineIndex = -1,
+            },
+            null,
+            &blendMultiplyGraphicsPipeline,
+        ));
+        errdefer c.vkDestroyPipeline(logicalDevice, blendMultiplyGraphicsPipeline, null);
 
         const initialElementCapacity = 1;
 
@@ -1992,7 +2088,8 @@ const ElementsPipeline = struct {
             .allocator = allocator,
 
             .pipelineLayout = pipelineLayout,
-            .graphicsPipeline = graphicsPipeline,
+            .blendAddGraphicsPipeline = blendAddGraphicsPipeline,
+            .blendMultiplyGraphicsPipeline = blendMultiplyGraphicsPipeline,
 
             .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
             .elementsShaderDataBuffer = shaderBuffers,
@@ -2054,7 +2151,7 @@ const ElementsPipeline = struct {
         c.vkCmdBindPipeline(
             commandBuffer,
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            self.graphicsPipeline,
+            self.blendAddGraphicsPipeline,
         );
         c.vkCmdBindDescriptorSets(
             commandBuffer,
@@ -2143,7 +2240,8 @@ const ElementsPipeline = struct {
         }
 
         c.vkDestroyDescriptorSetLayout(logicalDevice, self.shaderBufferDescriptorSetLayout, null);
-        c.vkDestroyPipeline(logicalDevice, self.graphicsPipeline, null);
+        c.vkDestroyPipeline(logicalDevice, self.blendAddGraphicsPipeline, null);
+        c.vkDestroyPipeline(logicalDevice, self.blendMultiplyGraphicsPipeline, null);
         c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
     }
 };
