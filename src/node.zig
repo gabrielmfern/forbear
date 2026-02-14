@@ -362,7 +362,7 @@ pub const BaseStyle = struct {
 };
 
 pub const Background = union(enum) {
-    image: *const Graphics.Image,
+    image: *Graphics.Image,
     color: Vec4,
 };
 

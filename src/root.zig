@@ -359,7 +359,7 @@ pub fn registerImage(uniqueIdentifier: []const u8, comptime contents: []const u8
 ///
 /// Before using this, call `registerImage` with the same unique identifier to
 /// ensure the image is loaded and available.
-pub fn useImage(uniqueIdentifier: []const u8) !*const Image {
+pub fn useImage(uniqueIdentifier: []const u8) !*Image {
     const self = getContext();
     return self.images.getPtr(uniqueIdentifier) orelse {
         std.log.err("Could not find image by the unique identifier {s}", .{uniqueIdentifier});
