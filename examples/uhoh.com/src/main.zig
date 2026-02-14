@@ -898,7 +898,7 @@ fn App() !void {
 fn renderingMain(
     allocator: std.mem.Allocator,
     renderer: *forbear.Graphics.Renderer,
-    window: *const forbear.Window,
+    window: *forbear.Window,
 ) !void {
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
     defer arenaAllocator.deinit();
@@ -907,7 +907,7 @@ fn renderingMain(
 
     try forbear.registerFont("SpaceGrotesk", @embedFile("SpaceGrotesk.ttf"));
 
-    // Image registrations for uhoh.com layout
+    const start = std.time.milliTimestamp();
     try forbear.registerImage("uhoh-logo", @embedFile("static/uhoh-logo.png"), .png);
     try forbear.registerImage("uhoh-hero", @embedFile("static/uhoh-hero.png"), .png);
     try forbear.registerImage("uhoh-check", @embedFile("static/uhoh-check.png"), .png);
@@ -936,6 +936,7 @@ fn renderingMain(
     try forbear.registerImage("uhoh-group-21", @embedFile("static/uhoh-group-21.png"), .png);
     try forbear.registerImage("uhoh-failure", @embedFile("static/uhoh-failure.png"), .png);
     try forbear.registerImage("uhoh-bottom-cta", @embedFile("static/uhoh-bottom-cta.png"), .png);
+    std.log.debug("spent {}ms registering images", .{ std.time.milliTimestamp() - start });
 
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
@@ -960,6 +961,8 @@ fn renderingMain(
         try forbear.update(arena, layoutBoxes, viewportSize);
 
         forbear.resetNodeTree();
+
+        window.running = false;
     }
     try renderer.waitIdle();
 }

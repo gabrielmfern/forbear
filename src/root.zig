@@ -346,11 +346,7 @@ pub fn registerImage(uniqueIdentifier: []const u8, comptime contents: []const u8
     const self = getContext();
     const result = try self.images.getOrPut(uniqueIdentifier);
     if (!result.found_existing) {
-        result.value_ptr.* = try Graphics.Image.init(
-            contents,
-            format,
-            self.renderer,
-        );
+        result.value_ptr.* = try self.renderer.loadImage(contents, format);
     }
 }
 
