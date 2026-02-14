@@ -32,7 +32,9 @@ missing things for the entire uhoh.com website:
 - [x] fps has been destroyed, lower than 165 for a non changing layout
     - we could start caching the layouts from the nodes
 - [x] maxWidth/maxHeight to limit a growing element's size
-- [ ] allow to center align just a single element, without affecting others
+- [x] allow to center align just a single element, without affecting others
+- [ ] first frame seems to take elements a long time 
+- [ ] startup is slow
 - [ ] can't make an element fully transparent?
 - [ ] blend multiply
 - [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
