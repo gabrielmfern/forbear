@@ -95,7 +95,17 @@ fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
 }
 
 fn approxEq(a: f32, b: f32) bool {
+    if (std.math.isNan(a) or std.math.isNan(b)) {
+        return false;
+    }
+    if (!std.math.isFinite(a) or !std.math.isFinite(b)) {
+        return a == b;
+    }
     return @abs(a - b) < 0.001;
+}
+
+fn isValidAspectRatio(aspectRatio: f32) bool {
+    return std.math.isFinite(aspectRatio) and aspectRatio > 0.0;
 }
 
 fn growAndShrink(
@@ -118,7 +128,9 @@ fn growAndShrink(
                         child.size[1] = @max(@min(layoutBox.size[1], child.maxSize[1]), child.minSize[1]);
                         if (child.style.width != .grow) {
                             if (child.style.aspectRatio) |aspectRatio| {
-                                child.size[0] = child.size[1] / aspectRatio;
+                                if (isValidAspectRatio(aspectRatio)) {
+                                    child.size[0] = child.size[1] / aspectRatio;
+                                }
                             }
                         }
                     }
@@ -127,7 +139,9 @@ fn growAndShrink(
                         child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
                         if (child.style.height != .grow) {
                             if (child.style.aspectRatio) |aspectRatio| {
-                                child.size[1] = child.size[0] * aspectRatio;
+                                if (isValidAspectRatio(aspectRatio)) {
+                                    child.size[1] = child.size[0] * aspectRatio;
+                                }
                             }
                         }
                     }
@@ -176,12 +190,16 @@ fn growAndShrink(
                     if (direction == .leftToRight) {
                         child.size[0] += allowedDifference;
                         if (child.style.aspectRatio) |aspectRatio| {
-                            child.size[1] = child.size[0] * aspectRatio;
+                            if (isValidAspectRatio(aspectRatio)) {
+                                child.size[1] = child.size[0] * aspectRatio;
+                            }
                         }
                     } else {
                         child.size[1] += allowedDifference;
                         if (child.style.aspectRatio) |aspectRatio| {
-                            child.size[0] = child.size[1] / aspectRatio;
+                            if (isValidAspectRatio(aspectRatio)) {
+                                child.size[0] = child.size[1] / aspectRatio;
+                            }
                         }
                     }
                     remaining -= allowedDifference;
@@ -229,6 +247,9 @@ fn growAndShrink(
                     largest - secondLargest,
                     -remaining / @as(f32, @floatFromInt(toShrinkGradually.items.len)),
                 );
+                if (!std.math.isFinite(largest) or !std.math.isFinite(secondLargest) or !std.math.isFinite(toSubtract) or !std.math.isFinite(remaining)) {
+                    break;
+                }
                 if (toSubtract == 0) {
                     toSubtract = -remaining / @as(f32, @floatFromInt(toShrinkGradually.items.len));
                 }
@@ -241,12 +262,16 @@ fn growAndShrink(
                         if (direction == .leftToRight) {
                             child.size[0] += allowedDifference;
                             if (child.style.aspectRatio) |aspectRatio| {
-                                child.size[1] = child.size[0] * aspectRatio;
+                                if (isValidAspectRatio(aspectRatio)) {
+                                    child.size[1] = child.size[0] * aspectRatio;
+                                }
                             }
                         } else {
                             child.size[1] += allowedDifference;
                             if (child.style.aspectRatio) |aspectRatio| {
-                                child.size[0] = child.size[1] / aspectRatio;
+                                if (isValidAspectRatio(aspectRatio)) {
+                                    child.size[0] = child.size[1] / aspectRatio;
+                                }
                             }
                         }
                         remaining -= allowedDifference;
@@ -366,7 +391,9 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                 }
                 layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
                 if (layoutBox.style.aspectRatio) |aspectRatio| {
-                    layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                    if (isValidAspectRatio(aspectRatio)) {
+                        layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                    }
                 }
             },
         }
@@ -384,7 +411,9 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                 if (layoutBox.style.height == .fit) {
                     layoutBox.size[1] = padding + border;
                     if (layoutBox.style.aspectRatio) |aspectRatio| {
-                        layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                        if (isValidAspectRatio(aspectRatio)) {
+                            layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                        }
                     }
                 }
                 if (shouldFitMin) {
@@ -398,7 +427,9 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                             if (layoutBox.style.height == .fit) {
                                 layoutBox.size[1] += childMargins + child.size[1];
                                 if (layoutBox.style.aspectRatio) |aspectRatio| {
-                                    layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                                    if (isValidAspectRatio(aspectRatio)) {
+                                        layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                                    }
                                 }
                             }
                             if (shouldFitMin) {
@@ -409,7 +440,9 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                             if (layoutBox.style.height == .fit) {
                                 layoutBox.size[1] = @max(childMargins + padding + border + child.size[1], layoutBox.size[1]);
                                 if (layoutBox.style.aspectRatio) |aspectRatio| {
-                                    layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                                    if (isValidAspectRatio(aspectRatio)) {
+                                        layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                                    }
                                 }
                             }
                             if (shouldFitMin) {
@@ -435,7 +468,9 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                 if (layoutBox.style.width == .fit) {
                     layoutBox.size[0] = padding + border;
                     if (layoutBox.style.aspectRatio) |aspectRatio| {
-                        layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                        if (isValidAspectRatio(aspectRatio)) {
+                            layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                        }
                     }
                 }
                 if (shouldFitMin) {
@@ -449,7 +484,9 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                             if (layoutBox.style.width == .fit) {
                                 layoutBox.size[0] += childMargins + child.size[0];
                                 if (layoutBox.style.aspectRatio) |aspectRatio| {
-                                    layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                                    if (isValidAspectRatio(aspectRatio)) {
+                                        layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                                    }
                                 }
                             }
                             if (shouldFitMin) {
@@ -460,7 +497,9 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                             if (layoutBox.style.width == .fit) {
                                 layoutBox.size[0] = @max(childMargins + padding + border + child.size[0], layoutBox.size[0]);
                                 if (layoutBox.style.aspectRatio) |aspectRatio| {
-                                    layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                                    if (isValidAspectRatio(aspectRatio)) {
+                                        layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                                    }
                                 }
                             }
                             if (shouldFitMin) {
@@ -776,13 +815,17 @@ pub fn layout(
             if (layoutBox.style.width == .grow) {
                 layoutBox.size[0] = viewportSize[0];
                 if (layoutBox.style.aspectRatio) |aspectRatio| {
-                    layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                    if (isValidAspectRatio(aspectRatio)) {
+                        layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                    }
                 }
             }
             if (layoutBox.style.height == .grow) {
                 layoutBox.size[1] = viewportSize[1];
                 if (layoutBox.style.aspectRatio) |aspectRatio| {
-                    layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                    if (isValidAspectRatio(aspectRatio)) {
+                        layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                    }
                 }
             }
             try growAndShrink(arena, &layoutBox);
@@ -1377,6 +1420,19 @@ test "growAndShrink - respects child aspect ratio while shrinking" {
         },
         .expectedSizes = &.{
             .{ 100.0, 50.0 },
+        },
+    });
+}
+
+test "growAndShrink - ignores invalid aspect ratio during shrinking" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 200.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 180.0 }, .size = .{ 180.0, 90.0 }, .aspectRatio = 0.0 },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 90.0 },
         },
     });
 }
