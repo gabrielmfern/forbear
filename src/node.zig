@@ -331,8 +331,18 @@ pub const Style = struct {
     maxHeight: ?f32 = null,
     minHeight: ?f32 = null,
     height: Sizing,
-    /// Should be the value that results out of the height / width ratio, it
-    /// will constrain the width and height to maintain this ratio
+    /// Height/width ratio used to constrain the opposite axis.
+    ///
+    /// Special behavior:
+    /// - Only finite values > 0 are applied. Null, 0, negative, NaN, and inf
+    ///   are ignored.
+    /// - If width and height are both fixed, the larger of the two fixed values
+    ///   is treated as authoritative and the other axis is derived from this
+    ///   ratio.
+    /// - During grow/shrink, the main-axis size drives the cross-axis when this
+    ///   ratio is valid.
+    /// - During fit and text wrapping, whichever pass updates one axis may
+    ///   recompute the other from this ratio.
     aspectRatio: ?f32 = null,
 
     translate: Vec2,
@@ -413,8 +423,17 @@ pub const IncompleteStyle = struct {
     minHeight: ?f32 = null,
     maxHeight: ?f32 = null,
     height: Sizing = .fit,
-    /// Should be the value that results out of the height / width ratio, it
-    /// will constrain the width and height to maintain this ratio
+    /// Height/width ratio used to constrain the opposite axis.
+    ///
+    /// Special behavior:
+    /// - Only finite values > 0 are applied. Null, 0, negative, NaN, and inf
+    ///   are ignored.
+    /// - If width and height are both fixed, the larger fixed value wins and
+    ///   the other axis is derived from this ratio.
+    /// - During grow/shrink, the main-axis size drives the cross-axis when this
+    ///   ratio is valid.
+    /// - During fit and text wrapping, passes that update one axis may
+    ///   recompute the other from this ratio.
     aspectRatio: ?f32 = null,
 
     translate: ?Vec2 = null,
@@ -487,4 +506,3 @@ pub const Element = struct {
     style: IncompleteStyle,
     children: std.ArrayList(Node) = .empty,
 };
-
