@@ -331,6 +331,7 @@ pub const Style = struct {
     maxHeight: ?f32 = null,
     minHeight: ?f32 = null,
     height: Sizing,
+    aspectRatio: ?f32 = null,
 
     translate: Vec2,
 
@@ -410,6 +411,8 @@ pub const IncompleteStyle = struct {
     minHeight: ?f32 = null,
     maxHeight: ?f32 = null,
     height: Sizing = .fit,
+    /// Should be the value that results out of the height / width ratio, it will constrain the width and height to maintain this ratio
+    aspectRatio: ?f32 = 0.0,
 
     translate: ?Vec2 = null,
 
@@ -449,6 +452,8 @@ pub const IncompleteStyle = struct {
             .maxHeight = self.maxHeight,
             .height = self.height,
 
+            .aspectRatio = self.aspectRatio,
+
             .translate = self.translate orelse @splat(0.0),
 
             .padding = self.padding orelse .all(0.0),
@@ -479,3 +484,4 @@ pub const Element = struct {
     style: IncompleteStyle,
     children: std.ArrayList(Node) = .empty,
 };
+
