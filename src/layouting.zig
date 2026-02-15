@@ -929,6 +929,154 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
     try std.testing.expectEqualDeep(configuration.expectedSizes, actualSizes);
 }
 
+test "fit order - fitHeight overrides fitWidth when called second" {
+    var children = [_]LayoutBox{
+        .{
+            .key = 1,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 50.0, 10.0 },
+            .minSize = .{ 50.0, 10.0 },
+            .maxSize = .{ 50.0, 10.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+        .{
+            .key = 2,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 50.0, 20.0 },
+            .minSize = .{ 50.0, 20.0 },
+            .maxSize = .{ 50.0, 20.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+    };
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 0.0, 0.0 },
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
+        .children = .{ .layoutBoxes = &children },
+        .style = (IncompleteStyle{
+            .width = .fit,
+            .height = .fit,
+            .direction = .leftToRight,
+            .aspectRatio = 0.5,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    fitWidth(&parent);
+    fitHeight(&parent);
+
+    try std.testing.expectApproxEqAbs(40.0, parent.size[0], 0.001);
+    try std.testing.expectApproxEqAbs(20.0, parent.size[1], 0.001);
+}
+
+test "fit order - fitWidth overrides fitHeight when called second" {
+    var children = [_]LayoutBox{
+        .{
+            .key = 1,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 50.0, 10.0 },
+            .minSize = .{ 50.0, 10.0 },
+            .maxSize = .{ 50.0, 10.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+        .{
+            .key = 2,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 50.0, 20.0 },
+            .minSize = .{ 50.0, 20.0 },
+            .maxSize = .{ 50.0, 20.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+    };
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 0.0, 0.0 },
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
+        .children = .{ .layoutBoxes = &children },
+        .style = (IncompleteStyle{
+            .width = .fit,
+            .height = .fit,
+            .direction = .leftToRight,
+            .aspectRatio = 0.5,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    fitHeight(&parent);
+    fitWidth(&parent);
+
+    try std.testing.expectApproxEqAbs(100.0, parent.size[0], 0.001);
+    try std.testing.expectApproxEqAbs(50.0, parent.size[1], 0.001);
+}
+
+test "wrap then fit - wrapped child height drives parent fitHeight" {
+    var glyphs = [_]LayoutGlyph{.{
+        .index = 0,
+        .position = .{ 0.0, 0.0 },
+        .text = "a",
+        .advance = .{ 15.0, 0.0 },
+        .offset = .{ 0.0, 0.0 },
+    }} ** 6;
+
+    const textChild = LayoutBox{
+        .key = 10,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 35.0, 20.0 },
+        .minSize = .{ 0.0, 20.0 },
+        .maxSize = .{ 90.0, 120.0 },
+        .children = .{ .glyphs = Glyphs{ .slice = &glyphs, .lineHeight = 20.0 } },
+        .style = (IncompleteStyle{
+            .textWrapping = .character,
+            .alignment = .topLeft,
+            .aspectRatio = null,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    var children = [_]LayoutBox{textChild};
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 0.0, 0.0 },
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
+        .children = .{ .layoutBoxes = &children },
+        .style = (IncompleteStyle{
+            .width = .fit,
+            .height = .fit,
+            .direction = .leftToRight,
+            .aspectRatio = 0.5,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    try wrap(arena.allocator(), &parent);
+    fitWidth(&parent);
+    fitHeight(&parent);
+
+    try std.testing.expectApproxEqAbs(35.0, parent.children.?.layoutBoxes[0].size[0], 0.001);
+    try std.testing.expectApproxEqAbs(60.0, parent.children.?.layoutBoxes[0].size[1], 0.001);
+    try std.testing.expectApproxEqAbs(120.0, parent.size[0], 0.001);
+    try std.testing.expectApproxEqAbs(60.0, parent.size[1], 0.001);
+}
+
 test "fitWidth - keeps aspect ratio while fitting" {
     var children = [_]LayoutBox{
         .{
