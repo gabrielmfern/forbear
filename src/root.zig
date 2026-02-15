@@ -1266,6 +1266,33 @@ pub fn element(arena: std.mem.Allocator, style: IncompleteStyle) !*const fn (voi
     return &popParentStack;
 }
 
+pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: Image) !void {
+    const result = try putNode(arena);
+
+    const self = getContext();
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
+    hasher.update(std.mem.sliceAsBytes(img.imageExtent));
+    hasher.update(std.mem.asBytes(&result.index));
+
+    var styleWithImage = style;
+    styleWithImage.maxWidth = img.width;
+    styleWithImage.maxHeight = img.height;
+    styleWithImage.aspectRatio = img.height / img.width;
+    styleWithImage.background = .{ .image = img };
+
+    result.ptr.* = Node{
+        .key = hasher.final(),
+        .content = .{
+            .element = .{
+                .style = style,
+                .children = .empty,
+            },
+        },
+    };
+    self.previousPushedNode = result.ptr;
+}
+
 pub fn text(arena: std.mem.Allocator, content: []const u8) !void {
     const result = try putNode(arena);
 
