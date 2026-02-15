@@ -112,13 +112,24 @@ fn growAndShrink(
         for (children) |*child| {
             if (child.style.placement == .standard) {
                 remaining -= child.getSize(direction);
+
                 if (direction.perpendicular() == .topToBottom) {
                     if (child.style.height == .grow or (child.size[1] > layoutBox.size[1] and child.minSize[1] < child.size[1])) {
                         child.size[1] = @max(@min(layoutBox.size[1], child.maxSize[1]), child.minSize[1]);
+                        if (child.style.width != .grow) {
+                            if (child.style.aspectRatio) |aspectRatio| {
+                                child.size[0] = child.size[1] / aspectRatio;
+                            }
+                        }
                     }
                 } else if (direction.perpendicular() == .leftToRight) {
                     if (child.style.width == .grow or (child.size[0] > layoutBox.size[0] and child.minSize[0] < child.size[0])) {
                         child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
+                        if (child.style.height != .grow) {
+                            if (child.style.aspectRatio) |aspectRatio| {
+                                child.size[1] = child.size[0] * aspectRatio;
+                            }
+                        }
                     }
                 }
                 if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
@@ -164,8 +175,14 @@ fn growAndShrink(
                     ) - child.getSize(direction);
                     if (direction == .leftToRight) {
                         child.size[0] += allowedDifference;
+                        if (child.style.aspectRatio) |aspectRatio| {
+                            child.size[1] = child.size[0] * aspectRatio;
+                        }
                     } else {
                         child.size[1] += allowedDifference;
+                        if (child.style.aspectRatio) |aspectRatio| {
+                            child.size[0] = child.size[1] / aspectRatio;
+                        }
                     }
                     remaining -= allowedDifference;
                 }
@@ -223,8 +240,14 @@ fn growAndShrink(
                         ) - child.getSize(direction);
                         if (direction == .leftToRight) {
                             child.size[0] += allowedDifference;
+                            if (child.style.aspectRatio) |aspectRatio| {
+                                child.size[1] = child.size[0] * aspectRatio;
+                            }
                         } else {
                             child.size[1] += allowedDifference;
+                            if (child.style.aspectRatio) |aspectRatio| {
+                                child.size[0] = child.size[1] / aspectRatio;
+                            }
                         }
                         remaining -= allowedDifference;
                     }
@@ -342,6 +365,9 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
                     }
                 }
                 layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
+                if (layoutBox.style.aspectRatio) |aspectRatio| {
+                    layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                }
             },
         }
     }
@@ -357,6 +383,9 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                 const border = layoutBox.style.borderWidth.y[0] + layoutBox.style.borderWidth.y[1];
                 if (layoutBox.style.height == .fit) {
                     layoutBox.size[1] = padding + border;
+                    if (layoutBox.style.aspectRatio) |aspectRatio| {
+                        layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                    }
                 }
                 if (shouldFitMin) {
                     layoutBox.minSize[1] = padding + border;
@@ -368,6 +397,9 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                         if (direction == .topToBottom) {
                             if (layoutBox.style.height == .fit) {
                                 layoutBox.size[1] += childMargins + child.size[1];
+                                if (layoutBox.style.aspectRatio) |aspectRatio| {
+                                    layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                                }
                             }
                             if (shouldFitMin) {
                                 layoutBox.minSize[1] += childMargins + child.minSize[1];
@@ -376,6 +408,9 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                         if (direction == .leftToRight) {
                             if (layoutBox.style.height == .fit) {
                                 layoutBox.size[1] = @max(childMargins + padding + border + child.size[1], layoutBox.size[1]);
+                                if (layoutBox.style.aspectRatio) |aspectRatio| {
+                                    layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                                }
                             }
                             if (shouldFitMin) {
                                 layoutBox.minSize[1] = @max(childMargins + padding + border + child.minSize[1], layoutBox.minSize[1]);
@@ -399,6 +434,9 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                 const border = layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1];
                 if (layoutBox.style.width == .fit) {
                     layoutBox.size[0] = padding + border;
+                    if (layoutBox.style.aspectRatio) |aspectRatio| {
+                        layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                    }
                 }
                 if (shouldFitMin) {
                     layoutBox.minSize[0] = padding + border;
@@ -410,6 +448,9 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                         if (direction == .leftToRight) {
                             if (layoutBox.style.width == .fit) {
                                 layoutBox.size[0] += childMargins + child.size[0];
+                                if (layoutBox.style.aspectRatio) |aspectRatio| {
+                                    layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                                }
                             }
                             if (shouldFitMin) {
                                 layoutBox.minSize[0] += childMargins + child.minSize[0];
@@ -418,6 +459,9 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                         if (direction == .topToBottom) {
                             if (layoutBox.style.width == .fit) {
                                 layoutBox.size[0] = @max(childMargins + padding + border + child.size[0], layoutBox.size[0]);
+                                if (layoutBox.style.aspectRatio) |aspectRatio| {
+                                    layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                                }
                             }
                             if (shouldFitMin) {
                                 layoutBox.minSize[0] = @max(childMargins + padding + border + child.minSize[0], layoutBox.minSize[0]);
@@ -731,9 +775,15 @@ pub fn layout(
             fitHeight(&layoutBox);
             if (layoutBox.style.width == .grow) {
                 layoutBox.size[0] = viewportSize[0];
+                if (layoutBox.style.aspectRatio) |aspectRatio| {
+                    layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                }
             }
             if (layoutBox.style.height == .grow) {
                 layoutBox.size[1] = viewportSize[1];
+                if (layoutBox.style.aspectRatio) |aspectRatio| {
+                    layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                }
             }
             try growAndShrink(arena, &layoutBox);
             try wrap(arena, &layoutBox);
@@ -817,6 +867,7 @@ const defaultBaseStyle = BaseStyle{
 const TestChild = struct {
     width: Sizing = .fit,
     height: Sizing = .fit,
+    aspectRatio: ?f32 = null,
     size: Vec2,
     minSize: Vec2 = .{ 0.0, 0.0 },
     maxSize: Vec2 = .{ std.math.inf(f32), std.math.inf(f32) },
@@ -825,6 +876,7 @@ const TestChild = struct {
 fn testGrowAndShrinkConfiguration(configuration: struct {
     direction: Direction,
     parentSize: Vec2,
+    parentAspectRatio: ?f32 = null,
     children: []const TestChild,
     expectedSizes: []const Vec2,
 }) !void {
@@ -847,6 +899,7 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
             .style = (IncompleteStyle{
                 .width = child.width,
                 .height = child.height,
+                .aspectRatio = child.aspectRatio,
             }).completeWith(defaultBaseStyle),
         };
     }
@@ -861,6 +914,7 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
         .children = .{ .layoutBoxes = childBoxes },
         .style = (IncompleteStyle{
             .direction = configuration.direction,
+            .aspectRatio = configuration.parentAspectRatio,
         }).completeWith(defaultBaseStyle),
     };
 
@@ -873,6 +927,96 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
     std.log.debug("Expecting {any}", .{configuration.expectedSizes});
     std.log.debug("Finding {any}", .{actualSizes});
     try std.testing.expectEqualDeep(configuration.expectedSizes, actualSizes);
+}
+
+test "fitWidth - keeps aspect ratio while fitting" {
+    var children = [_]LayoutBox{
+        .{
+            .key = 1,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 30.0, 10.0 },
+            .minSize = .{ 30.0, 10.0 },
+            .maxSize = .{ 30.0, 10.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+        .{
+            .key = 2,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 20.0, 15.0 },
+            .minSize = .{ 20.0, 15.0 },
+            .maxSize = .{ 20.0, 15.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+    };
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 0.0, 0.0 },
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
+        .children = .{ .layoutBoxes = &children },
+        .style = (IncompleteStyle{
+            .width = .fit,
+            .height = .grow,
+            .direction = .leftToRight,
+            .aspectRatio = 0.5,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    fitWidth(&parent);
+    try std.testing.expectApproxEqAbs(50.0, parent.size[0], 0.001);
+    try std.testing.expectApproxEqAbs(25.0, parent.size[1], 0.001);
+}
+
+test "fitHeight - keeps aspect ratio while fitting" {
+    var children = [_]LayoutBox{
+        .{
+            .key = 1,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 10.0, 30.0 },
+            .minSize = .{ 10.0, 30.0 },
+            .maxSize = .{ 10.0, 30.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+        .{
+            .key = 2,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 10.0, 20.0 },
+            .minSize = .{ 10.0, 20.0 },
+            .maxSize = .{ 10.0, 20.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+    };
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 0.0, 0.0 },
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
+        .children = .{ .layoutBoxes = &children },
+        .style = (IncompleteStyle{
+            .width = .grow,
+            .height = .fit,
+            .direction = .topToBottom,
+            .aspectRatio = 2.0,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    fitHeight(&parent);
+    try std.testing.expectApproxEqAbs(50.0, parent.size[1], 0.001);
+    try std.testing.expectApproxEqAbs(25.0, parent.size[0], 0.001);
 }
 
 test "growAndShrink - single grow child fills remaining space horizontally" {
@@ -1059,6 +1203,32 @@ test "growAndShrink - cross-axis grow respects minSize" {
         },
         .expectedSizes = &.{
             .{ 100.0, 200.0 },
+        },
+    });
+}
+
+test "growAndShrink - respects child aspect ratio while growing" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 300.0, 200.0 },
+        .children = &.{
+            .{ .width = .grow, .height = .grow, .size = .{ 0.0, 30.0 }, .aspectRatio = 0.5 },
+        },
+        .expectedSizes = &.{
+            .{ 300.0, 150.0 },
+        },
+    });
+}
+
+test "growAndShrink - respects child aspect ratio while shrinking" {
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 100.0, 200.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 180.0 }, .size = .{ 180.0, 90.0 }, .aspectRatio = 0.5 },
+        },
+        .expectedSizes = &.{
+            .{ 100.0, 50.0 },
         },
     });
 }
