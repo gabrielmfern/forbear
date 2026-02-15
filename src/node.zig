@@ -415,7 +415,7 @@ pub const IncompleteStyle = struct {
     height: Sizing = .fit,
     /// Should be the value that results out of the height / width ratio, it
     /// will constrain the width and height to maintain this ratio
-    aspectRatio: ?f32 = 0.0,
+    aspectRatio: ?f32 = null,
 
     translate: ?Vec2 = null,
 
