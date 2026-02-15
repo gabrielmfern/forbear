@@ -46,12 +46,11 @@ fn App() !void {
             .padding = .block(11.25),
             .alignment = .center,
         }))({
-            (try forbear.element(arena, .{
+            try forbear.image(arena, .{
                 .width = .{ .fixed = 67.5 },
                 .height = .{ .fixed = 21.0 },
-                .background = .{ .image = try forbear.useImage("uhoh-logo") },
                 .margin = forbear.Margin.right(24.0),
-            }))({});
+            }, try forbear.useImage("uhoh-logo"));
             (try forbear.element(arena, .{
                 .width = .grow,
                 .background = .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
@@ -110,12 +109,11 @@ fn App() !void {
                         );
                     });
                 });
-                (try forbear.element(arena, .{
+                try forbear.image(arena, .{
                     .width = .{ .fixed = 270.0 },
                     .height = .{ .fixed = 285.0 },
-                    .background = .{ .image = try forbear.useImage("uhoh-hero") },
                     .blendMode = .multiply,
-                }))({});
+                }, try forbear.useImage("uhoh-hero"));
             });
         });
 
@@ -144,13 +142,12 @@ fn App() !void {
                         .alignment = .centerLeft,
                         .margin = forbear.Margin.inLine(0.0).withRight(18.0),
                     }))({
-                        (try forbear.element(arena, .{
+                        try forbear.image(arena, .{
                             .width = .{ .fixed = 16.5 },
                             .height = .{ .fixed = 16.5 },
-                            .background = .{ .image = try forbear.useImage("uhoh-check") },
                             .blendMode = .multiply,
                             .margin = forbear.Margin.inLine(0.0).withRight(7.5),
-                        }))({});
+                        }, try forbear.useImage("uhoh-check"));
                         (try forbear.element(arena, .{
                             .fontWeight = 500,
                             .fontSize = 12.0,
@@ -178,13 +175,12 @@ fn App() !void {
                 .direction = .leftToRight,
                 .alignment = .centerLeft,
             }))({
-                (try forbear.element(arena, .{
+                try forbear.image(arena, .{
                     .width = .{ .fixed = 240.0 },
                     .height = .{ .fixed = 255.0 },
-                    .background = .{ .image = try forbear.useImage("uhoh-problem") },
                     .blendMode = .multiply,
-                    .margin = forbear.Margin.inLine(0.0).withRight(24.0),
-                }))({});
+                    .margin = forbear.Margin.right(24.0),
+                }, try forbear.useImage("uhoh-problem"));
                 (try forbear.element(arena, .{ .direction = .topToBottom }))({
                     (try forbear.element(arena, .{
                         .fontWeight = 600,
@@ -206,13 +202,12 @@ fn App() !void {
                             .direction = .leftToRight,
                             .margin = forbear.Margin.block(0.0).withBottom(7.5),
                         }))({
-                            (try forbear.element(arena, .{
+                            try forbear.image(arena, .{
                                 .width = .{ .fixed = 13.5 },
                                 .height = .{ .fixed = 13.5 },
-                                .background = .{ .image = try forbear.useImage("uhoh-x-red") },
                                 .blendMode = .multiply,
-                                .margin = forbear.Margin.inLine(0.0).withRight(7.5),
-                            }))({});
+                                .margin = forbear.Margin.right(7.5),
+                            }, try forbear.useImage("uhoh-x-red"));
                             (try forbear.element(arena, .{ .fontSize = 12.0 }))({
                                 try forbear.text(arena, issue);
                             });
@@ -286,13 +281,12 @@ fn App() !void {
                         .margin = forbear.Margin.block(0.0).withBottom(12.0),
                         .direction = .leftToRight,
                     }))({
-                        (try forbear.element(arena, .{
+                        try forbear.image(arena, .{
                             .width = .{ .fixed = 42.0 },
                             .height = .{ .fixed = 42.0 },
-                            .background = .{ .image = try forbear.useImage(testimonial.imageId) },
                             .borderRadius = 21.0,
                             .margin = forbear.Margin.inLine(0.0).withRight(10.5),
-                        }))({});
+                        }, try forbear.useImage(testimonial.imageId));
                         (try forbear.element(arena, .{
                             .fontSize = 11.25,
                             .lineHeight = 1.4,
@@ -334,12 +328,11 @@ fn App() !void {
                 }))({
                     for (logos) |id| {
                         // TODO: apply a grayscale filter to these logos
-                        (try forbear.element(arena, .{
+                        try forbear.image(arena, .{
                             .width = .{ .fixed = 120.0 },
                             .height = .{ .fixed = 42.0 },
-                            .background = .{ .image = try forbear.useImage(id) },
                             .margin = forbear.Margin.inLine(0.0).withRight(13.5),
-                        }))({});
+                        }, try forbear.useImage(id));
                     }
                 });
             });
@@ -355,12 +348,11 @@ fn App() !void {
                 .direction = .topToBottom,
                 .alignment = .topCenter,
             }))({
-                (try forbear.element(arena, .{
+                try forbear.image(arena, .{
                     .width = .{ .fixed = 270.0 },
                     .height = .{ .fixed = 165.0 },
-                    .background = .{ .image = try forbear.useImage("uhoh-solution") },
                     .blendMode = .multiply,
-                }))({});
+                }, try forbear.useImage("uhoh-solution"));
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
                     .fontSize = 22.5,
@@ -511,13 +503,12 @@ fn App() !void {
                             .alignment = .centerLeft,
                             .margin = forbear.Margin.block(0.0).withBottom(9.0),
                         }))({
-                            (try forbear.element(arena, .{
+                            try forbear.image(arena, .{
                                 .width = .{ .fixed = 30.0 },
                                 .height = .{ .fixed = 30.0 },
                                 .blendMode = .multiply,
-                                .background = .{ .image = try forbear.useImage(offering.imageId) },
-                                .margin = forbear.Margin.inLine(0.0).withRight(9.0),
-                            }))({});
+                                .margin = forbear.Margin.right(9.0),
+                            }, try forbear.useImage(offering.imageId));
                             (try forbear.element(arena, .{
                                 .fontWeight = 700,
                                 .fontSize = 16.5,
@@ -576,13 +567,12 @@ fn App() !void {
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
             }))({
-                (try forbear.element(arena, .{
+                try forbear.image(arena, .{
                     .width = .{ .fixed = 60.0 },
                     .height = .{ .fixed = 60.0 },
-                    .background = .{ .image = try forbear.useImage("uhoh-jon-avatar") },
                     .borderRadius = 30.0,
                     .margin = forbear.Margin.inLine(0.0).withRight(12.0),
-                }))({});
+                }, try forbear.useImage("uhoh-jon-avatar"));
                 (try forbear.element(arena, .{
                     .direction = .topToBottom,
                 }))({
@@ -621,12 +611,11 @@ fn App() !void {
                 .direction = .topToBottom,
                 .alignment = .topCenter,
             }))({
-                (try forbear.element(arena, .{
+                try forbear.image(arena, .{
                     .width = .{ .fixed = 165.0 },
                     .height = .{ .fixed = 135.0 },
-                    .background = .{ .image = try forbear.useImage("uhoh-how-it-works") },
                     .blendMode = .multiply,
-                }))({});
+                }, try forbear.useImage("uhoh-how-it-works"));
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
                     .fontSize = 21.0,
@@ -724,26 +713,24 @@ fn App() !void {
                         });
                     }
                 });
-                (try forbear.element(arena, .{
+                try forbear.image(arena, .{
                     .width = .{ .fixed = 270.0 },
                     .height = .{ .fixed = 225.0 },
-                    .background = .{ .image = try forbear.useImage("uhoh-group-21") },
                     .blendMode = .multiply,
                     .margin = forbear.Margin.inLine(24.0).withRight(0.0),
-                }))({});
+                }, try forbear.useImage("uhoh-group-21"));
             });
             (try forbear.element(arena, .{
                 .direction = .leftToRight,
                 .alignment = .centerLeft,
                 .margin = forbear.Margin.block(13.5).withBottom(0.0),
             }))({
-                (try forbear.element(arena, .{
+                try forbear.image(arena, .{
                     .width = .{ .fixed = 90.0 },
                     .height = .{ .fixed = 60.0 },
-                    .background = .{ .image = try forbear.useImage("uhoh-failure") },
                     .blendMode = .multiply,
-                    .margin = forbear.Margin.inLine(0.0).withRight(10.5),
-                }))({});
+                    .margin = forbear.Margin.right(10.5),
+                }, try forbear.useImage("uhoh-failure"));
                 (try forbear.element(arena, .{
                     .fontSize = 12.0,
                     .color = theme.Colors.muted,
@@ -827,12 +814,11 @@ fn App() !void {
                 .direction = .topToBottom,
                 .alignment = .topCenter,
             }))({
-                (try forbear.element(arena, .{
+                try forbear.image(arena, .{
                     .width = .{ .fixed = 315.0 },
                     .height = .{ .fixed = 180.0 },
-                    .background = .{ .image = try forbear.useImage("uhoh-bottom-cta") },
                     .blendMode = .multiply,
-                }))({});
+                }, try forbear.useImage("uhoh-bottom-cta"));
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
                     .fontSize = 22.5,
@@ -867,12 +853,11 @@ fn App() !void {
                     .direction = .leftToRight,
                     .alignment = .center,
                 }))({
-                    (try forbear.element(arena, .{
+                    try forbear.image(arena, .{
                         .width = .{ .fixed = 67.5 },
                         .height = .{ .fixed = 21.0 },
-                        .background = .{ .image = try forbear.useImage("uhoh-logo") },
                         .margin = forbear.Margin.inLine(0.0).withRight(9.0),
-                    }))({});
+                    }, try forbear.useImage("uhoh-logo"));
                     (try forbear.element(arena, .{ .fontSize = 9.0 }))({
                         try forbear.text(arena, "Privacy Policy");
                     });

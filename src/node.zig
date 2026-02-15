@@ -331,6 +331,8 @@ pub const Style = struct {
     maxHeight: ?f32 = null,
     minHeight: ?f32 = null,
     height: Sizing,
+    /// Should be the value that results out of the height / width ratio, it
+    /// will constrain the width and height to maintain this ratio
     aspectRatio: ?f32 = null,
 
     translate: Vec2,
@@ -411,7 +413,8 @@ pub const IncompleteStyle = struct {
     minHeight: ?f32 = null,
     maxHeight: ?f32 = null,
     height: Sizing = .fit,
-    /// Should be the value that results out of the height / width ratio, it will constrain the width and height to maintain this ratio
+    /// Should be the value that results out of the height / width ratio, it
+    /// will constrain the width and height to maintain this ratio
     aspectRatio: ?f32 = 0.0,
 
     translate: ?Vec2 = null,
