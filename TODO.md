@@ -41,8 +41,10 @@ missing things for the entire uhoh.com website:
     - we should probably have `forbear.image` instead of always using backgroundImage, and have its size calculated from the aspect ratio while filling up the parent
 - [ ] support for filter: grayscale()
 - [ ] after something like one frame the size of things seem to change
+- [ ] image fitting, like object-fit: contain, cover, etc.
 - [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
     - is having lots of them bad? I understand having no type-safety though
+- [ ] support for dashed borders
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
 - [ ] gradients
