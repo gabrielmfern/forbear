@@ -664,6 +664,19 @@ const LayoutCreator = struct {
                     .children = null,
                     .style = style,
                 };
+                if (style.width == .fixed and style.height == .fixed) {
+                    if (style.aspectRatio) |aspectRatio| {
+                        if (isValidAspectRatio(aspectRatio)) {
+                            if (layoutBox.size[0] >= layoutBox.size[1]) {
+                                layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                            } else {
+                                layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                            }
+                            layoutBox.minSize = layoutBox.size;
+                            layoutBox.maxSize = layoutBox.size;
+                        }
+                    }
+                }
                 layoutBox.children = .{ .layoutBoxes = try self.arenaAllocator.alloc(LayoutBox, element.children.items.len) };
                 errdefer self.arenaAllocator.free(layoutBox.children.?.layoutBoxes);
                 const previousParent = self.parent;
@@ -970,6 +983,52 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
     std.log.debug("Expecting {any}", .{configuration.expectedSizes});
     std.log.debug("Finding {any}", .{actualSizes});
     try std.testing.expectEqualDeep(configuration.expectedSizes, actualSizes);
+}
+
+test "LayoutCreator.create - fixed sizes respect aspect ratio from larger dimension" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    var creator = try LayoutCreator.init(arena.allocator());
+
+    const widthDominantNode = Node{
+        .key = 1,
+        .content = .{ .element = Element{
+            .style = .{
+                .width = .{ .fixed = 300.0 },
+                .height = .{ .fixed = 100.0 },
+                .aspectRatio = 0.5,
+            },
+        } },
+    };
+
+    const heightDominantNode = Node{
+        .key = 2,
+        .content = .{ .element = Element{
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 300.0 },
+                .aspectRatio = 0.5,
+            },
+        } },
+    };
+
+    const widthDominant = try creator.create(widthDominantNode, defaultBaseStyle, 1, .{ 72.0, 72.0 });
+    try std.testing.expectApproxEqAbs(300.0, widthDominant.size[0], 0.001);
+    try std.testing.expectApproxEqAbs(150.0, widthDominant.size[1], 0.001);
+    try std.testing.expectApproxEqAbs(300.0, widthDominant.minSize[0], 0.001);
+    try std.testing.expectApproxEqAbs(150.0, widthDominant.minSize[1], 0.001);
+    try std.testing.expectApproxEqAbs(300.0, widthDominant.maxSize[0], 0.001);
+    try std.testing.expectApproxEqAbs(150.0, widthDominant.maxSize[1], 0.001);
+
+    const heightDominant = try creator.create(heightDominantNode, defaultBaseStyle, 1, .{ 72.0, 72.0 });
+    try std.testing.expectApproxEqAbs(600.0, heightDominant.size[0], 0.001);
+    try std.testing.expectApproxEqAbs(300.0, heightDominant.size[1], 0.001);
+    try std.testing.expectApproxEqAbs(600.0, heightDominant.minSize[0], 0.001);
+    try std.testing.expectApproxEqAbs(300.0, heightDominant.minSize[1], 0.001);
+    try std.testing.expectApproxEqAbs(600.0, heightDominant.maxSize[0], 0.001);
+    try std.testing.expectApproxEqAbs(300.0, heightDominant.maxSize[1], 0.001);
 }
 
 test "fit order - fitHeight overrides fitWidth when called second" {
