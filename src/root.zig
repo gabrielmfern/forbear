@@ -1277,14 +1277,14 @@ pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !voi
     var styleWithImage = style;
     styleWithImage.maxWidth = @floatFromInt(img.width);
     styleWithImage.maxHeight = @floatFromInt(img.height);
-    styleWithImage.aspectRatio = styleWithImage.maxWidth.? / styleWithImage.maxHeight.?;
+    styleWithImage.aspectRatio = styleWithImage.maxHeight.? / styleWithImage.maxWidth.?;
     styleWithImage.background = .{ .image = img };
 
     result.ptr.* = Node{
         .key = hasher.final(),
         .content = .{
             .element = .{
-                .style = style,
+                .style = styleWithImage,
                 .children = .empty,
             },
         },
