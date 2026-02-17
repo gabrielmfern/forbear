@@ -51,6 +51,64 @@ pub const LayoutBox = struct {
 
     style: Style,
 
+    pub fn free(self: @This(), allocator: std.mem.Allocator) void {
+        if (self.children) |children| {
+            switch (children) {
+                .layoutBoxes => |layoutBoxes| {
+                    for (layoutBoxes) |*child| {
+                        child.free(allocator);
+                    }
+                    allocator.free(layoutBoxes);
+                },
+                .glyphs => |glyphs| {
+                    for (glyphs.slice) |*glyph| {
+                        allocator.free(glyph.text);
+                    }
+                    allocator.free(glyphs.slice);
+                },
+            }
+        }
+    }
+
+    pub fn own(self: @This(), allocator: std.mem.Allocator) !@This() {
+        var ownedChildren: ?Children = null;
+        if (self.children) |children| {
+            switch (children) {
+                .layoutBoxes => |layoutBoxes| {
+                    ownedChildren = .{ .layoutBoxes = try allocator.alloc(LayoutBox, layoutBoxes.len) };
+                    for (layoutBoxes, 0..) |child, index| {
+                        ownedChildren.?.layoutBoxes[index] = try child.own(allocator);
+                    }
+                },
+                .glyphs => |glyphs| {
+                    ownedChildren = .{ .glyphs = .{
+                        .slice = try allocator.alloc(LayoutGlyph, glyphs.slice.len),
+                        .lineHeight = glyphs.lineHeight,
+                    } };
+                    for (glyphs.slice, 0..) |glyph, index| {
+                        ownedChildren.?.glyphs.slice[index] = .{
+                            .index = glyph.index,
+                            .position = glyph.position,
+                            .text = try allocator.dupe(u8, glyph.text),
+                            .advance = glyph.advance,
+                            .offset = glyph.offset,
+                        };
+                    }
+                },
+            }
+        }
+        return LayoutBox{
+            .key = self.key,
+            .position = self.position,
+            .z = self.z,
+            .size = self.size,
+            .maxSize = self.maxSize,
+            .minSize = self.minSize,
+            .children = ownedChildren,
+            .style = self.style,
+        };
+    }
+
     pub fn getMinSize(self: @This(), direction: Direction) f32 {
         if (direction == .leftToRight) {
             return self.minSize[0];

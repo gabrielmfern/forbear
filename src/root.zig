@@ -45,7 +45,7 @@ const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
 allocator: std.mem.Allocator,
 
 mousePosition: Vec2,
-hoveredElementKeys: std.ArrayList(u64),
+hoveredLayoutBoxes: std.ArrayList(LayoutBox),
 /// The eased in value of `effectiveScrollPosition`
 scrollPosition: Vec2,
 /// The final value of the scrolling, without considering any animations, snaps
@@ -85,7 +85,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .allocator = allocator,
 
         .mousePosition = @splat(0.0),
-        .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
+        .hoveredLayoutBoxes = try std.ArrayList(LayoutBox).initCapacity(allocator, 1),
         .scrollPosition = @splat(0.0),
         .effectiveScrollPosition = @splat(0.0),
 
@@ -1275,9 +1275,11 @@ pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !voi
     hasher.update(std.mem.asBytes(&result.index));
 
     var styleWithImage = style;
-    styleWithImage.maxWidth = @floatFromInt(img.width);
-    styleWithImage.maxHeight = @floatFromInt(img.height);
-    styleWithImage.aspectRatio = styleWithImage.maxHeight.? / styleWithImage.maxWidth.?;
+    const width: f32 = @floatFromInt(img.width);
+    const height: f32 = @floatFromInt(img.height);
+    styleWithImage.maxWidth = width;
+    styleWithImage.maxHeight = height;
+    styleWithImage.aspectRatio = height / width;
     styleWithImage.background = .{ .image = img };
 
     result.ptr.* = Node{
@@ -1395,6 +1397,10 @@ fn pushEvent(key: u64, event: Event) !void {
     try result.value_ptr.*.append(self.allocator, event);
 }
 
+pub fn useHoveredBoxes() []const LayoutBox {
+    return getContext().hoveredLayoutBoxes.items;
+}
+
 /// Returns the next event in the queue to handle for the current element key.
 pub fn useNextEvent() ?Event {
     const self = getContext();
@@ -1418,8 +1424,10 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
 
     var iterator = try layouting.LayoutTreeIterator.init(arena, roots);
 
-    var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
-    missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
+    var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredLayoutBoxes.items.len);
+    for (self.hoveredLayoutBoxes.items) |box| {
+        missingHoveredKeys.appendAssumeCapacity(box.key);
+    }
 
     var uiEdges: Vec2 = @splat(0.0);
 
@@ -1433,7 +1441,13 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
         const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
         const isMouseInside = isMouseAfter and isMouseBefore;
 
-        const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, layoutBox.key);
+        var hoveredElementKeysIndexOpt: ?usize = null;
+        for (self.hoveredLayoutBoxes.items, 0..) |hoveredBox, i| {
+            if (hoveredBox.key == layoutBox.key) {
+                hoveredElementKeysIndexOpt = i;
+                break;
+            }
+        }
 
         if (std.mem.indexOfScalar(u64, missingHoveredKeys.items, layoutBox.key)) |i| {
             _ = missingHoveredKeys.swapRemove(i);
@@ -1443,18 +1457,28 @@ pub fn update(arena: std.mem.Allocator, roots: []const LayoutBox, viewportSize: 
             if (hoveredElementKeysIndexOpt == null) {
                 try pushEvent(layoutBox.key, .mouseOver);
 
-                try self.hoveredElementKeys.append(self.allocator, layoutBox.key);
+                var ownedLayoutBox = try layoutBox.own(self.allocator);
+                errdefer ownedLayoutBox.free(self.allocator);
+                try self.hoveredLayoutBoxes.append(self.allocator, ownedLayoutBox);
             }
         } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
             try pushEvent(layoutBox.key, .mouseOut);
 
-            _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
+            const removed = self.hoveredLayoutBoxes.swapRemove(hoveredElementKeysIndex);
+            removed.free(self.allocator);
         }
     }
 
     for (missingHoveredKeys.items) |key| {
-        if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
-            _ = self.hoveredElementKeys.swapRemove(i);
+        var index: usize = 0;
+        while (index < self.hoveredLayoutBoxes.items.len) {
+            const layoutBox = self.hoveredLayoutBoxes.items[index];
+            if (layoutBox.key == key) {
+                const removed = self.hoveredLayoutBoxes.swapRemove(index);
+                removed.free(self.allocator);
+                continue;
+            }
+            index += 1;
         }
     }
 
@@ -1560,7 +1584,10 @@ pub fn setWindowHandlers(window: *Window) void {
 pub fn deinit() void {
     const self = getContext();
 
-    self.hoveredElementKeys.deinit(self.allocator);
+    for (self.hoveredLayoutBoxes.items) |layoutBox| {
+        layoutBox.free(self.allocator);
+    }
+    self.hoveredLayoutBoxes.deinit(self.allocator);
 
     var componentStatesIterator = self.componentStates.valueIterator();
     while (componentStatesIterator.next()) |states| {
