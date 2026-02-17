@@ -51,6 +51,49 @@ pub const LayoutBox = struct {
 
     style: Style,
 
+    pub fn debugPrint(self: @This(), indent: usize) void {
+        for (0..indent) |_| {
+            std.debug.print("  ", .{});
+        }
+        std.debug.print("LayoutBox (key: {}, pos: {}, size: {}, z: {})\n", .{ self.key, self.position, self.size, self.z });
+        if (self.children) |children| {
+            switch (children) {
+                .layoutBoxes => |layoutBoxes| {
+                    for (layoutBoxes) |*child| {
+                        child.debugPrint(indent + 1);
+                    }
+                },
+                .glyphs => |glyphs| {
+                    for (glyphs.slice) |glyph| {
+                        for (0..indent) |_| {
+                            std.debug.print("  ", .{});
+                        }
+                        std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
+                    }
+                },
+            }
+        }
+    }
+
+    pub fn free(self: @This(), allocator: std.mem.Allocator) void {
+        if (self.children) |children| {
+            switch (children) {
+                .layoutBoxes => |layoutBoxes| {
+                    for (layoutBoxes) |*child| {
+                        child.free(allocator);
+                    }
+                    allocator.free(layoutBoxes);
+                },
+                .glyphs => |glyphs| {
+                    for (glyphs.slice) |*glyph| {
+                        allocator.free(glyph.text);
+                    }
+                    allocator.free(glyphs.slice);
+                },
+            }
+        }
+    }
+
     pub fn setMinSize(self: *@This(), direction: Direction, size: f32) void {
         if (direction == .leftToRight) {
             self.minSize[0] = size;
