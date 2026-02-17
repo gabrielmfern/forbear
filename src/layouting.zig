@@ -51,6 +51,30 @@ pub const LayoutBox = struct {
 
     style: Style,
 
+    pub fn debugPrint(self: @This(), indent: usize) void {
+        for (0..indent) |_| {
+            std.debug.print("  ", .{});
+        }
+        std.debug.print("LayoutBox (key: {}, pos: {}, size: {}, z: {})\n", .{ self.key, self.position, self.size, self.z });
+        if (self.children) |children| {
+            switch (children) {
+                .layoutBoxes => |layoutBoxes| {
+                    for (layoutBoxes) |*child| {
+                        child.debug(indent + 1);
+                    }
+                },
+                .glyphs => |glyphs| {
+                    for (glyphs.slice) |glyph| {
+                        for (0..indent) |_| {
+                            std.debug.print("  ", .{});
+                        }
+                        std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
+                    }
+                },
+            }
+        }
+    }
+
     pub fn free(self: @This(), allocator: std.mem.Allocator) void {
         if (self.children) |children| {
             switch (children) {
@@ -722,9 +746,9 @@ const LayoutCreator = struct {
                     .children = null,
                     .style = style,
                 };
-                if (style.width == .fixed and style.height == .fixed) {
-                    if (style.aspectRatio) |aspectRatio| {
-                        if (isValidAspectRatio(aspectRatio)) {
+                if (style.aspectRatio) |aspectRatio| {
+                    if (isValidAspectRatio(aspectRatio)) {
+                        if (style.width == .fixed and style.height == .fixed) {
                             if (layoutBox.size[0] >= layoutBox.size[1]) {
                                 layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
                             } else {
@@ -732,6 +756,22 @@ const LayoutCreator = struct {
                             }
                             layoutBox.minSize = layoutBox.size;
                             layoutBox.maxSize = layoutBox.size;
+                        } else if (style.width == .fixed) {
+                            layoutBox.size[1] = layoutBox.size[0] * aspectRatio;
+                            if (style.minHeight == null) {
+                                layoutBox.minSize[1] = layoutBox.size[1];
+                            }
+                            if (style.maxHeight == null) {
+                                layoutBox.maxSize[1] = layoutBox.size[1];
+                            }
+                        } else if (style.height == .fixed) {
+                            layoutBox.size[0] = layoutBox.size[1] / aspectRatio;
+                            if (style.minWidth == null) {
+                                layoutBox.minSize[0] = layoutBox.size[0];
+                            }
+                            if (style.maxWidth == null) {
+                                layoutBox.maxSize[0] = layoutBox.size[0];
+                            }
                         }
                     }
                 }
