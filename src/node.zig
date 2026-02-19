@@ -339,6 +339,8 @@ pub const Style = struct {
     /// - If width and height are both fixed, the larger of the two fixed values
     ///   is treated as authoritative and the other axis is derived from this
     ///   ratio.
+    /// - If one axis is fixed and the other axis is fit, the fit pass does not
+    ///   override the axis inferred from this ratio.
     /// - During grow/shrink, the main-axis size drives the cross-axis when this
     ///   ratio is valid.
     /// - During fit and text wrapping, whichever pass updates one axis may
@@ -430,6 +432,8 @@ pub const IncompleteStyle = struct {
     ///   are ignored.
     /// - If width and height are both fixed, the larger fixed value wins and
     ///   the other axis is derived from this ratio.
+    /// - If one axis is fixed and the other axis is fit, the fit pass does not
+    ///   override the axis inferred from this ratio.
     /// - During grow/shrink, the main-axis size drives the cross-axis when this
     ///   ratio is valid.
     /// - During fit and text wrapping, passes that update one axis may
