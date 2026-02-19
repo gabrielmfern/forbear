@@ -486,7 +486,10 @@ fn fitHeight(layoutBox: *LayoutBox) void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
-                const wasInferredFromAspectRatio = layoutBox.style.aspectRatio != null and layoutBox.style.width == .fixed;
+                const wasInferredFromAspectRatio = if (layoutBox.style.aspectRatio) |aspectRatio|
+                    isValidAspectRatio(aspectRatio) and layoutBox.style.width == .fixed
+                else
+                    false;
 
                 const shouldFitMin = layoutBox.style.height != .fixed and layoutBox.style.minHeight == null and !wasInferredFromAspectRatio;
                 const shouldFit = layoutBox.style.height == .fit and !wasInferredFromAspectRatio;
@@ -547,7 +550,10 @@ fn fitWidth(layoutBox: *LayoutBox) void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
-                const wasInferredFromAspectRatio = layoutBox.style.aspectRatio != null and layoutBox.style.height == .fixed;
+                const wasInferredFromAspectRatio = if (layoutBox.style.aspectRatio) |aspectRatio|
+                    isValidAspectRatio(aspectRatio) and layoutBox.style.height == .fixed
+                else
+                    false;
 
                 const shouldFitMin = layoutBox.style.width != .fixed and layoutBox.style.minWidth == null and !wasInferredFromAspectRatio;
                 const shouldFit = layoutBox.style.width == .fit and !wasInferredFromAspectRatio;
