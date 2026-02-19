@@ -60,7 +60,7 @@ pub const LayoutBox = struct {
             switch (children) {
                 .layoutBoxes => |layoutBoxes| {
                     for (layoutBoxes) |*child| {
-                        child.debug(indent + 1);
+                        child.debugPrint(indent + 1);
                     }
                 },
                 .glyphs => |glyphs| {
@@ -1373,6 +1373,96 @@ test "fitHeight - keeps aspect ratio while fitting" {
     fitHeight(&parent);
     try std.testing.expectApproxEqAbs(50.0, parent.size[1], 0.001);
     try std.testing.expectApproxEqAbs(25.0, parent.size[0], 0.001);
+}
+
+test "fitHeight - skips fit when height is inferred from fixed width and aspect ratio" {
+    var children = [_]LayoutBox{
+        .{
+            .key = 1,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 10.0, 30.0 },
+            .minSize = .{ 10.0, 30.0 },
+            .maxSize = .{ 10.0, 30.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+        .{
+            .key = 2,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 10.0, 40.0 },
+            .minSize = .{ 10.0, 40.0 },
+            .maxSize = .{ 10.0, 40.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+    };
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 100.0, 50.0 },
+        .minSize = .{ 100.0, 50.0 },
+        .maxSize = .{ 100.0, 50.0 },
+        .children = .{ .layoutBoxes = &children },
+        .style = (IncompleteStyle{
+            .width = .{ .fixed = 100.0 },
+            .height = .fit,
+            .direction = .topToBottom,
+            .aspectRatio = 0.5,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    fitHeight(&parent);
+    try std.testing.expectApproxEqAbs(100.0, parent.size[0], 0.001);
+    try std.testing.expectApproxEqAbs(50.0, parent.size[1], 0.001);
+}
+
+test "fitWidth - skips fit when width is inferred from fixed height and aspect ratio" {
+    var children = [_]LayoutBox{
+        .{
+            .key = 1,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 40.0, 10.0 },
+            .minSize = .{ 40.0, 10.0 },
+            .maxSize = .{ 40.0, 10.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+        .{
+            .key = 2,
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = .{ 30.0, 10.0 },
+            .minSize = .{ 30.0, 10.0 },
+            .maxSize = .{ 30.0, 10.0 },
+            .children = null,
+            .style = (IncompleteStyle{}).completeWith(defaultBaseStyle),
+        },
+    };
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 160.0, 80.0 },
+        .minSize = .{ 160.0, 80.0 },
+        .maxSize = .{ 160.0, 80.0 },
+        .children = .{ .layoutBoxes = &children },
+        .style = (IncompleteStyle{
+            .width = .fit,
+            .height = .{ .fixed = 80.0 },
+            .direction = .leftToRight,
+            .aspectRatio = 0.5,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    fitWidth(&parent);
+    try std.testing.expectApproxEqAbs(160.0, parent.size[0], 0.001);
+    try std.testing.expectApproxEqAbs(80.0, parent.size[1], 0.001);
 }
 
 test "growAndShrink - single grow child fills remaining space horizontally" {
