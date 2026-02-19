@@ -486,11 +486,15 @@ fn fitHeight(layoutBox: *LayoutBox) void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
-                const shouldFitMin = layoutBox.style.height != .fixed and layoutBox.style.minHeight == null;
+                const wasInferredFromAspectRatio = layoutBox.style.aspectRatio != null and layoutBox.style.width == .fixed;
+
+                const shouldFitMin = layoutBox.style.height != .fixed and layoutBox.style.minHeight == null and !wasInferredFromAspectRatio;
+                const shouldFit = layoutBox.style.height == .fit and !wasInferredFromAspectRatio;
+
                 const direction = layoutBox.style.direction;
                 const padding = layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1];
                 const border = layoutBox.style.borderWidth.y[0] + layoutBox.style.borderWidth.y[1];
-                if (layoutBox.style.height == .fit) {
+                if (shouldFit) {
                     layoutBox.size[1] = padding + border;
                     if (layoutBox.style.aspectRatio) |aspectRatio| {
                         if (isValidAspectRatio(aspectRatio)) {
@@ -506,7 +510,7 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                     if (child.style.placement == .standard) {
                         const childMargins = child.style.margin.y[0] + child.style.margin.y[1];
                         if (direction == .topToBottom) {
-                            if (layoutBox.style.height == .fit) {
+                            if (shouldFit) {
                                 layoutBox.size[1] += childMargins + child.size[1];
                                 if (layoutBox.style.aspectRatio) |aspectRatio| {
                                     if (isValidAspectRatio(aspectRatio)) {
@@ -519,7 +523,7 @@ fn fitHeight(layoutBox: *LayoutBox) void {
                             }
                         }
                         if (direction == .leftToRight) {
-                            if (layoutBox.style.height == .fit) {
+                            if (shouldFit) {
                                 layoutBox.size[1] = @max(childMargins + padding + border + child.size[1], layoutBox.size[1]);
                                 if (layoutBox.style.aspectRatio) |aspectRatio| {
                                     if (isValidAspectRatio(aspectRatio)) {
@@ -543,11 +547,15 @@ fn fitWidth(layoutBox: *LayoutBox) void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
-                const shouldFitMin = layoutBox.style.width != .fixed and layoutBox.style.minWidth == null;
+                const wasInferredFromAspectRatio = layoutBox.style.aspectRatio != null and layoutBox.style.height == .fixed;
+
+                const shouldFitMin = layoutBox.style.width != .fixed and layoutBox.style.minWidth == null and !wasInferredFromAspectRatio;
+                const shouldFit = layoutBox.style.width == .fit and !wasInferredFromAspectRatio;
+
                 const direction = layoutBox.style.direction;
                 const padding = layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1];
                 const border = layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1];
-                if (layoutBox.style.width == .fit) {
+                if (shouldFit) {
                     layoutBox.size[0] = padding + border;
                     if (layoutBox.style.aspectRatio) |aspectRatio| {
                         if (isValidAspectRatio(aspectRatio)) {
@@ -563,7 +571,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                     if (child.style.placement == .standard) {
                         const childMargins = child.style.margin.x[0] + child.style.margin.x[1];
                         if (direction == .leftToRight) {
-                            if (layoutBox.style.width == .fit) {
+                            if (shouldFit) {
                                 layoutBox.size[0] += childMargins + child.size[0];
                                 if (layoutBox.style.aspectRatio) |aspectRatio| {
                                     if (isValidAspectRatio(aspectRatio)) {
@@ -576,7 +584,7 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                             }
                         }
                         if (direction == .topToBottom) {
-                            if (layoutBox.style.width == .fit) {
+                            if (shouldFit) {
                                 layoutBox.size[0] = @max(childMargins + padding + border + child.size[0], layoutBox.size[0]);
                                 if (layoutBox.style.aspectRatio) |aspectRatio| {
                                     if (isValidAspectRatio(aspectRatio)) {
