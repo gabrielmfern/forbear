@@ -107,6 +107,13 @@ pub const Padding = struct {
     x: Vec2,
     y: Vec2,
 
+    pub fn get(self: @This(), direction: Direction) Vec2 {
+        return switch (direction) {
+            .leftToRight => self.x,
+            .topToBottom => self.y,
+        };
+    }
+
     pub inline fn all(value: f32) @This() {
         return .{
             .x = @splat(value),
@@ -200,108 +207,7 @@ pub const Padding = struct {
     }
 };
 
-pub const Margin = struct {
-    x: Vec2,
-    y: Vec2,
-
-    pub fn get(self: @This(), direction: Direction) Vec2 {
-        return switch (direction) {
-            .leftToRight => self.x,
-            .topToBottom => self.y,
-        };
-    }
-
-    pub inline fn all(value: f32) @This() {
-        return .{
-            .x = @splat(value),
-            .y = @splat(value),
-        };
-    }
-
-    pub inline fn inLine(value: f32) @This() {
-        return .{
-            .x = @splat(value),
-            .y = @splat(0.0),
-        };
-    }
-
-    pub fn withInLine(self: @This(), value: f32) @This() {
-        return .{
-            .x = @splat(value),
-            .y = self.y,
-        };
-    }
-
-    pub inline fn block(value: f32) @This() {
-        return .{
-            .x = @splat(0.0),
-            .y = @splat(value),
-        };
-    }
-
-    pub fn withBlock(self: @This(), value: f32) @This() {
-        return .{
-            .x = self.x,
-            .y = @splat(value),
-        };
-    }
-
-    pub inline fn left(value: f32) @This() {
-        return .{
-            .x = .{ value, 0.0 },
-            .y = @splat(0.0),
-        };
-    }
-
-    pub fn withLeft(self: @This(), value: f32) @This() {
-        return .{
-            .x = .{ value, self.x[1] },
-            .y = self.y,
-        };
-    }
-
-    pub inline fn right(value: f32) @This() {
-        return .{
-            .x = .{ 0.0, value },
-            .y = @splat(0.0),
-        };
-    }
-
-    pub fn withRight(self: @This(), value: f32) @This() {
-        return .{
-            .x = .{ self.x[0], value },
-            .y = self.y,
-        };
-    }
-
-    pub inline fn top(value: f32) @This() {
-        return .{
-            .x = @splat(0.0),
-            .y = .{ value, 0.0 },
-        };
-    }
-
-    pub fn withTop(self: @This(), value: f32) @This() {
-        return .{
-            .x = self.x,
-            .y = .{ value, self.y[1] },
-        };
-    }
-
-    pub inline fn bottom(value: f32) @This() {
-        return .{
-            .x = @splat(0.0),
-            .y = .{ 0.0, value },
-        };
-    }
-
-    pub fn withBottom(self: @This(), value: f32) @This() {
-        return .{
-            .x = self.x,
-            .y = .{ self.y[0], value },
-        };
-    }
-};
+pub const Margin = Padding;
 
 pub const BorderWidth = Padding;
 
@@ -352,6 +258,13 @@ pub const Style = struct {
             return self.width;
         }
         return self.height;
+    }
+
+    pub fn getMinSize(self: @This(), direction: Direction) ?f32 {
+        if (direction == .leftToRight) {
+            return self.minWidth;
+        }
+        return self.minHeight;
     }
 };
 

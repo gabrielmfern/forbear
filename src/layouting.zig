@@ -383,23 +383,27 @@ fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
-                const shouldFitMin = layoutBox.style.width != .fixed and layoutBox.style.minWidth == null;
+                const shouldFitMin = layoutBox.style.getPreferredSize(fitDirection) != .fixed and layoutBox.style.getMinSize(fitDirection) == null;
                 const layoutDirection = layoutBox.style.direction;
-                const padding = layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1];
-                const border = layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1];
+
+                const paddingVector = layoutBox.style.padding.get(fitDirection);
+                const padding =  paddingVector[0] + paddingVector[1];
+
+                const borderWidthVector = layoutBox.style.borderWidth.get(fitDirection);
+                const border = borderWidthVector[0] + borderWidthVector[1];
 
                 const size = layoutBox.style.getPreferredSize(fitDirection);
-                if (layoutBox.style.width == .fit) {
-                    layoutBox.size[0] = padding + border;
+                if (size == .fit) {
+                    layoutBox.setSize(fitDirection, padding + border);
                 }
                 if (shouldFitMin) {
-                    layoutBox.minSize[0] = padding + border;
+                    layoutBox.setMinSize(fitDirection, padding + border);
                 }
                 for (childBoxes) |*child| {
                     fitAlong(child, fitDirection);
                     if (child.style.placement == .standard) {
-                        const marginVector = child.style.margin.get(fitDirection);
-                        const childMargins = marginVector[0] + marginVector[1];
+                        const childMarginVector = child.style.margin.get(fitDirection);
+                        const childMargins = childMarginVector[0] + childMarginVector[1];
                         if (layoutDirection == .leftToRight) {
                             if (size == .fit) {
                                 layoutBox.addSize(fitDirection, childMargins + child.getSize(fitDirection));
