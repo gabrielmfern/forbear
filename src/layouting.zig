@@ -403,6 +403,30 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
     }
 }
 
+fn applyRatios(layoutBox: *LayoutBox) void {
+    if (layoutBox.children) |children| {
+        switch (children) {
+            .layoutBoxes => |childBoxes| {
+                for (childBoxes) |*child| {
+                    applyRatios(child);
+                }
+                const direction = layoutBox.style.direction;
+                for (childBoxes) |*child| {
+                    if (child.style.placement == .standard) {
+                        if (child.style.width == .ratio and direction == .leftToRight) {
+                            child.size[0] = child.style.width.ratio * layoutBox.size[0];
+                        }
+                        if (child.style.height == .ratio and direction == .topToBottom) {
+                            child.size[1] = child.style.height.ratio * layoutBox.size[1];
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+}
+
 fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
     if (layoutBox.children) |children| {
         switch (children) {
@@ -589,10 +613,18 @@ const LayoutCreator = struct {
                     .size = .{
                         switch (style.width) {
                             .fixed => |width| width,
+                            .ratio => |ratio| if (style.height == .fixed)
+                                style.width.fixed * ratio
+                            else
+                                0.0,
                             .fit, .grow => 0.0,
                         },
                         switch (style.height) {
                             .fixed => |height| height,
+                            .ratio => |ratio| if (style.height == .fixed)
+                                style.width.fixed * ratio
+                            else
+                                0.0,
                             .fit, .grow => 0.0,
                         },
                     },
@@ -756,10 +788,14 @@ pub fn layout(
         if (layoutBox.style.height == .grow) {
             layoutBox.size[1] = @min(@max(viewportSize[1], layoutBox.minSize[1]), layoutBox.maxSize[1]);
         }
+        applyRatios(&layoutBox);
         try growAndShrink(arena, &layoutBox);
+        applyRatios(&layoutBox);
         try wrap(arena, &layoutBox);
         fitAlong(&layoutBox, .leftToRight);
         fitAlong(&layoutBox, .topToBottom);
+        applyRatios(&layoutBox);
+
         place(&layoutBox);
         makeAbsolute(&layoutBox, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
         return layoutBox;
