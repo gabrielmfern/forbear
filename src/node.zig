@@ -204,6 +204,13 @@ pub const Margin = struct {
     x: Vec2,
     y: Vec2,
 
+    pub fn get(self: @This(), direction: Direction) Vec2 {
+        return switch (direction) {
+            .leftToRight => self.x,
+            .topToBottom => self.y,
+        };
+    }
+
     pub inline fn all(value: f32) @This() {
         return .{
             .x = @splat(value),

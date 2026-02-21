@@ -51,6 +51,38 @@ pub const LayoutBox = struct {
 
     style: Style,
 
+    pub fn setMinSize(self: *@This(), direction: Direction, size: f32) void {
+        if (direction == .leftToRight) {
+            self.minSize[0] = size;
+        } else {
+            self.minSize[1] = size;
+        }
+    }
+
+    pub fn addMinSize(self: *@This(), direction: Direction, increment: f32) void {
+        if (direction == .leftToRight) {
+            self.minSize[0] += increment;
+        } else {
+            self.minSize[1] += increment;
+        }
+    }
+
+    pub fn setSize(self: *@This(), direction: Direction, size: f32) void {
+        if (direction == .leftToRight) {
+            self.size[0] = size;
+        } else {
+            self.size[1] = size;
+        }
+    }
+
+    pub fn addSize(self: *@This(), direction: Direction, increment: f32) void {
+        if (direction == .leftToRight) {
+            self.size[0] += increment;
+        } else {
+            self.size[1] += increment;
+        }
+    }
+
     pub fn getMinSize(self: @This(), direction: Direction) f32 {
         if (direction == .leftToRight) {
             return self.minSize[0];
@@ -347,56 +379,16 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
     }
 }
 
-fn fitHeight(layoutBox: *LayoutBox) void {
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .layoutBoxes => |childBoxes| {
-                const shouldFitMin = layoutBox.style.height != .fixed and layoutBox.style.minHeight == null;
-                const direction = layoutBox.style.direction;
-                const padding = layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1];
-                const border = layoutBox.style.borderWidth.y[0] + layoutBox.style.borderWidth.y[1];
-                if (layoutBox.style.height == .fit) {
-                    layoutBox.size[1] = padding + border;
-                }
-                if (shouldFitMin) {
-                    layoutBox.minSize[1] = padding + border;
-                }
-                for (childBoxes) |*child| {
-                    fitHeight(child);
-                    if (child.style.placement == .standard) {
-                        const childMargins = child.style.margin.y[0] + child.style.margin.y[1];
-                        if (direction == .topToBottom) {
-                            if (layoutBox.style.height == .fit) {
-                                layoutBox.size[1] += childMargins + child.size[1];
-                            }
-                            if (shouldFitMin) {
-                                layoutBox.minSize[1] += childMargins + child.minSize[1];
-                            }
-                        }
-                        if (direction == .leftToRight) {
-                            if (layoutBox.style.height == .fit) {
-                                layoutBox.size[1] = @max(childMargins + padding + border + child.size[1], layoutBox.size[1]);
-                            }
-                            if (shouldFitMin) {
-                                layoutBox.minSize[1] = @max(childMargins + padding + border + child.minSize[1], layoutBox.minSize[1]);
-                            }
-                        }
-                    }
-                }
-            },
-            else => {},
-        }
-    }
-}
-
-fn fitWidth(layoutBox: *LayoutBox) void {
+fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
                 const shouldFitMin = layoutBox.style.width != .fixed and layoutBox.style.minWidth == null;
-                const direction = layoutBox.style.direction;
+                const layoutDirection = layoutBox.style.direction;
                 const padding = layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1];
                 const border = layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1];
+
+                const size = layoutBox.style.getPreferredSize(fitDirection);
                 if (layoutBox.style.width == .fit) {
                     layoutBox.size[0] = padding + border;
                 }
@@ -404,23 +396,30 @@ fn fitWidth(layoutBox: *LayoutBox) void {
                     layoutBox.minSize[0] = padding + border;
                 }
                 for (childBoxes) |*child| {
-                    fitWidth(child);
+                    fitAlong(child, fitDirection);
                     if (child.style.placement == .standard) {
-                        const childMargins = child.style.margin.x[0] + child.style.margin.x[1];
-                        if (direction == .leftToRight) {
-                            if (layoutBox.style.width == .fit) {
-                                layoutBox.size[0] += childMargins + child.size[0];
+                        const marginVector = child.style.margin.get(fitDirection);
+                        const childMargins = marginVector[0] + marginVector[1];
+                        if (layoutDirection == .leftToRight) {
+                            if (size == .fit) {
+                                layoutBox.addSize(fitDirection, childMargins + child.getSize(fitDirection));
                             }
                             if (shouldFitMin) {
-                                layoutBox.minSize[0] += childMargins + child.minSize[0];
+                                layoutBox.addMinSize(fitDirection, childMargins + child.getMinSize(fitDirection));
                             }
                         }
-                        if (direction == .topToBottom) {
-                            if (layoutBox.style.width == .fit) {
-                                layoutBox.size[0] = @max(childMargins + padding + border + child.size[0], layoutBox.size[0]);
+                        if (layoutDirection == .topToBottom) {
+                            if (size == .fit) {
+                                layoutBox.setSize(fitDirection, @max(
+                                    childMargins + padding + border + child.getSize(fitDirection),
+                                    layoutBox.getSize(fitDirection),
+                                ));
                             }
                             if (shouldFitMin) {
-                                layoutBox.minSize[0] = @max(childMargins + padding + border + child.minSize[0], layoutBox.minSize[0]);
+                                layoutBox.setMinSize(
+                                    fitDirection,
+                                    @max(childMargins + padding + border + child.getMinSize(fitDirection), layoutBox.getMinSize(fitDirection)),
+                                );
                             }
                         }
                     }
@@ -727,8 +726,8 @@ pub fn layout(
         for (context.rootNodes.items, 0..) |node, index| {
             var creator = try LayoutCreator.init(arena);
             var layoutBox = try creator.create(node, baseStyle, 1, dpi);
-            fitWidth(&layoutBox);
-            fitHeight(&layoutBox);
+            fitAlong(&layoutBox, .leftToRight);
+            fitAlong(&layoutBox, .topToBottom);
             if (layoutBox.style.width == .grow) {
                 layoutBox.size[0] = viewportSize[0];
             }
@@ -737,8 +736,8 @@ pub fn layout(
             }
             try growAndShrink(arena, &layoutBox);
             try wrap(arena, &layoutBox);
-            fitWidth(&layoutBox);
-            fitHeight(&layoutBox);
+            fitAlong(&layoutBox, .leftToRight);
+            fitAlong(&layoutBox, .topToBottom);
             place(&layoutBox);
             makeAbsolute(&layoutBox, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
             layoutBoxes[index] = layoutBox;
