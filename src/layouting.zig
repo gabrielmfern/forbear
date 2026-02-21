@@ -387,7 +387,7 @@ fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
                 const layoutDirection = layoutBox.style.direction;
 
                 const paddingVector = layoutBox.style.padding.get(fitDirection);
-                const padding =  paddingVector[0] + paddingVector[1];
+                const padding = paddingVector[0] + paddingVector[1];
 
                 const borderWidthVector = layoutBox.style.borderWidth.get(fitDirection);
                 const border = borderWidthVector[0] + borderWidthVector[1];
@@ -404,7 +404,7 @@ fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
                     if (child.style.placement == .standard) {
                         const childMarginVector = child.style.margin.get(fitDirection);
                         const childMargins = childMarginVector[0] + childMarginVector[1];
-                        if (layoutDirection == .leftToRight) {
+                        if (layoutDirection == fitDirection) {
                             if (size == .fit) {
                                 layoutBox.addSize(fitDirection, childMargins + child.getSize(fitDirection));
                             }
@@ -412,7 +412,7 @@ fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
                                 layoutBox.addMinSize(fitDirection, childMargins + child.getMinSize(fitDirection));
                             }
                         }
-                        if (layoutDirection == .topToBottom) {
+                        if (layoutDirection != fitDirection) {
                             if (size == .fit) {
                                 layoutBox.setSize(fitDirection, @max(
                                     childMargins + padding + border + child.getSize(fitDirection),
@@ -1056,6 +1056,127 @@ test "growAndShrink - cross-axis grow respects minSize" {
             .{ 100.0, 200.0 },
         },
     });
+}
+
+test "fitAlong - vertical fit uses height axis fields" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const childBoxes = try arenaAllocator.alloc(LayoutBox, 2);
+    childBoxes[0] = LayoutBox{
+        .key = 1,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 20.0, 30.0 },
+        .minSize = .{ 20.0, 30.0 },
+        .maxSize = .{ 20.0, 30.0 },
+        .children = null,
+        .style = (IncompleteStyle{
+            .width = .{ .fixed = 20.0 },
+            .height = .{ .fixed = 30.0 },
+            .margin = forbear.Margin.block(1.0).withBottom(2.0),
+        }).completeWith(defaultBaseStyle),
+    };
+    childBoxes[1] = LayoutBox{
+        .key = 2,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 20.0, 40.0 },
+        .minSize = .{ 20.0, 40.0 },
+        .maxSize = .{ 20.0, 40.0 },
+        .children = null,
+        .style = (IncompleteStyle{
+            .width = .{ .fixed = 20.0 },
+            .height = .{ .fixed = 40.0 },
+            .margin = forbear.Margin.block(3.0).withBottom(4.0),
+        }).completeWith(defaultBaseStyle),
+    };
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 100.0, 0.0 },
+        .minSize = .{ 100.0, 0.0 },
+        .maxSize = .{ 100.0, std.math.inf(f32) },
+        .children = .{ .layoutBoxes = childBoxes },
+        .style = (IncompleteStyle{
+            .direction = .topToBottom,
+            .width = .{ .fixed = 100.0 },
+            .height = .fit,
+            .padding = forbear.Padding.block(10.0).withBottom(20.0),
+            .borderWidth = forbear.BorderWidth.block(2.0).withBottom(3.0),
+        }).completeWith(defaultBaseStyle),
+    };
+
+    fitAlong(&parent, .topToBottom);
+
+    // height = (paddingY + borderY) + sum(child marginY + child height)
+    try std.testing.expectEqual(@as(f32, 115.0), parent.size[1]);
+    try std.testing.expectEqual(@as(f32, 115.0), parent.minSize[1]);
+}
+
+test "fitAlong - cross axis fit uses vertical padding and borders" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const childBoxes = try arenaAllocator.alloc(LayoutBox, 2);
+    childBoxes[0] = LayoutBox{
+        .key = 1,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 20.0, 30.0 },
+        .minSize = .{ 20.0, 30.0 },
+        .maxSize = .{ 20.0, 30.0 },
+        .children = null,
+        .style = (IncompleteStyle{
+            .width = .{ .fixed = 20.0 },
+            .height = .{ .fixed = 30.0 },
+            .margin = forbear.Margin.block(1.0).withBottom(2.0),
+        }).completeWith(defaultBaseStyle),
+    };
+    childBoxes[1] = LayoutBox{
+        .key = 2,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 20.0, 40.0 },
+        .minSize = .{ 20.0, 40.0 },
+        .maxSize = .{ 20.0, 40.0 },
+        .children = null,
+        .style = (IncompleteStyle{
+            .width = .{ .fixed = 20.0 },
+            .height = .{ .fixed = 40.0 },
+            .margin = forbear.Margin.block(3.0).withBottom(4.0),
+        }).completeWith(defaultBaseStyle),
+    };
+
+    var parent = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 100.0, 0.0 },
+        .minSize = .{ 100.0, 0.0 },
+        .maxSize = .{ 100.0, std.math.inf(f32) },
+        .children = .{ .layoutBoxes = childBoxes },
+        .style = (IncompleteStyle{
+            .direction = .leftToRight,
+            .width = .{ .fixed = 100.0 },
+            .height = .fit,
+            .padding = forbear.Padding.block(10.0).withBottom(20.0),
+            .borderWidth = forbear.BorderWidth.block(2.0).withBottom(3.0),
+        }).completeWith(defaultBaseStyle),
+    };
+
+    fitAlong(&parent, .topToBottom);
+
+    // For leftToRight parent fitting height, we take max child contribution
+    // plus vertical padding and border: max(1+2+30, 3+4+40) + (10+20) + (2+3)
+    try std.testing.expectEqual(@as(f32, 82.0), parent.size[1]);
+    try std.testing.expectEqual(@as(f32, 82.0), parent.minSize[1]);
 }
 
 test "wrap - no wrapping when glyphs fit on single line" {
