@@ -1295,7 +1295,7 @@ pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !voi
         },
         .ratio => {},
     }
-    imageStyle.background = .{ .image = image };
+    imageStyle.background = .{ .image = img };
 
     result.ptr.* = Node{
         .key = hasher.final(),
