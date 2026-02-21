@@ -130,6 +130,138 @@ fn approxEq(a: f32, b: f32) bool {
     return @abs(a - b) < 0.001;
 }
 
+fn growChildren(
+    allocator: std.mem.Allocator,
+    children: []LayoutBox,
+    direction: Direction,
+    remaining: *f32,
+) !void {
+    var toGrowGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
+    defer toGrowGradually.deinit(allocator);
+    for (children) |*child| {
+        if (child.style.placement == .standard) {
+            if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
+                try toGrowGradually.append(allocator, child);
+            }
+        }
+    }
+
+    while (remaining.* > 0.001 and toGrowGradually.items.len > 0) {
+        var smallest: f32 = std.math.inf(f32);
+        var secondSmallest = std.math.inf(f32);
+
+        var index: usize = 0;
+        while (index < toGrowGradually.items.len) {
+            const child = toGrowGradually.items[index];
+            if (approxEq(child.getSize(direction), child.getMaxSize(direction))) {
+                _ = toGrowGradually.orderedRemove(index);
+                continue;
+            }
+            if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
+                smallest = child.getSize(direction);
+            } else if (child.getSize(direction) < secondSmallest and child.getSize(direction) < child.getMaxSize(direction)) {
+                secondSmallest = child.getSize(direction);
+            }
+            index += 1;
+        }
+        // This ensures these two elements don't become so large that the remaining
+        // space ends up not being shared across all of the elements
+        var toAdd = @min(
+            secondSmallest - smallest,
+            remaining.* / @as(f32, @floatFromInt(toGrowGradually.items.len)),
+        );
+        // This avoids an infinte loop. It means all the children are the same size and
+        // we can simply share the remaining space across all of them
+        if (toAdd == 0) {
+            toAdd = remaining.* / @as(f32, @floatFromInt(toGrowGradually.items.len));
+        }
+        const remainingBeforeLoop = remaining.*;
+        for (toGrowGradually.items) |child| {
+            if (approxEq(child.getSize(direction), smallest)) {
+                const allowedDifference = @min(
+                    @max(child.getSize(direction) + toAdd, child.getMinSize(direction)),
+                    child.getMaxSize(direction),
+                ) - child.getSize(direction);
+                if (direction == .leftToRight) {
+                    child.size[0] += allowedDifference;
+                } else {
+                    child.size[1] += allowedDifference;
+                }
+                remaining.* -= allowedDifference;
+            }
+        }
+        if (remaining.* == remainingBeforeLoop) {
+            // This means that some constraint is impeding the growth
+            // of the childen, so we do this to avoid an infinte loop
+            break;
+        }
+    }
+}
+
+fn shrinkChildren(
+    allocator: std.mem.Allocator,
+    children: []LayoutBox,
+    direction: Direction,
+    remaining: *f32,
+) !void {
+    if (remaining.* >= -0.001) {
+        return;
+    }
+
+    var toShrinkGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
+    defer toShrinkGradually.deinit(allocator);
+    for (children) |*child| {
+        if (child.style.placement == .standard) {
+            if (child.getSize(direction) > child.getMinSize(direction)) {
+                try toShrinkGradually.append(allocator, child);
+            }
+        }
+    }
+    while (remaining.* < -0.001 and toShrinkGradually.items.len > 0) {
+        var largest: f32 = toShrinkGradually.items[0].getSize(direction);
+        var secondLargest: f32 = 0.0;
+
+        var index: usize = 0;
+        while (index < toShrinkGradually.items.len) {
+            const child = toShrinkGradually.items[index];
+            if (approxEq(child.getSize(direction), child.getMinSize(direction))) {
+                _ = toShrinkGradually.orderedRemove(index);
+                if (index == 0 and toShrinkGradually.items.len > 0) {
+                    largest = toShrinkGradually.items[0].getSize(direction);
+                }
+                continue;
+            }
+            if (child.getSize(direction) > largest) {
+                largest = child.getSize(direction);
+            } else if (child.getSize(direction) > secondLargest) {
+                secondLargest = child.getSize(direction);
+            }
+            index += 1;
+        }
+        var toSubtract = @min(
+            largest - secondLargest,
+            -remaining.* / @as(f32, @floatFromInt(toShrinkGradually.items.len)),
+        );
+        if (toSubtract == 0) {
+            toSubtract = -remaining.* / @as(f32, @floatFromInt(toShrinkGradually.items.len));
+        }
+        for (toShrinkGradually.items) |child| {
+            if (approxEq(child.getSize(direction), largest)) {
+                const allowedDifference = @max(
+                    child.getSize(direction) - toSubtract,
+                    child.getMinSize(direction),
+                ) - child.getSize(direction);
+                if (direction == .leftToRight) {
+                    child.size[0] += allowedDifference;
+                } else {
+                    child.size[1] += allowedDifference;
+                }
+                remaining.* -= allowedDifference;
+            }
+        }
+    }
+}
+
 fn growAndShrink(
     allocator: std.mem.Allocator,
     layoutBox: *LayoutBox,
@@ -138,8 +270,6 @@ fn growAndShrink(
         const children = layoutBox.children.?.layoutBoxes;
         const direction = layoutBox.style.direction;
 
-        var toGrowGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
-        defer toGrowGradually.deinit(allocator);
         var remaining = layoutBox.getSize(direction);
         for (children) |*child| {
             if (child.style.placement == .standard) {
@@ -153,116 +283,10 @@ fn growAndShrink(
                         child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
                     }
                 }
-                if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
-                    try toGrowGradually.append(allocator, child);
-                }
             }
         }
-        while (remaining > 0.001 and toGrowGradually.items.len > 0) {
-            var smallest: f32 = std.math.inf(f32);
-            var secondSmallest = std.math.inf(f32);
-
-            var index: usize = 0;
-            while (index < toGrowGradually.items.len) {
-                const child = toGrowGradually.items[index];
-                if (approxEq(child.getSize(direction), child.getMaxSize(direction))) {
-                    _ = toGrowGradually.orderedRemove(index);
-                    continue;
-                }
-                if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
-                    smallest = child.getSize(direction);
-                } else if (child.getSize(direction) < secondSmallest and child.getSize(direction) < child.getMaxSize(direction)) {
-                    secondSmallest = child.getSize(direction);
-                }
-                index += 1;
-            }
-            // This ensures these two elements don't become so large that the remaining
-            // space ends up not being shared across all of the elements
-            var toAdd = @min(
-                secondSmallest - smallest,
-                remaining / @as(f32, @floatFromInt(toGrowGradually.items.len)),
-            );
-            // This avoids an infinte loop. It means all the children are the same size and
-            // we can simply share the remaining space across all of them
-            if (toAdd == 0) {
-                toAdd = remaining / @as(f32, @floatFromInt(toGrowGradually.items.len));
-            }
-            const remainingBeforeLoop = remaining;
-            for (toGrowGradually.items) |child| {
-                if (approxEq(child.getSize(direction), smallest)) {
-                    const allowedDifference = @min(
-                        @max(child.getSize(direction) + toAdd, child.getMinSize(direction)),
-                        child.getMaxSize(direction),
-                    ) - child.getSize(direction);
-                    if (direction == .leftToRight) {
-                        child.size[0] += allowedDifference;
-                    } else {
-                        child.size[1] += allowedDifference;
-                    }
-                    remaining -= allowedDifference;
-                }
-            }
-            if (remaining == remainingBeforeLoop) {
-                // This means that some constraint is impeding the growth
-                // of the childen, so we do this to avoid an infinte loop
-                break;
-            }
-        }
-
-        if (remaining < -0.001) {
-            var toShrinkGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
-            defer toShrinkGradually.deinit(allocator);
-            for (children) |*child| {
-                if (child.style.placement == .standard) {
-                    if (child.getSize(direction) > child.getMinSize(direction)) {
-                        try toShrinkGradually.append(allocator, child);
-                    }
-                }
-            }
-            while (remaining < -0.001 and toShrinkGradually.items.len > 0) {
-                var largest: f32 = toShrinkGradually.items[0].getSize(direction);
-                var secondLargest: f32 = 0.0;
-
-                var index: usize = 0;
-                while (index < toShrinkGradually.items.len) {
-                    const child = toShrinkGradually.items[index];
-                    if (approxEq(child.getSize(direction), child.getMinSize(direction))) {
-                        _ = toShrinkGradually.orderedRemove(index);
-                        if (index == 0 and toGrowGradually.items.len > 0) {
-                            largest = toShrinkGradually.items[0].getSize(direction);
-                        }
-                        continue;
-                    }
-                    if (child.getSize(direction) > largest) {
-                        largest = child.getSize(direction);
-                    } else if (child.getSize(direction) > secondLargest) {
-                        secondLargest = child.getSize(direction);
-                    }
-                    index += 1;
-                }
-                var toSubtract = @min(
-                    largest - secondLargest,
-                    -remaining / @as(f32, @floatFromInt(toShrinkGradually.items.len)),
-                );
-                if (toSubtract == 0) {
-                    toSubtract = -remaining / @as(f32, @floatFromInt(toShrinkGradually.items.len));
-                }
-                for (toShrinkGradually.items) |child| {
-                    if (approxEq(child.getSize(direction), largest)) {
-                        const allowedDifference = @max(
-                            child.getSize(direction) - toSubtract,
-                            child.getMinSize(direction),
-                        ) - child.getSize(direction);
-                        if (direction == .leftToRight) {
-                            child.size[0] += allowedDifference;
-                        } else {
-                            child.size[1] += allowedDifference;
-                        }
-                        remaining -= allowedDifference;
-                    }
-                }
-            }
-        }
+        try growChildren(allocator, children, direction, &remaining);
+        try shrinkChildren(allocator, children, direction, &remaining);
         for (children) |*child| {
             try growAndShrink(allocator, child);
         }
