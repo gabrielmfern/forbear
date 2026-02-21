@@ -1250,6 +1250,64 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
     }
 }
 
+pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !void {
+    const self = getContext();
+
+    const result = try putNode(arena);
+
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
+    hasher.update(std.mem.asBytes(&result.index));
+
+    var imageStyle = style;
+    const imageWidth: f32 = @floatFromInt(img.width);
+    const imageHeight: f32 = @floatFromInt(img.height);
+    switch (imageStyle.width) {
+        .fit => {
+            switch (imageStyle.height) {
+                .fit => {
+                    imageStyle.height = .{ .ratio = imageHeight / imageWidth };
+                },
+                .grow, .fixed => {
+                    imageStyle.width = .{ .ratio = imageWidth / imageHeight };
+                },
+                .ratio => {},
+            }
+        },
+        .fixed => {
+            switch (imageStyle.height) {
+                .fit, .grow => {
+                    imageStyle.height = .{ .ratio = imageHeight / imageWidth };
+                },
+                .fixed, .ratio => {},
+            }
+        },
+        .grow => {
+            switch (imageStyle.height) {
+                .grow, .fit => {
+                    imageStyle.height = .{ .ratio = imageHeight / imageWidth };
+                },
+                .fixed => {
+                    imageStyle.width = .{ .ratio = imageWidth / imageHeight };
+                },
+                .ratio => {},
+            }
+        },
+        .ratio => {},
+    }
+    imageStyle.background = .{ .image = image };
+
+    result.ptr.* = Node{
+        .key = hasher.final(),
+        .content = .{
+            .element = .{
+                .style = imageStyle,
+                .children = .empty,
+            },
+        },
+    };
+}
+
 pub fn element(arena: std.mem.Allocator, style: IncompleteStyle) !*const fn (void) void {
     const self = getContext();
 
@@ -1567,8 +1625,8 @@ pub fn deinit() void {
     }
     self.fonts.deinit();
     var imagesIterator = self.images.valueIterator();
-    while (imagesIterator.next()) |image| {
-        image.deinit();
+    while (imagesIterator.next()) |img| {
+        img.deinit();
     }
     self.images.deinit();
 
