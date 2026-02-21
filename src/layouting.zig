@@ -614,14 +614,14 @@ const LayoutCreator = struct {
                         switch (style.width) {
                             .fixed => |width| width,
                             .ratio => |ratio| if (style.height == .fixed)
-                                style.width.fixed * ratio
+                                style.height.fixed * ratio
                             else
                                 0.0,
                             .fit, .grow => 0.0,
                         },
                         switch (style.height) {
                             .fixed => |height| height,
-                            .ratio => |ratio| if (style.height == .fixed)
+                            .ratio => |ratio| if (style.width == .fixed)
                                 style.width.fixed * ratio
                             else
                                 0.0,
