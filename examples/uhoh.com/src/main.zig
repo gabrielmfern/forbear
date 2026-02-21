@@ -22,7 +22,7 @@ fn App() !void {
         .fontSize = 12.0,
         .color = theme.Colors.text,
     }))({
-        // try forbear.component(arena, forbear.FpsCounter, null);
+        try forbear.component(arena, forbear.FpsCounter, null);
 
         (try forbear.element(arena, .{
             .width = .grow,
