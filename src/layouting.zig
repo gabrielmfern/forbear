@@ -1810,3 +1810,57 @@ test "layout pipeline - manual children stay out of flow" {
     try std.testing.expectEqual(@as(f32, 100.0), children[2].size[1]);
     try std.testing.expectEqual(@as(f32, 100.0), children[2].position[0]);
 }
+
+fn testCreateElementConfiguration(configuration: struct {
+    style: IncompleteStyle,
+    expectedSize: Vec2,
+}) !void {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var creator = try LayoutCreator.init(arenaAllocator);
+    const node = Node{
+        .key = 1,
+        .content = .{
+            .element = .{
+                .style = configuration.style,
+                .children = .empty,
+            },
+        },
+    };
+
+    const layoutBox = try creator.create(node, defaultBaseStyle, 0, .{ 72.0, 72.0 });
+    try std.testing.expectEqualDeep(configuration.expectedSize, layoutBox.size);
+}
+
+test "create - width ratio uses fixed height" {
+    try testCreateElementConfiguration(.{
+        .style = .{
+            .width = .{ .ratio = 1.5 },
+            .height = .{ .fixed = 40.0 },
+        },
+        .expectedSize = .{ 60.0, 40.0 },
+    });
+}
+
+test "create - height ratio uses fixed width" {
+    try testCreateElementConfiguration(.{
+        .style = .{
+            .width = .{ .fixed = 40.0 },
+            .height = .{ .ratio = 1.5 },
+        },
+        .expectedSize = .{ 40.0, 60.0 },
+    });
+}
+
+test "create - ratio without opposite fixed axis starts at zero" {
+    try testCreateElementConfiguration(.{
+        .style = .{
+            .width = .{ .ratio = 2.0 },
+            .height = .fit,
+        },
+        .expectedSize = .{ 0.0, 0.0 },
+    });
+}
