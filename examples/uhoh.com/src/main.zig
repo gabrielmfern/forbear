@@ -12,8 +12,6 @@ const black: Vec4 = .{ 0.01, 0.019, 0.07, 1.0 };
 fn App() !void {
     const arena = try forbear.useArena();
 
-    try forbear.component(arena, forbear.FpsCounter, null);
-
     (try forbear.element(arena, .{
         .width = .grow,
         .direction = .topToBottom,
@@ -24,6 +22,8 @@ fn App() !void {
         .fontSize = 12.0,
         .color = theme.Colors.text,
     }))({
+        // try forbear.component(arena, forbear.FpsCounter, null);
+
         (try forbear.element(arena, .{
             .width = .grow,
             .background = .{ .color = black },
@@ -947,7 +947,7 @@ fn renderingMain(
         try forbear.component(arena, App, null);
 
         const viewportSize = renderer.viewportSize();
-        const layoutBoxes = try forbear.layout(
+        const rootLayoutBox = try forbear.layout(
             arena,
             .{
                 .font = try forbear.useFont("SpaceGrotesk"),
@@ -961,8 +961,8 @@ fn renderingMain(
             viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         );
-        try renderer.drawFrame(arena, layoutBoxes, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
-        try forbear.update(arena, layoutBoxes, viewportSize);
+        try renderer.drawFrame(arena, &[_]forbear.LayoutBox{rootLayoutBox}, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
+        try forbear.update(arena, &rootLayoutBox, viewportSize);
 
         forbear.resetNodeTree();
     }
