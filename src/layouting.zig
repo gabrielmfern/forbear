@@ -723,10 +723,10 @@ pub fn layout(
         fitAlong(&layoutBox, .leftToRight);
         fitAlong(&layoutBox, .topToBottom);
         if (layoutBox.style.width == .grow) {
-            layoutBox.size[0] = viewportSize[0];
+            layoutBox.size[0] = @min(@max(viewportSize[0], layoutBox.minSize[0]), layoutBox.maxSize[0]);
         }
         if (layoutBox.style.height == .grow) {
-            layoutBox.size[1] = viewportSize[1];
+            layoutBox.size[1] = @min(@max(viewportSize[1], layoutBox.minSize[1]), layoutBox.maxSize[1]);
         }
         try growAndShrink(arena, &layoutBox);
         try wrap(arena, &layoutBox);
