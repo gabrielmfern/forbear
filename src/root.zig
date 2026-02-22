@@ -1259,53 +1259,54 @@ pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !voi
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
     hasher.update(std.mem.asBytes(&result.index));
 
-    var imageStyle = style;
+    var complementedStyle = style;
     const imageWidth: f32 = @floatFromInt(img.width);
     const imageHeight: f32 = @floatFromInt(img.height);
-    switch (imageStyle.width) {
+    switch (complementedStyle.width) {
         .fit => {
-            switch (imageStyle.height) {
+            switch (complementedStyle.height) {
                 .fit => {
-                    imageStyle.height = .{ .ratio = imageHeight / imageWidth };
+                    complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
                 .grow, .fixed => {
-                    imageStyle.width = .{ .ratio = imageWidth / imageHeight };
+                    complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
                 },
                 .ratio => {},
             }
         },
         .fixed => {
-            switch (imageStyle.height) {
+            switch (complementedStyle.height) {
                 .fit, .grow => {
-                    imageStyle.height = .{ .ratio = imageHeight / imageWidth };
+                    complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
                 .fixed, .ratio => {},
             }
         },
         .grow => {
-            switch (imageStyle.height) {
+            switch (complementedStyle.height) {
                 .grow, .fit => {
-                    imageStyle.height = .{ .ratio = imageHeight / imageWidth };
+                    complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
                 .fixed => {
-                    imageStyle.width = .{ .ratio = imageWidth / imageHeight };
+                    complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
                 },
                 .ratio => {},
             }
         },
         .ratio => {},
     }
-    imageStyle.background = .{ .image = img };
+    complementedStyle.background = .{ .image = img };
 
     result.ptr.* = Node{
         .key = hasher.final(),
         .content = .{
             .element = .{
-                .style = imageStyle,
+                .style = complementedStyle,
                 .children = .empty,
             },
         },
     };
+    self.previousPushedNode = result.ptr;
 }
 
 pub fn element(arena: std.mem.Allocator, style: IncompleteStyle) !*const fn (void) void {
