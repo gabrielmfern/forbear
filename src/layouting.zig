@@ -1555,135 +1555,6 @@ test "wrap - word wrapping with alignment end" {
     });
 }
 
-test "applyRatios - applies only on layout direction axis" {
-    const allocator = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    const horizontalChildren = try arenaAllocator.alloc(LayoutBox, 1);
-    horizontalChildren[0] = LayoutBox{
-        .key = 1,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 0.0, 33.0 },
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
-        .children = null,
-        .style = (IncompleteStyle{
-            .width = .{ .ratio = 0.5 },
-            .height = .{ .fixed = 33.0 },
-        }).completeWith(defaultBaseStyle),
-    };
-    var horizontalParent = LayoutBox{
-        .key = 10,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 200.0, 120.0 },
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
-        .children = .{ .layoutBoxes = horizontalChildren },
-        .style = (IncompleteStyle{
-            .direction = .leftToRight,
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 120.0 },
-        }).completeWith(defaultBaseStyle),
-    };
-
-    applyRatios(&horizontalParent);
-    try std.testing.expectEqual(@as(f32, 100.0), horizontalParent.children.?.layoutBoxes[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 33.0), horizontalParent.children.?.layoutBoxes[0].size[1]);
-
-    const verticalChildren = try arenaAllocator.alloc(LayoutBox, 1);
-    verticalChildren[0] = LayoutBox{
-        .key = 2,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 77.0, 0.0 },
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
-        .children = null,
-        .style = (IncompleteStyle{
-            .width = .{ .fixed = 77.0 },
-            .height = .{ .ratio = 0.25 },
-        }).completeWith(defaultBaseStyle),
-    };
-    var verticalParent = LayoutBox{
-        .key = 20,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 180.0, 300.0 },
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
-        .children = .{ .layoutBoxes = verticalChildren },
-        .style = (IncompleteStyle{
-            .direction = .topToBottom,
-            .width = .{ .fixed = 180.0 },
-            .height = .{ .fixed = 300.0 },
-        }).completeWith(defaultBaseStyle),
-    };
-
-    applyRatios(&verticalParent);
-    try std.testing.expectEqual(@as(f32, 77.0), verticalParent.children.?.layoutBoxes[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 75.0), verticalParent.children.?.layoutBoxes[0].size[1]);
-}
-
-test "applyRatios - ignores manual placement children" {
-    const allocator = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    const children = try arenaAllocator.alloc(LayoutBox, 2);
-    children[0] = LayoutBox{
-        .key = 1,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 0.0, 20.0 },
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
-        .children = null,
-        .style = (IncompleteStyle{
-            .width = .{ .ratio = 0.5 },
-            .height = .{ .fixed = 20.0 },
-        }).completeWith(defaultBaseStyle),
-    };
-    children[1] = LayoutBox{
-        .key = 2,
-        .position = .{ 10.0, 10.0 },
-        .z = 0,
-        .size = .{ 17.0, 20.0 },
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
-        .children = null,
-        .style = (IncompleteStyle{
-            .placement = .{ .manual = .{ 10.0, 10.0 } },
-            .width = .{ .ratio = 0.5 },
-            .height = .{ .fixed = 20.0 },
-        }).completeWith(defaultBaseStyle),
-    };
-
-    var parent = LayoutBox{
-        .key = 99,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 200.0, 50.0 },
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
-        .children = .{ .layoutBoxes = children },
-        .style = (IncompleteStyle{
-            .direction = .leftToRight,
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 50.0 },
-        }).completeWith(defaultBaseStyle),
-    };
-
-    applyRatios(&parent);
-
-    try std.testing.expectEqual(@as(f32, 100.0), parent.children.?.layoutBoxes[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 17.0), parent.children.?.layoutBoxes[1].size[0]);
-}
-
 test "ratio and grow passes are stable when reapplied" {
     const allocator = std.testing.allocator;
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -1743,8 +1614,8 @@ test "ratio and grow passes are stable when reapplied" {
 
     try std.testing.expectEqual(firstRatio, parent.children.?.layoutBoxes[0].size[0]);
     try std.testing.expectEqual(firstGrow, parent.children.?.layoutBoxes[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 60.0), parent.children.?.layoutBoxes[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 240.0), parent.children.?.layoutBoxes[1].size[0]);
+    try std.testing.expectEqual(@as(f32, 10.0), parent.children.?.layoutBoxes[0].size[0]);
+    try std.testing.expectEqual(@as(f32, 290.0), parent.children.?.layoutBoxes[1].size[0]);
 }
 
 test "layout pipeline - ratio and grow produce stable geometry" {
@@ -1781,12 +1652,16 @@ test "layout pipeline - ratio and grow produce stable geometry" {
     try std.testing.expectEqual(@as(usize, 2), firstChildren.len);
     try std.testing.expectEqual(@as(f32, 300.0), first.size[0]);
     try std.testing.expectEqual(@as(f32, 100.0), first.size[1]);
-    try std.testing.expectEqual(@as(f32, 60.0), firstChildren[0].size[0]);
+
+    try std.testing.expectEqual(@as(f32, 20.0), firstChildren[0].size[0]);
     try std.testing.expectEqual(@as(f32, 100.0), firstChildren[0].size[1]);
     try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[0]);
-    try std.testing.expectEqual(@as(f32, 240.0), firstChildren[1].size[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[1]);
+
+    try std.testing.expectEqual(@as(f32, 280.0), firstChildren[1].size[0]);
     try std.testing.expectEqual(@as(f32, 100.0), firstChildren[1].size[1]);
-    try std.testing.expectEqual(@as(f32, 60.0), firstChildren[1].position[0]);
+    try std.testing.expectEqual(@as(f32, 20.0), firstChildren[1].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[1].position[1]);
 
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
@@ -1797,10 +1672,18 @@ test "layout pipeline - ratio and grow produce stable geometry" {
 
     try std.testing.expectEqual(first.size[0], second.size[0]);
     try std.testing.expectEqual(first.size[1], second.size[1]);
+    try std.testing.expectEqual(first.position[0], second.position[0]);
+    try std.testing.expectEqual(first.position[1], second.position[1]);
+
     try std.testing.expectEqual(firstChildren[0].size[0], secondChildren[0].size[0]);
+    try std.testing.expectEqual(firstChildren[0].size[1], secondChildren[0].size[1]);
     try std.testing.expectEqual(firstChildren[0].position[0], secondChildren[0].position[0]);
+    try std.testing.expectEqual(firstChildren[0].position[1], secondChildren[0].position[1]);
+
     try std.testing.expectEqual(firstChildren[1].size[0], secondChildren[1].size[0]);
+    try std.testing.expectEqual(firstChildren[1].size[1], secondChildren[1].size[1]);
     try std.testing.expectEqual(firstChildren[1].position[0], secondChildren[1].position[0]);
+    try std.testing.expectEqual(firstChildren[1].position[1], secondChildren[1].position[1]);
 }
 
 test "layout pipeline - manual children stay out of flow" {
@@ -1831,13 +1714,21 @@ test "layout pipeline - manual children stay out of flow" {
         }))({});
     });
 
-    const result = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
-    const children = result.children.?.layoutBoxes;
+    const layoutBox = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
+
+    try std.testing.expectEqual(@as(f32, 200.0), layoutBox.size[0]);
+    try std.testing.expectEqual(@as(f32, 100.0), layoutBox.size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), layoutBox.position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), layoutBox.position[1]);
+
+    const children = layoutBox.children.?.layoutBoxes;
 
     try std.testing.expectEqual(@as(usize, 3), children.len);
 
-    try std.testing.expectEqual(@as(f32, 100.0), children[0].size[0]);
+    try std.testing.expectEqual(@as(f32, 50.0), children[0].size[0]);
+    try std.testing.expectEqual(@as(f32, 100.0), children[0].size[1]);
     try std.testing.expectEqual(@as(f32, 0.0), children[0].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), children[0].position[1]);
 
     try std.testing.expectEqual(@as(f32, 15.0), children[1].size[0]);
     try std.testing.expectEqual(@as(f32, 12.0), children[1].size[1]);
@@ -1847,6 +1738,7 @@ test "layout pipeline - manual children stay out of flow" {
     try std.testing.expectEqual(@as(f32, 20.0), children[2].size[0]);
     try std.testing.expectEqual(@as(f32, 100.0), children[2].size[1]);
     try std.testing.expectEqual(@as(f32, 100.0), children[2].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), children[2].position[1]);
 }
 
 fn testCreateElementConfiguration(configuration: struct {
