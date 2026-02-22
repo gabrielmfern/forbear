@@ -282,6 +282,15 @@ pub extern "user32" fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: LPCWSTR) 
 pub extern "user32" fn SetCursor(hCursor: HCURSOR) callconv(.c) HCURSOR;
 
 pub extern "user32" fn AdjustWindowRectEx(lpRect: *RECT, dwStyle: DWORD, bMenu: BOOL, dwExStyle: DWORD) callconv(.c) BOOL;
+pub extern "user32" fn SetWindowPos(
+    hWnd: HWND,
+    hWndInsertAfter: HWND,
+    X: c_int,
+    Y: c_int,
+    cx: c_int,
+    cy: c_int,
+    uFlags: UINT,
+) callconv(.c) BOOL;
 pub extern "user32" fn GetClientRect(hWnd: HWND, lpRect: *RECT) callconv(.c) BOOL;
 pub extern "user32" fn GetWindowRect(hWnd: HWND, lpRect: *RECT) callconv(.c) BOOL;
 

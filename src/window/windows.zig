@@ -88,6 +88,9 @@ pub fn init(
         return error.FailedToRegisterWindowClass;
     }
 
+    _ = win32.SetProcessDpiAwarenessContext(win32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    _ = win32.SetThreadDpiAwarenessContext(win32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     var rect = win32.RECT{ .left = 0, .top = 0, .right = @intCast(width), .bottom = @intCast(height) };
     const style = win32.WS_OVERLAPPEDWINDOW | win32.WS_VISIBLE;
     _ = win32.AdjustWindowRectEx(&rect, style, 0, 0);
@@ -107,9 +110,8 @@ pub fn init(
         window,
     ) orelse return error.FailedToCreateWindow;
 
-    _ = win32.SetThreadDpiAwarenessContext(win32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
     window.updateDpi();
+    window.updateClientSize();
 
     return window;
 }
@@ -117,6 +119,35 @@ pub fn init(
 fn updateDpi(self: *@This()) void {
     const dpi = win32.GetDpiForWindow(self.handle);
     self.dpi = .{ dpi, dpi };
+}
+
+fn updateClientSize(self: *@This()) void {
+    var rect: win32.RECT = undefined;
+    if (win32.GetClientRect(self.handle, &rect) == 0) {
+        std.log.err("failed to query window client size", .{});
+        return;
+    }
+    self.width = @intCast(rect.right - rect.left);
+    self.height = @intCast(rect.bottom - rect.top);
+}
+
+fn emitResizeIfNeeded(self: *@This(), hwnd: win32.HWND, force: bool) void {
+    var rect: win32.RECT = undefined;
+    if (win32.GetClientRect(hwnd, &rect) == 0) {
+        std.log.err("failed to get new window size, ignoring event", .{});
+        return;
+    }
+
+    const newWidth: u32 = @intCast(rect.right - rect.left);
+    const newHeight: u32 = @intCast(rect.bottom - rect.top);
+
+    if (force or self.width != newWidth or self.height != newHeight) {
+        self.width = newWidth;
+        self.height = newHeight;
+        if (self.handlers.resize) |handler| {
+            handler.function(self, self.width, self.height, self.dpi, handler.data);
+        }
+    }
 }
 
 pub fn deinit(self: *@This()) void {
@@ -147,20 +178,7 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
             if (window) |self| {
                 const windowpos: *win32.WINDOWPOS = @ptrFromInt(@as(usize, @intCast(lParam)));
                 if ((windowpos.flags & win32.SWP_NOSIZE) == 0) {
-                    var rect: win32.RECT = undefined;
-                    if (win32.GetClientRect(hwnd, &rect) != 0) {
-                        const newWidth: u32 = @intCast(windowpos.cx);
-                        const newHeight: u32 = @intCast(windowpos.cy);
-                        if (self.width != newWidth or self.height != newHeight) {
-                            self.width = newWidth;
-                            self.height = newHeight;
-                            if (self.handlers.resize) |handler| {
-                                handler.function(self, self.width, self.height, self.dpi, handler.data);
-                            }
-                        }
-                    } else {
-                        std.log.err("failed to get new window size, ignoring event", .{});
-                    }
+                    self.emitResizeIfNeeded(hwnd, false);
                 }
             }
         },
@@ -205,11 +223,25 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
         },
         win32.WM_DPICHANGED => {
             if (window) |self| {
-                const dpi: u16 = @truncate(@as(u32, @intCast(lParam)));
-                self.dpi = .{ @intCast(dpi), @intCast(dpi) };
-                if (self.handlers.resize) |handler| {
-                    handler.function(self, self.width, self.height, self.dpi, handler.data);
-                }
+                const previousDpi = self.dpi;
+                const wParam32: u32 = @truncate(wParam);
+                const dpiX: u16 = @truncate(wParam32);
+                const dpiY: u16 = @truncate(wParam32 >> 16);
+                self.dpi = .{ @intCast(dpiX), @intCast(dpiY) };
+
+                const suggestedRect: *const win32.RECT = @ptrFromInt(@as(usize, @bitCast(lParam)));
+                _ = win32.SetWindowPos(
+                    hwnd,
+                    null,
+                    @intCast(suggestedRect.left),
+                    @intCast(suggestedRect.top),
+                    @intCast(suggestedRect.right - suggestedRect.left),
+                    @intCast(suggestedRect.bottom - suggestedRect.top),
+                    win32.SWP_NOZORDER | win32.SWP_NOACTIVATE,
+                );
+
+                const dpiChanged = self.dpi[0] != previousDpi[0] or self.dpi[1] != previousDpi[1];
+                self.emitResizeIfNeeded(hwnd, dpiChanged);
             }
         },
         win32.WM_DESTROY => {
