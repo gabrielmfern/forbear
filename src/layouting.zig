@@ -447,22 +447,17 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
 }
 
 fn applyRatios(layoutBox: *LayoutBox) void {
+    if (layoutBox.style.width == .ratio) {
+        layoutBox.size[0] = layoutBox.style.width.ratio * layoutBox.size[1];
+    }
+    if (layoutBox.style.height == .ratio) {
+        layoutBox.size[1] = layoutBox.style.height.ratio * layoutBox.size[0];
+    }
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
                 for (childBoxes) |*child| {
                     applyRatios(child);
-                }
-                const direction = layoutBox.style.direction;
-                for (childBoxes) |*child| {
-                    if (child.style.placement == .standard) {
-                        if (child.style.width == .ratio and direction == .leftToRight) {
-                            child.size[0] = child.style.width.ratio * layoutBox.size[0];
-                        }
-                        if (child.style.height == .ratio and direction == .topToBottom) {
-                            child.size[1] = child.style.height.ratio * layoutBox.size[1];
-                        }
-                    }
                 }
             },
             else => {},
