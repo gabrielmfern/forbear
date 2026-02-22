@@ -987,8 +987,8 @@ pub fn main() !void {
 
     const window = try forbear.Window.init(
         allocator,
-        800,
-        600,
+        1280,
+        720,
         "uhoh.com",
         "uhoh.com",
     );
