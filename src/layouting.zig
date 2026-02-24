@@ -1161,6 +1161,57 @@ test "growAndShrink - cross-axis grow respects minSize" {
     });
 }
 
+test "growAndShrink - horizontal ratio uses cross-axis grow before remaining split" {
+    // Child 0 gets its height from cross-axis grow and then derives width from
+    // ratio. That derived width must be subtracted before grow children split
+    // the remaining main-axis space.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .leftToRight,
+        .parentSize = .{ 300.0, 100.0 },
+        .children = &.{
+            .{
+                .width = .{ .ratio = 0.2 },
+                .height = .grow,
+                .size = .{ 0.0, 0.0 },
+            },
+            .{
+                .width = .grow,
+                .height = .grow,
+                .size = .{ 0.0, 0.0 },
+            },
+        },
+        .expectedSizes = &.{
+            .{ 20.0, 100.0 },
+            .{ 280.0, 100.0 },
+        },
+    });
+}
+
+test "growAndShrink - vertical ratio uses cross-axis grow before remaining split" {
+    // Mirror case for topToBottom: child 0 gets width from cross-axis grow and
+    // then derives height from ratio before the remaining height is allocated.
+    try testGrowAndShrinkConfiguration(.{
+        .direction = .topToBottom,
+        .parentSize = .{ 120.0, 300.0 },
+        .children = &.{
+            .{
+                .width = .grow,
+                .height = .{ .ratio = 0.5 },
+                .size = .{ 0.0, 0.0 },
+            },
+            .{
+                .width = .grow,
+                .height = .grow,
+                .size = .{ 0.0, 0.0 },
+            },
+        },
+        .expectedSizes = &.{
+            .{ 120.0, 60.0 },
+            .{ 120.0, 240.0 },
+        },
+    });
+}
+
 test "fitAlong - vertical fit uses height axis fields" {
     const allocator = std.testing.allocator;
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -1737,6 +1788,125 @@ test "layout pipeline - manual children stay out of flow" {
 
     try std.testing.expectEqual(@as(f32, 15.0), children[1].size[0]);
     try std.testing.expectEqual(@as(f32, 12.0), children[1].size[1]);
+    try std.testing.expectEqual(@as(f32, 10.0), children[1].position[0]);
+    try std.testing.expectEqual(@as(f32, 7.0), children[1].position[1]);
+
+    try std.testing.expectEqual(@as(f32, 20.0), children[2].size[0]);
+    try std.testing.expectEqual(@as(f32, 100.0), children[2].size[1]);
+    try std.testing.expectEqual(@as(f32, 50.0), children[2].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), children[2].position[1]);
+}
+
+test "layout pipeline - vertical ratio and grow produce stable geometry" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const buildTree = struct {
+        fn build(allocator: std.mem.Allocator) !void {
+            (try forbear.element(allocator, .{
+                .direction = .topToBottom,
+                .width = .{ .fixed = 120.0 },
+                .height = .{ .fixed = 300.0 },
+            }))({
+                (try forbear.element(allocator, .{
+                    .width = .grow,
+                    .height = .{ .ratio = 0.5 },
+                }))({});
+                (try forbear.element(allocator, .{
+                    .width = .grow,
+                    .height = .grow,
+                }))({});
+            });
+        }
+    }.build;
+
+    try buildTree(arenaAllocator);
+    const first = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
+
+    const firstChildren = first.children.?.layoutBoxes;
+    try std.testing.expectEqual(@as(usize, 2), firstChildren.len);
+    try std.testing.expectEqual(@as(f32, 120.0), first.size[0]);
+    try std.testing.expectEqual(@as(f32, 300.0), first.size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), first.position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), first.position[1]);
+
+    try std.testing.expectEqual(@as(f32, 120.0), firstChildren[0].size[0]);
+    try std.testing.expectEqual(@as(f32, 60.0), firstChildren[0].size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[1]);
+
+    try std.testing.expectEqual(@as(f32, 120.0), firstChildren[1].size[0]);
+    try std.testing.expectEqual(@as(f32, 240.0), firstChildren[1].size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[1].position[0]);
+    try std.testing.expectEqual(@as(f32, 60.0), firstChildren[1].position[1]);
+
+    forbear.resetNodeTree();
+    _ = arena.reset(.retain_capacity);
+
+    try buildTree(arenaAllocator);
+    const second = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
+    const secondChildren = second.children.?.layoutBoxes;
+
+    try std.testing.expectEqual(first.size[0], second.size[0]);
+    try std.testing.expectEqual(first.size[1], second.size[1]);
+    try std.testing.expectEqual(first.position[0], second.position[0]);
+    try std.testing.expectEqual(first.position[1], second.position[1]);
+
+    try std.testing.expectEqual(firstChildren[0].size[0], secondChildren[0].size[0]);
+    try std.testing.expectEqual(firstChildren[0].size[1], secondChildren[0].size[1]);
+    try std.testing.expectEqual(firstChildren[0].position[0], secondChildren[0].position[0]);
+    try std.testing.expectEqual(firstChildren[0].position[1], secondChildren[0].position[1]);
+
+    try std.testing.expectEqual(firstChildren[1].size[0], secondChildren[1].size[0]);
+    try std.testing.expectEqual(firstChildren[1].size[1], secondChildren[1].size[1]);
+    try std.testing.expectEqual(firstChildren[1].position[0], secondChildren[1].position[0]);
+    try std.testing.expectEqual(firstChildren[1].position[1], secondChildren[1].position[1]);
+}
+
+test "layout pipeline - manual ratio child stays out of flow" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    (try forbear.element(arenaAllocator, .{
+        .direction = .leftToRight,
+        .width = .{ .fixed = 200.0 },
+        .height = .{ .fixed = 100.0 },
+    }))({
+        (try forbear.element(arenaAllocator, .{
+            .width = .{ .ratio = 0.5 },
+            .height = .grow,
+        }))({});
+        (try forbear.element(arenaAllocator, .{
+            .placement = .{ .manual = .{ 10.0, 7.0 } },
+            .width = .{ .ratio = 0.5 },
+            .height = .{ .fixed = 40.0 },
+        }))({});
+        (try forbear.element(arenaAllocator, .{
+            .width = .{ .fixed = 20.0 },
+            .height = .grow,
+        }))({});
+    });
+
+    const layoutBox = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
+    const children = layoutBox.children.?.layoutBoxes;
+
+    try std.testing.expectEqual(@as(usize, 3), children.len);
+
+    try std.testing.expectEqual(@as(f32, 50.0), children[0].size[0]);
+    try std.testing.expectEqual(@as(f32, 100.0), children[0].size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), children[0].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), children[0].position[1]);
+
+    try std.testing.expectEqual(@as(f32, 20.0), children[1].size[0]);
+    try std.testing.expectEqual(@as(f32, 40.0), children[1].size[1]);
     try std.testing.expectEqual(@as(f32, 10.0), children[1].position[0]);
     try std.testing.expectEqual(@as(f32, 7.0), children[1].position[1]);
 
