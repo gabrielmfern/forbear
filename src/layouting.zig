@@ -316,7 +316,6 @@ fn growAndShrink(
         var remaining = layoutBox.getSize(direction);
         for (children) |*child| {
             if (child.style.placement == .standard) {
-                remaining -= child.getSize(direction);
                 if (direction.perpendicular() == .topToBottom) {
                     if (child.style.height == .grow or (child.size[1] > layoutBox.size[1] and child.minSize[1] < child.size[1])) {
                         child.size[1] = @max(@min(layoutBox.size[1], child.maxSize[1]), child.minSize[1]);
@@ -326,6 +325,8 @@ fn growAndShrink(
                         child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
                     }
                 }
+                applyOwnRatios(child);
+                remaining -= child.getSize(direction);
             }
         }
         try growChildren(allocator, children, direction, &remaining);
@@ -446,13 +447,17 @@ fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
     }
 }
 
-fn applyRatios(layoutBox: *LayoutBox) void {
+fn applyOwnRatios(layoutBox: *LayoutBox) void {
     if (layoutBox.style.width == .ratio) {
         layoutBox.size[0] = layoutBox.style.width.ratio * layoutBox.size[1];
     }
     if (layoutBox.style.height == .ratio) {
         layoutBox.size[1] = layoutBox.style.height.ratio * layoutBox.size[0];
     }
+}
+
+fn applyRatios(layoutBox: *LayoutBox) void {
+    applyOwnRatios(layoutBox);
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
@@ -1737,7 +1742,7 @@ test "layout pipeline - manual children stay out of flow" {
 
     try std.testing.expectEqual(@as(f32, 20.0), children[2].size[0]);
     try std.testing.expectEqual(@as(f32, 100.0), children[2].size[1]);
-    try std.testing.expectEqual(@as(f32, 100.0), children[2].position[0]);
+    try std.testing.expectEqual(@as(f32, 50.0), children[2].position[0]);
     try std.testing.expectEqual(@as(f32, 0.0), children[2].position[1]);
 }
 
