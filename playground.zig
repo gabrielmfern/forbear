@@ -11,6 +11,7 @@ fn App() !void {
         .padding = .inLine(10),
     }))({
         try forbear.component(arena, forbear.FpsCounter, null);
+
         try forbear.text(arena, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
         (try forbear.element(arena, .{
             .width = .{ .fixed = 100 },
@@ -57,7 +58,7 @@ fn renderingMain(
         try forbear.component(arena, App, null);
 
         const viewportSize = renderer.viewportSize();
-        const layoutBoxes = try forbear.layout(
+        const rootLayoutBox = try forbear.layout(
             arena,
             .{
                 .blendMode = .normal,
@@ -71,9 +72,9 @@ fn renderingMain(
             viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         );
-        try renderer.drawFrame(arena, layoutBoxes, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
+        try renderer.drawFrame(arena, &[_]forbear.LayoutBox{rootLayoutBox}, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
 
-        try forbear.update(arena, layoutBoxes, viewportSize);
+        try forbear.update(arena, &rootLayoutBox, viewportSize);
 
         forbear.resetNodeTree();
     }
