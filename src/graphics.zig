@@ -71,6 +71,13 @@ pub const VulkanError = error{
     Unknown,
 };
 
+const validationFailedResult: c.VkResult = if (@hasDecl(c, "VK_ERROR_VALIDATION_FAILED_EXT"))
+    c.VK_ERROR_VALIDATION_FAILED_EXT
+else if (@hasDecl(c, "VK_ERROR_VALIDATION_FAILED"))
+    c.VK_ERROR_VALIDATION_FAILED
+else
+    @enumFromInt(-1000011001);
+
 pub fn ensureNoError(result: c.VkResult) !void {
     switch (result) {
         c.VK_ERROR_EXTENSION_NOT_PRESENT => return error.ExtensioNotPresent,
@@ -79,7 +86,7 @@ pub fn ensureNoError(result: c.VkResult) !void {
         c.VK_ERROR_LAYER_NOT_PRESENT => return error.LayerNotPresent,
         c.VK_ERROR_OUT_OF_DEVICE_MEMORY => return error.OutOfDeviceMemory,
         c.VK_ERROR_OUT_OF_HOST_MEMORY => return error.OutOfHostMemory,
-        c.VK_ERROR_VALIDATION_FAILED => return error.ValidationFailed,
+        validationFailedResult => return error.ValidationFailed,
         c.VK_ERROR_FEATURE_NOT_PRESENT => return error.FeatureNotPresent,
         c.VK_ERROR_DEVICE_LOST => return error.DeviceLost,
         c.VK_ERROR_TOO_MANY_OBJECTS => return error.TooManyObjects,
