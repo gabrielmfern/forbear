@@ -968,9 +968,11 @@ pub fn layout(
             std.log.debug("[layout-debug] created tree with {} nodes", .{countTreeSize(&layoutBox)});
         }
         logLayoutStage(debugEnabled, "after create", &layoutBox);
+
         fitAlong(&layoutBox, .leftToRight);
         fitAlong(&layoutBox, .topToBottom);
         logLayoutStage(debugEnabled, "after fitAlong x/y", &layoutBox);
+
         if (layoutBox.style.width == .grow) {
             layoutBox.size[0] = @min(@max(viewportSize[0], layoutBox.minSize[0]), layoutBox.maxSize[0]);
         }
@@ -978,21 +980,29 @@ pub fn layout(
             layoutBox.size[1] = @min(@max(viewportSize[1], layoutBox.minSize[1]), layoutBox.maxSize[1]);
         }
         logLayoutStage(debugEnabled, "after root grow clamp", &layoutBox);
+
         applyRatios(&layoutBox);
         logLayoutStage(debugEnabled, "after applyRatios #1", &layoutBox);
+
         try growAndShrinkWithDebug(arena, &layoutBox, debugEnabled);
         logLayoutStage(debugEnabled, "after growAndShrink #1", &layoutBox);
+
         applyRatios(&layoutBox);
         logLayoutStage(debugEnabled, "after applyRatios #2", &layoutBox);
+
         try growAndShrinkWithDebug(arena, &layoutBox, debugEnabled);
         logLayoutStage(debugEnabled, "after growAndShrink #2", &layoutBox);
+
         try wrap(arena, &layoutBox);
         logLayoutStage(debugEnabled, "after wrap", &layoutBox);
+
         fitAlong(&layoutBox, .leftToRight);
         fitAlong(&layoutBox, .topToBottom);
         logLayoutStage(debugEnabled, "after fitAlong x/y #2", &layoutBox);
+
         applyRatios(&layoutBox);
         logLayoutStage(debugEnabled, "after applyRatios #3", &layoutBox);
+
         try growAndShrinkWithDebug(arena, &layoutBox, debugEnabled);
         logLayoutStage(debugEnabled, "after growAndShrink #3", &layoutBox);
 
