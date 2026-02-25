@@ -9,6 +9,28 @@ const Button = @import("components/button.zig").Button;
 
 const black: Vec4 = .{ 0.01, 0.019, 0.07, 1.0 };
 
+fn readEnvBool(allocator: std.mem.Allocator, key: []const u8, default: bool) bool {
+    const value = std.process.getEnvVarOwned(allocator, key) catch |err| {
+        if (err != error.EnvironmentVariableNotFound) {
+            std.log.warn("Failed to read env var {s}: {}", .{ key, err });
+        }
+        return default;
+    };
+    defer allocator.free(value);
+
+    if (std.ascii.eqlIgnoreCase(value, "1") or std.ascii.eqlIgnoreCase(value, "true")) {
+        return true;
+    }
+    if (std.ascii.eqlIgnoreCase(value, "0") or std.ascii.eqlIgnoreCase(value, "false")) {
+        return false;
+    }
+    return default;
+}
+
+fn shouldLogFrame(frameIndex: u64) bool {
+    return frameIndex < 8 or frameIndex % 120 == 0;
+}
+
 fn App() !void {
     const arena = try forbear.useArena();
 
@@ -77,40 +99,41 @@ fn App() !void {
                 .direction = .leftToRight,
                 .alignment = .centerLeft,
             }))({
-                (try forbear.element(arena, .{
-                    .direction = .topToBottom,
-                }))({
-                    (try forbear.element(arena, .{
-                        .fontWeight = 700,
-                        .fontSize = 46,
-                        .lineHeight = 0.75,
-                        .margin = forbear.Margin.block(0.0).withBottom(18.0),
-                    }))({
-                        try forbear.text(arena, "You're the boss, why are you still fixing tech issues?");
-                    });
-                    (try forbear.element(arena, .{
-                        .fontSize = 15.0,
-                        .color = black,
-                        .fontWeight = 500,
-                        .margin = forbear.Margin.block(12.0).withBottom(15.0),
-                    }))({
-                        try forbear.text(arena, "It doesn't just annoy you. It slows you and your staff down. That's our job now.");
-                    });
-                    try forbear.component(arena, Button, ButtonProps{ .text = "Let us prove it*" });
-                    (try forbear.element(arena, .{
-                        .fontSize = 9.0,
-                        .color = black,
-                        .margin = forbear.Margin.block(10.5).withBottom(0.0),
-                    }))({
-                        try forbear.text(
-                            arena,
-                            "* You have to promise us that you'll dump all your problems on us so that we can show you what we're made of.",
-                        );
-                    });
-                });
+                // (try forbear.element(arena, .{
+                //     .direction = .topToBottom,
+                //     .width = .grow,
+                // }))({
+                //     (try forbear.element(arena, .{
+                //         .fontWeight = 700,
+                //         .fontSize = 46,
+                //         .lineHeight = 0.75,
+                //         .margin = forbear.Margin.block(0.0).withBottom(18.0),
+                //     }))({
+                //         try forbear.text(arena, "You're the boss, why are you still fixing tech issues?");
+                //     });
+                //     (try forbear.element(arena, .{
+                //         .fontSize = 15.0,
+                //         .color = black,
+                //         .fontWeight = 500,
+                //         .margin = forbear.Margin.block(12.0).withBottom(15.0),
+                //     }))({
+                //         try forbear.text(arena, "It doesn't just annoy you. It slows you and your staff down. That's our job now.");
+                //     });
+                //     try forbear.component(arena, Button, ButtonProps{ .text = "Let us prove it*" });
+                //     (try forbear.element(arena, .{
+                //         .fontSize = 9.0,
+                //         .color = black,
+                //         .margin = forbear.Margin.block(10.5).withBottom(0.0),
+                //     }))({
+                //         try forbear.text(
+                //             arena,
+                //             "* You have to promise us that you'll dump all your problems on us so that we can show you what we're made of.",
+                //         );
+                //     });
+                // });
                 try forbear.image(arena, .{
                     .width = .grow,
-                    .maxWidth = 369,
+                    // .maxWidth = 369,
                     .blendMode = .multiply,
                 }, try forbear.useImage("uhoh-hero"));
             });
@@ -850,12 +873,30 @@ fn renderingMain(
     try forbear.registerImage("uhoh-failure", @embedFile("static/uhoh-failure.png"), .png);
     try forbear.registerImage("uhoh-bottom-cta", @embedFile("static/uhoh-bottom-cta.png"), .png);
 
+    const layoutDebugEnabled = readEnvBool(allocator, "FORBEAR_LAYOUT_DEBUG", false);
+    if (layoutDebugEnabled) {
+        std.log.info("FORBEAR_LAYOUT_DEBUG enabled for uhoh.com frame diagnostics", .{});
+    }
+
+    var frameIndex: u64 = 0;
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
+        const shouldLog = layoutDebugEnabled and shouldLogFrame(frameIndex);
+        var frameStartNs: i128 = 0;
+        if (shouldLog) {
+            frameStartNs = std.time.nanoTimestamp();
+            std.log.debug("[uhoh-layout-debug] frame={} start", .{frameIndex});
+        }
 
         try forbear.component(arena, App, null);
 
         const viewportSize = renderer.viewportSize();
+        var layoutStartNs: i128 = 0;
+        if (shouldLog) {
+            layoutStartNs = std.time.nanoTimestamp();
+            std.log.debug("[uhoh-layout-debug] frame={} before layout viewport={any} dpi={any}", .{ frameIndex, viewportSize, window.dpi });
+        }
+
         const rootLayoutBox = try forbear.layout(
             arena,
             .{
@@ -870,10 +911,40 @@ fn renderingMain(
             viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         );
+        if (shouldLog) {
+            const layoutMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - layoutStartNs)) / 1_000_000.0;
+            std.log.debug(
+                "[uhoh-layout-debug] frame={} after layout: {d:.3}ms rootPos={any} rootSize={any}",
+                .{ frameIndex, layoutMs, rootLayoutBox.position, rootLayoutBox.size },
+            );
+        }
+
+        var drawStartNs: i128 = 0;
+        if (shouldLog) {
+            drawStartNs = std.time.nanoTimestamp();
+        }
         try renderer.drawFrame(arena, &[_]forbear.LayoutBox{rootLayoutBox}, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
+        if (shouldLog) {
+            const drawMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - drawStartNs)) / 1_000_000.0;
+            std.log.debug("[uhoh-layout-debug] frame={} after drawFrame: {d:.3}ms", .{ frameIndex, drawMs });
+        }
+
+        var updateStartNs: i128 = 0;
+        if (shouldLog) {
+            updateStartNs = std.time.nanoTimestamp();
+        }
         try forbear.update(arena, &rootLayoutBox, viewportSize);
+        if (shouldLog) {
+            const updateMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - updateStartNs)) / 1_000_000.0;
+            const totalMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - frameStartNs)) / 1_000_000.0;
+            std.log.debug(
+                "[uhoh-layout-debug] frame={} after update: {d:.3}ms total={d:.3}ms",
+                .{ frameIndex, updateMs, totalMs },
+            );
+        }
 
         forbear.resetNodeTree();
+        frameIndex += 1;
     }
     try renderer.waitIdle();
 }
