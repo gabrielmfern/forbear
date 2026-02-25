@@ -23,6 +23,8 @@ pub const Direction = enum {
 pub const Sizing = union(enum) {
     fit,
     fixed: f32,
+    /// A ratio with respect to the parent axis (e.g. 0.5 = 50% of parent width/height).
+    percentage: f32,
     /// A ratio with respect to the opposite axis.
     ratio: f32,
     grow,

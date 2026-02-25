@@ -1271,18 +1271,18 @@ pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !voi
                     complementedStyle.minWidth = 0;
                     complementedStyle.minHeight = 0;
                 },
-                .grow, .fixed => {
+                .grow, .fixed, .percentage => {
                     complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
                 },
                 .ratio => {},
             }
         },
-        .fixed => {
+        .fixed, .percentage => {
             switch (complementedStyle.height) {
                 .fit, .grow => {
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
-                .fixed, .ratio => {},
+                .fixed, .percentage, .ratio => {},
             }
         },
         .grow => {
@@ -1290,7 +1290,7 @@ pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !voi
                 .grow, .fit => {
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
-                .fixed => {
+                .fixed, .percentage => {
                     complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
                 },
                 .ratio => {},
