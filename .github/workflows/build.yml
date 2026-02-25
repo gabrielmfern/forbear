@@ -2,6 +2,7 @@ name: Build
 
 on:
   push:
+    - main
   pull_request:
 
 jobs:

@@ -2,6 +2,7 @@ name: Check
 
 on:
   push:
+    - main
   pull_request:
 
 jobs:
