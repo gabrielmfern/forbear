@@ -3,7 +3,7 @@ const theme = @import("theme.zig");
 
 pub const ButtonProps = struct {
     text: []const u8,
-    sizing: enum { small, medium, large } = .medium,
+    sizing: enum { medium, large } = .medium,
 };
 
 pub fn Button(props: ButtonProps) !void {
@@ -16,8 +16,7 @@ pub fn Button(props: ButtonProps) !void {
             .borderWidth = forbear.BorderWidth.all(1.5),
             .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
             .fontSize = switch (props.sizing) {
-                .small => 12,
-                .medium => 16,
+                .medium => 12,
                 .large => 20,
             },
             .translate = .{
@@ -33,8 +32,7 @@ pub fn Button(props: ButtonProps) !void {
                 ),
             },
             .padding = switch (props.sizing) {
-                .small => forbear.Padding.block(10).withInLine(20),
-                .medium => forbear.Padding.block(20).withInLine(36),
+                .medium => forbear.Padding.block(10).withInLine(20),
                 .large => forbear.Padding.block(28).withInLine(48),
             },
             .alignment = .center,
