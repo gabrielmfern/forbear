@@ -683,6 +683,29 @@ fn applyOwnRatios(layoutBox: *LayoutBox) void {
     }
 }
 
+fn applyParentPercentageSizes(layoutBox: *LayoutBox, parentSize: Vec2) void {
+    if (layoutBox.style.width == .percentage) {
+        layoutBox.size[0] = layoutBox.style.width.percentage * parentSize[0];
+    }
+    if (layoutBox.style.height == .percentage) {
+        layoutBox.size[1] = layoutBox.style.height.percentage * parentSize[1];
+    }
+
+    layoutBox.size[0] = @min(@max(layoutBox.size[0], layoutBox.minSize[0]), layoutBox.maxSize[0]);
+    layoutBox.size[1] = @min(@max(layoutBox.size[1], layoutBox.minSize[1]), layoutBox.maxSize[1]);
+
+    if (layoutBox.children) |children| {
+        switch (children) {
+            .layoutBoxes => |childBoxes| {
+                for (childBoxes) |*child| {
+                    applyParentPercentageSizes(child, layoutBox.size);
+                }
+            },
+            else => {},
+        }
+    }
+}
+
 fn applyRatios(layoutBox: *LayoutBox) void {
     applyOwnRatios(layoutBox);
     if (layoutBox.children) |children| {
@@ -701,7 +724,8 @@ fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
-                const shouldFitMin = layoutBox.style.getPreferredSize(fitDirection) != .fixed and layoutBox.style.getMinSize(fitDirection) == null;
+                const preferredSize = layoutBox.style.getPreferredSize(fitDirection);
+                const shouldFitMin = preferredSize != .fixed and preferredSize != .percentage and layoutBox.style.getMinSize(fitDirection) == null;
                 const layoutDirection = layoutBox.style.direction;
 
                 const paddingVector = layoutBox.style.padding.get(fitDirection);
@@ -710,7 +734,7 @@ fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
                 const borderWidthVector = layoutBox.style.borderWidth.get(fitDirection);
                 const border = borderWidthVector[0] + borderWidthVector[1];
 
-                const size = layoutBox.style.getPreferredSize(fitDirection);
+                const size = preferredSize;
                 if (size == .fit) {
                     layoutBox.setSize(fitDirection, padding + border);
                 }
@@ -883,6 +907,7 @@ const LayoutCreator = struct {
                     .size = .{
                         switch (style.width) {
                             .fixed => |width| width,
+                            .percentage => 0.0,
                             .ratio => |ratio| if (style.height == .fixed)
                                 style.height.fixed * ratio
                             else
@@ -891,6 +916,7 @@ const LayoutCreator = struct {
                         },
                         switch (style.height) {
                             .fixed => |height| height,
+                            .percentage => 0.0,
                             .ratio => |ratio| if (style.width == .fixed)
                                 style.width.fixed * ratio
                             else
@@ -1077,11 +1103,17 @@ pub fn layout(
         }
         logLayoutStage(debugConfig, "after root grow clamp", &layoutBox);
 
+        applyParentPercentageSizes(&layoutBox, viewportSize);
+        logLayoutStage(debugConfig, "after applyParentPercentageSizes #1", &layoutBox);
+
         applyRatios(&layoutBox);
         logLayoutStage(debugConfig, "after applyRatios #1", &layoutBox);
 
         try growAndShrinkWithDebug(arena, &layoutBox, debugConfig);
         logLayoutStage(debugConfig, "after growAndShrink #1", &layoutBox);
+
+        applyParentPercentageSizes(&layoutBox, viewportSize);
+        logLayoutStage(debugConfig, "after applyParentPercentageSizes #2", &layoutBox);
 
         applyRatios(&layoutBox);
         logLayoutStage(debugConfig, "after applyRatios #2", &layoutBox);
@@ -1095,6 +1127,9 @@ pub fn layout(
         fitAlong(&layoutBox, .leftToRight);
         fitAlong(&layoutBox, .topToBottom);
         logLayoutStage(debugConfig, "after fitAlong x/y #2", &layoutBox);
+
+        applyParentPercentageSizes(&layoutBox, viewportSize);
+        logLayoutStage(debugConfig, "after applyParentPercentageSizes #3", &layoutBox);
 
         applyRatios(&layoutBox);
         logLayoutStage(debugConfig, "after applyRatios #3", &layoutBox);
@@ -2350,6 +2385,44 @@ test "create - ratio without opposite fixed axis starts at zero" {
         .style = .{
             .width = .{ .ratio = 2.0 },
             .height = .fit,
+        },
+        .expectedSize = .{ 0.0, 0.0 },
+    });
+}
+
+
+test "layout pipeline - percentage sizes track parent axis" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    (try forbear.element(arenaAllocator, .{
+        .direction = .leftToRight,
+        .width = .{ .fixed = 200.0 },
+        .height = .{ .fixed = 100.0 },
+    }))({
+        (try forbear.element(arenaAllocator, .{
+            .width = .{ .percentage = 0.5 },
+            .height = .{ .percentage = 0.25 },
+        }))({});
+    });
+
+    const result = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
+    const children = result.children.?.layoutBoxes;
+
+    try std.testing.expectEqual(@as(usize, 1), children.len);
+    try std.testing.expectEqual(@as(f32, 100.0), children[0].size[0]);
+    try std.testing.expectEqual(@as(f32, 25.0), children[0].size[1]);
+}
+
+test "create - percentage sizing starts at zero before parent resolution" {
+    try testCreateElementConfiguration(.{
+        .style = .{
+            .width = .{ .percentage = 0.5 },
+            .height = .{ .percentage = 0.5 },
         },
         .expectedSize = .{ 0.0, 0.0 },
     });
