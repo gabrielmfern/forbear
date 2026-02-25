@@ -192,22 +192,112 @@ fn readEnvBool(key: []const u8, default: bool) bool {
     return default;
 }
 
-fn layoutDebugEnabled() bool {
-    return readEnvBool("FORBEAR_LAYOUT_DEBUG", false);
+fn readEnvU64(key: []const u8) ?u64 {
+    const allocator = std.heap.page_allocator;
+    const value = std.process.getEnvVarOwned(allocator, key) catch |err| {
+        if (err != error.EnvironmentVariableNotFound) {
+            std.log.warn("Failed to read env var {s}: {}", .{ key, err });
+        }
+        return null;
+    };
+    defer allocator.free(value);
+
+    const trimmed = std.mem.trim(u8, value, " \t\r\n\x0B\x0C");
+    return std.fmt.parseInt(u64, trimmed, 10) catch |err| {
+        std.log.warn("Invalid u64 env var {s}={s}: {}", .{ key, value, err });
+        return null;
+    };
+}
+
+const LayoutDebugConfig = struct {
+    enabled: bool,
+    keyFilter: ?u64,
+};
+
+fn layoutDebugConfig() LayoutDebugConfig {
+    const keyFilter = readEnvU64("FORBEAR_LAYOUT_DEBUG_KEY");
+    const enabled = readEnvBool("FORBEAR_LAYOUT_DEBUG", keyFilter != null);
+    return .{
+        .enabled = enabled,
+        .keyFilter = keyFilter,
+    };
+}
+
+fn shouldLogLayoutBox(debugConfig: LayoutDebugConfig, key: u64) bool {
+    if (!debugConfig.enabled) {
+        return false;
+    }
+    if (debugConfig.keyFilter) |targetKey| {
+        return key == targetKey;
+    }
+    return true;
+}
+
+fn findLayoutBoxByKey(layoutBox: *const LayoutBox, key: u64) ?*const LayoutBox {
+    if (layoutBox.key == key) {
+        return layoutBox;
+    }
+    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
+        for (layoutBox.children.?.layoutBoxes) |*child| {
+            if (findLayoutBoxByKey(child, key)) |found| {
+                return found;
+            }
+        }
+    }
+    return null;
+}
+
+fn logLayoutBoxState(stage: []const u8, layoutBox: *const LayoutBox) void {
+    var childKind: []const u8 = "none";
+    var childCount: usize = 0;
+    if (layoutBox.children) |children| {
+        switch (children) {
+            .layoutBoxes => |layoutBoxes| {
+                childKind = "layoutBoxes";
+                childCount = layoutBoxes.len;
+            },
+            .glyphs => |glyphs| {
+                childKind = "glyphs";
+                childCount = glyphs.slice.len;
+            },
+        }
+    }
+
+    std.log.debug(
+        "[layout-debug] {s}: key={}, pos={any}, size={any}, min={any}, max={any}, z={}, placement={s}, dir={s}, children={s}({})",
+        .{
+            stage,
+            layoutBox.key,
+            layoutBox.position,
+            layoutBox.size,
+            layoutBox.minSize,
+            layoutBox.maxSize,
+            layoutBox.z,
+            @tagName(layoutBox.style.placement),
+            @tagName(layoutBox.style.direction),
+            childKind,
+            childCount,
+        },
+    );
 }
 
 fn shouldLogLoopIteration(iteration: usize) bool {
     return iteration <= 8 or iteration % 128 == 0;
 }
 
-fn logLayoutStage(debugEnabled: bool, stage: []const u8, layoutBox: *const LayoutBox) void {
-    if (!debugEnabled) {
+fn logLayoutStage(debugConfig: LayoutDebugConfig, stage: []const u8, layoutBox: *const LayoutBox) void {
+    if (!debugConfig.enabled) {
         return;
     }
-    std.log.debug(
-        "[layout-debug] {s}: rootKey={}, rootSize={any}, rootMin={any}, rootMax={any}",
-        .{ stage, layoutBox.key, layoutBox.size, layoutBox.minSize, layoutBox.maxSize },
-    );
+    if (debugConfig.keyFilter) |targetKey| {
+        if (findLayoutBoxByKey(layoutBox, targetKey)) |targetLayoutBox| {
+            logLayoutBoxState(stage, targetLayoutBox);
+        } else {
+            std.log.debug("[layout-debug] {s}: key={} not found", .{ stage, targetKey });
+        }
+        return;
+    }
+    logLayoutBoxState(stage, layoutBox);
 }
 
 fn growChildren(
@@ -216,9 +306,10 @@ fn growChildren(
     direction: Direction,
     remaining: *f32,
     parentKey: u64,
-    debugEnabled: bool,
+    debugConfig: LayoutDebugConfig,
 ) !void {
     const loopWatchdogLimit: usize = 65_536;
+    const shouldLog = shouldLogLayoutBox(debugConfig, parentKey);
     var toGrowGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
     defer toGrowGradually.deinit(allocator);
     for (children) |*child| {
@@ -232,13 +323,13 @@ fn growChildren(
     var iteration: usize = 0;
     while (remaining.* > 0.001 and toGrowGradually.items.len > 0) {
         iteration += 1;
-        if (debugEnabled and shouldLogLoopIteration(iteration)) {
+        if (shouldLog and shouldLogLoopIteration(iteration)) {
             std.log.debug(
                 "[layout-debug] growChildren start: key={}, dir={s}, iter={}, active={}, remaining={d:.4}",
                 .{ parentKey, @tagName(direction), iteration, toGrowGradually.items.len, remaining.* },
             );
         }
-        if (debugEnabled and iteration > loopWatchdogLimit) {
+        if (shouldLog and iteration > loopWatchdogLimit) {
             std.log.err(
                 "[layout-debug] growChildren watchdog hit: key={}, dir={s}, iter={}, remaining={d:.4}, active={}",
                 .{ parentKey, @tagName(direction), iteration, remaining.*, toGrowGradually.items.len },
@@ -264,7 +355,7 @@ fn growChildren(
             index += 1;
         }
         if (toGrowGradually.items.len == 0) {
-            if (debugEnabled) {
+            if (shouldLog) {
                 std.log.debug(
                     "[layout-debug] growChildren stop: key={}, dir={s}, iter={} (no growable children remain)",
                     .{ parentKey, @tagName(direction), iteration },
@@ -313,9 +404,10 @@ fn shrinkChildren(
     direction: Direction,
     remaining: *f32,
     parentKey: u64,
-    debugEnabled: bool,
+    debugConfig: LayoutDebugConfig,
 ) !void {
     const loopWatchdogLimit: usize = 65_536;
+    const shouldLog = shouldLogLayoutBox(debugConfig, parentKey);
     if (remaining.* >= -0.001) {
         return;
     }
@@ -332,13 +424,13 @@ fn shrinkChildren(
     var iteration: usize = 0;
     while (remaining.* < -0.001 and toShrinkGradually.items.len > 0) {
         iteration += 1;
-        if (debugEnabled and shouldLogLoopIteration(iteration)) {
+        if (shouldLog and shouldLogLoopIteration(iteration)) {
             std.log.debug(
                 "[layout-debug] shrinkChildren start: key={}, dir={s}, iter={}, active={}, remaining={d:.4}",
                 .{ parentKey, @tagName(direction), iteration, toShrinkGradually.items.len, remaining.* },
             );
         }
-        if (debugEnabled and iteration > loopWatchdogLimit) {
+        if (shouldLog and iteration > loopWatchdogLimit) {
             std.log.err(
                 "[layout-debug] shrinkChildren watchdog hit: key={}, dir={s}, iter={}, remaining={d:.4}, active={}",
                 .{ parentKey, @tagName(direction), iteration, remaining.*, toShrinkGradually.items.len },
@@ -367,7 +459,7 @@ fn shrinkChildren(
             index += 1;
         }
         if (toShrinkGradually.items.len == 0) {
-            if (debugEnabled) {
+            if (shouldLog) {
                 std.log.debug(
                     "[layout-debug] shrinkChildren stop: key={}, dir={s}, iter={} (no shrinkable children remain)",
                     .{ parentKey, @tagName(direction), iteration },
@@ -399,7 +491,7 @@ fn shrinkChildren(
             }
         }
         if (remaining.* == remainingBeforeLoop) {
-            if (debugEnabled) {
+            if (shouldLog) {
                 std.log.warn(
                     "[layout-debug] shrinkChildren stalled: key={}, dir={s}, iter={}, remaining={d:.4}, largest={d:.4}, secondLargest={d:.4}, toSubtract={d:.4}, active={}",
                     .{
@@ -423,17 +515,18 @@ fn growAndShrink(
     allocator: std.mem.Allocator,
     layoutBox: *LayoutBox,
 ) !void {
-    try growAndShrinkWithDebug(allocator, layoutBox, layoutDebugEnabled());
+    try growAndShrinkWithDebug(allocator, layoutBox, layoutDebugConfig());
 }
 
 fn growAndShrinkWithDebug(
     allocator: std.mem.Allocator,
     layoutBox: *LayoutBox,
-    debugEnabled: bool,
+    debugConfig: LayoutDebugConfig,
 ) !void {
     if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
         const children = layoutBox.children.?.layoutBoxes;
         const direction = layoutBox.style.direction;
+        const shouldLog = shouldLogLayoutBox(debugConfig, layoutBox.key);
 
         var remaining = layoutBox.getSize(direction);
         for (children) |*child| {
@@ -451,22 +544,22 @@ fn growAndShrinkWithDebug(
                 remaining -= child.getSize(direction);
             }
         }
-        if (debugEnabled) {
+        if (shouldLog) {
             std.log.debug(
                 "[layout-debug] growAndShrink begin: key={}, dir={s}, childCount={}, parentSize={any}, initialRemaining={d:.4}",
                 .{ layoutBox.key, @tagName(direction), children.len, layoutBox.size, remaining },
             );
         }
-        try growChildren(allocator, children, direction, &remaining, layoutBox.key, debugEnabled);
-        try shrinkChildren(allocator, children, direction, &remaining, layoutBox.key, debugEnabled);
-        if (debugEnabled and @abs(remaining) > 0.001) {
+        try growChildren(allocator, children, direction, &remaining, layoutBox.key, debugConfig);
+        try shrinkChildren(allocator, children, direction, &remaining, layoutBox.key, debugConfig);
+        if (shouldLog and @abs(remaining) > 0.001) {
             std.log.debug(
                 "[layout-debug] growAndShrink residual: key={}, dir={s}, remaining={d:.4}",
                 .{ layoutBox.key, @tagName(direction), remaining },
             );
         }
         for (children) |*child| {
-            try growAndShrinkWithDebug(allocator, child, debugEnabled);
+            try growAndShrinkWithDebug(allocator, child, debugConfig);
         }
     }
 }
@@ -955,23 +1048,26 @@ pub fn layout(
 ) !LayoutBox {
     const context = forbear.getContext();
     if (context.rootFrameNode) |node| {
-        const debugEnabled = layoutDebugEnabled();
+        const debugConfig = layoutDebugConfig();
         var startNs: i128 = 0;
-        if (debugEnabled) {
+        if (debugConfig.enabled) {
             startNs = std.time.nanoTimestamp();
             std.log.debug("[layout-debug] layout start: viewport={any}, dpi={any}", .{ viewportSize, dpi });
+            if (debugConfig.keyFilter) |targetKey| {
+                std.log.debug("[layout-debug] key filter active: {}", .{targetKey});
+            }
         }
 
         var creator = try LayoutCreator.init(arena);
         var layoutBox = try creator.create(node, baseStyle, 1, dpi);
-        if (debugEnabled) {
+        if (debugConfig.enabled) {
             std.log.debug("[layout-debug] created tree with {} nodes", .{countTreeSize(&layoutBox)});
         }
-        logLayoutStage(debugEnabled, "after create", &layoutBox);
+        logLayoutStage(debugConfig, "after create", &layoutBox);
 
         fitAlong(&layoutBox, .leftToRight);
         fitAlong(&layoutBox, .topToBottom);
-        logLayoutStage(debugEnabled, "after fitAlong x/y", &layoutBox);
+        logLayoutStage(debugConfig, "after fitAlong x/y", &layoutBox);
 
         if (layoutBox.style.width == .grow) {
             layoutBox.size[0] = @min(@max(viewportSize[0], layoutBox.minSize[0]), layoutBox.maxSize[0]);
@@ -979,41 +1075,50 @@ pub fn layout(
         if (layoutBox.style.height == .grow) {
             layoutBox.size[1] = @min(@max(viewportSize[1], layoutBox.minSize[1]), layoutBox.maxSize[1]);
         }
-        logLayoutStage(debugEnabled, "after root grow clamp", &layoutBox);
+        logLayoutStage(debugConfig, "after root grow clamp", &layoutBox);
 
         applyRatios(&layoutBox);
-        logLayoutStage(debugEnabled, "after applyRatios #1", &layoutBox);
+        logLayoutStage(debugConfig, "after applyRatios #1", &layoutBox);
 
-        try growAndShrinkWithDebug(arena, &layoutBox, debugEnabled);
-        logLayoutStage(debugEnabled, "after growAndShrink #1", &layoutBox);
+        try growAndShrinkWithDebug(arena, &layoutBox, debugConfig);
+        logLayoutStage(debugConfig, "after growAndShrink #1", &layoutBox);
 
         applyRatios(&layoutBox);
-        logLayoutStage(debugEnabled, "after applyRatios #2", &layoutBox);
+        logLayoutStage(debugConfig, "after applyRatios #2", &layoutBox);
 
-        try growAndShrinkWithDebug(arena, &layoutBox, debugEnabled);
-        logLayoutStage(debugEnabled, "after growAndShrink #2", &layoutBox);
+        try growAndShrinkWithDebug(arena, &layoutBox, debugConfig);
+        logLayoutStage(debugConfig, "after growAndShrink #2", &layoutBox);
 
         try wrap(arena, &layoutBox);
-        logLayoutStage(debugEnabled, "after wrap", &layoutBox);
+        logLayoutStage(debugConfig, "after wrap", &layoutBox);
 
         fitAlong(&layoutBox, .leftToRight);
         fitAlong(&layoutBox, .topToBottom);
-        logLayoutStage(debugEnabled, "after fitAlong x/y #2", &layoutBox);
+        logLayoutStage(debugConfig, "after fitAlong x/y #2", &layoutBox);
 
         applyRatios(&layoutBox);
-        logLayoutStage(debugEnabled, "after applyRatios #3", &layoutBox);
+        logLayoutStage(debugConfig, "after applyRatios #3", &layoutBox);
 
-        try growAndShrinkWithDebug(arena, &layoutBox, debugEnabled);
-        logLayoutStage(debugEnabled, "after growAndShrink #3", &layoutBox);
+        try growAndShrinkWithDebug(arena, &layoutBox, debugConfig);
+        logLayoutStage(debugConfig, "after growAndShrink #3", &layoutBox);
 
         place(&layoutBox);
+        logLayoutStage(debugConfig, "after place", &layoutBox);
         makeAbsolute(&layoutBox, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
-        if (debugEnabled) {
+        logLayoutStage(debugConfig, "after makeAbsolute", &layoutBox);
+        if (debugConfig.enabled) {
             const elapsedMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - startNs)) / 1_000_000.0;
-            std.log.debug(
-                "[layout-debug] layout end: elapsed={d:.3}ms, rootPos={any}, rootSize={any}, scroll={any}",
-                .{ elapsedMs, layoutBox.position, layoutBox.size, context.scrollPosition },
-            );
+            if (debugConfig.keyFilter != null) {
+                std.log.debug(
+                    "[layout-debug] layout end: elapsed={d:.3}ms, scroll={any}",
+                    .{ elapsedMs, context.scrollPosition },
+                );
+            } else {
+                std.log.debug(
+                    "[layout-debug] layout end: elapsed={d:.3}ms, rootPos={any}, rootSize={any}, scroll={any}",
+                    .{ elapsedMs, layoutBox.position, layoutBox.size, context.scrollPosition },
+                );
+            }
         }
         return layoutBox;
     } else {
