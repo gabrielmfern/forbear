@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  check:
-    name: Zig format check
+  format:
+    name: format
     runs-on: ubuntu-latest
 
     steps:

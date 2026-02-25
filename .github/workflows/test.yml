@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  test:
-    name: Zig tests
+  tests:
+    name: tests
     runs-on: ubuntu-latest
 
     steps:
