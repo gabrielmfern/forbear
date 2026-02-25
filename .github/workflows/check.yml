@@ -1,0 +1,22 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    name: Zig format check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Check formatting
+        run: zig fmt --check .
