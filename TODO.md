@@ -59,6 +59,7 @@ problems:
 - created a utilty for px so that it didn't have to calculate the proper value
     - should we maybe have px as the default value? I've noticed that the DPI isn't as reliable as I thought, as it can be used for scaling for example
 - you can't recognize an image by quickly scanning the code, because it only allows for a background image
+- grow parent, one fit child and one grow child, the grow doesn't behave as expected
 - names for style properties are too long and cumbersome to write and read
     - paddingBlock, paddingInline, marginBlock, marginInline, horizontalAlignment, verticalAlignment, etc
     - we could define a single property for most of them, just like in CSS, and to fill the need for shorthands define functions that allow for common usecases
