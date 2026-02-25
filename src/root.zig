@@ -1268,6 +1268,8 @@ pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !voi
                 .fit => {
                     complementedStyle.width = .{ .fixed = imageWidth };
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
+                    complementedStyle.minWidth = 0;
+                    complementedStyle.minHeight = 0;
                 },
                 .grow, .fixed => {
                     complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
