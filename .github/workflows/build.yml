@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    - main
+    branches: [main]
   pull_request:
 
 jobs:
@@ -18,6 +18,18 @@ jobs:
         uses: https://codeberg.org/mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         with:
           version: 0.15.2
+
+      - name: Install project dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            glslang-tools \
+            libvulkan-dev \
+            libwayland-bin \
+            libwayland-dev \
+            libxkbcommon-dev \
+            spirv-tools \
+            wayland-protocols
 
       - name: Run build check
         run: zig build check
