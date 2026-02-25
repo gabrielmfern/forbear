@@ -99,43 +99,43 @@ fn App() !void {
                 .direction = .leftToRight,
                 .alignment = .centerLeft,
             }))({
-                // (try forbear.element(arena, .{
-                //     .direction = .topToBottom,
-                //     .width = .grow,
-                // }))({
-                //     (try forbear.element(arena, .{
-                //         .fontWeight = 700,
-                //         .fontSize = 46,
-                //         .lineHeight = 0.75,
-                //         .margin = forbear.Margin.block(0.0).withBottom(18.0),
-                //     }))({
-                //         try forbear.text(arena, "You're the boss, why are you still fixing tech issues?");
-                //     });
-                //     (try forbear.element(arena, .{
-                //         .fontSize = 15.0,
-                //         .color = black,
-                //         .fontWeight = 500,
-                //         .margin = forbear.Margin.block(12.0).withBottom(15.0),
-                //     }))({
-                //         try forbear.text(arena, "It doesn't just annoy you. It slows you and your staff down. That's our job now.");
-                //     });
-                //     try forbear.component(arena, Button, ButtonProps{ .text = "Let us prove it*" });
-                //     (try forbear.element(arena, .{
-                //         .fontSize = 9.0,
-                //         .color = black,
-                //         .margin = forbear.Margin.block(10.5).withBottom(0.0),
-                //     }))({
-                //         try forbear.text(
-                //             arena,
-                //             "* You have to promise us that you'll dump all your problems on us so that we can show you what we're made of.",
-                //         );
-                //     });
-                // });
+                (try forbear.element(arena, .{
+                    .direction = .topToBottom,
+                }))({
+                    (try forbear.element(arena, .{
+                        .fontWeight = 700,
+                        .fontSize = 46,
+                        .lineHeight = 0.75,
+                        .margin = forbear.Margin.block(0.0).withBottom(18.0),
+                    }))({
+                        try forbear.text(arena, "You're the boss, why are you still fixing tech issues?");
+                    });
+                    (try forbear.element(arena, .{
+                        .fontSize = 15.0,
+                        .color = black,
+                        .fontWeight = 500,
+                        .margin = forbear.Margin.block(12.0).withBottom(15.0),
+                    }))({
+                        try forbear.text(arena, "It doesn't just annoy you. It slows you and your staff down. That's our job now.");
+                    });
+                    try forbear.component(arena, Button, ButtonProps{ .text = "Let us prove it*" });
+                    (try forbear.element(arena, .{
+                        .fontSize = 9.0,
+                        .color = black,
+                        .margin = forbear.Margin.block(10.5).withBottom(0.0),
+                    }))({
+                        try forbear.text(
+                            arena,
+                            "* You have to promise us that you'll dump all your problems on us so that we can show you what we're made of.",
+                        );
+                    });
+                });
                 try forbear.image(arena, .{
                     .width = .grow,
-                    // .maxWidth = 369,
+                    .maxWidth = 369,
                     .blendMode = .multiply,
                 }, try forbear.useImage("uhoh-hero"));
+                std.log.debug("{}", .{forbear.getContext().previousPushedNode.?.key});
             });
         });
 
