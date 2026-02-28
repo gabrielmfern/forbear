@@ -221,9 +221,15 @@ pub const BlendMode = enum(u32) {
     multiply = 1,
 };
 
+pub const Filter = enum(u32) {
+    default = 0,
+    grayscale = 1,
+};
+
 pub const Style = struct {
     background: Background,
     blendMode: BlendMode,
+    filter: Filter,
 
     color: Vec4,
     borderRadius: f32,
@@ -282,6 +288,7 @@ pub const BaseStyle = struct {
     lineHeight: f32,
     textWrapping: TextWrapping,
     blendMode: BlendMode,
+    filter: Filter = .default,
     cursor: Cursor,
 
     pub fn from(style: Style) @This() {
@@ -293,6 +300,7 @@ pub const BaseStyle = struct {
             .lineHeight = style.lineHeight,
             .textWrapping = style.textWrapping,
             .blendMode = style.blendMode,
+            .filter = style.filter,
             .cursor = style.cursor,
         };
     }
@@ -315,6 +323,7 @@ pub const Placement = union(enum) {
 pub const IncompleteStyle = struct {
     background: ?Background = null,
     blendMode: ?BlendMode = null,
+    filter: ?Filter = null,
 
     color: ?Vec4 = null,
     borderRadius: ?f32 = null,
@@ -352,6 +361,7 @@ pub const IncompleteStyle = struct {
         return Style{
             .background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } },
             .blendMode = self.blendMode orelse base.blendMode,
+            .filter = self.filter orelse base.filter,
 
             .color = self.color orelse base.color,
 

@@ -1657,6 +1657,7 @@ const ElementRenderingData = extern struct {
     borderSize: Vec4,
     imageIndex: i32,
     blendMode: u32,
+    filterType: u32,
     modelViewProjectionMatrix: zmath.Mat,
     size: [2]f32,
 };
@@ -3748,6 +3749,7 @@ pub const Renderer = struct {
                 },
                 .imageIndex = textureIndex,
                 .blendMode = @intCast(@intFromEnum(layoutBox.style.blendMode)),
+                .filterType = @intCast(@intFromEnum(layoutBox.style.filter)),
             };
 
             if (layoutBox.style.shadow) |shadow| {
