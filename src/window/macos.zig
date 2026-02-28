@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const c = @import("../c.zig").c;
+pub const Cursor = @import("cursor.zig").Cursor;
 
 extern fn objc_autoreleasePoolPush() ?*anyopaque;
 extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;
@@ -456,12 +457,6 @@ pub fn nativeMetalLayer(self: *const Self) ?*anyopaque {
     return @ptrCast(self.metal_layer);
 }
 
-const Cursor = enum {
-    default,
-    text,
-    pointer,
-};
-
 pub fn isHoldingShift(_: *const Self) bool {
     const NSEvent = getClass("NSEvent");
     const modifierFlags = msgSend(*const fn (c.Class, c.SEL) callconv(.c) NSUInteger);
@@ -471,9 +466,21 @@ pub fn isHoldingShift(_: *const Self) bool {
 
 pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
     _ = self;
-    _ = cursor;
     _ = serial;
-    // TODO: map to NSCursor.
+
+    const NSCursor = getClass("NSCursor");
+    const getCursor = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
+    const set = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
+
+    const nsCursor = switch (cursor) {
+        .default => getCursor(NSCursor, sel("arrowCursor")),
+        .text => getCursor(NSCursor, sel("IBeamCursor")),
+        .pointer => getCursor(NSCursor, sel("pointingHandCursor")),
+    };
+
+    if (nsCursor != null) {
+        set(nsCursor, sel("set"));
+    }
 }
 
 /// Returns the target frame time in nanoseconds based on the display's refresh rate.
