@@ -1204,6 +1204,7 @@ fn testWrapConfiguration(configuration: struct {
             .lineHeight = 1.0,
             .textWrapping = configuration.mode,
             .blendMode = .normal,
+            .cursor = .default,
         }),
     };
 
@@ -1224,6 +1225,7 @@ const defaultBaseStyle = BaseStyle{
     .lineHeight = 1.0,
     .textWrapping = .none,
     .blendMode = .normal,
+    .cursor = .default,
 };
 
 const TestChild = struct {

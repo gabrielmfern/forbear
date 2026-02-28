@@ -282,6 +282,7 @@ pub const BaseStyle = struct {
     lineHeight: f32,
     textWrapping: TextWrapping,
     blendMode: BlendMode,
+    cursor: Cursor,
 
     pub fn from(style: Style) @This() {
         return @This(){
@@ -292,6 +293,7 @@ pub const BaseStyle = struct {
             .lineHeight = style.lineHeight,
             .textWrapping = style.textWrapping,
             .blendMode = style.blendMode,
+            .cursor = style.cursor,
         };
     }
 };
@@ -364,7 +366,7 @@ pub const IncompleteStyle = struct {
             .fontSize = self.fontSize orelse base.fontSize,
             .lineHeight = self.lineHeight orelse base.lineHeight,
             .textWrapping = self.textWrapping orelse base.textWrapping,
-            .cursor = self.cursor orelse .default,
+            .cursor = self.cursor orelse base.cursor,
 
             .placement = self.placement,
             .zIndex = self.zIndex,
@@ -407,3 +409,18 @@ pub const Element = struct {
     style: IncompleteStyle,
     children: std.ArrayList(Node) = .empty,
 };
+
+test "IncompleteStyle.completeWith inherits cursor from base style" {
+    const style = (IncompleteStyle{}).completeWith(.{
+        .font = undefined,
+        .color = .{ 0.0, 0.0, 0.0, 1.0 },
+        .fontSize = 16.0,
+        .fontWeight = 400,
+        .lineHeight = 1.0,
+        .textWrapping = .none,
+        .blendMode = .normal,
+        .cursor = .pointer,
+    });
+
+    try std.testing.expectEqual(Cursor.pointer, style.cursor);
+}
