@@ -65,6 +65,7 @@ fn renderingMain(
                 .font = try forbear.useFont("Inter"),
                 .color = .{ 1.0, 1.0, 1.0, 1.0 },
                 .textWrapping = .character,
+                .textStyle = .normal,
                 .fontSize = 32,
                 .fontWeight = 400,
                 .lineHeight = 1.0,

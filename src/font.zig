@@ -797,6 +797,14 @@ pub fn lineHeight(self: @This()) f32 {
     return self.ascent() - self.descent();
 }
 
+pub fn underlinePosition(self: @This()) f32 {
+    return @floatFromInt(self.handle.*.underline_position);
+}
+
+pub fn underlineThickness(self: @This()) f32 {
+    return @floatFromInt(self.handle.*.underline_thickness);
+}
+
 /// Weight can go from 100 to 900 like CSS, but it can be higher or lower. Note
 /// that the weight is clipped by the maximum and minimum values
 pub fn setWeight(self: @This(), weight: c.FT_UInt, allocator: std.mem.Allocator) !void {

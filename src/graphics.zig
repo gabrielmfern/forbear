@@ -8,6 +8,7 @@ const c = @import("c.zig").c;
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const LayoutBox = layouting.LayoutBox;
+const LayoutGlyph = layouting.LayoutGlyph;
 const countTreeSize = layouting.countTreeSize;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
 const Window = @import("window/root.zig").Window;
@@ -39,6 +40,36 @@ fn srgbToLinearColor(color: Vec4) Vec4 {
         srgbToLinear(color[2]),
         color[3], // Alpha is already linear
     };
+}
+
+fn addToLayerInterval(intervals: []?LayerInterval, z: u16, index: usize) void {
+    if (intervals[z - 1]) |*interval| {
+        std.debug.assert(interval.end + 1 == index);
+        interval.end = index;
+    } else {
+        intervals[z - 1] = LayerInterval{
+            .start = index,
+            .end = index,
+        };
+    }
+}
+
+fn countGlyphLines(glyphs: []const LayoutGlyph) usize {
+    if (glyphs.len == 0) {
+        return 0;
+    }
+
+    var lineCount: usize = 1;
+    var currentLineAnchorY = glyphs[0].position[1] - glyphs[0].offset[1];
+    for (glyphs[1..]) |glyph| {
+        const anchorY = glyph.position[1] - glyph.offset[1];
+        if (@abs(anchorY - currentLineAnchorY) > 0.001) {
+            lineCount += 1;
+            currentLineAnchorY = anchorY;
+        }
+    }
+
+    return lineCount;
 }
 
 pub const VulkanError = error{
@@ -3619,13 +3650,25 @@ pub const Renderer = struct {
         // glyphs and then allocate enough memory on the shader buffers ---
         var totalShadowCount: usize = 0;
         var totalGlyphCount: usize = 0;
-        const totalElementCount: usize = orderedLayoutBoxes.len;
+        var totalElementCount: usize = orderedLayoutBoxes.len;
+        var totalBlendAddElementCount: usize = 0;
         for (orderedLayoutBoxes) |layoutBox| {
+            if (layoutBox.style.blendMode == .normal) {
+                totalBlendAddElementCount += 1;
+            }
             if (layoutBox.style.shadow != null) {
                 totalShadowCount += 1;
             }
             if (layoutBox.children != null and layoutBox.children.? == .glyphs) {
-                totalGlyphCount += layoutBox.children.?.glyphs.slice.len;
+                const glyphs = layoutBox.children.?.glyphs.slice;
+                totalGlyphCount += glyphs.len;
+                if (layoutBox.style.textStyle == .underline and glyphs.len > 0) {
+                    const underlineCount = countGlyphLines(glyphs);
+                    totalElementCount += underlineCount;
+                    if (layoutBox.style.blendMode == .normal) {
+                        totalBlendAddElementCount += underlineCount;
+                    }
+                }
             }
         }
 
@@ -3658,10 +3701,10 @@ pub const Renderer = struct {
             orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z
         else
             0;
-        var shadowIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        var blendAddElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        var blendMultiplyElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        var textIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        const shadowIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        const blendAddElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        const blendMultiplyElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        const textIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
         for (shadowIntervals) |*interval| interval.* = null;
         for (blendAddElementIntervals) |*interval| interval.* = null;
         for (blendMultiplyElementIntervals) |*interval| interval.* = null;
@@ -3676,12 +3719,6 @@ pub const Renderer = struct {
 
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
-        var totalBlendAddElementCount: usize = 0;
-        for (orderedLayoutBoxes) |layoutBox| {
-            if (layoutBox.style.blendMode == .normal) {
-                totalBlendAddElementCount += 1;
-            }
-        }
         var blendAddElementIndex: usize = 0;
         var blendMultiplyElementIndex: usize = totalBlendAddElementCount;
 
@@ -3690,33 +3727,13 @@ pub const Renderer = struct {
                 .normal => blk: {
                     const idx = blendAddElementIndex;
                     blendAddElementIndex += 1;
-
-                    if (blendAddElementIntervals[layoutBox.z - 1]) |*interval| {
-                        std.debug.assert(interval.end + 1 == idx);
-                        interval.end = idx;
-                    } else {
-                        blendAddElementIntervals[layoutBox.z - 1] = LayerInterval{
-                            .start = idx,
-                            .end = idx,
-                        };
-                    }
-
+                    addToLayerInterval(blendAddElementIntervals, layoutBox.z, idx);
                     break :blk idx;
                 },
                 .multiply => blk: {
                     const idx = blendMultiplyElementIndex;
                     blendMultiplyElementIndex += 1;
-
-                    if (blendMultiplyElementIntervals[layoutBox.z - 1]) |*interval| {
-                        std.debug.assert(interval.end + 1 == idx);
-                        interval.end = idx;
-                    } else {
-                        blendMultiplyElementIntervals[layoutBox.z - 1] = LayerInterval{
-                            .start = idx,
-                            .end = idx,
-                        };
-                    }
-
+                    addToLayerInterval(blendMultiplyElementIntervals, layoutBox.z, idx);
                     break :blk idx;
                 },
             };
@@ -3751,15 +3768,7 @@ pub const Renderer = struct {
             };
 
             if (layoutBox.style.shadow) |shadow| {
-                if (shadowIntervals[layoutBox.z - 1]) |*interval| {
-                    std.debug.assert(interval.end + 1 == shadowIndex);
-                    interval.end = shadowIndex;
-                } else {
-                    shadowIntervals[layoutBox.z - 1] = LayerInterval{
-                        .start = shadowIndex,
-                        .end = shadowIndex,
-                    };
-                }
+                addToLayerInterval(shadowIntervals, layoutBox.z, shadowIndex);
                 const padding = Vec2{
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.x[1],
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.y[0] + shadow.offset.y[1],
@@ -3812,6 +3821,113 @@ pub const Renderer = struct {
                 const linearColor = srgbToLinearColor(layoutBox.style.color);
                 const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
                 const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[0];
+
+                if (layoutBox.style.textStyle == .underline and glyphCount > 0) {
+                    var underlineThickness = (layoutBox.style.font.underlineThickness() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[0];
+                    if (underlineThickness <= 0.0) {
+                        underlineThickness = @max(layoutBox.style.fontSize * resolutionMultiplier[0] * 0.05, 1.0);
+                    }
+                    const underlinePosition = (layoutBox.style.font.underlinePosition() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[0];
+
+                    var lineAnchorY = glyphs[0].position[1] - glyphs[0].offset[1];
+                    var lineStartX = glyphs[0].position[0] - glyphs[0].offset[0];
+                    var lineEndX = lineStartX + glyphs[0].advance[0];
+
+                    for (glyphs[1..]) |glyph| {
+                        const glyphAnchorY = glyph.position[1] - glyph.offset[1];
+                        const glyphStartX = glyph.position[0] - glyph.offset[0];
+                        const glyphEndX = glyphStartX + glyph.advance[0];
+                        if (@abs(glyphAnchorY - lineAnchorY) > 0.001) {
+                            const lineWidth = lineEndX - lineStartX;
+                            if (lineWidth > 0.001) {
+                                const underlineCenterY = (lineAnchorY + pixelAscent) - underlinePosition;
+                                const underlinePositionVec = Vec2{
+                                    layoutBox.position[0] + lineStartX,
+                                    layoutBox.position[1] + underlineCenterY - (underlineThickness / 2.0),
+                                };
+                                const underlineIndex = switch (layoutBox.style.blendMode) {
+                                    .normal => blk: {
+                                        const idx = blendAddElementIndex;
+                                        blendAddElementIndex += 1;
+                                        addToLayerInterval(blendAddElementIntervals, layoutBox.z, idx);
+                                        break :blk idx;
+                                    },
+                                    .multiply => blk: {
+                                        const idx = blendMultiplyElementIndex;
+                                        blendMultiplyElementIndex += 1;
+                                        addToLayerInterval(blendMultiplyElementIntervals, layoutBox.z, idx);
+                                        break :blk idx;
+                                    },
+                                };
+
+                                self.elementsPipeline.elementsShaderData[frameIndex][underlineIndex] = ElementRenderingData{
+                                    .modelViewProjectionMatrix = zmath.mul(
+                                        zmath.mul(
+                                            zmath.scaling(lineWidth, underlineThickness, 1.0),
+                                            zmath.translation(underlinePositionVec[0], underlinePositionVec[1], 0.0),
+                                        ),
+                                        projectionMatrix,
+                                    ),
+                                    .backgroundColor = linearColor,
+                                    .size = .{ lineWidth, underlineThickness },
+                                    .borderRadius = 0.0,
+                                    .borderColor = .{ 0.0, 0.0, 0.0, 0.0 },
+                                    .borderSize = .{ 0.0, 0.0, 0.0, 0.0 },
+                                    .imageIndex = -1,
+                                    .blendMode = @intCast(@intFromEnum(layoutBox.style.blendMode)),
+                                };
+                            }
+
+                            lineAnchorY = glyphAnchorY;
+                            lineStartX = glyphStartX;
+                            lineEndX = glyphEndX;
+                            continue;
+                        }
+
+                        lineStartX = @min(lineStartX, glyphStartX);
+                        lineEndX = @max(lineEndX, glyphEndX);
+                    }
+
+                    const lineWidth = lineEndX - lineStartX;
+                    if (lineWidth > 0.001) {
+                        const underlineCenterY = (lineAnchorY + pixelAscent) - underlinePosition;
+                        const underlinePositionVec = Vec2{
+                            layoutBox.position[0] + lineStartX,
+                            layoutBox.position[1] + underlineCenterY - (underlineThickness / 2.0),
+                        };
+                        const underlineIndex = switch (layoutBox.style.blendMode) {
+                            .normal => blk: {
+                                const idx = blendAddElementIndex;
+                                blendAddElementIndex += 1;
+                                addToLayerInterval(blendAddElementIntervals, layoutBox.z, idx);
+                                break :blk idx;
+                            },
+                            .multiply => blk: {
+                                const idx = blendMultiplyElementIndex;
+                                blendMultiplyElementIndex += 1;
+                                addToLayerInterval(blendMultiplyElementIntervals, layoutBox.z, idx);
+                                break :blk idx;
+                            },
+                        };
+
+                        self.elementsPipeline.elementsShaderData[frameIndex][underlineIndex] = ElementRenderingData{
+                            .modelViewProjectionMatrix = zmath.mul(
+                                zmath.mul(
+                                    zmath.scaling(lineWidth, underlineThickness, 1.0),
+                                    zmath.translation(underlinePositionVec[0], underlinePositionVec[1], 0.0),
+                                ),
+                                projectionMatrix,
+                            ),
+                            .backgroundColor = linearColor,
+                            .size = .{ lineWidth, underlineThickness },
+                            .borderRadius = 0.0,
+                            .borderColor = .{ 0.0, 0.0, 0.0, 0.0 },
+                            .borderSize = .{ 0.0, 0.0, 0.0, 0.0 },
+                            .imageIndex = -1,
+                            .blendMode = @intCast(@intFromEnum(layoutBox.style.blendMode)),
+                        };
+                    }
+                }
 
                 // Outer lookup: once per layout box (per font/size/weight/dpi combo)
                 const glyphPageKey = TextPipeline.GlyphPageKey{

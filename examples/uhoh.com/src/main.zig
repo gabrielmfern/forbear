@@ -80,6 +80,7 @@ fn App() !void {
                 .fontWeight = 500,
                 .fontSize = 10.5,
                 .margin = forbear.Margin.right(13.5),
+                .textStyle = .underline,
             }))({
                 try forbear.text(arena, "Pricing");
             });
@@ -892,6 +893,7 @@ fn renderingMain(
                 .color = .{ 0.0, 0.0, 0.0, 1.0 },
                 .fontSize = 16,
                 .textWrapping = .word,
+                .textStyle = .normal,
                 .fontWeight = 400,
                 .cursor = .default,
                 .lineHeight = 1.0,

@@ -108,6 +108,11 @@ pub const TextWrapping = enum {
     none,
 };
 
+pub const TextStyle = enum {
+    normal,
+    underline,
+};
+
 pub const Padding = struct {
     x: Vec2,
     y: Vec2,
@@ -240,6 +245,7 @@ pub const Style = struct {
     lineHeight: f32,
     textWrapping: TextWrapping,
     cursor: Cursor,
+    textStyle: TextStyle,
 
     placement: Placement,
     zIndex: ?u16 = null,
@@ -281,6 +287,7 @@ pub const BaseStyle = struct {
     fontWeight: u32,
     lineHeight: f32,
     textWrapping: TextWrapping,
+    textStyle: TextStyle,
     blendMode: BlendMode,
     cursor: Cursor,
 
@@ -292,6 +299,7 @@ pub const BaseStyle = struct {
             .fontWeight = style.fontWeight,
             .lineHeight = style.lineHeight,
             .textWrapping = style.textWrapping,
+            .textStyle = style.textStyle,
             .blendMode = style.blendMode,
             .cursor = style.cursor,
         };
@@ -329,6 +337,7 @@ pub const IncompleteStyle = struct {
     lineHeight: ?f32 = null,
     textWrapping: ?TextWrapping = null,
     cursor: ?Cursor = null,
+    textStyle: ?TextStyle = null,
 
     placement: Placement = .standard,
     zIndex: ?u16 = null,
@@ -367,6 +376,7 @@ pub const IncompleteStyle = struct {
             .lineHeight = self.lineHeight orelse base.lineHeight,
             .textWrapping = self.textWrapping orelse base.textWrapping,
             .cursor = self.cursor orelse base.cursor,
+            .textStyle = self.textStyle orelse base.textStyle,
 
             .placement = self.placement,
             .zIndex = self.zIndex,
