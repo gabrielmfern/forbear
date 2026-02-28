@@ -42,34 +42,60 @@ fn srgbToLinearColor(color: Vec4) Vec4 {
     };
 }
 
+const underlineWidthEpsilon: f32 = 0.001;
+
 fn addToLayerInterval(intervals: []?LayerInterval, z: u16, index: usize) void {
-    if (intervals[z - 1]) |*interval| {
-        std.debug.assert(interval.end + 1 == index);
-        interval.end = index;
+    addToLayerIntervalRange(intervals, z, index, index);
+}
+
+fn addToLayerIntervalRange(intervals: []?LayerInterval, z: u16, startIndex: usize, endIndex: usize) void {
+    const zIndex: usize = @intCast(z);
+    std.debug.assert(zIndex < intervals.len);
+    if (intervals[zIndex]) |*interval| {
+        std.debug.assert(interval.end + 1 == startIndex);
+        interval.end = endIndex;
     } else {
-        intervals[z - 1] = LayerInterval{
-            .start = index,
-            .end = index,
+        intervals[zIndex] = LayerInterval{
+            .start = startIndex,
+            .end = endIndex,
         };
     }
 }
 
-fn countGlyphLines(glyphs: []const LayoutGlyph) usize {
+fn countUnderlineSegments(glyphs: []const LayoutGlyph) usize {
     if (glyphs.len == 0) {
         return 0;
     }
 
-    var lineCount: usize = 1;
+    var segmentCount: usize = 0;
     var currentLineAnchorY = glyphs[0].position[1] - glyphs[0].offset[1];
+    var lineStartX = glyphs[0].position[0] - glyphs[0].offset[0];
+    var lineEndX = lineStartX + glyphs[0].advance[0];
+
     for (glyphs[1..]) |glyph| {
         const anchorY = glyph.position[1] - glyph.offset[1];
-        if (@abs(anchorY - currentLineAnchorY) > 0.001) {
-            lineCount += 1;
+        const glyphStartX = glyph.position[0] - glyph.offset[0];
+        const glyphEndX = glyphStartX + glyph.advance[0];
+
+        if (@abs(anchorY - currentLineAnchorY) > underlineWidthEpsilon) {
+            if (lineEndX - lineStartX > underlineWidthEpsilon) {
+                segmentCount += 1;
+            }
             currentLineAnchorY = anchorY;
+            lineStartX = glyphStartX;
+            lineEndX = glyphEndX;
+            continue;
         }
+
+        lineStartX = @min(lineStartX, glyphStartX);
+        lineEndX = @max(lineEndX, glyphEndX);
     }
 
-    return lineCount;
+    if (lineEndX - lineStartX > underlineWidthEpsilon) {
+        segmentCount += 1;
+    }
+
+    return segmentCount;
 }
 
 pub const VulkanError = error{
@@ -3663,7 +3689,7 @@ pub const Renderer = struct {
                 const glyphs = layoutBox.children.?.glyphs.slice;
                 totalGlyphCount += glyphs.len;
                 if (layoutBox.style.textStyle == .underline and glyphs.len > 0) {
-                    const underlineCount = countGlyphLines(glyphs);
+                    const underlineCount = countUnderlineSegments(glyphs);
                     totalElementCount += underlineCount;
                     if (layoutBox.style.blendMode == .normal) {
                         totalBlendAddElementCount += underlineCount;
@@ -3697,14 +3723,14 @@ pub const Renderer = struct {
             );
         }
 
-        const maxZ = if (orderedLayoutBoxes.len > 0)
-            orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z
+        const maxZ: usize = if (orderedLayoutBoxes.len > 0)
+            @intCast(orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z)
         else
             0;
-        const shadowIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        const blendAddElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        const blendMultiplyElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        const textIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        const shadowIntervals = try arena.alloc(?LayerInterval, maxZ + 1);
+        const blendAddElementIntervals = try arena.alloc(?LayerInterval, maxZ + 1);
+        const blendMultiplyElementIntervals = try arena.alloc(?LayerInterval, maxZ + 1);
+        const textIntervals = try arena.alloc(?LayerInterval, maxZ + 1);
         for (shadowIntervals) |*interval| interval.* = null;
         for (blendAddElementIntervals) |*interval| interval.* = null;
         for (blendMultiplyElementIntervals) |*interval| interval.* = null;
@@ -3807,27 +3833,19 @@ pub const Renderer = struct {
                 if (glyphCount > 0) {
                     const startIdx = glyphIndex;
                     const endIdx = glyphIndex + glyphCount - 1;
-                    if (textIntervals[layoutBox.z - 1]) |*interval| {
-                        std.debug.assert(interval.end + 1 == startIdx);
-                        interval.end = endIdx;
-                    } else {
-                        textIntervals[layoutBox.z - 1] = LayerInterval{
-                            .start = startIdx,
-                            .end = endIdx,
-                        };
-                    }
+                    addToLayerIntervalRange(textIntervals, layoutBox.z, startIdx, endIdx);
                 }
 
                 const linearColor = srgbToLinearColor(layoutBox.style.color);
                 const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
-                const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[0];
+                const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[1];
 
                 if (layoutBox.style.textStyle == .underline and glyphCount > 0) {
-                    var underlineThickness = (layoutBox.style.font.underlineThickness() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[0];
+                    var underlineThickness = (layoutBox.style.font.underlineThickness() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[1];
                     if (underlineThickness <= 0.0) {
-                        underlineThickness = @max(layoutBox.style.fontSize * resolutionMultiplier[0] * 0.05, 1.0);
+                        underlineThickness = @max(layoutBox.style.fontSize * resolutionMultiplier[1] * 0.05, 1.0);
                     }
-                    const underlinePosition = (layoutBox.style.font.underlinePosition() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[0];
+                    const underlinePosition = (layoutBox.style.font.underlinePosition() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[1];
 
                     var lineAnchorY = glyphs[0].position[1] - glyphs[0].offset[1];
                     var lineStartX = glyphs[0].position[0] - glyphs[0].offset[0];
@@ -3837,9 +3855,9 @@ pub const Renderer = struct {
                         const glyphAnchorY = glyph.position[1] - glyph.offset[1];
                         const glyphStartX = glyph.position[0] - glyph.offset[0];
                         const glyphEndX = glyphStartX + glyph.advance[0];
-                        if (@abs(glyphAnchorY - lineAnchorY) > 0.001) {
+                        if (@abs(glyphAnchorY - lineAnchorY) > underlineWidthEpsilon) {
                             const lineWidth = lineEndX - lineStartX;
-                            if (lineWidth > 0.001) {
+                            if (lineWidth > underlineWidthEpsilon) {
                                 const underlineCenterY = (lineAnchorY + pixelAscent) - underlinePosition;
                                 const underlinePositionVec = Vec2{
                                     layoutBox.position[0] + lineStartX,
@@ -3889,7 +3907,7 @@ pub const Renderer = struct {
                     }
 
                     const lineWidth = lineEndX - lineStartX;
-                    if (lineWidth > 0.001) {
+                    if (lineWidth > underlineWidthEpsilon) {
                         const underlineCenterY = (lineAnchorY + pixelAscent) - underlinePosition;
                         const underlinePositionVec = Vec2{
                             layoutBox.position[0] + lineStartX,
