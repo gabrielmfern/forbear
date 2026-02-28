@@ -45,7 +45,6 @@ missing things for the entire uhoh.com website:
     - is having lots of them bad? I understand having no type-safety though
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
-- [ ] gradients
 - [ ] linear gradient support
 - [ ] component children slotting
 - [ ] support for underlined text
