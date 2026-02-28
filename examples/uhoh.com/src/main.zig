@@ -276,17 +276,16 @@ fn App() !void {
             }))({
                 (try forbear.element(arena, .{
                     .fontWeight = 700,
-                    .fontSize = 22.5,
-                    .margin = forbear.Margin.block(0.0).withBottom(15.0),
+                    .fontSize = 30,
+                    .margin = forbear.Margin.top(15.0).withBottom(18.75),
                 }))({
                     try forbear.text(arena, "Don't take our word for it.");
                 });
                 for (testimonials) |testimonial| {
                     (try forbear.element(arena, .{
                         .width = .grow,
-                        .background = .{ .color = theme.Colors.card },
                         .borderRadius = 12.0,
-                        .borderColor = theme.Colors.border,
+                        .borderColor = black,
                         .borderWidth = .all(0.75),
                         .padding = .all(13.5),
                         .margin = forbear.Margin.block(0.0).withBottom(12.0),
