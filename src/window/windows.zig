@@ -1,6 +1,6 @@
 const std = @import("std");
 const win32 = @import("../windows/win32.zig");
-pub const Cursor = @import("cursor.zig").Cursor;
+const Cursor = @import("root.zig").Cursor;
 
 handle: win32.HWND,
 hInstance: win32.HINSTANCE,

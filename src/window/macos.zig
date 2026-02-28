@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const c = @import("../c.zig").c;
-pub const Cursor = @import("cursor.zig").Cursor;
+const Cursor = @import("root.zig").Cursor;
 
 extern fn objc_autoreleasePoolPush() ?*anyopaque;
 extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;

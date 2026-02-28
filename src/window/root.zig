@@ -40,7 +40,11 @@
 //! So making this cross platform, is still quite easy.
 const builtin = @import("builtin");
 
-pub const Cursor = @import("cursor.zig").Cursor;
+pub const Cursor = enum {
+    default,
+    text,
+    pointer,
+};
 
 pub const Window = switch (builtin.os.tag) {
     .linux => @import("linux.zig"),

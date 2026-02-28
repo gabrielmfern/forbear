@@ -4,7 +4,7 @@ const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
 const LayoutBox = @import("layouting.zig").LayoutBox;
-const Cursor = @import("window/cursor.zig").Cursor;
+const Cursor = @import("window/root.zig").Cursor;
 
 const Vec4 = @Vector(4, f32);
 const Vec2 = @Vector(2, f32);

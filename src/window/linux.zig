@@ -3,7 +3,7 @@ const posix = std.posix;
 const os = std.os;
 
 const c = @import("../c.zig").c;
-pub const Cursor = @import("cursor.zig").Cursor;
+const Cursor = @import("root.zig").Cursor;
 
 const Self = @This();
 
