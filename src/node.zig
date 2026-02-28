@@ -4,6 +4,7 @@ const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
 const LayoutBox = @import("layouting.zig").LayoutBox;
+const Cursor = @import("window/root.zig").Cursor;
 
 const Vec4 = @Vector(4, f32);
 const Vec2 = @Vector(2, f32);
@@ -238,6 +239,7 @@ pub const Style = struct {
     fontSize: f32,
     lineHeight: f32,
     textWrapping: TextWrapping,
+    cursor: Cursor,
 
     placement: Placement,
     zIndex: ?u16 = null,
@@ -280,6 +282,7 @@ pub const BaseStyle = struct {
     lineHeight: f32,
     textWrapping: TextWrapping,
     blendMode: BlendMode,
+    cursor: Cursor,
 
     pub fn from(style: Style) @This() {
         return @This(){
@@ -290,6 +293,7 @@ pub const BaseStyle = struct {
             .lineHeight = style.lineHeight,
             .textWrapping = style.textWrapping,
             .blendMode = style.blendMode,
+            .cursor = style.cursor,
         };
     }
 };
@@ -324,6 +328,7 @@ pub const IncompleteStyle = struct {
     fontSize: ?f32 = null,
     lineHeight: ?f32 = null,
     textWrapping: ?TextWrapping = null,
+    cursor: ?Cursor = null,
 
     placement: Placement = .standard,
     zIndex: ?u16 = null,
@@ -361,6 +366,7 @@ pub const IncompleteStyle = struct {
             .fontSize = self.fontSize orelse base.fontSize,
             .lineHeight = self.lineHeight orelse base.lineHeight,
             .textWrapping = self.textWrapping orelse base.textWrapping,
+            .cursor = self.cursor orelse base.cursor,
 
             .placement = self.placement,
             .zIndex = self.zIndex,
