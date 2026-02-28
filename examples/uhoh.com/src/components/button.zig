@@ -16,6 +16,7 @@ pub fn Button(props: ButtonProps) !void {
             .borderWidth = forbear.BorderWidth.all(1.5),
             .background = .{ .color = .{ 1.0, 1.0, 1.0, 1.0 } },
             .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
+            .cursor = .pointer,
             .fontSize = switch (props.sizing) {
                 .medium => 12,
                 .large => 20,

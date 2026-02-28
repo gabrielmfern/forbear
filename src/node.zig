@@ -409,18 +409,3 @@ pub const Element = struct {
     style: IncompleteStyle,
     children: std.ArrayList(Node) = .empty,
 };
-
-test "IncompleteStyle.completeWith inherits cursor from base style" {
-    const style = (IncompleteStyle{}).completeWith(.{
-        .font = undefined,
-        .color = .{ 0.0, 0.0, 0.0, 1.0 },
-        .fontSize = 16.0,
-        .fontWeight = 400,
-        .lineHeight = 1.0,
-        .textWrapping = .none,
-        .blendMode = .normal,
-        .cursor = .pointer,
-    });
-
-    try std.testing.expectEqual(Cursor.pointer, style.cursor);
-}

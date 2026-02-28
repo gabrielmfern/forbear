@@ -878,12 +878,18 @@ const LayoutCreator = struct {
         const resolutionMultiplier = dpi / @as(Vec2, @splat(72));
         var style = switch (node.content) {
             .element => |element| element.style.completeWith(baseStyle),
-            .text => (IncompleteStyle{
-                .alignment = if (self.parent) |parent| .{
-                    .x = parent.style.alignment.x,
-                    .y = .start,
-                } else null,
-            }).completeWith(baseStyle),
+            .text => blk: {
+                break :blk (IncompleteStyle{
+                    .cursor = if (baseStyle.cursor == .default)
+                        .text
+                    else
+                        baseStyle.cursor,
+                    .alignment = if (self.parent) |parent| .{
+                        .x = parent.style.alignment.x,
+                        .y = .start,
+                    } else null,
+                }).completeWith(baseStyle);
+            },
         };
         style.borderWidth.x *= @splat(resolutionMultiplier[0]);
         style.borderWidth.y *= @splat(resolutionMultiplier[1]);
