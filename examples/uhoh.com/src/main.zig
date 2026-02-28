@@ -65,6 +65,7 @@ fn App() !void {
         (try forbear.element(arena, .{
             .width = .grow,
             .maxWidth = 810.0,
+            .padding = .block(6.0),
             .alignment = .center,
         }))({
             try forbear.image(arena, .{
@@ -82,9 +83,8 @@ fn App() !void {
             }))({
                 try forbear.text(arena, "Pricing");
             });
-            // TODO: responsive hamburger nav for smaller widths.
             try forbear.component(arena, Button, ButtonProps{
-                .text = "Get a free trial",
+                .text = "Try it risk-free",
             });
         });
 
@@ -187,7 +187,10 @@ fn App() !void {
                 .blendMode = .multiply,
                 .margin = forbear.Margin.inLine(0.0).withRight(24.0),
             }, try forbear.useImage("uhoh-problem"));
-            (try forbear.element(arena, .{ .direction = .topToBottom }))({
+            (try forbear.element(arena, .{
+                .direction = .topToBottom,
+                .width = .grow,
+            }))({
                 (try forbear.element(arena, .{
                     .fontWeight = 600,
                     .fontSize = 10.5,
@@ -203,16 +206,19 @@ fn App() !void {
                     try forbear.text(arena, "But your day-to-day has some of this BS in it:");
                 });
 
-                for (issues) |issue| {
+                for (issues, 0..) |issue, i| {
                     (try forbear.element(arena, .{
                         .direction = .leftToRight,
-                        .margin = forbear.Margin.block(0.0).withBottom(7.5),
+                        .padding = .block(9.0),
+                        .fontSize = 10.5,
+                        .borderWidth = if (i == 0) null else .top(1.5),
+                        .borderColor = black,
                     }))({
                         try forbear.image(arena, .{
                             .width = .{ .fixed = 30.0 },
                             .height = .{ .fixed = 30.0 },
                             .blendMode = .multiply,
-                            .margin = forbear.Margin.inLine(0.0).withRight(7.5),
+                            .margin = .right(7.5),
                         }, try forbear.useImage("uhoh-x-red"));
                         (try forbear.element(arena, .{ .fontSize = 12.0 }))({
                             try forbear.text(arena, issue);
@@ -221,7 +227,7 @@ fn App() !void {
                 }
                 (try forbear.element(arena, .{
                     .fontSize = 12.0,
-                    .margin = forbear.Margin.block(12.0).withBottom(15.0),
+                    .margin = .bottom(30.0),
                 }))({
                     try forbear.text(arena, "Imagine if you could delegate all these issues to a genie?");
                 });
