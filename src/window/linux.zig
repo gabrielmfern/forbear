@@ -3,6 +3,7 @@ const posix = std.posix;
 const os = std.os;
 
 const c = @import("../c.zig").c;
+const Cursor = @import("root.zig").Cursor;
 
 const Self = @This();
 
@@ -62,6 +63,7 @@ wlKeyboard: *c.wl_keyboard,
 
 // cursor
 wlPointer: *c.wl_pointer,
+pointerSerial: ?u32,
 wlCursorTheme: *c.wl_cursor_theme,
 cursorWlSurface: *c.wl_surface,
 defaultWlCursor: *c.wl_cursor,
@@ -446,6 +448,7 @@ fn pointerHandleEnter(
     _ = wlPointer;
     _ = surface;
     const window: *Self = @ptrCast(@alignCast(data));
+    window.pointerSerial = serial;
     window.setCursor(.default, serial) catch |err| {
         std.log.err("failed to set cursor: {}", .{err});
     };
@@ -461,6 +464,7 @@ fn pointerHandleLeave(
     surface: ?*c.wl_surface,
 ) callconv(.c) void {
     const window: *Self = @ptrCast(@alignCast(data));
+    window.pointerSerial = null;
     if (window.handlers.pointerLeave) |handler| {
         handler.function(window, serial, handler.data);
     }
@@ -783,6 +787,7 @@ pub fn init(
 
     // Initialize optional fields to null before the registry roundtrip,
     // since allocator.create does not zero-initialize memory.
+    window.pointerSerial = null;
     window.wpFractionalScaleManager = null;
     window.wpViewporter = null;
     window.xdgDecorationManager = null;
@@ -869,12 +874,6 @@ fn setupCursor(self: *Self) !void {
     self.cursorWlSurface = c.wl_compositor_create_surface(self.wlCompositor) orelse return error.FailedCreatingCursorSurface;
 }
 
-const Cursor = enum {
-    default,
-    text,
-    pointer,
-};
-
 pub fn setPointerMotionHandler(
     self: *Self,
     handler: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
@@ -898,6 +897,11 @@ pub fn setResizeHandler(
 }
 
 pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
+    const effectiveSerial = if (serial != 0)
+        serial
+    else
+        self.pointerSerial orelse return;
+
     const wlCursorImage = switch (cursor) {
         .default => self.defaultWlCursor.images[0],
         .pointer => self.pointerWlCursor.images[0],
@@ -909,7 +913,7 @@ pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
     c.wl_surface_commit(self.cursorWlSurface);
     c.wl_pointer_set_cursor(
         self.wlPointer,
-        serial,
+        effectiveSerial,
         self.cursorWlSurface,
         @intCast(wlCursorImage.*.hotspot_x),
         @intCast(wlCursorImage.*.hotspot_y),

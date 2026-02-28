@@ -20,6 +20,7 @@ pub const Style = nodeImport.Style;
 pub const Component = nodeImport.Component;
 pub const Element = nodeImport.Element;
 pub const Window = @import("window/root.zig").Window;
+pub const WindowCursor = @import("window/root.zig").Cursor;
 pub const components = @import("components.zig");
 pub const FpsCounter = components.FpsCounter;
 
@@ -53,6 +54,7 @@ scrollPosition: Vec2,
 effectiveScrollPosition: Vec2,
 
 renderer: *Graphics.Renderer,
+window: ?*Window,
 
 /// Seconds
 startTime: f64,
@@ -90,6 +92,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .effectiveScrollPosition = @splat(0.0),
 
         .renderer = renderer,
+        .window = null,
 
         .startTime = timestampSeconds(),
         .deltaTime = null,
@@ -1465,6 +1468,8 @@ pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Ve
     missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
 
     var uiEdges: Vec2 = @splat(0.0);
+    var hoveredCursor: WindowCursor = .default;
+    var topHoveredZ: ?u16 = null;
 
     while (try iterator.next()) |layoutBox| {
         if (layoutBox.style.placement == .standard) {
@@ -1483,6 +1488,11 @@ pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Ve
         }
 
         if (isMouseInside) {
+            if (topHoveredZ == null or layoutBox.z > topHoveredZ.?) {
+                topHoveredZ = layoutBox.z;
+                hoveredCursor = layoutBox.style.cursor;
+            }
+
             if (hoveredElementKeysIndexOpt == null) {
                 try pushEvent(layoutBox.key, .mouseOver);
 
@@ -1499,6 +1509,12 @@ pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Ve
         if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
             _ = self.hoveredElementKeys.swapRemove(i);
         }
+    }
+
+    if (self.window) |window| {
+        window.setCursor(hoveredCursor, 0) catch |err| {
+            std.log.err("Failed to set cursor: {}", .{err});
+        };
     }
 
     self.viewportSize = viewportSize;
@@ -1547,6 +1563,7 @@ fn timestampSeconds() f64 {
 
 pub fn setWindowHandlers(window: *Window) void {
     const self = getContext();
+    self.window = window;
 
     window.handlers.resize = .{
         .function = &(struct {

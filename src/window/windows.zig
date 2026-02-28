@@ -1,5 +1,6 @@
 const std = @import("std");
 const win32 = @import("../windows/win32.zig");
+const Cursor = @import("root.zig").Cursor;
 
 handle: win32.HWND,
 hInstance: win32.HINSTANCE,
@@ -297,6 +298,19 @@ pub fn targetFrameTimeNs(self: *const @This()) u64 {
 
 pub fn isHoldingShift(self: *const Self) bool {
     return self.keysDown.shift;
+}
+
+pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
+    _ = self;
+    _ = serial;
+
+    const nativeCursor = switch (cursor) {
+        .default => win32.LoadCursorW(null, win32.IDC_ARROW),
+        .text => win32.LoadCursorW(null, win32.IDC_IBEAM),
+        .pointer => win32.LoadCursorW(null, win32.IDC_HAND),
+    } orelse return error.FailedToLoadCursor;
+
+    _ = win32.SetCursor(nativeCursor);
 }
 
 pub fn handleEvents(self: *@This()) !void {

@@ -12,6 +12,14 @@
 //!
 //! fn targetFrameTimeNs() u64;
 //!
+//! const Cursor = enum {
+//!     default,
+//!     text,
+//!     pointer,
+//! };
+//!
+//! fn setCursor(self: *@This(), cursor: Cursor, serial: u32) !void
+//!
 //! fn setResizeHandler(
 //!     self: *@This(),
 //!     handler: *const fn (
@@ -31,6 +39,12 @@
 //!
 //! So making this cross platform, is still quite easy.
 const builtin = @import("builtin");
+
+pub const Cursor = enum {
+    default,
+    text,
+    pointer,
+};
 
 pub const Window = switch (builtin.os.tag) {
     .linux => @import("linux.zig"),

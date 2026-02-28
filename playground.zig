@@ -68,6 +68,7 @@ fn renderingMain(
                 .fontSize = 32,
                 .fontWeight = 400,
                 .lineHeight = 1.0,
+                .cursor = .default,
             },
             viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
