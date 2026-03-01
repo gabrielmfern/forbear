@@ -341,6 +341,7 @@ fn App() !void {
                         try forbear.image(arena, .{
                             .maxWidth = 128,
                             .maxHeight = 112,
+                            .filter = .grayscale,
                             .margin = forbear.Margin.right(13.5),
                         }, try forbear.useImage(id));
                     }
