@@ -564,12 +564,119 @@ fn growAndShrinkWithDebug(
     }
 }
 
+const WrappedLineMeasurement = struct {
+    startIndex: usize,
+    endIndexExclusive: usize,
+    mainSize: f32,
+    crossSize: f32,
+};
+
+fn directionAxis(direction: Direction) usize {
+    return if (direction == .leftToRight) 0 else 1;
+}
+
+fn availableContentSize(layoutBox: *const LayoutBox, direction: Direction) f32 {
+    const padding = layoutBox.style.padding.get(direction);
+    const borderWidth = layoutBox.style.borderWidth.get(direction);
+    return @max(
+        layoutBox.getSize(direction) - (padding[0] + padding[1]) - (borderWidth[0] + borderWidth[1]),
+        0.0,
+    );
+}
+
+fn childContributingSize(child: *const LayoutBox, direction: Direction) f32 {
+    const margin = child.style.margin.get(direction);
+    return margin[0] + child.getSize(direction) + margin[1];
+}
+
+fn nextStandardChild(children: []const LayoutBox, start: usize) ?usize {
+    var index = start;
+    while (index < children.len) : (index += 1) {
+        if (children[index].style.placement == .standard) {
+            return index;
+        }
+    }
+    return null;
+}
+
+fn measureWrappedLine(
+    children: []const LayoutBox,
+    direction: Direction,
+    availableMainSize: f32,
+    scanStart: usize,
+) ?WrappedLineMeasurement {
+    const lineStart = nextStandardChild(children, scanStart) orelse return null;
+
+    var lineMainSize: f32 = 0.0;
+    var lineCrossSize: f32 = 0.0;
+    var lineEndExclusive = lineStart;
+
+    var childIndexOpt: ?usize = lineStart;
+    while (childIndexOpt) |childIndex| {
+        const child = &children[childIndex];
+        const childMainSize = childContributingSize(child, direction);
+        const childCrossSize = childContributingSize(child, direction.perpendicular());
+        if (lineMainSize > 0.0 and lineMainSize + childMainSize > availableMainSize) {
+            break;
+        }
+
+        lineMainSize += childMainSize;
+        lineCrossSize = @max(lineCrossSize, childCrossSize);
+        lineEndExclusive = childIndex + 1;
+        childIndexOpt = nextStandardChild(children, childIndex + 1);
+    }
+
+    return .{
+        .startIndex = lineStart,
+        .endIndexExclusive = lineEndExclusive,
+        .mainSize = lineMainSize,
+        .crossSize = lineCrossSize,
+    };
+}
+
 fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
     if (layoutBox.children) |children| {
         switch (children) {
             .layoutBoxes => |childBoxes| {
                 for (childBoxes) |*child| {
                     try wrap(arena, child);
+                }
+
+                if (layoutBox.style.overflow == .wrap) {
+                    const direction = layoutBox.style.direction;
+                    const perpendicularDirection = direction.perpendicular();
+                    const availableMainSize = availableContentSize(layoutBox, direction);
+
+                    var wrappedCrossSize: f32 = 0.0;
+                    var scanStart: usize = 0;
+                    while (measureWrappedLine(childBoxes, direction, availableMainSize, scanStart)) |line| {
+                        wrappedCrossSize += line.crossSize;
+                        scanStart = line.endIndexExclusive;
+                    }
+
+                    const perpendicularPadding = layoutBox.style.padding.get(perpendicularDirection);
+                    const perpendicularBorder = layoutBox.style.borderWidth.get(perpendicularDirection);
+                    const wrappedSize = wrappedCrossSize +
+                        perpendicularPadding[0] + perpendicularPadding[1] +
+                        perpendicularBorder[0] + perpendicularBorder[1];
+
+                    if (layoutBox.style.getPreferredSize(perpendicularDirection) == .fit) {
+                        const clampedWrappedSize = @min(
+                            @max(wrappedSize, layoutBox.getMinSize(perpendicularDirection)),
+                            layoutBox.getMaxSize(perpendicularDirection),
+                        );
+                        layoutBox.setSize(perpendicularDirection, clampedWrappedSize);
+                        layoutBox.setMinSize(
+                            perpendicularDirection,
+                            @max(layoutBox.getMinSize(perpendicularDirection), clampedWrappedSize),
+                        );
+
+                        if (perpendicularDirection == .leftToRight) {
+                            layoutBox.style.width = .{ .fixed = clampedWrappedSize };
+                        } else {
+                            layoutBox.style.height = .{ .fixed = clampedWrappedSize };
+                        }
+                    }
                 }
             },
             .glyphs => |glyphs| {
@@ -776,11 +883,102 @@ fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
     }
 }
 
+fn placeWrappedChildren(layoutBox: *LayoutBox, children: []LayoutBox) void {
+    const direction = layoutBox.style.direction;
+    const perpendicularDirection = direction.perpendicular();
+    const directionAxisIndex = directionAxis(direction);
+    const perpendicularAxisIndex = directionAxis(perpendicularDirection);
+
+    const availableMainSize = availableContentSize(layoutBox, direction);
+    const availableCrossSize = availableContentSize(layoutBox, perpendicularDirection);
+
+    const directionPadding = layoutBox.style.padding.get(direction);
+    const directionBorder = layoutBox.style.borderWidth.get(direction);
+    const perpendicularPadding = layoutBox.style.padding.get(perpendicularDirection);
+    const perpendicularBorder = layoutBox.style.borderWidth.get(perpendicularDirection);
+
+    const contentMainStart = directionPadding[0] + directionBorder[0];
+    const contentCrossStart = perpendicularPadding[0] + perpendicularBorder[0];
+
+    const mainAlignment = if (direction == .leftToRight)
+        layoutBox.style.alignment.x
+    else
+        layoutBox.style.alignment.y;
+    const crossAlignment = if (direction == .leftToRight)
+        layoutBox.style.alignment.y
+    else
+        layoutBox.style.alignment.x;
+
+    var totalCrossSize: f32 = 0.0;
+    var scanStart: usize = 0;
+    while (measureWrappedLine(children, direction, availableMainSize, scanStart)) |line| {
+        totalCrossSize += line.crossSize;
+        scanStart = line.endIndexExclusive;
+    }
+
+    var crossOffset: f32 = 0.0;
+    switch (crossAlignment) {
+        .start => {},
+        .center => crossOffset = (availableCrossSize - totalCrossSize) / 2.0,
+        .end => crossOffset = availableCrossSize - totalCrossSize,
+    }
+    var lineCrossStart = contentCrossStart + crossOffset;
+
+    scanStart = 0;
+    while (measureWrappedLine(children, direction, availableMainSize, scanStart)) |line| {
+        var mainOffset: f32 = 0.0;
+        switch (mainAlignment) {
+            .start => {},
+            .center => mainOffset = (availableMainSize - line.mainSize) / 2.0,
+            .end => mainOffset = availableMainSize - line.mainSize,
+        }
+        var cursorMain = contentMainStart + mainOffset;
+
+        var childIndexOpt: ?usize = line.startIndex;
+        while (childIndexOpt) |childIndex| {
+            if (childIndex >= line.endIndexExclusive) {
+                break;
+            }
+
+            var child = &children[childIndex];
+            const mainMargin = child.style.margin.get(direction);
+            const crossMargin = child.style.margin.get(perpendicularDirection);
+            const childCrossSize = childContributingSize(child, perpendicularDirection);
+
+            cursorMain += mainMargin[0];
+            child.position[directionAxisIndex] = cursorMain;
+
+            var childCrossOffset: f32 = 0.0;
+            switch (crossAlignment) {
+                .start => childCrossOffset = crossMargin[0],
+                .center => childCrossOffset = (line.crossSize - childCrossSize) / 2.0 + crossMargin[0],
+                .end => childCrossOffset = line.crossSize - childCrossSize + crossMargin[0],
+            }
+            child.position[perpendicularAxisIndex] = lineCrossStart + childCrossOffset;
+
+            cursorMain += child.getSize(direction) + mainMargin[1];
+            childIndexOpt = nextStandardChild(children, childIndex + 1);
+        }
+
+        lineCrossStart += line.crossSize;
+        scanStart = line.endIndexExclusive;
+    }
+
+    for (children) |*child| {
+        place(child);
+    }
+}
+
 fn place(layoutBox: *LayoutBox) void {
     layoutBox.position += layoutBox.style.translate;
     if (layoutBox.children != null) {
         switch (layoutBox.children.?) {
             .layoutBoxes => |children| {
+                if (layoutBox.style.overflow == .wrap) {
+                    placeWrappedChildren(layoutBox, children);
+                    return;
+                }
+
                 const direction = layoutBox.style.direction;
                 const hAlign = layoutBox.style.alignment.x;
                 const vAlign = layoutBox.style.alignment.y;
@@ -1792,6 +1990,108 @@ test "wrap - word wrapping with small width" {
             .{ 40.0, 20.0 }, // d
         },
     });
+}
+
+test "wrap - element overflow wrap" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const childBoxes = try arenaAllocator.alloc(LayoutBox, 3);
+    for (childBoxes, 0..) |*child, index| {
+        child.* = LayoutBox{
+            .key = @as(u64, @intCast(index + 1)),
+            .position = .{ 0.0, 0.0 },
+            .z = 1,
+            .size = .{ 40.0, 10.0 },
+            .minSize = .{ 40.0, 10.0 },
+            .maxSize = .{ 40.0, 10.0 },
+            .children = null,
+            .style = (IncompleteStyle{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 10.0 },
+            }).completeWith(defaultBaseStyle),
+        };
+    }
+
+    var layoutBox = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 100.0, 0.0 },
+        .minSize = .{ 100.0, 0.0 },
+        .maxSize = .{ 100.0, std.math.inf(f32) },
+        .children = .{ .layoutBoxes = childBoxes },
+        .style = (IncompleteStyle{
+            .direction = .leftToRight,
+            .width = .{ .fixed = 100.0 },
+            .height = .fit,
+            .overflow = .wrap,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    try wrap(arenaAllocator, &layoutBox);
+    place(&layoutBox);
+
+    try std.testing.expectEqual(@as(f32, 20.0), layoutBox.size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), childBoxes[0].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), childBoxes[0].position[1]);
+    try std.testing.expectEqual(@as(f32, 40.0), childBoxes[1].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), childBoxes[1].position[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), childBoxes[2].position[0]);
+    try std.testing.expectEqual(@as(f32, 10.0), childBoxes[2].position[1]);
+}
+
+test "wrap - element overflow visible keeps a single line" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const childBoxes = try arenaAllocator.alloc(LayoutBox, 3);
+    for (childBoxes, 0..) |*child, index| {
+        child.* = LayoutBox{
+            .key = @as(u64, @intCast(index + 1)),
+            .position = .{ 0.0, 0.0 },
+            .z = 1,
+            .size = .{ 40.0, 10.0 },
+            .minSize = .{ 40.0, 10.0 },
+            .maxSize = .{ 40.0, 10.0 },
+            .children = null,
+            .style = (IncompleteStyle{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 10.0 },
+            }).completeWith(defaultBaseStyle),
+        };
+    }
+
+    var layoutBox = LayoutBox{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 100.0, 20.0 },
+        .minSize = .{ 100.0, 20.0 },
+        .maxSize = .{ 100.0, 20.0 },
+        .children = .{ .layoutBoxes = childBoxes },
+        .style = (IncompleteStyle{
+            .direction = .leftToRight,
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 20.0 },
+            .overflow = .visible,
+        }).completeWith(defaultBaseStyle),
+    };
+
+    try wrap(arenaAllocator, &layoutBox);
+    place(&layoutBox);
+
+    try std.testing.expectEqual(@as(f32, 20.0), layoutBox.size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), childBoxes[0].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), childBoxes[0].position[1]);
+    try std.testing.expectEqual(@as(f32, 40.0), childBoxes[1].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), childBoxes[1].position[1]);
+    try std.testing.expectEqual(@as(f32, 80.0), childBoxes[2].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), childBoxes[2].position[1]);
 }
 
 test "wrap - alignment start" {
