@@ -108,6 +108,11 @@ pub const TextWrapping = enum {
     none,
 };
 
+pub const Overflow = enum {
+    visible,
+    wrap,
+};
+
 pub const Padding = struct {
     x: Vec2,
     y: Vec2,
@@ -262,6 +267,7 @@ pub const Style = struct {
     padding: Padding,
     margin: Margin,
 
+    overflow: Overflow,
     direction: Direction,
     alignment: Alignment,
 
@@ -354,6 +360,7 @@ pub const IncompleteStyle = struct {
     padding: ?Padding = null,
     margin: ?Margin = null,
 
+    overflow: ?Overflow = null,
     alignment: ?Alignment = null,
     direction: ?Direction = null,
 
@@ -394,6 +401,7 @@ pub const IncompleteStyle = struct {
             .padding = self.padding orelse .all(0.0),
             .margin = self.margin orelse .all(0.0),
 
+            .overflow = self.overflow orelse .visible,
             .direction = self.direction orelse .leftToRight,
             .alignment = self.alignment orelse Alignment.topLeft,
         };
