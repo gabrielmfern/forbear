@@ -18,7 +18,7 @@ struct ElementRenderingData {
     float borderRadius;
     vec4 borderSize;
     int imageIndex;
-    int blendMode;
+    uint blendMode;
     uint filterType;
     mat4 modelViewProjectionMatrix;
     vec2 size;
