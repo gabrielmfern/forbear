@@ -11,6 +11,7 @@ pub const LayoutBox = layouting.LayoutBox;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
 pub const Alignment = nodeImport.Alignment;
+pub const Overflow = nodeImport.Overflow;
 pub const Padding = nodeImport.Padding;
 pub const Margin = nodeImport.Margin;
 pub const BorderWidth = nodeImport.BorderWidth;
