@@ -10,6 +10,7 @@ layout(location = 4) out flat int imageIndex;
 layout(location = 5) out vec4 borderColor;
 layout(location = 6) out vec4 borderSize;
 layout(location = 7) out flat uint blendMode;
+layout(location = 8) out flat uint filterType;
 
 struct ElementRenderingData {
     vec4 backgroundColor;
@@ -17,7 +18,8 @@ struct ElementRenderingData {
     float borderRadius;
     vec4 borderSize;
     int imageIndex;
-    int blendMode;
+    uint blendMode;
+    uint filterType;
     mat4 modelViewProjectionMatrix;
     vec2 size;
 };
@@ -38,4 +40,5 @@ void main() {
     localPos = vec4(vertexPosition, 1.0);
     imageIndex = d.imageIndex;
     blendMode = d.blendMode;
+    filterType = d.filterType;
 }
