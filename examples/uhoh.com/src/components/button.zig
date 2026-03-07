@@ -7,11 +7,10 @@ pub const ButtonProps = struct {
 };
 
 pub fn Button(props: ButtonProps) !void {
-    const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
-    (try forbear.element(arena, .{}))({
-        (try forbear.element(arena, .{
+    (try forbear.element(.{}))({
+        (try forbear.element(.{
             .borderRadius = 6.0,
             .borderWidth = forbear.BorderWidth.all(1.5),
             .background = .{ .color = .{ 1.0, 1.0, 1.0, 1.0 } },
@@ -40,7 +39,7 @@ pub fn Button(props: ButtonProps) !void {
             .alignment = .center,
             .direction = .topToBottom,
         }))({
-            try forbear.text(arena, props.text);
+            try forbear.text(props.text);
         });
     });
 
