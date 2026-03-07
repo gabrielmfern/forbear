@@ -3,7 +3,7 @@ const std = @import("std");
 const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
-const LayoutBox = @import("layouting.zig").LayoutBox;
+const LayoutBox = @import("layouting.zig").Node;
 const Cursor = @import("window/root.zig").Cursor;
 
 const Vec4 = @Vector(4, f32);
@@ -400,19 +400,137 @@ pub const IncompleteStyle = struct {
     }
 };
 
-pub const Node = struct {
-    key: u64,
-    content: union(enum) {
-        element: Element,
-        text: []const u8,
-    },
+pub const LayoutGlyph = struct {
+    index: c_uint,
+    position: Vec2,
+
+    text: []const u8,
+
+    /// Meant for the recalculation of the glyphs position if that's required
+    /// at some other layouting step
+    advance: Vec2,
+    /// Meant for the recalculation of the glyphs position if that's required
+    /// at some other layouting step
+    offset: Vec2,
 };
 
-pub const Component = struct {
-    function: *const fn (props: ?*anyopaque) anyerror!Node,
-    /// Integer associated with the static pointer to the component's function
-    id: usize,
-    props: *anyopaque,
+pub const Glyphs = struct {
+    lineHeight: f32,
+    slice: []LayoutGlyph,
+};
+
+pub const Node = struct {
+    pub const Children = union(enum) {
+        nodes: std.ArrayList(Node),
+        glyphs: Glyphs,
+    };
+
+    key: u64,
+
+    position: Vec2,
+    z: u16,
+    size: Vec2,
+    maxSize: Vec2,
+    minSize: Vec2,
+    children: Children,
+
+    style: Style,
+
+    pub fn debugPrint(self: @This(), indent: usize) void {
+        for (0..indent) |_| {
+            std.debug.print("  ", .{});
+        }
+        std.debug.print("node (key: {}, pos: {}, size: {}, z: {})\n", .{ self.key, self.position, self.size, self.z });
+        if (self.children) |children| {
+            switch (children) {
+                .nodes => |nodes| {
+                    for (nodes) |*child| {
+                        child.debugPrint(indent + 1);
+                    }
+                },
+                .glyphs => |glyphs| {
+                    for (glyphs.slice) |glyph| {
+                        for (0..indent) |_| {
+                            std.debug.print("  ", .{});
+                        }
+                        std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
+                    }
+                },
+            }
+        }
+    }
+
+    pub fn free(self: @This(), allocator: std.mem.Allocator) void {
+        if (self.children) |children| {
+            switch (children) {
+                .nodes => |layoutBoxes| {
+                    for (layoutBoxes) |*child| {
+                        child.free(allocator);
+                    }
+                    allocator.free(layoutBoxes);
+                },
+                .glyphs => |glyphs| {
+                    for (glyphs.slice) |*glyph| {
+                        allocator.free(glyph.text);
+                    }
+                    allocator.free(glyphs.slice);
+                },
+            }
+        }
+    }
+
+    pub fn setMinSize(self: *@This(), direction: Direction, size: f32) void {
+        if (direction == .leftToRight) {
+            self.minSize[0] = size;
+        } else {
+            self.minSize[1] = size;
+        }
+    }
+
+    pub fn addMinSize(self: *@This(), direction: Direction, increment: f32) void {
+        if (direction == .leftToRight) {
+            self.minSize[0] += increment;
+        } else {
+            self.minSize[1] += increment;
+        }
+    }
+
+    pub fn setSize(self: *@This(), direction: Direction, size: f32) void {
+        if (direction == .leftToRight) {
+            self.size[0] = size;
+        } else {
+            self.size[1] = size;
+        }
+    }
+
+    pub fn addSize(self: *@This(), direction: Direction, increment: f32) void {
+        if (direction == .leftToRight) {
+            self.size[0] += increment;
+        } else {
+            self.size[1] += increment;
+        }
+    }
+
+    pub fn getMinSize(self: @This(), direction: Direction) f32 {
+        if (direction == .leftToRight) {
+            return self.minSize[0];
+        }
+        return self.minSize[1];
+    }
+
+    pub fn getMaxSize(self: @This(), direction: Direction) f32 {
+        if (direction == .leftToRight) {
+            return self.maxSize[0];
+        }
+        return self.maxSize[1];
+    }
+
+    pub fn getSize(self: @This(), direction: Direction) f32 {
+        if (direction == .leftToRight) {
+            return self.size[0];
+        }
+        return self.size[1];
+    }
 };
 
 pub const Element = struct {

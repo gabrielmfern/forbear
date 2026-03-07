@@ -7,7 +7,7 @@ const BlendMode = @import("node.zig").BlendMode;
 const c = @import("c.zig").c;
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
-const LayoutBox = layouting.LayoutBox;
+const Node = layouting.Node;
 const countTreeSize = layouting.countTreeSize;
 const LayoutTreeIterator = layouting.LayoutTreeIterator;
 const Window = @import("window/root.zig").Window;
@@ -3528,8 +3528,8 @@ pub const Renderer = struct {
     fn prepareLayoutTree(
         self: *const Self,
         allocator: std.mem.Allocator,
-        list: *std.ArrayList(*const LayoutBox),
-        layoutBox: *const LayoutBox,
+        list: *std.ArrayList(*const Node),
+        layoutBox: *const Node,
     ) !void {
         const viewport = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
         const insideView = layoutBox.position[0] + layoutBox.size[0] > 0.0 and layoutBox.position[1] + layoutBox.size[1] > 0.0 and viewport[0] > layoutBox.position[0] and viewport[1] > layoutBox.position[1];
@@ -3537,8 +3537,8 @@ pub const Renderer = struct {
             return;
         }
         try list.append(allocator, layoutBox);
-        if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
-            for (layoutBox.children.?.layoutBoxes) |*child| {
+        if (layoutBox.children != null and layoutBox.children.? == .nodes) {
+            for (layoutBox.children.?.nodes) |*child| {
                 try self.prepareLayoutTree(allocator, list, child);
             }
         }
@@ -3547,7 +3547,7 @@ pub const Renderer = struct {
     pub fn drawFrame(
         self: *Self,
         arena: std.mem.Allocator,
-        layoutBoxes: []const LayoutBox,
+        layoutBoxes: []const Node,
         clearColor: Vec4,
         dpi: [2]u32,
         targetFrameTimeNs: u64,
@@ -3602,12 +3602,12 @@ pub const Renderer = struct {
             1.0,
         );
 
-        var layoutTreeToRender = std.ArrayList(*const LayoutBox).empty;
+        var layoutTreeToRender = std.ArrayList(*const Node).empty;
         for (layoutBoxes) |*layoutBox| {
             try self.prepareLayoutTree(arena, &layoutTreeToRender, layoutBox);
         }
-        std.mem.sort(*const LayoutBox, layoutTreeToRender.items, {}, (struct {
-            fn lessThan(_: void, lhs: *const LayoutBox, rhs: *const LayoutBox) bool {
+        std.mem.sort(*const Node, layoutTreeToRender.items, {}, (struct {
+            fn lessThan(_: void, lhs: *const Node, rhs: *const Node) bool {
                 return lhs.z < rhs.z;
             }
         }).lessThan);

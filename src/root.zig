@@ -7,9 +7,10 @@ pub const Graphics = @import("graphics.zig");
 pub const Image = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
-pub const LayoutBox = layouting.LayoutBox;
+pub const LayoutBox = layouting.Node;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
+pub const BaseStyle = nodeImport.BaseStyle;
 pub const Alignment = nodeImport.Alignment;
 pub const Padding = nodeImport.Padding;
 pub const Margin = nodeImport.Margin;
@@ -17,7 +18,6 @@ pub const BorderWidth = nodeImport.BorderWidth;
 pub const Offset = nodeImport.Shadow.Offset;
 pub const IncompleteStyle = nodeImport.IncompleteStyle;
 pub const Style = nodeImport.Style;
-pub const Component = nodeImport.Component;
 pub const Element = nodeImport.Element;
 pub const Window = @import("window/root.zig").Window;
 pub const WindowCursor = @import("window/root.zig").Cursor;
@@ -31,7 +31,6 @@ const Context = @This();
 var context: ?@This() = null;
 
 const ComponentResolutionState = struct {
-    arenaAllocator: std.mem.Allocator,
     useStateCursor: usize,
     key: u64,
 };
@@ -42,6 +41,12 @@ const Event = union(enum) {
 };
 
 const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
+
+pub const FrameMeta = struct {
+    arena: std.mem.Allocator,
+    dpi: Vec2,
+    baseStyle: BaseStyle,
+};
 
 allocator: std.mem.Allocator,
 
@@ -68,6 +73,7 @@ componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)
 // images: std.StringHashMap(Image),
 componentResolutionState: ?ComponentResolutionState,
 
+frameMeta: ?FrameMeta,
 frameEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 
 rootFrameNode: ?Node,
@@ -102,6 +108,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .componentStates = .init(allocator),
         .componentResolutionState = null,
 
+        .frameMeta = null,
         .frameEventQueue = .init(allocator),
 
         .rootFrameNode = null,
@@ -113,6 +120,17 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .fonts = std.StringHashMap(Font).init(allocator),
     };
 }
+
+const testingBaseStyle: BaseStyle = .{
+    .font = undefined,
+    .color = .{ 0.0, 0.0, 0.0, 1.0 },
+    .fontSize = 16,
+    .fontWeight = 400,
+    .lineHeight = 1.0,
+    .textWrapping = configuration.mode,
+    .blendMode = .normal,
+    .cursor = .default,
+};
 
 test "Element tree stack stability" {
     try init(std.testing.allocator, undefined);
@@ -649,7 +667,6 @@ test "useSpringTransition - null delta time" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     self.deltaTime = null;
 
@@ -1014,13 +1031,13 @@ pub fn useLastUpdateTime() f64 {
 
 pub fn useArena() !std.mem.Allocator {
     const self = getContext();
-    if (self.componentResolutionState) |state| {
-        return state.arenaAllocator;
+    if (self.frameMeta) |meta| {
+        return meta.arena;
     } else {
         if (!builtin.is_test) {
-            std.log.err("You might be calling a hook (useArena) outside of a component, and forbear cannot track things outside of one.", .{});
+            std.log.err("You might be calling a hook (useArena) outside of a frame, and forbear cannot track things outside of one.", .{});
         }
-        return error.NoComponentContext;
+        return error.NoFrame;
     }
 }
 
@@ -1229,27 +1246,50 @@ fn popParentStack(block: void) void {
     _ = self.frameNodePath.pop();
 }
 
-fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
+fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node, index: usize } {
     const self = getContext();
     if (self.frameNodeParentStack.getLastOrNull()) |parent| {
         std.debug.assert(self.rootFrameNode != null);
         // How can we make sure that these asserts aren't really necessary? HOw
         // can we make sure that the compiler will ensure that the parent here
         // always allows for children?
-        std.debug.assert(parent.content == .element);
-        return .{
-            .ptr = try parent.content.element.children.addOne(arena),
-            .index = parent.content.element.children.items.len - 1,
-        };
+        if (parent.children) |*children| {
+            std.debug.assert(children.* == .nodes);
+            return .{
+                .ptr = try children.nodes.addOne(arena),
+                .parent = parent,
+                .index = children.nodes.items.len - 1,
+            };
+        } else {
+            var children = try std.ArrayList(Node).initCapacity(arena, 1);
+            defer parent.children = .{ .nodes = children };
+            return .{
+                .ptr = children.addOneAssumeCapacity(),
+                .parent = parent,
+                .index = children.items.len - 1,
+            };
+        }
     } else {
         if (self.rootFrameNode != null) {
             return error.MultipleRootNodesNotSupported;
         }
-        self.rootFrameNode = .{
-            .content = undefined,
+        self.rootFrameNode = Node{
             .key = undefined,
+
+            .position = undefined,
+            .z = undefined,
+            .size = undefined,
+            .maxSize = undefined,
+            .minSize = undefined,
+            .children = undefined,
+
+            .style = undefined,
         };
-        return .{ .ptr = &self.rootFrameNode.?, .index = 0 };
+        return .{
+            .ptr = &self.rootFrameNode.?,
+            .parent = null,
+            .index = 0,
+        };
     }
 }
 
@@ -1315,22 +1355,116 @@ pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !voi
     self.previousPushedNode = result.ptr;
 }
 
-pub fn element(arena: std.mem.Allocator, style: IncompleteStyle) !*const fn (void) void {
+fn endFrame(block: void) void {
+    _ = block;
     const self = getContext();
 
-    const result = try putNode(arena);
+    self.frameMeta = null;
+}
+
+pub fn frame(meta: FrameMeta) *const fn (void) void {
+    const self = getContext();
+
+    self.frameMeta = meta;
+    return &endFrame;
+}
+
+pub fn element(incompletestyle: IncompleteStyle) !*const fn (void) void {
+    const self = getContext();
+
+    std.debug.assert(self.frameMeta != null);
+
+    const result = try putNode(self.frameMeta.?.arena);
+
+    const baseStyle = if (result.parent) |parent|
+        BaseStyle.from(parent.style)
+    else
+        self.frameMeta.?.baseStyle;
+    var style = IncompleteStyle.completeWith(baseStyle);
+    const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
+    style.borderWidth.x *= @splat(resolutionMultiplier[0]);
+    style.borderWidth.y *= @splat(resolutionMultiplier[1]);
+    if (style.shadow) |*shadow| {
+        shadow.offset.x *= @splat(resolutionMultiplier[0]);
+        shadow.offset.y *= @splat(resolutionMultiplier[1]);
+        shadow.blurRadius *= resolutionMultiplier[0];
+        shadow.spread *= resolutionMultiplier[0];
+    }
+    style.padding.x *= @splat(resolutionMultiplier[0]);
+    style.padding.y *= @splat(resolutionMultiplier[1]);
+    style.margin.x *= @splat(resolutionMultiplier[0]);
+    style.margin.y *= @splat(resolutionMultiplier[1]);
+    style.borderRadius *= resolutionMultiplier[0];
+
+    const parentZ = if (result.parent) |parent|
+        parent.z
+    else
+        0.0;
 
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
     hasher.update(std.mem.asBytes(&result.index));
-
-    result.ptr.* = Node{
+    result.ptr.* = .{
         .key = hasher.final(),
-        .content = .{
-            .element = .{
-                .style = style,
-                .children = .empty,
+        .style = style,
+        .children = .{ .nodes = .empty },
+        .z = if (incompletestyle.zIndex) |zIndex|
+            zIndex
+        else if (parentZ < std.math.maxInt(u16))
+            parentZ + 1
+        else
+            parentZ,
+        .position = if (style.placement == .manual)
+            style.placement.manual
+        else
+            @splat(0.0),
+        .size = .{
+            switch (style.width) {
+                .fixed => |width| width,
+                .percentage => 0.0,
+                .ratio => |ratio| if (style.height == .fixed)
+                    style.height.fixed * ratio
+                else
+                    0.0,
+                .fit, .grow => 0.0,
             },
+            switch (style.height) {
+                .fixed => |height| height,
+                .percentage => 0.0,
+                .ratio => |ratio| if (style.width == .fixed)
+                    style.width.fixed * ratio
+                else
+                    0.0,
+                .fit, .grow => 0.0,
+            },
+        },
+        .minSize = .{
+            if (style.minWidth) |minWidth|
+                minWidth
+            else if (style.width == .fixed)
+                style.width.fixed
+            else
+                0.0,
+            if (style.minHeight) |minHeight|
+                minHeight
+            else if (style.height == .fixed)
+                style.height.fixed
+            else
+                0.0,
+        },
+        .maxSize = .{
+            if (style.maxWidth) |maxWidth|
+                maxWidth
+            else if (style.width == .fixed)
+                style.width.fixed
+            else
+                std.math.inf(f32),
+            if (style.maxHeight) |maxHeight|
+                maxHeight
+            else if (style.height == .fixed)
+                style.height.fixed
+            else
+                std.math.inf(f32),
         },
     };
     try self.frameNodeParentStack.append(self.allocator, result.ptr);
@@ -1338,21 +1472,94 @@ pub fn element(arena: std.mem.Allocator, style: IncompleteStyle) !*const fn (voi
     return &popParentStack;
 }
 
-pub fn text(arena: std.mem.Allocator, content: []const u8) !void {
-    const result = try putNode(arena);
-
+pub fn text(content: []const u8) !void {
     const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+
+    const result = try putNode(self.frameMeta.?.arena);
+
+    const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
+
+    const baseStyle = if (result.parent) |parent|
+        BaseStyle.from(parent.style)
+    else
+        self.frameMeta.?.baseStyle;
+
+    const style = (IncompleteStyle{
+        .cursor = if (baseStyle.cursor == .default)
+            .text
+        else
+            baseStyle.cursor,
+        .alignment = if (self.parent) |parent| .{
+            .x = parent.style.alignment.x,
+            .y = .start,
+        } else null,
+    }).completeWith(baseStyle);
+
+    const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
+    const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
+    const pixelSizeVec2: Vec2 = @as(Vec2, @splat(style.fontSize)) * resolutionMultiplier;
+    const pixelLineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * pixelSizeVec2[1];
+
+    const shapedGlyphs = try style.font.shape(text);
+    var layoutGlyphs = try self.arenaAllocator.alloc(LayoutGlyph, shapedGlyphs.len);
+    errdefer self.arenaAllocator.free(layoutGlyphs);
+    var cursor: Vec2 = @splat(0.0);
+
+    var minSize: Vec2 = .{ 0.0, pixelLineHeight };
+    var maxSize: Vec2 = .{ 0.0, pixelLineHeight };
+
+    var wordStart: usize = 0;
+    var wordAdvance: Vec2 = @splat(0.0);
+    for (shapedGlyphs, 0..) |shapedGlyph, i| {
+        const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
+        const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
+        const glyphText = try self.arenaAllocator.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]);
+        layoutGlyphs[i] = LayoutGlyph{
+            .index = @intCast(shapedGlyph.index),
+            .position = cursor + offset,
+
+            .text = glyphText,
+
+            .advance = advance,
+            .offset = offset,
+        };
+
+        cursor += advance;
+        if (style.textWrapping == .word) {
+            if (std.mem.eql(u8, glyphText, " ")) {
+                wordStart = i;
+                wordAdvance = @splat(0.0);
+            } else {
+                wordAdvance += advance;
+            }
+            minSize = @max(minSize, wordAdvance);
+            maxSize[1] += pixelLineHeight;
+        } else if (style.textWrapping == .character) {
+            minSize = @max(minSize, advance);
+            maxSize[1] += pixelLineHeight;
+        } else if (style.textWrapping == .none) {
+            minSize = cursor;
+        }
+    }
+    maxSize[0] = cursor[0];
+
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(content);
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
     hasher.update(std.mem.asBytes(&result.index));
-
     result.ptr.* = Node{
         .key = hasher.final(),
-        .content = .{
-            .text = content,
-        },
+        .position = .{ 0.0, 0.0 },
+        .z = z,
+        .key = node.key,
+        .size = .{ cursor[0], pixelLineHeight },
+        .minSize = minSize,
+        .maxSize = maxSize,
+        .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight } },
+        .style = style,
     };
+
     self.previousPushedNode = result.ptr;
 }
 

@@ -877,7 +877,22 @@ fn renderingMain(
             std.log.debug("[uhoh-layout-debug] frame={} start", .{frameIndex});
         }
 
-        try forbear.component(arena, App, null);
+        forbear.frame(.{
+            .arena = arena,
+            .baseStyle = .{
+                .font = try forbear.useFont("SpaceGrotesk"),
+                .color = .{ 0.0, 0.0, 0.0, 1.0 },
+                .fontSize = 16,
+                .textWrapping = .word,
+                .fontWeight = 400,
+                .cursor = .default,
+                .lineHeight = 1.0,
+                .blendMode = .normal,
+            },
+        })({
+            // I want this to inlcude more than one element if it's the case I'm defining it like this
+            try forbear.component(arena, App, null);
+        });
 
         const viewportSize = renderer.viewportSize();
         var layoutStartNs: i128 = 0;
@@ -888,16 +903,6 @@ fn renderingMain(
 
         const rootLayoutBox = try forbear.layout(
             arena,
-            .{
-                .font = try forbear.useFont("SpaceGrotesk"),
-                .color = .{ 0.0, 0.0, 0.0, 1.0 },
-                .fontSize = 16,
-                .textWrapping = .word,
-                .fontWeight = 400,
-                .cursor = .default,
-                .lineHeight = 1.0,
-                .blendMode = .normal,
-            },
             viewportSize,
             .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         );
