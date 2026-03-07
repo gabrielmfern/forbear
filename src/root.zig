@@ -6,6 +6,7 @@ pub const Font = @import("font.zig");
 pub const Graphics = @import("graphics.zig");
 pub const Image = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
+const testing = @import("testing.zig");
 pub const layout = layouting.layout;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
@@ -132,7 +133,7 @@ test "Element tree stack stability" {
 
     const self = getContext();
 
-    const testingBaseStyle = try createTestingBaseStyle();
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
     frame(.{
         .arena = arenaAllocator,
@@ -240,7 +241,7 @@ test "Element key stability across frames" {
             }
         }
     }.collect;
-    const testingBaseStyle = try createTestingBaseStyle();
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
     frame(.{
         .arena = arenaAllocator,
@@ -326,7 +327,7 @@ test "Component resolution" {
         }
     }).component;
 
-    const testingBaseStyle = try createTestingBaseStyle();
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
     frame(.{
         .arena = arenaAllocator,
@@ -1205,7 +1206,7 @@ test "Event queue dispatches events to correct elements" {
 
     const self = getContext();
 
-    const testingBaseStyle = try createTestingBaseStyle();
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
     frame(.{
         .arena = arenaAllocator,
@@ -1474,20 +1475,6 @@ pub fn element(incompleteStyle: IncompleteStyle) !*const fn (void) void {
     return &popParentStack;
 }
 
-fn createTestingBaseStyle() !BaseStyle {
-    try registerFont("Inter", @embedFile("./Inter.ttf"));
-    return BaseStyle{
-        .font = try useFont("Inter"),
-        .color = .{ 0.0, 0.0, 0.0, 1.0 },
-        .fontSize = 16,
-        .fontWeight = 400,
-        .lineHeight = 1.0,
-        .textWrapping = .none,
-        .blendMode = .normal,
-        .cursor = .default,
-    };
-}
-
 fn testCreateElementConfiguration(configuration: struct {
     style: IncompleteStyle,
     expectedSize: Vec2,
@@ -1504,7 +1491,7 @@ fn testCreateElementConfiguration(configuration: struct {
 
     frame(.{
         .arena = arenaAllocator,
-        .baseStyle = try createTestingBaseStyle(),
+        .baseStyle = try testing.createTestingBaseStyle(),
         .dpi = @splat(72.0),
     })({
         (try element(configuration.style))({});

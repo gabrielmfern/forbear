@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const testing = @import("testing.zig");
 const Alignment = @import("node.zig").Alignment;
 const BaseStyle = @import("node.zig").BaseStyle;
 const Direction = @import("node.zig").Direction;
@@ -1741,35 +1742,32 @@ test "layout pipeline - ratio and grow produce stable geometry" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const buildTree = struct {
-        fn build(allocator: std.mem.Allocator) !void {
-            forbear.frame(.{
-                .arena = allocator,
-                .dpi = @splat(72.0),
-                .baseStyle = testingBaseStyle,
-            })({
-                (try forbear.element(.{
-                    .direction = .leftToRight,
-                    .width = .grow,
-                    .height = .{ .fixed = 100.0 },
-                }))({
-                    (try forbear.element(.{
-                        .width = .{ .ratio = 0.2 },
-                        .height = .grow,
-                    }))({});
-                    (try forbear.element(.{
-                        .width = .grow,
-                        .height = .grow,
-                    }))({});
-                });
-            });
-        }
-    }.build;
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    try buildTree(arenaAllocator);
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .grow,
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.2 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+            }))({});
+        });
+    });
     const first = try layout(arenaAllocator, .{ 300.0, 400.0 });
 
-    const firstChildren = first.children.nodes.items;
+    const firstChildren = try std.testing.allocator.dupe(Node, first.children.nodes.items);
+    defer std.testing.allocator.free(firstChildren);
     try std.testing.expectEqual(@as(usize, 2), firstChildren.len);
     try std.testing.expectEqual(@as(f32, 300.0), first.size[0]);
     try std.testing.expectEqual(@as(f32, 100.0), first.size[1]);
@@ -1787,7 +1785,26 @@ test "layout pipeline - ratio and grow produce stable geometry" {
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    try buildTree(arenaAllocator);
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .grow,
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.2 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+            }))({});
+        });
+    });
     const second = try layout(arenaAllocator, .{ 300.0, 400.0 });
     const secondChildren = second.children.nodes.items;
 
@@ -1814,6 +1831,8 @@ test "layout pipeline - manual children stay out of flow" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
+
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
     forbear.frame(.{
         .arena = arenaAllocator,
@@ -1875,30 +1894,32 @@ test "layout pipeline - vertical ratio and grow produce stable geometry" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    const buildTree = struct {
-        fn build() !void {
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .topToBottom,
+            .width = .{ .fixed = 120.0 },
+            .height = .{ .fixed = 300.0 },
+        }))({
             (try forbear.element(.{
-                .direction = .topToBottom,
-                .width = .{ .fixed = 120.0 },
-                .height = .{ .fixed = 300.0 },
-            }))({
-                (try forbear.element(.{
-                    .width = .grow,
-                    .height = .{ .ratio = 0.5 },
-                }))({});
-                (try forbear.element(.{
-                    .width = .grow,
-                    .height = .grow,
-                }))({});
-            });
-        }
-    }.build;
-
-    try buildTree();
+                .width = .grow,
+                .height = .{ .ratio = 0.5 },
+            }))({});
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+            }))({});
+        });
+    });
     const first = try layout(arenaAllocator, .{ 500.0, 500.0 });
 
-    const firstsChildren = first.children.nodes.items;
+    const firstsChildren = try std.testing.allocator.dupe(Node, first.children.nodes.items);
+    defer std.testing.allocator.free(firstsChildren);
     try std.testing.expectEqual(@as(usize, 2), firstsChildren.len);
     try std.testing.expectEqual(@as(f32, 120.0), first.size[0]);
     try std.testing.expectEqual(@as(f32, 300.0), first.size[1]);
@@ -1918,7 +1939,26 @@ test "layout pipeline - vertical ratio and grow produce stable geometry" {
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    try buildTree();
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .topToBottom,
+            .width = .{ .fixed = 120.0 },
+            .height = .{ .fixed = 300.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .{ .ratio = 0.5 },
+            }))({});
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+            }))({});
+        });
+    });
     const second = try layout(arenaAllocator, .{ 500.0, 500.0 });
     const secondsChildren = second.children.nodes.items;
 
@@ -1945,6 +1985,8 @@ test "layout pipeline - manual ratio child stays out of flow" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
+
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
     forbear.frame(.{
         .arena = arenaAllocator,
@@ -2000,35 +2042,31 @@ test "layout pipeline - ratio and shrink keep children within parent flow" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    const buildTree = struct {
-        fn build(allocator: std.mem.Allocator) !void {
-            forbear.frame(.{
-                .arena = allocator,
-                .dpi = @splat(72.0),
-                .baseStyle = testingBaseStyle,
-            })({
-                (try forbear.element(.{
-                    .direction = .leftToRight,
-                    .width = .{ .fixed = 40.0 },
-                    .height = .{ .fixed = 100.0 },
-                }))({
-                    (try forbear.element(.{
-                        .width = .{ .ratio = 0.5 },
-                        .height = .grow,
-                    }))({});
-                    (try forbear.element(.{
-                        .width = .{ .fixed = 30.0 },
-                        .height = .grow,
-                    }))({});
-                });
-            });
-        }
-    }.build;
-
-    try buildTree(arenaAllocator);
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .{ .fixed = 40.0 },
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.5 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .grow,
+            }))({});
+        });
+    });
     const first = try layout(arenaAllocator, .{ 500.0, 500.0 });
-    const firstsChildren = first.children.nodes.items;
+    const firstsChildren = try std.testing.allocator.dupe(Node, first.children.nodes.items);
+    defer std.testing.allocator.free(firstsChildren);
 
     try std.testing.expectEqual(@as(usize, 2), firstsChildren.len);
     try std.testing.expectEqual(@as(f32, 40.0), first.size[0]);
@@ -2047,7 +2085,26 @@ test "layout pipeline - ratio and shrink keep children within parent flow" {
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    try buildTree(arenaAllocator);
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .{ .fixed = 40.0 },
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.5 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .grow,
+            }))({});
+        });
+    });
     const second = try layout(arenaAllocator, .{ 500.0, 500.0 });
     const secondsChildren = second.children.nodes.items;
 
@@ -2056,17 +2113,6 @@ test "layout pipeline - ratio and shrink keep children within parent flow" {
     try std.testing.expectEqual(firstsChildren[1].position[0], secondsChildren[1].position[0]);
 }
 
-const testingBaseStyle = BaseStyle{
-    .font = undefined,
-    .color = .{ 0.0, 0.0, 0.0, 1.0 },
-    .fontSize = 16,
-    .fontWeight = 400,
-    .lineHeight = 1.0,
-    .textWrapping = .none,
-    .blendMode = .normal,
-    .cursor = .default,
-};
-
 test "layout pipeline - percentage sizes track parent axis" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
@@ -2074,6 +2120,8 @@ test "layout pipeline - percentage sizes track parent axis" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
+
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
     forbear.frame(.{
         .arena = arenaAllocator,
