@@ -43,12 +43,7 @@ var priorCrashHandlers: ?CrashOutput.PriorHandlers = null;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer if (gpa.deinit() == .leak) {
-        printToRealStderr("\n\x1b[31mMemory leak detected in test runner allocator!\n\x1b[0m", .{});
-    };
-
     var arena = std.heap.ArenaAllocator.init(gpa.allocator());
-    defer arena.deinit();
     const allocator = arena.allocator();
 
     // Save the real stderr for later restoration.
@@ -59,12 +54,17 @@ pub fn main() !void {
         else => return err,
     };
 
-    if (singleTest) |testName| {
+    const exitCode = if (singleTest) |testName| blk: {
         CrashOutput.install();
-        runSingleTestProcess(testName);
+        break :blk try runSingleTestProcess(testName);
+    } else try runParentProcess(allocator);
+
+    arena.deinit();
+    if (gpa.deinit() == .leak) {
+        printToRealStderr("\n\x1b[31mMemory leak detected in test runner allocator!\n\x1b[0m", .{});
     }
 
-    try runParentProcess(allocator);
+    std.posix.exit(exitCode);
 }
 
 const ChildOutcome = struct {
@@ -74,7 +74,7 @@ const ChildOutcome = struct {
     unexpectedTerm: ?std.process.Child.Term,
 };
 
-fn runParentProcess(allocator: Allocator) !void {
+fn runParentProcess(allocator: Allocator) !u8 {
     const env = Env.init(allocator);
     defer env.deinit(allocator);
 
@@ -117,6 +117,9 @@ fn runParentProcess(allocator: Allocator) !void {
             defer testArena.deinit();
             const testAllocator = testArena.allocator();
 
+            // Child env/output allocations live only for this test. Printing
+            // happens inside this scope so the arena can reclaim everything at
+            // once after the result has been rendered.
             slowest.startTiming();
             const outcome = try runTestInChildProcess(testAllocator, argv, t.name);
             const nsTaken = slowest.endTiming(friendlyName);
@@ -217,15 +220,15 @@ fn runParentProcess(allocator: Allocator) !void {
     slowest.display();
     Printer.raw("\n", .{});
 
-    std.posix.exit(if (summaryStatus == .pass) 0 else 1);
+    return if (summaryStatus == .pass) 0 else 1;
 }
 
-fn runSingleTestProcess(selectedTestName: []const u8) noreturn {
+fn runSingleTestProcess(selectedTestName: []const u8) !u8 {
     for (builtin.test_functions) |t| {
         if (isSetup(t)) {
             t.func() catch |err| {
                 std.debug.print("setup \"{s}\" failed: {}\n", .{ t.name, err });
-                std.posix.exit(childExitFail);
+                return childExitFail;
             };
         }
     }
@@ -274,19 +277,19 @@ fn runSingleTestProcess(selectedTestName: []const u8) noreturn {
         }
 
         if (failed) {
-            std.posix.exit(if (leaked) childExitFailLeak else childExitFail);
+            return if (leaked) childExitFailLeak else childExitFail;
         }
         if (leaked) {
-            std.posix.exit(childExitLeak);
+            return childExitLeak;
         }
         if (skipped) {
-            std.posix.exit(childExitSkip);
+            return childExitSkip;
         }
-        std.posix.exit(0);
+        return 0;
     }
 
     std.debug.print("Test not found: {s}\n", .{selectedTestName});
-    std.posix.exit(childExitFail);
+    return childExitFail;
 }
 
 fn runTestInChildProcess(allocator: Allocator, argv: []const [:0]u8, testName: []const u8) !ChildOutcome {
