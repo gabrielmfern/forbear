@@ -79,6 +79,7 @@ fn runParentProcess(allocator: Allocator) !void {
     defer env.deinit(allocator);
 
     const argv = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, argv);
 
     const numSlowestToTrack = 5;
     var slowest = SlowTracker.init(allocator, numSlowestToTrack);
@@ -110,69 +111,78 @@ fn runParentProcess(allocator: Allocator) !void {
         const friendlyName = extractFriendlyName(t);
         const modulePath = extractModulePath(t);
 
-        slowest.startTiming();
-        const outcome = try runTestInChildProcess(allocator, argv, t.name);
-        const nsTaken = slowest.endTiming(friendlyName);
-        const ms = @as(f64, @floatFromInt(nsTaken)) / 1_000_000.0;
+        var shouldStop = false;
+        {
+            var testArena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer testArena.deinit();
+            const testAllocator = testArena.allocator();
 
-        if (outcome.leaked) {
-            leak += 1;
-        }
+            slowest.startTiming();
+            const outcome = try runTestInChildProcess(testAllocator, argv, t.name);
+            const nsTaken = slowest.endTiming(friendlyName);
+            const ms = @as(f64, @floatFromInt(nsTaken)) / 1_000_000.0;
 
-        switch (outcome.status) {
-            .pass => pass += 1,
-            .skip => skip += 1,
-            .fail => fail += 1,
-            .text => unreachable,
-        }
+            if (outcome.leaked) {
+                leak += 1;
+            }
 
-        if (env.verbose) {
             switch (outcome.status) {
-                .pass => {
-                    Printer.status(.pass, "  PASS ", .{});
-                    Printer.raw("{s}", .{friendlyName});
-                    if (modulePath) |path| {
-                        Printer.dim("  ({s})", .{path});
-                    }
-                    Printer.dim("  {d:.2}ms", .{ms});
-                    Printer.raw("\n", .{});
-                    printCapturedOutput(outcome.output);
-                },
-                .skip => {
-                    Printer.status(.skip, "  SKIP ", .{});
-                    Printer.raw("{s}", .{friendlyName});
-                    if (modulePath) |path| {
-                        Printer.dim("  ({s})", .{path});
-                    }
-                    Printer.raw("\n", .{});
-                    printCapturedOutput(outcome.output);
-                },
-                .fail => {
-                    Printer.raw("\n", .{});
-                    Printer.status(.fail, "  FAIL ", .{});
-                    Printer.raw("{s}", .{friendlyName});
-                    if (modulePath) |path| {
-                        Printer.dim("  ({s})", .{path});
-                    }
-                    Printer.dim("  {d:.2}ms", .{ms});
-                    Printer.raw("\n", .{});
-
-                    if (outcome.leaked) {
-                        Printer.status(.fail, "       Memory leak detected\n", .{});
-                    }
-                    if (outcome.unexpectedTerm) |term| {
-                        Printer.status(.fail, "       {s}\n", .{describeChildTerm(term)});
-                    }
-                    printCapturedOutput(outcome.output);
-                    Printer.raw("\n", .{});
-                },
+                .pass => pass += 1,
+                .skip => skip += 1,
+                .fail => fail += 1,
                 .text => unreachable,
             }
-        } else {
-            Printer.status(outcome.status, ".", .{});
+
+            if (env.verbose) {
+                switch (outcome.status) {
+                    .pass => {
+                        Printer.status(.pass, "  PASS ", .{});
+                        Printer.raw("{s}", .{friendlyName});
+                        if (modulePath) |path| {
+                            Printer.dim("  ({s})", .{path});
+                        }
+                        Printer.dim("  {d:.2}ms", .{ms});
+                        Printer.raw("\n", .{});
+                        printCapturedOutput(outcome.output);
+                    },
+                    .skip => {
+                        Printer.status(.skip, "  SKIP ", .{});
+                        Printer.raw("{s}", .{friendlyName});
+                        if (modulePath) |path| {
+                            Printer.dim("  ({s})", .{path});
+                        }
+                        Printer.raw("\n", .{});
+                        printCapturedOutput(outcome.output);
+                    },
+                    .fail => {
+                        Printer.raw("\n", .{});
+                        Printer.status(.fail, "  FAIL ", .{});
+                        Printer.raw("{s}", .{friendlyName});
+                        if (modulePath) |path| {
+                            Printer.dim("  ({s})", .{path});
+                        }
+                        Printer.dim("  {d:.2}ms", .{ms});
+                        Printer.raw("\n", .{});
+
+                        if (outcome.leaked) {
+                            Printer.status(.fail, "       Memory leak detected\n", .{});
+                        }
+                        if (outcome.unexpectedTerm) |term| {
+                            Printer.status(.fail, "       {s}\n", .{describeChildTerm(term)});
+                        }
+                        printCapturedOutput(outcome.output);
+                        Printer.raw("\n", .{});
+                    },
+                    .text => unreachable,
+                }
+            } else {
+                Printer.status(outcome.status, ".", .{});
+            }
+
+            shouldStop = outcome.status == .fail and env.failFirst;
         }
 
-        if (outcome.status == .fail and env.failFirst) {
+        if (shouldStop) {
             break;
         }
     }
