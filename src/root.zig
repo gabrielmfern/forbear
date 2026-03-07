@@ -7,9 +7,10 @@ pub const Graphics = @import("graphics.zig");
 pub const Image = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
-pub const LayoutBox = layouting.Node;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
+pub const LayoutGlyph = nodeImport.LayoutGlyph;
+pub const Glyphs = nodeImport.Glyphs;
 pub const BaseStyle = nodeImport.BaseStyle;
 pub const Alignment = nodeImport.Alignment;
 pub const Padding = nodeImport.Padding;
@@ -120,17 +121,6 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .fonts = std.StringHashMap(Font).init(allocator),
     };
 }
-
-const testingBaseStyle: BaseStyle = .{
-    .font = undefined,
-    .color = .{ 0.0, 0.0, 0.0, 1.0 },
-    .fontSize = 16,
-    .fontWeight = 400,
-    .lineHeight = 1.0,
-    .textWrapping = configuration.mode,
-    .blendMode = .normal,
-    .cursor = .default,
-};
 
 test "Element tree stack stability" {
     try init(std.testing.allocator, undefined);
@@ -1250,15 +1240,15 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node,
     const self = getContext();
     if (self.frameNodeParentStack.getLastOrNull()) |parent| {
         std.debug.assert(self.rootFrameNode != null);
+        std.debug.assert(parent.children == .nodes);
         // How can we make sure that these asserts aren't really necessary? HOw
         // can we make sure that the compiler will ensure that the parent here
         // always allows for children?
-        if (parent.children) |*children| {
-            std.debug.assert(children.* == .nodes);
+        if (parent.children.nodes.items.len > 0) {
             return .{
-                .ptr = try children.nodes.addOne(arena),
+                .ptr = try parent.children.nodes.addOne(arena),
                 .parent = parent,
-                .index = children.nodes.items.len - 1,
+                .index = parent.children.nodes.items.len - 1,
             };
         } else {
             var children = try std.ArrayList(Node).initCapacity(arena, 1);
@@ -1293,15 +1283,9 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node,
     }
 }
 
-pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !void {
-    const self = getContext();
-
-    const result = try putNode(arena);
-
-    var hasher = std.hash.Wyhash.init(0);
-    hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
-    hasher.update(std.mem.asBytes(&result.index));
-
+/// Thin wrapper around `element`, but handles the proper aspect ratio
+/// definition in a way that feels intuitive to CSS
+pub fn image(style: IncompleteStyle, img: *Image) !void {
     var complementedStyle = style;
     const imageWidth: f32 = @floatFromInt(img.width);
     const imageHeight: f32 = @floatFromInt(img.height);
@@ -1343,16 +1327,7 @@ pub fn image(arena: std.mem.Allocator, style: IncompleteStyle, img: *Image) !voi
     }
     complementedStyle.background = .{ .image = img };
 
-    result.ptr.* = Node{
-        .key = hasher.final(),
-        .content = .{
-            .element = .{
-                .style = complementedStyle,
-                .children = .empty,
-            },
-        },
-    };
-    self.previousPushedNode = result.ptr;
+    try element(complementedStyle)({});
 }
 
 fn endFrame(block: void) void {
@@ -1369,7 +1344,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) void {
     return &endFrame;
 }
 
-pub fn element(incompletestyle: IncompleteStyle) !*const fn (void) void {
+pub fn element(incompleteStyle: IncompleteStyle) !*const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -1380,7 +1355,7 @@ pub fn element(incompletestyle: IncompleteStyle) !*const fn (void) void {
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
-    var style = IncompleteStyle.completeWith(baseStyle);
+    var style = incompleteStyle.completeWith(baseStyle);
     const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
     style.borderWidth.x *= @splat(resolutionMultiplier[0]);
     style.borderWidth.y *= @splat(resolutionMultiplier[1]);
@@ -1399,7 +1374,7 @@ pub fn element(incompletestyle: IncompleteStyle) !*const fn (void) void {
     const parentZ = if (result.parent) |parent|
         parent.z
     else
-        0.0;
+        0;
 
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
@@ -1408,7 +1383,7 @@ pub fn element(incompletestyle: IncompleteStyle) !*const fn (void) void {
         .key = hasher.final(),
         .style = style,
         .children = .{ .nodes = .empty },
-        .z = if (incompletestyle.zIndex) |zIndex|
+        .z = if (incompleteStyle.zIndex) |zIndex|
             zIndex
         else if (parentZ < std.math.maxInt(u16))
             parentZ + 1
@@ -1472,11 +1447,86 @@ pub fn element(incompletestyle: IncompleteStyle) !*const fn (void) void {
     return &popParentStack;
 }
 
+const testingBaseStyle = BaseStyle{
+    .font = undefined,
+    .color = .{ 0.0, 0.0, 0.0, 1.0 },
+    .fontSize = 16,
+    .fontWeight = 400,
+    .lineHeight = 1.0,
+    .textWrapping = .none,
+    .blendMode = .normal,
+    .cursor = .default,
+};
+
+fn testCreateElementConfiguration(configuration: struct {
+    style: IncompleteStyle,
+    expectedSize: Vec2,
+}) !void {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    frame(.{
+        .arena = arenaAllocator,
+        .baseStyle = testingBaseStyle,
+        .dpi = 72.0,
+    })({
+        (try element(.{}))({});
+        if (self.previousPushedNode) |previousNode| {
+            try std.testing.expectEqualDeep(configuration.expectedSize, previousNode.size);
+        }
+    });
+}
+
+test "element - width ratio uses fixed height" {
+    try testCreateElementConfiguration(.{
+        .style = .{
+            .width = .{ .ratio = 1.5 },
+            .height = .{ .fixed = 40.0 },
+        },
+        .expectedSize = .{ 60.0, 40.0 },
+    });
+}
+
+test "element - height ratio uses fixed width" {
+    try testCreateElementConfiguration(.{
+        .style = .{
+            .width = .{ .fixed = 40.0 },
+            .height = .{ .ratio = 1.5 },
+        },
+        .expectedSize = .{ 40.0, 60.0 },
+    });
+}
+
+test "element - ratio without opposite fixed axis starts at zero" {
+    try testCreateElementConfiguration(.{
+        .style = .{
+            .width = .{ .ratio = 2.0 },
+            .height = .fit,
+        },
+        .expectedSize = .{ 0.0, 0.0 },
+    });
+}
+
+test "element - percentage sizing starts at zero before parent resolution" {
+    try testCreateElementConfiguration(.{
+        .style = .{
+            .width = .{ .percentage = 0.5 },
+            .height = .{ .percentage = 0.5 },
+        },
+        .expectedSize = .{ 0.0, 0.0 },
+    });
+}
+
 pub fn text(content: []const u8) !void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 
-    const result = try putNode(self.frameMeta.?.arena);
+    const arena = self.frameMeta.?.arena;
+    const result = try putNode(arena);
 
     const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
 
@@ -1490,7 +1540,7 @@ pub fn text(content: []const u8) !void {
             .text
         else
             baseStyle.cursor,
-        .alignment = if (self.parent) |parent| .{
+        .alignment = if (result.parent) |parent| .{
             .x = parent.style.alignment.x,
             .y = .start,
         } else null,
@@ -1501,9 +1551,9 @@ pub fn text(content: []const u8) !void {
     const pixelSizeVec2: Vec2 = @as(Vec2, @splat(style.fontSize)) * resolutionMultiplier;
     const pixelLineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * pixelSizeVec2[1];
 
-    const shapedGlyphs = try style.font.shape(text);
-    var layoutGlyphs = try self.arenaAllocator.alloc(LayoutGlyph, shapedGlyphs.len);
-    errdefer self.arenaAllocator.free(layoutGlyphs);
+    const shapedGlyphs = try style.font.shape(content);
+    var layoutGlyphs = try arena.alloc(LayoutGlyph, shapedGlyphs.len);
+    errdefer arena.free(layoutGlyphs);
     var cursor: Vec2 = @splat(0.0);
 
     var minSize: Vec2 = .{ 0.0, pixelLineHeight };
@@ -1514,7 +1564,7 @@ pub fn text(content: []const u8) !void {
     for (shapedGlyphs, 0..) |shapedGlyph, i| {
         const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
         const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
-        const glyphText = try self.arenaAllocator.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]);
+        const glyphText = try arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]);
         layoutGlyphs[i] = LayoutGlyph{
             .index = @intCast(shapedGlyph.index),
             .position = cursor + offset,
@@ -1544,6 +1594,11 @@ pub fn text(content: []const u8) !void {
     }
     maxSize[0] = cursor[0];
 
+    const parentZ = if (result.parent) |parent|
+        parent.z
+    else
+        0;
+
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(content);
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
@@ -1551,8 +1606,10 @@ pub fn text(content: []const u8) !void {
     result.ptr.* = Node{
         .key = hasher.final(),
         .position = .{ 0.0, 0.0 },
-        .z = z,
-        .key = node.key,
+        .z = if (parentZ < std.math.maxInt(u16))
+            parentZ + 1
+        else
+            parentZ,
         .size = .{ cursor[0], pixelLineHeight },
         .minSize = minSize,
         .maxSize = maxSize,
@@ -1597,7 +1654,7 @@ pub inline fn PropsOf(comptime function: anytype) type {
     }
 }
 
-pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, props: PropsOf(function)) !ReturnType(function) {
+pub inline fn component(comptime function: anytype, props: PropsOf(function)) !ReturnType(function) {
     const Function = @TypeOf(function);
     const functionTypeInfo = @typeInfo(Function);
     if (functionTypeInfo != .@"fn") {
@@ -1625,7 +1682,6 @@ pub inline fn component(arena: std.mem.Allocator, comptime function: anytype, pr
     const previousComponentResolutionState = self.componentResolutionState;
     self.componentResolutionState = .{
         .key = componentKey,
-        .arenaAllocator = arena,
         .useStateCursor = 0,
     };
     const returnValue = if (hasProps)
@@ -1661,7 +1717,7 @@ pub fn useNextEvent() ?Event {
     return null;
 }
 
-pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Vec2) !void {
+pub fn update(arena: std.mem.Allocator, root: *const Node, viewportSize: Vec2) !void {
     const self = getContext();
 
     var queueIterator = self.frameEventQueue.valueIterator();
@@ -1730,7 +1786,7 @@ pub fn update(arena: std.mem.Allocator, root: *const LayoutBox, viewportSize: Ve
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
     self.lastUpdateTime = timestamp;
 
-    try component(arena, Scrolling, .{ .uiEdges = uiEdges });
+    try component(Scrolling, .{ .uiEdges = uiEdges });
 }
 
 fn Scrolling(props: struct { uiEdges: Vec2 }) !void {

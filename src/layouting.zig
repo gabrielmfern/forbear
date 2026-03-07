@@ -4,6 +4,8 @@ const Alignment = @import("node.zig").Alignment;
 const BaseStyle = @import("node.zig").BaseStyle;
 const Direction = @import("node.zig").Direction;
 const Element = @import("node.zig").Element;
+const LayoutGlyph = @import("node.zig").LayoutGlyph;
+const Glyphs = @import("node.zig").Glyphs;
 const forbear = @import("root.zig");
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const Node = @import("node.zig").Node;
@@ -69,7 +71,7 @@ fn layoutDebugConfig() LayoutDebugConfig {
     };
 }
 
-fn shouldLogLayoutBox(debugConfig: LayoutDebugConfig, key: u64) bool {
+fn shouldLogNode(debugConfig: LayoutDebugConfig, key: u64) bool {
     if (!debugConfig.enabled) {
         return false;
     }
@@ -79,13 +81,13 @@ fn shouldLogLayoutBox(debugConfig: LayoutDebugConfig, key: u64) bool {
     return true;
 }
 
-fn findLayoutBoxByKey(layoutBox: *const Node, key: u64) ?*const Node {
-    if (layoutBox.key == key) {
-        return layoutBox;
+fn findNodeByKey(node: *const Node, key: u64) ?*const Node {
+    if (node.key == key) {
+        return node;
     }
-    if (layoutBox.children != null and layoutBox.children.? == .nodes) {
-        for (layoutBox.children.?.nodes) |*child| {
-            if (findLayoutBoxByKey(child, key)) |found| {
+    if (node.children == .nodes) {
+        for (node.children.nodes.items) |*child| {
+            if (findNodeByKey(child, key)) |found| {
                 return found;
             }
         }
@@ -93,34 +95,32 @@ fn findLayoutBoxByKey(layoutBox: *const Node, key: u64) ?*const Node {
     return null;
 }
 
-fn logLayoutBoxState(stage: []const u8, layoutBox: *const Node) void {
+fn logNodeState(stage: []const u8, node: *const Node) void {
     var childKind: []const u8 = "none";
     var childCount: usize = 0;
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .nodes => |layoutBoxes| {
-                childKind = "layoutBoxes";
-                childCount = layoutBoxes.len;
-            },
-            .glyphs => |glyphs| {
-                childKind = "glyphs";
-                childCount = glyphs.slice.len;
-            },
-        }
+    switch (node.children) {
+        .nodes => |nodes| {
+            childKind = "nodes";
+            childCount = nodes.items.len;
+        },
+        .glyphs => |glyphs| {
+            childKind = "glyphs";
+            childCount = glyphs.slice.len;
+        },
     }
 
     std.log.debug(
         "[layout-debug] {s}: key={}, pos={any}, size={any}, min={any}, max={any}, z={}, placement={s}, dir={s}, children={s}({})",
         .{
             stage,
-            layoutBox.key,
-            layoutBox.position,
-            layoutBox.size,
-            layoutBox.minSize,
-            layoutBox.maxSize,
-            layoutBox.z,
-            @tagName(layoutBox.style.placement),
-            @tagName(layoutBox.style.direction),
+            node.key,
+            node.position,
+            node.size,
+            node.minSize,
+            node.maxSize,
+            node.z,
+            @tagName(node.style.placement),
+            @tagName(node.style.direction),
             childKind,
             childCount,
         },
@@ -131,19 +131,19 @@ fn shouldLogLoopIteration(iteration: usize) bool {
     return iteration <= 8 or iteration % 128 == 0;
 }
 
-fn logLayoutStage(debugConfig: LayoutDebugConfig, stage: []const u8, layoutBox: *const Node) void {
+fn logLayoutStage(debugConfig: LayoutDebugConfig, stage: []const u8, node: *const Node) void {
     if (!debugConfig.enabled) {
         return;
     }
     if (debugConfig.keyFilter) |targetKey| {
-        if (findLayoutBoxByKey(layoutBox, targetKey)) |targetLayoutBox| {
-            logLayoutBoxState(stage, targetLayoutBox);
+        if (findNodeByKey(node, targetKey)) |targetNode| {
+            logNodeState(stage, targetNode);
         } else {
             std.log.debug("[layout-debug] {s}: key={} not found", .{ stage, targetKey });
         }
         return;
     }
-    logLayoutBoxState(stage, layoutBox);
+    logNodeState(stage, node);
 }
 
 fn makeAbsolute(node: *Node, base: Vec2) void {
@@ -151,19 +151,17 @@ fn makeAbsolute(node: *Node, base: Vec2) void {
         node.position += base;
     }
 
-    if (node.children != null) {
-        switch (node.children.?) {
-            .nodes => |children| {
-                for (children) |*child| {
-                    makeAbsolute(child, node.position);
-                }
-            },
-            .glyphs => |glyphs| {
-                for (glyphs.slice) |*glyph| {
-                    glyph.position += node.position;
-                }
-            },
-        }
+    switch (node.children) {
+        .nodes => |nodes| {
+            for (nodes.items) |*child| {
+                makeAbsolute(child, node.position);
+            }
+        },
+        .glyphs => |glyphs| {
+            for (glyphs.slice) |*glyph| {
+                glyph.position += node.position;
+            }
+        },
     }
 }
 
@@ -176,7 +174,7 @@ fn growChildren(
     debugConfig: LayoutDebugConfig,
 ) !void {
     const loopWatchdogLimit: usize = 65_536;
-    const shouldLog = shouldLogLayoutBox(debugConfig, parentKey);
+    const shouldLog = shouldLogNode(debugConfig, parentKey);
     var toGrowGradually = try std.ArrayList(*Node).initCapacity(allocator, children.len);
     defer toGrowGradually.deinit(allocator);
     for (children) |*child| {
@@ -274,7 +272,7 @@ fn shrinkChildren(
     debugConfig: LayoutDebugConfig,
 ) !void {
     const loopWatchdogLimit: usize = 65_536;
-    const shouldLog = shouldLogLayoutBox(debugConfig, parentKey);
+    const shouldLog = shouldLogNode(debugConfig, parentKey);
     if (remaining.* >= -0.001) {
         return;
     }
@@ -380,31 +378,31 @@ fn shrinkChildren(
 
 fn growAndShrink(
     allocator: std.mem.Allocator,
-    layoutBox: *Node,
+    node: *Node,
 ) !void {
-    try growAndShrinkWithDebug(allocator, layoutBox, layoutDebugConfig());
+    try growAndShrinkWithDebug(allocator, node, layoutDebugConfig());
 }
 
 fn growAndShrinkWithDebug(
     allocator: std.mem.Allocator,
-    layoutBox: *Node,
+    node: *Node,
     debugConfig: LayoutDebugConfig,
 ) !void {
-    if (layoutBox.children != null and layoutBox.children.? == .nodes) {
-        const children = layoutBox.children.?.nodes;
-        const direction = layoutBox.style.direction;
-        const shouldLog = shouldLogLayoutBox(debugConfig, layoutBox.key);
+    if (node.children == .nodes) {
+        const children = node.children.nodes;
+        const direction = node.style.direction;
+        const shouldLog = shouldLogNode(debugConfig, node.key);
 
-        var remaining = layoutBox.getSize(direction);
-        for (children) |*child| {
+        var remaining = node.getSize(direction);
+        for (children.items) |*child| {
             if (child.style.placement == .standard) {
                 if (direction.perpendicular() == .topToBottom) {
-                    if (child.style.height == .grow or (child.size[1] > layoutBox.size[1] and child.minSize[1] < child.size[1])) {
-                        child.size[1] = @max(@min(layoutBox.size[1], child.maxSize[1]), child.minSize[1]);
+                    if (child.style.height == .grow or (child.size[1] > node.size[1] and child.minSize[1] < child.size[1])) {
+                        child.size[1] = @max(@min(node.size[1], child.maxSize[1]), child.minSize[1]);
                     }
                 } else if (direction.perpendicular() == .leftToRight) {
-                    if (child.style.width == .grow or (child.size[0] > layoutBox.size[0] and child.minSize[0] < child.size[0])) {
-                        child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
+                    if (child.style.width == .grow or (child.size[0] > node.size[0] and child.minSize[0] < child.size[0])) {
+                        child.size[0] = @max(@min(node.size[0], child.maxSize[0]), child.minSize[0]);
                     }
                 }
                 applyOwnRatios(child);
@@ -414,319 +412,309 @@ fn growAndShrinkWithDebug(
         if (shouldLog) {
             std.log.debug(
                 "[layout-debug] growAndShrink begin: key={}, dir={s}, childCount={}, parentSize={any}, initialRemaining={d:.4}",
-                .{ layoutBox.key, @tagName(direction), children.len, layoutBox.size, remaining },
+                .{ node.key, @tagName(direction), children.items.len, node.size, remaining },
             );
         }
-        try growChildren(allocator, children, direction, &remaining, layoutBox.key, debugConfig);
-        try shrinkChildren(allocator, children, direction, &remaining, layoutBox.key, debugConfig);
+        try growChildren(allocator, children.items, direction, &remaining, node.key, debugConfig);
+        try shrinkChildren(allocator, children.items, direction, &remaining, node.key, debugConfig);
         if (shouldLog and @abs(remaining) > 0.001) {
             std.log.debug(
                 "[layout-debug] growAndShrink residual: key={}, dir={s}, remaining={d:.4}",
-                .{ layoutBox.key, @tagName(direction), remaining },
+                .{ node.key, @tagName(direction), remaining },
             );
         }
-        for (children) |*child| {
+        for (children.items) |*child| {
             try growAndShrinkWithDebug(allocator, child, debugConfig);
         }
     }
 }
 
-fn wrap(arena: std.mem.Allocator, layoutBox: *Node) !void {
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .nodes => |childBoxes| {
-                for (childBoxes) |*child| {
-                    try wrap(arena, child);
-                }
-            },
-            .glyphs => |glyphs| {
-                if (layoutBox.style.textWrapping == .none) {
-                    return;
-                }
-                const Line = struct {
-                    startIndex: usize,
-                    endIndex: usize,
-                };
-                var lines = try std.ArrayList(Line).initCapacity(arena, 4);
+fn wrap(arena: std.mem.Allocator, node: *Node) !void {
+    switch (node.children) {
+        .nodes => |nodes| {
+            for (nodes.items) |*child| {
+                try wrap(arena, child);
+            }
+        },
+        .glyphs => |glyphs| {
+            if (node.style.textWrapping == .none) {
+                return;
+            }
+            const Line = struct {
+                startIndex: usize,
+                endIndex: usize,
+            };
+            var lines = try std.ArrayList(Line).initCapacity(arena, 4);
 
-                const lineWidth = layoutBox.size[0];
-                var cursor: Vec2 = @splat(0.0);
-                var lineStartIndex: usize = 0;
-                switch (layoutBox.style.textWrapping) {
-                    .character => {
-                        for (glyphs.slice, 0..) |*glyph, index| {
-                            if (cursor[0] + glyph.advance[0] > lineWidth) {
+            const lineWidth = node.size[0];
+            var cursor: Vec2 = @splat(0.0);
+            var lineStartIndex: usize = 0;
+            switch (node.style.textWrapping) {
+                .character => {
+                    for (glyphs.slice, 0..) |*glyph, index| {
+                        if (cursor[0] + glyph.advance[0] > lineWidth) {
+                            try lines.append(arena, .{
+                                .startIndex = lineStartIndex,
+                                .endIndex = index - 1,
+                            });
+                            lineStartIndex = index;
+                            cursor[0] = 0.0;
+                            cursor[1] += glyphs.lineHeight;
+                        }
+
+                        glyph.position = cursor + glyph.offset;
+                        cursor += glyph.advance;
+                    }
+                },
+                .word => {
+                    var lastSpaceInfoOpt: ?struct {
+                        index: usize,
+                        position: Vec2,
+                    } = null;
+                    for (glyphs.slice, 0..) |*glyph, index| {
+                        if (cursor[0] + glyph.advance[0] > lineWidth) {
+                            if (lastSpaceInfoOpt) |lastSpaceInfo| {
+                                cursor[0] = 0;
+                                cursor[1] += glyphs.lineHeight;
+
+                                const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
                                 try lines.append(arena, .{
                                     .startIndex = lineStartIndex,
-                                    .endIndex = index - 1,
+                                    .endIndex = lastSpaceInfo.index,
                                 });
-                                lineStartIndex = index;
-                                cursor[0] = 0.0;
-                                cursor[1] += glyphs.lineHeight;
-                            }
 
-                            glyph.position = cursor + glyph.offset;
-                            cursor += glyph.advance;
-                        }
-                    },
-                    .word => {
-                        var lastSpaceInfoOpt: ?struct {
-                            index: usize,
-                            position: Vec2,
-                        } = null;
-                        for (glyphs.slice, 0..) |*glyph, index| {
-                            if (cursor[0] + glyph.advance[0] > lineWidth) {
-                                if (lastSpaceInfoOpt) |lastSpaceInfo| {
-                                    cursor[0] = 0;
-                                    cursor[1] += glyphs.lineHeight;
+                                for (lastSpaceInfo.index + 1..index) |reverseIndex| {
+                                    const reverseGlyph = &glyphs.slice[reverseIndex];
+                                    reverseGlyph.position[0] -= firstWordGlyph.position[0];
+                                    reverseGlyph.position[1] += glyphs.lineHeight;
 
-                                    const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
-                                    try lines.append(arena, .{
-                                        .startIndex = lineStartIndex,
-                                        .endIndex = lastSpaceInfo.index,
-                                    });
-
-                                    for (lastSpaceInfo.index + 1..index) |reverseIndex| {
-                                        const reverseGlyph = &glyphs.slice[reverseIndex];
-                                        reverseGlyph.position[0] -= firstWordGlyph.position[0];
-                                        reverseGlyph.position[1] += glyphs.lineHeight;
-
-                                        cursor += reverseGlyph.advance;
-                                    }
-                                    lineStartIndex = lastSpaceInfo.index + 1;
-                                    lastSpaceInfoOpt = null;
+                                    cursor += reverseGlyph.advance;
                                 }
-                            }
-
-                            glyph.position = cursor + glyph.offset;
-                            cursor += glyph.advance;
-                            if (std.mem.eql(u8, glyph.text, " ")) {
-                                lastSpaceInfoOpt = .{
-                                    .index = index,
-                                    .position = glyph.position,
-                                };
+                                lineStartIndex = lastSpaceInfo.index + 1;
+                                lastSpaceInfoOpt = null;
                             }
                         }
-                    },
-                    else => unreachable,
-                }
-                if (lines.getLastOrNull()) |lastLine| {
-                    if (lastLine.endIndex != glyphs.slice.len - 1) {
-                        try lines.append(arena, .{
-                            .startIndex = lastLine.endIndex + 1,
-                            .endIndex = glyphs.slice.len - 1,
-                        });
+
+                        glyph.position = cursor + glyph.offset;
+                        cursor += glyph.advance;
+                        if (std.mem.eql(u8, glyph.text, " ")) {
+                            lastSpaceInfoOpt = .{
+                                .index = index,
+                                .position = glyph.position,
+                            };
+                        }
                     }
-                } else {
+                },
+                else => unreachable,
+            }
+            if (lines.getLastOrNull()) |lastLine| {
+                if (lastLine.endIndex != glyphs.slice.len - 1) {
                     try lines.append(arena, .{
-                        .startIndex = 0,
+                        .startIndex = lastLine.endIndex + 1,
                         .endIndex = glyphs.slice.len - 1,
                     });
                 }
-                for (lines.items) |line| {
-                    const startX = glyphs.slice[line.startIndex].position[0];
-                    const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
-                    const width = endX - startX;
-                    for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
-                        switch (layoutBox.style.alignment.x) {
-                            .start => {},
-                            .center => glyph.position[0] += (lineWidth - width) / 2.0,
-                            .end => glyph.position[0] += lineWidth - width,
-                        }
-                    }
-                }
-                layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
-            },
-        }
-    }
-}
-
-fn applyOwnRatios(layoutBox: *Node) void {
-    if (layoutBox.style.width == .ratio) {
-        layoutBox.size[0] = layoutBox.style.width.ratio * layoutBox.size[1];
-    }
-    if (layoutBox.style.height == .ratio) {
-        layoutBox.size[1] = layoutBox.style.height.ratio * layoutBox.size[0];
-    }
-}
-
-fn applyParentPercentageSizes(layoutBox: *Node, parentSize: Vec2) void {
-    if (layoutBox.style.width == .percentage) {
-        layoutBox.size[0] = layoutBox.style.width.percentage * parentSize[0];
-    }
-    if (layoutBox.style.height == .percentage) {
-        layoutBox.size[1] = layoutBox.style.height.percentage * parentSize[1];
-    }
-
-    layoutBox.size[0] = @min(@max(layoutBox.size[0], layoutBox.minSize[0]), layoutBox.maxSize[0]);
-    layoutBox.size[1] = @min(@max(layoutBox.size[1], layoutBox.minSize[1]), layoutBox.maxSize[1]);
-
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .nodes => |childBoxes| {
-                for (childBoxes) |*child| {
-                    applyParentPercentageSizes(child, layoutBox.size);
-                }
-            },
-            else => {},
-        }
-    }
-}
-
-fn applyRatios(layoutBox: *Node) void {
-    applyOwnRatios(layoutBox);
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .nodes => |childBoxes| {
-                for (childBoxes) |*child| {
-                    applyRatios(child);
-                }
-            },
-            else => {},
-        }
-    }
-}
-
-fn fitAlong(layoutBox: *Node, fitDirection: Direction) void {
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .nodes => |childBoxes| {
-                const preferredSize = layoutBox.style.getPreferredSize(fitDirection);
-                const shouldFitMin = preferredSize != .fixed and preferredSize != .percentage and layoutBox.style.getMinSize(fitDirection) == null;
-                const layoutDirection = layoutBox.style.direction;
-
-                const paddingVector = layoutBox.style.padding.get(fitDirection);
-                const padding = paddingVector[0] + paddingVector[1];
-
-                const borderWidthVector = layoutBox.style.borderWidth.get(fitDirection);
-                const border = borderWidthVector[0] + borderWidthVector[1];
-
-                const size = preferredSize;
-                if (size == .fit) {
-                    layoutBox.setSize(fitDirection, padding + border);
-                }
-                if (shouldFitMin) {
-                    layoutBox.setMinSize(fitDirection, padding + border);
-                }
-                for (childBoxes) |*child| {
-                    fitAlong(child, fitDirection);
-                    if (child.style.placement == .standard) {
-                        const childMarginVector = child.style.margin.get(fitDirection);
-                        const childMargins = childMarginVector[0] + childMarginVector[1];
-                        if (layoutDirection == fitDirection) {
-                            if (size == .fit) {
-                                layoutBox.addSize(fitDirection, childMargins + child.getSize(fitDirection));
-                            }
-                            if (shouldFitMin) {
-                                layoutBox.addMinSize(fitDirection, childMargins + child.getMinSize(fitDirection));
-                            }
-                        }
-                        if (layoutDirection != fitDirection) {
-                            if (size == .fit) {
-                                layoutBox.setSize(fitDirection, @max(
-                                    childMargins + padding + border + child.getSize(fitDirection),
-                                    layoutBox.getSize(fitDirection),
-                                ));
-                            }
-                            if (shouldFitMin) {
-                                layoutBox.setMinSize(
-                                    fitDirection,
-                                    @max(childMargins + padding + border + child.getMinSize(fitDirection), layoutBox.getMinSize(fitDirection)),
-                                );
-                            }
-                        }
-                    }
-                }
-            },
-            else => {},
-        }
-    }
-}
-
-fn place(layoutBox: *Node) void {
-    layoutBox.position += layoutBox.style.translate;
-    if (layoutBox.children != null) {
-        switch (layoutBox.children.?) {
-            .nodes => |children| {
-                const direction = layoutBox.style.direction;
-                const hAlign = layoutBox.style.alignment.x;
-                const vAlign = layoutBox.style.alignment.y;
-
-                const availableSize = .{
-                    layoutBox.size[0] - (layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1]) - (layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1]),
-                    layoutBox.size[1] - (layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1]) - (layoutBox.style.borderWidth.y[0] + layoutBox.style.borderWidth.y[1]),
-                };
-
-                var childrenSize: Vec2 = @splat(0.0);
-                for (children) |child| {
-                    if (child.style.placement == .standard) {
-                        const contributingSize = Vec2{
-                            child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
-                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                        };
-                        if (direction == .leftToRight) {
-                            childrenSize[0] += contributingSize[0];
-                            childrenSize[1] = @max(contributingSize[1], childrenSize[1]);
-                        } else if (direction == .topToBottom) {
-                            childrenSize[0] = @max(contributingSize[0], childrenSize[0]);
-                            childrenSize[1] += contributingSize[1];
-                        }
-                    }
-                }
-
-                var cursor: Vec2 = .{
-                    layoutBox.style.padding.x[0] + layoutBox.style.borderWidth.x[0],
-                    layoutBox.style.padding.y[0] + layoutBox.style.borderWidth.y[0],
-                };
-                if (direction == .leftToRight) {
-                    switch (hAlign) {
+            } else {
+                try lines.append(arena, .{
+                    .startIndex = 0,
+                    .endIndex = glyphs.slice.len - 1,
+                });
+            }
+            for (lines.items) |line| {
+                const startX = glyphs.slice[line.startIndex].position[0];
+                const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
+                const width = endX - startX;
+                for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
+                    switch (node.style.alignment.x) {
                         .start => {},
-                        .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
-                        .end => cursor[0] += (availableSize[0] - childrenSize[0]),
-                    }
-                } else {
-                    switch (vAlign) {
-                        .start => {},
-                        .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
-                        .end => cursor[1] += (availableSize[1] - childrenSize[1]),
+                        .center => glyph.position[0] += (lineWidth - width) / 2.0,
+                        .end => glyph.position[0] += lineWidth - width,
                     }
                 }
+            }
+            node.size[1] = cursor[1] + glyphs.lineHeight;
+        },
+    }
+}
 
-                for (children) |*child| {
-                    if (child.style.placement == .standard) {
-                        const contributingSize = Vec2{
-                            child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
-                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                        };
-                        if (direction == .leftToRight) {
-                            // Cross-axis alignment (Vertical)
-                            switch (vAlign) {
-                                .start => child.position[1] = child.style.margin.y[0],
-                                .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
-                                .end => child.position[1] = (availableSize[1] - contributingSize[1]),
-                            }
+fn applyOwnRatios(node: *Node) void {
+    if (node.style.width == .ratio) {
+        node.size[0] = node.style.width.ratio * node.size[1];
+    }
+    if (node.style.height == .ratio) {
+        node.size[1] = node.style.height.ratio * node.size[0];
+    }
+}
 
-                            cursor[0] += child.style.margin.x[0];
-                            child.position += cursor;
-                            cursor[0] += child.size[0] + child.style.margin.x[1];
-                        } else {
-                            // Cross-axis alignment (Horizontal)
-                            switch (hAlign) {
-                                .start => child.position[0] = child.style.margin.x[0],
-                                .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
-                                .end => child.position[0] = (availableSize[0] - contributingSize[0]),
-                            }
+fn applyParentPercentageSizes(node: *Node, parentSize: Vec2) void {
+    if (node.style.width == .percentage) {
+        node.size[0] = node.style.width.percentage * parentSize[0];
+    }
+    if (node.style.height == .percentage) {
+        node.size[1] = node.style.height.percentage * parentSize[1];
+    }
 
-                            cursor[1] += child.style.margin.y[0];
-                            child.position += cursor;
-                            cursor[1] += child.size[1] + child.style.margin.y[1];
+    node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
+    node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
+
+    switch (node.children) {
+        .nodes => |nodes| {
+            for (nodes.items) |*child| {
+                applyParentPercentageSizes(child, node.size);
+            }
+        },
+        else => {},
+    }
+}
+
+fn applyRatios(node: *Node) void {
+    applyOwnRatios(node);
+    switch (node.children) {
+        .nodes => |nodes| {
+            for (nodes.items) |*child| {
+                applyRatios(child);
+            }
+        },
+        else => {},
+    }
+}
+
+fn fitAlong(node: *Node, fitDirection: Direction) void {
+    switch (node.children) {
+        .nodes => |nodes| {
+            const preferredSize = node.style.getPreferredSize(fitDirection);
+            const shouldFitMin = preferredSize != .fixed and preferredSize != .percentage and node.style.getMinSize(fitDirection) == null;
+            const layoutDirection = node.style.direction;
+
+            const paddingVector = node.style.padding.get(fitDirection);
+            const padding = paddingVector[0] + paddingVector[1];
+
+            const borderWidthVector = node.style.borderWidth.get(fitDirection);
+            const border = borderWidthVector[0] + borderWidthVector[1];
+
+            const size = preferredSize;
+            if (size == .fit) {
+                node.setSize(fitDirection, padding + border);
+            }
+            if (shouldFitMin) {
+                node.setMinSize(fitDirection, padding + border);
+            }
+            for (nodes.items) |*child| {
+                fitAlong(child, fitDirection);
+                if (child.style.placement == .standard) {
+                    const childMarginVector = child.style.margin.get(fitDirection);
+                    const childMargins = childMarginVector[0] + childMarginVector[1];
+                    if (layoutDirection == fitDirection) {
+                        if (size == .fit) {
+                            node.addSize(fitDirection, childMargins + child.getSize(fitDirection));
+                        }
+                        if (shouldFitMin) {
+                            node.addMinSize(fitDirection, childMargins + child.getMinSize(fitDirection));
                         }
                     }
-                    place(child);
+                    if (layoutDirection != fitDirection) {
+                        if (size == .fit) {
+                            node.setSize(fitDirection, @max(
+                                childMargins + padding + border + child.getSize(fitDirection),
+                                node.getSize(fitDirection),
+                            ));
+                        }
+                        if (shouldFitMin) {
+                            node.setMinSize(
+                                fitDirection,
+                                @max(childMargins + padding + border + child.getMinSize(fitDirection), node.getMinSize(fitDirection)),
+                            );
+                        }
+                    }
                 }
-            },
-            else => {},
-        }
+            }
+        },
+        else => {},
+    }
+}
+
+fn place(node: *Node) void {
+    node.position += node.style.translate;
+    switch (node.children) {
+        .nodes => |nodes| {
+            const direction = node.style.direction;
+            const hAlign = node.style.alignment.x;
+            const vAlign = node.style.alignment.y;
+
+            const availableSize = .{
+                node.size[0] - (node.style.padding.x[0] + node.style.padding.x[1]) - (node.style.borderWidth.x[0] + node.style.borderWidth.x[1]),
+                node.size[1] - (node.style.padding.y[0] + node.style.padding.y[1]) - (node.style.borderWidth.y[0] + node.style.borderWidth.y[1]),
+            };
+
+            var childrenSize: Vec2 = @splat(0.0);
+            for (nodes.items) |child| {
+                if (child.style.placement == .standard) {
+                    const contributingSize = Vec2{
+                        child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
+                    };
+                    if (direction == .leftToRight) {
+                        childrenSize[0] += contributingSize[0];
+                        childrenSize[1] = @max(contributingSize[1], childrenSize[1]);
+                    } else if (direction == .topToBottom) {
+                        childrenSize[0] = @max(contributingSize[0], childrenSize[0]);
+                        childrenSize[1] += contributingSize[1];
+                    }
+                }
+            }
+
+            var cursor: Vec2 = .{
+                node.style.padding.x[0] + node.style.borderWidth.x[0],
+                node.style.padding.y[0] + node.style.borderWidth.y[0],
+            };
+            if (direction == .leftToRight) {
+                switch (hAlign) {
+                    .start => {},
+                    .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
+                    .end => cursor[0] += (availableSize[0] - childrenSize[0]),
+                }
+            } else {
+                switch (vAlign) {
+                    .start => {},
+                    .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
+                    .end => cursor[1] += (availableSize[1] - childrenSize[1]),
+                }
+            }
+
+            for (nodes.items) |*child| {
+                if (child.style.placement == .standard) {
+                    const contributingSize = Vec2{
+                        child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
+                    };
+                    if (direction == .leftToRight) {
+                        // Cross-axis alignment (Vertical)
+                        switch (vAlign) {
+                            .start => child.position[1] = child.style.margin.y[0],
+                            .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
+                            .end => child.position[1] = (availableSize[1] - contributingSize[1]),
+                        }
+
+                        cursor[0] += child.style.margin.x[0];
+                        child.position += cursor;
+                        cursor[0] += child.size[0] + child.style.margin.x[1];
+                    } else {
+                        // Cross-axis alignment (Horizontal)
+                        switch (hAlign) {
+                            .start => child.position[0] = child.style.margin.x[0],
+                            .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
+                            .end => child.position[0] = (availableSize[0] - contributingSize[0]),
+                        }
+
+                        cursor[1] += child.style.margin.y[0];
+                        child.position += cursor;
+                        cursor[1] += child.size[1] + child.style.margin.y[1];
+                    }
+                }
+                place(child);
+            }
+        },
+        else => {},
     }
 }
 
@@ -759,22 +747,23 @@ pub const LayoutTreeIterator = struct {
         if (self.stack.items.len == 0) {
             return null;
         }
-        const current = self.stack.pop();
-        if (current != null and current.?.children != null) {
-            if (current.?.children.? == .nodes) {
-                for (current.?.children.?.nodes) |*child| {
+        if (self.stack.pop()) |current| {
+            if (current.children == .nodes) {
+                for (current.children.nodes.items) |*child| {
                     try self.stack.append(self.allocator, child);
                 }
             }
+            return current;
+        } else {
+            return null;
         }
-        return current;
     }
 };
 
-pub fn countTreeSize(layoutBox: *const Node) usize {
+pub fn countTreeSize(node: *const Node) usize {
     var count: usize = 1;
-    if (layoutBox.children != null and layoutBox.children.? == .nodes) {
-        for (layoutBox.children.?.nodes) |*child| {
+    if (node.children != null and node.children.? == .nodes) {
+        for (node.children.?.nodes) |*child| {
             count += countTreeSize(child);
         }
     }
@@ -782,8 +771,9 @@ pub fn countTreeSize(layoutBox: *const Node) usize {
 }
 
 pub fn layout(
+    arena: std.mem.Allocator,
     viewportSize: Vec2,
-) !Node {
+) !*Node {
     const context = forbear.getContext();
     if (context.rootFrameNode) |*node| {
         const debugConfig = layoutDebugConfig();
@@ -794,8 +784,6 @@ pub fn layout(
                 std.log.debug("[layout-debug] key filter active: {}", .{targetKey});
             }
         }
-
-        const arena = try forbear.useArena();
 
         fitAlong(node, .leftToRight);
         fitAlong(node, .topToBottom);
@@ -857,11 +845,11 @@ pub fn layout(
             } else {
                 std.log.debug(
                     "[layout-debug] layout end: elapsed={d:.3}ms, rootPos={any}, rootSize={any}, scroll={any}",
-                    .{ elapsedMs, layoutBox.position, layoutBox.size, context.scrollPosition },
+                    .{ elapsedMs, node.position, node.size, context.scrollPosition },
                 );
             }
         }
-        return layoutBox;
+        return node;
     } else {
         std.log.err("You need to define a root frame node before layouting. You can do so by just doing forbear.text(...), for example.", .{});
         return error.NoRootFrameNode;
@@ -887,7 +875,7 @@ fn testWrapConfiguration(configuration: struct {
         totalAdvanceX += glyph.advance[0];
     }
 
-    var layoutBox = Node{
+    var node = Node{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -914,7 +902,7 @@ fn testWrapConfiguration(configuration: struct {
         }),
     };
 
-    try wrap(arenaAllocator, &layoutBox);
+    try wrap(arenaAllocator, &node);
 
     const glyphPositions = try arenaAllocator.alloc(Vec2, configuration.glyphs.len);
     for (configuration.glyphs, 0..) |glyph, i| {
@@ -1841,14 +1829,14 @@ test "layout pipeline - manual children stay out of flow" {
         }))({});
     });
 
-    const layoutBox = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
+    const node = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
 
-    try std.testing.expectEqual(@as(f32, 200.0), layoutBox.size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), layoutBox.size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), layoutBox.position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), layoutBox.position[1]);
+    try std.testing.expectEqual(@as(f32, 200.0), node.size[0]);
+    try std.testing.expectEqual(@as(f32, 100.0), node.size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), node.position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), node.position[1]);
 
-    const children = layoutBox.children.?.nodes;
+    const children = node.children.?.nodes;
 
     try std.testing.expectEqual(@as(usize, 3), children.len);
 
@@ -1966,8 +1954,8 @@ test "layout pipeline - manual ratio child stays out of flow" {
         }))({});
     });
 
-    const layoutBox = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
-    const children = layoutBox.children.?.nodes;
+    const node = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
+    const children = node.children.?.nodes;
 
     try std.testing.expectEqual(@as(usize, 3), children.len);
 
@@ -2044,60 +2032,6 @@ test "layout pipeline - ratio and shrink keep children within parent flow" {
     try std.testing.expectEqual(firstChildren[1].position[0], secondChildren[1].position[0]);
 }
 
-fn testCreateElementConfiguration(configuration: struct {
-    style: IncompleteStyle,
-    expectedSize: Vec2,
-}) !void {
-    const allocator = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var creator = try LayoutCreator.init(arenaAllocator);
-    const node = Node{
-        .key = 1,
-        .content = .{
-            .element = .{
-                .style = configuration.style,
-                .children = .empty,
-            },
-        },
-    };
-
-    const layoutBox = try creator.create(node, defaultBaseStyle, 0, .{ 72.0, 72.0 });
-    try std.testing.expectEqualDeep(configuration.expectedSize, layoutBox.size);
-}
-
-test "create - width ratio uses fixed height" {
-    try testCreateElementConfiguration(.{
-        .style = .{
-            .width = .{ .ratio = 1.5 },
-            .height = .{ .fixed = 40.0 },
-        },
-        .expectedSize = .{ 60.0, 40.0 },
-    });
-}
-
-test "create - height ratio uses fixed width" {
-    try testCreateElementConfiguration(.{
-        .style = .{
-            .width = .{ .fixed = 40.0 },
-            .height = .{ .ratio = 1.5 },
-        },
-        .expectedSize = .{ 40.0, 60.0 },
-    });
-}
-
-test "create - ratio without opposite fixed axis starts at zero" {
-    try testCreateElementConfiguration(.{
-        .style = .{
-            .width = .{ .ratio = 2.0 },
-            .height = .fit,
-        },
-        .expectedSize = .{ 0.0, 0.0 },
-    });
-}
-
 test "layout pipeline - percentage sizes track parent axis" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
@@ -2123,14 +2057,4 @@ test "layout pipeline - percentage sizes track parent axis" {
     try std.testing.expectEqual(@as(usize, 1), children.len);
     try std.testing.expectEqual(@as(f32, 100.0), children[0].size[0]);
     try std.testing.expectEqual(@as(f32, 25.0), children[0].size[1]);
-}
-
-test "create - percentage sizing starts at zero before parent resolution" {
-    try testCreateElementConfiguration(.{
-        .style = .{
-            .width = .{ .percentage = 0.5 },
-            .height = .{ .percentage = 0.5 },
-        },
-        .expectedSize = .{ 0.0, 0.0 },
-    });
 }

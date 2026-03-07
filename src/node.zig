@@ -441,41 +441,37 @@ pub const Node = struct {
             std.debug.print("  ", .{});
         }
         std.debug.print("node (key: {}, pos: {}, size: {}, z: {})\n", .{ self.key, self.position, self.size, self.z });
-        if (self.children) |children| {
-            switch (children) {
-                .nodes => |nodes| {
-                    for (nodes) |*child| {
-                        child.debugPrint(indent + 1);
+        switch (self.children) {
+            .nodes => |nodes| {
+                for (nodes) |*child| {
+                    child.debugPrint(indent + 1);
+                }
+            },
+            .glyphs => |glyphs| {
+                for (glyphs.slice) |glyph| {
+                    for (0..indent) |_| {
+                        std.debug.print("  ", .{});
                     }
-                },
-                .glyphs => |glyphs| {
-                    for (glyphs.slice) |glyph| {
-                        for (0..indent) |_| {
-                            std.debug.print("  ", .{});
-                        }
-                        std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
-                    }
-                },
-            }
+                    std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
+                }
+            },
         }
     }
 
     pub fn free(self: @This(), allocator: std.mem.Allocator) void {
-        if (self.children) |children| {
-            switch (children) {
-                .nodes => |layoutBoxes| {
-                    for (layoutBoxes) |*child| {
-                        child.free(allocator);
-                    }
-                    allocator.free(layoutBoxes);
-                },
-                .glyphs => |glyphs| {
-                    for (glyphs.slice) |*glyph| {
-                        allocator.free(glyph.text);
-                    }
-                    allocator.free(glyphs.slice);
-                },
-            }
+        switch (self.children) {
+            .nodes => |layoutBoxes| {
+                for (layoutBoxes) |*child| {
+                    child.free(allocator);
+                }
+                allocator.free(layoutBoxes);
+            },
+            .glyphs => |glyphs| {
+                for (glyphs.slice) |*glyph| {
+                    allocator.free(glyph.text);
+                }
+                allocator.free(glyphs.slice);
+            },
         }
     }
 
