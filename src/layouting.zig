@@ -761,16 +761,6 @@ pub const LayoutTreeIterator = struct {
     }
 };
 
-pub fn countTreeSize(node: *const Node) usize {
-    var count: usize = 1;
-    if (node.children != null and node.children.? == .nodes) {
-        for (node.children.?.nodes) |*child| {
-            count += countTreeSize(child);
-        }
-    }
-    return count;
-}
-
 pub fn layout(
     arena: std.mem.Allocator,
     viewportSize: Vec2,

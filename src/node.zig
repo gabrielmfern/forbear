@@ -3,7 +3,6 @@ const std = @import("std");
 const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
-const LayoutBox = @import("layouting.zig").Node;
 const Cursor = @import("window/root.zig").Cursor;
 
 const Vec4 = @Vector(4, f32);
@@ -443,7 +442,7 @@ pub const Node = struct {
         std.debug.print("node (key: {}, pos: {}, size: {}, z: {})\n", .{ self.key, self.position, self.size, self.z });
         switch (self.children) {
             .nodes => |nodes| {
-                for (nodes) |*child| {
+                for (nodes.items) |*child| {
                     child.debugPrint(indent + 1);
                 }
             },
@@ -460,11 +459,11 @@ pub const Node = struct {
 
     pub fn free(self: @This(), allocator: std.mem.Allocator) void {
         switch (self.children) {
-            .nodes => |layoutBoxes| {
-                for (layoutBoxes) |*child| {
+            .nodes => |nodes| {
+                for (nodes.items) |*child| {
                     child.free(allocator);
                 }
-                allocator.free(layoutBoxes);
+                nodes.deinit(allocator);
             },
             .glyphs => |glyphs| {
                 for (glyphs.slice) |*glyph| {

@@ -887,7 +887,7 @@ fn renderingMain(
                 .blendMode = .normal,
             },
         })({
-            // I want this to inlcude more than one element if it's the case I'm defining it like this
+            // I want this to include more than one element if it's the case I'm defining it like this
             try forbear.component(App, null);
         });
 
