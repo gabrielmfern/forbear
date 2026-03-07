@@ -88,14 +88,6 @@ pub fn main() !void {
         currentTest = friendlyName;
         std.testing.allocator_instance = .{};
 
-        if (env.verbose) {
-            Printer.dim("  RUN  {s}", .{friendlyName});
-            if (modulePath) |path| {
-                Printer.dim("  ({s})", .{path});
-            }
-            Printer.raw("\n", .{});
-        }
-
         // Redirect stderr to capture test output
         const captureFile = StderrCapture.start();
 
