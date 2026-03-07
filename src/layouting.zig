@@ -1,9 +1,12 @@
 const std = @import("std");
 
+const testing = @import("testing.zig");
 const Alignment = @import("node.zig").Alignment;
 const BaseStyle = @import("node.zig").BaseStyle;
 const Direction = @import("node.zig").Direction;
 const Element = @import("node.zig").Element;
+const LayoutGlyph = @import("node.zig").LayoutGlyph;
+const Glyphs = @import("node.zig").Glyphs;
 const forbear = @import("root.zig");
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const Node = @import("node.zig").Node;
@@ -14,160 +17,6 @@ const TextWrapping = @import("node.zig").TextWrapping;
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
-
-pub const LayoutGlyph = struct {
-    index: c_uint,
-    position: Vec2,
-
-    text: []const u8,
-
-    /// Meant for the recalculation of the glyphs position if that's required
-    /// at some other layouting step
-    advance: Vec2,
-    /// Meant for the recalculation of the glyphs position if that's required
-    /// at some other layouting step
-    offset: Vec2,
-};
-
-pub const Glyphs = struct {
-    lineHeight: f32,
-    slice: []LayoutGlyph,
-};
-
-pub const LayoutBox = struct {
-    pub const Children = union(enum) {
-        layoutBoxes: []LayoutBox,
-        glyphs: Glyphs,
-    };
-
-    key: u64,
-
-    position: Vec2,
-    z: u16,
-    size: Vec2,
-    maxSize: Vec2,
-    minSize: Vec2,
-    children: ?Children,
-
-    style: Style,
-
-    pub fn debugPrint(self: @This(), indent: usize) void {
-        for (0..indent) |_| {
-            std.debug.print("  ", .{});
-        }
-        std.debug.print("LayoutBox (key: {}, pos: {}, size: {}, z: {})\n", .{ self.key, self.position, self.size, self.z });
-        if (self.children) |children| {
-            switch (children) {
-                .layoutBoxes => |layoutBoxes| {
-                    for (layoutBoxes) |*child| {
-                        child.debugPrint(indent + 1);
-                    }
-                },
-                .glyphs => |glyphs| {
-                    for (glyphs.slice) |glyph| {
-                        for (0..indent) |_| {
-                            std.debug.print("  ", .{});
-                        }
-                        std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
-                    }
-                },
-            }
-        }
-    }
-
-    pub fn free(self: @This(), allocator: std.mem.Allocator) void {
-        if (self.children) |children| {
-            switch (children) {
-                .layoutBoxes => |layoutBoxes| {
-                    for (layoutBoxes) |*child| {
-                        child.free(allocator);
-                    }
-                    allocator.free(layoutBoxes);
-                },
-                .glyphs => |glyphs| {
-                    for (glyphs.slice) |*glyph| {
-                        allocator.free(glyph.text);
-                    }
-                    allocator.free(glyphs.slice);
-                },
-            }
-        }
-    }
-
-    pub fn setMinSize(self: *@This(), direction: Direction, size: f32) void {
-        if (direction == .leftToRight) {
-            self.minSize[0] = size;
-        } else {
-            self.minSize[1] = size;
-        }
-    }
-
-    pub fn addMinSize(self: *@This(), direction: Direction, increment: f32) void {
-        if (direction == .leftToRight) {
-            self.minSize[0] += increment;
-        } else {
-            self.minSize[1] += increment;
-        }
-    }
-
-    pub fn setSize(self: *@This(), direction: Direction, size: f32) void {
-        if (direction == .leftToRight) {
-            self.size[0] = size;
-        } else {
-            self.size[1] = size;
-        }
-    }
-
-    pub fn addSize(self: *@This(), direction: Direction, increment: f32) void {
-        if (direction == .leftToRight) {
-            self.size[0] += increment;
-        } else {
-            self.size[1] += increment;
-        }
-    }
-
-    pub fn getMinSize(self: @This(), direction: Direction) f32 {
-        if (direction == .leftToRight) {
-            return self.minSize[0];
-        }
-        return self.minSize[1];
-    }
-
-    pub fn getMaxSize(self: @This(), direction: Direction) f32 {
-        if (direction == .leftToRight) {
-            return self.maxSize[0];
-        }
-        return self.maxSize[1];
-    }
-
-    pub fn getSize(self: @This(), direction: Direction) f32 {
-        if (direction == .leftToRight) {
-            return self.size[0];
-        }
-        return self.size[1];
-    }
-};
-
-fn makeAbsolute(layoutBox: *LayoutBox, base: Vec2) void {
-    if (layoutBox.style.placement != .manual) {
-        layoutBox.position += base;
-    }
-
-    if (layoutBox.children != null) {
-        switch (layoutBox.children.?) {
-            .layoutBoxes => |children| {
-                for (children) |*child| {
-                    makeAbsolute(child, layoutBox.position);
-                }
-            },
-            .glyphs => |glyphs| {
-                for (glyphs.slice) |*glyph| {
-                    glyph.position += layoutBox.position;
-                }
-            },
-        }
-    }
-}
 
 fn approxEq(a: f32, b: f32) bool {
     return @abs(a - b) < 0.001;
@@ -223,7 +72,7 @@ fn layoutDebugConfig() LayoutDebugConfig {
     };
 }
 
-fn shouldLogLayoutBox(debugConfig: LayoutDebugConfig, key: u64) bool {
+fn shouldLogNode(debugConfig: LayoutDebugConfig, key: u64) bool {
     if (!debugConfig.enabled) {
         return false;
     }
@@ -233,13 +82,13 @@ fn shouldLogLayoutBox(debugConfig: LayoutDebugConfig, key: u64) bool {
     return true;
 }
 
-fn findLayoutBoxByKey(layoutBox: *const LayoutBox, key: u64) ?*const LayoutBox {
-    if (layoutBox.key == key) {
-        return layoutBox;
+fn findNodeByKey(node: *const Node, key: u64) ?*const Node {
+    if (node.key == key) {
+        return node;
     }
-    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
-        for (layoutBox.children.?.layoutBoxes) |*child| {
-            if (findLayoutBoxByKey(child, key)) |found| {
+    if (node.children == .nodes) {
+        for (node.children.nodes.items) |*child| {
+            if (findNodeByKey(child, key)) |found| {
                 return found;
             }
         }
@@ -247,34 +96,32 @@ fn findLayoutBoxByKey(layoutBox: *const LayoutBox, key: u64) ?*const LayoutBox {
     return null;
 }
 
-fn logLayoutBoxState(stage: []const u8, layoutBox: *const LayoutBox) void {
+fn logNodeState(stage: []const u8, node: *const Node) void {
     var childKind: []const u8 = "none";
     var childCount: usize = 0;
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .layoutBoxes => |layoutBoxes| {
-                childKind = "layoutBoxes";
-                childCount = layoutBoxes.len;
-            },
-            .glyphs => |glyphs| {
-                childKind = "glyphs";
-                childCount = glyphs.slice.len;
-            },
-        }
+    switch (node.children) {
+        .nodes => |nodes| {
+            childKind = "nodes";
+            childCount = nodes.items.len;
+        },
+        .glyphs => |glyphs| {
+            childKind = "glyphs";
+            childCount = glyphs.slice.len;
+        },
     }
 
     std.log.debug(
         "[layout-debug] {s}: key={}, pos={any}, size={any}, min={any}, max={any}, z={}, placement={s}, dir={s}, children={s}({})",
         .{
             stage,
-            layoutBox.key,
-            layoutBox.position,
-            layoutBox.size,
-            layoutBox.minSize,
-            layoutBox.maxSize,
-            layoutBox.z,
-            @tagName(layoutBox.style.placement),
-            @tagName(layoutBox.style.direction),
+            node.key,
+            node.position,
+            node.size,
+            node.minSize,
+            node.maxSize,
+            node.z,
+            @tagName(node.style.placement),
+            @tagName(node.style.direction),
             childKind,
             childCount,
         },
@@ -285,32 +132,51 @@ fn shouldLogLoopIteration(iteration: usize) bool {
     return iteration <= 8 or iteration % 128 == 0;
 }
 
-fn logLayoutStage(debugConfig: LayoutDebugConfig, stage: []const u8, layoutBox: *const LayoutBox) void {
+fn logLayoutStage(debugConfig: LayoutDebugConfig, stage: []const u8, node: *const Node) void {
     if (!debugConfig.enabled) {
         return;
     }
     if (debugConfig.keyFilter) |targetKey| {
-        if (findLayoutBoxByKey(layoutBox, targetKey)) |targetLayoutBox| {
-            logLayoutBoxState(stage, targetLayoutBox);
+        if (findNodeByKey(node, targetKey)) |targetNode| {
+            logNodeState(stage, targetNode);
         } else {
             std.log.debug("[layout-debug] {s}: key={} not found", .{ stage, targetKey });
         }
         return;
     }
-    logLayoutBoxState(stage, layoutBox);
+    logNodeState(stage, node);
+}
+
+fn makeAbsolute(node: *Node, base: Vec2) void {
+    if (node.style.placement != .manual) {
+        node.position += base;
+    }
+
+    switch (node.children) {
+        .nodes => |nodes| {
+            for (nodes.items) |*child| {
+                makeAbsolute(child, node.position);
+            }
+        },
+        .glyphs => |glyphs| {
+            for (glyphs.slice) |*glyph| {
+                glyph.position += node.position;
+            }
+        },
+    }
 }
 
 fn growChildren(
     allocator: std.mem.Allocator,
-    children: []LayoutBox,
+    children: []Node,
     direction: Direction,
     remaining: *f32,
     parentKey: u64,
     debugConfig: LayoutDebugConfig,
 ) !void {
     const loopWatchdogLimit: usize = 65_536;
-    const shouldLog = shouldLogLayoutBox(debugConfig, parentKey);
-    var toGrowGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
+    const shouldLog = shouldLogNode(debugConfig, parentKey);
+    var toGrowGradually = try std.ArrayList(*Node).initCapacity(allocator, children.len);
     defer toGrowGradually.deinit(allocator);
     for (children) |*child| {
         if (child.style.placement == .standard) {
@@ -400,19 +266,19 @@ fn growChildren(
 
 fn shrinkChildren(
     allocator: std.mem.Allocator,
-    children: []LayoutBox,
+    children: []Node,
     direction: Direction,
     remaining: *f32,
     parentKey: u64,
     debugConfig: LayoutDebugConfig,
 ) !void {
     const loopWatchdogLimit: usize = 65_536;
-    const shouldLog = shouldLogLayoutBox(debugConfig, parentKey);
+    const shouldLog = shouldLogNode(debugConfig, parentKey);
     if (remaining.* >= -0.001) {
         return;
     }
 
-    var toShrinkGradually = try std.ArrayList(*LayoutBox).initCapacity(allocator, children.len);
+    var toShrinkGradually = try std.ArrayList(*Node).initCapacity(allocator, children.len);
     defer toShrinkGradually.deinit(allocator);
     for (children) |*child| {
         if (child.style.placement == .standard) {
@@ -513,31 +379,31 @@ fn shrinkChildren(
 
 fn growAndShrink(
     allocator: std.mem.Allocator,
-    layoutBox: *LayoutBox,
+    node: *Node,
 ) !void {
-    try growAndShrinkWithDebug(allocator, layoutBox, layoutDebugConfig());
+    try growAndShrinkWithDebug(allocator, node, layoutDebugConfig());
 }
 
 fn growAndShrinkWithDebug(
     allocator: std.mem.Allocator,
-    layoutBox: *LayoutBox,
+    node: *Node,
     debugConfig: LayoutDebugConfig,
 ) !void {
-    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
-        const children = layoutBox.children.?.layoutBoxes;
-        const direction = layoutBox.style.direction;
-        const shouldLog = shouldLogLayoutBox(debugConfig, layoutBox.key);
+    if (node.children == .nodes) {
+        const children = node.children.nodes;
+        const direction = node.style.direction;
+        const shouldLog = shouldLogNode(debugConfig, node.key);
 
-        var remaining = layoutBox.getSize(direction);
-        for (children) |*child| {
+        var remaining = node.getSize(direction);
+        for (children.items) |*child| {
             if (child.style.placement == .standard) {
                 if (direction.perpendicular() == .topToBottom) {
-                    if (child.style.height == .grow or (child.size[1] > layoutBox.size[1] and child.minSize[1] < child.size[1])) {
-                        child.size[1] = @max(@min(layoutBox.size[1], child.maxSize[1]), child.minSize[1]);
+                    if (child.style.height == .grow or (child.size[1] > node.size[1] and child.minSize[1] < child.size[1])) {
+                        child.size[1] = @max(@min(node.size[1], child.maxSize[1]), child.minSize[1]);
                     }
                 } else if (direction.perpendicular() == .leftToRight) {
-                    if (child.style.width == .grow or (child.size[0] > layoutBox.size[0] and child.minSize[0] < child.size[0])) {
-                        child.size[0] = @max(@min(layoutBox.size[0], child.maxSize[0]), child.minSize[0]);
+                    if (child.style.width == .grow or (child.size[0] > node.size[0] and child.minSize[0] < child.size[0])) {
+                        child.size[0] = @max(@min(node.size[0], child.maxSize[0]), child.minSize[0]);
                     }
                 }
                 applyOwnRatios(child);
@@ -547,489 +413,321 @@ fn growAndShrinkWithDebug(
         if (shouldLog) {
             std.log.debug(
                 "[layout-debug] growAndShrink begin: key={}, dir={s}, childCount={}, parentSize={any}, initialRemaining={d:.4}",
-                .{ layoutBox.key, @tagName(direction), children.len, layoutBox.size, remaining },
+                .{ node.key, @tagName(direction), children.items.len, node.size, remaining },
             );
         }
-        try growChildren(allocator, children, direction, &remaining, layoutBox.key, debugConfig);
-        try shrinkChildren(allocator, children, direction, &remaining, layoutBox.key, debugConfig);
+        try growChildren(allocator, children.items, direction, &remaining, node.key, debugConfig);
+        try shrinkChildren(allocator, children.items, direction, &remaining, node.key, debugConfig);
         if (shouldLog and @abs(remaining) > 0.001) {
             std.log.debug(
                 "[layout-debug] growAndShrink residual: key={}, dir={s}, remaining={d:.4}",
-                .{ layoutBox.key, @tagName(direction), remaining },
+                .{ node.key, @tagName(direction), remaining },
             );
         }
-        for (children) |*child| {
+        for (children.items) |*child| {
             try growAndShrinkWithDebug(allocator, child, debugConfig);
         }
     }
 }
 
-fn wrap(arena: std.mem.Allocator, layoutBox: *LayoutBox) !void {
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .layoutBoxes => |childBoxes| {
-                for (childBoxes) |*child| {
-                    try wrap(arena, child);
-                }
-            },
-            .glyphs => |glyphs| {
-                if (layoutBox.style.textWrapping == .none) {
-                    return;
-                }
-                const Line = struct {
-                    startIndex: usize,
-                    endIndex: usize,
-                };
-                var lines = try std.ArrayList(Line).initCapacity(arena, 4);
+fn wrap(arena: std.mem.Allocator, node: *Node) !void {
+    switch (node.children) {
+        .nodes => |nodes| {
+            for (nodes.items) |*child| {
+                try wrap(arena, child);
+            }
+        },
+        .glyphs => |glyphs| {
+            if (node.style.textWrapping == .none) {
+                return;
+            }
+            const Line = struct {
+                startIndex: usize,
+                endIndex: usize,
+            };
+            var lines = try std.ArrayList(Line).initCapacity(arena, 4);
 
-                const lineWidth = layoutBox.size[0];
-                var cursor: Vec2 = @splat(0.0);
-                var lineStartIndex: usize = 0;
-                switch (layoutBox.style.textWrapping) {
-                    .character => {
-                        for (glyphs.slice, 0..) |*glyph, index| {
-                            if (cursor[0] + glyph.advance[0] > lineWidth) {
+            const lineWidth = node.size[0];
+            var cursor: Vec2 = @splat(0.0);
+            var lineStartIndex: usize = 0;
+            switch (node.style.textWrapping) {
+                .character => {
+                    for (glyphs.slice, 0..) |*glyph, index| {
+                        if (cursor[0] + glyph.advance[0] > lineWidth) {
+                            try lines.append(arena, .{
+                                .startIndex = lineStartIndex,
+                                .endIndex = index - 1,
+                            });
+                            lineStartIndex = index;
+                            cursor[0] = 0.0;
+                            cursor[1] += glyphs.lineHeight;
+                        }
+
+                        glyph.position = cursor + glyph.offset;
+                        cursor += glyph.advance;
+                    }
+                },
+                .word => {
+                    var lastSpaceInfoOpt: ?struct {
+                        index: usize,
+                        position: Vec2,
+                    } = null;
+                    for (glyphs.slice, 0..) |*glyph, index| {
+                        if (cursor[0] + glyph.advance[0] > lineWidth) {
+                            if (lastSpaceInfoOpt) |lastSpaceInfo| {
+                                cursor[0] = 0;
+                                cursor[1] += glyphs.lineHeight;
+
+                                const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
                                 try lines.append(arena, .{
                                     .startIndex = lineStartIndex,
-                                    .endIndex = index - 1,
+                                    .endIndex = lastSpaceInfo.index,
                                 });
-                                lineStartIndex = index;
-                                cursor[0] = 0.0;
-                                cursor[1] += glyphs.lineHeight;
-                            }
 
-                            glyph.position = cursor + glyph.offset;
-                            cursor += glyph.advance;
-                        }
-                    },
-                    .word => {
-                        var lastSpaceInfoOpt: ?struct {
-                            index: usize,
-                            position: Vec2,
-                        } = null;
-                        for (glyphs.slice, 0..) |*glyph, index| {
-                            if (cursor[0] + glyph.advance[0] > lineWidth) {
-                                if (lastSpaceInfoOpt) |lastSpaceInfo| {
-                                    cursor[0] = 0;
-                                    cursor[1] += glyphs.lineHeight;
+                                for (lastSpaceInfo.index + 1..index) |reverseIndex| {
+                                    const reverseGlyph = &glyphs.slice[reverseIndex];
+                                    reverseGlyph.position[0] -= firstWordGlyph.position[0];
+                                    reverseGlyph.position[1] += glyphs.lineHeight;
 
-                                    const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
-                                    try lines.append(arena, .{
-                                        .startIndex = lineStartIndex,
-                                        .endIndex = lastSpaceInfo.index,
-                                    });
-
-                                    for (lastSpaceInfo.index + 1..index) |reverseIndex| {
-                                        const reverseGlyph = &glyphs.slice[reverseIndex];
-                                        reverseGlyph.position[0] -= firstWordGlyph.position[0];
-                                        reverseGlyph.position[1] += glyphs.lineHeight;
-
-                                        cursor += reverseGlyph.advance;
-                                    }
-                                    lineStartIndex = lastSpaceInfo.index + 1;
-                                    lastSpaceInfoOpt = null;
+                                    cursor += reverseGlyph.advance;
                                 }
-                            }
-
-                            glyph.position = cursor + glyph.offset;
-                            cursor += glyph.advance;
-                            if (std.mem.eql(u8, glyph.text, " ")) {
-                                lastSpaceInfoOpt = .{
-                                    .index = index,
-                                    .position = glyph.position,
-                                };
+                                lineStartIndex = lastSpaceInfo.index + 1;
+                                lastSpaceInfoOpt = null;
                             }
                         }
-                    },
-                    else => unreachable,
-                }
-                if (lines.getLastOrNull()) |lastLine| {
-                    if (lastLine.endIndex != glyphs.slice.len - 1) {
-                        try lines.append(arena, .{
-                            .startIndex = lastLine.endIndex + 1,
-                            .endIndex = glyphs.slice.len - 1,
-                        });
+
+                        glyph.position = cursor + glyph.offset;
+                        cursor += glyph.advance;
+                        if (std.mem.eql(u8, glyph.text, " ")) {
+                            lastSpaceInfoOpt = .{
+                                .index = index,
+                                .position = glyph.position,
+                            };
+                        }
                     }
-                } else {
+                },
+                else => unreachable,
+            }
+            if (lines.getLastOrNull()) |lastLine| {
+                if (lastLine.endIndex != glyphs.slice.len - 1) {
                     try lines.append(arena, .{
-                        .startIndex = 0,
+                        .startIndex = lastLine.endIndex + 1,
                         .endIndex = glyphs.slice.len - 1,
                     });
                 }
-                for (lines.items) |line| {
-                    const startX = glyphs.slice[line.startIndex].position[0];
-                    const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
-                    const width = endX - startX;
-                    for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
-                        switch (layoutBox.style.alignment.x) {
-                            .start => {},
-                            .center => glyph.position[0] += (lineWidth - width) / 2.0,
-                            .end => glyph.position[0] += lineWidth - width,
-                        }
-                    }
-                }
-                layoutBox.size[1] = cursor[1] + glyphs.lineHeight;
-            },
-        }
-    }
-}
-
-fn applyOwnRatios(layoutBox: *LayoutBox) void {
-    if (layoutBox.style.width == .ratio) {
-        layoutBox.size[0] = layoutBox.style.width.ratio * layoutBox.size[1];
-    }
-    if (layoutBox.style.height == .ratio) {
-        layoutBox.size[1] = layoutBox.style.height.ratio * layoutBox.size[0];
-    }
-}
-
-fn applyParentPercentageSizes(layoutBox: *LayoutBox, parentSize: Vec2) void {
-    if (layoutBox.style.width == .percentage) {
-        layoutBox.size[0] = layoutBox.style.width.percentage * parentSize[0];
-    }
-    if (layoutBox.style.height == .percentage) {
-        layoutBox.size[1] = layoutBox.style.height.percentage * parentSize[1];
-    }
-
-    layoutBox.size[0] = @min(@max(layoutBox.size[0], layoutBox.minSize[0]), layoutBox.maxSize[0]);
-    layoutBox.size[1] = @min(@max(layoutBox.size[1], layoutBox.minSize[1]), layoutBox.maxSize[1]);
-
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .layoutBoxes => |childBoxes| {
-                for (childBoxes) |*child| {
-                    applyParentPercentageSizes(child, layoutBox.size);
-                }
-            },
-            else => {},
-        }
-    }
-}
-
-fn applyRatios(layoutBox: *LayoutBox) void {
-    applyOwnRatios(layoutBox);
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .layoutBoxes => |childBoxes| {
-                for (childBoxes) |*child| {
-                    applyRatios(child);
-                }
-            },
-            else => {},
-        }
-    }
-}
-
-fn fitAlong(layoutBox: *LayoutBox, fitDirection: Direction) void {
-    if (layoutBox.children) |children| {
-        switch (children) {
-            .layoutBoxes => |childBoxes| {
-                const preferredSize = layoutBox.style.getPreferredSize(fitDirection);
-                const shouldFitMin = preferredSize != .fixed and preferredSize != .percentage and layoutBox.style.getMinSize(fitDirection) == null;
-                const layoutDirection = layoutBox.style.direction;
-
-                const paddingVector = layoutBox.style.padding.get(fitDirection);
-                const padding = paddingVector[0] + paddingVector[1];
-
-                const borderWidthVector = layoutBox.style.borderWidth.get(fitDirection);
-                const border = borderWidthVector[0] + borderWidthVector[1];
-
-                const size = preferredSize;
-                if (size == .fit) {
-                    layoutBox.setSize(fitDirection, padding + border);
-                }
-                if (shouldFitMin) {
-                    layoutBox.setMinSize(fitDirection, padding + border);
-                }
-                for (childBoxes) |*child| {
-                    fitAlong(child, fitDirection);
-                    if (child.style.placement == .standard) {
-                        const childMarginVector = child.style.margin.get(fitDirection);
-                        const childMargins = childMarginVector[0] + childMarginVector[1];
-                        if (layoutDirection == fitDirection) {
-                            if (size == .fit) {
-                                layoutBox.addSize(fitDirection, childMargins + child.getSize(fitDirection));
-                            }
-                            if (shouldFitMin) {
-                                layoutBox.addMinSize(fitDirection, childMargins + child.getMinSize(fitDirection));
-                            }
-                        }
-                        if (layoutDirection != fitDirection) {
-                            if (size == .fit) {
-                                layoutBox.setSize(fitDirection, @max(
-                                    childMargins + padding + border + child.getSize(fitDirection),
-                                    layoutBox.getSize(fitDirection),
-                                ));
-                            }
-                            if (shouldFitMin) {
-                                layoutBox.setMinSize(
-                                    fitDirection,
-                                    @max(childMargins + padding + border + child.getMinSize(fitDirection), layoutBox.getMinSize(fitDirection)),
-                                );
-                            }
-                        }
-                    }
-                }
-            },
-            else => {},
-        }
-    }
-}
-
-fn place(layoutBox: *LayoutBox) void {
-    layoutBox.position += layoutBox.style.translate;
-    if (layoutBox.children != null) {
-        switch (layoutBox.children.?) {
-            .layoutBoxes => |children| {
-                const direction = layoutBox.style.direction;
-                const hAlign = layoutBox.style.alignment.x;
-                const vAlign = layoutBox.style.alignment.y;
-
-                const availableSize = .{
-                    layoutBox.size[0] - (layoutBox.style.padding.x[0] + layoutBox.style.padding.x[1]) - (layoutBox.style.borderWidth.x[0] + layoutBox.style.borderWidth.x[1]),
-                    layoutBox.size[1] - (layoutBox.style.padding.y[0] + layoutBox.style.padding.y[1]) - (layoutBox.style.borderWidth.y[0] + layoutBox.style.borderWidth.y[1]),
-                };
-
-                var childrenSize: Vec2 = @splat(0.0);
-                for (children) |child| {
-                    if (child.style.placement == .standard) {
-                        const contributingSize = Vec2{
-                            child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
-                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                        };
-                        if (direction == .leftToRight) {
-                            childrenSize[0] += contributingSize[0];
-                            childrenSize[1] = @max(contributingSize[1], childrenSize[1]);
-                        } else if (direction == .topToBottom) {
-                            childrenSize[0] = @max(contributingSize[0], childrenSize[0]);
-                            childrenSize[1] += contributingSize[1];
-                        }
-                    }
-                }
-
-                var cursor: Vec2 = .{
-                    layoutBox.style.padding.x[0] + layoutBox.style.borderWidth.x[0],
-                    layoutBox.style.padding.y[0] + layoutBox.style.borderWidth.y[0],
-                };
-                if (direction == .leftToRight) {
-                    switch (hAlign) {
+            } else {
+                try lines.append(arena, .{
+                    .startIndex = 0,
+                    .endIndex = glyphs.slice.len - 1,
+                });
+            }
+            for (lines.items) |line| {
+                const startX = glyphs.slice[line.startIndex].position[0];
+                const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
+                const width = endX - startX;
+                for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
+                    switch (node.style.alignment.x) {
                         .start => {},
-                        .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
-                        .end => cursor[0] += (availableSize[0] - childrenSize[0]),
-                    }
-                } else {
-                    switch (vAlign) {
-                        .start => {},
-                        .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
-                        .end => cursor[1] += (availableSize[1] - childrenSize[1]),
+                        .center => glyph.position[0] += (lineWidth - width) / 2.0,
+                        .end => glyph.position[0] += lineWidth - width,
                     }
                 }
-
-                for (children) |*child| {
-                    if (child.style.placement == .standard) {
-                        const contributingSize = Vec2{
-                            child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
-                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                        };
-                        if (direction == .leftToRight) {
-                            // Cross-axis alignment (Vertical)
-                            switch (vAlign) {
-                                .start => child.position[1] = child.style.margin.y[0],
-                                .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
-                                .end => child.position[1] = (availableSize[1] - contributingSize[1]),
-                            }
-
-                            cursor[0] += child.style.margin.x[0];
-                            child.position += cursor;
-                            cursor[0] += child.size[0] + child.style.margin.x[1];
-                        } else {
-                            // Cross-axis alignment (Horizontal)
-                            switch (hAlign) {
-                                .start => child.position[0] = child.style.margin.x[0],
-                                .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
-                                .end => child.position[0] = (availableSize[0] - contributingSize[0]),
-                            }
-
-                            cursor[1] += child.style.margin.y[0];
-                            child.position += cursor;
-                            cursor[1] += child.size[1] + child.style.margin.y[1];
-                        }
-                    }
-                    place(child);
-                }
-            },
-            else => {},
-        }
+            }
+            node.size[1] = cursor[1] + glyphs.lineHeight;
+        },
     }
 }
 
-const LayoutCreator = struct {
-    arenaAllocator: std.mem.Allocator,
-    parent: ?LayoutBox,
+fn applyOwnRatios(node: *Node) void {
+    if (node.style.width == .ratio) {
+        node.size[0] = node.style.width.ratio * node.size[1];
+    }
+    if (node.style.height == .ratio) {
+        node.size[1] = node.style.height.ratio * node.size[0];
+    }
+}
 
-    fn init(arenaAllocator: std.mem.Allocator) !@This() {
-        return .{
-            .arenaAllocator = arenaAllocator,
-            .parent = null,
-        };
+fn applyParentPercentageSizes(node: *Node, parentSize: Vec2) void {
+    if (node.style.width == .percentage) {
+        node.size[0] = node.style.width.percentage * parentSize[0];
+    }
+    if (node.style.height == .percentage) {
+        node.size[1] = node.style.height.percentage * parentSize[1];
     }
 
-    fn create(self: *@This(), node: Node, baseStyle: BaseStyle, z: u16, dpi: Vec2) !LayoutBox {
-        const resolutionMultiplier = dpi / @as(Vec2, @splat(72));
-        var style = switch (node.content) {
-            .element => |element| element.style.completeWith(baseStyle),
-            .text => blk: {
-                break :blk (IncompleteStyle{
-                    .cursor = if (baseStyle.cursor == .default)
-                        .text
-                    else
-                        baseStyle.cursor,
-                    .alignment = if (self.parent) |parent| .{
-                        .x = parent.style.alignment.x,
-                        .y = .start,
-                    } else null,
-                }).completeWith(baseStyle);
-            },
-        };
-        style.borderWidth.x *= @splat(resolutionMultiplier[0]);
-        style.borderWidth.y *= @splat(resolutionMultiplier[1]);
-        if (style.shadow) |*shadow| {
-            shadow.offset.x *= @splat(resolutionMultiplier[0]);
-            shadow.offset.y *= @splat(resolutionMultiplier[1]);
-            shadow.blurRadius *= resolutionMultiplier[0];
-            shadow.spread *= resolutionMultiplier[0];
-        }
-        style.padding.x *= @splat(resolutionMultiplier[0]);
-        style.padding.y *= @splat(resolutionMultiplier[1]);
-        style.margin.x *= @splat(resolutionMultiplier[0]);
-        style.margin.y *= @splat(resolutionMultiplier[1]);
-        style.borderRadius *= resolutionMultiplier[0];
+    node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
+    node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
 
-        switch (node.content) {
-            .element => |element| {
-                var layoutBox = LayoutBox{
-                    .position = if (style.placement == .manual) style.placement.manual else .{ 0.0, 0.0 },
-                    .z = if (style.zIndex) |zIndex| zIndex else z,
-                    .size = .{
-                        switch (style.width) {
-                            .fixed => |width| width,
-                            .percentage => 0.0,
-                            .ratio => |ratio| if (style.height == .fixed)
-                                style.height.fixed * ratio
-                            else
-                                0.0,
-                            .fit, .grow => 0.0,
-                        },
-                        switch (style.height) {
-                            .fixed => |height| height,
-                            .percentage => 0.0,
-                            .ratio => |ratio| if (style.width == .fixed)
-                                style.width.fixed * ratio
-                            else
-                                0.0,
-                            .fit, .grow => 0.0,
-                        },
-                    },
-                    .minSize = .{
-                        style.minWidth orelse if (style.width == .fixed) style.width.fixed else 0.0,
-                        style.minHeight orelse if (style.height == .fixed) style.height.fixed else 0.0,
-                    },
-                    .maxSize = .{
-                        style.maxWidth orelse if (style.width == .fixed) style.width.fixed else std.math.inf(f32),
-                        style.maxHeight orelse if (style.height == .fixed) style.height.fixed else std.math.inf(f32),
-                    },
-                    .key = node.key,
-                    .children = null,
-                    .style = style,
-                };
-                layoutBox.children = .{ .layoutBoxes = try self.arenaAllocator.alloc(LayoutBox, element.children.items.len) };
-                errdefer self.arenaAllocator.free(layoutBox.children.?.layoutBoxes);
-                const previousParent = self.parent;
-                self.parent = layoutBox;
-                for (element.children.items, 0..) |child, index| {
-                    layoutBox.children.?.layoutBoxes[index] = try self.create(
-                        child,
-                        BaseStyle.from(style),
-                        if (layoutBox.z == std.math.maxInt(u16)) layoutBox.z else layoutBox.z + 1,
-                        dpi,
-                    );
+    switch (node.children) {
+        .nodes => |nodes| {
+            for (nodes.items) |*child| {
+                applyParentPercentageSizes(child, node.size);
+            }
+        },
+        else => {},
+    }
+}
+
+fn applyRatios(node: *Node) void {
+    applyOwnRatios(node);
+    switch (node.children) {
+        .nodes => |nodes| {
+            for (nodes.items) |*child| {
+                applyRatios(child);
+            }
+        },
+        else => {},
+    }
+}
+
+fn fitAlong(node: *Node, fitDirection: Direction) void {
+    switch (node.children) {
+        .nodes => |nodes| {
+            const preferredSize = node.style.getPreferredSize(fitDirection);
+            const shouldFitMin = preferredSize != .fixed and preferredSize != .percentage and node.style.getMinSize(fitDirection) == null;
+            const layoutDirection = node.style.direction;
+
+            const paddingVector = node.style.padding.get(fitDirection);
+            const padding = paddingVector[0] + paddingVector[1];
+
+            const borderWidthVector = node.style.borderWidth.get(fitDirection);
+            const border = borderWidthVector[0] + borderWidthVector[1];
+
+            const size = preferredSize;
+            if (size == .fit) {
+                node.setSize(fitDirection, padding + border);
+            }
+            if (shouldFitMin) {
+                node.setMinSize(fitDirection, padding + border);
+            }
+            for (nodes.items) |*child| {
+                fitAlong(child, fitDirection);
+                if (child.style.placement == .standard) {
+                    const childMarginVector = child.style.margin.get(fitDirection);
+                    const childMargins = childMarginVector[0] + childMarginVector[1];
+                    if (layoutDirection == fitDirection) {
+                        if (size == .fit) {
+                            node.addSize(fitDirection, childMargins + child.getSize(fitDirection));
+                        }
+                        if (shouldFitMin) {
+                            node.addMinSize(fitDirection, childMargins + child.getMinSize(fitDirection));
+                        }
+                    }
+                    if (layoutDirection != fitDirection) {
+                        if (size == .fit) {
+                            node.setSize(fitDirection, @max(
+                                childMargins + padding + border + child.getSize(fitDirection),
+                                node.getSize(fitDirection),
+                            ));
+                        }
+                        if (shouldFitMin) {
+                            node.setMinSize(
+                                fitDirection,
+                                @max(childMargins + padding + border + child.getMinSize(fitDirection), node.getMinSize(fitDirection)),
+                            );
+                        }
+                    }
                 }
-                self.parent = previousParent;
-                return layoutBox;
-            },
-            .text => |text| {
-                const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
-                const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
-                const pixelSizeVec2: Vec2 = @as(Vec2, @splat(style.fontSize)) * resolutionMultiplier;
-                const pixelLineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * pixelSizeVec2[1];
+            }
+        },
+        else => {},
+    }
+}
 
-                const shapedGlyphs = try style.font.shape(text);
-                var layoutGlyphs = try self.arenaAllocator.alloc(LayoutGlyph, shapedGlyphs.len);
-                errdefer self.arenaAllocator.free(layoutGlyphs);
-                var cursor: Vec2 = @splat(0.0);
+fn place(node: *Node) void {
+    node.position += node.style.translate;
+    switch (node.children) {
+        .nodes => |nodes| {
+            const direction = node.style.direction;
+            const hAlign = node.style.alignment.x;
+            const vAlign = node.style.alignment.y;
 
-                var minSize: Vec2 = .{ 0.0, pixelLineHeight };
-                var maxSize: Vec2 = .{ 0.0, pixelLineHeight };
+            const availableSize = .{
+                node.size[0] - (node.style.padding.x[0] + node.style.padding.x[1]) - (node.style.borderWidth.x[0] + node.style.borderWidth.x[1]),
+                node.size[1] - (node.style.padding.y[0] + node.style.padding.y[1]) - (node.style.borderWidth.y[0] + node.style.borderWidth.y[1]),
+            };
 
-                var wordStart: usize = 0;
-                var wordAdvance: Vec2 = @splat(0.0);
-                for (shapedGlyphs, 0..) |shapedGlyph, i| {
-                    const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
-                    const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
-                    const glyphText = try self.arenaAllocator.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]);
-                    layoutGlyphs[i] = LayoutGlyph{
-                        .index = @intCast(shapedGlyph.index),
-                        .position = cursor + offset,
-
-                        .text = glyphText,
-
-                        .advance = advance,
-                        .offset = offset,
+            var childrenSize: Vec2 = @splat(0.0);
+            for (nodes.items) |child| {
+                if (child.style.placement == .standard) {
+                    const contributingSize = Vec2{
+                        child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
                     };
-
-                    cursor += advance;
-                    if (style.textWrapping == .word) {
-                        if (std.mem.eql(u8, glyphText, " ")) {
-                            wordStart = i;
-                            wordAdvance = @splat(0.0);
-                        } else {
-                            wordAdvance += advance;
-                        }
-                        minSize = @max(minSize, wordAdvance);
-                        maxSize[1] += pixelLineHeight;
-                    } else if (style.textWrapping == .character) {
-                        minSize = @max(minSize, advance);
-                        maxSize[1] += pixelLineHeight;
-                    } else if (style.textWrapping == .none) {
-                        minSize = cursor;
+                    if (direction == .leftToRight) {
+                        childrenSize[0] += contributingSize[0];
+                        childrenSize[1] = @max(contributingSize[1], childrenSize[1]);
+                    } else if (direction == .topToBottom) {
+                        childrenSize[0] = @max(contributingSize[0], childrenSize[0]);
+                        childrenSize[1] += contributingSize[1];
                     }
                 }
-                maxSize[0] = cursor[0];
+            }
 
-                return LayoutBox{
-                    .position = .{ 0.0, 0.0 },
-                    .z = z,
-                    .key = node.key,
-                    .size = .{ cursor[0], pixelLineHeight },
-                    .minSize = minSize,
-                    .maxSize = maxSize,
-                    .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight } },
-                    .style = style,
-                };
-            },
-        }
+            var cursor: Vec2 = .{
+                node.style.padding.x[0] + node.style.borderWidth.x[0],
+                node.style.padding.y[0] + node.style.borderWidth.y[0],
+            };
+            if (direction == .leftToRight) {
+                switch (hAlign) {
+                    .start => {},
+                    .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
+                    .end => cursor[0] += (availableSize[0] - childrenSize[0]),
+                }
+            } else {
+                switch (vAlign) {
+                    .start => {},
+                    .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
+                    .end => cursor[1] += (availableSize[1] - childrenSize[1]),
+                }
+            }
+
+            for (nodes.items) |*child| {
+                if (child.style.placement == .standard) {
+                    const contributingSize = Vec2{
+                        child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
+                    };
+                    if (direction == .leftToRight) {
+                        // Cross-axis alignment (Vertical)
+                        switch (vAlign) {
+                            .start => child.position[1] = child.style.margin.y[0],
+                            .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
+                            .end => child.position[1] = (availableSize[1] - contributingSize[1]),
+                        }
+
+                        cursor[0] += child.style.margin.x[0];
+                        child.position += cursor;
+                        cursor[0] += child.size[0] + child.style.margin.x[1];
+                    } else {
+                        // Cross-axis alignment (Horizontal)
+                        switch (hAlign) {
+                            .start => child.position[0] = child.style.margin.x[0],
+                            .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
+                            .end => child.position[0] = (availableSize[0] - contributingSize[0]),
+                        }
+
+                        cursor[1] += child.style.margin.y[0];
+                        child.position += cursor;
+                        cursor[1] += child.size[1] + child.style.margin.y[1];
+                    }
+                }
+                place(child);
+            }
+        },
+        else => {},
     }
-};
+}
 
 pub const LayoutTreeIterator = struct {
-    stack: std.ArrayList(*const LayoutBox),
+    stack: std.ArrayList(*const Node),
     allocator: std.mem.Allocator,
 
-    root: *const LayoutBox,
+    root: *const Node,
 
-    pub fn init(allocator: std.mem.Allocator, root: *const LayoutBox) !@This() {
+    pub fn init(allocator: std.mem.Allocator, root: *const Node) !@This() {
         var iterator = @This(){
-            .stack = try std.ArrayList(*const LayoutBox).initCapacity(allocator, 16),
+            .stack = try std.ArrayList(*const Node).initCapacity(allocator, 16),
             .allocator = allocator,
             .root = root,
         };
@@ -1046,107 +744,88 @@ pub const LayoutTreeIterator = struct {
         try self.stack.append(self.allocator, self.root);
     }
 
-    pub fn next(self: *@This()) !?*const LayoutBox {
+    pub fn next(self: *@This()) !?*const Node {
         if (self.stack.items.len == 0) {
             return null;
         }
-        const current = self.stack.pop();
-        if (current != null and current.?.children != null) {
-            if (current.?.children.? == .layoutBoxes) {
-                for (current.?.children.?.layoutBoxes) |*child| {
+        if (self.stack.pop()) |current| {
+            if (current.children == .nodes) {
+                for (current.children.nodes.items) |*child| {
                     try self.stack.append(self.allocator, child);
                 }
             }
+            return current;
+        } else {
+            return null;
         }
-        return current;
     }
 };
 
-pub fn countTreeSize(layoutBox: *const LayoutBox) usize {
-    var count: usize = 1;
-    if (layoutBox.children != null and layoutBox.children.? == .layoutBoxes) {
-        for (layoutBox.children.?.layoutBoxes) |*child| {
-            count += countTreeSize(child);
-        }
-    }
-    return count;
-}
-
 pub fn layout(
     arena: std.mem.Allocator,
-    baseStyle: BaseStyle,
     viewportSize: Vec2,
-    dpi: Vec2,
-) !LayoutBox {
+) !*Node {
     const context = forbear.getContext();
-    if (context.rootFrameNode) |node| {
+    if (context.rootFrameNode) |*node| {
         const debugConfig = layoutDebugConfig();
         var startNs: i128 = 0;
         if (debugConfig.enabled) {
             startNs = std.time.nanoTimestamp();
-            std.log.debug("[layout-debug] layout start: viewport={any}, dpi={any}", .{ viewportSize, dpi });
             if (debugConfig.keyFilter) |targetKey| {
                 std.log.debug("[layout-debug] key filter active: {}", .{targetKey});
             }
         }
 
-        var creator = try LayoutCreator.init(arena);
-        var layoutBox = try creator.create(node, baseStyle, 1, dpi);
-        if (debugConfig.enabled) {
-            std.log.debug("[layout-debug] created tree with {} nodes", .{countTreeSize(&layoutBox)});
+        fitAlong(node, .leftToRight);
+        fitAlong(node, .topToBottom);
+        logLayoutStage(debugConfig, "after fitAlong x/y", node);
+
+        if (node.style.width == .grow) {
+            node.size[0] = @min(@max(viewportSize[0], node.minSize[0]), node.maxSize[0]);
         }
-        logLayoutStage(debugConfig, "after create", &layoutBox);
-
-        fitAlong(&layoutBox, .leftToRight);
-        fitAlong(&layoutBox, .topToBottom);
-        logLayoutStage(debugConfig, "after fitAlong x/y", &layoutBox);
-
-        if (layoutBox.style.width == .grow) {
-            layoutBox.size[0] = @min(@max(viewportSize[0], layoutBox.minSize[0]), layoutBox.maxSize[0]);
+        if (node.style.height == .grow) {
+            node.size[1] = @min(@max(viewportSize[1], node.minSize[1]), node.maxSize[1]);
         }
-        if (layoutBox.style.height == .grow) {
-            layoutBox.size[1] = @min(@max(viewportSize[1], layoutBox.minSize[1]), layoutBox.maxSize[1]);
-        }
-        logLayoutStage(debugConfig, "after root grow clamp", &layoutBox);
+        logLayoutStage(debugConfig, "after root grow clamp", node);
 
-        applyParentPercentageSizes(&layoutBox, viewportSize);
-        logLayoutStage(debugConfig, "after applyParentPercentageSizes #1", &layoutBox);
+        applyParentPercentageSizes(node, viewportSize);
+        logLayoutStage(debugConfig, "after applyParentPercentageSizes #1", node);
 
-        applyRatios(&layoutBox);
-        logLayoutStage(debugConfig, "after applyRatios #1", &layoutBox);
+        applyRatios(node);
+        logLayoutStage(debugConfig, "after applyRatios #1", node);
 
-        try growAndShrinkWithDebug(arena, &layoutBox, debugConfig);
-        logLayoutStage(debugConfig, "after growAndShrink #1", &layoutBox);
+        try growAndShrinkWithDebug(arena, node, debugConfig);
+        logLayoutStage(debugConfig, "after growAndShrink #1", node);
 
-        applyParentPercentageSizes(&layoutBox, viewportSize);
-        logLayoutStage(debugConfig, "after applyParentPercentageSizes #2", &layoutBox);
+        applyParentPercentageSizes(node, viewportSize);
+        logLayoutStage(debugConfig, "after applyParentPercentageSizes #2", node);
 
-        applyRatios(&layoutBox);
-        logLayoutStage(debugConfig, "after applyRatios #2", &layoutBox);
+        applyRatios(node);
+        logLayoutStage(debugConfig, "after applyRatios #2", node);
 
-        try growAndShrinkWithDebug(arena, &layoutBox, debugConfig);
-        logLayoutStage(debugConfig, "after growAndShrink #2", &layoutBox);
+        try growAndShrinkWithDebug(arena, node, debugConfig);
+        logLayoutStage(debugConfig, "after growAndShrink #2", node);
 
-        try wrap(arena, &layoutBox);
-        logLayoutStage(debugConfig, "after wrap", &layoutBox);
+        try wrap(arena, node);
+        logLayoutStage(debugConfig, "after wrap", node);
 
-        fitAlong(&layoutBox, .leftToRight);
-        fitAlong(&layoutBox, .topToBottom);
-        logLayoutStage(debugConfig, "after fitAlong x/y #2", &layoutBox);
+        fitAlong(node, .leftToRight);
+        fitAlong(node, .topToBottom);
+        logLayoutStage(debugConfig, "after fitAlong x/y #2", node);
 
-        applyParentPercentageSizes(&layoutBox, viewportSize);
-        logLayoutStage(debugConfig, "after applyParentPercentageSizes #3", &layoutBox);
+        applyParentPercentageSizes(node, viewportSize);
+        logLayoutStage(debugConfig, "after applyParentPercentageSizes #3", node);
 
-        applyRatios(&layoutBox);
-        logLayoutStage(debugConfig, "after applyRatios #3", &layoutBox);
+        applyRatios(node);
+        logLayoutStage(debugConfig, "after applyRatios #3", node);
 
-        try growAndShrinkWithDebug(arena, &layoutBox, debugConfig);
-        logLayoutStage(debugConfig, "after growAndShrink #3", &layoutBox);
+        try growAndShrinkWithDebug(arena, node, debugConfig);
+        logLayoutStage(debugConfig, "after growAndShrink #3", node);
 
-        place(&layoutBox);
-        logLayoutStage(debugConfig, "after place", &layoutBox);
-        makeAbsolute(&layoutBox, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
-        logLayoutStage(debugConfig, "after makeAbsolute", &layoutBox);
+        place(node);
+        logLayoutStage(debugConfig, "after place", node);
+        makeAbsolute(node, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
+        logLayoutStage(debugConfig, "after makeAbsolute", node);
         if (debugConfig.enabled) {
             const elapsedMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - startNs)) / 1_000_000.0;
             if (debugConfig.keyFilter != null) {
@@ -1157,11 +836,11 @@ pub fn layout(
             } else {
                 std.log.debug(
                     "[layout-debug] layout end: elapsed={d:.3}ms, rootPos={any}, rootSize={any}, scroll={any}",
-                    .{ elapsedMs, layoutBox.position, layoutBox.size, context.scrollPosition },
+                    .{ elapsedMs, node.position, node.size, context.scrollPosition },
                 );
             }
         }
-        return layoutBox;
+        return node;
     } else {
         std.log.err("You need to define a root frame node before layouting. You can do so by just doing forbear.text(...), for example.", .{});
         return error.NoRootFrameNode;
@@ -1187,7 +866,7 @@ fn testWrapConfiguration(configuration: struct {
         totalAdvanceX += glyph.advance[0];
     }
 
-    var layoutBox = LayoutBox{
+    var node = Node{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -1214,7 +893,7 @@ fn testWrapConfiguration(configuration: struct {
         }),
     };
 
-    try wrap(arenaAllocator, &layoutBox);
+    try wrap(arenaAllocator, &node);
 
     const glyphPositions = try arenaAllocator.alloc(Vec2, configuration.glyphs.len);
     for (configuration.glyphs, 0..) |glyph, i| {
@@ -1254,31 +933,31 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const childBoxes = try arenaAllocator.alloc(LayoutBox, configuration.children.len);
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, configuration.children.len);
     for (configuration.children, 0..) |child, i| {
-        childBoxes[i] = LayoutBox{
+        children.appendAssumeCapacity(Node{
             .key = @intCast(i),
             .position = .{ 0.0, 0.0 },
             .z = 0,
             .size = child.size,
             .minSize = child.minSize,
             .maxSize = child.maxSize,
-            .children = null,
+            .children = .{ .nodes = .empty },
             .style = (IncompleteStyle{
                 .width = child.width,
                 .height = child.height,
             }).completeWith(defaultBaseStyle),
-        };
+        });
     }
 
-    var parent = LayoutBox{
+    var parent = Node{
         .key = 999,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = configuration.parentSize,
         .minSize = .{ 0.0, 0.0 },
         .maxSize = configuration.parentSize,
-        .children = .{ .layoutBoxes = childBoxes },
+        .children = .{ .nodes = children },
         .style = (IncompleteStyle{
             .direction = configuration.direction,
         }).completeWith(defaultBaseStyle),
@@ -1287,7 +966,7 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
     try growAndShrink(arenaAllocator, &parent);
 
     const actualSizes = try arenaAllocator.alloc(Vec2, configuration.children.len);
-    for (parent.children.?.layoutBoxes, 0..) |child, i| {
+    for (parent.children.nodes.items, 0..) |child, i| {
         actualSizes[i] = child.size;
     }
     std.log.debug("Expecting {any}", .{configuration.expectedSizes});
@@ -1589,44 +1268,44 @@ test "fitAlong - vertical fit uses height axis fields" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const childBoxes = try arenaAllocator.alloc(LayoutBox, 2);
-    childBoxes[0] = LayoutBox{
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
+    children.appendAssumeCapacity(Node{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ 20.0, 30.0 },
         .minSize = .{ 20.0, 30.0 },
         .maxSize = .{ 20.0, 30.0 },
-        .children = null,
+        .children = .{ .nodes = .empty },
         .style = (IncompleteStyle{
             .width = .{ .fixed = 20.0 },
             .height = .{ .fixed = 30.0 },
             .margin = forbear.Margin.block(1.0).withBottom(2.0),
         }).completeWith(defaultBaseStyle),
-    };
-    childBoxes[1] = LayoutBox{
+    });
+    children.appendAssumeCapacity(Node{
         .key = 2,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ 20.0, 40.0 },
         .minSize = .{ 20.0, 40.0 },
         .maxSize = .{ 20.0, 40.0 },
-        .children = null,
+        .children = .{ .nodes = .empty },
         .style = (IncompleteStyle{
             .width = .{ .fixed = 20.0 },
             .height = .{ .fixed = 40.0 },
             .margin = forbear.Margin.block(3.0).withBottom(4.0),
         }).completeWith(defaultBaseStyle),
-    };
+    });
 
-    var parent = LayoutBox{
+    var parent = Node{
         .key = 999,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ 100.0, 0.0 },
         .minSize = .{ 100.0, 0.0 },
         .maxSize = .{ 100.0, std.math.inf(f32) },
-        .children = .{ .layoutBoxes = childBoxes },
+        .children = .{ .nodes = children },
         .style = (IncompleteStyle{
             .direction = .topToBottom,
             .width = .{ .fixed = 100.0 },
@@ -1649,44 +1328,44 @@ test "fitAlong - cross axis fit uses vertical padding and borders" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const childBoxes = try arenaAllocator.alloc(LayoutBox, 2);
-    childBoxes[0] = LayoutBox{
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
+    children.appendAssumeCapacity(Node{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ 20.0, 30.0 },
         .minSize = .{ 20.0, 30.0 },
         .maxSize = .{ 20.0, 30.0 },
-        .children = null,
+        .children = .{ .nodes = .empty },
         .style = (IncompleteStyle{
             .width = .{ .fixed = 20.0 },
             .height = .{ .fixed = 30.0 },
             .margin = forbear.Margin.block(1.0).withBottom(2.0),
         }).completeWith(defaultBaseStyle),
-    };
-    childBoxes[1] = LayoutBox{
+    });
+    children.appendAssumeCapacity(Node{
         .key = 2,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ 20.0, 40.0 },
         .minSize = .{ 20.0, 40.0 },
         .maxSize = .{ 20.0, 40.0 },
-        .children = null,
+        .children = .{ .nodes = .empty },
         .style = (IncompleteStyle{
             .width = .{ .fixed = 20.0 },
             .height = .{ .fixed = 40.0 },
             .margin = forbear.Margin.block(3.0).withBottom(4.0),
         }).completeWith(defaultBaseStyle),
-    };
+    });
 
-    var parent = LayoutBox{
+    var parent = Node{
         .key = 999,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ 100.0, 0.0 },
         .minSize = .{ 100.0, 0.0 },
         .maxSize = .{ 100.0, std.math.inf(f32) },
-        .children = .{ .layoutBoxes = childBoxes },
+        .children = .{ .nodes = children },
         .style = (IncompleteStyle{
             .direction = .leftToRight,
             .width = .{ .fixed = 100.0 },
@@ -1988,42 +1667,42 @@ test "ratio and grow passes are stable when reapplied" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const children = try arenaAllocator.alloc(LayoutBox, 2);
-    children[0] = LayoutBox{
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
+    children.appendAssumeCapacity(Node{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ 0.0, 50.0 },
         .minSize = .{ 0.0, 0.0 },
         .maxSize = .{ std.math.inf(f32), 50.0 },
-        .children = null,
+        .children = .{ .nodes = .empty },
         .style = (IncompleteStyle{
             .width = .{ .ratio = 0.2 },
             .height = .{ .fixed = 50.0 },
         }).completeWith(defaultBaseStyle),
-    };
-    children[1] = LayoutBox{
+    });
+    children.appendAssumeCapacity(Node{
         .key = 2,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ 0.0, 50.0 },
         .minSize = .{ 0.0, 0.0 },
         .maxSize = .{ std.math.inf(f32), 50.0 },
-        .children = null,
+        .children = .{ .nodes = .empty },
         .style = (IncompleteStyle{
             .width = .grow,
             .height = .{ .fixed = 50.0 },
         }).completeWith(defaultBaseStyle),
-    };
+    });
 
-    var parent = LayoutBox{
+    var parent = Node{
         .key = 99,
         .position = .{ 0.0, 0.0 },
         .z = 0,
         .size = .{ 300.0, 50.0 },
         .minSize = .{ 300.0, 50.0 },
         .maxSize = .{ 300.0, 50.0 },
-        .children = .{ .layoutBoxes = children },
+        .children = .{ .nodes = children },
         .style = (IncompleteStyle{
             .direction = .leftToRight,
             .width = .{ .fixed = 300.0 },
@@ -2033,16 +1712,16 @@ test "ratio and grow passes are stable when reapplied" {
 
     applyRatios(&parent);
     try growAndShrink(arenaAllocator, &parent);
-    const firstRatio = parent.children.?.layoutBoxes[0].size[0];
-    const firstGrow = parent.children.?.layoutBoxes[1].size[0];
+    const firstRatio = parent.children.nodes.items[0].size[0];
+    const firstGrow = parent.children.nodes.items[1].size[0];
 
     applyRatios(&parent);
     try growAndShrink(arenaAllocator, &parent);
 
-    try std.testing.expectEqual(firstRatio, parent.children.?.layoutBoxes[0].size[0]);
-    try std.testing.expectEqual(firstGrow, parent.children.?.layoutBoxes[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 10.0), parent.children.?.layoutBoxes[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 290.0), parent.children.?.layoutBoxes[1].size[0]);
+    try std.testing.expectEqual(firstRatio, parent.children.nodes.items[0].size[0]);
+    try std.testing.expectEqual(firstGrow, parent.children.nodes.items[1].size[0]);
+    try std.testing.expectEqual(@as(f32, 10.0), parent.children.nodes.items[0].size[0]);
+    try std.testing.expectEqual(@as(f32, 290.0), parent.children.nodes.items[1].size[0]);
 }
 
 test "layout pipeline - ratio and grow produce stable geometry" {
@@ -2053,29 +1732,32 @@ test "layout pipeline - ratio and grow produce stable geometry" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const buildTree = struct {
-        fn build(allocator: std.mem.Allocator) !void {
-            (try forbear.element(allocator, .{
-                .direction = .leftToRight,
+    const testingBaseStyle = try testing.createTestingBaseStyle();
+
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .grow,
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.2 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
                 .width = .grow,
-                .height = .{ .fixed = 100.0 },
-            }))({
-                (try forbear.element(allocator, .{
-                    .width = .{ .ratio = 0.2 },
-                    .height = .grow,
-                }))({});
-                (try forbear.element(allocator, .{
-                    .width = .grow,
-                    .height = .grow,
-                }))({});
-            });
-        }
-    }.build;
+                .height = .grow,
+            }))({});
+        });
+    });
+    const first = try layout(arenaAllocator, .{ 300.0, 400.0 });
 
-    try buildTree(arenaAllocator);
-    const first = try layout(arenaAllocator, defaultBaseStyle, .{ 300.0, 400.0 }, .{ 72.0, 72.0 });
-
-    const firstChildren = first.children.?.layoutBoxes;
+    const firstChildren = try std.testing.allocator.dupe(Node, first.children.nodes.items);
+    defer std.testing.allocator.free(firstChildren);
     try std.testing.expectEqual(@as(usize, 2), firstChildren.len);
     try std.testing.expectEqual(@as(f32, 300.0), first.size[0]);
     try std.testing.expectEqual(@as(f32, 100.0), first.size[1]);
@@ -2093,9 +1775,28 @@ test "layout pipeline - ratio and grow produce stable geometry" {
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    try buildTree(arenaAllocator);
-    const second = try layout(arenaAllocator, defaultBaseStyle, .{ 300.0, 400.0 }, .{ 72.0, 72.0 });
-    const secondChildren = second.children.?.layoutBoxes;
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .grow,
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.2 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+            }))({});
+        });
+    });
+    const second = try layout(arenaAllocator, .{ 300.0, 400.0 });
+    const secondChildren = second.children.nodes.items;
 
     try std.testing.expectEqual(first.size[0], second.size[0]);
     try std.testing.expectEqual(first.size[1], second.size[1]);
@@ -2121,34 +1822,42 @@ test "layout pipeline - manual children stay out of flow" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    (try forbear.element(arenaAllocator, .{
-        .direction = .leftToRight,
-        .width = .{ .fixed = 200.0 },
-        .height = .{ .fixed = 100.0 },
-    }))({
-        (try forbear.element(arenaAllocator, .{
-            .width = .{ .ratio = 0.5 },
-            .height = .grow,
-        }))({});
-        (try forbear.element(arenaAllocator, .{
-            .placement = .{ .manual = .{ 10.0, 7.0 } },
-            .width = .{ .fixed = 15.0 },
-            .height = .{ .fixed = 12.0 },
-        }))({});
-        (try forbear.element(arenaAllocator, .{
-            .width = .{ .fixed = 20.0 },
-            .height = .grow,
-        }))({});
+    const testingBaseStyle = try testing.createTestingBaseStyle();
+
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.5 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
+                .placement = .{ .manual = .{ 10.0, 7.0 } },
+                .width = .{ .fixed = 15.0 },
+                .height = .{ .fixed = 12.0 },
+            }))({});
+            (try forbear.element(.{
+                .width = .{ .fixed = 20.0 },
+                .height = .grow,
+            }))({});
+        });
     });
 
-    const layoutBox = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
+    const node = try layout(arenaAllocator, .{ 500.0, 500.0 });
 
-    try std.testing.expectEqual(@as(f32, 200.0), layoutBox.size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), layoutBox.size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), layoutBox.position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), layoutBox.position[1]);
+    try std.testing.expectEqual(@as(f32, 200.0), node.size[0]);
+    try std.testing.expectEqual(@as(f32, 100.0), node.size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), node.position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), node.position[1]);
 
-    const children = layoutBox.children.?.layoutBoxes;
+    const children = node.children.nodes.items;
 
     try std.testing.expectEqual(@as(usize, 3), children.len);
 
@@ -2175,67 +1884,88 @@ test "layout pipeline - vertical ratio and grow produce stable geometry" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    const buildTree = struct {
-        fn build(allocator: std.mem.Allocator) !void {
-            (try forbear.element(allocator, .{
-                .direction = .topToBottom,
-                .width = .{ .fixed = 120.0 },
-                .height = .{ .fixed = 300.0 },
-            }))({
-                (try forbear.element(allocator, .{
-                    .width = .grow,
-                    .height = .{ .ratio = 0.5 },
-                }))({});
-                (try forbear.element(allocator, .{
-                    .width = .grow,
-                    .height = .grow,
-                }))({});
-            });
-        }
-    }.build;
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .topToBottom,
+            .width = .{ .fixed = 120.0 },
+            .height = .{ .fixed = 300.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .{ .ratio = 0.5 },
+            }))({});
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+            }))({});
+        });
+    });
+    const first = try layout(arenaAllocator, .{ 500.0, 500.0 });
 
-    try buildTree(arenaAllocator);
-    const first = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
-
-    const firstChildren = first.children.?.layoutBoxes;
-    try std.testing.expectEqual(@as(usize, 2), firstChildren.len);
+    const firstsChildren = try std.testing.allocator.dupe(Node, first.children.nodes.items);
+    defer std.testing.allocator.free(firstsChildren);
+    try std.testing.expectEqual(@as(usize, 2), firstsChildren.len);
     try std.testing.expectEqual(@as(f32, 120.0), first.size[0]);
     try std.testing.expectEqual(@as(f32, 300.0), first.size[1]);
     try std.testing.expectEqual(@as(f32, 0.0), first.position[0]);
     try std.testing.expectEqual(@as(f32, 0.0), first.position[1]);
 
-    try std.testing.expectEqual(@as(f32, 120.0), firstChildren[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 60.0), firstChildren[0].size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[1]);
+    try std.testing.expectEqual(@as(f32, 120.0), firstsChildren[0].size[0]);
+    try std.testing.expectEqual(@as(f32, 60.0), firstsChildren[0].size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[0].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[0].position[1]);
 
-    try std.testing.expectEqual(@as(f32, 120.0), firstChildren[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 240.0), firstChildren[1].size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[1].position[0]);
-    try std.testing.expectEqual(@as(f32, 60.0), firstChildren[1].position[1]);
+    try std.testing.expectEqual(@as(f32, 120.0), firstsChildren[1].size[0]);
+    try std.testing.expectEqual(@as(f32, 240.0), firstsChildren[1].size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[1].position[0]);
+    try std.testing.expectEqual(@as(f32, 60.0), firstsChildren[1].position[1]);
 
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    try buildTree(arenaAllocator);
-    const second = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
-    const secondChildren = second.children.?.layoutBoxes;
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .topToBottom,
+            .width = .{ .fixed = 120.0 },
+            .height = .{ .fixed = 300.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .{ .ratio = 0.5 },
+            }))({});
+            (try forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+            }))({});
+        });
+    });
+    const second = try layout(arenaAllocator, .{ 500.0, 500.0 });
+    const secondsChildren = second.children.nodes.items;
 
     try std.testing.expectEqual(first.size[0], second.size[0]);
     try std.testing.expectEqual(first.size[1], second.size[1]);
     try std.testing.expectEqual(first.position[0], second.position[0]);
     try std.testing.expectEqual(first.position[1], second.position[1]);
 
-    try std.testing.expectEqual(firstChildren[0].size[0], secondChildren[0].size[0]);
-    try std.testing.expectEqual(firstChildren[0].size[1], secondChildren[0].size[1]);
-    try std.testing.expectEqual(firstChildren[0].position[0], secondChildren[0].position[0]);
-    try std.testing.expectEqual(firstChildren[0].position[1], secondChildren[0].position[1]);
+    try std.testing.expectEqual(firstsChildren[0].size[0], secondsChildren[0].size[0]);
+    try std.testing.expectEqual(firstsChildren[0].size[1], secondsChildren[0].size[1]);
+    try std.testing.expectEqual(firstsChildren[0].position[0], secondsChildren[0].position[0]);
+    try std.testing.expectEqual(firstsChildren[0].position[1], secondsChildren[0].position[1]);
 
-    try std.testing.expectEqual(firstChildren[1].size[0], secondChildren[1].size[0]);
-    try std.testing.expectEqual(firstChildren[1].size[1], secondChildren[1].size[1]);
-    try std.testing.expectEqual(firstChildren[1].position[0], secondChildren[1].position[0]);
-    try std.testing.expectEqual(firstChildren[1].position[1], secondChildren[1].position[1]);
+    try std.testing.expectEqual(firstsChildren[1].size[0], secondsChildren[1].size[0]);
+    try std.testing.expectEqual(firstsChildren[1].size[1], secondsChildren[1].size[1]);
+    try std.testing.expectEqual(firstsChildren[1].position[0], secondsChildren[1].position[0]);
+    try std.testing.expectEqual(firstsChildren[1].position[1], secondsChildren[1].position[1]);
 }
 
 test "layout pipeline - manual ratio child stays out of flow" {
@@ -2246,28 +1976,36 @@ test "layout pipeline - manual ratio child stays out of flow" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    (try forbear.element(arenaAllocator, .{
-        .direction = .leftToRight,
-        .width = .{ .fixed = 200.0 },
-        .height = .{ .fixed = 100.0 },
-    }))({
-        (try forbear.element(arenaAllocator, .{
-            .width = .{ .ratio = 0.5 },
-            .height = .grow,
-        }))({});
-        (try forbear.element(arenaAllocator, .{
-            .placement = .{ .manual = .{ 10.0, 7.0 } },
-            .width = .{ .ratio = 0.5 },
-            .height = .{ .fixed = 40.0 },
-        }))({});
-        (try forbear.element(arenaAllocator, .{
-            .width = .{ .fixed = 20.0 },
-            .height = .grow,
-        }))({});
+    const testingBaseStyle = try testing.createTestingBaseStyle();
+
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.5 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
+                .placement = .{ .manual = .{ 10.0, 7.0 } },
+                .width = .{ .ratio = 0.5 },
+                .height = .{ .fixed = 40.0 },
+            }))({});
+            (try forbear.element(.{
+                .width = .{ .fixed = 20.0 },
+                .height = .grow,
+            }))({});
+        });
     });
 
-    const layoutBox = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
-    const children = layoutBox.children.?.layoutBoxes;
+    const node = try layout(arenaAllocator, .{ 500.0, 500.0 });
+    const children = node.children.nodes.items;
 
     try std.testing.expectEqual(@as(usize, 3), children.len);
 
@@ -2294,108 +2032,75 @@ test "layout pipeline - ratio and shrink keep children within parent flow" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
+    const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    const buildTree = struct {
-        fn build(allocator: std.mem.Allocator) !void {
-            (try forbear.element(allocator, .{
-                .direction = .leftToRight,
-                .width = .{ .fixed = 40.0 },
-                .height = .{ .fixed = 100.0 },
-            }))({
-                (try forbear.element(allocator, .{
-                    .width = .{ .ratio = 0.5 },
-                    .height = .grow,
-                }))({});
-                (try forbear.element(allocator, .{
-                    .width = .{ .fixed = 30.0 },
-                    .height = .grow,
-                }))({});
-            });
-        }
-    }.build;
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .{ .fixed = 40.0 },
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.5 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .grow,
+            }))({});
+        });
+    });
+    const first = try layout(arenaAllocator, .{ 500.0, 500.0 });
+    const firstsChildren = try std.testing.allocator.dupe(Node, first.children.nodes.items);
+    defer std.testing.allocator.free(firstsChildren);
 
-    try buildTree(arenaAllocator);
-    const first = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
-    const firstChildren = first.children.?.layoutBoxes;
-
-    try std.testing.expectEqual(@as(usize, 2), firstChildren.len);
+    try std.testing.expectEqual(@as(usize, 2), firstsChildren.len);
     try std.testing.expectEqual(@as(f32, 40.0), first.size[0]);
     try std.testing.expectEqual(@as(f32, 100.0), first.size[1]);
 
-    try std.testing.expectEqual(@as(f32, 10.0), firstChildren[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), firstChildren[0].size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[1]);
+    try std.testing.expectEqual(@as(f32, 10.0), firstsChildren[0].size[0]);
+    try std.testing.expectEqual(@as(f32, 100.0), firstsChildren[0].size[1]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[0].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[0].position[1]);
 
-    try std.testing.expectEqual(@as(f32, 30.0), firstChildren[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), firstChildren[1].size[1]);
-    try std.testing.expectEqual(@as(f32, 10.0), firstChildren[1].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[1].position[1]);
+    try std.testing.expectEqual(@as(f32, 30.0), firstsChildren[1].size[0]);
+    try std.testing.expectEqual(@as(f32, 100.0), firstsChildren[1].size[1]);
+    try std.testing.expectEqual(@as(f32, 10.0), firstsChildren[1].position[0]);
+    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[1].position[1]);
 
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    try buildTree(arenaAllocator);
-    const second = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
-    const secondChildren = second.children.?.layoutBoxes;
-
-    try std.testing.expectEqual(firstChildren[0].size[0], secondChildren[0].size[0]);
-    try std.testing.expectEqual(firstChildren[1].size[0], secondChildren[1].size[0]);
-    try std.testing.expectEqual(firstChildren[1].position[0], secondChildren[1].position[0]);
-}
-
-fn testCreateElementConfiguration(configuration: struct {
-    style: IncompleteStyle,
-    expectedSize: Vec2,
-}) !void {
-    const allocator = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var creator = try LayoutCreator.init(arenaAllocator);
-    const node = Node{
-        .key = 1,
-        .content = .{
-            .element = .{
-                .style = configuration.style,
-                .children = .empty,
-            },
-        },
-    };
-
-    const layoutBox = try creator.create(node, defaultBaseStyle, 0, .{ 72.0, 72.0 });
-    try std.testing.expectEqualDeep(configuration.expectedSize, layoutBox.size);
-}
-
-test "create - width ratio uses fixed height" {
-    try testCreateElementConfiguration(.{
-        .style = .{
-            .width = .{ .ratio = 1.5 },
-            .height = .{ .fixed = 40.0 },
-        },
-        .expectedSize = .{ 60.0, 40.0 },
-    });
-}
-
-test "create - height ratio uses fixed width" {
-    try testCreateElementConfiguration(.{
-        .style = .{
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
             .width = .{ .fixed = 40.0 },
-            .height = .{ .ratio = 1.5 },
-        },
-        .expectedSize = .{ 40.0, 60.0 },
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .ratio = 0.5 },
+                .height = .grow,
+            }))({});
+            (try forbear.element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .grow,
+            }))({});
+        });
     });
-}
+    const second = try layout(arenaAllocator, .{ 500.0, 500.0 });
+    const secondsChildren = second.children.nodes.items;
 
-test "create - ratio without opposite fixed axis starts at zero" {
-    try testCreateElementConfiguration(.{
-        .style = .{
-            .width = .{ .ratio = 2.0 },
-            .height = .fit,
-        },
-        .expectedSize = .{ 0.0, 0.0 },
-    });
+    try std.testing.expectEqual(firstsChildren[0].size[0], secondsChildren[0].size[0]);
+    try std.testing.expectEqual(firstsChildren[1].size[0], secondsChildren[1].size[0]);
+    try std.testing.expectEqual(firstsChildren[1].position[0], secondsChildren[1].position[0]);
 }
 
 test "layout pipeline - percentage sizes track parent axis" {
@@ -2406,31 +2111,29 @@ test "layout pipeline - percentage sizes track parent axis" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    (try forbear.element(arenaAllocator, .{
-        .direction = .leftToRight,
-        .width = .{ .fixed = 200.0 },
-        .height = .{ .fixed = 100.0 },
-    }))({
-        (try forbear.element(arenaAllocator, .{
-            .width = .{ .percentage = 0.5 },
-            .height = .{ .percentage = 0.25 },
-        }))({});
+    const testingBaseStyle = try testing.createTestingBaseStyle();
+
+    forbear.frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try forbear.element(.{
+            .direction = .leftToRight,
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 100.0 },
+        }))({
+            (try forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .percentage = 0.25 },
+            }))({});
+        });
     });
 
-    const result = try layout(arenaAllocator, defaultBaseStyle, .{ 500.0, 500.0 }, .{ 72.0, 72.0 });
-    const children = result.children.?.layoutBoxes;
+    const result = try layout(arenaAllocator, .{ 500.0, 500.0 });
+    const children = result.children.nodes.items;
 
     try std.testing.expectEqual(@as(usize, 1), children.len);
     try std.testing.expectEqual(@as(f32, 100.0), children[0].size[0]);
     try std.testing.expectEqual(@as(f32, 25.0), children[0].size[1]);
-}
-
-test "create - percentage sizing starts at zero before parent resolution" {
-    try testCreateElementConfiguration(.{
-        .style = .{
-            .width = .{ .percentage = 0.5 },
-            .height = .{ .percentage = 0.5 },
-        },
-        .expectedSize = .{ 0.0, 0.0 },
-    });
 }
