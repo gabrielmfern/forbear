@@ -942,9 +942,9 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const children = try std.ArrayList(Node).initCapacity(arenaAllocator, configuration.children.len);
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, configuration.children.len);
     for (configuration.children, 0..) |child, i| {
-        children.items[i] = Node{
+        children.appendAssumeCapacity(Node{
             .key = @intCast(i),
             .position = .{ 0.0, 0.0 },
             .z = 0,
@@ -956,7 +956,7 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
                 .width = child.width,
                 .height = child.height,
             }).completeWith(defaultBaseStyle),
-        };
+        });
     }
 
     var parent = Node{
@@ -1277,8 +1277,8 @@ test "fitAlong - vertical fit uses height axis fields" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
-    children.items[0] = Node{
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
+    children.appendAssumeCapacity(Node{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -1291,8 +1291,8 @@ test "fitAlong - vertical fit uses height axis fields" {
             .height = .{ .fixed = 30.0 },
             .margin = forbear.Margin.block(1.0).withBottom(2.0),
         }).completeWith(defaultBaseStyle),
-    };
-    children.items[1] = Node{
+    });
+    children.appendAssumeCapacity(Node{
         .key = 2,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -1305,7 +1305,7 @@ test "fitAlong - vertical fit uses height axis fields" {
             .height = .{ .fixed = 40.0 },
             .margin = forbear.Margin.block(3.0).withBottom(4.0),
         }).completeWith(defaultBaseStyle),
-    };
+    });
 
     var parent = Node{
         .key = 999,
@@ -1337,8 +1337,8 @@ test "fitAlong - cross axis fit uses vertical padding and borders" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
-    children.items[0] = Node{
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
+    children.appendAssumeCapacity(Node{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -1351,8 +1351,8 @@ test "fitAlong - cross axis fit uses vertical padding and borders" {
             .height = .{ .fixed = 30.0 },
             .margin = forbear.Margin.block(1.0).withBottom(2.0),
         }).completeWith(defaultBaseStyle),
-    };
-    children.items[1] = Node{
+    });
+    children.appendAssumeCapacity(Node{
         .key = 2,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -1365,7 +1365,7 @@ test "fitAlong - cross axis fit uses vertical padding and borders" {
             .height = .{ .fixed = 40.0 },
             .margin = forbear.Margin.block(3.0).withBottom(4.0),
         }).completeWith(defaultBaseStyle),
-    };
+    });
 
     var parent = Node{
         .key = 999,
@@ -1676,8 +1676,8 @@ test "ratio and grow passes are stable when reapplied" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
-    children.items[0] = Node{
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
+    children.appendAssumeCapacity(Node{
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -1689,8 +1689,8 @@ test "ratio and grow passes are stable when reapplied" {
             .width = .{ .ratio = 0.2 },
             .height = .{ .fixed = 50.0 },
         }).completeWith(defaultBaseStyle),
-    };
-    children.items[1] = Node{
+    });
+    children.appendAssumeCapacity(Node{
         .key = 2,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -1702,7 +1702,7 @@ test "ratio and grow passes are stable when reapplied" {
             .width = .grow,
             .height = .{ .fixed = 50.0 },
         }).completeWith(defaultBaseStyle),
-    };
+    });
 
     var parent = Node{
         .key = 99,
@@ -1742,25 +1742,31 @@ test "layout pipeline - ratio and grow produce stable geometry" {
     const arenaAllocator = arena.allocator();
 
     const buildTree = struct {
-        fn build() !void {
-            (try forbear.element(.{
-                .direction = .leftToRight,
-                .width = .grow,
-                .height = .{ .fixed = 100.0 },
-            }))({
+        fn build(allocator: std.mem.Allocator) !void {
+            forbear.frame(.{
+                .arena = allocator,
+                .dpi = @splat(72.0),
+                .baseStyle = testingBaseStyle,
+            })({
                 (try forbear.element(.{
-                    .width = .{ .ratio = 0.2 },
-                    .height = .grow,
-                }))({});
-                (try forbear.element(.{
+                    .direction = .leftToRight,
                     .width = .grow,
-                    .height = .grow,
-                }))({});
+                    .height = .{ .fixed = 100.0 },
+                }))({
+                    (try forbear.element(.{
+                        .width = .{ .ratio = 0.2 },
+                        .height = .grow,
+                    }))({});
+                    (try forbear.element(.{
+                        .width = .grow,
+                        .height = .grow,
+                    }))({});
+                });
             });
         }
     }.build;
 
-    try buildTree();
+    try buildTree(arenaAllocator);
     const first = try layout(arenaAllocator, .{ 300.0, 400.0 });
 
     const firstChildren = first.children.nodes.items;
@@ -1781,7 +1787,7 @@ test "layout pipeline - ratio and grow produce stable geometry" {
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    try buildTree();
+    try buildTree(arenaAllocator);
     const second = try layout(arenaAllocator, .{ 300.0, 400.0 });
     const secondChildren = second.children.nodes.items;
 

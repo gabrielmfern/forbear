@@ -132,6 +132,8 @@ test "Element tree stack stability" {
 
     const self = getContext();
 
+    const testingBaseStyle = try createTestingBaseStyle();
+
     frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
@@ -238,6 +240,7 @@ test "Element key stability across frames" {
             }
         }
     }.collect;
+    const testingBaseStyle = try createTestingBaseStyle();
 
     frame(.{
         .arena = arenaAllocator,
@@ -322,6 +325,8 @@ test "Component resolution" {
             });
         }
     }).component;
+
+    const testingBaseStyle = try createTestingBaseStyle();
 
     frame(.{
         .arena = arenaAllocator,
@@ -1200,6 +1205,8 @@ test "Event queue dispatches events to correct elements" {
 
     const self = getContext();
 
+    const testingBaseStyle = try createTestingBaseStyle();
+
     frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
@@ -1467,22 +1474,28 @@ pub fn element(incompleteStyle: IncompleteStyle) !*const fn (void) void {
     return &popParentStack;
 }
 
-const testingBaseStyle = BaseStyle{
-    .font = undefined,
-    .color = .{ 0.0, 0.0, 0.0, 1.0 },
-    .fontSize = 16,
-    .fontWeight = 400,
-    .lineHeight = 1.0,
-    .textWrapping = .none,
-    .blendMode = .normal,
-    .cursor = .default,
-};
+fn createTestingBaseStyle() !BaseStyle {
+    try registerFont("Inter", @embedFile("./Inter.ttf"));
+    return BaseStyle{
+        .font = try useFont("Inter"),
+        .color = .{ 0.0, 0.0, 0.0, 1.0 },
+        .fontSize = 16,
+        .fontWeight = 400,
+        .lineHeight = 1.0,
+        .textWrapping = .none,
+        .blendMode = .normal,
+        .cursor = .default,
+    };
+}
 
 fn testCreateElementConfiguration(configuration: struct {
     style: IncompleteStyle,
     expectedSize: Vec2,
 }) !void {
     const allocator = std.testing.allocator;
+    try init(allocator, undefined);
+    defer deinit();
+
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -1491,10 +1504,10 @@ fn testCreateElementConfiguration(configuration: struct {
 
     frame(.{
         .arena = arenaAllocator,
-        .baseStyle = testingBaseStyle,
+        .baseStyle = try createTestingBaseStyle(),
         .dpi = @splat(72.0),
     })({
-        (try element(.{}))({});
+        (try element(configuration.style))({});
         if (self.previousPushedNode) |previousNode| {
             try std.testing.expectEqualDeep(configuration.expectedSize, previousNode.size);
         }
