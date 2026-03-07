@@ -132,81 +132,85 @@ test "Element tree stack stability" {
 
     const self = getContext();
 
-    (try element(arenaAllocator, .{}))({
-        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
-        try std.testing.expectEqual(1, self.frameNodePath.items.len);
-        try component(arenaAllocator, FpsCounter, null);
-        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
-        try std.testing.expectEqual(1, self.frameNodePath.items.len);
-        (try element(arenaAllocator, .{}))({
-            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+    frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try element(.{}))({
+            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(1, self.frameNodePath.items.len);
+            try component(FpsCounter, null);
+            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(1, self.frameNodePath.items.len);
+            (try element(.{}))({
+                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-            try text(arenaAllocator, "Hello, world!");
-            try std.testing.expectEqualDeep("Hello, world!", self.previousPushedNode.?.content.text);
+                try text("Hello, world!");
+                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+                (try element(.{}))({
+                    try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
+                    try std.testing.expectEqual(3, self.frameNodePath.items.len);
 
-            (try element(arenaAllocator, .{}))({
-                try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(3, self.frameNodePath.items.len);
+                    try text("Nested element");
+                    try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
+                    try std.testing.expectEqual(3, self.frameNodePath.items.len);
+                });
 
-                try text(arenaAllocator, "Nested element");
-                try std.testing.expectEqualDeep("Nested element", self.previousPushedNode.?.content.text);
-
-                try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(3, self.frameNodePath.items.len);
+                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(2, self.frameNodePath.items.len);
             });
-
-            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
         });
-        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+        try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
+        try std.testing.expectEqual(0, self.frameNodePath.items.len);
+        try std.testing.expect(self.rootFrameNode != null);
     });
-    try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
-    try std.testing.expectEqual(0, self.frameNodePath.items.len);
-    try std.testing.expect(self.rootFrameNode != null);
 
     // This acts like the end of a frame here
     resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    (try element(arenaAllocator, .{}))({
-        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
-        try std.testing.expectEqual(1, self.frameNodePath.items.len);
-        try component(arenaAllocator, FpsCounter, null);
-        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
-        try std.testing.expectEqual(1, self.frameNodePath.items.len);
-        (try element(arenaAllocator, .{}))({
-            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+    frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try element(.{}))({
+            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(1, self.frameNodePath.items.len);
+            try component(FpsCounter, null);
+            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(1, self.frameNodePath.items.len);
+            (try element(.{}))({
+                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-            try text(arenaAllocator, "Hello, world!");
-            try std.testing.expectEqualDeep("Hello, world!", self.previousPushedNode.?.content.text);
+                try text("Hello, world!");
+                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+                (try element(.{}))({
+                    try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
+                    try std.testing.expectEqual(3, self.frameNodePath.items.len);
 
-            (try element(arenaAllocator, .{}))({
-                try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(3, self.frameNodePath.items.len);
+                    try text("Nested element");
+                    try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
+                    try std.testing.expectEqual(3, self.frameNodePath.items.len);
+                });
 
-                try text(arenaAllocator, "Nested element");
-                try std.testing.expectEqualDeep("Nested element", self.previousPushedNode.?.content.text);
-
-                try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(3, self.frameNodePath.items.len);
+                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
+                try std.testing.expectEqual(2, self.frameNodePath.items.len);
             });
-
-            try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(2, self.frameNodePath.items.len);
+            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
         });
-        try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+        try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
+        try std.testing.expectEqual(0, self.frameNodePath.items.len);
+        try std.testing.expect(self.rootFrameNode != null);
     });
-    try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
-    try std.testing.expectEqual(0, self.frameNodePath.items.len);
-    try std.testing.expect(self.rootFrameNode != null);
 }
 
 test "Element key stability across frames" {
@@ -227,20 +231,26 @@ test "Element key stability across frames" {
             arrayList: *std.ArrayList(u64),
         ) !void {
             try arrayList.append(allocator, node.key);
-            if (node.content == .element) {
-                for (node.content.element.children.items) |*child| {
+            if (node.children == .nodes) {
+                for (node.children.nodes.items) |*child| {
                     try collect(allocator, child, arrayList);
                 }
             }
         }
     }.collect;
 
-    // Build tree: root > [child1, child2 > [nested1, nested2]]
-    (try element(arenaAllocator, .{}))({
-        (try element(arenaAllocator, .{}))({});
-        (try element(arenaAllocator, .{}))({
-            (try element(arenaAllocator, .{}))({});
-            (try element(arenaAllocator, .{}))({});
+    frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        // Build tree: root > [child1, child2 > [nested1, nested2]]
+        (try element(.{}))({
+            (try element(.{}))({});
+            (try element(.{}))({
+                (try element(.{}))({});
+                (try element(.{}))({});
+            });
         });
     });
 
@@ -252,12 +262,17 @@ test "Element key stability across frames" {
     resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    // Build the exact same tree structure
-    (try element(arenaAllocator, .{}))({
-        (try element(arenaAllocator, .{}))({});
-        (try element(arenaAllocator, .{}))({
-            (try element(arenaAllocator, .{}))({});
-            (try element(arenaAllocator, .{}))({});
+    frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try element(.{}))({
+            (try element(.{}))({});
+            (try element(.{}))({
+                (try element(.{}))({});
+                (try element(.{}))({});
+            });
         });
     });
 
@@ -302,31 +317,41 @@ test "Component resolution" {
             const counter = try useState(u32, props.value);
             const innerArena = try useArena();
             try std.testing.expectEqual(10, counter.*);
-            (try element(innerArena, .{}))({
-                try text(innerArena, try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
+            (try element(.{}))({
+                try text(try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
             });
         }
     }).component;
 
-    (try element(arenaAllocator, .{}))({
-        try component(
-            arenaAllocator,
-            MyComponent,
-            MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
-        );
+    frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try element(.{}))({
+            try component(
+                MyComponent,
+                MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
+            );
+        });
+        try std.testing.expectEqual(1, callCount);
     });
-    try std.testing.expectEqual(1, callCount);
 
     resetNodeTree();
 
-    (try element(arenaAllocator, .{}))({
-        try component(
-            arenaAllocator,
-            MyComponent,
-            MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
-        );
+    frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try element(.{}))({
+            try component(
+                MyComponent,
+                MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
+            );
+        });
+        try std.testing.expectEqual(2, callCount);
     });
-    try std.testing.expectEqual(2, callCount);
 }
 
 /// Registers a font from the given embedded byte contents. The font is associated with
@@ -586,7 +611,6 @@ test "useSpringTransition - basic convergence" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     self.deltaTime = dt;
 
@@ -627,7 +651,6 @@ test "useSpringTransition - zero delta time" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     self.deltaTime = 0.0;
 
@@ -683,7 +706,6 @@ test "useSpringTransition - small delta time" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     self.deltaTime = smallDt;
 
@@ -720,7 +742,6 @@ test "useSpringTransition - large delta time" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     self.deltaTime = largeDt;
 
@@ -754,7 +775,6 @@ test "useSpringTransition - convergence threshold" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     self.deltaTime = dt;
 
@@ -793,7 +813,6 @@ test "useSpringTransition - different spring configurations" {
         self.componentResolutionState = ComponentResolutionState{
             .useStateCursor = 0,
             .key = 1,
-            .arenaAllocator = std.testing.allocator,
         };
 
         const stiffConfig = SpringConfig{
@@ -820,7 +839,6 @@ test "useSpringTransition - different spring configurations" {
         self.componentResolutionState = ComponentResolutionState{
             .useStateCursor = 0,
             .key = 2,
-            .arenaAllocator = std.testing.allocator,
         };
 
         const softConfig = SpringConfig{
@@ -859,7 +877,6 @@ test "useSpringTransition - heavy mass" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     self.deltaTime = dt;
 
@@ -890,7 +907,6 @@ test "useSpringTransition - target changes during animation" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     self.deltaTime = dt;
 
@@ -932,7 +948,6 @@ test "useSpringTransition - negative values" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     self.deltaTime = dt;
 
@@ -969,7 +984,6 @@ test "useSpringTransition - state persistence across frames" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     const value1 = try useSpringTransition(0.0, config);
     try std.testing.expectEqual(0.0, value1);
@@ -978,7 +992,6 @@ test "useSpringTransition - state persistence across frames" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     const value2 = try useSpringTransition(100.0, config);
 
@@ -986,7 +999,6 @@ test "useSpringTransition - state persistence across frames" {
     self.componentResolutionState = ComponentResolutionState{
         .useStateCursor = 0,
         .key = 1,
-        .arenaAllocator = std.testing.allocator,
     };
     const value3 = try useSpringTransition(100.0, config);
 
@@ -1075,7 +1087,6 @@ test "State creation with manual handling" {
         self.componentResolutionState = ComponentResolutionState{
             .useStateCursor = 0,
             .key = 1,
-            .arenaAllocator = std.testing.allocator,
         };
         const state1 = try useState(i32, 42);
         try std.testing.expectEqual(1, self.componentStates.get(1).?.items.len);
@@ -1098,7 +1109,6 @@ test "State creation with manual handling" {
         self.componentResolutionState = ComponentResolutionState{
             .useStateCursor = 0,
             .key = 1,
-            .arenaAllocator = std.testing.allocator,
         };
         const state1 = try useState(i32, 42);
         try std.testing.expectEqual(2, self.componentStates.get(1).?.items.len);
@@ -1130,7 +1140,6 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
         self.componentResolutionState = ComponentResolutionState{
             .useStateCursor = 0,
             .key = 99,
-            .arenaAllocator = std.testing.allocator,
         };
         defer self.componentResolutionState = null;
 
@@ -1167,7 +1176,6 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
         self.componentResolutionState = ComponentResolutionState{
             .useStateCursor = 0,
             .key = 99,
-            .arenaAllocator = std.testing.allocator,
         };
         defer self.componentResolutionState = null;
 
@@ -1192,34 +1200,46 @@ test "Event queue dispatches events to correct elements" {
 
     const self = getContext();
 
-    (try element(arenaAllocator, .{}))({
-        (try element(arenaAllocator, .{}))({});
-        const firstChildKey = self.previousPushedNode.?.key;
+    frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try element(.{}))({
+            (try element(.{}))({});
+            const firstChildKey = self.previousPushedNode.?.key;
 
-        (try element(arenaAllocator, .{}))({});
-        const secondChildKey = self.previousPushedNode.?.key;
+            (try element(.{}))({});
+            const secondChildKey = self.previousPushedNode.?.key;
 
-        try std.testing.expect(firstChildKey != secondChildKey);
+            try std.testing.expect(firstChildKey != secondChildKey);
 
-        try pushEvent(firstChildKey, .mouseOver);
-        try pushEvent(firstChildKey, .mouseOut);
-        try pushEvent(secondChildKey, .mouseOver);
+            try pushEvent(firstChildKey, .mouseOver);
+            try pushEvent(firstChildKey, .mouseOut);
+            try pushEvent(secondChildKey, .mouseOver);
+        });
     });
 
     resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    (try element(arenaAllocator, .{}))({
-        (try element(arenaAllocator, .{}))({});
+    frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        (try element(.{}))({
+            (try element(.{}))({});
 
-        try std.testing.expectEqual(Event.mouseOut, useNextEvent().?);
-        try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
-        try std.testing.expectEqual(null, useNextEvent());
+            try std.testing.expectEqual(Event.mouseOut, useNextEvent().?);
+            try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
+            try std.testing.expectEqual(null, useNextEvent());
 
-        (try element(arenaAllocator, .{}))({});
+            (try element(.{}))({});
 
-        try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
-        try std.testing.expectEqual(null, useNextEvent());
+            try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
+            try std.testing.expectEqual(null, useNextEvent());
+        });
     });
 }
 
@@ -1327,7 +1347,7 @@ pub fn image(style: IncompleteStyle, img: *Image) !void {
     }
     complementedStyle.background = .{ .image = img };
 
-    try element(complementedStyle)({});
+    (try element(complementedStyle))({});
 }
 
 fn endFrame(block: void) void {
@@ -1472,7 +1492,7 @@ fn testCreateElementConfiguration(configuration: struct {
     frame(.{
         .arena = arenaAllocator,
         .baseStyle = testingBaseStyle,
-        .dpi = 72.0,
+        .dpi = @splat(72.0),
     })({
         (try element(.{}))({});
         if (self.previousPushedNode) |previousNode| {
