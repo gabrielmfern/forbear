@@ -42,7 +42,12 @@ var realStderr: ?File = null;
 var priorCrashHandlers: ?CrashOutput.PriorHandlers = null;
 
 pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer if (gpa.deinit() == .leak) {
+        printToRealStderr("\n\x1b[31mMemory leak detected in test runner allocator!\n\x1b[0m", .{});
+    };
+
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
     defer arena.deinit();
     const allocator = arena.allocator();
 
