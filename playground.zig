@@ -2,18 +2,17 @@ const std = @import("std");
 const forbear = @import("forbear");
 
 fn App() !void {
-    const arena = try forbear.useArena();
     const isHovering = try forbear.useState(bool, false);
 
-    (try forbear.element(arena, .{
+    (try forbear.element(.{
         .width = .grow,
         .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
         .padding = .inLine(10),
     }))({
-        try forbear.component(arena, forbear.FpsCounter, null);
+        try forbear.component(forbear.FpsCounter, null);
 
-        try forbear.text(arena, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
-        (try forbear.element(arena, .{
+        try forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
+        (try forbear.element(.{
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
             .background = .{
@@ -55,12 +54,9 @@ fn renderingMain(
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
-        try forbear.component(arena, App, null);
-
-        const viewportSize = renderer.viewportSize();
-        const rootLayoutBox = try forbear.layout(
-            arena,
-            .{
+        forbear.frame(.{
+            .arena = arena,
+            .baseStyle = .{
                 .blendMode = .normal,
                 .font = try forbear.useFont("Inter"),
                 .color = .{ 1.0, 1.0, 1.0, 1.0 },
@@ -70,12 +66,22 @@ fn renderingMain(
                 .lineHeight = 1.0,
                 .cursor = .default,
             },
-            viewportSize,
-            .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
-        );
-        try renderer.drawFrame(arena, &[_]forbear.LayoutBox{rootLayoutBox}, .{ 1.0, 1.0, 1.0, 1.0 }, window.dpi, window.targetFrameTimeNs());
+            .dpi = .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
+        })({
+            try forbear.component(App, null);
+        });
 
-        try forbear.update(arena, &rootLayoutBox, viewportSize);
+        const viewportSize = renderer.viewportSize();
+        const rootNode = try forbear.layout(arena, viewportSize);
+        try renderer.drawFrame(
+            arena,
+            rootNode,
+            .{ 1.0, 1.0, 1.0, 1.0 },
+            window.dpi,
+            window.targetFrameTimeNs(),
+        );
+
+        try forbear.update(arena, rootNode, viewportSize);
 
         forbear.resetNodeTree();
     }

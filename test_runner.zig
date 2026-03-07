@@ -25,6 +25,12 @@ const File = std.fs.File;
 
 const border = "=" ** 80;
 const thinBorder = "-" ** 80;
+const childTestEnv = "FORBEAR_TEST_RUNNER_CASE";
+const childExitSkip: u8 = 10;
+const childExitFail: u8 = 11;
+const childExitLeak: u8 = 12;
+const childExitFailLeak: u8 = 13;
+const childMaxOutputBytes = 1024 * 1024;
 
 /// Used by the custom panic handler to report which test panicked.
 var currentTest: ?[]const u8 = null;
@@ -32,13 +38,48 @@ var currentTest: ?[]const u8 = null;
 /// The real stderr, saved before any redirection.
 var realStderr: ?File = null;
 
-pub fn main() !void {
-    var mem: [8192]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&mem);
-    const allocator = fba.allocator();
+/// The segfault/exception handlers that Zig installed before we wrapped them.
+var priorCrashHandlers: ?CrashOutput.PriorHandlers = null;
 
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    const allocator = arena.allocator();
+
+    // Save the real stderr for later restoration.
+    realStderr = StderrCapture.duplicateStderr();
+
+    const singleTest = std.process.getEnvVarOwned(allocator, childTestEnv) catch |err| switch (err) {
+        error.EnvironmentVariableNotFound => null,
+        else => return err,
+    };
+
+    const exitCode = if (singleTest) |testName| blk: {
+        CrashOutput.install();
+        break :blk try runSingleTestProcess(testName);
+    } else try runParentProcess(allocator);
+
+    arena.deinit();
+    if (gpa.deinit() == .leak) {
+        printToRealStderr("\n\x1b[31mMemory leak detected in test runner allocator!\n\x1b[0m", .{});
+    }
+
+    std.posix.exit(exitCode);
+}
+
+const ChildOutcome = struct {
+    status: Status,
+    leaked: bool,
+    output: []const u8,
+    unexpectedTerm: ?std.process.Child.Term,
+};
+
+fn runParentProcess(allocator: Allocator) !u8 {
     const env = Env.init(allocator);
     defer env.deinit(allocator);
+
+    const argv = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, argv);
 
     const numSlowestToTrack = 5;
     var slowest = SlowTracker.init(allocator, numSlowestToTrack);
@@ -49,23 +90,8 @@ pub fn main() !void {
     var skip: usize = 0;
     var leak: usize = 0;
 
-    // Save the real stderr for later restoration.
-    realStderr = StderrCapture.duplicateStderr();
-
-    // Clear current line (write to real stderr)
     writeToRealStderr("\r\x1b[0K");
 
-    // Phase 1: Run setup functions
-    for (builtin.test_functions) |t| {
-        if (isSetup(t)) {
-            t.func() catch |err| {
-                printToRealStderr("\nsetup \"{s}\" failed: {}\n", .{ t.name, err });
-                return err;
-            };
-        }
-    }
-
-    // Phase 2: Run tests
     if (env.verbose) {
         writeToRealStderr("\n");
     }
@@ -85,116 +111,85 @@ pub fn main() !void {
         const friendlyName = extractFriendlyName(t);
         const modulePath = extractModulePath(t);
 
-        currentTest = friendlyName;
-        std.testing.allocator_instance = .{};
+        var shouldStop = false;
+        {
+            var testArena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer testArena.deinit();
+            const testAllocator = testArena.allocator();
 
-        // Redirect stderr to capture test output
-        const captureFile = StderrCapture.start();
+            // Child env/output allocations live only for this test. Printing
+            // happens inside this scope so the arena can reclaim everything at
+            // once after the result has been rendered.
+            slowest.startTiming();
+            const outcome = try runTestInChildProcess(testAllocator, argv, t.name);
+            const nsTaken = slowest.endTiming(friendlyName);
+            const ms = @as(f64, @floatFromInt(nsTaken)) / 1_000_000.0;
 
-        slowest.startTiming();
-        const result = t.func();
-        const nsTaken = slowest.endTiming(friendlyName);
-        currentTest = null;
-
-        // Restore stderr and read captured output
-        var capturedBuf: [4096]u8 = undefined;
-        const captured = StderrCapture.finish(captureFile, &capturedBuf);
-
-        const ms = @as(f64, @floatFromInt(nsTaken)) / 1_000_000.0;
-
-        const leaked = std.testing.allocator_instance.deinit() == .leak;
-        if (leaked) {
-            leak += 1;
-        }
-
-        var status = Status.pass;
-        if (result) |_| {
-            pass += 1;
-        } else |err| switch (err) {
-            error.SkipZigTest => {
-                skip += 1;
-                status = .skip;
-            },
-            else => {
-                status = .fail;
-                fail += 1;
-            },
-        }
-
-        if (leaked and status != .fail) {
-            status = .fail;
-        }
-
-        if (env.verbose) {
-            // Print grouped output per test
-            switch (status) {
-                .pass => {
-                    Printer.status(.pass, "  PASS ", .{});
-                    Printer.raw("{s}", .{friendlyName});
-                    if (modulePath) |path| {
-                        Printer.dim("  ({s})", .{path});
-                    }
-                    Printer.dim("  {d:.2}ms", .{ms});
-                    Printer.raw("\n", .{});
-                    printCapturedOutput(captured);
-                },
-                .skip => {
-                    Printer.status(.skip, "  SKIP ", .{});
-                    Printer.raw("{s}", .{friendlyName});
-                    if (modulePath) |path| {
-                        Printer.dim("  ({s})", .{path});
-                    }
-                    Printer.raw("\n", .{});
-                },
-                .fail => {
-                    Printer.raw("\n", .{});
-                    Printer.status(.fail, "  FAIL ", .{});
-                    Printer.raw("{s}", .{friendlyName});
-                    if (modulePath) |path| {
-                        Printer.dim("  ({s})", .{path});
-                    }
-                    Printer.dim("  {d:.2}ms", .{ms});
-                    Printer.raw("\n", .{});
-
-                    // Print failure details
-                    if (leaked) {
-                        Printer.status(.fail, "       Memory leak detected\n", .{});
-                    }
-                    if (result) |_| {} else |err| switch (err) {
-                        error.SkipZigTest => {},
-                        else => {
-                            Printer.status(.fail, "       Error: {s}\n", .{@errorName(err)});
-                            if (@errorReturnTrace()) |trace| {
-                                std.debug.dumpStackTrace(trace.*);
-                            }
-                        },
-                    }
-                    printCapturedOutput(captured);
-                    Printer.raw("\n", .{});
-                },
-                .text => {},
+            if (outcome.leaked) {
+                leak += 1;
             }
-        } else {
-            // Compact dot mode
-            Printer.status(status, ".", .{});
+
+            switch (outcome.status) {
+                .pass => pass += 1,
+                .skip => skip += 1,
+                .fail => fail += 1,
+                .text => unreachable,
+            }
+
+            if (env.verbose) {
+                switch (outcome.status) {
+                    .pass => {
+                        Printer.status(.pass, "  PASS ", .{});
+                        Printer.raw("{s}", .{friendlyName});
+                        if (modulePath) |path| {
+                            Printer.dim("  ({s})", .{path});
+                        }
+                        Printer.dim("  {d:.2}ms", .{ms});
+                        Printer.raw("\n", .{});
+                        printCapturedOutput(outcome.output);
+                    },
+                    .skip => {
+                        Printer.status(.skip, "  SKIP ", .{});
+                        Printer.raw("{s}", .{friendlyName});
+                        if (modulePath) |path| {
+                            Printer.dim("  ({s})", .{path});
+                        }
+                        Printer.raw("\n", .{});
+                        printCapturedOutput(outcome.output);
+                    },
+                    .fail => {
+                        Printer.raw("\n", .{});
+                        Printer.status(.fail, "  FAIL ", .{});
+                        Printer.raw("{s}", .{friendlyName});
+                        if (modulePath) |path| {
+                            Printer.dim("  ({s})", .{path});
+                        }
+                        Printer.dim("  {d:.2}ms", .{ms});
+                        Printer.raw("\n", .{});
+
+                        if (outcome.leaked) {
+                            Printer.status(.fail, "       Memory leak detected\n", .{});
+                        }
+                        if (outcome.unexpectedTerm) |term| {
+                            Printer.status(.fail, "       {s}\n", .{describeChildTerm(term)});
+                        }
+                        printCapturedOutput(outcome.output);
+                        Printer.raw("\n", .{});
+                    },
+                    .text => unreachable,
+                }
+            } else {
+                Printer.status(outcome.status, ".", .{});
+            }
+
+            shouldStop = outcome.status == .fail and env.failFirst;
         }
 
-        if (status == .fail and env.failFirst) {
+        if (shouldStop) {
             break;
         }
     }
 
-    // Phase 3: Run teardown functions
-    for (builtin.test_functions) |t| {
-        if (isTeardown(t)) {
-            t.func() catch |err| {
-                printToRealStderr("\nteardown \"{s}\" failed: {}\n", .{ t.name, err });
-                return err;
-            };
-        }
-    }
-
-    // Summary
     const totalTests = pass + fail + skip;
     const totalRan = pass + fail;
     const summaryStatus: Status = if (fail == 0) .pass else .fail;
@@ -221,12 +216,121 @@ pub fn main() !void {
     Printer.dim("  ({d} total)\n", .{totalTests});
     Printer.raw("{s}\n", .{thinBorder});
 
-    // Slowest tests
     Printer.raw("\n", .{});
     slowest.display();
     Printer.raw("\n", .{});
 
-    std.posix.exit(if (summaryStatus == .pass) 0 else 1);
+    return if (summaryStatus == .pass) 0 else 1;
+}
+
+fn runSingleTestProcess(selectedTestName: []const u8) !u8 {
+    for (builtin.test_functions) |t| {
+        if (isSetup(t)) {
+            t.func() catch |err| {
+                std.debug.print("setup \"{s}\" failed: {}\n", .{ t.name, err });
+                return childExitFail;
+            };
+        }
+    }
+
+    for (builtin.test_functions) |t| {
+        if (isSetup(t) or isTeardown(t)) {
+            continue;
+        }
+        if (!std.mem.eql(u8, t.name, selectedTestName)) {
+            continue;
+        }
+
+        const friendlyName = extractFriendlyName(t);
+        currentTest = friendlyName;
+        std.testing.allocator_instance = .{};
+
+        const result = t.func();
+        currentTest = null;
+
+        var failed = false;
+        var skipped = false;
+        const leaked = std.testing.allocator_instance.deinit() == .leak;
+
+        if (result) |_| {} else |err| switch (err) {
+            error.SkipZigTest => skipped = true,
+            else => {
+                failed = true;
+                std.debug.print("Error: {s}\n", .{@errorName(err)});
+                if (@errorReturnTrace()) |trace| {
+                    std.debug.dumpStackTrace(trace.*);
+                }
+            },
+        }
+
+        if (leaked) {
+            std.debug.print("Memory leak detected\n", .{});
+        }
+
+        for (builtin.test_functions) |teardown| {
+            if (isTeardown(teardown)) {
+                teardown.func() catch |err| {
+                    failed = true;
+                    std.debug.print("teardown \"{s}\" failed: {}\n", .{ teardown.name, err });
+                };
+            }
+        }
+
+        if (failed) {
+            return if (leaked) childExitFailLeak else childExitFail;
+        }
+        if (leaked) {
+            return childExitLeak;
+        }
+        if (skipped) {
+            return childExitSkip;
+        }
+        return 0;
+    }
+
+    std.debug.print("Test not found: {s}\n", .{selectedTestName});
+    return childExitFail;
+}
+
+fn runTestInChildProcess(allocator: Allocator, argv: []const [:0]u8, testName: []const u8) !ChildOutcome {
+    var envMap = try std.process.getEnvMap(allocator);
+    try envMap.put(childTestEnv, testName);
+
+    const runResult = try std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = argv,
+        .env_map = &envMap,
+        .max_output_bytes = childMaxOutputBytes,
+    });
+
+    const output = try joinChildOutput(allocator, runResult.stdout, runResult.stderr);
+
+    return switch (runResult.term) {
+        .Exited => |code| switch (code) {
+            0 => .{ .status = .pass, .leaked = false, .output = output, .unexpectedTerm = null },
+            childExitSkip => .{ .status = .skip, .leaked = false, .output = output, .unexpectedTerm = null },
+            childExitFail => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = null },
+            childExitLeak => .{ .status = .fail, .leaked = true, .output = output, .unexpectedTerm = null },
+            childExitFailLeak => .{ .status = .fail, .leaked = true, .output = output, .unexpectedTerm = null },
+            else => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = runResult.term },
+        },
+        else => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = runResult.term },
+    };
+}
+
+fn joinChildOutput(allocator: Allocator, stdout: []const u8, stderr: []const u8) ![]const u8 {
+    if (stdout.len == 0) return stderr;
+    if (stderr.len == 0) return stdout;
+    return std.fmt.allocPrint(allocator, "{s}\n{s}", .{ stdout, stderr });
+}
+
+fn describeChildTerm(term: std.process.Child.Term) []const u8 {
+    return switch (term) {
+        .Exited => "Child process exited unexpectedly",
+        .Signal => "Child process terminated by signal",
+        .Stopped => "Child process was stopped",
+        .Unknown => "Child process terminated unexpectedly",
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +435,127 @@ const StderrCapture = struct {
         cache_dir.deleteFile(encoded) catch {};
 
         return file;
+    }
+};
+
+const CrashOutput = struct {
+    const PriorHandlers = switch (native_os) {
+        .windows => void,
+        else => struct {
+            segv: std.posix.Sigaction,
+            ill: std.posix.Sigaction,
+            bus: std.posix.Sigaction,
+            fpe: std.posix.Sigaction,
+        },
+    };
+
+    fn install() void {
+        if (realStderr == null) return;
+
+        switch (native_os) {
+            .windows => {
+                _ = windows.kernel32.AddVectoredExceptionHandler(1, handleWindows);
+            },
+            .linux,
+            .macos,
+            .ios,
+            .tvos,
+            .watchos,
+            .visionos,
+            .freebsd,
+            .openbsd,
+            .netbsd,
+            .solaris,
+            .illumos,
+            => installPosix(),
+            else => {},
+        }
+    }
+
+    fn restoreRealStderr() void {
+        if (realStderr) |saved| {
+            if (native_os == .windows) {
+                windows.peb().ProcessParameters.hStdError = saved.handle;
+            } else {
+                std.posix.dup2(saved.handle, std.posix.STDERR_FILENO) catch {};
+            }
+        }
+    }
+
+    fn installPosix() void {
+        var segv: std.posix.Sigaction = undefined;
+        var ill: std.posix.Sigaction = undefined;
+        var bus: std.posix.Sigaction = undefined;
+        var fpe: std.posix.Sigaction = undefined;
+
+        const act = std.posix.Sigaction{
+            .handler = .{ .sigaction = handlePosix },
+            .mask = std.posix.sigemptyset(),
+            .flags = std.posix.SA.SIGINFO | std.posix.SA.RESTART | std.posix.SA.RESETHAND,
+        };
+
+        std.posix.sigaction(std.posix.SIG.SEGV, &act, &segv);
+        std.posix.sigaction(std.posix.SIG.ILL, &act, &ill);
+        std.posix.sigaction(std.posix.SIG.BUS, &act, &bus);
+        std.posix.sigaction(std.posix.SIG.FPE, &act, &fpe);
+
+        priorCrashHandlers = .{
+            .segv = segv,
+            .ill = ill,
+            .bus = bus,
+            .fpe = fpe,
+        };
+    }
+
+    fn posixHandlerForSignal(sig: i32) ?std.posix.Sigaction {
+        const previous = priorCrashHandlers orelse return null;
+        return switch (sig) {
+            std.posix.SIG.SEGV => previous.segv,
+            std.posix.SIG.ILL => previous.ill,
+            std.posix.SIG.BUS => previous.bus,
+            std.posix.SIG.FPE => previous.fpe,
+            else => null,
+        };
+    }
+
+    fn handlePosix(sig: i32, info: *const std.posix.siginfo_t, ctx_ptr: ?*anyopaque) callconv(.c) noreturn {
+        restoreRealStderr();
+
+        const previous = posixHandlerForSignal(sig) orelse {
+            std.posix.abort();
+        };
+
+        if (previous.handler.sigaction) |handler| {
+            handler(sig, info, ctx_ptr);
+            std.posix.abort();
+        }
+
+        if (previous.handler.handler) |handler| {
+            if (handler == std.posix.SIG.DFL) {
+                std.posix.abort();
+            }
+
+            if (handler == std.posix.SIG.IGN) {
+                std.posix.abort();
+            }
+
+            handler(sig);
+        }
+
+        std.posix.abort();
+    }
+
+    fn handleWindows(info: *windows.EXCEPTION_POINTERS) callconv(.winapi) c_long {
+        switch (info.ExceptionRecord.ExceptionCode) {
+            windows.EXCEPTION_ACCESS_VIOLATION,
+            windows.EXCEPTION_ILLEGAL_INSTRUCTION,
+            windows.EXCEPTION_DATATYPE_MISALIGNMENT,
+            windows.EXCEPTION_STACK_OVERFLOW,
+            => restoreRealStderr(),
+            else => {},
+        }
+
+        return windows.EXCEPTION_CONTINUE_SEARCH;
     }
 };
 
@@ -514,14 +739,8 @@ const Env = struct {
 
 pub const panic = std.debug.FullPanic(struct {
     pub fn panicFn(msg: []const u8, firstTraceAddr: ?usize) noreturn {
-        // Restore real stderr before panicking so output is visible
-        if (realStderr) |saved| {
-            if (native_os == .windows) {
-                windows.peb().ProcessParameters.hStdError = saved.handle;
-            } else {
-                std.posix.dup2(saved.handle, std.posix.STDERR_FILENO) catch {};
-            }
-        }
+        // Restore real stderr before panicking so output is visible.
+        CrashOutput.restoreRealStderr();
         if (currentTest) |ct| {
             std.debug.print("\n\x1b[31m{s}\npanic running \"{s}\"\n{s}\x1b[0m\n", .{ border, ct, border });
         }
