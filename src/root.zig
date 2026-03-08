@@ -46,8 +46,20 @@ const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
 
 pub const FrameMeta = struct {
     arena: std.mem.Allocator,
+
+    viewportSize: Vec2,
     dpi: Vec2,
     baseStyle: BaseStyle,
+
+    err: ?anyerror = null,
+
+    componentResolutionState: std.ArrayList(ComponentResolutionState) = .empty,
+
+    rootNode: ?Node = null,
+    previousPushedNode: ?*const Node = null,
+
+    nodeParentStack: std.ArrayList(*Node) = .empty,
+    nodePath: std.ArrayList(usize) = .empty,
 };
 
 allocator: std.mem.Allocator,
@@ -73,15 +85,9 @@ viewportSize: Vec2,
 
 componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
 // images: std.StringHashMap(Image),
-componentResolutionState: ?ComponentResolutionState,
 
 frameMeta: ?FrameMeta,
-frameEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
-
-rootFrameNode: ?Node,
-frameNodeParentStack: std.ArrayList(*Node),
-frameNodePath: std.ArrayList(usize),
-previousPushedNode: ?*const Node,
+pendingEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 
 images: std.StringHashMap(Image),
 fonts: std.StringHashMap(Font),
@@ -108,15 +114,9 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .viewportSize = @splat(0.0),
 
         .componentStates = .init(allocator),
-        .componentResolutionState = null,
 
         .frameMeta = null,
-        .frameEventQueue = .init(allocator),
-
-        .rootFrameNode = null,
-        .frameNodeParentStack = .empty,
-        .frameNodePath = .empty,
-        .previousPushedNode = null,
+        .pendingEventQueue = .init(allocator),
 
         .images = std.StringHashMap(Image).init(allocator),
         .fonts = std.StringHashMap(Font).init(allocator),
@@ -133,86 +133,77 @@ test "Element tree stack stability" {
 
     const self = getContext();
 
-    const testingBaseStyle = try testing.createTestingBaseStyle();
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{})({
+            const nodeParentStack = &self.frameMeta.?.nodeParentStack;
+            const nodePath = &self.frameMeta.?.nodePath;
+            try std.testing.expectEqual(1, nodeParentStack.items.len);
+            try std.testing.expectEqual(1, nodePath.items.len);
+            try FpsCounter();
 
-    frame(.{
-        .arena = arenaAllocator,
-        .dpi = @splat(72.0),
-        .baseStyle = testingBaseStyle,
-    })({
-        (try element(.{}))({
-            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(1, self.frameNodePath.items.len);
-            try component(FpsCounter, null);
-            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(1, self.frameNodePath.items.len);
-            (try element(.{}))({
-                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(2, self.frameNodePath.items.len);
+            try std.testing.expectEqual(1, nodeParentStack.items.len);
+            try std.testing.expectEqual(1, nodePath.items.len);
+            element(.{})({
+                try std.testing.expectEqual(2, nodeParentStack.items.len);
+                try std.testing.expectEqual(2, nodePath.items.len);
 
-                try text("Hello, world!");
-                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(2, self.frameNodePath.items.len);
+                text("Hello, world!");
+                try std.testing.expectEqual(2, nodeParentStack.items.len);
+                try std.testing.expectEqual(2, nodePath.items.len);
 
-                (try element(.{}))({
-                    try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
-                    try std.testing.expectEqual(3, self.frameNodePath.items.len);
+                element(.{})({
+                    try std.testing.expectEqual(3, nodeParentStack.items.len);
+                    try std.testing.expectEqual(3, nodePath.items.len);
 
-                    try text("Nested element");
-                    try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
-                    try std.testing.expectEqual(3, self.frameNodePath.items.len);
+                    text("Nested element");
+                    try std.testing.expectEqual(3, nodeParentStack.items.len);
+                    try std.testing.expectEqual(3, nodePath.items.len);
                 });
 
-                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(2, self.frameNodePath.items.len);
+                try std.testing.expectEqual(2, nodeParentStack.items.len);
+                try std.testing.expectEqual(2, nodePath.items.len);
             });
-            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
-        try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
-        try std.testing.expectEqual(0, self.frameNodePath.items.len);
-        try std.testing.expect(self.rootFrameNode != null);
+        try std.testing.expectEqual(0, self.frameMeta.?.nodeParentStack.items.len);
+        try std.testing.expectEqual(0, self.frameMeta.?.nodePath.items.len);
+        try std.testing.expect(self.frameMeta.?.rootNode != null);
     });
 
-    // This acts like the end of a frame here
-    resetNodeTree();
-    _ = arena.reset(.retain_capacity);
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{})({
+            const nodeParentStack = &self.frameMeta.?.nodeParentStack;
+            const nodePath = &self.frameMeta.?.nodePath;
+            try std.testing.expectEqual(1, nodeParentStack.items.len);
+            try std.testing.expectEqual(1, nodePath.items.len);
+            try FpsCounter();
+            try std.testing.expectEqual(1, nodeParentStack.items.len);
+            try std.testing.expectEqual(1, nodePath.items.len);
+            element(.{})({
+                try std.testing.expectEqual(2, nodeParentStack.items.len);
+                try std.testing.expectEqual(2, nodePath.items.len);
 
-    frame(.{
-        .arena = arenaAllocator,
-        .dpi = @splat(72.0),
-        .baseStyle = testingBaseStyle,
-    })({
-        (try element(.{}))({
-            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(1, self.frameNodePath.items.len);
-            try component(FpsCounter, null);
-            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
-            try std.testing.expectEqual(1, self.frameNodePath.items.len);
-            (try element(.{}))({
-                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(2, self.frameNodePath.items.len);
+                text("Hello, world!");
+                try std.testing.expectEqual(2, nodeParentStack.items.len);
+                try std.testing.expectEqual(2, nodePath.items.len);
 
-                try text("Hello, world!");
-                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(2, self.frameNodePath.items.len);
+                element(.{})({
+                    try std.testing.expectEqual(3, nodeParentStack.items.len);
+                    try std.testing.expectEqual(3, nodePath.items.len);
 
-                (try element(.{}))({
-                    try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
-                    try std.testing.expectEqual(3, self.frameNodePath.items.len);
-
-                    try text("Nested element");
-                    try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
-                    try std.testing.expectEqual(3, self.frameNodePath.items.len);
+                    text("Nested element");
+                    try std.testing.expectEqual(3, nodeParentStack.items.len);
+                    try std.testing.expectEqual(3, nodePath.items.len);
                 });
 
-                try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
-                try std.testing.expectEqual(2, self.frameNodePath.items.len);
+                try std.testing.expectEqual(2, nodeParentStack.items.len);
+                try std.testing.expectEqual(2, nodePath.items.len);
             });
-            try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
+            try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
-        try std.testing.expectEqual(0, self.frameNodeParentStack.items.len);
-        try std.testing.expectEqual(0, self.frameNodePath.items.len);
-        try std.testing.expect(self.rootFrameNode != null);
+        try std.testing.expectEqual(0, self.frameMeta.?.nodeParentStack.items.len);
+        try std.testing.expectEqual(0, self.frameMeta.?.nodePath.items.len);
+        try std.testing.expect(self.frameMeta.?.rootNode != null);
     });
 }
 
@@ -241,48 +232,33 @@ test "Element key stability across frames" {
             }
         }
     }.collect;
-    const testingBaseStyle = try testing.createTestingBaseStyle();
-
-    frame(.{
-        .arena = arenaAllocator,
-        .dpi = @splat(72.0),
-        .baseStyle = testingBaseStyle,
-    })({
-        // Build tree: root > [child1, child2 > [nested1, nested2]]
-        (try element(.{}))({
-            (try element(.{}))({});
-            (try element(.{}))({
-                (try element(.{}))({});
-                (try element(.{}))({});
-            });
-        });
-    });
 
     var firstFrameKeys = try std.ArrayList(u64).initCapacity(std.testing.allocator, 8);
     defer firstFrameKeys.deinit(std.testing.allocator);
-    try collectKeys(std.testing.allocator, &self.rootFrameNode.?, &firstFrameKeys);
-
-    // Simulate frame boundary (just resetNodes, no arena reset - arena is reused across frames)
-    resetNodeTree();
-    _ = arena.reset(.retain_capacity);
-
-    frame(.{
-        .arena = arenaAllocator,
-        .dpi = @splat(72.0),
-        .baseStyle = testingBaseStyle,
-    })({
-        (try element(.{}))({
-            (try element(.{}))({});
-            (try element(.{}))({
-                (try element(.{}))({});
-                (try element(.{}))({});
-            });
-        });
-    });
-
     var secondFrameKeys = try std.ArrayList(u64).initCapacity(std.testing.allocator, 8);
     defer secondFrameKeys.deinit(std.testing.allocator);
-    try collectKeys(std.testing.allocator, &self.rootFrameNode.?, &secondFrameKeys);
+    try frame(try testing.frameMeta(arenaAllocator))({
+        // Build tree: root > [child1, child2 > [nested1, nested2]]
+        element(.{})({
+            element(.{})({});
+            element(.{})({
+                element(.{})({});
+                element(.{})({});
+            });
+        });
+        try collectKeys(std.testing.allocator, &self.frameMeta.?.rootNode.?, &firstFrameKeys);
+    });
+
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{})({
+            element(.{})({});
+            element(.{})({
+                element(.{})({});
+                element(.{})({});
+            });
+        });
+        try collectKeys(std.testing.allocator, &self.frameMeta.?.rootNode.?, &secondFrameKeys);
+    });
 
     // Keys should be identical across frames for the same structure
     try std.testing.expectEqual(firstFrameKeys.items.len, secondFrameKeys.items.len);
@@ -312,51 +288,48 @@ test "Component resolution" {
     const MyComponentProps = struct {
         callCount: *u32,
         value: u32,
-        arenaAllocator: std.mem.Allocator,
     };
 
     const MyComponent = (struct {
-        fn component(props: MyComponentProps) !void {
-            props.callCount.* += 1;
-            const counter = try useState(u32, props.value);
-            const innerArena = try useArena();
-            try std.testing.expectEqual(10, counter.*);
-            (try element(.{}))({
-                try text(try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
+        fn myComponent(props: MyComponentProps) !void {
+            component("component-resolution-test")({
+                props.callCount.* += 1;
+                const counter = try useState(u32, props.value);
+                const innerArena = try useArena();
+                try std.testing.expectEqual(10, counter.*);
+                element(.{})({
+                    text(try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
+                });
             });
         }
-    }).component;
+    }).myComponent;
 
-    const testingBaseStyle = try testing.createTestingBaseStyle();
-
-    frame(.{
-        .arena = arenaAllocator,
-        .dpi = @splat(72.0),
-        .baseStyle = testingBaseStyle,
-    })({
-        (try element(.{}))({
-            try component(
-                MyComponent,
-                MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
-            );
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{})({
+            try MyComponent(.{ .callCount = &callCount, .value = 10 });
         });
         try std.testing.expectEqual(1, callCount);
     });
 
-    resetNodeTree();
-
-    frame(.{
-        .arena = arenaAllocator,
-        .dpi = @splat(72.0),
-        .baseStyle = testingBaseStyle,
-    })({
-        (try element(.{}))({
-            try component(
-                MyComponent,
-                MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
-            );
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{})({
+            try MyComponent(.{ .callCount = &callCount, .value = 20 });
         });
         try std.testing.expectEqual(2, callCount);
+    });
+}
+
+fn resolveSpringTransition(
+    arenaAllocator: std.mem.Allocator,
+    componentKey: []const u8,
+    target: f32,
+    config: SpringConfig,
+    result: *f32,
+) !void {
+    try frame(try testing.frameMeta(arenaAllocator))({
+        component(componentKey)({
+            result.* = try useSpringTransition(target, config);
+        });
     });
 }
 
@@ -605,6 +578,9 @@ test "useSpringTransition - basic convergence" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const config = SpringConfig{
         .stiffness = 200.0,
@@ -614,14 +590,11 @@ test "useSpringTransition - basic convergence" {
     const target = 100.0;
     const dt = 0.016; // ~60fps
 
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
     self.deltaTime = dt;
 
     // First frame: value should start at target when initialized
-    var value = try useSpringTransition(target, config);
+    var value: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-basic-convergence", target, config, &value);
     try std.testing.expectEqual(target, value);
 
     // Change target and simulate several frames
@@ -630,8 +603,8 @@ test "useSpringTransition - basic convergence" {
 
     // Simulate spring physics over multiple frames
     for (0..100) |_| {
-        self.componentResolutionState.?.useStateCursor = 0;
-        value = try useSpringTransition(newTarget, config);
+        _ = arena.reset(.retain_capacity);
+        try resolveSpringTransition(arenaAllocator, "spring-basic-convergence", newTarget, config, &value);
     }
 
     // After 100 frames, should be very close or converged to target
@@ -646,6 +619,9 @@ test "useSpringTransition - zero delta time" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const config = SpringConfig{
         .stiffness = 200.0,
@@ -654,19 +630,17 @@ test "useSpringTransition - zero delta time" {
     };
     const target = 50.0;
 
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
     self.deltaTime = 0.0;
 
     // First frame with zero dt
-    const value1 = try useSpringTransition(target, config);
+    var value1: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-zero-dt", target, config, &value1);
     try std.testing.expectEqual(target, value1);
 
     // Second frame with zero dt - should return current value unchanged
-    self.componentResolutionState.?.useStateCursor = 0;
-    const value2 = try useSpringTransition(target + 100.0, config);
+    _ = arena.reset(.retain_capacity);
+    var value2: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-zero-dt", target + 100.0, config, &value2);
     try std.testing.expectEqual(target, value2);
 }
 
@@ -675,6 +649,9 @@ test "useSpringTransition - null delta time" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const config = SpringConfig{
         .stiffness = 200.0,
@@ -683,14 +660,11 @@ test "useSpringTransition - null delta time" {
     };
     const target = 75.0;
 
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
     self.deltaTime = null;
 
     // With null delta time, should return current value
-    const value = try useSpringTransition(target, config);
+    var value: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-null-dt", target, config, &value);
     try std.testing.expectEqual(target, value);
 }
 
@@ -699,6 +673,9 @@ test "useSpringTransition - small delta time" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const config = SpringConfig{
         .stiffness = 200.0,
@@ -709,19 +686,16 @@ test "useSpringTransition - small delta time" {
     const newTarget = 100.0;
     const smallDt = 0.001; // 1ms - very small time step
 
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
     self.deltaTime = smallDt;
 
     // Initialize
-    var value = try useSpringTransition(initialTarget, config);
+    var value: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-small-dt", initialTarget, config, &value);
     try std.testing.expectEqual(initialTarget, value);
 
     // Change target with small dt
-    self.componentResolutionState.?.useStateCursor = 0;
-    value = try useSpringTransition(newTarget, config);
+    _ = arena.reset(.retain_capacity);
+    try resolveSpringTransition(arenaAllocator, "spring-small-dt", newTarget, config, &value);
 
     // Should have moved, but only slightly due to small dt
     try std.testing.expect(value != initialTarget);
@@ -735,6 +709,9 @@ test "useSpringTransition - large delta time" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const config = SpringConfig{
         .stiffness = 200.0,
@@ -745,19 +722,16 @@ test "useSpringTransition - large delta time" {
     const newTarget = 100.0;
     const largeDt = 1.0; // 1 second - very large frame time
 
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
     self.deltaTime = largeDt;
 
     // Initialize
-    var value = try useSpringTransition(initialTarget, config);
+    var value: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-large-dt", initialTarget, config, &value);
     try std.testing.expectEqual(initialTarget, value);
 
     // Change target with large dt - spring should handle it gracefully
-    self.componentResolutionState.?.useStateCursor = 0;
-    value = try useSpringTransition(newTarget, config);
+    _ = arena.reset(.retain_capacity);
+    try resolveSpringTransition(arenaAllocator, "spring-large-dt", newTarget, config, &value);
 
     // Should have moved significantly (physics are stable)
     try std.testing.expect(value != initialTarget);
@@ -768,6 +742,9 @@ test "useSpringTransition - convergence threshold" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const config = SpringConfig{
         .stiffness = 200.0,
@@ -778,21 +755,18 @@ test "useSpringTransition - convergence threshold" {
     const newTarget = 100.0;
     const dt = 0.016;
 
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
     self.deltaTime = dt;
 
     // Initialize
-    var value = try useSpringTransition(initialTarget, config);
+    var value: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-convergence-threshold", initialTarget, config, &value);
     try std.testing.expectEqual(initialTarget, value);
 
     // Animate towards target
     var converged = false;
     for (0..1000) |_| {
-        self.componentResolutionState.?.useStateCursor = 0;
-        value = try useSpringTransition(newTarget, config);
+        _ = arena.reset(.retain_capacity);
+        try resolveSpringTransition(arenaAllocator, "spring-convergence-threshold", newTarget, config, &value);
 
         // Check if converged (should snap to exact target within epsilon)
         if (value == newTarget) {
@@ -810,30 +784,29 @@ test "useSpringTransition - different spring configurations" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const dt = 0.016;
     self.deltaTime = dt;
 
     // Test stiff spring (high stiffness, high damping)
     {
-        self.componentResolutionState = ComponentResolutionState{
-            .useStateCursor = 0,
-            .key = 1,
-        };
-
         const stiffConfig = SpringConfig{
             .stiffness = 400.0,
             .damping = 40.0,
             .mass = 1.0,
         };
 
-        var value = try useSpringTransition(0.0, stiffConfig);
+        var value: f32 = undefined;
+        try resolveSpringTransition(arenaAllocator, "spring-stiff-config", 0.0, stiffConfig, &value);
         try std.testing.expectEqual(0.0, value);
 
         // Should converge quickly
         for (0..50) |_| {
-            self.componentResolutionState.?.useStateCursor = 0;
-            value = try useSpringTransition(100.0, stiffConfig);
+            _ = arena.reset(.retain_capacity);
+            try resolveSpringTransition(arenaAllocator, "spring-stiff-config", 100.0, stiffConfig, &value);
         }
 
         const epsilon = 0.1;
@@ -842,24 +815,21 @@ test "useSpringTransition - different spring configurations" {
 
     // Test soft spring (low stiffness, low damping)
     {
-        self.componentResolutionState = ComponentResolutionState{
-            .useStateCursor = 0,
-            .key = 2,
-        };
-
         const softConfig = SpringConfig{
             .stiffness = 50.0,
             .damping = 5.0,
             .mass = 1.0,
         };
 
-        var value = try useSpringTransition(0.0, softConfig);
+        _ = arena.reset(.retain_capacity);
+        var value: f32 = undefined;
+        try resolveSpringTransition(arenaAllocator, "spring-soft-config", 0.0, softConfig, &value);
         try std.testing.expectEqual(0.0, value);
 
         // Should move more slowly
         for (0..10) |_| {
-            self.componentResolutionState.?.useStateCursor = 0;
-            value = try useSpringTransition(100.0, softConfig);
+            _ = arena.reset(.retain_capacity);
+            try resolveSpringTransition(arenaAllocator, "spring-soft-config", 100.0, softConfig, &value);
         }
 
         // After 10 frames, should not be fully converged yet
@@ -872,6 +842,9 @@ test "useSpringTransition - heavy mass" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const heavyConfig = SpringConfig{
         .stiffness = 200.0,
@@ -880,18 +853,15 @@ test "useSpringTransition - heavy mass" {
     };
     const dt = 0.016;
 
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
     self.deltaTime = dt;
 
-    var value = try useSpringTransition(0.0, heavyConfig);
+    var value: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-heavy-mass", 0.0, heavyConfig, &value);
     try std.testing.expectEqual(0.0, value);
 
     // Heavy mass should result in slower acceleration
-    self.componentResolutionState.?.useStateCursor = 0;
-    value = try useSpringTransition(100.0, heavyConfig);
+    _ = arena.reset(.retain_capacity);
+    try resolveSpringTransition(arenaAllocator, "spring-heavy-mass", 100.0, heavyConfig, &value);
 
     // After one frame, movement should be relatively small due to mass
     try std.testing.expect(@abs(value) < 50.0);
@@ -902,6 +872,9 @@ test "useSpringTransition - target changes during animation" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const config = SpringConfig{
         .stiffness = 200.0,
@@ -910,27 +883,24 @@ test "useSpringTransition - target changes during animation" {
     };
     const dt = 0.016;
 
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
     self.deltaTime = dt;
 
     // Initialize at 0
-    var value = try useSpringTransition(0.0, config);
+    var value: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-target-changes", 0.0, config, &value);
     try std.testing.expectEqual(0.0, value);
 
     // Animate towards 100 for a few frames
     for (0..10) |_| {
-        self.componentResolutionState.?.useStateCursor = 0;
-        value = try useSpringTransition(100.0, config);
+        _ = arena.reset(.retain_capacity);
+        try resolveSpringTransition(arenaAllocator, "spring-target-changes", 100.0, config, &value);
     }
     const valueAfter10Frames = value;
 
     // Suddenly change target to 200
     for (0..20) |_| {
-        self.componentResolutionState.?.useStateCursor = 0;
-        value = try useSpringTransition(200.0, config);
+        _ = arena.reset(.retain_capacity);
+        try resolveSpringTransition(arenaAllocator, "spring-target-changes", 200.0, config, &value);
     }
 
     // Should have moved past the first target
@@ -943,6 +913,9 @@ test "useSpringTransition - negative values" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const config = SpringConfig{
         .stiffness = 200.0,
@@ -951,20 +924,17 @@ test "useSpringTransition - negative values" {
     };
     const dt = 0.016;
 
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
     self.deltaTime = dt;
 
     // Initialize at positive value
-    var value = try useSpringTransition(100.0, config);
+    var value: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-negative-values", 100.0, config, &value);
     try std.testing.expectEqual(100.0, value);
 
     // Transition to negative target
     for (0..100) |_| {
-        self.componentResolutionState.?.useStateCursor = 0;
-        value = try useSpringTransition(-50.0, config);
+        _ = arena.reset(.retain_capacity);
+        try resolveSpringTransition(arenaAllocator, "spring-negative-values", -50.0, config, &value);
     }
 
     // Should converge to negative target
@@ -977,6 +947,9 @@ test "useSpringTransition - state persistence across frames" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     const config = SpringConfig{
         .stiffness = 200.0,
@@ -987,26 +960,19 @@ test "useSpringTransition - state persistence across frames" {
     self.deltaTime = dt;
 
     // Frame 1
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
-    const value1 = try useSpringTransition(0.0, config);
+    var value1: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-state-persistence", 0.0, config, &value1);
     try std.testing.expectEqual(0.0, value1);
 
     // Frame 2 - change target
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
-    const value2 = try useSpringTransition(100.0, config);
+    _ = arena.reset(.retain_capacity);
+    var value2: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-state-persistence", 100.0, config, &value2);
 
     // Frame 3 - should continue from where it left off
-    self.componentResolutionState = ComponentResolutionState{
-        .useStateCursor = 0,
-        .key = 1,
-    };
-    const value3 = try useSpringTransition(100.0, config);
+    _ = arena.reset(.retain_capacity);
+    var value3: f32 = undefined;
+    try resolveSpringTransition(arenaAllocator, "spring-state-persistence", 100.0, config, &value3);
 
     // Value should continue progressing
     try std.testing.expect(value3 >= value2 or @abs(value3 - 100.0) < 0.0001);
@@ -1051,12 +1017,22 @@ pub fn useArena() !std.mem.Allocator {
 
 const stateAlignment: std.mem.Alignment = .@"8";
 
+fn currentComponentResolutionState() ?*ComponentResolutionState {
+    const self = getContext();
+    if (self.frameMeta.?.componentResolutionState.items.len > 0) {
+        return &self.frameMeta.?.componentResolutionState.items[self.frameMeta.?.componentResolutionState.items.len - 1];
+    } else {
+        return null;
+    }
+}
+
 // TODO: in debug mode, we should be adding some guard rail here to make sure
 // of warning the user if they called the hook in an unexpected order, as it
 // can cause undefined behavior as is right now
 pub fn useState(T: type, initialValue: T) !*T {
     const self = getContext();
-    if (self.componentResolutionState) |*state| {
+    std.debug.assert(self.frameMeta != null);
+    if (currentComponentResolutionState()) |state| {
         const stateResult = try self.componentStates.getOrPut(state.key);
         defer state.useStateCursor += 1;
         if (stateResult.found_existing) {
@@ -1088,47 +1064,54 @@ test "State creation with manual handling" {
     try init(std.testing.allocator, renderer);
     defer deinit();
     const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+    var componentKey: u64 = undefined;
     {
         // First run that should allocate RAM, and still allow reading and writing the values
-        self.componentResolutionState = ComponentResolutionState{
-            .useStateCursor = 0,
-            .key = 1,
-        };
-        const state1 = try useState(i32, 42);
-        try std.testing.expectEqual(1, self.componentStates.get(1).?.items.len);
-        try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(1).?.items[0].len);
-        try std.testing.expectEqual(42, state1.*);
+        try frame(try testing.frameMeta(arenaAllocator))({
+            component("random")({
+                componentKey = self.frameMeta.?.componentResolutionState.getLast().key;
+                const state1 = try useState(i32, 42);
+                try std.testing.expectEqual(1, self.componentStates.get(componentKey).?.items.len);
+                try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(componentKey).?.items[0].len);
+                try std.testing.expectEqual(42, state1.*);
 
-        const state2 = try useState(f32, 3.14);
-        try std.testing.expectEqual(2, self.componentStates.get(1).?.items.len);
-        try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(1).?.items[1].len);
-        try std.testing.expectEqual(42, state1.*);
-        try std.testing.expectEqual(3.14, state2.*);
+                const state2 = try useState(f32, 3.14);
+                try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
+                try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(componentKey).?.items[1].len);
+                try std.testing.expectEqual(42, state1.*);
+                try std.testing.expectEqual(3.14, state2.*);
 
-        state1.* = 100;
-        state2.* = 6.28;
-        try std.testing.expectEqual(100, state1.*);
-        try std.testing.expectEqual(6.28, state2.*);
+                state1.* = 100;
+                state2.* = 6.28;
+                try std.testing.expectEqual(100, state1.*);
+                try std.testing.expectEqual(6.28, state2.*);
+            });
+        });
     }
     {
-        // Second run that should not allcoate new memory
-        self.componentResolutionState = ComponentResolutionState{
-            .useStateCursor = 0,
-            .key = 1,
-        };
-        const state1 = try useState(i32, 42);
-        try std.testing.expectEqual(2, self.componentStates.get(1).?.items.len);
-        try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(1).?.items[0].len);
-        const state2 = try useState(f32, 3.14);
-        try std.testing.expectEqual(2, self.componentStates.get(1).?.items.len);
-        try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(1).?.items[1].len);
+        _ = arena.reset(.retain_capacity);
+        try frame(try testing.frameMeta(arenaAllocator))({
+            component("random")({
+                const state1 = try useState(i32, 42);
+                try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
+                try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(componentKey).?.items[0].len);
+                const state2 = try useState(f32, 3.14);
+                try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
+                try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(componentKey).?.items[1].len);
 
-        try std.testing.expectEqual(100, state1.*);
-        try std.testing.expectEqual(6.28, state2.*);
+                try std.testing.expectEqual(100, state1.*);
+                try std.testing.expectEqual(6.28, state2.*);
+            });
+        });
     }
     {
-        self.componentResolutionState = null;
-        try std.testing.expectError(error.NoComponentContext, useState(i32, 42));
+        _ = arena.reset(.retain_capacity);
+        try frame(try testing.frameMeta(arenaAllocator))({
+            try std.testing.expectError(error.NoComponentContext, useState(i32, 42));
+        });
     }
 }
 
@@ -1139,60 +1122,59 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
     const renderer: *Graphics.Renderer = undefined;
     try init(std.testing.allocator, renderer);
     defer deinit();
-    const self = getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
 
     {
         // First frame: all three useState calls allocate/grow the buffer
-        self.componentResolutionState = ComponentResolutionState{
-            .useStateCursor = 0,
-            .key = 99,
-        };
-        defer self.componentResolutionState = null;
+        try frame(try testing.frameMeta(arenaAllocator))({
+            component("use-transition-realloc-test")({
+                // Mimics useTransition's calls:
+                //   const valueToTransitionFrom = try useState(f32, value);
+                //   const valueToTransitionTo = try useState(f32, value);
+                //   const animation = try useAnimation(duration);  -> useState(?AnimationState, null)
+                const valueToTransitionFrom = try useState(f32, 1.0);
+                try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
+                const valueToTransitionTo = try useState(f32, 1.0);
+                try std.testing.expectEqual(1.0, valueToTransitionTo.*);
+                const animationState = try useState(?AnimationState, null);
+                try std.testing.expectEqual(null, animationState.*);
 
-        // Mimics useTransition's calls:
-        //   const valueToTransitionFrom = try useState(f32, value);
-        //   const valueToTransitionTo = try useState(f32, value);
-        //   const animation = try useAnimation(duration);  -> useState(?AnimationState, null)
-        const valueToTransitionFrom = try useState(f32, 1.0);
-        try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
-        const valueToTransitionTo = try useState(f32, 1.0);
-        try std.testing.expectEqual(1.0, valueToTransitionTo.*);
-        const animationState = try useState(?AnimationState, null);
-        try std.testing.expectEqual(null, animationState.*);
+                // These dereferences should not segfault — if realloc moved the buffer,
+                // earlier pointers would be dangling and this would crash or read garbage.
+                try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
+                try std.testing.expectEqual(1.0, valueToTransitionTo.*);
+                try std.testing.expectEqual(null, animationState.*);
 
-        // These dereferences should not segfault — if realloc moved the buffer,
-        // earlier pointers would be dangling and this would crash or read garbage.
-        try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
-        try std.testing.expectEqual(1.0, valueToTransitionTo.*);
-        try std.testing.expectEqual(null, animationState.*);
-
-        // Simulate the comparison from useTransition line 419:
-        //   if (value != valueToTransitionTo.*) { ... }
-        const value: f32 = 2.0;
-        if (value != valueToTransitionTo.*) {
-            valueToTransitionTo.* = value;
-        }
-        try std.testing.expectEqual(2.0, valueToTransitionTo.*);
-        // The first pointer should still be valid and unchanged
-        try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
+                // Simulate the comparison from useTransition line 419:
+                //   if (value != valueToTransitionTo.*) { ... }
+                const value: f32 = 2.0;
+                if (value != valueToTransitionTo.*) {
+                    valueToTransitionTo.* = value;
+                }
+                try std.testing.expectEqual(2.0, valueToTransitionTo.*);
+                // The first pointer should still be valid and unchanged
+                try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
+            });
+        });
     }
 
     {
         // Second frame: buffer already exists at full size, no realloc needed
-        self.componentResolutionState = ComponentResolutionState{
-            .useStateCursor = 0,
-            .key = 99,
-        };
-        defer self.componentResolutionState = null;
+        _ = arena.reset(.retain_capacity);
+        try frame(try testing.frameMeta(arenaAllocator))({
+            component("use-transition-realloc-test")({
+                const valueToTransitionFrom = try useState(f32, 1.0);
+                const valueToTransitionTo = try useState(f32, 1.0);
+                const animationState = try useState(?AnimationState, null);
 
-        const valueToTransitionFrom = try useState(f32, 1.0);
-        const valueToTransitionTo = try useState(f32, 1.0);
-        const animationState = try useState(?AnimationState, null);
-
-        // Second frame should preserve mutated state from first frame
-        try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
-        try std.testing.expectEqual(2.0, valueToTransitionTo.*);
-        try std.testing.expectEqual(null, animationState.*);
+                // Second frame should preserve mutated state from first frame
+                try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
+                try std.testing.expectEqual(2.0, valueToTransitionTo.*);
+                try std.testing.expectEqual(null, animationState.*);
+            });
+        });
     }
 }
 
@@ -1206,19 +1188,13 @@ test "Event queue dispatches events to correct elements" {
 
     const self = getContext();
 
-    const testingBaseStyle = try testing.createTestingBaseStyle();
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{})({
+            element(.{})({});
+            const firstChildKey = self.frameMeta.?.previousPushedNode.?.key;
 
-    frame(.{
-        .arena = arenaAllocator,
-        .dpi = @splat(72.0),
-        .baseStyle = testingBaseStyle,
-    })({
-        (try element(.{}))({
-            (try element(.{}))({});
-            const firstChildKey = self.previousPushedNode.?.key;
-
-            (try element(.{}))({});
-            const secondChildKey = self.previousPushedNode.?.key;
+            element(.{})({});
+            const secondChildKey = self.frameMeta.?.previousPushedNode.?.key;
 
             try std.testing.expect(firstChildKey != secondChildKey);
 
@@ -1228,22 +1204,21 @@ test "Event queue dispatches events to correct elements" {
         });
     });
 
-    resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    frame(.{
-        .arena = arenaAllocator,
-        .dpi = @splat(72.0),
-        .baseStyle = testingBaseStyle,
-    })({
-        (try element(.{}))({
-            (try element(.{}))({});
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{})({
+            element(.{})({});
+            const firstChildKey = self.frameMeta.?.previousPushedNode.?.key;
 
             try std.testing.expectEqual(Event.mouseOut, useNextEvent().?);
             try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
             try std.testing.expectEqual(null, useNextEvent());
 
-            (try element(.{}))({});
+            element(.{})({});
+            const secondChildKey = self.frameMeta.?.previousPushedNode.?.key;
+
+            try std.testing.expect(firstChildKey != secondChildKey);
 
             try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
             try std.testing.expectEqual(null, useNextEvent());
@@ -1259,15 +1234,21 @@ test "Event queue dispatches events to correct elements" {
 fn popParentStack(block: void) void {
     _ = block;
     const self = getContext();
-    std.debug.assert(self.frameNodeParentStack.items.len > 0);
-    self.previousPushedNode = self.frameNodeParentStack.pop();
-    _ = self.frameNodePath.pop();
+    std.debug.assert(self.frameMeta != null);
+    std.debug.assert(self.frameMeta.?.nodeParentStack.items.len > 0);
+    self.frameMeta.?.previousPushedNode = self.frameMeta.?.nodeParentStack.pop();
+    _ = self.frameMeta.?.nodePath.pop();
+}
+
+fn endNoop(block: void) void {
+    _ = block;
 }
 
 fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node, index: usize } {
     const self = getContext();
-    if (self.frameNodeParentStack.getLastOrNull()) |parent| {
-        std.debug.assert(self.rootFrameNode != null);
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
+        std.debug.assert(self.frameMeta.?.rootNode != null);
         std.debug.assert(parent.children == .nodes);
         // How can we make sure that these asserts aren't really necessary? HOw
         // can we make sure that the compiler will ensure that the parent here
@@ -1288,10 +1269,10 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node,
             };
         }
     } else {
-        if (self.rootFrameNode != null) {
+        if (self.frameMeta.?.rootNode != null) {
             return error.MultipleRootNodesNotSupported;
         }
-        self.rootFrameNode = Node{
+        self.frameMeta.?.rootNode = Node{
             .key = undefined,
 
             .position = undefined,
@@ -1304,16 +1285,16 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node,
             .style = undefined,
         };
         return .{
-            .ptr = &self.rootFrameNode.?,
+            .ptr = &self.frameMeta.?.rootNode.?,
             .parent = null,
             .index = 0,
         };
     }
 }
 
-/// Thin wrapper around `element`, but handles the proper aspect ratio
-/// definition in a way that feels intuitive to CSS
-pub fn image(style: IncompleteStyle, img: *Image) !void {
+/// A thin wrapper around `element` that includes some aspect ratio handling
+/// definition logic in a way that feels more intuitve
+pub fn image(style: IncompleteStyle, img: *Image) void {
     var complementedStyle = style;
     const imageWidth: f32 = @floatFromInt(img.width);
     const imageHeight: f32 = @floatFromInt(img.height);
@@ -1355,29 +1336,37 @@ pub fn image(style: IncompleteStyle, img: *Image) !void {
     }
     complementedStyle.background = .{ .image = img };
 
-    (try element(complementedStyle))({});
+    element(complementedStyle)({});
 }
 
-fn endFrame(block: void) void {
+fn frameEnd(block: void) anyerror!void {
     _ = block;
     const self = getContext();
 
+    std.debug.assert(self.frameMeta != null);
+    const frameMeta = self.frameMeta.?;
     self.frameMeta = null;
+    if (frameMeta.err) |err| return err;
 }
 
-pub fn frame(meta: FrameMeta) *const fn (void) void {
+pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
 
     self.frameMeta = meta;
-    return &endFrame;
+    return &frameEnd;
 }
 
-pub fn element(incompleteStyle: IncompleteStyle) !*const fn (void) void {
+pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
 
-    const result = try putNode(self.frameMeta.?.arena);
+    if (self.frameMeta.?.err != null) return &endNoop;
+
+    const result = putNode(self.frameMeta.?.arena) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
 
     const baseStyle = if (result.parent) |parent|
         BaseStyle.from(parent.style)
@@ -1405,7 +1394,7 @@ pub fn element(incompleteStyle: IncompleteStyle) !*const fn (void) void {
         0;
 
     var hasher = std.hash.Wyhash.init(0);
-    hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
+    hasher.update(std.mem.sliceAsBytes(self.frameMeta.?.nodePath.items));
     hasher.update(std.mem.asBytes(&result.index));
     result.ptr.* = .{
         .key = hasher.final(),
@@ -1470,8 +1459,15 @@ pub fn element(incompleteStyle: IncompleteStyle) !*const fn (void) void {
                 std.math.inf(f32),
         },
     };
-    try self.frameNodeParentStack.append(self.allocator, result.ptr);
-    try self.frameNodePath.append(self.allocator, result.index);
+    self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, result.ptr) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+    self.frameMeta.?.nodePath.append(self.frameMeta.?.arena, result.index) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+
     return &popParentStack;
 }
 
@@ -1489,13 +1485,9 @@ fn testCreateElementConfiguration(configuration: struct {
 
     const self = getContext();
 
-    frame(.{
-        .arena = arenaAllocator,
-        .baseStyle = try testing.createTestingBaseStyle(),
-        .dpi = @splat(72.0),
-    })({
-        (try element(configuration.style))({});
-        if (self.previousPushedNode) |previousNode| {
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(configuration.style)({});
+        if (self.frameMeta.?.previousPushedNode) |previousNode| {
             try std.testing.expectEqualDeep(configuration.expectedSize, previousNode.size);
         }
     });
@@ -1541,12 +1533,17 @@ test "element - percentage sizing starts at zero before parent resolution" {
     });
 }
 
-pub fn text(content: []const u8) !void {
+pub fn text(content: []const u8) void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 
+    if (self.frameMeta.?.err != null) return;
+
     const arena = self.frameMeta.?.arena;
-    const result = try putNode(arena);
+    const result = putNode(arena) catch |err| {
+        handleFrameError(err);
+        return;
+    };
 
     const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
 
@@ -1571,8 +1568,14 @@ pub fn text(content: []const u8) !void {
     const pixelSizeVec2: Vec2 = @as(Vec2, @splat(style.fontSize)) * resolutionMultiplier;
     const pixelLineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * pixelSizeVec2[1];
 
-    const shapedGlyphs = try style.font.shape(content);
-    var layoutGlyphs = try arena.alloc(LayoutGlyph, shapedGlyphs.len);
+    const shapedGlyphs = style.font.shape(content) catch |err| {
+        handleFrameError(err);
+        return;
+    };
+    var layoutGlyphs = arena.alloc(LayoutGlyph, shapedGlyphs.len) catch |err| {
+        handleFrameError(err);
+        return;
+    };
     errdefer arena.free(layoutGlyphs);
     var cursor: Vec2 = @splat(0.0);
 
@@ -1584,7 +1587,10 @@ pub fn text(content: []const u8) !void {
     for (shapedGlyphs, 0..) |shapedGlyph, i| {
         const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
         const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
-        const glyphText = try arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]);
+        const glyphText = arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]) catch |err| {
+            handleFrameError(err);
+            return;
+        };
         layoutGlyphs[i] = LayoutGlyph{
             .index = @intCast(shapedGlyph.index),
             .position = cursor + offset,
@@ -1621,7 +1627,7 @@ pub fn text(content: []const u8) !void {
 
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(content);
-    hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
+    hasher.update(std.mem.sliceAsBytes(self.frameMeta.?.nodePath.items));
     hasher.update(std.mem.asBytes(&result.index));
     result.ptr.* = Node{
         .key = hasher.final(),
@@ -1637,7 +1643,7 @@ pub fn text(content: []const u8) !void {
         .style = style,
     };
 
-    self.previousPushedNode = result.ptr;
+    self.frameMeta.?.previousPushedNode = result.ptr;
 }
 
 inline fn ReturnType(comptime function: anytype) type {
@@ -1674,50 +1680,64 @@ pub inline fn PropsOf(comptime function: anytype) type {
     }
 }
 
-pub inline fn component(comptime function: anytype, props: PropsOf(function)) !ReturnType(function) {
-    const Function = @TypeOf(function);
-    const functionTypeInfo = @typeInfo(Function);
-    if (functionTypeInfo != .@"fn") {
-        @compileError("expected function to be a `fn`, but found " ++ @typeName(function));
-    }
-
-    if (functionTypeInfo.@"fn".params.len > 1) {
-        @compileError(
-            "function components can only have one parameter `props: struct`, found " ++ std.fmt.comptimePrint("{d}", .{functionTypeInfo.@"fn".params.len}),
-        );
-    }
-
-    const hasProps = functionTypeInfo.@"fn".params.len == 1;
-
-    if (hasProps and functionTypeInfo.@"fn".params[0].type != @TypeOf(props)) {
-        @compileError("expected props to be of type " ++ @typeName(functionTypeInfo.@"fn".params[0].type orelse void) ++ ", but found " ++ @typeName(@TypeOf(props)));
-    }
-
+pub fn handleFrameError(err: anyerror) void {
     const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+
+    self.frameMeta.?.err = err;
+
+    var stackTrace: std.builtin.StackTrace = undefined;
+    std.debug.captureStackTrace(@returnAddress(), &stackTrace);
+    std.debug.print("There was an error during frame's UI mounting stage: ", .{});
+    std.debug.dumpStackTrace(stackTrace);
+}
+
+fn componentEnd(block: void) void {
+    _ = block;
+    const self = getContext();
+
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) {
+        return;
+    }
+
+    if (self.frameMeta.?.componentResolutionState.pop()) |endedResolutionState| {
+        const componentKey = endedResolutionState.key;
+        if (self.componentStates.get(componentKey)) |componentStates| {
+            if (endedResolutionState.useStateCursor != componentStates.items.len) {
+                handleFrameError(error.RulesOfHooksViolated);
+            }
+        }
+    }
+}
+
+pub fn component(key: []const u8) *const fn (void) void {
+    const self = getContext();
+
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) {
+        return &endNoop;
+    }
+
     var hasher = std.hash.Wyhash.init(0);
-    hasher.update(std.mem.asBytes(&@intFromPtr(&function)));
-    hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
+    hasher.update(key);
+    hasher.update(std.mem.sliceAsBytes(self.frameMeta.?.nodePath.items));
     const componentKey = hasher.final();
 
-    const previousComponentResolutionState = self.componentResolutionState;
-    self.componentResolutionState = .{
+    self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
         .key = componentKey,
         .useStateCursor = 0,
+    }) catch |err| {
+        handleFrameError(err);
+        return endNoop;
     };
-    const returnValue = if (hasProps)
-        try function(props)
-    else
-        try function();
-    if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.useStateCursor != self.componentStates.get(componentKey).?.items.len) {
-        return error.RulesOfHooksViolated;
-    }
-    self.componentResolutionState = previousComponentResolutionState;
-    return returnValue;
+
+    return &componentEnd;
 }
 
 fn pushEvent(key: u64, event: Event) !void {
     const self = getContext();
-    const result = try self.frameEventQueue.getOrPut(key);
+    const result = try self.pendingEventQueue.getOrPut(key);
     if (!result.found_existing) {
         result.value_ptr.* = try std.ArrayList(Event).initCapacity(self.allocator, 1);
     }
@@ -1727,117 +1747,122 @@ fn pushEvent(key: u64, event: Event) !void {
 /// Returns the next event in the queue to handle for the current element key.
 pub fn useNextEvent() ?Event {
     const self = getContext();
-    if (self.previousPushedNode) |previous| {
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.previousPushedNode) |previous| {
         const key = previous.key;
         // std.log.debug("handling events for {}", .{key});
-        if (self.frameEventQueue.getPtr(key)) |eventQueue| {
+        if (self.pendingEventQueue.getPtr(key)) |eventQueue| {
             return eventQueue.pop();
         }
     }
     return null;
 }
 
-pub fn update(arena: std.mem.Allocator, root: *const Node, viewportSize: Vec2) !void {
+pub fn update() !void {
     const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err) |err| return err;
 
-    var queueIterator = self.frameEventQueue.valueIterator();
-    while (queueIterator.next()) |events| {
-        events.clearRetainingCapacity();
-    }
+    const viewportSize = self.frameMeta.?.viewportSize;
+    const arena = self.frameMeta.?.arena;
 
-    var iterator = try layouting.LayoutTreeIterator.init(arena, root);
-
-    var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
-    missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
-
-    var uiEdges: Vec2 = @splat(0.0);
-    var hoveredCursor: WindowCursor = .default;
-    var topHoveredZ: ?u16 = null;
-
-    while (try iterator.next()) |layoutBox| {
-        if (layoutBox.style.placement == .standard) {
-            // this +scrollPosition term feels hacky to do, it's only required
-            // because layouting adds in the scroll position
-            uiEdges = @max(uiEdges, layoutBox.position + self.scrollPosition + layoutBox.size);
-        }
-        const isMouseAfter = layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1];
-        const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
-        const isMouseInside = isMouseAfter and isMouseBefore;
-
-        const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, layoutBox.key);
-
-        if (std.mem.indexOfScalar(u64, missingHoveredKeys.items, layoutBox.key)) |i| {
-            _ = missingHoveredKeys.swapRemove(i);
+    if (self.frameMeta.?.rootNode) |*root| {
+        var queueIterator = self.pendingEventQueue.valueIterator();
+        while (queueIterator.next()) |events| {
+            events.clearRetainingCapacity();
         }
 
-        if (isMouseInside) {
-            if (topHoveredZ == null or layoutBox.z > topHoveredZ.?) {
-                topHoveredZ = layoutBox.z;
-                hoveredCursor = layoutBox.style.cursor;
+        var iterator = try layouting.LayoutTreeIterator.init(arena, root);
+
+        var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
+        missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
+
+        var uiEdges: Vec2 = @splat(0.0);
+        var hoveredCursor: WindowCursor = .default;
+        var topHoveredZ: ?u16 = null;
+
+        while (try iterator.next()) |layoutBox| {
+            if (layoutBox.style.placement == .standard) {
+                // this +scrollPosition term feels hacky to do, it's only required
+                // because layouting adds in the scroll position
+                uiEdges = @max(uiEdges, layoutBox.position + self.scrollPosition + layoutBox.size);
+            }
+            const isMouseAfter = layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1];
+            const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
+            const isMouseInside = isMouseAfter and isMouseBefore;
+
+            const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, layoutBox.key);
+
+            if (std.mem.indexOfScalar(u64, missingHoveredKeys.items, layoutBox.key)) |i| {
+                _ = missingHoveredKeys.swapRemove(i);
             }
 
-            if (hoveredElementKeysIndexOpt == null) {
-                try pushEvent(layoutBox.key, .mouseOver);
+            if (isMouseInside) {
+                if (topHoveredZ == null or layoutBox.z > topHoveredZ.?) {
+                    topHoveredZ = layoutBox.z;
+                    hoveredCursor = layoutBox.style.cursor;
+                }
 
-                try self.hoveredElementKeys.append(self.allocator, layoutBox.key);
+                if (hoveredElementKeysIndexOpt == null) {
+                    try pushEvent(layoutBox.key, .mouseOver);
+
+                    try self.hoveredElementKeys.append(self.allocator, layoutBox.key);
+                }
+            } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
+                try pushEvent(layoutBox.key, .mouseOut);
+
+                _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
             }
-        } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
-            try pushEvent(layoutBox.key, .mouseOut);
-
-            _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
         }
-    }
 
-    for (missingHoveredKeys.items) |key| {
-        if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
-            _ = self.hoveredElementKeys.swapRemove(i);
+        for (missingHoveredKeys.items) |key| {
+            if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
+                _ = self.hoveredElementKeys.swapRemove(i);
+            }
         }
-    }
 
-    if (self.window) |window| {
-        window.setCursor(hoveredCursor, 0) catch |err| {
-            std.log.err("Failed to set cursor: {}", .{err});
-        };
-    }
+        if (self.window) |window| {
+            window.setCursor(hoveredCursor, 0) catch |err| {
+                std.log.err("Failed to set cursor: {}", .{err});
+            };
+        }
 
-    self.viewportSize = viewportSize;
+        self.viewportSize = viewportSize;
 
-    const timestamp = timestampSeconds();
-    self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
-    self.lastUpdateTime = timestamp;
+        const timestamp = timestampSeconds();
+        self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
+        self.lastUpdateTime = timestamp;
 
-    try component(Scrolling, .{ .uiEdges = uiEdges });
-}
-
-fn Scrolling(props: struct { uiEdges: Vec2 }) !void {
-    const self = getContext();
-    const viewportSize = useViewportSize();
-
-    const identity: Vec2 = @splat(0.0);
-    self.effectiveScrollPosition = @min(
-        @max(self.effectiveScrollPosition, identity),
-        @max(props.uiEdges - viewportSize, identity),
-    );
-
-    if (builtin.os.tag == .macos) {
-        self.scrollPosition = self.effectiveScrollPosition;
-    } else {
-        const spring = SpringConfig{
-            .stiffness = 320.0,
-            .damping = 32.0,
-            .mass = 1.0,
-        };
-        self.scrollPosition[0] = try useSpringTransition(self.effectiveScrollPosition[0], spring);
-        self.scrollPosition[1] = try useSpringTransition(self.effectiveScrollPosition[1], spring);
+        try scroller(uiEdges);
     }
 }
 
-/// Resets the UI state, clearing the root frame node - and consequently - everything else.
-pub fn resetNodeTree() void {
+fn scroller(uiEdges: Vec2) !void {
     const self = getContext();
-    self.rootFrameNode = null;
-    self.frameNodeParentStack.clearRetainingCapacity();
-    self.frameNodePath.clearRetainingCapacity();
+    // This is fine since we're not really inserting any node, so it won't clash
+    // with the current root node. The only purpose of this is to use the same
+    // logic here as is already implmented for actual UI code.
+    component("forbear-native-scroller")({
+        const viewportSize = useViewportSize();
+
+        const identity: Vec2 = @splat(0.0);
+        self.effectiveScrollPosition = @min(
+            @max(self.effectiveScrollPosition, identity),
+            @max(uiEdges - viewportSize, identity),
+        );
+
+        if (builtin.os.tag == .macos) {
+            self.scrollPosition = self.effectiveScrollPosition;
+        } else {
+            const spring = SpringConfig{
+                .stiffness = 320.0,
+                .damping = 32.0,
+                .mass = 1.0,
+            };
+            self.scrollPosition[0] = try useSpringTransition(self.effectiveScrollPosition[0], spring);
+            self.scrollPosition[1] = try useSpringTransition(self.effectiveScrollPosition[1], spring);
+        }
+    });
 }
 
 fn timestampSeconds() f64 {
@@ -1914,14 +1939,11 @@ pub fn deinit() void {
     }
     self.componentStates.deinit();
 
-    var eventQueueIterator = self.frameEventQueue.valueIterator();
+    var eventQueueIterator = self.pendingEventQueue.valueIterator();
     while (eventQueueIterator.next()) |events| {
         events.deinit(self.allocator);
     }
-    self.frameEventQueue.deinit();
-
-    self.frameNodeParentStack.deinit(self.allocator);
-    self.frameNodePath.deinit(self.allocator);
+    self.pendingEventQueue.deinit();
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
