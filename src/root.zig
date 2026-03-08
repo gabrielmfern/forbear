@@ -139,7 +139,7 @@ test "Element tree stack stability" {
             const nodePath = &self.frameMeta.?.nodePath;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             try std.testing.expectEqual(1, nodePath.items.len);
-            try FpsCounter();
+            FpsCounter();
 
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             try std.testing.expectEqual(1, nodePath.items.len);
@@ -176,7 +176,7 @@ test "Element tree stack stability" {
             const nodePath = &self.frameMeta.?.nodePath;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             try std.testing.expectEqual(1, nodePath.items.len);
-            try FpsCounter();
+            FpsCounter();
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             try std.testing.expectEqual(1, nodePath.items.len);
             element(.{})({
@@ -1680,8 +1680,7 @@ pub inline fn PropsOf(comptime function: anytype) type {
     }
 }
 
-// TODO: name this better
-fn handleFrameError(err: anyerror) void {
+pub fn handleFrameError(err: anyerror) void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 
@@ -1717,7 +1716,7 @@ pub fn component(key: []const u8) *const fn (void) void {
 
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) {
-        return undefined;
+        return &endNoop;
     }
 
     var hasher = std.hash.Wyhash.init(0);
@@ -1762,6 +1761,7 @@ pub fn useNextEvent() ?Event {
 pub fn update() !void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err) |err| return err;
 
     const viewportSize = self.frameMeta.?.viewportSize;
     const arena = self.frameMeta.?.arena;
@@ -1955,6 +1955,8 @@ pub fn deinit() void {
         img.deinit();
     }
     self.images.deinit();
+
+    testing.resetTestingBaseStyle();
 
     context = null;
 }

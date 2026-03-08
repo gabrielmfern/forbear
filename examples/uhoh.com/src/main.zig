@@ -42,7 +42,7 @@ fn App() !void {
             .fontSize = 12.0,
             .color = theme.Colors.text,
         })({
-            try forbear.FpsCounter();
+            forbear.FpsCounter();
 
             forbear.element(.{
                 .width = .grow,

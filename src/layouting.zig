@@ -765,6 +765,7 @@ pub fn layout() !*Node {
     const context = forbear.getContext();
 
     std.debug.assert(context.frameMeta != null);
+    if (context.frameMeta.?.err) |err| return err;
     if (context.frameMeta.?.rootNode) |*node| {
         const viewportSize = context.frameMeta.?.viewportSize;
         const arena = context.frameMeta.?.arena;

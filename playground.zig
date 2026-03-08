@@ -10,7 +10,7 @@ fn App() !void {
             .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
             .padding = .inLine(10),
         })({
-            try forbear.FpsCounter();
+            forbear.FpsCounter();
 
             forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
             forbear.element(.{
