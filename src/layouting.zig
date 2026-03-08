@@ -1734,24 +1734,24 @@ test "layout pipeline - ratio and grow produce stable geometry" {
 
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    forbear.frame(.{
+    try forbear.frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try forbear.element(.{
+        forbear.element(.{
             .direction = .leftToRight,
             .width = .grow,
             .height = .{ .fixed = 100.0 },
-        }))({
-            (try forbear.element(.{
+        })({
+            forbear.element(.{
                 .width = .{ .ratio = 0.2 },
                 .height = .grow,
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .width = .grow,
                 .height = .grow,
-            }))({});
+            })({});
         });
     });
     const first = try layout(arenaAllocator, .{ 300.0, 400.0 });
@@ -1775,24 +1775,24 @@ test "layout pipeline - ratio and grow produce stable geometry" {
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    forbear.frame(.{
+    try forbear.frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try forbear.element(.{
+        forbear.element(.{
             .direction = .leftToRight,
             .width = .grow,
             .height = .{ .fixed = 100.0 },
-        }))({
-            (try forbear.element(.{
+        })({
+            forbear.element(.{
                 .width = .{ .ratio = 0.2 },
                 .height = .grow,
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .width = .grow,
                 .height = .grow,
-            }))({});
+            })({});
         });
     });
     const second = try layout(arenaAllocator, .{ 300.0, 400.0 });
@@ -1824,29 +1824,29 @@ test "layout pipeline - manual children stay out of flow" {
 
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    forbear.frame(.{
+    try forbear.frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try forbear.element(.{
+        forbear.element(.{
             .direction = .leftToRight,
             .width = .{ .fixed = 200.0 },
             .height = .{ .fixed = 100.0 },
-        }))({
-            (try forbear.element(.{
+        })({
+            forbear.element(.{
                 .width = .{ .ratio = 0.5 },
                 .height = .grow,
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .placement = .{ .manual = .{ 10.0, 7.0 } },
                 .width = .{ .fixed = 15.0 },
                 .height = .{ .fixed = 12.0 },
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .width = .{ .fixed = 20.0 },
                 .height = .grow,
-            }))({});
+            })({});
         });
     });
 
@@ -1886,24 +1886,24 @@ test "layout pipeline - vertical ratio and grow produce stable geometry" {
     const arenaAllocator = arena.allocator();
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    forbear.frame(.{
+    try forbear.frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try forbear.element(.{
+        forbear.element(.{
             .direction = .topToBottom,
             .width = .{ .fixed = 120.0 },
             .height = .{ .fixed = 300.0 },
-        }))({
-            (try forbear.element(.{
+        })({
+            forbear.element(.{
                 .width = .grow,
                 .height = .{ .ratio = 0.5 },
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .width = .grow,
                 .height = .grow,
-            }))({});
+            })({});
         });
     });
     const first = try layout(arenaAllocator, .{ 500.0, 500.0 });
@@ -1929,24 +1929,24 @@ test "layout pipeline - vertical ratio and grow produce stable geometry" {
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    forbear.frame(.{
+    try forbear.frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try forbear.element(.{
+        forbear.element(.{
             .direction = .topToBottom,
             .width = .{ .fixed = 120.0 },
             .height = .{ .fixed = 300.0 },
-        }))({
-            (try forbear.element(.{
+        })({
+            forbear.element(.{
                 .width = .grow,
                 .height = .{ .ratio = 0.5 },
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .width = .grow,
                 .height = .grow,
-            }))({});
+            })({});
         });
     });
     const second = try layout(arenaAllocator, .{ 500.0, 500.0 });
@@ -1978,29 +1978,29 @@ test "layout pipeline - manual ratio child stays out of flow" {
 
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    forbear.frame(.{
+    try forbear.frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try forbear.element(.{
+        forbear.element(.{
             .direction = .leftToRight,
             .width = .{ .fixed = 200.0 },
             .height = .{ .fixed = 100.0 },
-        }))({
-            (try forbear.element(.{
+        })({
+            forbear.element(.{
                 .width = .{ .ratio = 0.5 },
                 .height = .grow,
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .placement = .{ .manual = .{ 10.0, 7.0 } },
                 .width = .{ .ratio = 0.5 },
                 .height = .{ .fixed = 40.0 },
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .width = .{ .fixed = 20.0 },
                 .height = .grow,
-            }))({});
+            })({});
         });
     });
 
@@ -2034,24 +2034,24 @@ test "layout pipeline - ratio and shrink keep children within parent flow" {
     const arenaAllocator = arena.allocator();
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    forbear.frame(.{
+    try forbear.frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try forbear.element(.{
+        forbear.element(.{
             .direction = .leftToRight,
             .width = .{ .fixed = 40.0 },
             .height = .{ .fixed = 100.0 },
-        }))({
-            (try forbear.element(.{
+        })({
+            forbear.element(.{
                 .width = .{ .ratio = 0.5 },
                 .height = .grow,
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .width = .{ .fixed = 30.0 },
                 .height = .grow,
-            }))({});
+            })({});
         });
     });
     const first = try layout(arenaAllocator, .{ 500.0, 500.0 });
@@ -2075,24 +2075,24 @@ test "layout pipeline - ratio and shrink keep children within parent flow" {
     forbear.resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    forbear.frame(.{
+    try forbear.frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try forbear.element(.{
+        forbear.element(.{
             .direction = .leftToRight,
             .width = .{ .fixed = 40.0 },
             .height = .{ .fixed = 100.0 },
-        }))({
-            (try forbear.element(.{
+        })({
+            forbear.element(.{
                 .width = .{ .ratio = 0.5 },
                 .height = .grow,
-            }))({});
-            (try forbear.element(.{
+            })({});
+            forbear.element(.{
                 .width = .{ .fixed = 30.0 },
                 .height = .grow,
-            }))({});
+            })({});
         });
     });
     const second = try layout(arenaAllocator, .{ 500.0, 500.0 });
@@ -2113,20 +2113,20 @@ test "layout pipeline - percentage sizes track parent axis" {
 
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    forbear.frame(.{
+    try forbear.frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try forbear.element(.{
+        forbear.element(.{
             .direction = .leftToRight,
             .width = .{ .fixed = 200.0 },
             .height = .{ .fixed = 100.0 },
-        }))({
-            (try forbear.element(.{
+        })({
+            forbear.element(.{
                 .width = .{ .percentage = 0.5 },
                 .height = .{ .percentage = 0.25 },
-            }))({});
+            })({});
         });
     });
 

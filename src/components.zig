@@ -9,7 +9,7 @@ pub fn FpsCounter() !void {
     const deltaTime = forbear.useDeltaTime();
     const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
 
-    (try forbear.element(.{
+    forbear.element(.{
         .placement = .{ .manual = .{ 10, 10 } },
         .zIndex = 10,
         .background = .{ .color = .{ 0.0, 0.0, 0.0, 0.9 } },
@@ -18,8 +18,8 @@ pub fn FpsCounter() !void {
         .borderRadius = 2,
         .color = .{ 1.0, 1.0, 0.0, 1.0 },
         .direction = .topToBottom,
-    }))({
-        try forbear.text(try std.fmt.allocPrint(arena, "FPS: {d:.1}", .{fps}));
-        try forbear.text(try std.fmt.allocPrint(arena, "delta time: {d:.1}ms", .{deltaTime * 1000.0}));
+    })({
+        forbear.text(try std.fmt.allocPrint(arena, "FPS: {d:.1}", .{fps}));
+        forbear.text(try std.fmt.allocPrint(arena, "delta time: {d:.1}ms", .{deltaTime * 1000.0}));
     });
 }
