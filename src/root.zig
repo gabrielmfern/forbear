@@ -139,7 +139,7 @@ test "Element tree stack stability" {
             const nodePath = &self.frameMeta.?.nodePath;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             try std.testing.expectEqual(1, nodePath.items.len);
-            FpsCounter();
+            try FpsCounter();
 
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             try std.testing.expectEqual(1, nodePath.items.len);
@@ -176,7 +176,7 @@ test "Element tree stack stability" {
             const nodePath = &self.frameMeta.?.nodePath;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             try std.testing.expectEqual(1, nodePath.items.len);
-            FpsCounter();
+            try FpsCounter();
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             try std.testing.expectEqual(1, nodePath.items.len);
             element(.{})({
@@ -1955,8 +1955,6 @@ pub fn deinit() void {
         img.deinit();
     }
     self.images.deinit();
-
-    testing.resetTestingBaseStyle();
 
     context = null;
 }

@@ -25,7 +25,3 @@ pub fn frameMeta(arena: std.mem.Allocator) !forbear.FrameMeta {
         .baseStyle = testingBaseStyle.?,
     };
 }
-
-pub fn resetTestingBaseStyle() void {
-    testingBaseStyle = null;
-}
