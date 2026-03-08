@@ -48,6 +48,7 @@ pub const FrameMeta = struct {
     arena: std.mem.Allocator,
     dpi: Vec2,
     baseStyle: BaseStyle,
+    deferredError: ?anyerror = null,
 };
 
 allocator: std.mem.Allocator,
@@ -135,30 +136,30 @@ test "Element tree stack stability" {
 
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    frame(.{
+    try frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try element(.{}))({
+        element(.{})({
             try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
             try std.testing.expectEqual(1, self.frameNodePath.items.len);
             try component(FpsCounter, null);
             try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
             try std.testing.expectEqual(1, self.frameNodePath.items.len);
-            (try element(.{}))({
+            element(.{})({
                 try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
                 try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-                try text("Hello, world!");
+                text("Hello, world!");
                 try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
                 try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-                (try element(.{}))({
+                element(.{})({
                     try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
                     try std.testing.expectEqual(3, self.frameNodePath.items.len);
 
-                    try text("Nested element");
+                    text("Nested element");
                     try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
                     try std.testing.expectEqual(3, self.frameNodePath.items.len);
                 });
@@ -177,30 +178,30 @@ test "Element tree stack stability" {
     resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    frame(.{
+    try frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try element(.{}))({
+        element(.{})({
             try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
             try std.testing.expectEqual(1, self.frameNodePath.items.len);
             try component(FpsCounter, null);
             try std.testing.expectEqual(1, self.frameNodeParentStack.items.len);
             try std.testing.expectEqual(1, self.frameNodePath.items.len);
-            (try element(.{}))({
+            element(.{})({
                 try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
                 try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-                try text("Hello, world!");
+                text("Hello, world!");
                 try std.testing.expectEqual(2, self.frameNodeParentStack.items.len);
                 try std.testing.expectEqual(2, self.frameNodePath.items.len);
 
-                (try element(.{}))({
+                element(.{})({
                     try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
                     try std.testing.expectEqual(3, self.frameNodePath.items.len);
 
-                    try text("Nested element");
+                    text("Nested element");
                     try std.testing.expectEqual(3, self.frameNodeParentStack.items.len);
                     try std.testing.expectEqual(3, self.frameNodePath.items.len);
                 });
@@ -243,17 +244,17 @@ test "Element key stability across frames" {
     }.collect;
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    frame(.{
+    try frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
         // Build tree: root > [child1, child2 > [nested1, nested2]]
-        (try element(.{}))({
-            (try element(.{}))({});
-            (try element(.{}))({
-                (try element(.{}))({});
-                (try element(.{}))({});
+        element(.{})({
+            element(.{})({});
+            element(.{})({
+                element(.{})({});
+                element(.{})({});
             });
         });
     });
@@ -266,16 +267,16 @@ test "Element key stability across frames" {
     resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    frame(.{
+    try frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try element(.{}))({
-            (try element(.{}))({});
-            (try element(.{}))({
-                (try element(.{}))({});
-                (try element(.{}))({});
+        element(.{})({
+            element(.{})({});
+            element(.{})({
+                element(.{})({});
+                element(.{})({});
             });
         });
     });
@@ -321,20 +322,20 @@ test "Component resolution" {
             const counter = try useState(u32, props.value);
             const innerArena = try useArena();
             try std.testing.expectEqual(10, counter.*);
-            (try element(.{}))({
-                try text(try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
+            element(.{})({
+                text(try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
             });
         }
     }).component;
 
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    frame(.{
+    try frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try element(.{}))({
+        element(.{})({
             try component(
                 MyComponent,
                 MyComponentProps{ .callCount = &callCount, .value = 10, .arenaAllocator = arenaAllocator },
@@ -345,12 +346,12 @@ test "Component resolution" {
 
     resetNodeTree();
 
-    frame(.{
+    try frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try element(.{}))({
+        element(.{})({
             try component(
                 MyComponent,
                 MyComponentProps{ .callCount = &callCount, .value = 20, .arenaAllocator = arenaAllocator },
@@ -1208,16 +1209,16 @@ test "Event queue dispatches events to correct elements" {
 
     const testingBaseStyle = try testing.createTestingBaseStyle();
 
-    frame(.{
+    try frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try element(.{}))({
-            (try element(.{}))({});
+        element(.{})({
+            element(.{})({});
             const firstChildKey = self.previousPushedNode.?.key;
 
-            (try element(.{}))({});
+            element(.{})({});
             const secondChildKey = self.previousPushedNode.?.key;
 
             try std.testing.expect(firstChildKey != secondChildKey);
@@ -1231,24 +1232,56 @@ test "Event queue dispatches events to correct elements" {
     resetNodeTree();
     _ = arena.reset(.retain_capacity);
 
-    frame(.{
+    try frame(.{
         .arena = arenaAllocator,
         .dpi = @splat(72.0),
         .baseStyle = testingBaseStyle,
     })({
-        (try element(.{}))({
-            (try element(.{}))({});
+        element(.{})({
+            element(.{})({});
 
             try std.testing.expectEqual(Event.mouseOut, useNextEvent().?);
             try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
             try std.testing.expectEqual(null, useNextEvent());
 
-            (try element(.{}))({});
+            element(.{})({});
 
             try std.testing.expectEqual(Event.mouseOver, useNextEvent().?);
             try std.testing.expectEqual(null, useNextEvent());
         });
     });
+}
+
+test "Frame returns deferred element creation errors at end" {
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arenaBuffer: [1]u8 = undefined;
+    var fixedBufferAllocator = std.heap.FixedBufferAllocator.init(&arenaBuffer);
+    const arenaAllocator = fixedBufferAllocator.allocator();
+
+    const self = getContext();
+    const testingBaseStyle = try testing.createTestingBaseStyle();
+
+    try std.testing.expectError(error.OutOfMemory, frame(.{
+        .arena = arenaAllocator,
+        .dpi = @splat(72.0),
+        .baseStyle = testingBaseStyle,
+    })({
+        element(.{})({
+            try std.testing.expect(self.frameMeta.?.deferredError == null);
+
+            element(.{})({});
+            try std.testing.expect(self.frameMeta.?.deferredError.? == error.OutOfMemory);
+            try std.testing.expectEqual(@as(usize, 1), self.frameNodeParentStack.items.len);
+
+            // Once a frame has recorded an error, later node definitions become no-ops.
+            text("This text should be skipped");
+            try std.testing.expectEqual(@as(usize, 1), self.frameNodeParentStack.items.len);
+        });
+    }));
+
+    try std.testing.expect(self.frameMeta == null);
 }
 
 /// This is meant to be returned as a function that will only run once the
@@ -1262,6 +1295,21 @@ fn popParentStack(block: void) void {
     std.debug.assert(self.frameNodeParentStack.items.len > 0);
     self.previousPushedNode = self.frameNodeParentStack.pop();
     _ = self.frameNodePath.pop();
+}
+
+fn noopBlock(block: void) void {
+    _ = block;
+}
+
+fn frameHasDeferredError(self: *const Context) bool {
+    return self.frameMeta != null and self.frameMeta.?.deferredError != null;
+}
+
+fn recordFrameError(self: *Context, err: anyerror) void {
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.deferredError == null) {
+        self.frameMeta.?.deferredError = err;
+    }
 }
 
 fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node, index: usize } {
@@ -1313,7 +1361,13 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node,
 
 /// Thin wrapper around `element`, but handles the proper aspect ratio
 /// definition in a way that feels intuitive to CSS
-pub fn image(style: IncompleteStyle, img: *Image) !void {
+pub fn image(style: IncompleteStyle, img: *Image) void {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    if (frameHasDeferredError(self)) {
+        return;
+    }
+
     var complementedStyle = style;
     const imageWidth: f32 = @floatFromInt(img.width);
     const imageHeight: f32 = @floatFromInt(img.height);
@@ -1355,29 +1409,39 @@ pub fn image(style: IncompleteStyle, img: *Image) !void {
     }
     complementedStyle.background = .{ .image = img };
 
-    (try element(complementedStyle))({});
+    element(complementedStyle)({});
 }
 
-fn endFrame(block: void) void {
+fn endFrame(block: void) anyerror!void {
     _ = block;
     const self = getContext();
 
-    self.frameMeta = null;
+    defer self.frameMeta = null;
+
+    if (self.frameMeta.?.deferredError) |err| {
+        return err;
+    }
 }
 
-pub fn frame(meta: FrameMeta) *const fn (void) void {
+pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
 
     self.frameMeta = meta;
     return &endFrame;
 }
 
-pub fn element(incompleteStyle: IncompleteStyle) !*const fn (void) void {
+pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
+    if (frameHasDeferredError(self)) {
+        return &noopBlock;
+    }
 
-    const result = try putNode(self.frameMeta.?.arena);
+    const result = putNode(self.frameMeta.?.arena) catch |err| {
+        recordFrameError(self, err);
+        return &noopBlock;
+    };
 
     const baseStyle = if (result.parent) |parent|
         BaseStyle.from(parent.style)
@@ -1470,8 +1534,15 @@ pub fn element(incompleteStyle: IncompleteStyle) !*const fn (void) void {
                 std.math.inf(f32),
         },
     };
-    try self.frameNodeParentStack.append(self.allocator, result.ptr);
-    try self.frameNodePath.append(self.allocator, result.index);
+    self.frameNodeParentStack.append(self.allocator, result.ptr) catch |err| {
+        recordFrameError(self, err);
+        return &noopBlock;
+    };
+    self.frameNodePath.append(self.allocator, result.index) catch |err| {
+        _ = self.frameNodeParentStack.pop();
+        recordFrameError(self, err);
+        return &noopBlock;
+    };
     return &popParentStack;
 }
 
@@ -1489,12 +1560,12 @@ fn testCreateElementConfiguration(configuration: struct {
 
     const self = getContext();
 
-    frame(.{
+    try frame(.{
         .arena = arenaAllocator,
         .baseStyle = try testing.createTestingBaseStyle(),
         .dpi = @splat(72.0),
     })({
-        (try element(configuration.style))({});
+        element(configuration.style)({});
         if (self.previousPushedNode) |previousNode| {
             try std.testing.expectEqualDeep(configuration.expectedSize, previousNode.size);
         }
@@ -1541,12 +1612,18 @@ test "element - percentage sizing starts at zero before parent resolution" {
     });
 }
 
-pub fn text(content: []const u8) !void {
+pub fn text(content: []const u8) void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
+    if (frameHasDeferredError(self)) {
+        return;
+    }
 
     const arena = self.frameMeta.?.arena;
-    const result = try putNode(arena);
+    const result = putNode(arena) catch |err| {
+        recordFrameError(self, err);
+        return;
+    };
 
     const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
 
@@ -1571,8 +1648,14 @@ pub fn text(content: []const u8) !void {
     const pixelSizeVec2: Vec2 = @as(Vec2, @splat(style.fontSize)) * resolutionMultiplier;
     const pixelLineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * pixelSizeVec2[1];
 
-    const shapedGlyphs = try style.font.shape(content);
-    var layoutGlyphs = try arena.alloc(LayoutGlyph, shapedGlyphs.len);
+    const shapedGlyphs = style.font.shape(content) catch |err| {
+        recordFrameError(self, err);
+        return;
+    };
+    var layoutGlyphs = arena.alloc(LayoutGlyph, shapedGlyphs.len) catch |err| {
+        recordFrameError(self, err);
+        return;
+    };
     errdefer arena.free(layoutGlyphs);
     var cursor: Vec2 = @splat(0.0);
 
@@ -1584,7 +1667,10 @@ pub fn text(content: []const u8) !void {
     for (shapedGlyphs, 0..) |shapedGlyph, i| {
         const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
         const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
-        const glyphText = try arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]);
+        const glyphText = arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]) catch |err| {
+            recordFrameError(self, err);
+            return;
+        };
         layoutGlyphs[i] = LayoutGlyph{
             .index = @intCast(shapedGlyph.index),
             .position = cursor + offset,
@@ -1694,6 +1780,12 @@ pub inline fn component(comptime function: anytype, props: PropsOf(function)) !R
     }
 
     const self = getContext();
+    if (frameHasDeferredError(self)) {
+        if (comptime ReturnType(function) == void) {
+            return;
+        }
+    }
+
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(std.mem.asBytes(&@intFromPtr(&function)));
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
@@ -1704,6 +1796,8 @@ pub inline fn component(comptime function: anytype, props: PropsOf(function)) !R
         .key = componentKey,
         .useStateCursor = 0,
     };
+    defer self.componentResolutionState = previousComponentResolutionState;
+
     const returnValue = if (hasProps)
         try function(props)
     else
@@ -1711,7 +1805,6 @@ pub inline fn component(comptime function: anytype, props: PropsOf(function)) !R
     if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.useStateCursor != self.componentStates.get(componentKey).?.items.len) {
         return error.RulesOfHooksViolated;
     }
-    self.componentResolutionState = previousComponentResolutionState;
     return returnValue;
 }
 

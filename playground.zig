@@ -4,15 +4,15 @@ const forbear = @import("forbear");
 fn App() !void {
     const isHovering = try forbear.useState(bool, false);
 
-    (try forbear.element(.{
+    (forbear.element(.{
         .width = .grow,
         .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
         .padding = .inLine(10),
     }))({
         try forbear.component(forbear.FpsCounter, null);
 
-        try forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
-        (try forbear.element(.{
+        forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
+        (forbear.element(.{
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
             .background = .{
@@ -54,7 +54,7 @@ fn renderingMain(
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
-        forbear.frame(.{
+        try forbear.frame(.{
             .arena = arena,
             .baseStyle = .{
                 .blendMode = .normal,
