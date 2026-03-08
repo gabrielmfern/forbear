@@ -384,3 +384,26 @@ On POSIX, use `dup2(new_fd, STDERR_FILENO)` instead.
 ### PEB Struct Fields
 
 `RTL_USER_PROCESS_PARAMETERS.hStdError` is `HANDLE` (non-optional). The similar-looking `STARTUPINFOW.hStdError` is `?HANDLE` (optional). Don't confuse them — the PEB version doesn't need `orelse`.
+
+## Cursor Cloud specific instructions
+
+### System dependencies
+
+The following system packages are required (installed via apt on Ubuntu): `glslang-tools`, `libvulkan-dev`, `libwayland-bin`, `libwayland-dev`, `libxkbcommon-dev`, `spirv-tools`, `wayland-protocols`. Zig 0.15.2 is installed at `/opt/zig-0.15.2/zig` (symlinked to `/usr/local/bin/zig`).
+
+### Build, test, and lint
+
+All commands are documented in the **Build Commands** section above. Quick reference:
+
+- **Build**: `zig build`
+- **Test**: `zig build test`
+- **Lint/format check**: `zig fmt --check .`
+- **Full compile check** (playground + examples): `zig build check`
+
+### Runtime limitations
+
+This is a native GUI framework with a Vulkan rendering backend. The cloud VM has no GPU or display server, so `zig build run` (the playground) cannot be executed at runtime. All tests, builds, and format checks work without a GPU because the test suite exercises layout, state management, animations, and component resolution without initializing a Vulkan context.
+
+### Dependency caching
+
+Zig fetches the `zmath` dependency from GitHub on first build and caches it in `.zig-cache/`. Subsequent builds reuse the cache. If a network-dependent build step fails, retry or clear `.zig-cache/` and rebuild.
