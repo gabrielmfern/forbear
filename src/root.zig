@@ -74,7 +74,7 @@ viewportSize: Vec2,
 
 componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
 // images: std.StringHashMap(Image),
-componentResolutionState: ?ComponentResolutionState,
+componentResolutionState: std.ArrayList(ComponentResolutionState),
 
 frameMeta: ?FrameMeta,
 frameEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
@@ -109,7 +109,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .viewportSize = @splat(0.0),
 
         .componentStates = .init(allocator),
-        .componentResolutionState = null,
+        .componentResolutionState = .empty,
 
         .frameMeta = null,
         .frameEventQueue = .init(allocator),
@@ -1316,8 +1316,8 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node,
     }
 }
 
-/// Thin wrapper around `element`, but handles the proper aspect ratio
-/// definition in a way that feels intuitive to CSS
+/// A thin wrapper around `element` that includes some aspect ratio handling
+/// definition logic in a way that feels more intuitve
 pub fn image(style: IncompleteStyle, img: *Image) void {
     var complementedStyle = style;
     const imageWidth: f32 = @floatFromInt(img.width);
@@ -1363,21 +1363,19 @@ pub fn image(style: IncompleteStyle, img: *Image) void {
     element(complementedStyle)({});
 }
 
-fn endFrame(block: void) anyerror!void {
+fn frameEnd(block: void) anyerror!void {
     _ = block;
     const self = getContext();
 
-    const err = if (self.frameMeta) |meta| meta.err else null;
-    self.frameMeta = null;
-
-    if (err) |e| return e;
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err) |err| return err;
 }
 
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
 
     self.frameMeta = meta;
-    return &endFrame;
+    return &frameEnd;
 }
 
 pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
@@ -1387,14 +1385,10 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
 
     if (self.frameMeta.?.err != null) return &popParentStackNoop;
 
-    return elementInner(self, incompleteStyle) catch |err| {
-        self.frameMeta.?.err = err;
+    const result = putNode(self.frameMeta.?.arena) catch |err| {
+        handleFrameError(err);
         return &popParentStackNoop;
     };
-}
-
-fn elementInner(self: *@This(), incompleteStyle: IncompleteStyle) !*const fn (void) void {
-    const result = try putNode(self.frameMeta.?.arena);
 
     const baseStyle = if (result.parent) |parent|
         BaseStyle.from(parent.style)
@@ -1487,8 +1481,15 @@ fn elementInner(self: *@This(), incompleteStyle: IncompleteStyle) !*const fn (vo
                 std.math.inf(f32),
         },
     };
-    try self.frameNodeParentStack.append(self.allocator, result.ptr);
-    try self.frameNodePath.append(self.allocator, result.index);
+    self.frameNodeParentStack.append(self.allocator, result.ptr) catch |err| {
+        handleFrameError(err);
+        return &popParentStackNoop;
+    };
+    self.frameNodePath.append(self.allocator, result.index) catch |err| {
+        handleFrameError(err);
+        return &popParentStackNoop;
+    };
+
     return &popParentStack;
 }
 
@@ -1699,61 +1700,57 @@ pub inline fn PropsOf(comptime function: anytype) type {
     }
 }
 
-pub inline fn component(comptime function: anytype, props: PropsOf(function)) void {
-    const Function = @TypeOf(function);
-    const functionTypeInfo = @typeInfo(Function);
-    if (functionTypeInfo != .@"fn") {
-        @compileError("expected function to be a `fn`, but found " ++ @typeName(function));
-    }
-
-    if (functionTypeInfo.@"fn".params.len > 1) {
-        @compileError(
-            "function components can only have one parameter `props: struct`, found " ++ std.fmt.comptimePrint("{d}", .{functionTypeInfo.@"fn".params.len}),
-        );
-    }
-
-    const hasProps = functionTypeInfo.@"fn".params.len == 1;
-
-    if (hasProps and functionTypeInfo.@"fn".params[0].type != @TypeOf(props)) {
-        @compileError("expected props to be of type " ++ @typeName(functionTypeInfo.@"fn".params[0].type orelse void) ++ ", but found " ++ @typeName(@TypeOf(props)));
-    }
-
+// TODO: name this better
+fn handleFrameError(err: anyerror) void {
     const self = getContext();
+    std.debug.assert(self.frameMeta != null);
 
-    if (self.frameMeta != null and self.frameMeta.?.err != null) return;
+    self.frameMeta.?.err = err;
 
-    componentInner(function, props, self, hasProps) catch |err| {
-        if (self.frameMeta) |*meta| {
-            meta.err = err;
-        }
-    };
+    var stackTrace: std.builtin.StackTrace = undefined;
+    std.debug.captureStackTrace(@returnAddress(), &stackTrace);
+    std.debug.print("There was an error during frame's UI mounting stage: ", .{});
+    std.debug.dumpStackTrace(stackTrace);
 }
 
-inline fn componentInner(
-    comptime function: anytype,
-    props: PropsOf(function),
-    self: *@This(),
-    comptime hasProps: bool,
-) !ReturnType(function) {
+fn componentEnd(block: void) void {
+    _ = block;
+    const self = getContext();
+
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) {
+        return;
+    }
+
+    if (self.componentResolutionState.pop()) |endedResolutionState| {
+        const componentKey = endedResolutionState.key;
+        if (self.componentStates.get(componentKey)) |componentStates| {
+            if (endedResolutionState.useStateCursor != componentStates.items.len) {
+                handleFrameError(error.RulesOfHooksViolated);
+            }
+        }
+    }
+}
+
+pub fn component(key: []const u8) *const fn (void) void {
+    const self = getContext();
+
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) {
+        return undefined;
+    }
+
     var hasher = std.hash.Wyhash.init(0);
-    hasher.update(std.mem.asBytes(&@intFromPtr(&function)));
+    hasher.update(key);
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
     const componentKey = hasher.final();
 
-    const previousComponentResolutionState = self.componentResolutionState;
-    self.componentResolutionState = .{
+    self.componentResolutionState.append(.{
         .key = componentKey,
         .useStateCursor = 0,
-    };
-    const returnValue = if (hasProps)
-        try function(props)
-    else
-        try function();
-    if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.useStateCursor != self.componentStates.get(componentKey).?.items.len) {
-        return error.RulesOfHooksViolated;
-    }
-    self.componentResolutionState = previousComponentResolutionState;
-    return returnValue;
+    });
+
+    return &componentEnd;
 }
 
 fn pushEvent(key: u64, event: Event) !void {
@@ -1847,14 +1844,12 @@ pub fn update(arena: std.mem.Allocator, root: *const Node, viewportSize: Vec2) !
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
     self.lastUpdateTime = timestamp;
 
-    try callScrolling(self, .{ .uiEdges = uiEdges });
+    try self.scroller(uiEdges);
 }
 
-const ScrollingProps = struct { uiEdges: Vec2 };
-
-fn callScrolling(self: *@This(), props: ScrollingProps) !void {
+fn scroller(self: *@This(), uiEdges: Vec2) !void {
     var hasher = std.hash.Wyhash.init(0);
-    hasher.update(std.mem.asBytes(&@intFromPtr(&scrollingComponent)));
+    hasher.update(std.mem.asBytes(&@intFromPtr(&scroller)));
     hasher.update(std.mem.sliceAsBytes(self.frameNodePath.items));
     const componentKey = hasher.final();
 
@@ -1863,21 +1858,12 @@ fn callScrolling(self: *@This(), props: ScrollingProps) !void {
         .key = componentKey,
         .useStateCursor = 0,
     };
-    try scrollingComponent(props);
-    if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.useStateCursor != self.componentStates.get(componentKey).?.items.len) {
-        return error.RulesOfHooksViolated;
-    }
-    self.componentResolutionState = previousComponentResolutionState;
-}
-
-fn scrollingComponent(props: ScrollingProps) !void {
-    const self = getContext();
     const viewportSize = useViewportSize();
 
     const identity: Vec2 = @splat(0.0);
     self.effectiveScrollPosition = @min(
         @max(self.effectiveScrollPosition, identity),
-        @max(props.uiEdges - viewportSize, identity),
+        @max(uiEdges - viewportSize, identity),
     );
 
     if (builtin.os.tag == .macos) {
@@ -1891,6 +1877,10 @@ fn scrollingComponent(props: ScrollingProps) !void {
         self.scrollPosition[0] = try useSpringTransition(self.effectiveScrollPosition[0], spring);
         self.scrollPosition[1] = try useSpringTransition(self.effectiveScrollPosition[1], spring);
     }
+    if (self.componentStates.contains(componentKey) and self.componentResolutionState.?.useStateCursor != self.componentStates.get(componentKey).?.items.len) {
+        return error.RulesOfHooksViolated;
+    }
+    self.componentResolutionState = previousComponentResolutionState;
 }
 
 /// Resets the UI state, clearing the root frame node - and consequently - everything else.
