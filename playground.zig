@@ -2,40 +2,42 @@ const std = @import("std");
 const forbear = @import("forbear");
 
 fn App() !void {
-    const isHovering = try forbear.useState(bool, false);
+    forbear.component("app")({
+        const isHovering = try forbear.useState(bool, false);
 
-    forbear.element(.{
-        .width = .grow,
-        .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
-        .padding = .inLine(10),
-    })({
-        forbear.component(forbear.FpsCounter, null);
-
-        forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
         forbear.element(.{
-            .width = .{ .fixed = 100 },
-            .height = .{ .fixed = 100 },
-            .background = .{
-                .color = .{
-                    1.0,
-                    try forbear.useTransition(if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
-                    0.0,
-                    1.0,
-                },
-            },
-            .borderRadius = 20,
-        })({});
+            .width = .grow,
+            .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
+            .padding = .inLine(10),
+        })({
+            try forbear.FpsCounter();
 
-        while (forbear.useNextEvent()) |event| {
-            switch (event) {
-                .mouseOver => {
-                    isHovering.* = true;
+            forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+                .background = .{
+                    .color = .{
+                        1.0,
+                        try forbear.useTransition(if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
+                        0.0,
+                        1.0,
+                    },
                 },
-                .mouseOut => {
-                    isHovering.* = false;
-                },
+                .borderRadius = 20,
+            })({});
+
+            while (forbear.useNextEvent()) |event| {
+                switch (event) {
+                    .mouseOver => {
+                        isHovering.* = true;
+                    },
+                    .mouseOut => {
+                        isHovering.* = false;
+                    },
+                }
             }
-        }
+        });
     });
 }
 
@@ -56,6 +58,7 @@ fn renderingMain(
 
         try forbear.frame(.{
             .arena = arena,
+            .viewportSize = renderer.viewportSize(),
             .baseStyle = .{
                 .blendMode = .normal,
                 .font = try forbear.useFont("Inter"),
@@ -68,22 +71,19 @@ fn renderingMain(
             },
             .dpi = .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         })({
-            forbear.component(App, null);
+            try App();
+
+            const rootNode = try forbear.layout();
+            try renderer.drawFrame(
+                arena,
+                rootNode,
+                .{ 1.0, 1.0, 1.0, 1.0 },
+                window.dpi,
+                window.targetFrameTimeNs(),
+            );
+
+            try forbear.update();
         });
-
-        const viewportSize = renderer.viewportSize();
-        const rootNode = try forbear.layout(arena, viewportSize);
-        try renderer.drawFrame(
-            arena,
-            rootNode,
-            .{ 1.0, 1.0, 1.0, 1.0 },
-            window.dpi,
-            window.targetFrameTimeNs(),
-        );
-
-        try forbear.update(arena, rootNode, viewportSize);
-
-        forbear.resetNodeTree();
     }
     try renderer.waitIdle();
 }

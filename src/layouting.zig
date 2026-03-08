@@ -761,12 +761,14 @@ pub const LayoutTreeIterator = struct {
     }
 };
 
-pub fn layout(
-    arena: std.mem.Allocator,
-    viewportSize: Vec2,
-) !*Node {
+pub fn layout() !*Node {
     const context = forbear.getContext();
-    if (context.rootFrameNode) |*node| {
+
+    std.debug.assert(context.frameMeta != null);
+    if (context.frameMeta.?.rootNode) |*node| {
+        const viewportSize = context.frameMeta.?.viewportSize;
+        const arena = context.frameMeta.?.arena;
+
         const debugConfig = layoutDebugConfig();
         var startNs: i128 = 0;
         if (debugConfig.enabled) {
@@ -842,7 +844,7 @@ pub fn layout(
         }
         return node;
     } else {
-        std.log.err("You need to define a root frame node before layouting. You can do so by just doing forbear.text(...), for example.", .{});
+        std.log.err("You need to define a root node before layouting, any node will suffice.", .{});
         return error.NoRootFrameNode;
     }
 }
