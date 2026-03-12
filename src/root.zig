@@ -1582,6 +1582,239 @@ test "element - percentage sizing starts at zero before parent resolution" {
     });
 }
 
+test "element fitting - fit parent with padding accumulates fixed child inline" {
+    // A topToBottom fit parent with padding should grow its height by the
+    // child's height plus margins, plus its own padding/border.
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{
+            .direction = .topToBottom,
+            .height = .fit,
+            .width = .{ .fixed = 100.0 },
+            .padding = Padding.block(10.0),
+        })({
+            element(.{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 20.0 },
+                .margin = Margin.block(5.0),
+            })({});
+        });
+        const parent = self.frameMeta.?.previousPushedNode.?;
+        // height = padding(10+10) + margin(5+5) + child(20) = 50
+        try std.testing.expectEqual(@as(f32, 50.0), parent.size[1]);
+        try std.testing.expectEqual(@as(f32, 50.0), parent.minSize[1]);
+    });
+}
+
+test "element fitting - fit parent cross-axis takes max child height" {
+    // A leftToRight fit parent fitting height should use the tallest child
+    // contribution plus its own vertical padding.
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{
+            .direction = .leftToRight,
+            .height = .fit,
+            .width = .{ .fixed = 200.0 },
+            .padding = Padding.block(8.0),
+        })({
+            element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 20.0 },
+            })({});
+            element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 50.0 },
+            })({});
+        });
+        const parent = self.frameMeta.?.previousPushedNode.?;
+        // height = padding(8+8) + max child height(50) = 66
+        try std.testing.expectEqual(@as(f32, 66.0), parent.size[1]);
+        try std.testing.expectEqual(@as(f32, 66.0), parent.minSize[1]);
+    });
+}
+
+test "element fitting - fit parent with padding accumulates fixed child inline width" {
+    // A leftToRight fit parent should sum child widths plus margins plus its
+    // own horizontal padding.
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{
+            .direction = .leftToRight,
+            .width = .fit,
+            .height = .{ .fixed = 50.0 },
+            .padding = Padding.inLine(12.0),
+        })({
+            element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 50.0 },
+                .margin = Margin.inLine(4.0),
+            })({});
+            element(.{
+                .width = .{ .fixed = 20.0 },
+                .height = .{ .fixed = 50.0 },
+                .margin = Margin.inLine(6.0),
+            })({});
+        });
+        const parent = self.frameMeta.?.previousPushedNode.?;
+        // width = padding(12+12) + child0(4+30+4) + child1(6+20+6) = 94
+        try std.testing.expectEqual(@as(f32, 94.0), parent.size[0]);
+        try std.testing.expectEqual(@as(f32, 94.0), parent.minSize[0]);
+    });
+}
+
+test "element fitting - nested fit parents propagate size upward" {
+    // Inner fit parent should size to its child, outer fit parent should size
+    // to the inner parent. Both measured before layout().
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{
+            .direction = .topToBottom,
+            .width = .fit,
+            .height = .fit,
+        })({
+            element(.{
+                .direction = .topToBottom,
+                .width = .fit,
+                .height = .fit,
+            })({
+                element(.{
+                    .width = .{ .fixed = 60.0 },
+                    .height = .{ .fixed = 30.0 },
+                })({});
+            });
+        });
+        const outer = self.frameMeta.?.previousPushedNode.?;
+        try std.testing.expectEqual(@as(f32, 60.0), outer.size[0]);
+        try std.testing.expectEqual(@as(f32, 30.0), outer.size[1]);
+        try std.testing.expectEqual(@as(f32, 60.0), outer.minSize[0]);
+        try std.testing.expectEqual(@as(f32, 30.0), outer.minSize[1]);
+    });
+}
+
+test "element fitting - manual child does not contribute to fit parent" {
+    // A manually-placed child should be excluded from the parent's fit
+    // calculation.
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{
+            .direction = .topToBottom,
+            .width = .fit,
+            .height = .fit,
+        })({
+            element(.{
+                .placement = .{ .manual = .{ 0.0, 0.0 } },
+                .width = .{ .fixed = 999.0 },
+                .height = .{ .fixed = 999.0 },
+            })({});
+        });
+        const parent = self.frameMeta.?.previousPushedNode.?;
+        // Manual child must not inflate the fit parent
+        try std.testing.expectEqual(@as(f32, 0.0), parent.size[0]);
+        try std.testing.expectEqual(@as(f32, 0.0), parent.size[1]);
+    });
+}
+
+test "element fitting - text child inflates fit parent inline" {
+    // A fit parent whose only child is a text node should grow to contain the
+    // text's full single-line width and height before layout() runs.
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{
+            .direction = .leftToRight,
+            .width = .fit,
+            .height = .fit,
+        })({
+            text("hello");
+        });
+        const parent = self.frameMeta.?.previousPushedNode.?;
+        // Parent must be at least as wide and tall as the text node itself.
+        const textNode = parent.children.nodes.items[0];
+        try std.testing.expect(parent.size[0] >= textNode.size[0]);
+        try std.testing.expect(parent.size[1] >= textNode.size[1]);
+        try std.testing.expect(parent.size[0] > 0.0);
+        try std.testing.expect(parent.size[1] > 0.0);
+    });
+}
+
+test "element fitting - word-wrapped text child inflates fit parent to full text width" {
+    // When textWrapping = .word, the text node's size[0] is the full unwrapped
+    // width. A fit parent must pick that up during definition so it is not
+    // collapsed to the minimum-word width before layout runs.
+    try init(std.testing.allocator, undefined);
+    defer deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = getContext();
+
+    try frame(try testing.frameMeta(arenaAllocator))({
+        element(.{
+            .direction = .leftToRight,
+            .width = .fit,
+            .height = .fit,
+            .textWrapping = .word,
+        })({
+            text("hello world");
+        });
+        const parent = self.frameMeta.?.previousPushedNode.?;
+        const textNode = parent.children.nodes.items[0];
+        // The full text width (size[0]) must be reflected in the parent —
+        // not just the longest-word minSize.
+        try std.testing.expectEqual(textNode.size[0], parent.size[0]);
+        try std.testing.expect(parent.size[0] > textNode.minSize[0]);
+    });
+}
+
 pub fn text(content: []const u8) void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
