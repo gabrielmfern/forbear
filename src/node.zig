@@ -442,6 +442,43 @@ pub const Node = struct {
         return preferredSize != .fixed and preferredSize != .percentage and self.style.getMinSize(direction) == null;
     }
 
+    pub fn fitChild(self: *@This(), child: *const Node) void {
+        if (child.style.placement != .manual) {
+            inline for (Direction.array) |fitDirection| {
+                const preferredSize = self.style.getPreferredSize(fitDirection);
+                const layoutDirection = self.style.direction;
+                const marginVector = child.style.margin.get(fitDirection);
+                const margins = marginVector[0] + marginVector[1];
+
+                const contribution = margins + child.getSize(fitDirection);
+                const minContribution = margins + child.getMinSize(fitDirection);
+
+                if (layoutDirection == fitDirection) {
+                    if (preferredSize == .fit) {
+                        self.addSize(fitDirection, contribution);
+                    }
+                    if (self.shouldFitMin(fitDirection)) {
+                        self.addMinSize(fitDirection, minContribution);
+                    }
+                } else {
+                    // cross axis fitting
+                    if (preferredSize == .fit) {
+                        self.setSize(fitDirection, @max(
+                            contribution + self.fittingBase(fitDirection),
+                            self.getSize(fitDirection),
+                        ));
+                    }
+                    if (self.shouldFitMin(fitDirection)) {
+                        self.setMinSize(fitDirection, @max(
+                            minContribution + self.fittingBase(fitDirection),
+                            self.getMinSize(fitDirection),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     pub fn fittingBase(self: @This(), direction: Direction) f32 {
         const paddingVector = self.style.padding.get(direction);
         const padding = paddingVector[0] + paddingVector[1];

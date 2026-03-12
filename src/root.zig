@@ -1343,43 +1343,6 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     return &frameEnd;
 }
 
-fn fitChild(parent: *Node, child: *const Node) void {
-    if (child.style.placement != .manual) {
-        inline for (Direction.array) |fitDirection| {
-            const preferredSize = parent.style.getPreferredSize(fitDirection);
-            const layoutDirection = parent.style.direction;
-            const marginVector = child.style.margin.get(fitDirection);
-            const margins = marginVector[0] + marginVector[1];
-
-            const contribution = margins + child.getSize(fitDirection);
-            const minContribution = margins + child.getMinSize(fitDirection);
-
-            if (layoutDirection == fitDirection) {
-                if (preferredSize == .fit) {
-                    parent.addSize(fitDirection, contribution);
-                }
-                if (parent.shouldFitMin(fitDirection)) {
-                    parent.addMinSize(fitDirection, minContribution);
-                }
-            } else {
-                // cross axis fitting
-                if (preferredSize == .fit) {
-                    parent.setSize(fitDirection, @max(
-                        contribution + parent.fittingBase(fitDirection),
-                        parent.getSize(fitDirection),
-                    ));
-                }
-                if (parent.shouldFitMin(fitDirection)) {
-                    parent.setMinSize(fitDirection, @max(
-                        minContribution + parent.fittingBase(fitDirection),
-                        parent.getMinSize(fitDirection),
-                    ));
-                }
-            }
-        }
-    }
-}
-
 /// TODO: share the github of the person I got this trick from
 fn elementEnd(block: void) void {
     _ = block;
@@ -1392,7 +1355,7 @@ fn elementEnd(block: void) void {
 
     const node = self.frameMeta.?.previousPushedNode.?;
     if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
-        fitChild(parent, node);
+        parent.fitChild(node);
     }
 }
 
@@ -1928,7 +1891,7 @@ pub fn text(content: []const u8) void {
     self.frameMeta.?.previousPushedNode = result.ptr;
 
     if (result.parent) |parent| {
-        fitChild(parent, result.ptr);
+        parent.fitChild(result.ptr);
     }
 }
 
