@@ -18,6 +18,8 @@ pub const Direction = enum {
             .topToBottom => .leftToRight,
         };
     }
+
+    pub const array = [_]Direction{ .leftToRight, .topToBottom };
 };
 
 pub const Sizing = union(enum) {
@@ -434,6 +436,21 @@ pub const Node = struct {
     children: Children,
 
     style: Style,
+
+    pub fn shouldFitMin(self: @This(), direction: Direction) bool {
+        const preferredSize = self.style.getPreferredSize(direction);
+        return preferredSize != .fixed and preferredSize != .percentage and self.style.getMinSize(direction) == null;
+    }
+
+    pub fn fittingBase(self: @This(), direction: Direction) f32 {
+        const paddingVector = self.style.padding.get(direction);
+        const padding = paddingVector[0] + paddingVector[1];
+
+        const borderWidthVector = self.style.borderWidth.get(direction);
+        const border = borderWidthVector[0] + borderWidthVector[1];
+
+        return padding + border;
+    }
 
     pub fn debugPrint(self: @This(), indent: usize) void {
         for (0..indent) |_| {

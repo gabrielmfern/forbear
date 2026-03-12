@@ -10,6 +10,7 @@ const testing = @import("testing.zig");
 pub const layout = layouting.layout;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
+pub const Direction = nodeImport.Direction;
 pub const LayoutGlyph = nodeImport.LayoutGlyph;
 pub const Glyphs = nodeImport.Glyphs;
 pub const BaseStyle = nodeImport.BaseStyle;
@@ -1226,25 +1227,11 @@ test "Event queue dispatches events to correct elements" {
     });
 }
 
-/// This is meant to be returned as a function that will only run once the
-/// "block" is executed. It's a really smart trick from someone doing an
-/// immediate mode UI library in Zig as well from teh Zig Discord server.
-///
-/// TODO: share the github of the person I got this trick from
-fn popParentStack(block: void) void {
-    _ = block;
-    const self = getContext();
-    std.debug.assert(self.frameMeta != null);
-    std.debug.assert(self.frameMeta.?.nodeParentStack.items.len > 0);
-    self.frameMeta.?.previousPushedNode = self.frameMeta.?.nodeParentStack.pop();
-    _ = self.frameMeta.?.nodePath.pop();
-}
-
 fn endNoop(block: void) void {
     _ = block;
 }
 
-fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*const Node, index: usize } {
+fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*Node, index: usize } {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
@@ -1354,6 +1341,59 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
 
     self.frameMeta = meta;
     return &frameEnd;
+}
+
+fn fitChild(parent: *Node, child: *const Node) void {
+    if (child.style.placement != .standard) {
+        inline for (Direction.array) |fitDirection| {
+            const preferredSize = parent.style.getPreferredSize(fitDirection);
+            const layoutDirection = parent.style.direction;
+            const marginVector = child.style.margin.get(fitDirection);
+            const margins = marginVector[0] + marginVector[1];
+
+            const contribution = margins + child.getSize(fitDirection);
+            const minContribution = margins + child.getMinSize(fitDirection);
+
+            if (layoutDirection == fitDirection) {
+                if (preferredSize == .fit) {
+                    parent.addSize(fitDirection, contribution);
+                }
+                if (parent.shouldFitMin(fitDirection)) {
+                    parent.addMinSize(fitDirection, minContribution);
+                }
+            } else {
+                // cross axis fitting
+                if (preferredSize == .fit) {
+                    parent.setSize(fitDirection, @max(
+                        contribution + parent.fittingBase(fitDirection),
+                        parent.getSize(fitDirection),
+                    ));
+                }
+                if (parent.shouldFitMin(fitDirection)) {
+                    parent.setMinSize(fitDirection, @max(
+                        minContribution + parent.fittingBase(fitDirection),
+                        parent.getMinSize(fitDirection),
+                    ));
+                }
+            }
+        }
+    }
+}
+
+/// TODO: share the github of the person I got this trick from
+fn elementEnd(block: void) void {
+    _ = block;
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    std.debug.assert(self.frameMeta.?.nodeParentStack.items.len > 0);
+
+    self.frameMeta.?.previousPushedNode = self.frameMeta.?.nodeParentStack.pop();
+    _ = self.frameMeta.?.nodePath.pop();
+
+    const node = self.frameMeta.?.previousPushedNode.?;
+    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
+        fitChild(parent, node);
+    }
 }
 
 pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
@@ -1468,7 +1508,16 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         return &endNoop;
     };
 
-    return &popParentStack;
+    inline for (Direction.array) |fitDirection| {
+        if (result.ptr.style.getPreferredSize(fitDirection) == .fit) {
+            result.ptr.setSize(fitDirection, result.ptr.fittingBase(fitDirection));
+        }
+        if (result.ptr.shouldFitMin(fitDirection)) {
+            result.ptr.setMinSize(fitDirection, result.ptr.fittingBase(fitDirection));
+        }
+    }
+
+    return &elementEnd;
 }
 
 fn testCreateElementConfiguration(configuration: struct {
@@ -1644,6 +1693,10 @@ pub fn text(content: []const u8) void {
     };
 
     self.frameMeta.?.previousPushedNode = result.ptr;
+
+    if (result.parent) |parent| {
+        fitChild(parent, result.ptr);
+    }
 }
 
 inline fn ReturnType(comptime function: anytype) type {

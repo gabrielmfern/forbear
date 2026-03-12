@@ -593,8 +593,7 @@ fn fitAlong(node: *Node, fitDirection: Direction) void {
             const borderWidthVector = node.style.borderWidth.get(fitDirection);
             const border = borderWidthVector[0] + borderWidthVector[1];
 
-            const size = preferredSize;
-            if (size == .fit) {
+            if (preferredSize == .fit) {
                 node.setSize(fitDirection, padding + border);
             }
             if (shouldFitMin) {
@@ -606,7 +605,7 @@ fn fitAlong(node: *Node, fitDirection: Direction) void {
                     const childMarginVector = child.style.margin.get(fitDirection);
                     const childMargins = childMarginVector[0] + childMarginVector[1];
                     if (layoutDirection == fitDirection) {
-                        if (size == .fit) {
+                        if (preferredSize == .fit) {
                             node.addSize(fitDirection, childMargins + child.getSize(fitDirection));
                         }
                         if (shouldFitMin) {
@@ -614,7 +613,7 @@ fn fitAlong(node: *Node, fitDirection: Direction) void {
                         }
                     }
                     if (layoutDirection != fitDirection) {
-                        if (size == .fit) {
+                        if (preferredSize == .fit) {
                             node.setSize(fitDirection, @max(
                                 childMargins + padding + border + child.getSize(fitDirection),
                                 node.getSize(fitDirection),
@@ -779,9 +778,9 @@ pub fn layout() !*Node {
             }
         }
 
-        fitAlong(node, .leftToRight);
-        fitAlong(node, .topToBottom);
-        logLayoutStage(debugConfig, "after fitAlong x/y", node);
+        // fitAlong(node, .leftToRight);
+        // fitAlong(node, .topToBottom);
+        // logLayoutStage(debugConfig, "after fitAlong x/y", node);
 
         if (node.style.width == .grow) {
             node.size[0] = @min(@max(viewportSize[0], node.minSize[0]), node.maxSize[0]);
