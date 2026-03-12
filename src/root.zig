@@ -1344,7 +1344,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
 }
 
 fn fitChild(parent: *Node, child: *const Node) void {
-    if (child.style.placement != .standard) {
+    if (child.style.placement != .manual) {
         inline for (Direction.array) |fitDirection| {
             const preferredSize = parent.style.getPreferredSize(fitDirection);
             const layoutDirection = parent.style.direction;
