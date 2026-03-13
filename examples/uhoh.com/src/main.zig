@@ -265,41 +265,37 @@ fn App() !void {
                 .width = .grow,
                 .maxWidth = 810.0,
                 .alignment = .topCenter,
+                .direction = .topToBottom,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
                 forbear.element(.{
-                    .direction = .topToBottom,
-                    .alignment = .topCenter,
+                    .fontWeight = 700,
+                    .fontSize = 30,
+                    .margin = forbear.Margin.top(15.0).withBottom(18.75),
                 })({
-                    forbear.element(.{
-                        .fontWeight = 700,
-                        .fontSize = 30,
-                        .margin = forbear.Margin.top(15.0).withBottom(18.75),
-                    })({
-                        forbear.text("Don't take our word for it.");
-                    });
+                    forbear.text("Don't take our word for it.");
+                });
+                forbear.element(.{
+                    .alignment = .topCenter,
+                    .overflow = .wrap,
+                    .width = .{ .fixed = 810.0 },
+                })({
                     for (testimonials) |testimonial| {
                         forbear.element(.{
-                            .width = .grow,
+                            .width = .{ .fixed = 810.0 / 3 - 15.0 * 2 },
                             .borderRadius = 12.0,
                             .borderColor = black,
                             .borderWidth = .all(0.75),
                             .padding = .all(13.5),
-                            .margin = forbear.Margin.block(0.0).withBottom(12.0),
-                            .direction = .leftToRight,
+                            .margin = forbear.Margin.inLine(15.0).withBottom(12.0),
                         })({
                             forbear.image(.{
                                 .width = .{ .fixed = 80.0 },
                                 .height = .{ .fixed = 80.0 },
                                 .borderRadius = 12.0,
-                                .margin = forbear.Margin.inLine(0.0).withRight(10.5),
+                                .margin = .right(10.5),
                             }, try forbear.useImage(testimonial.imageId));
-                            forbear.element(.{
-                                .fontSize = 11.25,
-                                .lineHeight = 1.4,
-                            })({
-                                forbear.text(testimonial.body);
-                            });
+                            forbear.text(testimonial.body);
                         });
                     }
                 });
