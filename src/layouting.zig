@@ -22,130 +22,10 @@ fn approxEq(a: f32, b: f32) bool {
     return @abs(a - b) < 0.001;
 }
 
-fn readEnvBool(key: []const u8, default: bool) bool {
-    const allocator = std.heap.page_allocator;
-    const value = std.process.getEnvVarOwned(allocator, key) catch |err| {
-        if (err != error.EnvironmentVariableNotFound) {
-            std.log.warn("Failed to read env var {s}: {}", .{ key, err });
-        }
-        return default;
-    };
-    defer allocator.free(value);
-
-    if (std.ascii.eqlIgnoreCase(value, "1") or std.ascii.eqlIgnoreCase(value, "true")) {
-        return true;
-    }
-    if (std.ascii.eqlIgnoreCase(value, "0") or std.ascii.eqlIgnoreCase(value, "false")) {
-        return false;
-    }
-    return default;
-}
-
-fn readEnvU64(key: []const u8) ?u64 {
-    const allocator = std.heap.page_allocator;
-    const value = std.process.getEnvVarOwned(allocator, key) catch |err| {
-        if (err != error.EnvironmentVariableNotFound) {
-            std.log.warn("Failed to read env var {s}: {}", .{ key, err });
-        }
-        return null;
-    };
-    defer allocator.free(value);
-
-    const trimmed = std.mem.trim(u8, value, " \t\r\n\x0B\x0C");
-    return std.fmt.parseInt(u64, trimmed, 10) catch |err| {
-        std.log.warn("Invalid u64 env var {s}={s}: {}", .{ key, value, err });
-        return null;
-    };
-}
-
 const LayoutDebugConfig = struct {
     enabled: bool,
     keyFilter: ?u64,
 };
-
-fn layoutDebugConfig() LayoutDebugConfig {
-    const keyFilter = readEnvU64("FORBEAR_LAYOUT_DEBUG_KEY");
-    const enabled = readEnvBool("FORBEAR_LAYOUT_DEBUG", keyFilter != null);
-    return .{
-        .enabled = enabled,
-        .keyFilter = keyFilter,
-    };
-}
-
-fn shouldLogNode(debugConfig: LayoutDebugConfig, key: u64) bool {
-    if (!debugConfig.enabled) {
-        return false;
-    }
-    if (debugConfig.keyFilter) |targetKey| {
-        return key == targetKey;
-    }
-    return true;
-}
-
-fn findNodeByKey(node: *const Node, key: u64) ?*const Node {
-    if (node.key == key) {
-        return node;
-    }
-    if (node.children == .nodes) {
-        for (node.children.nodes.items) |*child| {
-            if (findNodeByKey(child, key)) |found| {
-                return found;
-            }
-        }
-    }
-    return null;
-}
-
-fn logNodeState(stage: []const u8, node: *const Node) void {
-    var childKind: []const u8 = "none";
-    var childCount: usize = 0;
-    switch (node.children) {
-        .nodes => |nodes| {
-            childKind = "nodes";
-            childCount = nodes.items.len;
-        },
-        .glyphs => |glyphs| {
-            childKind = "glyphs";
-            childCount = glyphs.slice.len;
-        },
-    }
-
-    std.log.debug(
-        "[layout-debug] {s}: key={}, pos={any}, size={any}, min={any}, max={any}, z={}, placement={s}, dir={s}, children={s}({})",
-        .{
-            stage,
-            node.key,
-            node.position,
-            node.size,
-            node.minSize,
-            node.maxSize,
-            node.z,
-            @tagName(node.style.placement),
-            @tagName(node.style.direction),
-            childKind,
-            childCount,
-        },
-    );
-}
-
-fn shouldLogLoopIteration(iteration: usize) bool {
-    return iteration <= 8 or iteration % 128 == 0;
-}
-
-fn logLayoutStage(debugConfig: LayoutDebugConfig, stage: []const u8, node: *const Node) void {
-    if (!debugConfig.enabled) {
-        return;
-    }
-    if (debugConfig.keyFilter) |targetKey| {
-        if (findNodeByKey(node, targetKey)) |targetNode| {
-            logNodeState(stage, targetNode);
-        } else {
-            std.log.debug("[layout-debug] {s}: key={} not found", .{ stage, targetKey });
-        }
-        return;
-    }
-    logNodeState(stage, node);
-}
 
 fn makeAbsolute(node: *Node, base: Vec2) void {
     if (node.style.placement != .manual) {
@@ -171,11 +51,7 @@ fn growChildren(
     children: []Node,
     direction: Direction,
     remaining: *f32,
-    parentKey: u64,
-    debugConfig: LayoutDebugConfig,
 ) !void {
-    const loopWatchdogLimit: usize = 65_536;
-    const shouldLog = shouldLogNode(debugConfig, parentKey);
     var toGrowGradually = try std.ArrayList(*Node).initCapacity(allocator, children.len);
     defer toGrowGradually.deinit(allocator);
     for (children) |*child| {
@@ -189,20 +65,6 @@ fn growChildren(
     var iteration: usize = 0;
     while (remaining.* > 0.001 and toGrowGradually.items.len > 0) {
         iteration += 1;
-        if (shouldLog and shouldLogLoopIteration(iteration)) {
-            std.log.debug(
-                "[layout-debug] growChildren start: key={}, dir={s}, iter={}, active={}, remaining={d:.4}",
-                .{ parentKey, @tagName(direction), iteration, toGrowGradually.items.len, remaining.* },
-            );
-        }
-        if (shouldLog and iteration > loopWatchdogLimit) {
-            std.log.err(
-                "[layout-debug] growChildren watchdog hit: key={}, dir={s}, iter={}, remaining={d:.4}, active={}",
-                .{ parentKey, @tagName(direction), iteration, remaining.*, toGrowGradually.items.len },
-            );
-            break;
-        }
-
         var smallest: f32 = std.math.inf(f32);
         var secondSmallest = std.math.inf(f32);
 
@@ -221,12 +83,6 @@ fn growChildren(
             index += 1;
         }
         if (toGrowGradually.items.len == 0) {
-            if (shouldLog) {
-                std.log.debug(
-                    "[layout-debug] growChildren stop: key={}, dir={s}, iter={} (no growable children remain)",
-                    .{ parentKey, @tagName(direction), iteration },
-                );
-            }
             break;
         }
 
@@ -269,11 +125,7 @@ fn shrinkChildren(
     children: []Node,
     direction: Direction,
     remaining: *f32,
-    parentKey: u64,
-    debugConfig: LayoutDebugConfig,
 ) !void {
-    const loopWatchdogLimit: usize = 65_536;
-    const shouldLog = shouldLogNode(debugConfig, parentKey);
     if (remaining.* >= -0.001) {
         return;
     }
@@ -290,19 +142,6 @@ fn shrinkChildren(
     var iteration: usize = 0;
     while (remaining.* < -0.001 and toShrinkGradually.items.len > 0) {
         iteration += 1;
-        if (shouldLog and shouldLogLoopIteration(iteration)) {
-            std.log.debug(
-                "[layout-debug] shrinkChildren start: key={}, dir={s}, iter={}, active={}, remaining={d:.4}",
-                .{ parentKey, @tagName(direction), iteration, toShrinkGradually.items.len, remaining.* },
-            );
-        }
-        if (shouldLog and iteration > loopWatchdogLimit) {
-            std.log.err(
-                "[layout-debug] shrinkChildren watchdog hit: key={}, dir={s}, iter={}, remaining={d:.4}, active={}",
-                .{ parentKey, @tagName(direction), iteration, remaining.*, toShrinkGradually.items.len },
-            );
-            break;
-        }
 
         var largest: f32 = toShrinkGradually.items[0].getSize(direction);
         var secondLargest: f32 = 0.0;
@@ -325,12 +164,6 @@ fn shrinkChildren(
             index += 1;
         }
         if (toShrinkGradually.items.len == 0) {
-            if (shouldLog) {
-                std.log.debug(
-                    "[layout-debug] shrinkChildren stop: key={}, dir={s}, iter={} (no shrinkable children remain)",
-                    .{ parentKey, @tagName(direction), iteration },
-                );
-            }
             break;
         }
 
@@ -357,21 +190,6 @@ fn shrinkChildren(
             }
         }
         if (remaining.* == remainingBeforeLoop) {
-            if (shouldLog) {
-                std.log.warn(
-                    "[layout-debug] shrinkChildren stalled: key={}, dir={s}, iter={}, remaining={d:.4}, largest={d:.4}, secondLargest={d:.4}, toSubtract={d:.4}, active={}",
-                    .{
-                        parentKey,
-                        @tagName(direction),
-                        iteration,
-                        remaining.*,
-                        largest,
-                        secondLargest,
-                        toSubtract,
-                        toShrinkGradually.items.len,
-                    },
-                );
-            }
             break;
         }
     }
@@ -381,18 +199,9 @@ fn growAndShrink(
     allocator: std.mem.Allocator,
     node: *Node,
 ) !void {
-    try growAndShrinkWithDebug(allocator, node, layoutDebugConfig());
-}
-
-fn growAndShrinkWithDebug(
-    allocator: std.mem.Allocator,
-    node: *Node,
-    debugConfig: LayoutDebugConfig,
-) !void {
     if (node.children == .nodes) {
         const children = node.children.nodes;
         const direction = node.style.direction;
-        const shouldLog = shouldLogNode(debugConfig, node.key);
 
         var remaining = node.getSize(direction);
         for (children.items) |*child| {
@@ -410,22 +219,10 @@ fn growAndShrinkWithDebug(
                 remaining -= child.getSize(direction);
             }
         }
-        if (shouldLog) {
-            std.log.debug(
-                "[layout-debug] growAndShrink begin: key={}, dir={s}, childCount={}, parentSize={any}, initialRemaining={d:.4}",
-                .{ node.key, @tagName(direction), children.items.len, node.size, remaining },
-            );
-        }
-        try growChildren(allocator, children.items, direction, &remaining, node.key, debugConfig);
-        try shrinkChildren(allocator, children.items, direction, &remaining, node.key, debugConfig);
-        if (shouldLog and @abs(remaining) > 0.001) {
-            std.log.debug(
-                "[layout-debug] growAndShrink residual: key={}, dir={s}, remaining={d:.4}",
-                .{ node.key, @tagName(direction), remaining },
-            );
-        }
+        try growChildren(allocator, children.items, direction, &remaining);
+        try shrinkChildren(allocator, children.items, direction, &remaining);
         for (children.items) |*child| {
-            try growAndShrinkWithDebug(allocator, child, debugConfig);
+            try growAndShrink(allocator, child);
         }
     }
 }
@@ -769,15 +566,6 @@ pub fn layout() !*Node {
         const viewportSize = context.frameMeta.?.viewportSize;
         const arena = context.frameMeta.?.arena;
 
-        const debugConfig = layoutDebugConfig();
-        var startNs: i128 = 0;
-        if (debugConfig.enabled) {
-            startNs = std.time.nanoTimestamp();
-            if (debugConfig.keyFilter) |targetKey| {
-                std.log.debug("[layout-debug] key filter active: {}", .{targetKey});
-            }
-        }
-
         // fitAlong(node, .leftToRight);
         // fitAlong(node, .topToBottom);
         // logLayoutStage(debugConfig, "after fitAlong x/y", node);
@@ -788,60 +576,22 @@ pub fn layout() !*Node {
         if (node.style.height == .grow) {
             node.size[1] = @min(@max(viewportSize[1], node.minSize[1]), node.maxSize[1]);
         }
-        logLayoutStage(debugConfig, "after root grow clamp", node);
 
         applyParentPercentageSizes(node, viewportSize);
-        logLayoutStage(debugConfig, "after applyParentPercentageSizes #1", node);
-
         applyRatios(node);
-        logLayoutStage(debugConfig, "after applyRatios #1", node);
-
-        try growAndShrinkWithDebug(arena, node, debugConfig);
-        logLayoutStage(debugConfig, "after growAndShrink #1", node);
-
+        try growAndShrink(arena, node);
         applyParentPercentageSizes(node, viewportSize);
-        logLayoutStage(debugConfig, "after applyParentPercentageSizes #2", node);
-
         applyRatios(node);
-        logLayoutStage(debugConfig, "after applyRatios #2", node);
-
-        try growAndShrinkWithDebug(arena, node, debugConfig);
-        logLayoutStage(debugConfig, "after growAndShrink #2", node);
-
+        try growAndShrink(arena, node);
         try wrap(arena, node);
-        logLayoutStage(debugConfig, "after wrap", node);
-
         fitAlong(node, .leftToRight);
         fitAlong(node, .topToBottom);
-        logLayoutStage(debugConfig, "after fitAlong x/y #2", node);
-
         applyParentPercentageSizes(node, viewportSize);
-        logLayoutStage(debugConfig, "after applyParentPercentageSizes #3", node);
-
         applyRatios(node);
-        logLayoutStage(debugConfig, "after applyRatios #3", node);
-
-        try growAndShrinkWithDebug(arena, node, debugConfig);
-        logLayoutStage(debugConfig, "after growAndShrink #3", node);
-
+        try growAndShrink(arena, node);
         place(node);
-        logLayoutStage(debugConfig, "after place", node);
         makeAbsolute(node, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
-        logLayoutStage(debugConfig, "after makeAbsolute", node);
-        if (debugConfig.enabled) {
-            const elapsedMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - startNs)) / 1_000_000.0;
-            if (debugConfig.keyFilter != null) {
-                std.log.debug(
-                    "[layout-debug] layout end: elapsed={d:.3}ms, scroll={any}",
-                    .{ elapsedMs, context.scrollPosition },
-                );
-            } else {
-                std.log.debug(
-                    "[layout-debug] layout end: elapsed={d:.3}ms, rootPos={any}, rootSize={any}, scroll={any}",
-                    .{ elapsedMs, node.position, node.size, context.scrollPosition },
-                );
-            }
-        }
+
         return node;
     } else {
         std.log.err("You need to define a root node before layouting, any node will suffice.", .{});
