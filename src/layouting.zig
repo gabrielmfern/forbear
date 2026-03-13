@@ -46,33 +46,31 @@ fn makeAbsolute(node: *Node, base: Vec2) void {
     }
 }
 
-fn growChildren(
-    allocator: std.mem.Allocator,
+pub fn growChildren(
     children: []Node,
+    activelyModifying: *std.ArrayList(*Node),
     direction: Direction,
     remaining: *f32,
-) !void {
-    var toGrowGradually = try std.ArrayList(*Node).initCapacity(allocator, children.len);
-    defer toGrowGradually.deinit(allocator);
+) void {
     for (children) |*child| {
         if (child.style.placement == .standard) {
             if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
-                try toGrowGradually.append(allocator, child);
+                activelyModifying.appendAssumeCapacity(child);
             }
         }
     }
 
     var iteration: usize = 0;
-    while (remaining.* > 0.001 and toGrowGradually.items.len > 0) {
+    while (remaining.* > 0.001 and activelyModifying.items.len > 0) {
         iteration += 1;
         var smallest: f32 = std.math.inf(f32);
         var secondSmallest = std.math.inf(f32);
 
         var index: usize = 0;
-        while (index < toGrowGradually.items.len) {
-            const child = toGrowGradually.items[index];
+        while (index < activelyModifying.items.len) {
+            const child = activelyModifying.items[index];
             if (approxEq(child.getSize(direction), child.getMaxSize(direction))) {
-                _ = toGrowGradually.orderedRemove(index);
+                _ = activelyModifying.orderedRemove(index);
                 continue;
             }
             if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
@@ -82,7 +80,7 @@ fn growChildren(
             }
             index += 1;
         }
-        if (toGrowGradually.items.len == 0) {
+        if (activelyModifying.items.len == 0) {
             break;
         }
 
@@ -90,15 +88,15 @@ fn growChildren(
         // space ends up not being shared across all of the elements
         var toAdd = @min(
             secondSmallest - smallest,
-            remaining.* / @as(f32, @floatFromInt(toGrowGradually.items.len)),
+            remaining.* / @as(f32, @floatFromInt(activelyModifying.items.len)),
         );
         // This avoids an infinte loop. It means all the children are the same size and
         // we can simply share the remaining space across all of them
         if (toAdd == 0) {
-            toAdd = remaining.* / @as(f32, @floatFromInt(toGrowGradually.items.len));
+            toAdd = remaining.* / @as(f32, @floatFromInt(activelyModifying.items.len));
         }
         const remainingBeforeLoop = remaining.*;
-        for (toGrowGradually.items) |child| {
+        for (activelyModifying.items) |child| {
             if (approxEq(child.getSize(direction), smallest)) {
                 const allowedDifference = @min(
                     @max(child.getSize(direction) + toAdd, child.getMinSize(direction)),
@@ -120,39 +118,38 @@ fn growChildren(
     }
 }
 
-fn shrinkChildren(
-    allocator: std.mem.Allocator,
+pub fn shrinkChildren(
     children: []Node,
+    activelyModifying: *std.ArrayList(*Node),
     direction: Direction,
     remaining: *f32,
-) !void {
+) void {
     if (remaining.* >= -0.001) {
         return;
     }
 
-    var toShrinkGradually = try std.ArrayList(*Node).initCapacity(allocator, children.len);
-    defer toShrinkGradually.deinit(allocator);
+    activelyModifying.clearRetainingCapacity();
     for (children) |*child| {
         if (child.style.placement == .standard) {
             if (child.getSize(direction) > child.getMinSize(direction)) {
-                try toShrinkGradually.append(allocator, child);
+                activelyModifying.appendAssumeCapacity(child);
             }
         }
     }
     var iteration: usize = 0;
-    while (remaining.* < -0.001 and toShrinkGradually.items.len > 0) {
+    while (remaining.* < -0.001 and activelyModifying.items.len > 0) {
         iteration += 1;
 
-        var largest: f32 = toShrinkGradually.items[0].getSize(direction);
+        var largest: f32 = activelyModifying.items[0].getSize(direction);
         var secondLargest: f32 = 0.0;
 
         var index: usize = 0;
-        while (index < toShrinkGradually.items.len) {
-            const child = toShrinkGradually.items[index];
+        while (index < activelyModifying.items.len) {
+            const child = activelyModifying.items[index];
             if (approxEq(child.getSize(direction), child.getMinSize(direction))) {
-                _ = toShrinkGradually.orderedRemove(index);
-                if (index == 0 and toShrinkGradually.items.len > 0) {
-                    largest = toShrinkGradually.items[0].getSize(direction);
+                _ = activelyModifying.orderedRemove(index);
+                if (index == 0 and activelyModifying.items.len > 0) {
+                    largest = activelyModifying.items[0].getSize(direction);
                 }
                 continue;
             }
@@ -163,19 +160,19 @@ fn shrinkChildren(
             }
             index += 1;
         }
-        if (toShrinkGradually.items.len == 0) {
+        if (activelyModifying.items.len == 0) {
             break;
         }
 
         var toSubtract = @min(
             largest - secondLargest,
-            -remaining.* / @as(f32, @floatFromInt(toShrinkGradually.items.len)),
+            -remaining.* / @as(f32, @floatFromInt(activelyModifying.items.len)),
         );
         if (toSubtract == 0) {
-            toSubtract = -remaining.* / @as(f32, @floatFromInt(toShrinkGradually.items.len));
+            toSubtract = -remaining.* / @as(f32, @floatFromInt(activelyModifying.items.len));
         }
         const remainingBeforeLoop = remaining.*;
-        for (toShrinkGradually.items) |child| {
+        for (activelyModifying.items) |child| {
             if (approxEq(child.getSize(direction), largest)) {
                 const allowedDifference = @max(
                     child.getSize(direction) - toSubtract,
@@ -196,7 +193,7 @@ fn shrinkChildren(
 }
 
 fn growAndShrink(
-    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
     node: *Node,
 ) !void {
     if (node.children == .nodes) {
@@ -215,14 +212,16 @@ fn growAndShrink(
                         child.size[0] = @max(@min(node.size[0], child.maxSize[0]), child.minSize[0]);
                     }
                 }
-                applyOwnRatios(child);
+                child.applyRatios();
                 remaining -= child.getSize(direction);
             }
         }
-        try growChildren(allocator, children.items, direction, &remaining);
-        try shrinkChildren(allocator, children.items, direction, &remaining);
+
+        var activelyModifying = try std.ArrayList(*Node).initCapacity(arena, children.items.len);
+        growChildren(children.items, &activelyModifying, direction, &remaining);
+        shrinkChildren(children.items, &activelyModifying, direction, &remaining);
         for (children.items) |*child| {
-            try growAndShrink(allocator, child);
+            try growAndShrink(arena, child);
         }
     }
 }
@@ -335,15 +334,6 @@ fn wrap(arena: std.mem.Allocator, node: *Node) !void {
     }
 }
 
-fn applyOwnRatios(node: *Node) void {
-    if (node.style.width == .ratio) {
-        node.size[0] = node.style.width.ratio * node.size[1];
-    }
-    if (node.style.height == .ratio) {
-        node.size[1] = node.style.height.ratio * node.size[0];
-    }
-}
-
 fn applyParentPercentageSizes(node: *Node, parentSize: Vec2) void {
     if (node.style.width == .percentage) {
         node.size[0] = node.style.width.percentage * parentSize[0];
@@ -366,7 +356,7 @@ fn applyParentPercentageSizes(node: *Node, parentSize: Vec2) void {
 }
 
 fn applyRatios(node: *Node) void {
-    applyOwnRatios(node);
+    node.applyRatios();
     switch (node.children) {
         .nodes => |nodes| {
             for (nodes.items) |*child| {
@@ -573,9 +563,9 @@ pub fn layout() !*Node {
             node.size[1] = @min(@max(viewportSize[1], node.minSize[1]), node.maxSize[1]);
         }
 
-        applyParentPercentageSizes(node, viewportSize);
-        applyRatios(node);
-        try growAndShrink(arena, node);
+        // applyParentPercentageSizes(node, viewportSize);
+        // applyRatios(node);
+        // try growAndShrink(arena, node);
 
         try wrap(arena, node);
         fitAlong(node, .topToBottom);

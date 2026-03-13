@@ -4,6 +4,7 @@ const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
 const Cursor = @import("window/root.zig").Cursor;
+const layouting = @import("layouting.zig");
 
 const Vec4 = @Vector(4, f32);
 const Vec2 = @Vector(2, f32);
@@ -440,6 +441,15 @@ pub const Node = struct {
     pub fn shouldFitMin(self: @This(), direction: Direction) bool {
         const preferredSize = self.style.getPreferredSize(direction);
         return preferredSize != .fixed and preferredSize != .percentage and self.style.getMinSize(direction) == null;
+    }
+
+    pub fn applyRatios(self: *@This()) void {
+        if (self.style.width == .ratio) {
+            self.size[0] = self.style.width.ratio * self.size[1];
+        }
+        if (self.style.height == .ratio) {
+            self.size[1] = self.style.height.ratio * self.size[0];
+        }
     }
 
     pub fn fitChild(self: *@This(), child: *const Node) void {
