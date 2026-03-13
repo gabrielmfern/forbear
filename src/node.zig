@@ -4,6 +4,7 @@ const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
 const Cursor = @import("window/root.zig").Cursor;
+const layouting = @import("layouting.zig");
 
 const Vec4 = @Vector(4, f32);
 const Vec2 = @Vector(2, f32);
@@ -18,6 +19,8 @@ pub const Direction = enum {
             .topToBottom => .leftToRight,
         };
     }
+
+    pub const array = [_]Direction{ .leftToRight, .topToBottom };
 };
 
 pub const Sizing = union(enum) {
@@ -434,6 +437,67 @@ pub const Node = struct {
     children: Children,
 
     style: Style,
+
+    pub fn shouldFitMin(self: @This(), direction: Direction) bool {
+        const preferredSize = self.style.getPreferredSize(direction);
+        return preferredSize != .fixed and preferredSize != .percentage and self.style.getMinSize(direction) == null;
+    }
+
+    pub fn applyRatios(self: *@This()) void {
+        if (self.style.width == .ratio) {
+            self.size[0] = self.style.width.ratio * self.size[1];
+        }
+        if (self.style.height == .ratio) {
+            self.size[1] = self.style.height.ratio * self.size[0];
+        }
+    }
+
+    pub fn fitChild(self: *@This(), child: *const Node) void {
+        if (child.style.placement != .manual) {
+            inline for (Direction.array) |fitDirection| {
+                const preferredSize = self.style.getPreferredSize(fitDirection);
+                const layoutDirection = self.style.direction;
+                const marginVector = child.style.margin.get(fitDirection);
+                const margins = marginVector[0] + marginVector[1];
+
+                const contribution = margins + child.getSize(fitDirection);
+                const minContribution = margins + child.getMinSize(fitDirection);
+
+                if (layoutDirection == fitDirection) {
+                    if (preferredSize == .fit) {
+                        self.addSize(fitDirection, contribution);
+                    }
+                    if (self.shouldFitMin(fitDirection)) {
+                        self.addMinSize(fitDirection, minContribution);
+                    }
+                } else {
+                    // cross axis fitting
+                    if (preferredSize == .fit) {
+                        self.setSize(fitDirection, @max(
+                            contribution + self.fittingBase(fitDirection),
+                            self.getSize(fitDirection),
+                        ));
+                    }
+                    if (self.shouldFitMin(fitDirection)) {
+                        self.setMinSize(fitDirection, @max(
+                            minContribution + self.fittingBase(fitDirection),
+                            self.getMinSize(fitDirection),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn fittingBase(self: @This(), direction: Direction) f32 {
+        const paddingVector = self.style.padding.get(direction);
+        const padding = paddingVector[0] + paddingVector[1];
+
+        const borderWidthVector = self.style.borderWidth.get(direction);
+        const border = borderWidthVector[0] + borderWidthVector[1];
+
+        return padding + border;
+    }
 
     pub fn debugPrint(self: @This(), indent: usize) void {
         for (0..indent) |_| {
