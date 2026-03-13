@@ -964,7 +964,10 @@ test "growAndShrink - vertical ratio participates in shrink distribution" {
     });
 }
 
-test "fitAlong - vertical fit uses height axis fields" {
+fn testFitConfiguration(configuration: struct {
+    direction: Direction,
+    expectedHeight: f32,
+}) !void {
     const allocator = std.testing.allocator;
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
@@ -1009,7 +1012,7 @@ test "fitAlong - vertical fit uses height axis fields" {
         .maxSize = .{ 100.0, std.math.inf(f32) },
         .children = .{ .nodes = children },
         .style = (IncompleteStyle{
-            .direction = .topToBottom,
+            .direction = configuration.direction,
             .width = .{ .fixed = 100.0 },
             .height = .fit,
             .padding = forbear.Padding.block(10.0).withBottom(20.0),
@@ -1017,72 +1020,21 @@ test "fitAlong - vertical fit uses height axis fields" {
         }).completeWith(defaultBaseStyle),
     };
 
-    fitAlong(&parent, .topToBottom);
+    fit(&parent);
 
-    // height = (paddingY + borderY) + sum(child marginY + child height)
-    try std.testing.expectEqual(@as(f32, 115.0), parent.size[1]);
-    try std.testing.expectEqual(@as(f32, 115.0), parent.minSize[1]);
+    try std.testing.expectEqual(configuration.expectedHeight, parent.size[1]);
+    try std.testing.expectEqual(configuration.expectedHeight, parent.minSize[1]);
 }
 
-test "fitAlong - cross axis fit uses vertical padding and borders" {
-    const allocator = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
-    children.appendAssumeCapacity(Node{
-        .key = 1,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 20.0, 30.0 },
-        .minSize = .{ 20.0, 30.0 },
-        .maxSize = .{ 20.0, 30.0 },
-        .children = .{ .nodes = .empty },
-        .style = (IncompleteStyle{
-            .width = .{ .fixed = 20.0 },
-            .height = .{ .fixed = 30.0 },
-            .margin = forbear.Margin.block(1.0).withBottom(2.0),
-        }).completeWith(defaultBaseStyle),
+test "fit - fitted height handles main and cross axis cases" {
+    try testFitConfiguration(.{
+        .direction = .topToBottom,
+        .expectedHeight = 115.0,
     });
-    children.appendAssumeCapacity(Node{
-        .key = 2,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 20.0, 40.0 },
-        .minSize = .{ 20.0, 40.0 },
-        .maxSize = .{ 20.0, 40.0 },
-        .children = .{ .nodes = .empty },
-        .style = (IncompleteStyle{
-            .width = .{ .fixed = 20.0 },
-            .height = .{ .fixed = 40.0 },
-            .margin = forbear.Margin.block(3.0).withBottom(4.0),
-        }).completeWith(defaultBaseStyle),
+    try testFitConfiguration(.{
+        .direction = .leftToRight,
+        .expectedHeight = 82.0,
     });
-
-    var parent = Node{
-        .key = 999,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 100.0, 0.0 },
-        .minSize = .{ 100.0, 0.0 },
-        .maxSize = .{ 100.0, std.math.inf(f32) },
-        .children = .{ .nodes = children },
-        .style = (IncompleteStyle{
-            .direction = .leftToRight,
-            .width = .{ .fixed = 100.0 },
-            .height = .fit,
-            .padding = forbear.Padding.block(10.0).withBottom(20.0),
-            .borderWidth = forbear.BorderWidth.block(2.0).withBottom(3.0),
-        }).completeWith(defaultBaseStyle),
-    };
-
-    fitAlong(&parent, .topToBottom);
-
-    // For leftToRight parent fitting height, we take max child contribution
-    // plus vertical padding and border: max(1+2+30, 3+4+40) + (10+20) + (2+3)
-    try std.testing.expectEqual(@as(f32, 82.0), parent.size[1]);
-    try std.testing.expectEqual(@as(f32, 82.0), parent.minSize[1]);
 }
 
 test "wrap - no wrapping when glyphs fit on single line" {
