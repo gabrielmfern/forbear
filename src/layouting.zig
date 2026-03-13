@@ -339,7 +339,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
                         }
 
                         cursor[0] += child.style.margin.x[0];
-                        child.position += cursor;
+                        child.position[0] = cursor[0];
+                        child.position[1] += cursor[1];
                         cursor[0] += child.size[0] + child.style.margin.x[1];
                     } else {
                         // Cross-axis alignment (Horizontal)
@@ -350,7 +351,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
                         }
 
                         cursor[1] += child.style.margin.y[0];
-                        child.position += cursor;
+                        child.position[0] += cursor[0];
+                        child.position[1] = cursor[1];
                         cursor[1] += child.size[1] + child.style.margin.y[1];
                     }
                 }

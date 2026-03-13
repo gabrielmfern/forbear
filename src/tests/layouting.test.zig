@@ -74,6 +74,99 @@ fn testWrapConfiguration(configuration: struct {
     try std.testing.expectEqualDeep(configuration.expectedPositions, glyphPositions);
 }
 
+const MountedTextWrappingLayout = struct {
+    rootSize: Vec2,
+    textNodePosition: Vec2,
+    textNodeSize: Vec2,
+    textNodeMinSize: Vec2,
+    lineHeight: f32,
+    glyphPositions: []Vec2,
+
+    fn deinit(self: @This()) void {
+        std.testing.allocator.free(self.glyphPositions);
+    }
+};
+
+fn layoutMountedText(configuration: struct {
+    width: Sizing,
+    alignment: Alignment = .topLeft,
+    textWrapping: TextWrapping,
+    content: []const u8,
+}) !MountedTextWrappingLayout {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var root: Node = undefined;
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .direction = .leftToRight,
+            .width = configuration.width,
+            .height = .fit,
+            .alignment = configuration.alignment,
+            .textWrapping = configuration.textWrapping,
+        })({
+            forbear.text(configuration.content);
+        });
+        root = (try layout()).*;
+    });
+
+    try std.testing.expectEqual(@as(usize, 1), root.children.nodes.items.len);
+    const textNode = root.children.nodes.items[0];
+    std.debug.assert(textNode.children == .glyphs);
+
+    const glyphs = textNode.children.glyphs;
+    const glyphPositions = try std.testing.allocator.alloc(Vec2, glyphs.slice.len);
+    for (glyphs.slice, 0..) |glyph, index| {
+        glyphPositions[index] = glyph.position;
+    }
+
+    return .{
+        .rootSize = root.size,
+        .textNodePosition = textNode.position,
+        .textNodeSize = textNode.size,
+        .textNodeMinSize = textNode.minSize,
+        .lineHeight = glyphs.lineHeight,
+        .glyphPositions = glyphPositions,
+    };
+}
+
+fn lineCountFromGlyphPositions(glyphPositions: []const Vec2) usize {
+    if (glyphPositions.len == 0) {
+        return 0;
+    }
+
+    var count: usize = 1;
+    var previousX = glyphPositions[0][0];
+    for (glyphPositions[1..]) |position| {
+        if (position[0] < previousX - 0.001) {
+            count += 1;
+        }
+        previousX = position[0];
+    }
+
+    return count;
+}
+
+fn secondLineStartX(glyphPositions: []const Vec2) ?f32 {
+    if (glyphPositions.len < 2) {
+        return null;
+    }
+
+    var previousX = glyphPositions[0][0];
+    for (glyphPositions[1..]) |position| {
+        if (position[0] < previousX - 0.001) {
+            return position[0];
+        }
+        previousX = position[0];
+    }
+
+    return null;
+}
+
 const TestChild = struct {
     width: Sizing = .fit,
     height: Sizing = .fit,
@@ -772,6 +865,77 @@ test "text wrapping - word wrapping with alignment end" {
             .{ 90.0, 20.0 }, // d
         },
     });
+}
+
+test "layout pipeline - text wrapping word wrap works with mounted text" {
+    const measured = try layoutMountedText(.{
+        .width = .fit,
+        .textWrapping = .word,
+        .content = "hello hello",
+    });
+    defer measured.deinit();
+
+    const lineWidth = (measured.textNodeMinSize[0] + measured.textNodeSize[0]) / 2.0;
+
+    const wrapped = try layoutMountedText(.{
+        .width = .{ .fixed = lineWidth },
+        .textWrapping = .word,
+        .content = "hello hello",
+    });
+    defer wrapped.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), lineCountFromGlyphPositions(wrapped.glyphPositions));
+    try std.testing.expectApproxEqAbs(lineWidth, wrapped.rootSize[0], 0.01);
+    try std.testing.expectApproxEqAbs(lineWidth, wrapped.textNodeSize[0], 0.01);
+    try std.testing.expectApproxEqAbs(wrapped.lineHeight * 2.0, wrapped.rootSize[1], 0.01);
+    try std.testing.expectApproxEqAbs(wrapped.lineHeight * 2.0, wrapped.textNodeSize[1], 0.01);
+}
+
+test "layout pipeline - text wrapping center alignment offsets narrower mounted lines" {
+    const measured = try layoutMountedText(.{
+        .width = .fit,
+        .textWrapping = .word,
+        .content = "hello hello",
+    });
+    defer measured.deinit();
+
+    const lineWidth = (measured.textNodeMinSize[0] + measured.textNodeSize[0]) / 2.0;
+
+    const wrapped = try layoutMountedText(.{
+        .width = .{ .fixed = lineWidth },
+        .alignment = .topCenter,
+        .textWrapping = .word,
+        .content = "hello hello",
+    });
+    defer wrapped.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), lineCountFromGlyphPositions(wrapped.glyphPositions));
+
+    const lineTwoStartX = secondLineStartX(wrapped.glyphPositions) orelse unreachable;
+    try std.testing.expect(lineTwoStartX > wrapped.glyphPositions[0][0]);
+    try std.testing.expect(lineTwoStartX >= wrapped.textNodePosition[0]);
+}
+
+test "layout pipeline - text wrapping character wrap works with mounted text" {
+    const measured = try layoutMountedText(.{
+        .width = .fit,
+        .textWrapping = .character,
+        .content = "aaaa",
+    });
+    defer measured.deinit();
+
+    const lineWidth = (measured.textNodeMinSize[0] + measured.textNodeSize[0]) / 2.0;
+
+    const wrapped = try layoutMountedText(.{
+        .width = .{ .fixed = lineWidth },
+        .textWrapping = .character,
+        .content = "aaaa",
+    });
+    defer wrapped.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), lineCountFromGlyphPositions(wrapped.glyphPositions));
+    try std.testing.expectApproxEqAbs(wrapped.lineHeight * 2.0, wrapped.rootSize[1], 0.01);
+    try std.testing.expectApproxEqAbs(wrapped.lineHeight * 2.0, wrapped.textNodeSize[1], 0.01);
 }
 
 test "ratio and grow passes are stable when reapplied" {
