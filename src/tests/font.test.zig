@@ -238,4 +238,3 @@ test "LRU cache - eviction order with mixed access" {
     try std.testing.expect(lru.get(3) != null);
     try std.testing.expect(lru.get(4) != null);
 }
-

@@ -691,7 +691,6 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
     return &elementEnd;
 }
 
-
 pub fn text(content: []const u8) void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);

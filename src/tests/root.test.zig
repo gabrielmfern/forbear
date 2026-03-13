@@ -1089,4 +1089,3 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
         try std.testing.expect(parent.size[0] > textNode.minSize[0]);
     });
 }
-
