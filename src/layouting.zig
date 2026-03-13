@@ -566,10 +566,6 @@ pub fn layout() !*Node {
         const viewportSize = context.frameMeta.?.viewportSize;
         const arena = context.frameMeta.?.arena;
 
-        // fitAlong(node, .leftToRight);
-        // fitAlong(node, .topToBottom);
-        // logLayoutStage(debugConfig, "after fitAlong x/y", node);
-
         if (node.style.width == .grow) {
             node.size[0] = @min(@max(viewportSize[0], node.minSize[0]), node.maxSize[0]);
         }
@@ -580,15 +576,19 @@ pub fn layout() !*Node {
         applyParentPercentageSizes(node, viewportSize);
         applyRatios(node);
         try growAndShrink(arena, node);
+
         applyParentPercentageSizes(node, viewportSize);
         applyRatios(node);
         try growAndShrink(arena, node);
+
         try wrap(arena, node);
         fitAlong(node, .leftToRight);
         fitAlong(node, .topToBottom);
+
         applyParentPercentageSizes(node, viewportSize);
         applyRatios(node);
         try growAndShrink(arena, node);
+
         place(node);
         makeAbsolute(node, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
 
