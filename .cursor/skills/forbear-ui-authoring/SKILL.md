@@ -84,7 +84,7 @@ When using this skill to write or propose code:
 
 - Run `zig fmt` on touched Zig files.
 - Run `zig build check` when the app/example change affects compilation or public usage shape.
-- Run a focused `zig build test -- --test-filter="..."` only when the change also touches shared logic with existing tests.
+- Run a focused `TEST_FILTER="..." zig build test` only when the change also touches shared logic with existing tests.
 
 ## Additional Reference
 

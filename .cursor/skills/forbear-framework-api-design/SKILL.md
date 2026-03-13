@@ -91,7 +91,7 @@ When using this skill to write or propose code:
 
 - Run `zig fmt` on touched Zig files.
 - Run `zig build check` when the change affects API shape, examples, rendering, or compilation breadth.
-- Run a focused `zig build test -- --test-filter="..."` when changing layout, hooks, or tested state behavior.
+- Run a focused `TEST_FILTER="..." zig build test` when changing layout, hooks, or tested state behavior.
 
 ## Additional Reference
 

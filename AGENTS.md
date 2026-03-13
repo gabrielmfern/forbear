@@ -64,10 +64,10 @@ Zig's build step runs the module test binary, but test filters still work:
 
 ```bash
 # Run tests whose names contain a substring
-zig build test -- --test-filter="layout"
+TEST_FILTER="layout" zig build test
 
 # Example: run the layout pipeline tests
-zig build test -- --test-filter="layout pipeline"
+TEST_FILTER="layout pipeline" zig build test
 ```
 
 ### Shader Compilation
