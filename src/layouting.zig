@@ -362,53 +362,23 @@ fn applyRatios(node: *Node) void {
     }
 }
 
-fn fitAlong(node: *Node, fitDirection: Direction) void {
+fn fit(node: *Node) void {
     switch (node.children) {
         .nodes => |nodes| {
-            const preferredSize = node.style.getPreferredSize(fitDirection);
-            const shouldFitMin = preferredSize != .fixed and preferredSize != .percentage and node.style.getMinSize(fitDirection) == null;
-            const layoutDirection = node.style.direction;
+            inline for (Direction.array) |direction| {
+                const fittingBase = node.fittingBase(direction);
+                const preferredSize = node.style.getPreferredSize(direction);
 
-            const paddingVector = node.style.padding.get(fitDirection);
-            const padding = paddingVector[0] + paddingVector[1];
-
-            const borderWidthVector = node.style.borderWidth.get(fitDirection);
-            const border = borderWidthVector[0] + borderWidthVector[1];
-
-            if (preferredSize == .fit) {
-                node.setSize(fitDirection, padding + border);
-            }
-            if (shouldFitMin) {
-                node.setMinSize(fitDirection, padding + border);
+                if (preferredSize == .fit) {
+                    node.setSize(direction, fittingBase);
+                }
+                if (node.shouldFitMin(direction)) {
+                    node.setMinSize(direction, fittingBase);
+                }
             }
             for (nodes.items) |*child| {
-                fitAlong(child, fitDirection);
-                if (child.style.placement == .standard) {
-                    const childMarginVector = child.style.margin.get(fitDirection);
-                    const childMargins = childMarginVector[0] + childMarginVector[1];
-                    if (layoutDirection == fitDirection) {
-                        if (preferredSize == .fit) {
-                            node.addSize(fitDirection, childMargins + child.getSize(fitDirection));
-                        }
-                        if (shouldFitMin) {
-                            node.addMinSize(fitDirection, childMargins + child.getMinSize(fitDirection));
-                        }
-                    }
-                    if (layoutDirection != fitDirection) {
-                        if (preferredSize == .fit) {
-                            node.setSize(fitDirection, @max(
-                                childMargins + padding + border + child.getSize(fitDirection),
-                                node.getSize(fitDirection),
-                            ));
-                        }
-                        if (shouldFitMin) {
-                            node.setMinSize(
-                                fitDirection,
-                                @max(childMargins + padding + border + child.getMinSize(fitDirection), node.getMinSize(fitDirection)),
-                            );
-                        }
-                    }
-                }
+                fit(child);
+                node.fitChild(child);
             }
         },
         else => {},
@@ -563,7 +533,7 @@ pub fn layout() !*Node {
         try growAndShrink(arena, node);
 
         try wrap(arena, node);
-        fitAlong(node, .topToBottom);
+        fit(node);
 
         applyParentPercentageSizes(node, viewportSize);
         applyRatios(node);
