@@ -1,0 +1,17 @@
+---
+description: Use this skill when you're asked to write UI using Forbear.
+globs:
+  - "playground.zig"
+  - "examples/**/src/**/*.zig"
+alwaysApply: false
+---
+
+Before creating new UI or modifying existing one, read:
+
+- `.cursor/skills/forbear/SKILL.md`
+
+Use `AGENTS.md` for:
+
+- architecture and data flow,
+- testing layout and helpers,
+- repo-level conventions.
