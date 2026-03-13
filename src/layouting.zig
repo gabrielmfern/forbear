@@ -276,6 +276,14 @@ pub fn fit(node: *Node) void {
     }
 }
 
+fn alignmentOffset(alignment: anytype, available: f32, content: f32) f32 {
+    return switch (alignment) {
+        .start => 0.0,
+        .center => (available - content) / 2.0,
+        .end => available - content,
+    };
+}
+
 pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
     node.position += node.style.translate;
     switch (node.children) {
@@ -288,74 +296,131 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
                 node.size[0] - (node.style.padding.x[0] + node.style.padding.x[1]) - (node.style.borderWidth.x[0] + node.style.borderWidth.x[1]),
                 node.size[1] - (node.style.padding.y[0] + node.style.padding.y[1]) - (node.style.borderWidth.y[0] + node.style.borderWidth.y[1]),
             };
+            const Line = struct {
+                startIndex: usize,
+                endIndex: usize,
+                mainSize: f32,
+                crossSize: f32,
+                crossOffset: f32,
+            };
+            var lines = try std.ArrayList(Line).initCapacity(arena, 4);
 
-            var childrenSize: Vec2 = @splat(0.0);
-            for (nodes.items) |child| {
-                if (child.style.placement == .standard) {
+            var hasLine = false;
+            var lineStartIndex: usize = 0;
+            var lineEndIndex: usize = 0;
+            var lineMainSize: f32 = 0.0;
+            var lineCrossSize: f32 = 0.0;
+            var crossCursor: f32 = 0.0;
+
+            const mainLimit = if (direction == .leftToRight)
+                availableSize[0]
+            else
+                availableSize[1];
+            const shouldWrap = node.style.overflow == .wrap;
+
+            for (nodes.items, 0..) |*child, index| {
+                if (child.style.placement != .standard) {
+                    continue;
+                }
+
+                const contributingSize = Vec2{
+                    child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                    child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
+                };
+                const childMainSize = if (direction == .leftToRight)
+                    contributingSize[0]
+                else
+                    contributingSize[1];
+                const childCrossSize = if (direction == .leftToRight)
+                    contributingSize[1]
+                else
+                    contributingSize[0];
+
+                if (!hasLine) {
+                    hasLine = true;
+                    lineStartIndex = index;
+                } else if (shouldWrap and lineMainSize + childMainSize > mainLimit) {
+                    try lines.append(arena, .{
+                        .startIndex = lineStartIndex,
+                        .endIndex = lineEndIndex,
+                        .mainSize = lineMainSize,
+                        .crossSize = lineCrossSize,
+                        .crossOffset = crossCursor,
+                    });
+                    crossCursor += lineCrossSize;
+                    lineStartIndex = index;
+                    lineMainSize = 0.0;
+                    lineCrossSize = 0.0;
+                }
+
+                lineEndIndex = index;
+                if (direction == .leftToRight) {
+                    child.position[0] = lineMainSize + child.style.margin.x[0];
+                } else {
+                    child.position[1] = lineMainSize + child.style.margin.y[0];
+                }
+                lineMainSize += childMainSize;
+                lineCrossSize = @max(lineCrossSize, childCrossSize);
+            }
+
+            if (hasLine) {
+                try lines.append(arena, .{
+                    .startIndex = lineStartIndex,
+                    .endIndex = lineEndIndex,
+                    .mainSize = lineMainSize,
+                    .crossSize = lineCrossSize,
+                    .crossOffset = crossCursor,
+                });
+            }
+
+            const totalCrossSize = if (lines.items.len == 0)
+                0.0
+            else
+                lines.items[lines.items.len - 1].crossOffset + lines.items[lines.items.len - 1].crossSize;
+            const contentOrigin = Vec2{
+                node.style.padding.x[0] + node.style.borderWidth.x[0],
+                node.style.padding.y[0] + node.style.borderWidth.y[0],
+            };
+            const blockCrossOffset = if (direction == .leftToRight)
+                alignmentOffset(vAlign, availableSize[1], totalCrossSize)
+            else
+                alignmentOffset(hAlign, availableSize[0], totalCrossSize);
+
+            for (lines.items) |line| {
+                const lineMainOffset = if (direction == .leftToRight)
+                    alignmentOffset(hAlign, availableSize[0], line.mainSize)
+                else
+                    alignmentOffset(vAlign, availableSize[1], line.mainSize);
+
+                for (nodes.items[line.startIndex .. line.endIndex + 1]) |*child| {
+                    if (child.style.placement != .standard) {
+                        continue;
+                    }
+
                     const contributingSize = Vec2{
                         child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
                         child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
                     };
-                    if (direction == .leftToRight) {
-                        childrenSize[0] += contributingSize[0];
-                        childrenSize[1] = @max(contributingSize[1], childrenSize[1]);
-                    } else if (direction == .topToBottom) {
-                        childrenSize[0] = @max(contributingSize[0], childrenSize[0]);
-                        childrenSize[1] += contributingSize[1];
-                    }
-                }
-            }
 
-            var cursor: Vec2 = .{
-                node.style.padding.x[0] + node.style.borderWidth.x[0],
-                node.style.padding.y[0] + node.style.borderWidth.y[0],
-            };
-            if (direction == .leftToRight) {
-                switch (hAlign) {
-                    .start => {},
-                    .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
-                    .end => cursor[0] += (availableSize[0] - childrenSize[0]),
-                }
-            } else {
-                switch (vAlign) {
-                    .start => {},
-                    .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
-                    .end => cursor[1] += (availableSize[1] - childrenSize[1]),
+                    if (direction == .leftToRight) {
+                        child.position[0] += contentOrigin[0] + lineMainOffset;
+                        child.position[1] = contentOrigin[1] + blockCrossOffset + line.crossOffset + switch (vAlign) {
+                            .start => child.style.margin.y[0],
+                            .center => (line.crossSize - contributingSize[1]) / 2.0,
+                            .end => line.crossSize - contributingSize[1],
+                        };
+                    } else {
+                        child.position[0] = contentOrigin[0] + blockCrossOffset + line.crossOffset + switch (hAlign) {
+                            .start => child.style.margin.x[0],
+                            .center => (line.crossSize - contributingSize[0]) / 2.0,
+                            .end => line.crossSize - contributingSize[0],
+                        };
+                        child.position[1] += contentOrigin[1] + lineMainOffset;
+                    }
                 }
             }
 
             for (nodes.items) |*child| {
-                if (child.style.placement == .standard) {
-                    const contributingSize = Vec2{
-                        child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
-                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                    };
-                    if (direction == .leftToRight) {
-                        // Cross-axis alignment (Vertical)
-                        switch (vAlign) {
-                            .start => child.position[1] = child.style.margin.y[0],
-                            .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
-                            .end => child.position[1] = (availableSize[1] - contributingSize[1]),
-                        }
-
-                        cursor[0] += child.style.margin.x[0];
-                        child.position[0] = cursor[0];
-                        child.position[1] += cursor[1];
-                        cursor[0] += child.size[0] + child.style.margin.x[1];
-                    } else {
-                        // Cross-axis alignment (Horizontal)
-                        switch (hAlign) {
-                            .start => child.position[0] = child.style.margin.x[0],
-                            .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
-                            .end => child.position[0] = (availableSize[0] - contributingSize[0]),
-                        }
-
-                        cursor[1] += child.style.margin.y[0];
-                        child.position[0] += cursor[0];
-                        child.position[1] = cursor[1];
-                        cursor[1] += child.size[1] + child.style.margin.y[1];
-                    }
-                }
                 try wrapAndPlace(arena, child);
             }
         },
@@ -521,14 +586,19 @@ pub fn layout() !*Node {
 
         applyParentPercentageSizes(node, viewportSize);
         applyRatios(node);
+
         try growAndShrink(arena, node);
+        applyParentPercentageSizes(node, viewportSize);
+        applyRatios(node);
 
         try wrapAndPlace(arena, node);
         fit(node);
-
         applyParentPercentageSizes(node, viewportSize);
         applyRatios(node);
+
         try growAndShrink(arena, node);
+        applyParentPercentageSizes(node, viewportSize);
+        applyRatios(node);
 
         try wrapAndPlace(arena, node);
         makeAbsolute(node, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
