@@ -1,0 +1,16 @@
+---
+description: Use the Forbear code-style skill for any Zig change in the repo.
+globs:
+  - "build.zig"
+  - "playground.zig"
+  - "test_runner.zig"
+  - "src/**/*.zig"
+  - "examples/**/*.zig"
+alwaysApply: false
+---
+
+Before making a non-trivial Zig change, read:
+
+- `.cursor/skills/forbear-code-style/SKILL.md`
+
+Use `AGENTS.md` as the authoritative source for naming, formatting, and repo conventions.
