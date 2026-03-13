@@ -25,7 +25,7 @@ milestones I want to reach. This is a multiyear project, so I do not want to
 get tied to the priorities of when this was written.
 
 See the current [to-dos](./TODO.md) for more details. Also, you can read the project's
-(open questions)[./notes/open-questions.md] that I've had while building.
+[open questions](./notes/open-questions.md) that I've had while building.
 
 # No LICENSE?
 
