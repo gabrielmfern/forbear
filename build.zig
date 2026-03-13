@@ -82,6 +82,48 @@ const Dependencies = struct {
     }
 };
 
+const Example = struct {
+    exe: *std.Build.Step.Compile,
+    install: *std.Build.Step.InstallArtifact,
+    run: *std.Build.Step.Run,
+};
+
+fn addExample(
+    b: *std.Build,
+    dependencies: *Dependencies,
+    forbear: *std.Build.Module,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    moduleName: []const u8,
+    rootSourceFile: []const u8,
+    artifactName: []const u8,
+) Example {
+    const example = b.addModule(moduleName, .{
+        .root_source_file = b.path(rootSourceFile),
+        .link_libc = true,
+        .target = target,
+        .optimize = optimize,
+    });
+
+    dependencies.addToModule(example);
+    example.addImport("forbear", forbear);
+
+    const exe = b.addExecutable(.{
+        .name = artifactName,
+        .root_module = example,
+        .use_llvm = true,
+    });
+    const install = b.addInstallArtifact(exe, .{});
+    const run = b.addRunArtifact(exe);
+    run.step.dependOn(&install.step);
+
+    return .{
+        .exe = exe,
+        .install = install,
+        .run = run,
+    };
+}
+
 pub fn addShaderImport(b: *std.Build, module: *std.Build.Module, path: []const u8, name: []const u8) void {
     // Step 1: Compile GLSL to SPIR-V
     const glslangValidatorCommand = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
@@ -178,60 +220,45 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
 
-    {
-        // Playground
-        const playground = b.addModule("playground", .{
-            .root_source_file = b.path("playground.zig"),
-            .link_libc = true,
-            .target = target,
-            .optimize = optimize,
-        });
+    const playground = addExample(
+        b,
+        &dependencies,
+        forbear,
+        target,
+        optimize,
+        "playground",
+        "playground.zig",
+        "playground",
+    );
+    b.getInstallStep().dependOn(&playground.install.step);
 
-        dependencies.addToModule(playground);
+    const playground_step = b.step("playground", "Build the playground");
+    playground_step.dependOn(&playground.install.step);
 
-        playground.addImport("forbear", forbear);
+    const playground_run_step = b.step("playground-run", "Run the playground");
+    playground_run_step.dependOn(&playground.run.step);
 
-        const playground_exe = b.addExecutable(.{
-            .name = "playground",
-            .root_module = playground,
-            .use_llvm = true,
-        });
-        b.installArtifact(playground_exe);
+    const uhoh = addExample(
+        b,
+        &dependencies,
+        forbear,
+        target,
+        optimize,
+        "uhoh",
+        "examples/uhoh.com/src/main.zig",
+        "uhoh.com",
+    );
 
-        const run_playground_command = b.addRunArtifact(playground_exe);
-        run_playground_command.step.dependOn(b.getInstallStep());
+    const uhoh_step = b.step("uhoh", "Build the uhoh.com example");
+    uhoh_step.dependOn(&uhoh.install.step);
 
-        const run_playground_step = b.step("run", "Run the playground");
-        run_playground_step.dependOn(&run_playground_command.step);
-    }
+    const run_step = b.step("run", "Run the uhoh.com example");
+    run_step.dependOn(&uhoh.run.step);
 
     // Check step - builds all examples and playground
     {
         const check_step = b.step("check", "Build all examples and playground");
-
-        // Build playground
-        const playground = b.addModule("playground_check", .{
-            .root_source_file = b.path("playground.zig"),
-            .link_libc = true,
-            .target = target,
-            .optimize = optimize,
-        });
-
-        dependencies.addToModule(playground);
-        playground.addImport("forbear", forbear);
-
-        const playground_exe = b.addExecutable(.{
-            .name = "playground_check",
-            .root_module = playground,
-        });
-        check_step.dependOn(&playground_exe.step);
-
-        // Build uhoh.com example
-        const uhoh_build = b.addSystemCommand(&.{
-            "zig",
-            "build",
-        });
-        uhoh_build.setCwd(b.path("examples/uhoh.com"));
-        check_step.dependOn(&uhoh_build.step);
+        check_step.dependOn(&playground.exe.step);
+        check_step.dependOn(&uhoh.exe.step);
     }
 }
