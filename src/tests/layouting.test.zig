@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const place = @import("../layouting.zig").place;
+const wrapAndPlace = @import("../layouting.zig").wrapAndPlace;
 const applyRatios = @import("../layouting.zig").applyRatios;
 const growAndShrink = @import("../layouting.zig").growAndShrink;
 const fit = @import("../layouting.zig").fit;
@@ -65,7 +65,7 @@ fn testWrapConfiguration(configuration: struct {
         }),
     };
 
-    try place(arenaAllocator, &node);
+    try wrapAndPlace(arenaAllocator, &node);
 
     const glyphPositions = try arenaAllocator.alloc(Vec2, configuration.glyphs.len);
     for (configuration.glyphs, 0..) |glyph, i| {

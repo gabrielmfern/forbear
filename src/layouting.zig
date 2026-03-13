@@ -276,7 +276,7 @@ pub fn fit(node: *Node) void {
     }
 }
 
-pub fn place(arena: std.mem.Allocator, node: *Node) !void {
+pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
     node.position += node.style.translate;
     switch (node.children) {
         .nodes => |nodes| {
@@ -354,7 +354,7 @@ pub fn place(arena: std.mem.Allocator, node: *Node) !void {
                         cursor[1] += child.size[1] + child.style.margin.y[1];
                     }
                 }
-                try place(arena, child);
+                try wrapAndPlace(arena, child);
             }
         },
         .glyphs => |glyphs| {
@@ -521,13 +521,14 @@ pub fn layout() !*Node {
         applyRatios(node);
         try growAndShrink(arena, node);
 
+        try wrapAndPlace(arena, node);
         fit(node);
 
         applyParentPercentageSizes(node, viewportSize);
         applyRatios(node);
         try growAndShrink(arena, node);
 
-        try place(arena, node);
+        try wrapAndPlace(arena, node);
         makeAbsolute(node, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
 
         return node;
