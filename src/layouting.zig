@@ -577,12 +577,7 @@ pub fn layout() !*Node {
         applyRatios(node);
         try growAndShrink(arena, node);
 
-        applyParentPercentageSizes(node, viewportSize);
-        applyRatios(node);
-        try growAndShrink(arena, node);
-
         try wrap(arena, node);
-        fitAlong(node, .leftToRight);
         fitAlong(node, .topToBottom);
 
         applyParentPercentageSizes(node, viewportSize);
