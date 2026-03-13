@@ -40,7 +40,6 @@ missing things for the entire uhoh.com website:
     - lazily decompressing images causes huge frame drops for large images
     - we should probably have `forbear.image` instead of always using backgroundImage, and have its size calculated from the aspect ratio while filling up the parent
 - [x] support for filter: grayscale()
-- [ ] after something like one frame the size of things seem to change
 - [ ] element wrapping
 - [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
     - is having lots of them bad? I understand having no type-safety though
@@ -50,17 +49,11 @@ missing things for the entire uhoh.com website:
 - [ ] component children slotting
 
 problems:
-- sea of parenthesis
-    - having to try before actually calling the children block eating function lol
-- too many try statements makes things much uglier and harder to read
-- components usage is confusing
+- image loading causes stutters, we should decompress images async, across frames to avoid this
+    - is stb_image enough for this?
+- when there's scaling in linux, the scale only drops in after some frames
 - could not figure out what `useNextEvent` was for, and just ignored it leaving it in place
 - created a utilty for px so that it didn't have to calculate the proper value
     - should we maybe have px as the default value? I've noticed that the DPI isn't as reliable as I thought, as it can be used for scaling for example
-- you can't recognize an image by quickly scanning the code, because it only allows for a background image
 - grow parent, one fit child and one grow child, the grow doesn't behave as expected
 - we need manual keying for loops of children
-- names for style properties are too long and cumbersome to write and read
-    - paddingBlock, paddingInline, marginBlock, marginInline, horizontalAlignment, verticalAlignment, etc
-    - we could define a single property for most of them, just like in CSS, and to fill the need for shorthands define functions that allow for common usecases
-        - e.g., `.inline(10)`, `.block(10)`, `.all(10)`, etc.
