@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const wrap = @import("../layouting.zig").wrap;
+const place = @import("../layouting.zig").place;
 const applyRatios = @import("../layouting.zig").applyRatios;
 const growAndShrink = @import("../layouting.zig").growAndShrink;
 const fit = @import("../layouting.zig").fit;
@@ -65,7 +65,7 @@ fn testWrapConfiguration(configuration: struct {
         }),
     };
 
-    try wrap(arenaAllocator, &node);
+    try place(arenaAllocator, &node);
 
     const glyphPositions = try arenaAllocator.alloc(Vec2, configuration.glyphs.len);
     for (configuration.glyphs, 0..) |glyph, i| {
@@ -496,7 +496,7 @@ test "fit - fitted height handles main and cross axis cases" {
     });
 }
 
-test "wrap - no wrapping when glyphs fit on single line" {
+test "text wrapping - no wrapping when glyphs fit on single line" {
     var glyphs = [_]LayoutGlyph{
         .{
             .index = 0,
@@ -522,7 +522,7 @@ test "wrap - no wrapping when glyphs fit on single line" {
     });
 }
 
-test "wrap - character wrapping with small width" {
+test "text wrapping - character wrapping with small width" {
     var glyphs = [_]LayoutGlyph{
         .{
             .index = 0,
@@ -549,7 +549,7 @@ test "wrap - character wrapping with small width" {
     });
 }
 
-test "wrap - word wrapping with small width" {
+test "text wrapping - word wrapping with small width" {
     // Create glyphs representing "hello world" (11 glyphs including space)
     var glyphs = [_]LayoutGlyph{
         .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
@@ -586,7 +586,7 @@ test "wrap - word wrapping with small width" {
     });
 }
 
-test "wrap - alignment start" {
+test "text wrapping - alignment start" {
     var glyphs = [_]LayoutGlyph{
         .{
             .index = 0,
@@ -612,7 +612,7 @@ test "wrap - alignment start" {
     });
 }
 
-test "wrap - alignment center" {
+test "text wrapping - alignment center" {
     var glyphs = [_]LayoutGlyph{
         .{
             .index = 0,
@@ -638,7 +638,7 @@ test "wrap - alignment center" {
     });
 }
 
-test "wrap - alignment end" {
+test "text wrapping - alignment end" {
     var glyphs = [_]LayoutGlyph{
         .{
             .index = 0,
@@ -664,7 +664,7 @@ test "wrap - alignment end" {
     });
 }
 
-test "wrap - word wrapping with alignment start" {
+test "text wrapping - word wrapping with alignment start" {
     var glyphs = [_]LayoutGlyph{
         .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
         .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
@@ -700,7 +700,7 @@ test "wrap - word wrapping with alignment start" {
     });
 }
 
-test "wrap - word wrapping with alignment center" {
+test "text wrapping - word wrapping with alignment center" {
     var glyphs = [_]LayoutGlyph{
         .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
         .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
@@ -737,7 +737,7 @@ test "wrap - word wrapping with alignment center" {
     });
 }
 
-test "wrap - word wrapping with alignment end" {
+test "text wrapping - word wrapping with alignment end" {
     var glyphs = [_]LayoutGlyph{
         .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
         .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },

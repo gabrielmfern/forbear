@@ -220,15 +220,146 @@ pub fn growAndShrink(
     }
 }
 
-pub fn wrap(arena: std.mem.Allocator, node: *Node) !void {
+fn applyParentPercentageSizes(node: *Node, parentSize: Vec2) void {
+    if (node.style.width == .percentage) {
+        node.size[0] = node.style.width.percentage * parentSize[0];
+    }
+    if (node.style.height == .percentage) {
+        node.size[1] = node.style.height.percentage * parentSize[1];
+    }
+
+    node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
+    node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
+
     switch (node.children) {
         .nodes => |nodes| {
             for (nodes.items) |*child| {
-                try wrap(arena, child);
+                applyParentPercentageSizes(child, node.size);
+            }
+        },
+        else => {},
+    }
+}
+
+pub fn applyRatios(node: *Node) void {
+    node.applyRatios();
+    switch (node.children) {
+        .nodes => |nodes| {
+            for (nodes.items) |*child| {
+                applyRatios(child);
+            }
+        },
+        else => {},
+    }
+}
+
+pub fn fit(node: *Node) void {
+    switch (node.children) {
+        .nodes => |nodes| {
+            inline for (Direction.array) |direction| {
+                const fittingBase = node.fittingBase(direction);
+                const preferredSize = node.style.getPreferredSize(direction);
+
+                if (preferredSize == .fit) {
+                    node.setSize(direction, fittingBase);
+                }
+                if (node.shouldFitMin(direction)) {
+                    node.setMinSize(direction, fittingBase);
+                }
+            }
+            for (nodes.items) |*child| {
+                fit(child);
+                node.fitChild(child);
+            }
+        },
+        else => {},
+    }
+}
+
+pub fn place(arena: std.mem.Allocator, node: *Node) !void {
+    node.position += node.style.translate;
+    switch (node.children) {
+        .nodes => |nodes| {
+            const direction = node.style.direction;
+            const hAlign = node.style.alignment.x;
+            const vAlign = node.style.alignment.y;
+
+            const availableSize = .{
+                node.size[0] - (node.style.padding.x[0] + node.style.padding.x[1]) - (node.style.borderWidth.x[0] + node.style.borderWidth.x[1]),
+                node.size[1] - (node.style.padding.y[0] + node.style.padding.y[1]) - (node.style.borderWidth.y[0] + node.style.borderWidth.y[1]),
+            };
+
+            var childrenSize: Vec2 = @splat(0.0);
+            for (nodes.items) |child| {
+                if (child.style.placement == .standard) {
+                    const contributingSize = Vec2{
+                        child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
+                    };
+                    if (direction == .leftToRight) {
+                        childrenSize[0] += contributingSize[0];
+                        childrenSize[1] = @max(contributingSize[1], childrenSize[1]);
+                    } else if (direction == .topToBottom) {
+                        childrenSize[0] = @max(contributingSize[0], childrenSize[0]);
+                        childrenSize[1] += contributingSize[1];
+                    }
+                }
+            }
+
+            var cursor: Vec2 = .{
+                node.style.padding.x[0] + node.style.borderWidth.x[0],
+                node.style.padding.y[0] + node.style.borderWidth.y[0],
+            };
+            if (direction == .leftToRight) {
+                switch (hAlign) {
+                    .start => {},
+                    .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
+                    .end => cursor[0] += (availableSize[0] - childrenSize[0]),
+                }
+            } else {
+                switch (vAlign) {
+                    .start => {},
+                    .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
+                    .end => cursor[1] += (availableSize[1] - childrenSize[1]),
+                }
+            }
+
+            for (nodes.items) |*child| {
+                if (child.style.placement == .standard) {
+                    const contributingSize = Vec2{
+                        child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
+                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
+                    };
+                    if (direction == .leftToRight) {
+                        // Cross-axis alignment (Vertical)
+                        switch (vAlign) {
+                            .start => child.position[1] = child.style.margin.y[0],
+                            .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
+                            .end => child.position[1] = (availableSize[1] - contributingSize[1]),
+                        }
+
+                        cursor[0] += child.style.margin.x[0];
+                        child.position += cursor;
+                        cursor[0] += child.size[0] + child.style.margin.x[1];
+                    } else {
+                        // Cross-axis alignment (Horizontal)
+                        switch (hAlign) {
+                            .start => child.position[0] = child.style.margin.x[0],
+                            .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
+                            .end => child.position[0] = (availableSize[0] - contributingSize[0]),
+                        }
+
+                        cursor[1] += child.style.margin.y[0];
+                        child.position += cursor;
+                        cursor[1] += child.size[1] + child.style.margin.y[1];
+                    }
+                }
+                try place(arena, child);
             }
         },
         .glyphs => |glyphs| {
             if (node.style.textWrapping == .none) {
+                // text placement is already done at its creation. see `text` in root.zig
                 return;
             }
             const Line = struct {
@@ -328,147 +459,6 @@ pub fn wrap(arena: std.mem.Allocator, node: *Node) !void {
     }
 }
 
-fn applyParentPercentageSizes(node: *Node, parentSize: Vec2) void {
-    if (node.style.width == .percentage) {
-        node.size[0] = node.style.width.percentage * parentSize[0];
-    }
-    if (node.style.height == .percentage) {
-        node.size[1] = node.style.height.percentage * parentSize[1];
-    }
-
-    node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
-    node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
-
-    switch (node.children) {
-        .nodes => |nodes| {
-            for (nodes.items) |*child| {
-                applyParentPercentageSizes(child, node.size);
-            }
-        },
-        else => {},
-    }
-}
-
-pub fn applyRatios(node: *Node) void {
-    node.applyRatios();
-    switch (node.children) {
-        .nodes => |nodes| {
-            for (nodes.items) |*child| {
-                applyRatios(child);
-            }
-        },
-        else => {},
-    }
-}
-
-pub fn fit(node: *Node) void {
-    switch (node.children) {
-        .nodes => |nodes| {
-            inline for (Direction.array) |direction| {
-                const fittingBase = node.fittingBase(direction);
-                const preferredSize = node.style.getPreferredSize(direction);
-
-                if (preferredSize == .fit) {
-                    node.setSize(direction, fittingBase);
-                }
-                if (node.shouldFitMin(direction)) {
-                    node.setMinSize(direction, fittingBase);
-                }
-            }
-            for (nodes.items) |*child| {
-                fit(child);
-                node.fitChild(child);
-            }
-        },
-        else => {},
-    }
-}
-
-fn place(node: *Node) void {
-    node.position += node.style.translate;
-    switch (node.children) {
-        .nodes => |nodes| {
-            const direction = node.style.direction;
-            const hAlign = node.style.alignment.x;
-            const vAlign = node.style.alignment.y;
-
-            const availableSize = .{
-                node.size[0] - (node.style.padding.x[0] + node.style.padding.x[1]) - (node.style.borderWidth.x[0] + node.style.borderWidth.x[1]),
-                node.size[1] - (node.style.padding.y[0] + node.style.padding.y[1]) - (node.style.borderWidth.y[0] + node.style.borderWidth.y[1]),
-            };
-
-            var childrenSize: Vec2 = @splat(0.0);
-            for (nodes.items) |child| {
-                if (child.style.placement == .standard) {
-                    const contributingSize = Vec2{
-                        child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
-                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                    };
-                    if (direction == .leftToRight) {
-                        childrenSize[0] += contributingSize[0];
-                        childrenSize[1] = @max(contributingSize[1], childrenSize[1]);
-                    } else if (direction == .topToBottom) {
-                        childrenSize[0] = @max(contributingSize[0], childrenSize[0]);
-                        childrenSize[1] += contributingSize[1];
-                    }
-                }
-            }
-
-            var cursor: Vec2 = .{
-                node.style.padding.x[0] + node.style.borderWidth.x[0],
-                node.style.padding.y[0] + node.style.borderWidth.y[0],
-            };
-            if (direction == .leftToRight) {
-                switch (hAlign) {
-                    .start => {},
-                    .center => cursor[0] += (availableSize[0] - childrenSize[0]) / 2.0,
-                    .end => cursor[0] += (availableSize[0] - childrenSize[0]),
-                }
-            } else {
-                switch (vAlign) {
-                    .start => {},
-                    .center => cursor[1] += (availableSize[1] - childrenSize[1]) / 2.0,
-                    .end => cursor[1] += (availableSize[1] - childrenSize[1]),
-                }
-            }
-
-            for (nodes.items) |*child| {
-                if (child.style.placement == .standard) {
-                    const contributingSize = Vec2{
-                        child.size[0] + child.style.margin.x[0] + child.style.margin.x[1],
-                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                    };
-                    if (direction == .leftToRight) {
-                        // Cross-axis alignment (Vertical)
-                        switch (vAlign) {
-                            .start => child.position[1] = child.style.margin.y[0],
-                            .center => child.position[1] = (availableSize[1] - contributingSize[1]) / 2.0,
-                            .end => child.position[1] = (availableSize[1] - contributingSize[1]),
-                        }
-
-                        cursor[0] += child.style.margin.x[0];
-                        child.position += cursor;
-                        cursor[0] += child.size[0] + child.style.margin.x[1];
-                    } else {
-                        // Cross-axis alignment (Horizontal)
-                        switch (hAlign) {
-                            .start => child.position[0] = child.style.margin.x[0],
-                            .center => child.position[0] = (availableSize[0] - contributingSize[0]) / 2.0,
-                            .end => child.position[0] = (availableSize[0] - contributingSize[0]),
-                        }
-
-                        cursor[1] += child.style.margin.y[0];
-                        child.position += cursor;
-                        cursor[1] += child.size[1] + child.style.margin.y[1];
-                    }
-                }
-                place(child);
-            }
-        },
-        else => {},
-    }
-}
-
 pub const LayoutTreeIterator = struct {
     stack: std.ArrayList(*const Node),
     allocator: std.mem.Allocator,
@@ -531,14 +521,13 @@ pub fn layout() !*Node {
         applyRatios(node);
         try growAndShrink(arena, node);
 
-        try wrap(arena, node);
         fit(node);
 
         applyParentPercentageSizes(node, viewportSize);
         applyRatios(node);
         try growAndShrink(arena, node);
 
-        place(node);
+        try place(arena, node);
         makeAbsolute(node, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
 
         return node;
