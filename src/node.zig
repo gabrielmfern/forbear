@@ -110,6 +110,11 @@ pub const TextWrapping = enum {
     none,
 };
 
+pub const Overflow = enum {
+    visible,
+    wrap,
+};
+
 pub const Padding = struct {
     x: Vec2,
     y: Vec2,
@@ -266,6 +271,7 @@ pub const Style = struct {
 
     direction: Direction,
     alignment: Alignment,
+    overflow: Overflow,
 
     pub fn getPreferredSize(self: @This(), direction: Direction) Sizing {
         if (direction == .leftToRight) {
@@ -358,6 +364,7 @@ pub const IncompleteStyle = struct {
 
     alignment: ?Alignment = null,
     direction: ?Direction = null,
+    overflow: ?Overflow = null,
 
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
         return Style{
@@ -398,6 +405,7 @@ pub const IncompleteStyle = struct {
 
             .direction = self.direction orelse .leftToRight,
             .alignment = self.alignment orelse Alignment.topLeft,
+            .overflow = self.overflow orelse .visible,
         };
     }
 };

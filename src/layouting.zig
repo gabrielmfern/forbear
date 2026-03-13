@@ -21,6 +21,157 @@ fn approxEq(a: f32, b: f32) bool {
     return @abs(a - b) < 0.001;
 }
 
+fn axisIndex(direction: Direction) usize {
+    return if (direction == .leftToRight) 0 else 1;
+}
+
+fn leadingInset(node: *const Node, direction: Direction) f32 {
+    const padding = node.style.padding.get(direction);
+    const border = node.style.borderWidth.get(direction);
+    return padding[0] + border[0];
+}
+
+fn trailingInset(node: *const Node, direction: Direction) f32 {
+    const padding = node.style.padding.get(direction);
+    const border = node.style.borderWidth.get(direction);
+    return padding[1] + border[1];
+}
+
+fn contentAxisSize(node: *const Node, direction: Direction) f32 {
+    return @max(0.0, node.getSize(direction) - node.fittingBase(direction));
+}
+
+fn contributingAxisSize(child: *const Node, direction: Direction) f32 {
+    const margins = child.style.margin.get(direction);
+    return child.getSize(direction) + margins[0] + margins[1];
+}
+
+const WrapLine = struct {
+    startIndex: usize,
+    endIndex: usize,
+    mainSize: f32,
+    crossSize: f32,
+};
+
+const WrapMetadata = struct {
+    standardChildren: std.ArrayList(*Node),
+    lines: std.ArrayList(WrapLine),
+
+    fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+        self.standardChildren.deinit(allocator);
+        self.lines.deinit(allocator);
+    }
+};
+
+fn buildWrapMetadata(arena: std.mem.Allocator, node: *Node) !WrapMetadata {
+    std.debug.assert(node.children == .nodes);
+
+    const nodes = node.children.nodes;
+    var metadata = WrapMetadata{
+        .standardChildren = try std.ArrayList(*Node).initCapacity(arena, nodes.items.len),
+        .lines = try std.ArrayList(WrapLine).initCapacity(arena, 4),
+    };
+    errdefer metadata.standardChildren.deinit(arena);
+    errdefer metadata.lines.deinit(arena);
+
+    for (nodes.items) |*child| {
+        if (child.style.placement == .standard) {
+            metadata.standardChildren.appendAssumeCapacity(child);
+        }
+    }
+
+    if (metadata.standardChildren.items.len == 0) {
+        return metadata;
+    }
+
+    const direction = node.style.direction;
+    const crossDirection = direction.perpendicular();
+    const availableMain = contentAxisSize(node, direction);
+
+    var lineStartIndex: usize = 0;
+    var lineMainSize: f32 = 0.0;
+    var lineCrossSize: f32 = 0.0;
+
+    for (metadata.standardChildren.items, 0..) |child, index| {
+        const childMainSize = contributingAxisSize(child, direction);
+        const childCrossSize = contributingAxisSize(child, crossDirection);
+
+        if (index > lineStartIndex and lineMainSize + childMainSize > availableMain + 0.001) {
+            try metadata.lines.append(arena, .{
+                .startIndex = lineStartIndex,
+                .endIndex = index - 1,
+                .mainSize = lineMainSize,
+                .crossSize = lineCrossSize,
+            });
+            lineStartIndex = index;
+            lineMainSize = 0.0;
+            lineCrossSize = 0.0;
+        }
+
+        lineMainSize += childMainSize;
+        lineCrossSize = @max(lineCrossSize, childCrossSize);
+    }
+
+    try metadata.lines.append(arena, .{
+        .startIndex = lineStartIndex,
+        .endIndex = metadata.standardChildren.items.len - 1,
+        .mainSize = lineMainSize,
+        .crossSize = lineCrossSize,
+    });
+
+    return metadata;
+}
+
+fn applyWrapLayout(arena: std.mem.Allocator, node: *Node) !void {
+    if (node.children != .nodes or node.style.overflow != .wrap) {
+        return;
+    }
+
+    var metadata = try buildWrapMetadata(arena, node);
+    defer metadata.deinit(arena);
+
+    if (metadata.standardChildren.items.len == 0) {
+        return;
+    }
+
+    const direction = node.style.direction;
+    const crossDirection = direction.perpendicular();
+    const availableMain = contentAxisSize(node, direction);
+    const mainAxis = axisIndex(direction);
+    const crossAxis = axisIndex(crossDirection);
+    const mainAlign = if (direction == .leftToRight) node.style.alignment.x else node.style.alignment.y;
+    const crossAlign = if (direction == .leftToRight) node.style.alignment.y else node.style.alignment.x;
+    const mainBase = leadingInset(node, direction);
+    const crossBase = leadingInset(node, crossDirection);
+
+    var crossCursor = crossBase;
+    for (metadata.lines.items) |line| {
+        var mainCursor = mainBase + switch (mainAlign) {
+            .start => 0.0,
+            .center => (availableMain - line.mainSize) / 2.0,
+            .end => availableMain - line.mainSize,
+        };
+
+        for (metadata.standardChildren.items[line.startIndex .. line.endIndex + 1]) |child| {
+            const mainMargins = child.style.margin.get(direction);
+            const crossMargins = child.style.margin.get(crossDirection);
+            const childCrossSize = contributingAxisSize(child, crossDirection);
+            const crossOffset = switch (crossAlign) {
+                .start => crossMargins[0],
+                .center => (line.crossSize - childCrossSize) / 2.0 + crossMargins[0],
+                .end => line.crossSize - childCrossSize + crossMargins[0],
+            };
+
+            child.position = @splat(0.0);
+            child.position[mainAxis] = mainCursor + mainMargins[0];
+            child.position[crossAxis] = crossCursor + crossOffset;
+            mainCursor += contributingAxisSize(child, direction);
+        }
+
+        crossCursor += line.crossSize;
+    }
+}
+
 fn makeAbsolute(node: *Node, base: Vec2) void {
     if (node.style.placement != .manual) {
         node.position += base;
@@ -41,16 +192,15 @@ fn makeAbsolute(node: *Node, base: Vec2) void {
 }
 
 fn growChildren(
-    children: []Node,
+    children: []*Node,
     activelyModifying: *std.ArrayList(*Node),
     direction: Direction,
     remaining: *f32,
 ) void {
-    for (children) |*child| {
-        if (child.style.placement == .standard) {
-            if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
-                activelyModifying.appendAssumeCapacity(child);
-            }
+    activelyModifying.clearRetainingCapacity();
+    for (children) |child| {
+        if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
+            activelyModifying.appendAssumeCapacity(child);
         }
     }
 
@@ -113,7 +263,7 @@ fn growChildren(
 }
 
 fn shrinkChildren(
-    children: []Node,
+    children: []*Node,
     activelyModifying: *std.ArrayList(*Node),
     direction: Direction,
     remaining: *f32,
@@ -123,11 +273,9 @@ fn shrinkChildren(
     }
 
     activelyModifying.clearRetainingCapacity();
-    for (children) |*child| {
-        if (child.style.placement == .standard) {
-            if (child.getSize(direction) > child.getMinSize(direction)) {
-                activelyModifying.appendAssumeCapacity(child);
-            }
+    for (children) |child| {
+        if (child.getSize(direction) > child.getMinSize(direction)) {
+            activelyModifying.appendAssumeCapacity(child);
         }
     }
     var iteration: usize = 0;
@@ -193,27 +341,60 @@ pub fn growAndShrink(
     if (node.children == .nodes) {
         const children = node.children.nodes;
         const direction = node.style.direction;
+        const hasWrapping = node.style.overflow == .wrap;
+        const perpendicularDirection = direction.perpendicular();
+        const shouldClampPerpendicular = node.style.getPreferredSize(perpendicularDirection) != .fit or
+            node.getSize(perpendicularDirection) > 0.001;
 
-        var remaining = node.getSize(direction);
         for (children.items) |*child| {
             if (child.style.placement == .standard) {
-                if (direction.perpendicular() == .topToBottom) {
+                if (perpendicularDirection == .topToBottom) {
                     if (child.style.height == .grow or (child.size[1] > node.size[1] and child.minSize[1] < child.size[1])) {
-                        child.size[1] = @max(@min(node.size[1], child.maxSize[1]), child.minSize[1]);
+                        if (shouldClampPerpendicular) {
+                            child.size[1] = @max(@min(node.size[1], child.maxSize[1]), child.minSize[1]);
+                        }
                     }
-                } else if (direction.perpendicular() == .leftToRight) {
+                } else if (perpendicularDirection == .leftToRight) {
                     if (child.style.width == .grow or (child.size[0] > node.size[0] and child.minSize[0] < child.size[0])) {
-                        child.size[0] = @max(@min(node.size[0], child.maxSize[0]), child.minSize[0]);
+                        if (shouldClampPerpendicular) {
+                            child.size[0] = @max(@min(node.size[0], child.maxSize[0]), child.minSize[0]);
+                        }
                     }
                 }
                 child.applyRatios();
-                remaining -= child.getSize(direction);
             }
         }
 
         var activelyModifying = try std.ArrayList(*Node).initCapacity(arena, children.items.len);
-        growChildren(children.items, &activelyModifying, direction, &remaining);
-        shrinkChildren(children.items, &activelyModifying, direction, &remaining);
+        defer activelyModifying.deinit(arena);
+
+        if (hasWrapping) {
+            var metadata = try buildWrapMetadata(arena, node);
+            defer metadata.deinit(arena);
+
+            const availableMain = contentAxisSize(node, direction);
+            for (metadata.lines.items) |line| {
+                const lineChildren = metadata.standardChildren.items[line.startIndex .. line.endIndex + 1];
+                var remaining = availableMain - line.mainSize;
+                growChildren(lineChildren, &activelyModifying, direction, &remaining);
+                shrinkChildren(lineChildren, &activelyModifying, direction, &remaining);
+            }
+        } else {
+            var standardChildren = try std.ArrayList(*Node).initCapacity(arena, children.items.len);
+            defer standardChildren.deinit(arena);
+
+            var remaining = node.getSize(direction);
+            for (children.items) |*child| {
+                if (child.style.placement == .standard) {
+                    standardChildren.appendAssumeCapacity(child);
+                    remaining -= child.getSize(direction);
+                }
+            }
+
+            growChildren(standardChildren.items, &activelyModifying, direction, &remaining);
+            shrinkChildren(standardChildren.items, &activelyModifying, direction, &remaining);
+        }
+
         for (children.items) |*child| {
             try growAndShrink(arena, child);
         }
@@ -223,6 +404,7 @@ pub fn growAndShrink(
 pub fn wrap(arena: std.mem.Allocator, node: *Node) !void {
     switch (node.children) {
         .nodes => |nodes| {
+            try applyWrapLayout(arena, node);
             for (nodes.items) |*child| {
                 try wrap(arena, child);
             }
@@ -361,7 +543,7 @@ pub fn applyRatios(node: *Node) void {
     }
 }
 
-pub fn fit(node: *Node) void {
+pub fn fit(arena: std.mem.Allocator, node: *Node) !void {
     switch (node.children) {
         .nodes => |nodes| {
             inline for (Direction.array) |direction| {
@@ -376,18 +558,63 @@ pub fn fit(node: *Node) void {
                 }
             }
             for (nodes.items) |*child| {
-                fit(child);
+                try fit(arena, child);
                 node.fitChild(child);
+            }
+
+            if (node.style.overflow == .wrap) {
+                const crossDirection = node.style.direction.perpendicular();
+                const crossAxis = axisIndex(crossDirection);
+                const preferredSize = node.style.getPreferredSize(crossDirection);
+
+                if (preferredSize == .fit) {
+                    node.setSize(crossDirection, node.fittingBase(crossDirection));
+                }
+                if (node.shouldFitMin(crossDirection)) {
+                    node.setMinSize(crossDirection, node.fittingBase(crossDirection));
+                }
+
+                try applyWrapLayout(arena, node);
+                for (nodes.items) |*child| {
+                    if (child.style.placement != .standard) {
+                        continue;
+                    }
+
+                    const trailingMargin = child.style.margin.get(crossDirection)[1];
+                    const extent = child.position[crossAxis] +
+                        child.getSize(crossDirection) +
+                        trailingMargin +
+                        trailingInset(node, crossDirection);
+                    const minExtent = child.position[crossAxis] +
+                        child.getMinSize(crossDirection) +
+                        trailingMargin +
+                        trailingInset(node, crossDirection);
+
+                    if (preferredSize == .fit) {
+                        node.setSize(crossDirection, @max(node.getSize(crossDirection), extent));
+                    }
+                    if (node.shouldFitMin(crossDirection)) {
+                        node.setMinSize(crossDirection, @max(node.getMinSize(crossDirection), minExtent));
+                    }
+                }
             }
         },
         else => {},
     }
 }
 
-fn place(node: *Node) void {
+fn place(arena: std.mem.Allocator, node: *Node) !void {
     node.position += node.style.translate;
     switch (node.children) {
         .nodes => |nodes| {
+            if (node.style.overflow == .wrap) {
+                try applyWrapLayout(arena, node);
+                for (nodes.items) |*child| {
+                    try place(arena, child);
+                }
+                return;
+            }
+
             const direction = node.style.direction;
             const hAlign = node.style.alignment.x;
             const vAlign = node.style.alignment.y;
@@ -462,7 +689,7 @@ fn place(node: *Node) void {
                         cursor[1] += child.size[1] + child.style.margin.y[1];
                     }
                 }
-                place(child);
+                try place(arena, child);
             }
         },
         else => {},
@@ -532,13 +759,13 @@ pub fn layout() !*Node {
         try growAndShrink(arena, node);
 
         try wrap(arena, node);
-        fit(node);
+        try fit(arena, node);
 
         applyParentPercentageSizes(node, viewportSize);
         applyRatios(node);
         try growAndShrink(arena, node);
 
-        place(node);
+        try place(arena, node);
         makeAbsolute(node, @as(Vec2, @splat(-1.0)) * context.scrollPosition);
 
         return node;

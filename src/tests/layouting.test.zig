@@ -479,7 +479,7 @@ fn testFitConfiguration(configuration: struct {
         }).completeWith(utilities.shallowBaseStyle),
     };
 
-    fit(&parent);
+    try fit(arenaAllocator, &parent);
 
     try std.testing.expectEqual(configuration.expectedHeight, parent.size[1]);
     try std.testing.expectEqual(configuration.expectedHeight, parent.minSize[1]);
@@ -494,6 +494,417 @@ test "fit - fitted height handles main and cross axis cases" {
         .direction = .leftToRight,
         .expectedHeight = 82.0,
     });
+}
+
+const TestWrapChild = struct {
+    width: Sizing,
+    height: Sizing,
+    size: Vec2,
+    minSize: Vec2 = .{ 0.0, 0.0 },
+    maxSize: Vec2 = .{ std.math.inf(f32), std.math.inf(f32) },
+    margin: forbear.Margin = .all(0.0),
+};
+
+fn testElementWrapConfiguration(configuration: struct {
+    direction: Direction = .leftToRight,
+    alignment: Alignment = .topLeft,
+    parentWidth: Sizing,
+    parentHeight: Sizing,
+    parentSize: Vec2,
+    parentMinSize: Vec2 = .{ 0.0, 0.0 },
+    parentMaxSize: Vec2 = .{ std.math.inf(f32), std.math.inf(f32) },
+    parentPadding: forbear.Padding = .all(0.0),
+    parentBorderWidth: forbear.BorderWidth = .all(0.0),
+    children: []const TestWrapChild,
+    expectedPositions: []const Vec2,
+    expectedSizes: ?[]const Vec2 = null,
+    expectedParentSize: ?Vec2 = null,
+    expectedParentMinSize: ?Vec2 = null,
+}) !void {
+    std.debug.assert(configuration.children.len == configuration.expectedPositions.len);
+    if (configuration.expectedSizes) |expectedSizes| {
+        std.debug.assert(expectedSizes.len == configuration.children.len);
+    }
+
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, configuration.children.len);
+    for (configuration.children, 0..) |child, i| {
+        children.appendAssumeCapacity(Node{
+            .key = @intCast(i),
+            .position = .{ 0.0, 0.0 },
+            .z = 0,
+            .size = child.size,
+            .minSize = child.minSize,
+            .maxSize = child.maxSize,
+            .children = .{ .nodes = .empty },
+            .style = (IncompleteStyle{
+                .width = child.width,
+                .height = child.height,
+                .margin = child.margin,
+            }).completeWith(utilities.shallowBaseStyle),
+        });
+    }
+
+    var parent = Node{
+        .key = 999,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = configuration.parentSize,
+        .minSize = configuration.parentMinSize,
+        .maxSize = configuration.parentMaxSize,
+        .children = .{ .nodes = children },
+        .style = (IncompleteStyle{
+            .direction = configuration.direction,
+            .alignment = configuration.alignment,
+            .overflow = .wrap,
+            .width = configuration.parentWidth,
+            .height = configuration.parentHeight,
+            .padding = configuration.parentPadding,
+            .borderWidth = configuration.parentBorderWidth,
+        }).completeWith(utilities.shallowBaseStyle),
+    };
+
+    applyRatios(&parent);
+    try growAndShrink(arenaAllocator, &parent);
+    try wrap(arenaAllocator, &parent);
+    try fit(arenaAllocator, &parent);
+    applyRatios(&parent);
+    try growAndShrink(arenaAllocator, &parent);
+    try wrap(arenaAllocator, &parent);
+
+    const actualPositions = try arenaAllocator.alloc(Vec2, configuration.children.len);
+    for (parent.children.nodes.items, 0..) |child, i| {
+        actualPositions[i] = child.position;
+    }
+    try std.testing.expectEqualDeep(configuration.expectedPositions, actualPositions);
+
+    if (configuration.expectedSizes) |expectedSizes| {
+        const actualSizes = try arenaAllocator.alloc(Vec2, expectedSizes.len);
+        for (parent.children.nodes.items, 0..) |child, i| {
+            actualSizes[i] = child.size;
+        }
+        try std.testing.expectEqualDeep(expectedSizes, actualSizes);
+    }
+
+    if (configuration.expectedParentSize) |expectedParentSize| {
+        try std.testing.expectEqualDeep(expectedParentSize, parent.size);
+    }
+    if (configuration.expectedParentMinSize) |expectedParentMinSize| {
+        try std.testing.expectEqualDeep(expectedParentMinSize, parent.minSize);
+    }
+}
+
+test "element wrap - basic horizontal wrapping" {
+    try testElementWrapConfiguration(.{
+        .parentWidth = .{ .fixed = 100.0 },
+        .parentHeight = .fit,
+        .parentSize = .{ 100.0, 0.0 },
+        .parentMinSize = .{ 100.0, 0.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 40.0, 20.0 } },
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 40.0, 20.0 } },
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 40.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 40.0, 0.0 },
+            .{ 0.0, 20.0 },
+        },
+        .expectedParentSize = .{ 100.0, 40.0 },
+    });
+}
+
+test "element wrap - no wrapping when children fit" {
+    try testElementWrapConfiguration(.{
+        .parentWidth = .{ .fixed = 100.0 },
+        .parentHeight = .fit,
+        .parentSize = .{ 100.0, 0.0 },
+        .parentMinSize = .{ 100.0, 0.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 30.0, 20.0 } },
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 30.0, 20.0 } },
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 30.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 30.0, 0.0 },
+            .{ 60.0, 0.0 },
+        },
+        .expectedParentSize = .{ 100.0, 20.0 },
+    });
+}
+
+test "element wrap - mixed child widths wrap at boundary" {
+    try testElementWrapConfiguration(.{
+        .parentWidth = .{ .fixed = 100.0 },
+        .parentHeight = .fit,
+        .parentSize = .{ 100.0, 0.0 },
+        .parentMinSize = .{ 100.0, 0.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 70.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 70.0, 20.0 } },
+            .{ .width = .{ .fixed = 20.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 20.0, 20.0 } },
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 30.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 70.0, 0.0 },
+            .{ 0.0, 20.0 },
+        },
+        .expectedParentSize = .{ 100.0, 40.0 },
+    });
+}
+
+test "element wrap - margins contribute to line breaks" {
+    try testElementWrapConfiguration(.{
+        .parentWidth = .{ .fixed = 100.0 },
+        .parentHeight = .fit,
+        .parentSize = .{ 100.0, 0.0 },
+        .parentMinSize = .{ 100.0, 0.0 },
+        .children = &.{
+            .{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 20.0 },
+                .size = .{ 30.0, 20.0 },
+                .margin = forbear.Margin.right(10.0),
+            },
+            .{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 20.0 },
+                .size = .{ 30.0, 20.0 },
+                .margin = forbear.Margin.right(10.0),
+            },
+            .{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 20.0 },
+                .size = .{ 30.0, 20.0 },
+                .margin = forbear.Margin.right(10.0),
+            },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 40.0, 0.0 },
+            .{ 0.0, 20.0 },
+        },
+        .expectedParentSize = .{ 100.0, 40.0 },
+    });
+}
+
+test "element wrap - padding reduces available wrap width" {
+    try testElementWrapConfiguration(.{
+        .parentWidth = .{ .fixed = 100.0 },
+        .parentHeight = .fit,
+        .parentSize = .{ 100.0, 0.0 },
+        .parentMinSize = .{ 100.0, 0.0 },
+        .parentPadding = forbear.Padding.inLine(10.0),
+        .children = &.{
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 40.0, 20.0 } },
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 40.0, 20.0 } },
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 40.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 10.0, 0.0 },
+            .{ 50.0, 0.0 },
+            .{ 10.0, 20.0 },
+        },
+        .expectedParentSize = .{ 100.0, 40.0 },
+    });
+}
+
+test "element wrap - vertical direction wraps into columns" {
+    try testElementWrapConfiguration(.{
+        .direction = .topToBottom,
+        .parentWidth = .fit,
+        .parentHeight = .{ .fixed = 100.0 },
+        .parentSize = .{ 0.0, 100.0 },
+        .parentMinSize = .{ 0.0, 100.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 40.0 }, .size = .{ 30.0, 40.0 } },
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 40.0 }, .size = .{ 30.0, 40.0 } },
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 40.0 }, .size = .{ 30.0, 40.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 0.0, 40.0 },
+            .{ 30.0, 0.0 },
+        },
+        .expectedParentSize = .{ 60.0, 100.0 },
+    });
+}
+
+test "element wrap - oversized child stays on its own line" {
+    try testElementWrapConfiguration(.{
+        .parentWidth = .{ .fixed = 100.0 },
+        .parentHeight = .fit,
+        .parentSize = .{ 100.0, 0.0 },
+        .parentMinSize = .{ 100.0, 0.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 120.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 120.0, 20.0 } },
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 30.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 0.0, 20.0 },
+        },
+        .expectedParentSize = .{ 100.0, 40.0 },
+    });
+}
+
+test "element wrap - main-axis alignment is applied per line" {
+    try testElementWrapConfiguration(.{
+        .alignment = .center,
+        .parentWidth = .{ .fixed = 100.0 },
+        .parentHeight = .fit,
+        .parentSize = .{ 100.0, 0.0 },
+        .parentMinSize = .{ 100.0, 0.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 40.0, 20.0 } },
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 40.0, 20.0 } },
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 30.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 10.0, 0.0 },
+            .{ 50.0, 0.0 },
+            .{ 35.0, 20.0 },
+        },
+        .expectedParentSize = .{ 100.0, 40.0 },
+    });
+}
+
+test "element wrap - cross-axis alignment centers smaller items within a line" {
+    try testElementWrapConfiguration(.{
+        .alignment = .centerLeft,
+        .parentWidth = .{ .fixed = 100.0 },
+        .parentHeight = .fit,
+        .parentSize = .{ 100.0, 0.0 },
+        .parentMinSize = .{ 100.0, 0.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 10.0 }, .size = .{ 40.0, 10.0 } },
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 40.0, 20.0 } },
+            .{ .width = .{ .fixed = 40.0 }, .height = .{ .fixed = 10.0 }, .size = .{ 40.0, 10.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 5.0 },
+            .{ 40.0, 0.0 },
+            .{ 0.0, 20.0 },
+        },
+        .expectedParentSize = .{ 100.0, 30.0 },
+    });
+}
+
+test "element wrap - grow distributes remaining width within each line" {
+    try testElementWrapConfiguration(.{
+        .parentWidth = .{ .fixed = 100.0 },
+        .parentHeight = .fit,
+        .parentSize = .{ 100.0, 0.0 },
+        .parentMinSize = .{ 100.0, 0.0 },
+        .children = &.{
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 30.0, 20.0 } },
+            .{ .width = .grow, .height = .{ .fixed = 20.0 }, .size = .{ 0.0, 20.0 } },
+            .{ .width = .{ .fixed = 30.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 30.0, 20.0 } },
+            .{ .width = .{ .fixed = 80.0 }, .height = .{ .fixed = 20.0 }, .size = .{ 80.0, 20.0 } },
+        },
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 30.0, 0.0 },
+            .{ 70.0, 0.0 },
+            .{ 0.0, 20.0 },
+        },
+        .expectedSizes = &.{
+            .{ 30.0, 20.0 },
+            .{ 40.0, 20.0 },
+            .{ 30.0, 20.0 },
+            .{ 80.0, 20.0 },
+        },
+        .expectedParentSize = .{ 100.0, 40.0 },
+    });
+}
+
+test "layout pipeline - overflow wrap reflows children into rows" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var node: Node = undefined;
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .fit,
+            .overflow = .wrap,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 20.0 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 20.0 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 20.0 },
+            })({});
+        });
+        node = (try layout()).*;
+    });
+
+    const children = node.children.nodes.items;
+    try std.testing.expectEqual(@as(usize, 3), children.len);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 100.0, 40.0 }), node.size);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 0.0, 0.0 }), children[0].position);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 40.0, 0.0 }), children[1].position);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 0.0, 20.0 }), children[2].position);
+}
+
+test "layout pipeline - wrapped grow child fills remaining space in its row" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var node: Node = undefined;
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .fit,
+            .overflow = .wrap,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 20.0 },
+            })({});
+            forbear.element(.{
+                .width = .grow,
+                .height = .{ .fixed = 20.0 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 20.0 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 80.0 },
+                .height = .{ .fixed = 20.0 },
+            })({});
+        });
+        node = (try layout()).*;
+    });
+
+    const children = node.children.nodes.items;
+    try std.testing.expectEqual(@as(usize, 4), children.len);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 100.0, 40.0 }), node.size);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 0.0, 0.0 }), children[0].position);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 30.0, 0.0 }), children[1].position);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 70.0, 0.0 }), children[2].position);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 0.0, 20.0 }), children[3].position);
+    try std.testing.expectEqualDeep(@as(Vec2, .{ 40.0, 20.0 }), children[1].size);
 }
 
 test "wrap - no wrapping when glyphs fit on single line" {

@@ -10,6 +10,7 @@ pub const layout = layouting.layout;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
 pub const Direction = nodeImport.Direction;
+pub const Overflow = nodeImport.Overflow;
 pub const LayoutGlyph = nodeImport.LayoutGlyph;
 pub const Glyphs = nodeImport.Glyphs;
 pub const BaseStyle = nodeImport.BaseStyle;

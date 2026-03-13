@@ -270,6 +270,7 @@ fn App() !void {
                 forbear.element(.{
                     .direction = .topToBottom,
                     .alignment = .topCenter,
+                    .width = .grow,
                 })({
                     forbear.element(.{
                         .fontWeight = 700,
@@ -278,30 +279,37 @@ fn App() !void {
                     })({
                         forbear.text("Don't take our word for it.");
                     });
-                    for (testimonials) |testimonial| {
-                        forbear.element(.{
-                            .width = .grow,
-                            .borderRadius = 12.0,
-                            .borderColor = black,
-                            .borderWidth = .all(0.75),
-                            .padding = .all(13.5),
-                            .margin = forbear.Margin.block(0.0).withBottom(12.0),
-                            .direction = .leftToRight,
-                        })({
-                            forbear.image(.{
-                                .width = .{ .fixed = 80.0 },
-                                .height = .{ .fixed = 80.0 },
-                                .borderRadius = 12.0,
-                                .margin = forbear.Margin.inLine(0.0).withRight(10.5),
-                            }, try forbear.useImage(testimonial.imageId));
+                    forbear.element(.{
+                        .width = .grow,
+                        .direction = .leftToRight,
+                        .alignment = .topLeft,
+                        .overflow = .wrap,
+                    })({
+                        for (testimonials) |testimonial| {
                             forbear.element(.{
-                                .fontSize = 11.25,
-                                .lineHeight = 1.4,
+                                .width = .{ .percentage = 0.485 },
+                                .borderRadius = 12.0,
+                                .borderColor = black,
+                                .borderWidth = .all(0.75),
+                                .padding = .all(13.5),
+                                .margin = forbear.Margin.right(12.0).withBottom(12.0),
+                                .direction = .leftToRight,
                             })({
-                                forbear.text(testimonial.body);
+                                forbear.image(.{
+                                    .width = .{ .fixed = 80.0 },
+                                    .height = .{ .fixed = 80.0 },
+                                    .borderRadius = 12.0,
+                                    .margin = forbear.Margin.inLine(0.0).withRight(10.5),
+                                }, try forbear.useImage(testimonial.imageId));
+                                forbear.element(.{
+                                    .fontSize = 11.25,
+                                    .lineHeight = 1.4,
+                                })({
+                                    forbear.text(testimonial.body);
+                                });
                             });
-                        });
-                    }
+                        }
+                    });
                 });
             });
             const logos = [_][]const u8{
@@ -332,6 +340,8 @@ fn App() !void {
                     forbear.element(.{
                         .direction = .leftToRight,
                         .alignment = .centerLeft,
+                        .width = .grow,
+                        .overflow = .wrap,
                     })({
                         for (logos) |id| {
                             forbear.image(.{
@@ -493,16 +503,21 @@ fn App() !void {
                 .alignment = .topCenter,
                 .padding = forbear.Padding.top(22.5).withBottom(37.5),
             })({
-                forbear.element(.{ .direction = .topToBottom })({
+                forbear.element(.{
+                    .width = .grow,
+                    .direction = .leftToRight,
+                    .alignment = .topLeft,
+                    .overflow = .wrap,
+                })({
                     inline for (offerings) |offering| {
                         forbear.element(.{
-                            .width = .grow,
+                            .width = .{ .percentage = 0.485 },
                             .background = .{ .color = theme.Colors.card },
                             .borderRadius = 12.0,
                             .borderColor = theme.Colors.border,
                             .borderWidth = .all(0.75),
                             .padding = .all(15.0),
-                            .margin = forbear.Margin.block(0.0).withBottom(12.0),
+                            .margin = forbear.Margin.right(12.0).withBottom(12.0),
                             .direction = .topToBottom,
                         })({
                             forbear.element(.{
