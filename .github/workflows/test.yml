@@ -25,6 +25,7 @@ jobs:
           sudo apt-get install -y \
             glslang-tools \
             libvulkan-dev \
+            mesa-vulkan-drivers \
             libwayland-bin \
             libwayland-dev \
             libxkbcommon-dev \
@@ -32,4 +33,6 @@ jobs:
             wayland-protocols
 
       - name: Run tests
-        run: zig build test
+        env:
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.json
+        run: zig build test -Dvisual-tests=true
