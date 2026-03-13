@@ -1,14 +1,40 @@
 # AGENTS.md - Forbear Codebase Guide
 
-This document provides guidelines for AI agents working in the Forbear codebase.
-Forbear is a Zig-based UI framework with Vulkan graphics backend, supporting Linux (Wayland) and macOS.
+This document gives AI agents the shortest path to the real shape of the Forbear codebase.
+Forbear is a Zig UI framework with a Vulkan renderer, an immediate-style mounting API, a retained component state model, and platform-specific window backends.
 
 ## Project Overview
 
 - **Language**: Zig (minimum version 0.15.2)
-- **Graphics**: Vulkan with GLSL shaders (compiled via glslangValidator)
-- **Platforms**: Linux (Wayland), macOS (Metal surface via MoltenVK), Windows
-- **Dependencies**: FreeType (font rendering), kb_text_shape (text shaping), zmath (math), stb_image
+- **Graphics**: Vulkan with GLSL shaders compiled during the build
+- **Platforms**: Linux (Wayland), macOS (MoltenVK + Metal surface), Windows
+- **Dependencies**: FreeType, kb_text_shape, zmath, stb_image
+
+## Architecture At A Glance
+
+Forbear's runtime flow is:
+
+1. Initialize graphics/window/context.
+2. Register long-lived resources such as fonts and images.
+3. Start a frame with `forbear.frame(meta)`.
+4. Mount UI by calling `component()`, `element()`, `text()`, and `image()`.
+5. Resolve geometry with `forbear.layout()`.
+6. Render the laid out node tree with `renderer.drawFrame(...)`.
+7. Advance events, hover state, scrolling, and animations with `forbear.update()`.
+
+The core mental model is "build a node tree each frame, but keep component state across frames by key." `component("key")` creates a stable hook scope for `useState`, `useTransition`, `useAnimation`, and related helpers. `element`, `text`, and `image` append `Node` values into the current frame tree stored in `FrameMeta`. The layout stage resolves sizes and positions, then the renderer iterates that resolved tree to issue Vulkan draw calls.
+
+## How The Core Files Connect
+
+- `src/root.zig`: public API, global runtime context, frame lifecycle, hooks, resource registration, event/update flow.
+- `src/node.zig`: the UI data model: `Node`, `Style`, `IncompleteStyle`, sizing enums, alignment, padding, text wrapping, shadows.
+- `src/layouting.zig`: layout resolution, grow/shrink distribution, wrapping, absolute positioning, tree iteration, and `layout()`.
+- `src/graphics.zig`: Vulkan initialization plus turning the laid out tree into render passes and draw calls.
+- `src/components.zig`: reusable built-in components such as `FpsCounter`.
+- `src/font.zig`: font loading, shaping, and glyph data.
+- `src/window/*.zig`: platform-specific window/event backends.
+- `src/windows/win32.zig`: lower-level Windows helpers used by the windowing/graphics code.
+- `playground.zig`: the best end-to-end example of the frame -> layout -> draw -> update loop.
 
 ## Build Commands
 
@@ -22,58 +48,144 @@ zig build run
 # Run all tests
 zig build test
 
-# Build all examples and playground (verifies everything compiles)
+# Build the playground and examples without running tests
 zig build check
 
 # Build with release optimizations
 zig build --release=fast
 
-# Build with specific target
+# Build with a specific target
 zig build -Dtarget=x86_64-linux-gnu
 ```
 
-### Running a Single Test
+### Running Focused Tests
 
-Zig's build system runs all tests together. To run specific tests, use test filters:
+Zig's build step runs the module test binary, but test filters still work:
 
 ```bash
-# Run tests with filter (matches test name substring)
-zig build test -- --test-filter="test_name_pattern"
-
-# Example: run tests containing "layout" in their name
+# Run tests whose names contain a substring
 zig build test -- --test-filter="layout"
+
+# Example: run the layout pipeline tests
+zig build test -- --test-filter="layout pipeline"
 ```
 
 ### Shader Compilation
 
-Shaders are automatically compiled during build using `glslangValidator`. Manual compilation:
+Shaders are compiled automatically during `zig build`. Manual examples:
 
 ```bash
 glslangValidator -V -o output.spv shaders/element/vertex.vert
 glslangValidator -V -o output.spv shaders/element/fragment.frag
+glslangValidator -V -o output.spv shaders/shadow/vertex.vert
+glslangValidator -V -o output.spv shaders/text/fragment.frag
 ```
+
+## Project Structure
+
+```text
+forbear/
+├── AGENTS.md
+├── TODO.md
+├── build.zig
+├── build.zig.zon
+├── playground.zig
+├── test_runner.zig
+├── examples/
+│   └── uhoh.com/           # Real example app using the framework
+├── notes/                  # Design notes, plans, and open questions
+├── shaders/
+│   ├── element/
+│   ├── shadow/
+│   └── text/
+├── src/
+│   ├── c.zig
+│   ├── components.zig
+│   ├── font.zig
+│   ├── graphics.zig
+│   ├── layouting.zig
+│   ├── node.zig
+│   ├── root.zig
+│   ├── tests/
+│   │   ├── font.test.zig
+│   │   ├── layouting.test.zig
+│   │   ├── root.test.zig
+│   │   └── utilities.zig
+│   ├── window/
+│   │   ├── linux.zig
+│   │   ├── macos.zig
+│   │   ├── root.zig
+│   │   └── windows.zig
+│   └── windows/
+│       └── win32.zig
+└── dependencies/
+```
+
+## Component, Hook, And Resource Patterns
+
+### Frame lifecycle
+
+- `forbear.frame(meta)` installs per-frame context such as the arena allocator, viewport size, DPI, and base style.
+- `FrameMeta.rootNode` starts as `null` and is filled by `element`/`text`.
+- `forbear.layout()` and `forbear.update()` are expected to run inside the frame body after mounting finishes.
+
+### Components and hooks
+
+- Wrap stateful UI in `forbear.component("stable-key")({ ... })`.
+- Hooks such as `useState`, `useArena`, `useAnimation`, `useTransition`, and `useNextEvent` depend on frame/component context.
+- Hook ordering matters. `componentEnd` checks that the number of `useState` calls stays stable across frames and raises `error.RulesOfHooksViolated` otherwise.
+- Component state is keyed by both the explicit component key and the current node path, so stable structure matters.
+
+### Node construction
+
+- `forbear.element(style)({ ... })` pushes an element node and establishes a parent for child nodes.
+- `forbear.text("...")` shapes text and inserts a glyph-backed node.
+- `forbear.image(style, img)` is a convenience wrapper over `element` that fills in aspect-ratio-aware sizing and background image state.
+- Standard-placement children participate in layout flow; `.placement = .manual` children stay out of that flow.
+
+### Resources
+
+- `registerFont` / `registerImage` are for long-lived resource registration.
+- `useFont` / `useImage` assume registration already happened and return errors if the identifier is missing.
+- In tests, helpers usually register the `Inter` font once and then build `FrameMeta` around it.
+
+## Testing Structure
+
+Tests are not stored in a top-level `tests/` directory. The current pattern is:
+
+- `src/root.zig` contains a final `test { ... }` block that imports the test modules under `src/tests/`.
+- Individual test cases live in `src/tests/*.test.zig`.
+- Shared test helpers live in `src/tests/utilities.zig`.
+
+The most important helper is `utilities.frameMeta(arena)`, which:
+
+- registers the embedded `Inter` font,
+- builds a realistic `forbear.FrameMeta`,
+- sets default DPI, viewport size, and base style,
+- gives layout tests a ready-made frame context.
+
+For layout tests, the usual pattern is:
+
+1. Create an arena allocator.
+2. Call `forbear.frame(try utilities.frameMeta(arena))({ ... })`.
+3. Mount nodes with `element`, `text`, or `component`.
+4. Call `try forbear.layout()`.
+5. Assert on node size/position or wrapped glyph output.
+
+`zig build check` only verifies compilation. It does **not** run tests.
 
 ## Code Style Guidelines
 
-### File Organization
+### Imports
 
-1. **Imports** - Group in this order, separated by blank lines:
-   - Standard library (`const std = @import("std");`)
-   - Built-in (`const builtin = @import("builtin");`)
-   - External dependencies (`const zmath = @import("zmath");`)
-   - Internal modules (`const Font = @import("font.zig");`)
+Group imports in this order with blank lines between groups:
 
-2. **Type Definitions** - Define after imports:
-   - Vector types: `const Vec4 = @Vector(4, f32);`
-   - Error sets
-   - Structs and enums
+1. Standard library: `const std = @import("std");`
+2. Built-ins: `const builtin = @import("builtin");`
+3. External dependencies: `const zmath = @import("zmath");`
+4. Internal modules: `const Font = @import("font.zig");`
 
-3. **Module Structure** - For files that define a primary type:
-   - Use `@This()` pattern for self-referential types
-   - Public fields and functions first
-   - Private/helper functions after
-
-### Naming Conventions
+### Naming
 
 | Element | Convention | Example |
 |---------|------------|---------|
@@ -84,303 +196,127 @@ glslangValidator -V -o output.spv shaders/element/fragment.frag
 | Files | snake_case.zig | `graphics.zig`, `font.zig` |
 | C interop | Match C naming | `c.VkInstance`, `c.FT_Face` |
 
-### Type Patterns
+### Type and module patterns
 
-```zig
-// Use @This() for self-referential struct methods
-pub fn init(...) @This() {
-    return @This(){ ... };
-}
+- Use `@This()` for self-referential struct methods.
+- Define vector aliases, error sets, and core types near the top of the file.
+- Keep public fields and public functions before private helpers when the file centers on one primary type.
+- Prefer tagged unions or small structs over long positional parameter lists.
 
-// Use extern struct for C-compatible layouts
-pub const Vertex = extern struct {
-    position: @Vector(3, f32),
-};
+### Closures (pseudo-closures)
 
-// Tagged unions for variant types
-pub const Node = union(enum) {
-    element: Element,
-    text: []const u8,
-};
-
-// Optional fields with defaults
-pub const Style = struct {
-    minWidth: ?f32 = null,
-    preferredWidth: Sizing,
-};
-```
-
-### Closures (Pseudo-Closures)
-
-**Zig does not support closures.** Inner functions cannot access surrounding variable context - everything must be passed down as parameters. The only way to "simulate" a closure is by explicitly passing values as parameters through a struct pattern:
+Zig does not support closures. Inner functions cannot capture outer locals, so pass everything explicitly:
 
 ```zig
 const myValue: usize = 10;
 const pseudoClosure = (struct {
     fn closure(value: usize) void {
-        // Use the passed value here
         _ = value;
     }
 }).closure(myValue);
 ```
 
-**Important:** The inner parameter name cannot shadow the outer variable name. You cannot use the same name in both the outer scope and the inner function parameter:
+Do not shadow the outer variable name in the inner function parameter:
 
 ```zig
-// WRONG - won't compile
+// WRONG
 const myValue: usize = 10;
 const pseudoClosure = (struct {
-    fn closure(myValue: usize) void {  // Error: shadows outer myValue
-        // ...
-    }
+    fn closure(myValue: usize) void {}
 }).closure(myValue);
 
-// CORRECT - different parameter name
+// CORRECT
 const myValue: usize = 10;
 const pseudoClosure = (struct {
-    fn closure(value: usize) void {  // OK: different name
-        // ...
-    }
+    fn closure(value: usize) void {}
 }).closure(myValue);
 ```
 
-In practice, use regular functions and pass all context explicitly.
+### Error handling and cleanup
 
-### Error Handling
+- Define explicit subsystem error sets where the boundary matters.
+- Translate foreign-library errors at the boundary.
+- Use `errdefer` aggressively for Vulkan/FreeType/resource cleanup.
+- Keep `init` / `deinit` pairs obvious and symmetrical.
 
-1. **Error Sets** - Define comprehensive error enums for each subsystem:
-   ```zig
-   const FreetypeError = error{
-       CannotOpenResource,
-       UnknownFileFormat,
-       // ...
-   };
-   ```
+### Memory management
 
-2. **Error Translation** - Convert C library errors to Zig errors:
-   ```zig
-   fn ensureNoError(errorCode: c.FT_Error) FreetypeError!void {
-       switch (errorCode) {
-           c.FT_Err_Cannot_Open_Resource => return error.CannotOpenResource,
-           // ...
-           else => std.debug.assert(errorCode == c.FT_Err_Ok),
-       }
-   }
-   ```
+- Pass allocators explicitly when ownership is real.
+- Use arena allocation for frame-scoped work.
+- Put allocator parameters first.
+- Keep long-lived allocations visible; do not hide persistent allocation behind "convenience" APIs.
 
-3. **Resource Cleanup** - Use `errdefer` for cleanup on error paths:
-   ```zig
-   var image: c.VkImage = undefined;
-   try ensureNoError(c.vkCreateImage(...));
-   errdefer c.vkDestroyImage(logicalDevice, image, null);
-   ```
+### C interop and platform code
 
-### Memory Management
+- Keep C imports centralized in `src/c.zig`.
+- Use `builtin.os.tag` for platform branching.
+- Prefer `std.fs.File` for cross-platform file I/O over raw `std.posix` calls.
 
-1. **Allocator Passing** - Pass allocators explicitly:
-   ```zig
-   pub fn init(allocator: std.mem.Allocator) !@This() { ... }
-   ```
+### Formatting
 
-2. **Arena Allocators** - Use for frame-scoped allocations:
-   ```zig
-   var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
-   defer arenaAllocator.deinit();
-   const arena = arenaAllocator.allocator();
-   ```
-
-3. **Cleanup Pattern** - Match init/deinit pairs:
-   ```zig
-   pub fn deinit(self: *@This(), logicalDevice: c.VkDevice) void {
-       c.vkDestroyImageView(logicalDevice, self.imageView, null);
-       // ...
-   }
-   ```
-
-4. **Allocator as first parameter**:
-   ```zig
-   pub fn createResource(allocator: std.mem.Allocator, ...) !Resource { ... }
-   ```
-
-### C Interop
-
-1. **Single c.zig file** - All C imports centralized:
-   ```zig
-   pub const c = @cImport({
-       @cDefine("VK_USE_PLATFORM_WAYLAND_KHR", "1");
-       @cInclude("vulkan/vulkan.h");
-   });
-   ```
-
-2. **Platform-specific code** - Use `builtin.os.tag`:
-   ```zig
-   if (builtin.os.tag == .linux) {
-       // Wayland-specific code
-   } else if (builtin.os.tag == .macos) {
-       // macOS-specific code
-   }
-   ```
-
-### Vulkan Specifics
-
-1. **Image Formats**:
-   - Font atlas: `VK_FORMAT_R8_UNORM` (linear grayscale from FreeType)
-   - Color images: `VK_FORMAT_R8G8B8A8_UNORM`
-   - Swapchain: Platform-dependent sRGB format
-
-2. **Resource Creation Pattern**:
-   ```zig
-   var resource: c.VkType = undefined;
-   try ensureNoError(c.vkCreateType(device, &createInfo, null, &resource));
-   errdefer c.vkDestroyType(device, resource, null);
-   ```
-
-### Code Formatting
-
-- Use `zig fmt` for automatic formatting
-- 4-space indentation (handled by zig fmt)
-- Line length: no strict limit, but prefer readable lines
-- Trailing commas in multi-line structs/arrays
-
-### Debug vs Release
-
-```zig
-if (builtin.mode == .Debug) {
-    // Debug-only code (validation layers, logging)
-}
-```
-
-## Project Structure
-
-```
-forbear/
-├── build.zig           # Build configuration
-├── build.zig.zon       # Package manifest
-├── src/
-│   ├── root.zig        # Public API exports
-│   ├── graphics.zig    # Vulkan rendering
-│   ├── font.zig        # FreeType font handling
-│   ├── layouting.zig   # Layout algorithm
-│   ├── node.zig        # UI node types
-│   ├── c.zig           # C imports
-│   └── window/
-│       ├── root.zig    # Platform abstraction
-│       ├── linux.zig   # Wayland implementation
-│       └── macos.zig   # macOS implementation
-├── shaders/
-│   ├── element/        # UI element shaders
-│   └── text/           # Text rendering shaders
-├── dependencies/       # Local dependencies
-└── playground.zig      # Example/test application
-```
+- Use `zig fmt` on touched Zig files.
+- 4-space indentation is handled by `zig fmt`.
+- Prefer readable lines over golfed code.
+- Use trailing commas in multiline literals.
 
 ## Common Tasks
 
-### Verifying All Code Compiles
+### Verifying all relevant code compiles
 
-After making changes, use `zig build check` to verify all examples and the playground compile:
+Use `zig build check` when a change affects public API, examples, shaders, or broad compilation behavior.
 
-```bash
-zig build check
-```
+### Adding a new public source file
 
-This command:
-- Builds the playground executable
-- Builds all examples in `examples/` directory
-- Does not run tests (use `zig build test` for that)
-- Useful for CI or before committing changes
+1. Create the file under `src/`.
+2. Export or re-export it from `src/root.zig` if it belongs in the public surface.
+3. Follow existing ownership/error patterns instead of inventing a new API style.
 
-### Adding a New Source File
+### Modifying shaders
 
-1. Create file in `src/` directory
-2. Import in `src/root.zig` if public API
-3. Use existing patterns for error handling and memory
+1. Edit the `.vert` or `.frag` file under `shaders/`.
+2. Make sure `build.zig` wires it into `addShaderImport` if it is a new shader.
+3. Rebuild with `zig build check` or a narrower relevant command.
 
-### Modifying Shaders
+### Platform-specific changes
 
-1. Edit `.vert` or `.frag` files in `shaders/`
-2. Build system auto-compiles to SPIR-V
-3. Embedded via `@embedFile` in graphics.zig
-
-### Platform-Specific Changes
-
-- Linux: `src/window/linux.zig` (Wayland)
+- Linux: `src/window/linux.zig`
 - macOS: `src/window/macos.zig`
-- Windows: `src/window/windows.zig`
-- Shared: Use `builtin.os.tag` switches
+- Windows window backend: `src/window/windows.zig`
+- Windows helpers: `src/windows/win32.zig`
+- Shared behavior: branch on `builtin.os.tag`
 
-### Custom Test Runner
+### Notes and TODOs
 
-Tests use a custom runner at `test_runner.zig`, wired in `build.zig` via:
+- Read `TODO.md` to understand the current roadmap and rough edges.
+- Read `notes/` when the task touches an area with open design questions or known tradeoffs.
+
+### Custom test runner
+
+The build uses `test_runner.zig` via:
+
 ```zig
 .test_runner = .{ .path = b.path("test_runner.zig"), .mode = .simple },
 ```
 
-Environment variables: `TEST_VERBOSE` (default true), `TEST_FAIL_FIRST`, `TEST_FILTER`.
+Useful environment variables: `TEST_VERBOSE`, `TEST_FAIL_FIRST`, `TEST_FILTER`.
 
-## Zig 0.15 Standard Library Notes
+## Common Pitfalls
 
-Key API details for Zig 0.15.2 that differ from earlier versions or have platform-specific behavior:
+- `forbear.frame`, `forbear.element`, and `forbear.component` return end functions. Always invoke them with the `({ ... })` pattern so stacks unwind correctly.
+- Hooks must run inside the correct context:
+  - `useArena` requires a frame.
+  - `useState` and related stateful hooks require a component scope.
+- `zig build check` is compile coverage, not test coverage.
+- Fonts and images must be registered before `useFont` / `useImage`.
+- `.placement = .manual` keeps a child out of standard flow; do not debug those nodes as if grow/shrink logic applies to them.
+- Stable hook ordering matters. Do not call `useState` conditionally unless the condition is structurally stable across every frame.
 
-### Cross-Platform File I/O
+## Zig 0.15 Notes
 
-Use `std.fs.File` for cross-platform file operations — it wraps POSIX `fd_t` (integer) on Unix and Windows `HANDLE` on Windows behind a unified type. The methods `read()`, `write()`, `seekTo()`, `close()` all work on every platform.
+The common gotchas worth remembering in normal work:
 
-```zig
-const File = std.fs.File;
-const stderr = File.stderr();  // cross-platform
-_ = try stderr.write("hello");
-```
+- `std.fs.File.writer()` in Zig 0.15 takes a buffer parameter.
+- There is no old-style `std.io.bufferedWriter()` helper to reach for.
+- `std.fs.File` methods are the safe cross-platform default for read/write/seek/close.
 
-`std.fs.File.writer()` in 0.15 takes a buffer parameter:
-```zig
-var buf: [256]u8 = undefined;
-const w = file.writer(&buf);
-```
-There is no free-standing `std.io.bufferedWriter()` — it was removed/restructured in 0.15.
-
-### POSIX APIs That Do NOT Work on Windows
-
-These `std.posix` functions only compile on POSIX systems (Linux, macOS):
-
-- `std.posix.dup()`, `std.posix.dup2()` — no Windows implementation
-- `std.posix.STDERR_FILENO` — not defined on Windows
-- `std.posix.memfd_create()` — Linux only
-- `std.posix.openZ()`, `std.posix.unlinkZ()` — POSIX only
-- `std.posix.getpid()` — Linux/Plan9 only
-
-These `std.posix` functions DO work on Windows (they dispatch to Windows APIs internally):
-
-- `std.posix.exit()` — calls `kernel32.ExitProcess` on Windows
-- `std.posix.lseek_SET()` — calls `SetFilePointerEx` on Windows
-- `std.posix.read()` / `std.posix.write()` / `std.posix.close()` — dispatch to Windows equivalents
-
-When writing cross-platform code, prefer `std.fs.File` methods over raw `std.posix` calls.
-
-### Windows Handle Duplication
-
-Windows equivalent of `dup()` is `kernel32.DuplicateHandle()`:
-```zig
-const windows = std.os.windows;
-var duplicated: windows.HANDLE = undefined;
-const proc = windows.GetCurrentProcess();
-const DUPLICATE_SAME_ACCESS = 0x00000002;
-_ = windows.kernel32.DuplicateHandle(proc, handle, proc, &duplicated, 0, windows.FALSE, DUPLICATE_SAME_ACCESS);
-```
-
-### Windows Stderr Redirection
-
-`std.debug.print` reads `peb().ProcessParameters.hStdError` on each call (the PEB field is `HANDLE`, not optional). To redirect stderr on Windows, overwrite this field directly:
-```zig
-windows.peb().ProcessParameters.hStdError = new_handle;
-```
-On POSIX, use `dup2(new_fd, STDERR_FILENO)` instead.
-
-### Temporary Files
-
-- **Linux**: `std.posix.memfd_create("name", 0)` creates an anonymous in-memory file (no filesystem path needed).
-- **Cross-platform**: Use `std.fs.Dir.createFile()` on a temp directory. The `.zig-cache/tmp/` directory is conventional for build-time temp files. Generate unique names via `std.crypto.random.bytes()` + `std.fs.base64_encoder.encode()`.
-
-### PEB Struct Fields
-
-`RTL_USER_PROCESS_PARAMETERS.hStdError` is `HANDLE` (non-optional). The similar-looking `STARTUPINFOW.hStdError` is `?HANDLE` (optional). Don't confuse them — the PEB version doesn't need `orelse`.
+For the deeper platform-specific notes used by the Windows/test-runner work, read `notes/zig-015-platform-notes.md`.
