@@ -1,5 +1,6 @@
 const std = @import("std");
 const forbear = @import("../root.zig");
+const Sizing = @import("../node.zig").Sizing;
 const utilities = @import("utilities.zig");
 const Vec2 = @Vector(2, f32);
 
@@ -1087,5 +1088,295 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
         // not just the longest-word minSize.
         try std.testing.expectEqual(textNode.size[0], parent.size[0]);
         try std.testing.expect(parent.size[0] > textNode.minSize[0]);
+    });
+}
+
+fn resolveTransition(
+    arenaAllocator: std.mem.Allocator,
+    key: []const u8,
+    value: f32,
+    duration: f32,
+    easing: fn (f32) f32,
+    result: *f32,
+) !void {
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.component(key)({
+            result.* = try forbear.useTransition(value, duration, easing);
+        });
+    });
+}
+
+const AnimationCommand = enum {
+    none,
+    start,
+    reset,
+};
+
+const AnimationSnapshot = struct {
+    running: bool,
+    progress: ?f32,
+};
+
+fn resolveAnimation(
+    arenaAllocator: std.mem.Allocator,
+    key: []const u8,
+    duration: f32,
+    command: AnimationCommand,
+    snapshot: *AnimationSnapshot,
+) !void {
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.component(key)({
+            const animation = try forbear.useAnimation(duration);
+            switch (command) {
+                .none => {},
+                .start => animation.start(),
+                .reset => animation.reset(),
+            }
+            snapshot.* = .{
+                .running = animation.isRunning(),
+                .progress = animation.progress(),
+            };
+        });
+    });
+}
+
+fn expectApprox(expected: f32, actual: f32) !void {
+    try std.testing.expectApproxEqAbs(expected, actual, 0.001);
+}
+
+fn testImageStyleResolution(configuration: struct {
+    style: forbear.IncompleteStyle,
+    expectedWidth: Sizing,
+    expectedHeight: Sizing,
+    expectedSize: Vec2,
+    expectedMinSize: Vec2,
+}) !void {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var image = forbear.Image{
+        .image = undefined,
+        .imageExtent = undefined,
+        .imageView = undefined,
+        .memory = undefined,
+        .contents = &.{},
+        .loaded = false,
+        .width = 200,
+        .height = 100,
+        .renderer = undefined,
+    };
+
+    const self = forbear.getContext();
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.image(configuration.style, &image);
+        const node = self.frameMeta.?.previousPushedNode.?;
+        try std.testing.expectEqualDeep(configuration.expectedWidth, node.style.width);
+        try std.testing.expectEqualDeep(configuration.expectedHeight, node.style.height);
+        try std.testing.expectEqualDeep(configuration.expectedSize, node.size);
+        try std.testing.expectEqualDeep(configuration.expectedMinSize, node.minSize);
+        switch (node.style.background) {
+            .image => |backgroundImage| try std.testing.expect(backgroundImage == &image),
+            else => return error.ExpectedImageBackground,
+        }
+    });
+}
+
+test "cubicBezier - edge cases clamp to unit interval" {
+    try std.testing.expectEqual(@as(f32, 0.0), forbear.cubicBezier(0.25, 0.1, 0.25, 1.0, -1.0));
+    try std.testing.expectEqual(@as(f32, 0.0), forbear.cubicBezier(0.25, 0.1, 0.25, 1.0, 0.0));
+    try std.testing.expectEqual(@as(f32, 1.0), forbear.cubicBezier(0.25, 0.1, 0.25, 1.0, 1.0));
+    try std.testing.expectEqual(@as(f32, 1.0), forbear.cubicBezier(0.25, 0.1, 0.25, 1.0, 2.0));
+}
+
+test "cubicBezier - linear control points match input" {
+    for ([_]f32{ 0.1, 0.25, 0.5, 0.75, 0.9 }) |time| {
+        try expectApprox(time, forbear.cubicBezier(0.0, 0.0, 1.0, 1.0, time));
+    }
+}
+
+test "cubicBezier - known easing values stay stable" {
+    try expectApprox(0.8024034, forbear.cubicBezier(0.25, 0.1, 0.25, 1.0, 0.5));
+    try expectApprox(0.5, forbear.cubicBezier(0.5, 0.0, 0.5, 1.0, 0.5));
+}
+
+test "linear - identity" {
+    try std.testing.expectEqual(@as(f32, 0.0), forbear.linear(0.0));
+    try std.testing.expectEqual(@as(f32, 0.5), forbear.linear(0.5));
+    try std.testing.expectEqual(@as(f32, 1.0), forbear.linear(1.0));
+}
+
+test "useTransition - initial value, interpolation, and completion" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, renderer);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    self.deltaTime = 0.0;
+    var value: f32 = undefined;
+    try resolveTransition(arenaAllocator, "transition-basic", 0.0, 1.0, forbear.linear, &value);
+    try std.testing.expectEqual(@as(f32, 0.0), value);
+
+    self.deltaTime = 0.25;
+    _ = arena.reset(.retain_capacity);
+    try resolveTransition(arenaAllocator, "transition-basic", 100.0, 1.0, forbear.linear, &value);
+    try std.testing.expectEqual(@as(f32, 0.0), value);
+
+    _ = arena.reset(.retain_capacity);
+    try resolveTransition(arenaAllocator, "transition-basic", 100.0, 1.0, forbear.linear, &value);
+    try expectApprox(25.0, value);
+
+    _ = arena.reset(.retain_capacity);
+    try resolveTransition(arenaAllocator, "transition-basic", 100.0, 1.0, forbear.linear, &value);
+    try expectApprox(50.0, value);
+
+    self.deltaTime = 1.0;
+    _ = arena.reset(.retain_capacity);
+    try resolveTransition(arenaAllocator, "transition-basic", 100.0, 1.0, forbear.linear, &value);
+    try std.testing.expectEqual(@as(f32, 100.0), value);
+}
+
+test "useTransition - changing target mid animation restarts from current value" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, renderer);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    self.deltaTime = 0.0;
+    var value: f32 = undefined;
+    try resolveTransition(arenaAllocator, "transition-retarget", 0.0, 1.0, forbear.linear, &value);
+
+    self.deltaTime = 0.5;
+    _ = arena.reset(.retain_capacity);
+    try resolveTransition(arenaAllocator, "transition-retarget", 100.0, 1.0, forbear.linear, &value);
+    try std.testing.expectEqual(@as(f32, 0.0), value);
+
+    _ = arena.reset(.retain_capacity);
+    try resolveTransition(arenaAllocator, "transition-retarget", 100.0, 1.0, forbear.linear, &value);
+    try expectApprox(50.0, value);
+
+    _ = arena.reset(.retain_capacity);
+    try resolveTransition(arenaAllocator, "transition-retarget", 200.0, 1.0, forbear.linear, &value);
+    try expectApprox(100.0, value);
+
+    _ = arena.reset(.retain_capacity);
+    try resolveTransition(arenaAllocator, "transition-retarget", 200.0, 1.0, forbear.linear, &value);
+    try expectApprox(150.0, value);
+}
+
+test "useAnimation - start advances progress and reset clears state" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, renderer);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var snapshot: AnimationSnapshot = undefined;
+
+    self.deltaTime = null;
+    try resolveAnimation(arenaAllocator, "animation-lifecycle", 1.0, .none, &snapshot);
+    try std.testing.expect(!snapshot.running);
+    try std.testing.expectEqual(@as(?f32, null), snapshot.progress);
+
+    self.deltaTime = 0.0;
+    _ = arena.reset(.retain_capacity);
+    try resolveAnimation(arenaAllocator, "animation-lifecycle", 1.0, .start, &snapshot);
+    try std.testing.expect(snapshot.running);
+    try std.testing.expectEqual(@as(?f32, 0.0), snapshot.progress);
+
+    self.deltaTime = 0.25;
+    _ = arena.reset(.retain_capacity);
+    try resolveAnimation(arenaAllocator, "animation-lifecycle", 1.0, .none, &snapshot);
+    try std.testing.expect(snapshot.running);
+    try expectApprox(0.25, snapshot.progress.?);
+
+    self.deltaTime = 2.0;
+    _ = arena.reset(.retain_capacity);
+    try resolveAnimation(arenaAllocator, "animation-lifecycle", 1.0, .none, &snapshot);
+    try std.testing.expect(snapshot.running);
+    try std.testing.expectEqual(@as(?f32, 1.0), snapshot.progress);
+
+    _ = arena.reset(.retain_capacity);
+    try resolveAnimation(arenaAllocator, "animation-lifecycle", 1.0, .reset, &snapshot);
+    try std.testing.expect(!snapshot.running);
+    try std.testing.expectEqual(@as(?f32, null), snapshot.progress);
+}
+
+test "image - fit fit resolves to intrinsic width and aspect ratio height" {
+    try testImageStyleResolution(.{
+        .style = .{
+            .width = .fit,
+            .height = .fit,
+        },
+        .expectedWidth = .{ .fixed = 200.0 },
+        .expectedHeight = .{ .ratio = 0.5 },
+        .expectedSize = .{ 200.0, 100.0 },
+        .expectedMinSize = .{ 0.0, 0.0 },
+    });
+}
+
+test "image - fixed fit resolves ratio height from aspect" {
+    try testImageStyleResolution(.{
+        .style = .{
+            .width = .{ .fixed = 80.0 },
+            .height = .fit,
+        },
+        .expectedWidth = .{ .fixed = 80.0 },
+        .expectedHeight = .{ .ratio = 0.5 },
+        .expectedSize = .{ 80.0, 40.0 },
+        .expectedMinSize = .{ 80.0, 0.0 },
+    });
+}
+
+test "image - grow fit keeps grow width and derives ratio height" {
+    try testImageStyleResolution(.{
+        .style = .{
+            .width = .grow,
+            .height = .fit,
+        },
+        .expectedWidth = .grow,
+        .expectedHeight = .{ .ratio = 0.5 },
+        .expectedSize = .{ 0.0, 0.0 },
+        .expectedMinSize = .{ 0.0, 0.0 },
+    });
+}
+
+test "image - fit fixed derives ratio width from aspect" {
+    try testImageStyleResolution(.{
+        .style = .{
+            .width = .fit,
+            .height = .{ .fixed = 40.0 },
+        },
+        .expectedWidth = .{ .ratio = 2.0 },
+        .expectedHeight = .{ .fixed = 40.0 },
+        .expectedSize = .{ 80.0, 40.0 },
+        .expectedMinSize = .{ 0.0, 40.0 },
+    });
+}
+
+test "image - grow grow keeps grow width and derives ratio height" {
+    try testImageStyleResolution(.{
+        .style = .{
+            .width = .grow,
+            .height = .grow,
+        },
+        .expectedWidth = .grow,
+        .expectedHeight = .{ .ratio = 0.5 },
+        .expectedSize = .{ 0.0, 0.0 },
+        .expectedMinSize = .{ 0.0, 0.0 },
     });
 }
