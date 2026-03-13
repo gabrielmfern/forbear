@@ -563,9 +563,9 @@ pub fn layout() !*Node {
             node.size[1] = @min(@max(viewportSize[1], node.minSize[1]), node.maxSize[1]);
         }
 
-        // applyParentPercentageSizes(node, viewportSize);
-        // applyRatios(node);
-        // try growAndShrink(arena, node);
+        applyParentPercentageSizes(node, viewportSize);
+        applyRatios(node);
+        try growAndShrink(arena, node);
 
         try wrap(arena, node);
         fitAlong(node, .topToBottom);

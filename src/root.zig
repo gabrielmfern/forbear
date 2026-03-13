@@ -1343,7 +1343,8 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     return &frameEnd;
 }
 
-/// TODO: share the github of the person I got this trick from
+/// TODO: share the github of the person I got the trick of using an end
+/// function as return value
 fn elementEnd(block: void) void {
     _ = block;
     const self = getContext();
