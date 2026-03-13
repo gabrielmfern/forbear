@@ -1129,4 +1129,5 @@ test {
     _ = std.testing.refAllDecls(@import("tests/font.test.zig"));
     _ = std.testing.refAllDecls(@import("tests/layouting.test.zig"));
     _ = std.testing.refAllDecls(@import("tests/root.test.zig"));
+    _ = std.testing.refAllDecls(@import("tests/snapshot.test.zig"));
 }
