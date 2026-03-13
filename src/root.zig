@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const build_options = @import("build_options");
 
 pub const c = @import("c.zig").c;
 pub const Font = @import("font.zig");
@@ -1129,4 +1130,7 @@ test {
     _ = std.testing.refAllDecls(@import("tests/font.test.zig"));
     _ = std.testing.refAllDecls(@import("tests/layouting.test.zig"));
     _ = std.testing.refAllDecls(@import("tests/root.test.zig"));
+    if (build_options.enable_visual_tests) {
+        _ = std.testing.refAllDecls(@import("tests/visual.test.zig"));
+    }
 }
