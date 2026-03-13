@@ -167,6 +167,77 @@ fn secondLineStartX(glyphPositions: []const Vec2) ?f32 {
     return null;
 }
 
+const MountedElementWrappingLayout = struct {
+    rootSize: Vec2,
+    childPositions: []Vec2,
+
+    fn deinit(self: @This()) void {
+        std.testing.allocator.free(self.childPositions);
+    }
+};
+
+fn layoutMountedWrappedElements(configuration: struct {
+    direction: Direction,
+    alignment: Alignment,
+    containerSize: Vec2,
+    childSizes: []const Vec2,
+}) !MountedElementWrappingLayout {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var root: Node = undefined;
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .direction = configuration.direction,
+            .alignment = configuration.alignment,
+            .overflow = .wrap,
+            .width = .{ .fixed = configuration.containerSize[0] },
+            .height = .{ .fixed = configuration.containerSize[1] },
+        })({
+            for (configuration.childSizes) |childSize| {
+                forbear.element(.{
+                    .width = .{ .fixed = childSize[0] },
+                    .height = .{ .fixed = childSize[1] },
+                })({});
+            }
+        });
+        root = (try layout()).*;
+    });
+
+    const childPositions = try std.testing.allocator.alloc(Vec2, root.children.nodes.items.len);
+    for (root.children.nodes.items, 0..) |child, index| {
+        childPositions[index] = child.position;
+    }
+
+    return .{
+        .rootSize = root.size,
+        .childPositions = childPositions,
+    };
+}
+
+fn testElementWrapConfiguration(configuration: struct {
+    direction: Direction,
+    alignment: Alignment,
+    containerSize: Vec2,
+    childSizes: []const Vec2,
+    expectedPositions: []const Vec2,
+}) !void {
+    std.debug.assert(configuration.childSizes.len == configuration.expectedPositions.len);
+    const measured = try layoutMountedWrappedElements(.{
+        .direction = configuration.direction,
+        .alignment = configuration.alignment,
+        .containerSize = configuration.containerSize,
+        .childSizes = configuration.childSizes,
+    });
+    defer measured.deinit();
+
+    try std.testing.expectEqualDeep(configuration.expectedPositions, measured.childPositions);
+}
+
 const TestChild = struct {
     width: Sizing = .fit,
     height: Sizing = .fit,
@@ -936,6 +1007,121 @@ test "layout pipeline - text wrapping character wrap works with mounted text" {
     try std.testing.expectEqual(@as(usize, 2), lineCountFromGlyphPositions(wrapped.glyphPositions));
     try std.testing.expectApproxEqAbs(wrapped.lineHeight * 2.0, wrapped.rootSize[1], 0.01);
     try std.testing.expectApproxEqAbs(wrapped.lineHeight * 2.0, wrapped.textNodeSize[1], 0.01);
+}
+
+test "layout pipeline - element wrapping aligns wrapped rows on the main axis" {
+    const childSizes = [_]Vec2{
+        .{ 40.0, 20.0 },
+        .{ 40.0, 20.0 },
+        .{ 40.0, 20.0 },
+    };
+
+    try testElementWrapConfiguration(.{
+        .direction = .leftToRight,
+        .alignment = .topLeft,
+        .containerSize = .{ 100.0, 80.0 },
+        .childSizes = &childSizes,
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 40.0, 0.0 },
+            .{ 0.0, 20.0 },
+        },
+    });
+    try testElementWrapConfiguration(.{
+        .direction = .leftToRight,
+        .alignment = .topCenter,
+        .containerSize = .{ 100.0, 80.0 },
+        .childSizes = &childSizes,
+        .expectedPositions = &.{
+            .{ 10.0, 0.0 },
+            .{ 50.0, 0.0 },
+            .{ 30.0, 20.0 },
+        },
+    });
+    try testElementWrapConfiguration(.{
+        .direction = .leftToRight,
+        .alignment = .topRight,
+        .containerSize = .{ 100.0, 80.0 },
+        .childSizes = &childSizes,
+        .expectedPositions = &.{
+            .{ 20.0, 0.0 },
+            .{ 60.0, 0.0 },
+            .{ 60.0, 20.0 },
+        },
+    });
+}
+
+test "layout pipeline - element wrapping aligns the wrapped block on the cross axis" {
+    const childSizes = [_]Vec2{
+        .{ 40.0, 20.0 },
+        .{ 40.0, 20.0 },
+        .{ 40.0, 20.0 },
+    };
+
+    try testElementWrapConfiguration(.{
+        .direction = .leftToRight,
+        .alignment = .centerLeft,
+        .containerSize = .{ 100.0, 80.0 },
+        .childSizes = &childSizes,
+        .expectedPositions = &.{
+            .{ 0.0, 20.0 },
+            .{ 40.0, 20.0 },
+            .{ 0.0, 40.0 },
+        },
+    });
+    try testElementWrapConfiguration(.{
+        .direction = .leftToRight,
+        .alignment = .bottomLeft,
+        .containerSize = .{ 100.0, 80.0 },
+        .childSizes = &childSizes,
+        .expectedPositions = &.{
+            .{ 0.0, 40.0 },
+            .{ 40.0, 40.0 },
+            .{ 0.0, 60.0 },
+        },
+    });
+    try testElementWrapConfiguration(.{
+        .direction = .leftToRight,
+        .alignment = .center,
+        .containerSize = .{ 100.0, 80.0 },
+        .childSizes = &childSizes,
+        .expectedPositions = &.{
+            .{ 10.0, 20.0 },
+            .{ 50.0, 20.0 },
+            .{ 30.0, 40.0 },
+        },
+    });
+}
+
+test "layout pipeline - element wrapping works for vertical flow" {
+    const childSizes = [_]Vec2{
+        .{ 20.0, 40.0 },
+        .{ 20.0, 40.0 },
+        .{ 20.0, 40.0 },
+    };
+
+    try testElementWrapConfiguration(.{
+        .direction = .topToBottom,
+        .alignment = .topLeft,
+        .containerSize = .{ 80.0, 100.0 },
+        .childSizes = &childSizes,
+        .expectedPositions = &.{
+            .{ 0.0, 0.0 },
+            .{ 0.0, 40.0 },
+            .{ 20.0, 0.0 },
+        },
+    });
+    try testElementWrapConfiguration(.{
+        .direction = .topToBottom,
+        .alignment = .bottomCenter,
+        .containerSize = .{ 80.0, 100.0 },
+        .childSizes = &childSizes,
+        .expectedPositions = &.{
+            .{ 20.0, 20.0 },
+            .{ 20.0, 60.0 },
+            .{ 40.0, 60.0 },
+        },
+    });
 }
 
 test "ratio and grow passes are stable when reapplied" {
