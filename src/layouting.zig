@@ -22,11 +22,6 @@ fn approxEq(a: f32, b: f32) bool {
     return @abs(a - b) < 0.001;
 }
 
-const LayoutDebugConfig = struct {
-    enabled: bool,
-    keyFilter: ?u64,
-};
-
 fn makeAbsolute(node: *Node, base: Vec2) void {
     if (node.style.placement != .manual) {
         node.position += base;
@@ -46,7 +41,7 @@ fn makeAbsolute(node: *Node, base: Vec2) void {
     }
 }
 
-pub fn growChildren(
+fn growChildren(
     children: []Node,
     activelyModifying: *std.ArrayList(*Node),
     direction: Direction,
@@ -118,7 +113,7 @@ pub fn growChildren(
     }
 }
 
-pub fn shrinkChildren(
+fn shrinkChildren(
     children: []Node,
     activelyModifying: *std.ArrayList(*Node),
     direction: Direction,
