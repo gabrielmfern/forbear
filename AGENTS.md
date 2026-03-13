@@ -74,13 +74,6 @@ TEST_FILTER="layout pipeline" zig build test
 
 Shaders are compiled automatically during `zig build`. Manual examples:
 
-```bash
-glslangValidator -V -o output.spv shaders/element/vertex.vert
-glslangValidator -V -o output.spv shaders/element/fragment.frag
-glslangValidator -V -o output.spv shaders/shadow/vertex.vert
-glslangValidator -V -o output.spv shaders/text/fragment.frag
-```
-
 ## Project Structure
 
 ```text
@@ -203,35 +196,6 @@ Group imports in this order with blank lines between groups:
 - Keep public fields and public functions before private helpers when the file centers on one primary type.
 - Prefer tagged unions or small structs over long positional parameter lists.
 
-### Closures (pseudo-closures)
-
-Zig does not support closures. Inner functions cannot capture outer locals, so pass everything explicitly:
-
-```zig
-const myValue: usize = 10;
-const pseudoClosure = (struct {
-    fn closure(value: usize) void {
-        _ = value;
-    }
-}).closure(myValue);
-```
-
-Do not shadow the outer variable name in the inner function parameter:
-
-```zig
-// WRONG
-const myValue: usize = 10;
-const pseudoClosure = (struct {
-    fn closure(myValue: usize) void {}
-}).closure(myValue);
-
-// CORRECT
-const myValue: usize = 10;
-const pseudoClosure = (struct {
-    fn closure(value: usize) void {}
-}).closure(myValue);
-```
-
 ### Error handling and cleanup
 
 - Define explicit subsystem error sets where the boundary matters.
@@ -290,33 +254,3 @@ Use `zig build check` when a change affects public API, examples, shaders, or br
 - Read `TODO.md` to understand the current roadmap and rough edges.
 - Read `notes/` when the task touches an area with open design questions or known tradeoffs.
 
-### Custom test runner
-
-The build uses `test_runner.zig` via:
-
-```zig
-.test_runner = .{ .path = b.path("test_runner.zig"), .mode = .simple },
-```
-
-Useful environment variables: `TEST_VERBOSE`, `TEST_FAIL_FIRST`, `TEST_FILTER`.
-
-## Common Pitfalls
-
-- `forbear.frame`, `forbear.element`, and `forbear.component` return end functions. Always invoke them with the `({ ... })` pattern so stacks unwind correctly.
-- Hooks must run inside the correct context:
-  - `useArena` requires a frame.
-  - `useState` and related stateful hooks require a component scope.
-- `zig build check` is compile coverage, not test coverage.
-- Fonts and images must be registered before `useFont` / `useImage`.
-- `.placement = .manual` keeps a child out of standard flow; do not debug those nodes as if grow/shrink logic applies to them.
-- Stable hook ordering matters. Do not call `useState` conditionally unless the condition is structurally stable across every frame.
-
-## Zig 0.15 Notes
-
-The common gotchas worth remembering in normal work:
-
-- `std.fs.File.writer()` in Zig 0.15 takes a buffer parameter.
-- There is no old-style `std.io.bufferedWriter()` helper to reach for.
-- `std.fs.File` methods are the safe cross-platform default for read/write/seek/close.
-
-For the deeper platform-specific notes used by the Windows/test-runner work, read `notes/zig-015-platform-notes.md`.

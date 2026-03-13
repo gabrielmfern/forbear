@@ -1,5 +1,5 @@
 ---
-description: Use the framework API design and code-style skills for internal Forbear Zig work.
+description: Use the API design skill when I ask you about making something new, when I ask your opinion on an API, when you're using an existing API and struggling with it.
 globs:
   - "src/**/*.zig"
 alwaysApply: false
@@ -7,8 +7,7 @@ alwaysApply: false
 
 Before making a non-trivial framework change, read:
 
-- `.cursor/skills/forbear-framework-api-design/SKILL.md`
-- `.cursor/skills/forbear-code-style/SKILL.md`
+- `.cursor/skills/api-design/SKILL.md`
 
 Use `AGENTS.md` for:
 

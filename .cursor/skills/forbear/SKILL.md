@@ -1,9 +1,9 @@
 ---
-name: forbear-ui-authoring
+name: forbear
 description: Writes application UI with Forbear's public API: frame loops, components, hooks, elements, text, images, events, and resource usage. Use when editing `playground.zig` or example app code under `examples/**/src/**`.
 ---
 
-# Forbear UI Authoring
+# Forbear UI work
 
 ## Use This Skill When
 
@@ -45,6 +45,7 @@ You are writing code against the public API, not extending the framework interna
 
 ### Components and hooks
 
+- Can only be used inside a component.
 - Put stateful logic inside `forbear.component("stable-key")({ ... })`.
 - Keep hook order stable across frames.
 - Use `useState` for local retained state, `useTransition` / `useAnimation` for motion, and `useNextEvent()` to consume events for the current element/component.
@@ -63,28 +64,14 @@ You are writing code against the public API, not extending the framework interna
 - Use `useFont` / `useImage` during frame work.
 - Do not add extra caching or ownership layers in app code unless the task clearly needs it.
 
-## Common Pitfalls
-
-- Calling hooks outside a frame or outside a component scope
-- Using unstable component keys
-- Calling hooks conditionally in a way that changes ordering across frames
-- Forgetting that `forbear.frame`, `element`, and `component` all use the `({ ... })` end-function pattern
-- Expecting manual-placement children to participate in grow/shrink layout flow
-
 ## Output Expectations
 
 When using this skill to write or propose code:
 
-1. Keep examples close to `playground.zig` or `examples/uhoh.com`.
+1. Keep examples close to `examples/uhoh.com`.
 2. Show concrete `forbear.*` calls rather than abstract pseudocode.
 3. Mention the relevant lifecycle rule when hooks or events are involved.
 4. Prefer a small reusable component over a framework-like abstraction in app code.
-
-## Validation
-
-- Run `zig fmt` on touched Zig files.
-- Run `zig build check` when the app/example change affects compilation or public usage shape.
-- Run a focused `TEST_FILTER="..." zig build test` only when the change also touches shared logic with existing tests.
 
 ## Additional Reference
 
