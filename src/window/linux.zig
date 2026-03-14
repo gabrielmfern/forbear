@@ -87,6 +87,8 @@ title: [:0]const u8,
 app_id: [:0]const u8,
 running: bool,
 dpi: [2]u32,
+configuredOnce: bool,
+receivedAnyConfigure: bool,
 
 scale: f32 = 1.0,
 physicalWidthMilimeters: i32 = 0,
@@ -373,7 +375,12 @@ fn xdgToplevelConfigure(
     _ = xdgToplevel;
     _ = states;
 
+    // receivedAnyConfigure is set on every configure, including 0x0 ones.
+    // configuredOnce is only set when the compositor provides a real (non-zero)
+    // size. The init() loop uses both to decide when to stop waiting.
+    window.receivedAnyConfigure = true;
     if (width > 0 and height > 0) {
+        window.configuredOnce = true;
         window.width = @intCast(width);
         window.height = @intCast(height);
         if (window.wpViewport) |viewport| {
@@ -777,6 +784,8 @@ pub fn init(
     window.title = title;
     window.app_id = app_id;
     window.running = true;
+    window.configuredOnce = false;
+    window.receivedAnyConfigure = false;
 
     window.handlers = .{};
 
@@ -855,6 +864,23 @@ pub fn init(
 
     c.wl_surface_commit(window.wlSurface);
     _ = c.wl_display_roundtrip(window.wlDisplay);
+
+    // Wait until the compositor tells us the window size before the first frame.
+    // Two outcomes:
+    //   - configuredOnce = true: compositor sent a real (non-zero) size; use it.
+    //   - receivedAnyConfigure = true but configuredOnce = false: compositor sent
+    //     a 0x0 configure meaning "client chooses"; keep the requested dimensions.
+    //     One extra roundtrip is done to catch a real size that may arrive just
+    //     after the 0x0 one.
+    while (!window.configuredOnce) {
+        _ = c.wl_display_roundtrip(window.wlDisplay);
+        if (window.receivedAnyConfigure) {
+            // Got a 0x0 configure. Do one more roundtrip to catch a real size
+            // if the compositor sends one immediately after, then stop.
+            _ = c.wl_display_roundtrip(window.wlDisplay);
+            break;
+        }
+    }
 
     // gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     // gl.enable(gl.BLEND);
