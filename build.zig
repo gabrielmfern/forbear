@@ -105,6 +105,7 @@ pub fn addShaderImport(b: *std.Build, module: *std.Build.Module, path: []const u
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const enableVisualTests = b.option(bool, "visual-tests", "Enable visual regression tests (requires Vulkan)") orelse false;
 
     const forbear = b.addModule("forbear", .{
         .root_source_file = b.path("src/root.zig"),
@@ -112,6 +113,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const buildOptions = b.addOptions();
+    buildOptions.addOption(bool, "enable_visual_tests", enableVisualTests);
+    forbear.addOptions("build_options", buildOptions);
 
     var dependencies = Dependencies.init(b, target, optimize);
 

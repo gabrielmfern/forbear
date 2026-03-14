@@ -547,3 +547,360 @@ pub fn layout() !*Node {
         return error.NoRootFrameNode;
     }
 }
+
+fn testBaseStyle() BaseStyle {
+    return .{
+        .font = undefined,
+        .color = .{ 0.0, 0.0, 0.0, 1.0 },
+        .fontSize = 16.0,
+        .fontWeight = 400,
+        .lineHeight = 1.0,
+        .textWrapping = .none,
+        .blendMode = .normal,
+        .cursor = .default,
+    };
+}
+
+fn testStyle(incompleteStyle: IncompleteStyle) Style {
+    return incompleteStyle.completeWith(testBaseStyle());
+}
+
+fn testNode(key: u64, position: Vec2, size: Vec2, style: IncompleteStyle) Node {
+    return .{
+        .key = key,
+        .position = position,
+        .z = 0,
+        .size = size,
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
+        .children = .{ .nodes = .empty },
+        .style = testStyle(style),
+    };
+}
+
+fn expectVec2(expected: Vec2, actual: Vec2) !void {
+    try std.testing.expectApproxEqAbs(expected[0], actual[0], 0.001);
+    try std.testing.expectApproxEqAbs(expected[1], actual[1], 0.001);
+}
+
+test "makeAbsolute - standard nodes accumulate, manual nodes keep local positions, glyphs inherit absolute parent" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var standardGrandchildren = try std.ArrayList(Node).initCapacity(arenaAllocator, 1);
+    standardGrandchildren.appendAssumeCapacity(testNode(3, .{ 1.0, 2.0 }, .{ 3.0, 4.0 }, .{}));
+
+    var standardChild = testNode(2, .{ 5.0, 6.0 }, .{ 20.0, 10.0 }, .{});
+    standardChild.children = .{ .nodes = standardGrandchildren };
+
+    var manualGrandchildren = try std.ArrayList(Node).initCapacity(arenaAllocator, 1);
+    manualGrandchildren.appendAssumeCapacity(testNode(5, .{ 2.0, 3.0 }, .{ 4.0, 5.0 }, .{}));
+
+    var manualChild = testNode(4, .{ 7.0, 8.0 }, .{ 12.0, 13.0 }, .{
+        .placement = .{ .manual = .{ 7.0, 8.0 } },
+    });
+    manualChild.children = .{ .nodes = manualGrandchildren };
+
+    const glyphs = try arenaAllocator.alloc(LayoutGlyph, 2);
+    glyphs[0] = .{
+        .index = 0,
+        .position = .{ 1.0, 1.0 },
+        .text = "a",
+        .advance = .{ 4.0, 0.0 },
+        .offset = .{ 0.0, 0.0 },
+    };
+    glyphs[1] = .{
+        .index = 1,
+        .position = .{ 2.0, 3.0 },
+        .text = "b",
+        .advance = .{ 4.0, 0.0 },
+        .offset = .{ 0.0, 0.0 },
+    };
+
+    var glyphChild = testNode(6, .{ 4.0, 5.0 }, .{ 8.0, 9.0 }, .{});
+    glyphChild.children = .{ .glyphs = .{
+        .slice = glyphs,
+        .lineHeight = 10.0,
+    } };
+
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 3);
+    children.appendAssumeCapacity(standardChild);
+    children.appendAssumeCapacity(manualChild);
+    children.appendAssumeCapacity(glyphChild);
+
+    var root = testNode(1, .{ 10.0, 20.0 }, .{ 100.0, 100.0 }, .{});
+    root.children = .{ .nodes = children };
+
+    makeAbsolute(&root, .{ 0.0, 0.0 });
+
+    try expectVec2(.{ 10.0, 20.0 }, root.position);
+
+    const absoluteChildren = root.children.nodes.items;
+    try expectVec2(.{ 15.0, 26.0 }, absoluteChildren[0].position);
+    try expectVec2(.{ 16.0, 28.0 }, absoluteChildren[0].children.nodes.items[0].position);
+
+    try expectVec2(.{ 7.0, 8.0 }, absoluteChildren[1].position);
+    try expectVec2(.{ 9.0, 11.0 }, absoluteChildren[1].children.nodes.items[0].position);
+
+    try expectVec2(.{ 14.0, 25.0 }, absoluteChildren[2].position);
+    try expectVec2(.{ 15.0, 26.0 }, absoluteChildren[2].children.glyphs.slice[0].position);
+    try expectVec2(.{ 16.0, 28.0 }, absoluteChildren[2].children.glyphs.slice[1].position);
+}
+
+test "applyParentPercentageSizes - resolves percentages, clamps limits, preserves fixed sizes, and recurses" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var grandChildren = try std.ArrayList(Node).initCapacity(arenaAllocator, 1);
+    grandChildren.appendAssumeCapacity(.{
+        .key = 3,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 0.0, 0.0 },
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
+        .children = .{ .nodes = .empty },
+        .style = testStyle(.{
+            .width = .{ .percentage = 0.5 },
+            .height = .{ .percentage = 0.5 },
+        }),
+    });
+
+    const percentageChild = Node{
+        .key = 2,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 0.0, 0.0 },
+        .minSize = .{ 0.0, 60.0 },
+        .maxSize = .{ 100.0, std.math.inf(f32) },
+        .children = .{ .nodes = grandChildren },
+        .style = testStyle(.{
+            .width = .{ .percentage = 0.9 },
+            .height = .{ .percentage = 0.5 },
+        }),
+    };
+
+    const fixedChild = Node{
+        .key = 4,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 33.0, 44.0 },
+        .minSize = .{ 33.0, 44.0 },
+        .maxSize = .{ 33.0, 44.0 },
+        .children = .{ .nodes = .empty },
+        .style = testStyle(.{
+            .width = .{ .fixed = 33.0 },
+            .height = .{ .fixed = 44.0 },
+        }),
+    };
+
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
+    children.appendAssumeCapacity(percentageChild);
+    children.appendAssumeCapacity(fixedChild);
+
+    var root = Node{
+        .key = 1,
+        .position = .{ 0.0, 0.0 },
+        .z = 0,
+        .size = .{ 200.0, 100.0 },
+        .minSize = .{ 200.0, 100.0 },
+        .maxSize = .{ 200.0, 100.0 },
+        .children = .{ .nodes = children },
+        .style = testStyle(.{
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 100.0 },
+        }),
+    };
+
+    applyParentPercentageSizes(&root, .{ 200.0, 100.0 });
+
+    try expectVec2(.{ 100.0, 60.0 }, root.children.nodes.items[0].size);
+    try expectVec2(.{ 50.0, 30.0 }, root.children.nodes.items[0].children.nodes.items[0].size);
+    try expectVec2(.{ 33.0, 44.0 }, root.children.nodes.items[1].size);
+}
+
+test "place - horizontal alignment combinations position children along both axes" {
+    const cases = [_]struct {
+        alignment: Alignment,
+        expectedFirst: Vec2,
+        expectedSecond: Vec2,
+    }{
+        .{ .alignment = .topLeft, .expectedFirst = .{ 0.0, 0.0 }, .expectedSecond = .{ 10.0, 0.0 } },
+        .{ .alignment = .topCenter, .expectedFirst = .{ 35.0, 0.0 }, .expectedSecond = .{ 45.0, 0.0 } },
+        .{ .alignment = .topRight, .expectedFirst = .{ 70.0, 0.0 }, .expectedSecond = .{ 80.0, 0.0 } },
+        .{ .alignment = .centerLeft, .expectedFirst = .{ 0.0, 25.0 }, .expectedSecond = .{ 10.0, 20.0 } },
+        .{ .alignment = .center, .expectedFirst = .{ 35.0, 25.0 }, .expectedSecond = .{ 45.0, 20.0 } },
+        .{ .alignment = .centerRight, .expectedFirst = .{ 70.0, 25.0 }, .expectedSecond = .{ 80.0, 20.0 } },
+        .{ .alignment = .bottomLeft, .expectedFirst = .{ 0.0, 50.0 }, .expectedSecond = .{ 10.0, 40.0 } },
+        .{ .alignment = .bottomCenter, .expectedFirst = .{ 35.0, 50.0 }, .expectedSecond = .{ 45.0, 40.0 } },
+        .{ .alignment = .bottomRight, .expectedFirst = .{ 70.0, 50.0 }, .expectedSecond = .{ 80.0, 40.0 } },
+    };
+
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    for (cases) |case| {
+        var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
+        children.appendAssumeCapacity(testNode(1, .{ 0.0, 0.0 }, .{ 10.0, 10.0 }, .{}));
+        children.appendAssumeCapacity(testNode(2, .{ 0.0, 0.0 }, .{ 20.0, 20.0 }, .{}));
+
+        var parent = testNode(0, .{ 0.0, 0.0 }, .{ 100.0, 60.0 }, .{
+            .direction = .leftToRight,
+            .alignment = case.alignment,
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 60.0 },
+        });
+        parent.children = .{ .nodes = children };
+
+        place(&parent);
+
+        try expectVec2(case.expectedFirst, parent.children.nodes.items[0].position);
+        try expectVec2(case.expectedSecond, parent.children.nodes.items[1].position);
+        _ = arena.reset(.retain_capacity);
+    }
+}
+
+test "place - vertical alignment combinations position children along both axes" {
+    const cases = [_]struct {
+        alignment: Alignment,
+        expectedFirst: Vec2,
+        expectedSecond: Vec2,
+    }{
+        .{ .alignment = .topLeft, .expectedFirst = .{ 0.0, 0.0 }, .expectedSecond = .{ 0.0, 10.0 } },
+        .{ .alignment = .topCenter, .expectedFirst = .{ 45.0, 0.0 }, .expectedSecond = .{ 40.0, 10.0 } },
+        .{ .alignment = .topRight, .expectedFirst = .{ 90.0, 0.0 }, .expectedSecond = .{ 80.0, 10.0 } },
+        .{ .alignment = .centerLeft, .expectedFirst = .{ 0.0, 15.0 }, .expectedSecond = .{ 0.0, 25.0 } },
+        .{ .alignment = .center, .expectedFirst = .{ 45.0, 15.0 }, .expectedSecond = .{ 40.0, 25.0 } },
+        .{ .alignment = .centerRight, .expectedFirst = .{ 90.0, 15.0 }, .expectedSecond = .{ 80.0, 25.0 } },
+        .{ .alignment = .bottomLeft, .expectedFirst = .{ 0.0, 30.0 }, .expectedSecond = .{ 0.0, 40.0 } },
+        .{ .alignment = .bottomCenter, .expectedFirst = .{ 45.0, 30.0 }, .expectedSecond = .{ 40.0, 40.0 } },
+        .{ .alignment = .bottomRight, .expectedFirst = .{ 90.0, 30.0 }, .expectedSecond = .{ 80.0, 40.0 } },
+    };
+
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    for (cases) |case| {
+        var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
+        children.appendAssumeCapacity(testNode(1, .{ 0.0, 0.0 }, .{ 10.0, 10.0 }, .{}));
+        children.appendAssumeCapacity(testNode(2, .{ 0.0, 0.0 }, .{ 20.0, 20.0 }, .{}));
+
+        var parent = testNode(0, .{ 0.0, 0.0 }, .{ 100.0, 60.0 }, .{
+            .direction = .topToBottom,
+            .alignment = case.alignment,
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 60.0 },
+        });
+        parent.children = .{ .nodes = children };
+
+        place(&parent);
+
+        try expectVec2(case.expectedFirst, parent.children.nodes.items[0].position);
+        try expectVec2(case.expectedSecond, parent.children.nodes.items[1].position);
+        _ = arena.reset(.retain_capacity);
+    }
+}
+
+test "place - padding, border, margin, translate, and manual nodes interact as expected" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var manualChildren = try std.ArrayList(Node).initCapacity(arenaAllocator, 1);
+    manualChildren.appendAssumeCapacity(testNode(4, .{ 0.0, 0.0 }, .{ 5.0, 5.0 }, .{}));
+
+    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 3);
+    children.appendAssumeCapacity(testNode(1, .{ 0.0, 0.0 }, .{ 10.0, 6.0 }, .{
+        .translate = .{ 1.0, 2.0 },
+        .margin = .{ .x = .{ 2.0, 3.0 }, .y = .{ 0.0, 0.0 } },
+    }));
+    children.appendAssumeCapacity(.{
+        .key = 2,
+        .position = .{ 30.0, 5.0 },
+        .z = 0,
+        .size = .{ 9.0, 9.0 },
+        .minSize = .{ 0.0, 0.0 },
+        .maxSize = .{ std.math.inf(f32), std.math.inf(f32) },
+        .children = .{ .nodes = manualChildren },
+        .style = testStyle(.{
+            .placement = .{ .manual = .{ 30.0, 5.0 } },
+        }),
+    });
+    children.appendAssumeCapacity(testNode(3, .{ 0.0, 0.0 }, .{ 8.0, 6.0 }, .{
+        .margin = .{ .x = .{ 4.0, 1.0 }, .y = .{ 0.0, 0.0 } },
+    }));
+
+    var parent = testNode(0, .{ 0.0, 0.0 }, .{ 100.0, 40.0 }, .{
+        .direction = .leftToRight,
+        .translate = .{ 4.0, 7.0 },
+        .padding = .{ .x = .{ 3.0, 0.0 }, .y = .{ 4.0, 0.0 } },
+        .borderWidth = .{ .x = .{ 2.0, 0.0 }, .y = .{ 1.0, 0.0 } },
+        .width = .{ .fixed = 100.0 },
+        .height = .{ .fixed = 40.0 },
+    });
+    parent.children = .{ .nodes = children };
+
+    place(&parent);
+    makeAbsolute(&parent, .{ 0.0, 0.0 });
+
+    try expectVec2(.{ 4.0, 7.0 }, parent.position);
+
+    const placedChildren = parent.children.nodes.items;
+    try expectVec2(.{ 12.0, 14.0 }, placedChildren[0].position);
+    try expectVec2(.{ 30.0, 5.0 }, placedChildren[1].position);
+    try expectVec2(.{ 28.0, 12.0 }, placedChildren[2].position);
+    try expectVec2(.{ 30.0, 5.0 }, placedChildren[1].children.nodes.items[0].position);
+}
+
+test "LayoutTreeIterator - stack traversal visits all nodes, reset restarts, and single-node trees exhaust" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var single = testNode(1, .{ 0.0, 0.0 }, .{ 1.0, 1.0 }, .{});
+    var singleIterator = try LayoutTreeIterator.init(arenaAllocator, &single);
+    defer singleIterator.deinit();
+
+    try std.testing.expectEqual(@as(?*const Node, &single), try singleIterator.next());
+    try std.testing.expectEqual(@as(?*const Node, null), try singleIterator.next());
+
+    var branchChildren = try std.ArrayList(Node).initCapacity(arenaAllocator, 1);
+    branchChildren.appendAssumeCapacity(testNode(4, .{ 0.0, 0.0 }, .{ 1.0, 1.0 }, .{}));
+
+    var branch = testNode(2, .{ 0.0, 0.0 }, .{ 1.0, 1.0 }, .{});
+    branch.children = .{ .nodes = branchChildren };
+
+    var rootChildren = try std.ArrayList(Node).initCapacity(arenaAllocator, 3);
+    rootChildren.appendAssumeCapacity(testNode(3, .{ 0.0, 0.0 }, .{ 1.0, 1.0 }, .{}));
+    rootChildren.appendAssumeCapacity(branch);
+    rootChildren.appendAssumeCapacity(testNode(5, .{ 0.0, 0.0 }, .{ 1.0, 1.0 }, .{}));
+
+    var root = testNode(0, .{ 0.0, 0.0 }, .{ 1.0, 1.0 }, .{});
+    root.children = .{ .nodes = rootChildren };
+
+    var iterator = try LayoutTreeIterator.init(arenaAllocator, &root);
+    defer iterator.deinit();
+
+    const expectedOrder = [_]u64{ 0, 5, 2, 4, 3 };
+    for (expectedOrder) |expectedKey| {
+        const next = (try iterator.next()).?;
+        try std.testing.expectEqual(expectedKey, next.key);
+    }
+    try std.testing.expectEqual(@as(?*const Node, null), try iterator.next());
+
+    try iterator.reset();
+    for (expectedOrder) |expectedKey| {
+        const next = (try iterator.next()).?;
+        try std.testing.expectEqual(expectedKey, next.key);
+    }
+}
