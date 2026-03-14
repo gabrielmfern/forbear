@@ -169,6 +169,8 @@ pub fn build(b: *std.Build) void {
     addShaderImport(b, forbear, "shaders/text/fragment.frag", "text_fragment_shader");
     addShaderImport(b, forbear, "shaders/shadow/vertex.vert", "shadow_vertex_shader");
     addShaderImport(b, forbear, "shaders/shadow/fragment.frag", "shadow_fragment_shader");
+    addShaderImport(b, forbear, "shaders/present/vertex.vert", "present_vertex_shader");
+    addShaderImport(b, forbear, "shaders/present/fragment.frag", "present_fragment_shader");
 
     const mod_tests = b.addTest(.{
         .root_module = forbear,

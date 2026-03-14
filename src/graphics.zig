@@ -2845,6 +2845,770 @@ pub const FrameRateCapper = struct {
     }
 };
 
+const Swapchain = SwapchainType;
+
+/// One offscreen FP16 linear render target (image + view + memory).
+/// There is one per swapchain frame-in-flight so that the GPU can
+/// work on one while we record the next.
+const OffscreenTarget = struct {
+    image: c.VkImage,
+    view: c.VkImageView,
+    memory: c.VkDeviceMemory,
+
+    fn init(
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        width: u32,
+        height: u32,
+    ) !OffscreenTarget {
+        var image: c.VkImage = undefined;
+        try ensureNoError(c.vkCreateImage(
+            logicalDevice,
+            &c.VkImageCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .imageType = c.VK_IMAGE_TYPE_2D,
+                .format = c.VK_FORMAT_R16G16B16A16_SFLOAT,
+                .extent = .{ .width = width, .height = height, .depth = 1 },
+                .mipLevels = 1,
+                .arrayLayers = 1,
+                .samples = c.VK_SAMPLE_COUNT_1_BIT,
+                .tiling = c.VK_IMAGE_TILING_OPTIMAL,
+                .usage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | c.VK_IMAGE_USAGE_SAMPLED_BIT,
+                .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount = 0,
+                .pQueueFamilyIndices = null,
+                .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+            },
+            null,
+            &image,
+        ));
+        errdefer c.vkDestroyImage(logicalDevice, image, null);
+
+        var memRequirements: c.VkMemoryRequirements = undefined;
+        c.vkGetImageMemoryRequirements(logicalDevice, image, &memRequirements);
+
+        const memTypeIndex = try findMemoryType(
+            memRequirements.memoryTypeBits,
+            c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            physicalDevice,
+        );
+        var memory: c.VkDeviceMemory = undefined;
+        try ensureNoError(c.vkAllocateMemory(
+            logicalDevice,
+            &c.VkMemoryAllocateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .pNext = null,
+                .allocationSize = memRequirements.size,
+                .memoryTypeIndex = memTypeIndex,
+            },
+            null,
+            &memory,
+        ));
+        errdefer c.vkFreeMemory(logicalDevice, memory, null);
+        try ensureNoError(c.vkBindImageMemory(logicalDevice, image, memory, 0));
+
+        var view: c.VkImageView = undefined;
+        try ensureNoError(c.vkCreateImageView(
+            logicalDevice,
+            &c.VkImageViewCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .image = image,
+                .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+                .format = c.VK_FORMAT_R16G16B16A16_SFLOAT,
+                .components = .{
+                    .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                },
+                .subresourceRange = .{
+                    .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            },
+            null,
+            &view,
+        ));
+
+        return .{ .image = image, .view = view, .memory = memory };
+    }
+
+    fn deinit(self: OffscreenTarget, logicalDevice: c.VkDevice) void {
+        c.vkDestroyImageView(logicalDevice, self.view, null);
+        c.vkDestroyImage(logicalDevice, self.image, null);
+        c.vkFreeMemory(logicalDevice, self.memory, null);
+    }
+};
+
+/// The present pipeline reads a linear-light FP16 offscreen target and
+/// writes to the swapchain image, applying either the sRGB or PQ output
+/// transform according to a push constant.
+const PresentPipeline = struct {
+    offscreenRenderPass: c.VkRenderPass,
+    presentRenderPass: c.VkRenderPass,
+
+    offscreenTargets: [maxFramesInFlight]OffscreenTarget,
+
+    // One framebuffer per in-flight frame pointing to the offscreen target.
+    offscreenFramebuffers: [maxFramesInFlight]c.VkFramebuffer,
+    // One framebuffer per swapchain image pointing to the swapchain image view.
+    presentFramebuffers: []c.VkFramebuffer,
+
+    descriptorSetLayout: c.VkDescriptorSetLayout,
+    descriptorPool: c.VkDescriptorPool,
+    descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
+    sampler: c.VkSampler,
+
+    pipelineLayout: c.VkPipelineLayout,
+    pipeline: c.VkPipeline,
+
+    allocator: std.mem.Allocator,
+
+    const presentVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("present_vertex_shader")));
+    const presentFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("present_fragment_shader")));
+
+    fn init(
+        allocator: std.mem.Allocator,
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        swapchain: Swapchain,
+    ) !PresentPipeline {
+        // --- offscreen render pass (writes FP16 linear) ---
+        const offscreenRenderPass = try createOffscreenRenderPass(logicalDevice);
+        errdefer c.vkDestroyRenderPass(logicalDevice, offscreenRenderPass, null);
+
+        // --- present render pass (reads FP16, writes to swapchain) ---
+        const presentRenderPass = try createPresentRenderPass(logicalDevice, swapchain.surfaceFormat.format);
+        errdefer c.vkDestroyRenderPass(logicalDevice, presentRenderPass, null);
+
+        // --- offscreen targets ---
+        var offscreenTargets: [maxFramesInFlight]OffscreenTarget = undefined;
+        var initializedTargets: usize = 0;
+        errdefer {
+            for (offscreenTargets[0..initializedTargets]) |t| t.deinit(logicalDevice);
+        }
+        for (0..maxFramesInFlight) |i| {
+            offscreenTargets[i] = try OffscreenTarget.init(
+                logicalDevice,
+                physicalDevice,
+                swapchain.extent.width,
+                swapchain.extent.height,
+            );
+            initializedTargets += 1;
+        }
+
+        // --- offscreen framebuffers (one per in-flight frame) ---
+        var offscreenFramebuffers: [maxFramesInFlight]c.VkFramebuffer = undefined;
+        var initializedOffscreenFbs: usize = 0;
+        errdefer {
+            for (offscreenFramebuffers[0..initializedOffscreenFbs]) |fb| {
+                c.vkDestroyFramebuffer(logicalDevice, fb, null);
+            }
+        }
+        for (0..maxFramesInFlight) |i| {
+            try ensureNoError(c.vkCreateFramebuffer(
+                logicalDevice,
+                &c.VkFramebufferCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .renderPass = offscreenRenderPass,
+                    .attachmentCount = 1,
+                    .pAttachments = &offscreenTargets[i].view,
+                    .width = swapchain.extent.width,
+                    .height = swapchain.extent.height,
+                    .layers = 1,
+                },
+                null,
+                &offscreenFramebuffers[i],
+            ));
+            initializedOffscreenFbs += 1;
+        }
+
+        // --- present framebuffers (one per swapchain image) ---
+        const presentFramebuffers = try createPresentFramebuffers(
+            allocator,
+            logicalDevice,
+            presentRenderPass,
+            swapchain,
+        );
+        errdefer {
+            for (presentFramebuffers) |fb| c.vkDestroyFramebuffer(logicalDevice, fb, null);
+            allocator.free(presentFramebuffers);
+        }
+
+        // --- descriptor layout / pool / sets ---
+        const descriptorSetLayout = try createPresentDescriptorSetLayout(logicalDevice);
+        errdefer c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
+
+        const descriptorPool = blk: {
+            var pool: c.VkDescriptorPool = undefined;
+            try ensureNoError(c.vkCreateDescriptorPool(
+                logicalDevice,
+                &c.VkDescriptorPoolCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .maxSets = maxFramesInFlight,
+                    .poolSizeCount = 1,
+                    .pPoolSizes = &c.VkDescriptorPoolSize{
+                        .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                        .descriptorCount = maxFramesInFlight,
+                    },
+                },
+                null,
+                &pool,
+            ));
+            break :blk pool;
+        };
+        errdefer c.vkDestroyDescriptorPool(logicalDevice, descriptorPool, null);
+
+        const sampler = blk: {
+            var s: c.VkSampler = undefined;
+            try ensureNoError(c.vkCreateSampler(
+                logicalDevice,
+                &c.VkSamplerCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .magFilter = c.VK_FILTER_NEAREST,
+                    .minFilter = c.VK_FILTER_NEAREST,
+                    .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                    .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    .mipLodBias = 0,
+                    .anisotropyEnable = c.VK_FALSE,
+                    .maxAnisotropy = 1,
+                    .compareEnable = c.VK_FALSE,
+                    .compareOp = c.VK_COMPARE_OP_ALWAYS,
+                    .minLod = 0,
+                    .maxLod = 0,
+                    .borderColor = c.VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+                    .unnormalizedCoordinates = c.VK_FALSE,
+                },
+                null,
+                &s,
+            ));
+            break :blk s;
+        };
+        errdefer c.vkDestroySampler(logicalDevice, sampler, null);
+
+        const layouts = [maxFramesInFlight]c.VkDescriptorSetLayout{
+            descriptorSetLayout,
+            descriptorSetLayout,
+        };
+        var descriptorSets: [maxFramesInFlight]c.VkDescriptorSet = undefined;
+        try ensureNoError(c.vkAllocateDescriptorSets(
+            logicalDevice,
+            &c.VkDescriptorSetAllocateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                .pNext = null,
+                .descriptorPool = descriptorPool,
+                .descriptorSetCount = maxFramesInFlight,
+                .pSetLayouts = &layouts,
+            },
+            &descriptorSets,
+        ));
+
+        for (0..maxFramesInFlight) |i| {
+            c.vkUpdateDescriptorSets(
+                logicalDevice,
+                1,
+                &c.VkWriteDescriptorSet{
+                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = null,
+                    .dstSet = descriptorSets[i],
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .pImageInfo = &c.VkDescriptorImageInfo{
+                        .sampler = sampler,
+                        .imageView = offscreenTargets[i].view,
+                        .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    },
+                    .pBufferInfo = null,
+                    .pTexelBufferView = null,
+                },
+                0,
+                null,
+            );
+        }
+
+        // --- pipeline ---
+        const pipelineLayout = blk: {
+            var layout: c.VkPipelineLayout = undefined;
+            try ensureNoError(c.vkCreatePipelineLayout(
+                logicalDevice,
+                &c.VkPipelineLayoutCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .setLayoutCount = 1,
+                    .pSetLayouts = &descriptorSetLayout,
+                    .pushConstantRangeCount = 1,
+                    .pPushConstantRanges = &c.VkPushConstantRange{
+                        .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                        .offset = 0,
+                        .size = @sizeOf(u32),
+                    },
+                },
+                null,
+                &layout,
+            ));
+            break :blk layout;
+        };
+        errdefer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
+
+        var vertexShaderModule: c.VkShaderModule = undefined;
+        try ensureNoError(c.vkCreateShaderModule(
+            logicalDevice,
+            &c.VkShaderModuleCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .codeSize = presentVertexShader.len * @sizeOf(u32),
+                .pCode = presentVertexShader.ptr,
+            },
+            null,
+            &vertexShaderModule,
+        ));
+        defer c.vkDestroyShaderModule(logicalDevice, vertexShaderModule, null);
+
+        var fragmentShaderModule: c.VkShaderModule = undefined;
+        try ensureNoError(c.vkCreateShaderModule(
+            logicalDevice,
+            &c.VkShaderModuleCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .codeSize = presentFragmentShader.len * @sizeOf(u32),
+                .pCode = presentFragmentShader.ptr,
+            },
+            null,
+            &fragmentShaderModule,
+        ));
+        defer c.vkDestroyShaderModule(logicalDevice, fragmentShaderModule, null);
+
+        const shaderStages = [_]c.VkPipelineShaderStageCreateInfo{
+            .{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+                .module = vertexShaderModule,
+                .pName = "main",
+                .pSpecializationInfo = null,
+            },
+            .{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .module = fragmentShaderModule,
+                .pName = "main",
+                .pSpecializationInfo = null,
+            },
+        };
+
+        var pipeline: c.VkPipeline = undefined;
+        try ensureNoError(c.vkCreateGraphicsPipelines(
+            logicalDevice,
+            null,
+            1,
+            &c.VkGraphicsPipelineCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .stageCount = shaderStages.len,
+                .pStages = &shaderStages,
+                .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .vertexBindingDescriptionCount = 0,
+                    .pVertexBindingDescriptions = null,
+                    .vertexAttributeDescriptionCount = 0,
+                    .pVertexAttributeDescriptions = null,
+                },
+                .pInputAssemblyState = &c.VkPipelineInputAssemblyStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                    .primitiveRestartEnable = c.VK_FALSE,
+                },
+                .pTessellationState = null,
+                .pViewportState = &c.VkPipelineViewportStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .viewportCount = 1,
+                    .pViewports = null,
+                    .scissorCount = 1,
+                    .pScissors = null,
+                },
+                .pRasterizationState = &c.VkPipelineRasterizationStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .depthClampEnable = c.VK_FALSE,
+                    .rasterizerDiscardEnable = c.VK_FALSE,
+                    .polygonMode = c.VK_POLYGON_MODE_FILL,
+                    .cullMode = c.VK_CULL_MODE_NONE,
+                    .frontFace = c.VK_FRONT_FACE_COUNTER_CLOCKWISE,
+                    .depthBiasEnable = c.VK_FALSE,
+                    .depthBiasConstantFactor = 0,
+                    .depthBiasClamp = 0,
+                    .depthBiasSlopeFactor = 0,
+                    .lineWidth = 1.0,
+                },
+                .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .sampleShadingEnable = c.VK_FALSE,
+                    .minSampleShading = 1.0,
+                    .pSampleMask = null,
+                    .alphaToCoverageEnable = c.VK_FALSE,
+                    .alphaToOneEnable = c.VK_FALSE,
+                },
+                .pDepthStencilState = null,
+                .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .logicOpEnable = c.VK_FALSE,
+                    .logicOp = c.VK_LOGIC_OP_COPY,
+                    .attachmentCount = 1,
+                    .pAttachments = &c.VkPipelineColorBlendAttachmentState{
+                        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT |
+                            c.VK_COLOR_COMPONENT_G_BIT |
+                            c.VK_COLOR_COMPONENT_B_BIT |
+                            c.VK_COLOR_COMPONENT_A_BIT,
+                        .blendEnable = c.VK_FALSE,
+                        .srcColorBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .colorBlendOp = c.VK_BLEND_OP_ADD,
+                        .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+                        .alphaBlendOp = c.VK_BLEND_OP_ADD,
+                    },
+                    .blendConstants = .{ 0, 0, 0, 0 },
+                },
+                .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .dynamicStateCount = 2,
+                    .pDynamicStates = &[_]c.VkDynamicState{
+                        c.VK_DYNAMIC_STATE_VIEWPORT,
+                        c.VK_DYNAMIC_STATE_SCISSOR,
+                    },
+                },
+                .layout = pipelineLayout,
+                .renderPass = presentRenderPass,
+                .subpass = 0,
+                .basePipelineHandle = null,
+                .basePipelineIndex = -1,
+            },
+            null,
+            &pipeline,
+        ));
+
+        return .{
+            .offscreenRenderPass = offscreenRenderPass,
+            .presentRenderPass = presentRenderPass,
+            .offscreenTargets = offscreenTargets,
+            .offscreenFramebuffers = offscreenFramebuffers,
+            .presentFramebuffers = presentFramebuffers,
+            .descriptorSetLayout = descriptorSetLayout,
+            .descriptorPool = descriptorPool,
+            .descriptorSets = descriptorSets,
+            .sampler = sampler,
+            .pipelineLayout = pipelineLayout,
+            .pipeline = pipeline,
+            .allocator = allocator,
+        };
+    }
+
+    fn deinit(self: *PresentPipeline, logicalDevice: c.VkDevice) void {
+        c.vkDestroyPipeline(logicalDevice, self.pipeline, null);
+        c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
+        c.vkDestroySampler(logicalDevice, self.sampler, null);
+        c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
+        c.vkDestroyDescriptorSetLayout(logicalDevice, self.descriptorSetLayout, null);
+        for (self.presentFramebuffers) |fb| c.vkDestroyFramebuffer(logicalDevice, fb, null);
+        self.allocator.free(self.presentFramebuffers);
+        for (self.offscreenFramebuffers) |fb| c.vkDestroyFramebuffer(logicalDevice, fb, null);
+        for (self.offscreenTargets) |t| t.deinit(logicalDevice);
+        c.vkDestroyRenderPass(logicalDevice, self.presentRenderPass, null);
+        c.vkDestroyRenderPass(logicalDevice, self.offscreenRenderPass, null);
+    }
+
+    /// Tear down and rebuild everything that depends on swapchain size/format.
+    fn recreate(
+        self: *PresentPipeline,
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        swapchain: Swapchain,
+    ) !void {
+        // Destroy old size-dependent resources.
+        for (self.presentFramebuffers) |fb| c.vkDestroyFramebuffer(logicalDevice, fb, null);
+        self.allocator.free(self.presentFramebuffers);
+        for (self.offscreenFramebuffers) |fb| c.vkDestroyFramebuffer(logicalDevice, fb, null);
+        for (&self.offscreenTargets) |*t| t.deinit(logicalDevice);
+
+        // Recreate offscreen targets at the new size.
+        for (0..maxFramesInFlight) |i| {
+            self.offscreenTargets[i] = try OffscreenTarget.init(
+                logicalDevice,
+                physicalDevice,
+                swapchain.extent.width,
+                swapchain.extent.height,
+            );
+        }
+
+        // Recreate offscreen framebuffers.
+        for (0..maxFramesInFlight) |i| {
+            try ensureNoError(c.vkCreateFramebuffer(
+                logicalDevice,
+                &c.VkFramebufferCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .renderPass = self.offscreenRenderPass,
+                    .attachmentCount = 1,
+                    .pAttachments = &self.offscreenTargets[i].view,
+                    .width = swapchain.extent.width,
+                    .height = swapchain.extent.height,
+                    .layers = 1,
+                },
+                null,
+                &self.offscreenFramebuffers[i],
+            ));
+        }
+
+        // Update descriptor sets to point at the new image views.
+        for (0..maxFramesInFlight) |i| {
+            c.vkUpdateDescriptorSets(
+                logicalDevice,
+                1,
+                &c.VkWriteDescriptorSet{
+                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = null,
+                    .dstSet = self.descriptorSets[i],
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .pImageInfo = &c.VkDescriptorImageInfo{
+                        .sampler = self.sampler,
+                        .imageView = self.offscreenTargets[i].view,
+                        .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    },
+                    .pBufferInfo = null,
+                    .pTexelBufferView = null,
+                },
+                0,
+                null,
+            );
+        }
+
+        // Recreate present framebuffers at the new size.
+        self.presentFramebuffers = try createPresentFramebuffers(
+            self.allocator,
+            logicalDevice,
+            self.presentRenderPass,
+            swapchain,
+        );
+    }
+
+    fn createOffscreenRenderPass(logicalDevice: c.VkDevice) !c.VkRenderPass {
+        var rp: c.VkRenderPass = undefined;
+        try ensureNoError(c.vkCreateRenderPass(
+            logicalDevice,
+            &c.VkRenderPassCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .attachmentCount = 1,
+                .pAttachments = &c.VkAttachmentDescription{
+                    .flags = 0,
+                    .format = c.VK_FORMAT_R16G16B16A16_SFLOAT,
+                    .samples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+                    .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+                    .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                    .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                    .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                    .finalLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                },
+                .subpassCount = 1,
+                .pSubpasses = &c.VkSubpassDescription{
+                    .flags = 0,
+                    .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    .inputAttachmentCount = 0,
+                    .pInputAttachments = null,
+                    .colorAttachmentCount = 1,
+                    .pColorAttachments = &c.VkAttachmentReference{
+                        .attachment = 0,
+                        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    },
+                    .pResolveAttachments = null,
+                    .pDepthStencilAttachment = null,
+                    .preserveAttachmentCount = 0,
+                    .pPreserveAttachments = null,
+                },
+                .dependencyCount = 2,
+                .pDependencies = &[2]c.VkSubpassDependency{
+                    .{
+                        .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+                        .dstSubpass = 0,
+                        .srcStageMask = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .srcAccessMask = c.VK_ACCESS_SHADER_READ_BIT,
+                        .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                        .dependencyFlags = c.VK_DEPENDENCY_BY_REGION_BIT,
+                    },
+                    .{
+                        .srcSubpass = 0,
+                        .dstSubpass = c.VK_SUBPASS_EXTERNAL,
+                        .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .dstStageMask = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        .srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                        .dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT,
+                        .dependencyFlags = c.VK_DEPENDENCY_BY_REGION_BIT,
+                    },
+                },
+            },
+            null,
+            &rp,
+        ));
+        return rp;
+    }
+
+    fn createPresentRenderPass(logicalDevice: c.VkDevice, swapchainFormat: c.VkFormat) !c.VkRenderPass {
+        var rp: c.VkRenderPass = undefined;
+        try ensureNoError(c.vkCreateRenderPass(
+            logicalDevice,
+            &c.VkRenderPassCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .attachmentCount = 1,
+                .pAttachments = &c.VkAttachmentDescription{
+                    .flags = 0,
+                    .format = swapchainFormat,
+                    .samples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .loadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                    .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+                    .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                    .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                    .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+                    .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                },
+                .subpassCount = 1,
+                .pSubpasses = &c.VkSubpassDescription{
+                    .flags = 0,
+                    .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    .inputAttachmentCount = 0,
+                    .pInputAttachments = null,
+                    .colorAttachmentCount = 1,
+                    .pColorAttachments = &c.VkAttachmentReference{
+                        .attachment = 0,
+                        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    },
+                    .pResolveAttachments = null,
+                    .pDepthStencilAttachment = null,
+                    .preserveAttachmentCount = 0,
+                    .pPreserveAttachments = null,
+                },
+                .dependencyCount = 1,
+                .pDependencies = &[1]c.VkSubpassDependency{.{
+                    .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+                    .dstSubpass = 0,
+                    .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    .srcAccessMask = 0,
+                    .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                    .dependencyFlags = 0,
+                }},
+            },
+            null,
+            &rp,
+        ));
+        return rp;
+    }
+
+    fn createPresentDescriptorSetLayout(logicalDevice: c.VkDevice) !c.VkDescriptorSetLayout {
+        var layout: c.VkDescriptorSetLayout = undefined;
+        try ensureNoError(c.vkCreateDescriptorSetLayout(
+            logicalDevice,
+            &c.VkDescriptorSetLayoutCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .pNext = null,
+                .flags = 0,
+                .bindingCount = 1,
+                .pBindings = &c.VkDescriptorSetLayoutBinding{
+                    .binding = 0,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .descriptorCount = 1,
+                    .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .pImmutableSamplers = null,
+                },
+            },
+            null,
+            &layout,
+        ));
+        return layout;
+    }
+
+    fn createPresentFramebuffers(
+        allocator: std.mem.Allocator,
+        logicalDevice: c.VkDevice,
+        presentRenderPass: c.VkRenderPass,
+        swapchain: Swapchain,
+    ) ![]c.VkFramebuffer {
+        const fbs = try allocator.alloc(c.VkFramebuffer, swapchain.imageViews.len);
+        errdefer {
+            for (fbs) |fb| {
+                if (fb != null) c.vkDestroyFramebuffer(logicalDevice, fb, null);
+            }
+            allocator.free(fbs);
+        }
+        for (fbs) |*fb| fb.* = null;
+        for (swapchain.imageViews, 0..) |view, i| {
+            try ensureNoError(c.vkCreateFramebuffer(
+                logicalDevice,
+                &c.VkFramebufferCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .renderPass = presentRenderPass,
+                    .attachmentCount = 1,
+                    .pAttachments = &view,
+                    .width = swapchain.extent.width,
+                    .height = swapchain.extent.height,
+                    .layers = 1,
+                },
+                null,
+                &fbs[i],
+            ));
+        }
+        return fbs;
+    }
+};
+
 pub const Renderer = struct {
     const Self = @This();
 
@@ -2863,12 +3627,11 @@ pub const Renderer = struct {
     surface: c.VkSurfaceKHR,
     window: *const Window,
     swapchain: Swapchain,
-    swapchainFramebuffers: []c.VkFramebuffer,
 
     elementsPipeline: ElementsPipeline,
     shadowsPipeline: ShadowsPipeline,
     textPipeline: TextPipeline,
-    renderPass: c.VkRenderPass,
+    presentPipeline: PresentPipeline,
     rectangleModel: Model,
 
     commandPool: c.VkCommandPool,
@@ -2933,9 +3696,7 @@ pub const Renderer = struct {
         errdefer self.swapchain.deinit(self.logicalDevice);
         std.log.debug("spent {d}ms just recreating swapchain", .{std.time.milliTimestamp() - recreateStart});
 
-        destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
-
-        self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
+        try self.presentPipeline.recreate(self.logicalDevice, self.physicalDevice, self.swapchain);
         std.log.debug("swapchain recreation took {d}ms", .{std.time.milliTimestamp() - timestamp});
 
         for (0..maxFramesInFlight) |i| {
@@ -3214,57 +3975,13 @@ pub const Renderer = struct {
         );
         errdefer swapchain.deinit(logicalDevice);
 
-        const renderPassDependencies: []const c.VkSubpassDependency = &.{
-            c.VkSubpassDependency{
-                .srcSubpass = c.VK_SUBPASS_EXTERNAL,
-                .dstSubpass = 0,
-                .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .srcAccessMask = 0,
-                .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            },
-        };
-
-        const attachments = [_]c.VkAttachmentDescription{
-            // Color attachment
-            c.VkAttachmentDescription{
-                .format = swapchain.surfaceFormat.format,
-                .samples = c.VK_SAMPLE_COUNT_1_BIT,
-                .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
-                .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                .flags = 0,
-            },
-        };
-
-        var renderPass: c.VkRenderPass = undefined;
-        try ensureNoError(c.vkCreateRenderPass(
+        var presentPipeline = try PresentPipeline.init(
+            graphics.allocator,
             logicalDevice,
-            &c.VkRenderPassCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-                .attachmentCount = attachments.len,
-                .pAttachments = &attachments,
-                .subpassCount = 1,
-                .pSubpasses = &c.VkSubpassDescription{
-                    .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    .colorAttachmentCount = 1,
-                    .pColorAttachments = &c.VkAttachmentReference{
-                        .attachment = 0,
-                        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                    },
-                    .pDepthStencilAttachment = null,
-                },
-                .flags = 0,
-                .dependencyCount = @intCast(renderPassDependencies.len),
-                .pDependencies = renderPassDependencies.ptr,
-            },
-            null,
-            &renderPass,
-        ));
-        errdefer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
+            physicalDevice,
+            swapchain,
+        );
+        errdefer presentPipeline.deinit(logicalDevice);
 
         var commandPool: c.VkCommandPool = undefined;
         try ensureNoError(c.vkCreateCommandPool(
@@ -3300,7 +4017,7 @@ pub const Renderer = struct {
             graphics.allocator,
             logicalDevice,
             physicalDevice,
-            renderPass,
+            presentPipeline.offscreenRenderPass,
         );
         errdefer elementsPipeline.deinit(logicalDevice);
 
@@ -3310,19 +4027,16 @@ pub const Renderer = struct {
             physicalDevice,
             graphicsQueue,
             commandPool,
-            renderPass,
+            presentPipeline.offscreenRenderPass,
         );
         errdefer textPipeline.deinit(logicalDevice, graphics.allocator);
 
         const shadowsPipeline = try ShadowsPipeline.init(
             logicalDevice,
             physicalDevice,
-            renderPass,
+            presentPipeline.offscreenRenderPass,
         );
         errdefer shadowsPipeline.deinit(logicalDevice);
-
-        const framebuffers = try createFramebuffers(logicalDevice, renderPass, swapchain, graphics.allocator);
-        errdefer destroyFramebuffers(framebuffers, logicalDevice, graphics.allocator);
 
         var commandBuffers: [maxFramesInFlight]c.VkCommandBuffer = undefined;
         try ensureNoError(c.vkAllocateCommandBuffers(
@@ -3406,13 +4120,12 @@ pub const Renderer = struct {
 
             .surface = surface,
             .swapchain = swapchain,
-            .swapchainFramebuffers = framebuffers,
 
             .elementsPipeline = elementsPipeline,
             .textPipeline = textPipeline,
             .shadowsPipeline = shadowsPipeline,
+            .presentPipeline = presentPipeline,
             .rectangleModel = rectangleModel,
-            .renderPass = renderPass,
 
             .commandPool = commandPool,
             .commandBuffers = commandBuffers,
@@ -3507,12 +4220,11 @@ pub const Renderer = struct {
         }
         c.vkFreeCommandBuffers(self.logicalDevice, self.commandPool, maxFramesInFlight, &self.commandBuffers);
         c.vkDestroyCommandPool(self.logicalDevice, self.commandPool, null);
-        destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
         self.elementsPipeline.deinit(self.logicalDevice);
         self.textPipeline.deinit(self.logicalDevice, self.allocator);
         self.shadowsPipeline.deinit(self.logicalDevice);
         self.rectangleModel.deinit(self.logicalDevice);
-        c.vkDestroyRenderPass(self.logicalDevice, self.renderPass, null);
+        self.presentPipeline.deinit(self.logicalDevice);
         self.swapchain.deinit(self.logicalDevice);
         c.vkDestroyDevice(self.logicalDevice, null);
         c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
@@ -3606,7 +4318,6 @@ pub const Renderer = struct {
             std.log.err("image ({d}) acquiring took {d}ms!!!!!!!", .{ imageIndex, std.time.milliTimestamp() - start });
         }
 
-        const framebuffers = self.swapchainFramebuffers;
         const framebufferIndex: usize = @intCast(imageIndex);
 
         const projectionMatrix = zmath.orthographicOffCenterRh(
@@ -3921,84 +4632,109 @@ pub const Renderer = struct {
         }));
         self.executingFrame = true;
 
-        const clearValues = [_]c.VkClearValue{
-            c.VkClearValue{
-                .color = c.VkClearColorValue{
-                    .float32 = srgbToLinearColor(clearColor),
-                },
-            },
-        };
+        const cmdBuf = self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight];
+        const extent = self.swapchain.extent;
 
+        // ---- Pass 1: render UI into the FP16 linear offscreen target ----
+        const linearClear = [_]c.VkClearValue{.{
+            .color = .{ .float32 = srgbToLinearColor(clearColor) },
+        }};
         c.vkCmdBeginRenderPass(
-            self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+            cmdBuf,
             &c.VkRenderPassBeginInfo{
                 .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = null,
-                .renderPass = self.renderPass,
-                .framebuffer = framebuffers[framebufferIndex],
-                .renderArea = c.VkRect2D{
-                    .offset = c.VkOffset2D{ .x = 0, .y = 0 },
-                    .extent = self.swapchain.extent,
-                },
-                .clearValueCount = clearValues.len,
-                .pClearValues = &clearValues,
+                .renderPass = self.presentPipeline.offscreenRenderPass,
+                .framebuffer = self.presentPipeline.offscreenFramebuffers[frameIndex],
+                .renderArea = .{ .offset = .{ .x = 0, .y = 0 }, .extent = extent },
+                .clearValueCount = linearClear.len,
+                .pClearValues = &linearClear,
             },
             c.VK_SUBPASS_CONTENTS_INLINE,
         );
 
-        c.vkCmdSetViewport(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkViewport{c.VkViewport{
+        c.vkCmdSetViewport(cmdBuf, 0, 1, &[_]c.VkViewport{.{
             .x = 0.0,
             .y = 0.0,
-            .width = @floatFromInt(self.swapchain.extent.width),
-            .height = @floatFromInt(self.swapchain.extent.height),
+            .width = @floatFromInt(extent.width),
+            .height = @floatFromInt(extent.height),
             .minDepth = 0.0,
             .maxDepth = 1.0,
         }});
-
-        c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{c.VkRect2D{
-            .offset = c.VkOffset2D{ .x = 0, .y = 0 },
-            .extent = self.swapchain.extent,
+        c.vkCmdSetScissor(cmdBuf, 0, 1, &[_]c.VkRect2D{.{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = extent,
         }});
 
         for (0..blendAddElementIntervals.len) |i| {
             if (shadowIntervals[i]) |shadowInterval| {
-                self.shadowsPipeline.draw(
-                    shadowInterval,
-                    frameIndex,
-                    self.commandBuffers[frameIndex],
-                    &self.rectangleModel,
-                );
+                self.shadowsPipeline.draw(shadowInterval, frameIndex, cmdBuf, &self.rectangleModel);
             }
             if (blendAddElementIntervals[i]) |elementInterval| {
-                self.elementsPipeline.draw(
-                    elementInterval,
-                    .normal,
-                    frameIndex,
-                    self.commandBuffers[frameIndex],
-                    &self.rectangleModel,
-                );
+                self.elementsPipeline.draw(elementInterval, .normal, frameIndex, cmdBuf, &self.rectangleModel);
             }
             if (blendMultiplyElementIntervals[i]) |elementInterval| {
-                self.elementsPipeline.draw(
-                    elementInterval,
-                    .multiply,
-                    frameIndex,
-                    self.commandBuffers[frameIndex],
-                    &self.rectangleModel,
-                );
+                self.elementsPipeline.draw(elementInterval, .multiply, frameIndex, cmdBuf, &self.rectangleModel);
             }
             if (textIntervals[i]) |glyphInterval| {
-                self.textPipeline.draw(
-                    glyphInterval,
-                    frameIndex,
-                    self.commandBuffers[frameIndex],
-                    &self.rectangleModel,
-                );
+                self.textPipeline.draw(glyphInterval, frameIndex, cmdBuf, &self.rectangleModel);
             }
         }
 
-        c.vkCmdEndRenderPass(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]);
-        try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]));
+        c.vkCmdEndRenderPass(cmdBuf);
+
+        // ---- Pass 2: encode FP16 linear -> swapchain (sRGB or PQ) ----
+        c.vkCmdBeginRenderPass(
+            cmdBuf,
+            &c.VkRenderPassBeginInfo{
+                .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                .pNext = null,
+                .renderPass = self.presentPipeline.presentRenderPass,
+                .framebuffer = self.presentPipeline.presentFramebuffers[framebufferIndex],
+                .renderArea = .{ .offset = .{ .x = 0, .y = 0 }, .extent = extent },
+                .clearValueCount = 0,
+                .pClearValues = null,
+            },
+            c.VK_SUBPASS_CONTENTS_INLINE,
+        );
+
+        c.vkCmdSetViewport(cmdBuf, 0, 1, &[_]c.VkViewport{.{
+            .x = 0.0,
+            .y = 0.0,
+            .width = @floatFromInt(extent.width),
+            .height = @floatFromInt(extent.height),
+            .minDepth = 0.0,
+            .maxDepth = 1.0,
+        }});
+        c.vkCmdSetScissor(cmdBuf, 0, 1, &[_]c.VkRect2D{.{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = extent,
+        }});
+
+        c.vkCmdBindPipeline(cmdBuf, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.presentPipeline.pipeline);
+        c.vkCmdBindDescriptorSets(
+            cmdBuf,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.presentPipeline.pipelineLayout,
+            0,
+            1,
+            &self.presentPipeline.descriptorSets[frameIndex],
+            0,
+            null,
+        );
+        const hdrMode: u32 = if (self.swapchain.isHdr) 1 else 0;
+        c.vkCmdPushConstants(
+            cmdBuf,
+            self.presentPipeline.pipelineLayout,
+            c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            0,
+            @sizeOf(u32),
+            &hdrMode,
+        );
+        c.vkCmdDraw(cmdBuf, 3, 1, 0, 0);
+
+        c.vkCmdEndRenderPass(cmdBuf);
+        try ensureNoError(c.vkEndCommandBuffer(cmdBuf));
 
         const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight]};
         const renderFinishedSemaphores = self.renderFinishedSemaphores;
@@ -4015,7 +4751,7 @@ pub const Renderer = struct {
                 .pWaitSemaphores = waitSemaphores.ptr,
                 .pWaitDstStageMask = waitStages.ptr,
                 .commandBufferCount = 1,
-                .pCommandBuffers = &self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                .pCommandBuffers = &cmdBuf,
                 .signalSemaphoreCount = @intCast(signalSemaphores.len),
                 .pSignalSemaphores = signalSemaphores.ptr,
             },
@@ -4085,275 +4821,241 @@ pub const Renderer = struct {
 
         return error.NoSupportedFormat;
     }
+}; // end Renderer
 
-    const Swapchain = struct {
-        handle: c.VkSwapchainKHR,
-        surfaceFormat: c.VkSurfaceFormatKHR,
-        presentMode: c.VkPresentModeKHR,
-        extent: c.VkExtent2D,
+const SwapchainType = struct {
+    handle: c.VkSwapchainKHR,
+    surfaceFormat: c.VkSurfaceFormatKHR,
+    presentMode: c.VkPresentModeKHR,
+    extent: c.VkExtent2D,
+    isHdr: bool,
 
-        images: []c.VkImage,
-        imageViews: []c.VkImageView,
+    images: []c.VkImage,
+    imageViews: []c.VkImageView,
+
+    allocator: std.mem.Allocator,
+
+    const SwapchainSupportDetails = struct {
+        capabilities: c.VkSurfaceCapabilitiesKHR,
+        formats: []c.VkSurfaceFormatKHR,
+        presentModes: []c.VkPresentModeKHR,
 
         allocator: std.mem.Allocator,
 
-        const SwapchainSupportDetails = struct {
-            capabilities: c.VkSurfaceCapabilitiesKHR,
-            formats: []c.VkSurfaceFormatKHR,
-            presentModes: []c.VkPresentModeKHR,
-
-            allocator: std.mem.Allocator,
-
-            fn deinit(self: @This()) void {
-                self.allocator.free(self.formats);
-                self.allocator.free(self.presentModes);
-            }
-        };
-
-        fn init(
-            allocator: std.mem.Allocator,
-            physicalDevice: c.VkPhysicalDevice,
-            logicalDevice: c.VkDevice,
-            surface: c.VkSurfaceKHR,
-            width: u32,
-            height: u32,
-            oldSwapchain: ?@This(),
-        ) !Swapchain {
-            var swapchainSupportDetails: SwapchainSupportDetails = undefined;
-            swapchainSupportDetails.allocator = allocator;
-            try ensureNoError(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                physicalDevice,
-                surface,
-                &swapchainSupportDetails.capabilities,
-            ));
-
-            var formatsLen: u32 = 0;
-            try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
-                physicalDevice,
-                surface,
-                &formatsLen,
-                null,
-            ));
-            swapchainSupportDetails.formats = try allocator.alloc(c.VkSurfaceFormatKHR, @intCast(formatsLen));
-            errdefer allocator.free(swapchainSupportDetails.formats);
-            try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
-                physicalDevice,
-                surface,
-                &formatsLen,
-                swapchainSupportDetails.formats.ptr,
-            ));
-
-            var presentModesLen: u32 = 0;
-            try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
-                physicalDevice,
-                surface,
-                &presentModesLen,
-                null,
-            ));
-            swapchainSupportDetails.presentModes = try allocator.alloc(c.VkPresentModeKHR, @intCast(presentModesLen));
-            errdefer allocator.free(swapchainSupportDetails.presentModes);
-            try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
-                physicalDevice,
-                surface,
-                &presentModesLen,
-                swapchainSupportDetails.presentModes.ptr,
-            ));
-            defer swapchainSupportDetails.deinit();
-
-            var surfaceFormat: c.VkSurfaceFormatKHR = swapchainSupportDetails.formats[0];
-            for (swapchainSupportDetails.formats) |availableFormat| {
-                if (availableFormat.format == c.VK_FORMAT_B8G8R8A8_SRGB and
-                    availableFormat.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-                {
-                    surfaceFormat = availableFormat;
-                }
-                if (availableFormat.format == c.VK_FORMAT_B8G8R8A8_SRGB and
-                    availableFormat.colorSpace == c.VK_COLOR_SPACE_HDR10_ST2084_EXT)
-                {
-                    surfaceFormat = availableFormat;
-                }
-            }
-
-            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
-
-            var swapchainExtent: c.VkExtent2D = swapchainSupportDetails.capabilities.currentExtent;
-            if (swapchainExtent.width == std.math.maxInt(u32)) {
-                swapchainExtent = c.VkExtent2D{
-                    .width = std.math.clamp(
-                        width,
-                        swapchainSupportDetails.capabilities.minImageExtent.width,
-                        swapchainSupportDetails.capabilities.maxImageExtent.width,
-                    ),
-                    .height = std.math.clamp(
-                        height,
-                        swapchainSupportDetails.capabilities.minImageExtent.height,
-                        swapchainSupportDetails.capabilities.maxImageExtent.height,
-                    ),
-                };
-            }
-
-            var imageCount: u32 = swapchainSupportDetails.capabilities.minImageCount + 1;
-            if (swapchainSupportDetails.capabilities.maxImageCount > 0 and imageCount > swapchainSupportDetails.capabilities.maxImageCount) {
-                imageCount = swapchainSupportDetails.capabilities.maxImageCount;
-            }
-
-            var swapchain: c.VkSwapchainKHR = undefined;
-            try ensureNoError(c.vkCreateSwapchainKHR(
-                logicalDevice,
-                &c.VkSwapchainCreateInfoKHR{
-                    .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-                    .surface = surface,
-                    .minImageCount = imageCount,
-                    .imageFormat = surfaceFormat.format,
-                    .imageColorSpace = surfaceFormat.colorSpace,
-                    .imageExtent = swapchainExtent,
-                    .imageArrayLayers = 1,
-                    .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                    .imageSharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
-                    .queueFamilyIndexCount = 0,
-                    .pQueueFamilyIndices = null,
-                    .preTransform = swapchainSupportDetails.capabilities.currentTransform,
-                    .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-                    .presentMode = presentMode,
-                    .clipped = c.VK_TRUE,
-                    .oldSwapchain = if (oldSwapchain) |prev| prev.handle else null,
-                },
-                null,
-                &swapchain,
-            ));
-            errdefer c.vkDestroySwapchainKHR(logicalDevice, swapchain, null);
-
-            std.debug.assert(swapchain != null);
-
-            var swapChainImagesLen: u32 = 0;
-            try ensureNoError(c.vkGetSwapchainImagesKHR(
-                logicalDevice,
-                swapchain,
-                &swapChainImagesLen,
-                null,
-            ));
-            const swapChainImages = try allocator.alloc(c.VkImage, @intCast(swapChainImagesLen));
-            errdefer allocator.free(swapChainImages);
-            try ensureNoError(c.vkGetSwapchainImagesKHR(
-                logicalDevice,
-                swapchain,
-                &swapChainImagesLen,
-                swapChainImages.ptr,
-            ));
-
-            const imageViews = try allocator.alloc(c.VkImageView, swapChainImages.len);
-            errdefer {
-                for (imageViews) |imageView| {
-                    if (imageView != null) {
-                        c.vkDestroyImageView(logicalDevice, imageView, null);
-                    }
-                }
-                allocator.free(imageViews);
-            }
-            for (swapChainImages, 0..) |image, i| {
-                try ensureNoError(c.vkCreateImageView(
-                    logicalDevice,
-                    &c.VkImageViewCreateInfo{
-                        .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                        .image = image,
-                        .pNext = null,
-                        .flags = 0,
-                        .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
-                        .format = surfaceFormat.format,
-                        .components = c.VkComponentMapping{
-                            .r = c.VK_COMPONENT_SWIZZLE_R,
-                            .g = c.VK_COMPONENT_SWIZZLE_G,
-                            .b = c.VK_COMPONENT_SWIZZLE_B,
-                            .a = c.VK_COMPONENT_SWIZZLE_A,
-                        },
-                        .subresourceRange = c.VkImageSubresourceRange{
-                            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = 1,
-                            .baseArrayLayer = 0,
-                            .layerCount = 1,
-                        },
-                    },
-                    null,
-                    &imageViews[i],
-                ));
-            }
-
-            return Swapchain{
-                .handle = swapchain,
-                .surfaceFormat = surfaceFormat,
-                .presentMode = presentMode,
-                .extent = swapchainExtent,
-                .images = swapChainImages,
-                .imageViews = imageViews,
-                .allocator = allocator,
-            };
-        }
-
-        fn deinit(self: Swapchain, logicalDevice: c.VkDevice) void {
-            for (self.imageViews) |imageView| {
-                c.vkDestroyImageView(logicalDevice, imageView, null);
-            }
-            self.allocator.free(self.imageViews);
-            self.allocator.free(self.images);
-
-            c.vkDestroySwapchainKHR(logicalDevice, self.handle, null);
+        fn deinit(self: @This()) void {
+            self.allocator.free(self.formats);
+            self.allocator.free(self.presentModes);
         }
     };
 
-    fn createFramebuffers(
-        logicalDevice: c.VkDevice,
-        renderPass: c.VkRenderPass,
-        swapchain: Swapchain,
+    fn init(
         allocator: std.mem.Allocator,
-    ) ![]c.VkFramebuffer {
-        const imageViews = swapchain.imageViews;
+        physicalDevice: c.VkPhysicalDevice,
+        logicalDevice: c.VkDevice,
+        surface: c.VkSurfaceKHR,
+        width: u32,
+        height: u32,
+        oldSwapchain: ?@This(),
+    ) !@This() {
+        var swapchainSupportDetails: SwapchainSupportDetails = undefined;
+        swapchainSupportDetails.allocator = allocator;
+        try ensureNoError(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+            physicalDevice,
+            surface,
+            &swapchainSupportDetails.capabilities,
+        ));
 
-        const swapchainFramebuffers = try allocator.alloc(c.VkFramebuffer, imageViews.len);
+        var formatsLen: u32 = 0;
+        try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
+            physicalDevice,
+            surface,
+            &formatsLen,
+            null,
+        ));
+        swapchainSupportDetails.formats = try allocator.alloc(c.VkSurfaceFormatKHR, @intCast(formatsLen));
+        errdefer allocator.free(swapchainSupportDetails.formats);
+        try ensureNoError(c.vkGetPhysicalDeviceSurfaceFormatsKHR(
+            physicalDevice,
+            surface,
+            &formatsLen,
+            swapchainSupportDetails.formats.ptr,
+        ));
+
+        var presentModesLen: u32 = 0;
+        try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
+            physicalDevice,
+            surface,
+            &presentModesLen,
+            null,
+        ));
+        swapchainSupportDetails.presentModes = try allocator.alloc(c.VkPresentModeKHR, @intCast(presentModesLen));
+        errdefer allocator.free(swapchainSupportDetails.presentModes);
+        try ensureNoError(c.vkGetPhysicalDeviceSurfacePresentModesKHR(
+            physicalDevice,
+            surface,
+            &presentModesLen,
+            swapchainSupportDetails.presentModes.ptr,
+        ));
+        defer swapchainSupportDetails.deinit();
+
+        // Prefer HDR10 (ST2084) with a 10-bit or 16-bit format, then fall
+        // back to the standard sRGB SDR format, then accept whatever the
+        // driver offers first.
+        var surfaceFormat: c.VkSurfaceFormatKHR = swapchainSupportDetails.formats[0];
+        var hdrScore: u8 = 0; // higher = better HDR candidate
+        for (swapchainSupportDetails.formats) |availableFormat| {
+            // SDR fallback: standard sRGB — score 1 (better than unknown default)
+            if (availableFormat.format == c.VK_FORMAT_B8G8R8A8_SRGB and
+                availableFormat.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR and
+                hdrScore < 1)
+            {
+                surfaceFormat = availableFormat;
+                hdrScore = 1;
+            }
+            // HDR10 with 10-bit pack — score 3 (best match for HDR10 hardware)
+            if ((availableFormat.format == c.VK_FORMAT_A2B10G10R10_UNORM_PACK32 or
+                availableFormat.format == c.VK_FORMAT_A2R10G10B10_UNORM_PACK32) and
+                availableFormat.colorSpace == c.VK_COLOR_SPACE_HDR10_ST2084_EXT and
+                hdrScore < 3)
+            {
+                surfaceFormat = availableFormat;
+                hdrScore = 3;
+            }
+            // HDR10 with 16-bit float — score 2 (good but rarer on displays)
+            if (availableFormat.format == c.VK_FORMAT_R16G16B16A16_SFLOAT and
+                availableFormat.colorSpace == c.VK_COLOR_SPACE_HDR10_ST2084_EXT and
+                hdrScore < 2)
+            {
+                surfaceFormat = availableFormat;
+                hdrScore = 2;
+            }
+        }
+        const isHdr = hdrScore >= 2;
+
+        const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
+
+        var swapchainExtent: c.VkExtent2D = swapchainSupportDetails.capabilities.currentExtent;
+        if (swapchainExtent.width == std.math.maxInt(u32)) {
+            swapchainExtent = c.VkExtent2D{
+                .width = std.math.clamp(
+                    width,
+                    swapchainSupportDetails.capabilities.minImageExtent.width,
+                    swapchainSupportDetails.capabilities.maxImageExtent.width,
+                ),
+                .height = std.math.clamp(
+                    height,
+                    swapchainSupportDetails.capabilities.minImageExtent.height,
+                    swapchainSupportDetails.capabilities.maxImageExtent.height,
+                ),
+            };
+        }
+
+        var imageCount: u32 = swapchainSupportDetails.capabilities.minImageCount + 1;
+        if (swapchainSupportDetails.capabilities.maxImageCount > 0 and imageCount > swapchainSupportDetails.capabilities.maxImageCount) {
+            imageCount = swapchainSupportDetails.capabilities.maxImageCount;
+        }
+
+        var swapchain: c.VkSwapchainKHR = undefined;
+        try ensureNoError(c.vkCreateSwapchainKHR(
+            logicalDevice,
+            &c.VkSwapchainCreateInfoKHR{
+                .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+                .surface = surface,
+                .minImageCount = imageCount,
+                .imageFormat = surfaceFormat.format,
+                .imageColorSpace = surfaceFormat.colorSpace,
+                .imageExtent = swapchainExtent,
+                .imageArrayLayers = 1,
+                .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                .imageSharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount = 0,
+                .pQueueFamilyIndices = null,
+                .preTransform = swapchainSupportDetails.capabilities.currentTransform,
+                .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+                .presentMode = presentMode,
+                .clipped = c.VK_TRUE,
+                .oldSwapchain = if (oldSwapchain) |prev| prev.handle else null,
+            },
+            null,
+            &swapchain,
+        ));
+        errdefer c.vkDestroySwapchainKHR(logicalDevice, swapchain, null);
+
+        std.debug.assert(swapchain != null);
+
+        var swapChainImagesLen: u32 = 0;
+        try ensureNoError(c.vkGetSwapchainImagesKHR(
+            logicalDevice,
+            swapchain,
+            &swapChainImagesLen,
+            null,
+        ));
+        const swapChainImages = try allocator.alloc(c.VkImage, @intCast(swapChainImagesLen));
+        errdefer allocator.free(swapChainImages);
+        try ensureNoError(c.vkGetSwapchainImagesKHR(
+            logicalDevice,
+            swapchain,
+            &swapChainImagesLen,
+            swapChainImages.ptr,
+        ));
+
+        const imageViews = try allocator.alloc(c.VkImageView, swapChainImages.len);
         errdefer {
-            for (swapchainFramebuffers) |framebuffer| {
-                if (framebuffer != null) {
-                    c.vkDestroyFramebuffer(logicalDevice, framebuffer, null);
+            for (imageViews) |imageView| {
+                if (imageView != null) {
+                    c.vkDestroyImageView(logicalDevice, imageView, null);
                 }
             }
-            allocator.free(swapchainFramebuffers);
+            allocator.free(imageViews);
         }
-
-        for (swapchainFramebuffers) |*framebuffer| {
-            framebuffer.* = null;
-        }
-
-        for (imageViews, 0..) |imageView, i| {
-            const framebufferAttachments = [_]c.VkImageView{imageView};
-            try ensureNoError(c.vkCreateFramebuffer(
+        for (swapChainImages, 0..) |image, i| {
+            try ensureNoError(c.vkCreateImageView(
                 logicalDevice,
-                &c.VkFramebufferCreateInfo{
-                    .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                &c.VkImageViewCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .image = image,
                     .pNext = null,
                     .flags = 0,
-                    .renderPass = renderPass,
-                    .attachmentCount = framebufferAttachments.len,
-                    .pAttachments = &framebufferAttachments,
-                    .width = swapchain.extent.width,
-                    .height = swapchain.extent.height,
-                    .layers = 1,
+                    .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+                    .format = surfaceFormat.format,
+                    .components = c.VkComponentMapping{
+                        .r = c.VK_COMPONENT_SWIZZLE_R,
+                        .g = c.VK_COMPONENT_SWIZZLE_G,
+                        .b = c.VK_COMPONENT_SWIZZLE_B,
+                        .a = c.VK_COMPONENT_SWIZZLE_A,
+                    },
+                    .subresourceRange = c.VkImageSubresourceRange{
+                        .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
                 },
                 null,
-                &swapchainFramebuffers[i],
+                &imageViews[i],
             ));
         }
 
-        return swapchainFramebuffers;
+        return Swapchain{
+            .handle = swapchain,
+            .surfaceFormat = surfaceFormat,
+            .presentMode = presentMode,
+            .extent = swapchainExtent,
+            .isHdr = isHdr,
+            .images = swapChainImages,
+            .imageViews = imageViews,
+            .allocator = allocator,
+        };
     }
 
-    fn destroyFramebuffers(
-        swapchainFramebuffers: []c.VkFramebuffer,
-        logicalDevice: c.VkDevice,
-        allocator: std.mem.Allocator,
-    ) void {
-        for (swapchainFramebuffers) |framebuffer| {
-            c.vkDestroyFramebuffer(logicalDevice, framebuffer, null);
+    fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+        for (self.imageViews) |imageView| {
+            c.vkDestroyImageView(logicalDevice, imageView, null);
         }
-        allocator.free(swapchainFramebuffers);
+        self.allocator.free(self.imageViews);
+        self.allocator.free(self.images);
+
+        c.vkDestroySwapchainKHR(logicalDevice, self.handle, null);
     }
 };
