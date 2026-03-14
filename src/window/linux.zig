@@ -87,6 +87,7 @@ title: [:0]const u8,
 app_id: [:0]const u8,
 running: bool,
 dpi: [2]u32,
+configuredOnce: bool,
 
 scale: f32 = 1.0,
 physicalWidthMilimeters: i32 = 0,
@@ -376,6 +377,7 @@ fn xdgToplevelConfigure(
     if (width > 0 and height > 0) {
         window.width = @intCast(width);
         window.height = @intCast(height);
+        window.configuredOnce = true;
         if (window.wpViewport) |viewport| {
             c.wp_viewport_set_destination(viewport, @intCast(window.width), @intCast(window.height));
         }
@@ -777,6 +779,7 @@ pub fn init(
     window.title = title;
     window.app_id = app_id;
     window.running = true;
+    window.configuredOnce = false;
 
     window.handlers = .{};
 
@@ -855,6 +858,15 @@ pub fn init(
 
     c.wl_surface_commit(window.wlSurface);
     _ = c.wl_display_roundtrip(window.wlDisplay);
+
+    // Wait for the compositor to send a configure with the real window size.
+    // Wayland compositors often send an initial (0, 0) configure which is
+    // ignored, and then a second configure with the actual size. Without this
+    // loop the first frame would render at the requested size and then jump
+    // once the real configure arrives.
+    while (!window.configuredOnce) {
+        _ = c.wl_display_roundtrip(window.wlDisplay);
+    }
 
     // gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     // gl.enable(gl.BLEND);
