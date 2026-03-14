@@ -374,10 +374,12 @@ fn xdgToplevelConfigure(
     _ = xdgToplevel;
     _ = states;
 
+    // A 0x0 configure means "client chooses the size" per the xdg-shell spec.
+    // Either way, any configure unblocks the init() wait loop.
+    window.configuredOnce = true;
     if (width > 0 and height > 0) {
         window.width = @intCast(width);
         window.height = @intCast(height);
-        window.configuredOnce = true;
         if (window.wpViewport) |viewport| {
             c.wp_viewport_set_destination(viewport, @intCast(window.width), @intCast(window.height));
         }
