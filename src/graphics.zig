@@ -171,7 +171,7 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
         else => 0,
     };
 
-    const requestedInstanceExtensions: []const [*c]const u8 = &(.{
+    const requiredInstanceExtensions: []const [*c]const u8 = &(.{
         c.VK_KHR_SURFACE_EXTENSION_NAME,
     } ++ (if (builtin.mode == .Debug) .{c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME} else .{}) ++ switch (builtin.os.tag) {
         .linux => .{"VK_KHR_wayland_surface"},
@@ -183,14 +183,20 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
         else => .{},
     });
 
+    var instanceExtensionsToRequest = try std.ArrayList([*c]const u8).initCapacity(allocator, requiredInstanceExtensions.len);
+    defer instanceExtensionsToRequest.deinit(allocator);
+    for (requiredInstanceExtensions) |requiredExtension| {
+        instanceExtensionsToRequest.appendAssumeCapacity(requiredExtension);
+    }
+
     var count: u32 = 0;
     try ensureNoError(c.vkEnumerateInstanceExtensionProperties(null, &count, null));
     const availableExtensions = try allocator.alloc(c.VkExtensionProperties, @intCast(count));
     defer allocator.free(availableExtensions);
     try ensureNoError(c.vkEnumerateInstanceExtensionProperties(null, &count, availableExtensions.ptr));
     if (builtin.mode == .Debug) {
-        std.log.debug("Requested Vulkan instance extensions ({d}):", .{requestedInstanceExtensions.len});
-        for (requestedInstanceExtensions) |ext| {
+        std.log.debug("Requested Vulkan instance extensions ({d}):", .{requiredInstanceExtensions.len});
+        for (requiredInstanceExtensions) |ext| {
             std.log.debug("  {s}", .{ext});
         }
         std.log.debug("Available Vulkan instance extensions ({d}):", .{availableExtensions.len});
@@ -199,7 +205,7 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
             std.log.debug("  {s}", .{name});
         }
     }
-    for (requestedInstanceExtensions) |requiredExtension| {
+    for (requiredInstanceExtensions) |requiredExtension| {
         const requiredExtensionSlice = std.mem.span(requiredExtension);
         var found = false;
         for (availableExtensions) |availableExtension| {
@@ -212,6 +218,16 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
         if (!found) {
             std.log.err("Missing required Vulkan instance extension: {s}", .{requiredExtensionSlice});
             return error.MissingRequiredExtension;
+        }
+    }
+    for (availableExtensions) |ext| {
+        if (std.mem.eql(
+            u8,
+            std.mem.sliceTo(ext.extensionName[0..], 0),
+            c.VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME,
+        )) {
+            try instanceExtensionsToRequest.append(allocator, c.VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
+            break;
         }
     }
 
@@ -258,8 +274,8 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
             },
             .enabledLayerCount = @intCast(instanceLayers.len),
             .ppEnabledLayerNames = instanceLayers.ptr,
-            .enabledExtensionCount = @intCast(requestedInstanceExtensions.len),
-            .ppEnabledExtensionNames = requestedInstanceExtensions.ptr,
+            .enabledExtensionCount = @intCast(instanceExtensionsToRequest.items.len),
+            .ppEnabledExtensionNames = instanceExtensionsToRequest.items.ptr,
         },
         null,
         &vulkanInstance,
@@ -4150,7 +4166,11 @@ pub const Renderer = struct {
                     availableFormat.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
                 {
                     surfaceFormat = availableFormat;
-                    break;
+                }
+                if (availableFormat.format == c.VK_FORMAT_B8G8R8A8_SRGB and
+                    availableFormat.colorSpace == c.VK_COLOR_SPACE_HDR10_ST2084_EXT)
+                {
+                    surfaceFormat = availableFormat;
                 }
             }
 
