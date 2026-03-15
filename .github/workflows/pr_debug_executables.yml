@@ -48,6 +48,11 @@ jobs:
       - name: Package debug executables
         run: zig build package
 
+      - name: Verify both debug executables exist
+        run: |
+          test -f zig-out/pr-binaries/playground
+          test -f zig-out/pr-binaries/uhoh.com
+
       - name: Upload combined debug executables
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
