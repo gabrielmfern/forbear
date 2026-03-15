@@ -3,7 +3,7 @@
   "env": {
     "GALLIUM_DRIVER": "llvmpipe",
     "LIBGL_ALWAYS_SOFTWARE": "1",
-    "VK_DRIVER_FILES": "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json",
-    "VK_ICD_FILENAMES": "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
+    "VK_DRIVER_FILES": "/usr/share/vulkan/icd.d/lvp_icd.json",
+    "VK_ICD_FILENAMES": "/usr/share/vulkan/icd.d/lvp_icd.json"
   }
 }
