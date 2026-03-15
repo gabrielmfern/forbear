@@ -343,50 +343,53 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
 /// minSizes accordingly, though (?) there shouldn't be a growth or shrinking after
 /// this
 pub fn updateFittingForAncestors(node: *Node, addition: f32) void {
-    inline for (Direction.array) |direction| {
-        const minSize = node.getMinSize(direction);
-        const size = node.getSize(direction);
-        const margin = node.style.margin.get(direction);
+    // If it's not standard we can't account for it in the flow of updates
+    if (node.style.placement == .standard) {
+        inline for (Direction.array) |direction| {
+            const minSize = node.getMinSize(direction);
+            const size = node.getSize(direction);
+            const margin = node.style.margin.get(direction);
 
-        var ancestorOpt = node.parent;
-        while (ancestorOpt) |ancestor| {
-            const ancestorSize = ancestor.getSize(direction);
-            const ancestorMinSize = ancestor.getMinSize(direction);
-            if (ancestor.shouldFitMin(direction)) {
-                if (ancestor.style.direction == direction) {
-                    // just addition is fine since it should already be here
-                    ancestor.addMinSize(direction, addition);
+            var ancestorOpt = node.parent;
+            while (ancestorOpt) |ancestor| {
+                const ancestorSize = ancestor.getSize(direction);
+                const ancestorMinSize = ancestor.getMinSize(direction);
+                if (ancestor.shouldFitMin(direction)) {
+                    if (ancestor.style.direction == direction) {
+                        // just addition is fine since it should already be here
+                        ancestor.addMinSize(direction, addition);
+                    } else {
+                        ancestor.setMinSize(direction, @max(
+                            ancestorMinSize,
+                            minSize + margin[0] + margin[1],
+                        ));
+                    }
+                }
+
+                if (ancestor.style.getPreferredSize(direction) == .fit) {
+                    if (ancestor.style.direction == direction) {
+                        // just addition is fine since it should already be here
+                        ancestor.addSize(direction, addition);
+                    } else {
+                        // TODO: ensure the max and min sizes here
+                        // TODO: also add the padding and margins of nodes
+                        ancestor.setSize(direction, @max(
+                            ancestorSize,
+                            size + margin[0] + margin[1],
+                        ));
+                    }
+                    const perpendicularPreferredSize = ancestor.style.getPreferredSize(direction.perpendicular());
+                    if (perpendicularPreferredSize == .ratio) {
+                        ancestor.setSize(direction, ancestorSize * perpendicularPreferredSize.ratio);
+                    }
                 } else {
-                    ancestor.setMinSize(direction, @max(
-                        ancestorMinSize,
-                        minSize + margin[0] + margin[1],
-                    ));
+                    // means the streak should be ended as only a sequence of fits
+                    // would continue increasing
+                    break;
                 }
-            }
 
-            if (ancestor.style.getPreferredSize(direction) == .fit) {
-                if (ancestor.style.direction == direction) {
-                    // just addition is fine since it should already be here
-                    ancestor.addSize(direction, addition);
-                } else {
-                    // TODO: ensure the max and min sizes here
-                    // TODO: also add the padding and margins of nodes
-                    ancestor.setSize(direction, @max(
-                        ancestorSize,
-                        size + margin[0] + margin[1],
-                    ));
-                }
-                const perpendicularPreferredSize = ancestor.style.getPreferredSize(direction.perpendicular());
-                if (perpendicularPreferredSize == .ratio) {
-                    ancestor.setSize(direction, ancestorSize * perpendicularPreferredSize.ratio);
-                }
-            } else {
-                // means the streak should be ended as only a sequence of fits
-                // would continue increasing
-                break;
+                ancestorOpt = ancestor.parent;
             }
-
-            ancestorOpt = ancestor.parent;
         }
     }
 }
@@ -545,7 +548,7 @@ pub fn layout() !*Node {
         //
         // the side effects can be done minimally inside of the functions. what
         // really needs to be done if height fitting for consecutive height
-        // fitting ancestors, and aspect ratio maintenance.
+        // fitting ancestors, aspect ratio maintenance, and width/height percentage value calculations.
 
         if (node.style.width == .grow) {
             node.size[0] = @min(@max(viewportSize[0], node.minSize[0]), node.maxSize[0]);
@@ -556,6 +559,7 @@ pub fn layout() !*Node {
 
         try growAndShrink(arena, node);
         try wrapAndPlace(arena, node);
+
 
         return node;
     } else {

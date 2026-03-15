@@ -566,7 +566,9 @@ fn elementEnd(block: void) void {
 
     const node = self.frameMeta.?.previousPushedNode.?;
     if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
-        parent.fitChild(node);
+        if (node.style.placement == .standard) {
+            parent.fitChild(node);
+        }
     }
 
     if (node.style.width == .ratio) {
