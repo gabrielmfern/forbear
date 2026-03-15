@@ -52,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: playground-debug-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
-          path: zig-out/pr-binaries/playground-debug-*.tar
+          path: zig-out/pr-binaries/playground*
           if-no-files-found: error
           retention-days: 14
 
@@ -60,7 +60,7 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: uhoh.com-debug-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
-          path: zig-out/pr-binaries/uhoh.com-debug-*.tar
+          path: zig-out/pr-binaries/uhoh.com*
           if-no-files-found: error
           retention-days: 14
 
@@ -135,7 +135,7 @@ jobs:
                 `- [${artifact.name}](${serverUrl}/${owner}/${repo}/actions/runs/${runId}/artifacts/${artifact.id})`,
               ),
               "",
-              "Each artifact contains a `.tar` archive so the executable bit survives download without an extra compression layer inside GitHub's zip artifact.",
+              "Each artifact zip contains the raw binary directly. GitHub's artifact service still wraps downloads in zip, so you may need `chmod +x` after unzipping on Unix.",
             ];
 
             const wrappedSection = [

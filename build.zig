@@ -292,20 +292,10 @@ pub fn build(b: *std.Build) void {
         check_step.dependOn(&uhoh_build.step);
     }
 
-    // Package step - builds debug executables and archives them for CI upload
+    // Package step - builds debug executables and copies them for CI upload
     {
         const package_step = b.step("package", "Build and package debug executables");
         const package_directory: std.Build.InstallDir = .{ .custom = "pr-binaries" };
-        const package_os = @tagName(target.result.os.tag);
-        const package_arch = @tagName(target.result.cpu.arch);
-        const playground_archive_name = b.fmt(
-            "playground-debug-{s}-{s}.tar",
-            .{ package_os, package_arch },
-        );
-        const uhoh_archive_name = b.fmt(
-            "uhoh.com-debug-{s}-{s}.tar",
-            .{ package_os, package_arch },
-        );
         const package_context = createForbearModule(b, "forbear_package", target, .Debug);
         var package_dependencies = package_context.dependencies;
         const package_playground_exe = addPlaygroundExecutable(
@@ -326,30 +316,18 @@ pub fn build(b: *std.Build) void {
             package_context.forbear,
         );
 
-        const archive_playground = b.addSystemCommand(&.{ "tar", "-C" });
-        archive_playground.addDirectoryArg(package_playground_exe.getEmittedBinDirectory());
-        archive_playground.addArg("-cf");
-        const playground_archive = archive_playground.addOutputFileArg(playground_archive_name);
-        archive_playground.addArg(package_playground_exe.out_filename);
-
-        const archive_uhoh = b.addSystemCommand(&.{ "tar", "-C" });
-        archive_uhoh.addDirectoryArg(package_uhoh_exe.getEmittedBinDirectory());
-        archive_uhoh.addArg("-cf");
-        const uhoh_archive = archive_uhoh.addOutputFileArg(uhoh_archive_name);
-        archive_uhoh.addArg(package_uhoh_exe.out_filename);
-
-        const install_playground_archive = b.addInstallFileWithDir(
-            playground_archive,
+        const install_playground_binary = b.addInstallFileWithDir(
+            package_playground_exe.getEmittedBin(),
             package_directory,
-            playground_archive_name,
+            package_playground_exe.out_filename,
         );
-        const install_uhoh_archive = b.addInstallFileWithDir(
-            uhoh_archive,
+        const install_uhoh_binary = b.addInstallFileWithDir(
+            package_uhoh_exe.getEmittedBin(),
             package_directory,
-            uhoh_archive_name,
+            package_uhoh_exe.out_filename,
         );
 
-        package_step.dependOn(&install_playground_archive.step);
-        package_step.dependOn(&install_uhoh_archive.step);
+        package_step.dependOn(&install_playground_binary.step);
+        package_step.dependOn(&install_uhoh_binary.step);
     }
 }
