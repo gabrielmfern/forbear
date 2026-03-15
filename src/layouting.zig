@@ -440,37 +440,43 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
 
             // place elements, wrapping in .leftToRight if overflow is .wrap, appending the line information to `lines`
             for (children.items) |*child| {
-                if (node.style.direction == .leftToRight) {
-                    if (node.style.overflow == .wrap) {
-                        const remainingSpace = node.size[0] - (cursor[0] + node.style.padding.x[1]);
-                        if (child.style.margin.x[0] + child.size[0] + child.style.margin.x[1] > remainingSpace) {
-                            // breaks the line
-                            cursor[1] += node.size[1] + child.style.margin.y[0];
-                            // TODO: where does the bottom margin get used in this flow? I believe we're missing something
-                            node.size[1] += node.size[1] + child.style.margin.y[0];
-                            cursor[0] = node.style.padding.x[0];
-                            try lines.append(arena, currentLine);
-                            currentLine.start = currentLine.end - 1;
-                            currentLine.width = 0;
-                            currentLine.height = 0;
+                if (child.style.placement == .standard) {
+                    if (node.style.direction == .leftToRight) {
+                        if (node.style.overflow == .wrap) {
+                            const remainingSpace = node.size[0] - (cursor[0] + node.style.padding.x[1]);
+                            if (child.style.margin.x[0] + child.size[0] + child.style.margin.x[1] > remainingSpace) {
+                                // breaks the line
+                                cursor[1] += node.size[1] + child.style.margin.y[0];
+                                // TODO: where does the bottom margin get used in this flow? I believe we're missing something
+                                node.size[1] += node.size[1] + child.style.margin.y[0];
+                                if (node.style.width == .ratio) {
+                                    node.size[0] = node.size[1] + node.style.width.ratio;
+                                }
+                                cursor[0] = node.style.padding.x[0];
+                                try lines.append(arena, currentLine);
+                                currentLine.start = currentLine.end - 1;
+                                currentLine.width = 0;
+                                currentLine.height = 0;
+                            }
                         }
-                    }
-                    cursor[0] += child.style.margin.x[0];
-                    child.position = cursor;
-                    cursor[0] += child.size[0] + child.style.margin.x[1];
+                        cursor[0] += child.style.margin.x[0];
+                        child.position = cursor;
+                        cursor[0] += child.size[0] + child.style.margin.x[1];
 
-                    currentLine.end += 1;
-                    currentLine.width += child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
-                    currentLine.height = @max(
-                        currentLine.height,
-                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                    );
-                } else if (node.style.direction == .topToBottom) {
-                    cursor[1] += child.style.margin.y[0];
-                    child.position = cursor;
-                    cursor[1] += child.size[1] + child.style.margin.y[1];
+                        currentLine.end += 1;
+                        currentLine.width += child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
+                        currentLine.height = @max(
+                            currentLine.height,
+                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
+                        );
+                    } else if (node.style.direction == .topToBottom) {
+                        cursor[1] += child.style.margin.y[0];
+                        child.position = cursor;
+                        cursor[1] += child.size[1] + child.style.margin.y[1];
+                    }
                 }
             }
+            try lines.append(arena, currentLine);
 
             // 2. update consecutive ancestors with a fit height
             const addition = node.size[1] - nodeHeightBeforeIteration;
@@ -488,13 +494,15 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
                         .center => (availableSize[0] - line.width) / 2.0,
                         .end => availableSize[0] - line.width,
                     };
-                    for (children.items[line.start .. line.end]) |*child| {
-                        child.position[0] += horizontalAlignmentOffset;
-                        child.position[1] += switch (node.style.alignment.y) {
-                            .start => 0.0,
-                            .center => (line.height - child.size[1]) / 2.0,
-                            .end => line.height - child.size[1],
-                        };
+                    for (children.items[line.start..line.end]) |*child| {
+                        if (child.style.placement == .standard) {
+                            child.position[0] += horizontalAlignmentOffset;
+                            child.position[1] += switch (node.style.alignment.y) {
+                                .start => 0.0,
+                                .center => (line.height - child.size[1]) / 2.0,
+                                .end => line.height - child.size[1],
+                            };
+                        }
                         try wrapAndPlace(arena, child);
                     }
                 }
@@ -505,12 +513,14 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
                     .end => availableSize[1] - cursor[1],
                 };
                 for (children.items) |*child| {
-                    child.position[0] += switch (node.style.alignment.y) {
-                        .start => 0.0,
-                        .center => (availableSize[0] - child.size[1]) / 2.0,
-                        .end => availableSize[0] - child.size[1],
-                    };
-                    child.position[1] += verticalAlignmentOffset;
+                    if (child.style.placement == .standard) {
+                        child.position[0] += switch (node.style.alignment.y) {
+                            .start => 0.0,
+                            .center => (availableSize[0] - child.size[1]) / 2.0,
+                            .end => availableSize[0] - child.size[1],
+                        };
+                        child.position[1] += verticalAlignmentOffset;
+                    }
                     try wrapAndPlace(arena, child);
                 }
             }
