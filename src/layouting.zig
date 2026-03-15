@@ -220,8 +220,8 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
     };
     var lines = try std.ArrayList(Line).initCapacity(arena, 4);
 
-    const lineEnd = node.size[0] + base[0];
-    var cursor = base;
+    const lineEnd = node.size[0];
+    var cursor: Vec2 = @splat(0.0);
     var lineStartIndex: usize = 0;
     switch (node.style.textWrapping) {
         .character => {
@@ -236,7 +236,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
                     cursor[1] += glyphs.lineHeight;
                 }
 
-                glyph.position = cursor + glyph.offset;
+                glyph.position = base + cursor + glyph.offset;
                 cursor += glyph.advance;
             }
         },
@@ -269,7 +269,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
                     }
                 }
 
-                glyph.position = cursor + glyph.offset;
+                glyph.position = base + cursor + glyph.offset;
                 cursor += glyph.advance;
                 if (std.mem.eql(u8, glyph.text, " ")) {
                     lastSpaceInfoOpt = .{
