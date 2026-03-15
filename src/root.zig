@@ -56,7 +56,7 @@ pub const FrameMeta = struct {
     componentResolutionState: std.ArrayList(ComponentResolutionState) = .empty,
 
     rootNode: ?Node = null,
-    previousPushedNode: ?*const Node = null,
+    previousPushedNode: ?*Node = null,
 
     nodeParentStack: std.ArrayList(*Node) = .empty,
     nodePath: std.ArrayList(usize) = .empty,
@@ -438,7 +438,7 @@ fn endNoop(block: void) void {
     _ = block;
 }
 
-fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*Node, index: usize } {
+fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
@@ -448,17 +448,19 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*Node, index
         // can we make sure that the compiler will ensure that the parent here
         // always allows for children?
         if (parent.children.nodes.items.len > 0) {
+            const newNode = try parent.children.nodes.addOne(arena);
+            newNode.parent = parent;
             return .{
-                .ptr = try parent.children.nodes.addOne(arena),
-                .parent = parent,
+                .ptr = newNode,
                 .index = parent.children.nodes.items.len - 1,
             };
         } else {
             var children = try std.ArrayList(Node).initCapacity(arena, 1);
             defer parent.children = .{ .nodes = children };
+            const newNode = children.addOneAssumeCapacity();
+            newNode.parent = parent;
             return .{
-                .ptr = children.addOneAssumeCapacity(),
-                .parent = parent,
+                .ptr = newNode,
                 .index = children.items.len - 1,
             };
         }
@@ -468,6 +470,8 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*Node, index
         }
         self.frameMeta.?.rootNode = Node{
             .key = undefined,
+
+            .parent = null,
 
             .position = undefined,
             .z = undefined,
@@ -480,7 +484,6 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, parent: ?*Node, index
         };
         return .{
             .ptr = &self.frameMeta.?.rootNode.?,
-            .parent = null,
             .index = 0,
         };
     }
@@ -565,6 +568,23 @@ fn elementEnd(block: void) void {
     if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
         parent.fitChild(node);
     }
+
+    if (node.style.width == .ratio) {
+        node.size[0] = node.style.width.ratio * node.size[1];
+    }
+    if (node.style.height == .ratio) {
+        node.size[1] = node.style.height.ratio * node.size[0];
+    }
+    if (node.children == .nodes) {
+        for (node.children.nodes.items) |*child| {
+            if (child.style.width == .percentage) {
+                child.size[0] = child.style.width.percentage * node.size[0];
+            }
+            if (child.style.height == .percentage) {
+                child.size[1] = child.style.height.percentage * node.size[1];
+            }
+        }
+    }
 }
 
 pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
@@ -579,7 +599,7 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         return &endNoop;
     };
 
-    const baseStyle = if (result.parent) |parent|
+    const baseStyle = if (result.ptr.parent) |parent|
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
@@ -599,7 +619,7 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
     style.margin.y *= @splat(resolutionMultiplier[1]);
     style.borderRadius *= resolutionMultiplier[0];
 
-    const parentZ = if (result.parent) |parent|
+    const parentZ = if (result.ptr.parent) |parent|
         parent.z
     else
         0;
@@ -609,6 +629,7 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
     hasher.update(std.mem.asBytes(&result.index));
     result.ptr.* = .{
         .key = hasher.final(),
+        .parent = result.ptr.parent,
         .style = style,
         .children = .{ .nodes = .empty },
         .z = if (incompleteStyle.zIndex) |zIndex|
@@ -705,7 +726,7 @@ pub fn text(content: []const u8) void {
 
     const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
 
-    const baseStyle = if (result.parent) |parent|
+    const baseStyle = if (result.ptr.parent) |parent|
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
@@ -715,7 +736,7 @@ pub fn text(content: []const u8) void {
             .text
         else
             baseStyle.cursor,
-        .alignment = if (result.parent) |parent| .{
+        .alignment = if (result.ptr.parent) |parent| .{
             .x = parent.style.alignment.x,
             .y = .start,
         } else null,
@@ -778,7 +799,7 @@ pub fn text(content: []const u8) void {
     }
     maxSize[0] = cursor[0];
 
-    const parentZ = if (result.parent) |parent|
+    const parentZ = if (result.ptr.parent) |parent|
         parent.z
     else
         0;
@@ -789,6 +810,7 @@ pub fn text(content: []const u8) void {
     hasher.update(std.mem.asBytes(&result.index));
     result.ptr.* = Node{
         .key = hasher.final(),
+        .parent = result.ptr.parent,
         .position = .{ 0.0, 0.0 },
         .z = if (parentZ < std.math.maxInt(u16))
             parentZ + 1
@@ -803,7 +825,7 @@ pub fn text(content: []const u8) void {
 
     self.frameMeta.?.previousPushedNode = result.ptr;
 
-    if (result.parent) |parent| {
+    if (result.ptr.parent) |parent| {
         parent.fitChild(result.ptr);
     }
 }

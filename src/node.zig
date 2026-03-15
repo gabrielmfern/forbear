@@ -436,6 +436,8 @@ pub const Node = struct {
         glyphs: Glyphs,
     };
 
+    parent: ?*Node,
+
     key: u64,
 
     position: Vec2,
@@ -452,15 +454,6 @@ pub const Node = struct {
         return preferredSize != .fixed and preferredSize != .percentage and self.style.getMinSize(direction) == null;
     }
 
-    pub fn applyRatios(self: *@This()) void {
-        if (self.style.width == .ratio) {
-            self.size[0] = self.style.width.ratio * self.size[1];
-        }
-        if (self.style.height == .ratio) {
-            self.size[1] = self.style.height.ratio * self.size[0];
-        }
-    }
-
     pub fn fitChild(self: *@This(), child: *const Node) void {
         if (child.style.placement != .manual) {
             inline for (Direction.array) |fitDirection| {
@@ -474,6 +467,7 @@ pub const Node = struct {
 
                 if (layoutDirection == fitDirection) {
                     if (preferredSize == .fit) {
+                        // TODO: ensure the max and min sizes here
                         self.addSize(fitDirection, contribution);
                     }
                     if (self.shouldFitMin(fitDirection)) {
@@ -482,6 +476,7 @@ pub const Node = struct {
                 } else {
                     // cross axis fitting
                     if (preferredSize == .fit) {
+                        // TODO: ensure the max and min sizes here
                         self.setSize(fitDirection, @max(
                             contribution + self.fittingBase(fitDirection),
                             self.getSize(fitDirection),
