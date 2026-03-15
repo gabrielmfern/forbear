@@ -30,7 +30,10 @@ else
         weston_backend="headless-backend.so"
     fi
 
-    nohup weston \
+    nohup env \
+        XDG_RUNTIME_DIR="${runtime_dir}" \
+        WAYLAND_DISPLAY="${socket_name}" \
+        weston \
         --backend="${weston_backend}" \
         --socket="${socket_name}" \
         --idle-time=0 \
