@@ -1,6 +1,6 @@
 {
   "install": "sudo apt-get update && sudo apt-get install -y glslang-tools libvulkan-dev libwayland-bin libwayland-dev libxkbcommon-dev mesa-vulkan-drivers spirv-tools vulkan-tools wayland-protocols weston",
-  "start": "mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\" && if [ ! -S \"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\" ]; then nohup weston --backend=headless-backend.so --socket=\"$WAYLAND_DISPLAY\" --idle-time=0 --width=1280 --height=720 >/tmp/weston.log 2>&1 & for _ in $(seq 1 50); do [ -S \"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\" ] && break; sleep 0.1; done; fi",
+  "start": "mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\" && if [ ! -S \"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\" ]; then existing_wayland_socket=$(ls /run/user/*/wayland-* 2>/dev/null | head -n 1); if [ -n \"$existing_wayland_socket\" ]; then ln -sf \"$existing_wayland_socket\" \"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\"; else if [ -n \"$DISPLAY\" ]; then weston_backend=x11-backend.so; else weston_backend=headless-backend.so; fi; nohup weston --backend=\"$weston_backend\" --socket=\"$WAYLAND_DISPLAY\" --idle-time=0 --width=1280 --height=720 >/tmp/weston.log 2>&1 & for _ in $(seq 1 50); do [ -S \"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\" ] && break; sleep 0.1; done; fi; fi",
   "env": {
     "GALLIUM_DRIVER": "llvmpipe",
     "LIBGL_ALWAYS_SOFTWARE": "1",
