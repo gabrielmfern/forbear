@@ -77,7 +77,8 @@ jobs:
             const startMarker = "<!-- pr-debug-executables:start -->";
             const endMarker = "<!-- pr-debug-executables:end -->";
             const runUrl = `${serverUrl}/${owner}/${repo}/actions/runs/${runId}`;
-            const shortSha = context.payload.pull_request.head.sha.slice(0, 7);
+            const eventHeadSha = context.payload.pull_request.head.sha;
+            const shortSha = eventHeadSha.slice(0, 7);
             const expectedArtifacts = 2;
 
             const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -118,6 +119,12 @@ jobs:
               repo,
               pull_number: pullNumber,
             });
+            if (pullRequest.data.head.sha !== eventHeadSha) {
+              core.info(
+                `PR #${pullNumber} head moved to ${pullRequest.data.head.sha}; skipping stale artifact update for ${eventHeadSha}.`,
+              );
+              return;
+            }
 
             const bodySectionLines = [
               "## Debug executables",

@@ -82,6 +82,11 @@ const Dependencies = struct {
     }
 };
 
+const BuildContext = struct {
+    dependencies: Dependencies,
+    forbear: *std.Build.Module,
+};
+
 pub fn addShaderImport(b: *std.Build, module: *std.Build.Module, path: []const u8, name: []const u8) void {
     // Step 1: Compile GLSL to SPIR-V
     const glslangValidatorCommand = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
@@ -102,11 +107,13 @@ pub fn addShaderImport(b: *std.Build, module: *std.Build.Module, path: []const u
     );
 }
 
-pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-
-    const forbear = b.addModule("forbear", .{
+fn createForbearModule(
+    b: *std.Build,
+    name: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) BuildContext {
+    const forbear = b.addModule(name, .{
         .root_source_file = b.path("src/root.zig"),
         .link_libc = true,
         .target = target,
@@ -114,7 +121,6 @@ pub fn build(b: *std.Build) void {
     });
 
     var dependencies = Dependencies.init(b, target, optimize);
-
     dependencies.addToModule(forbear);
 
     if (target.result.os.tag == .linux) {
@@ -170,6 +176,69 @@ pub fn build(b: *std.Build) void {
     addShaderImport(b, forbear, "shaders/shadow/vertex.vert", "shadow_vertex_shader");
     addShaderImport(b, forbear, "shaders/shadow/fragment.frag", "shadow_fragment_shader");
 
+    return .{
+        .dependencies = dependencies,
+        .forbear = forbear,
+    };
+}
+
+fn addPlaygroundExecutable(
+    b: *std.Build,
+    module_name: []const u8,
+    executable_name: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    forbear: *std.Build.Module,
+    dependencies: *Dependencies,
+) *std.Build.Step.Compile {
+    const playground = b.addModule(module_name, .{
+        .root_source_file = b.path("playground.zig"),
+        .link_libc = true,
+        .target = target,
+        .optimize = optimize,
+    });
+
+    dependencies.addToModule(playground);
+    playground.addImport("forbear", forbear);
+
+    return b.addExecutable(.{
+        .name = executable_name,
+        .root_module = playground,
+        .use_llvm = true,
+    });
+}
+
+fn addUhohExecutable(
+    b: *std.Build,
+    module_name: []const u8,
+    executable_name: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    forbear: *std.Build.Module,
+) *std.Build.Step.Compile {
+    const uhoh = b.addModule(module_name, .{
+        .root_source_file = b.path("examples/uhoh.com/src/main.zig"),
+        .link_libc = true,
+        .target = target,
+        .optimize = optimize,
+    });
+    uhoh.addImport("forbear", forbear);
+
+    return b.addExecutable(.{
+        .name = executable_name,
+        .root_module = uhoh,
+        .use_llvm = true,
+    });
+}
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const default_context = createForbearModule(b, "forbear", target, optimize);
+    const forbear = default_context.forbear;
+    var dependencies = default_context.dependencies;
+
     const mod_tests = b.addTest(.{
         .root_module = forbear,
         .test_runner = .{ .path = b.path("test_runner.zig"), .mode = .simple },
@@ -180,22 +249,15 @@ pub fn build(b: *std.Build) void {
 
     {
         // Playground
-        const playground = b.addModule("playground", .{
-            .root_source_file = b.path("playground.zig"),
-            .link_libc = true,
-            .target = target,
-            .optimize = optimize,
-        });
-
-        dependencies.addToModule(playground);
-
-        playground.addImport("forbear", forbear);
-
-        const playground_exe = b.addExecutable(.{
-            .name = "playground",
-            .root_module = playground,
-            .use_llvm = true,
-        });
+        const playground_exe = addPlaygroundExecutable(
+            b,
+            "playground",
+            "playground",
+            target,
+            optimize,
+            forbear,
+            &dependencies,
+        );
         b.installArtifact(playground_exe);
 
         const run_playground_command = b.addRunArtifact(playground_exe);
@@ -210,20 +272,15 @@ pub fn build(b: *std.Build) void {
         const check_step = b.step("check", "Build all examples and playground");
 
         // Build playground
-        const playground = b.addModule("playground_check", .{
-            .root_source_file = b.path("playground.zig"),
-            .link_libc = true,
-            .target = target,
-            .optimize = optimize,
-        });
-
-        dependencies.addToModule(playground);
-        playground.addImport("forbear", forbear);
-
-        const playground_exe = b.addExecutable(.{
-            .name = "playground_check",
-            .root_module = playground,
-        });
+        const playground_exe = addPlaygroundExecutable(
+            b,
+            "playground_check",
+            "playground_check",
+            target,
+            optimize,
+            forbear,
+            &dependencies,
+        );
         check_step.dependOn(&playground_exe.step);
 
         // Build uhoh.com example
@@ -238,7 +295,7 @@ pub fn build(b: *std.Build) void {
     // Package step - builds debug executables and archives them for CI upload
     {
         const package_step = b.step("package", "Build and package debug executables");
-        const package_directory = "zig-out/pr-binaries";
+        const package_directory: std.Build.InstallDir = .{ .custom = "pr-binaries" };
         const package_os = @tagName(target.result.os.tag);
         const package_arch = @tagName(target.result.cpu.arch);
         const playground_archive_name = b.fmt(
@@ -249,49 +306,50 @@ pub fn build(b: *std.Build) void {
             "uhoh.com-debug-{s}-{s}.tar.gz",
             .{ package_os, package_arch },
         );
-
-        const prepare_package_directory = b.addSystemCommand(&.{
-            "bash",
-            "-lc",
-            b.fmt("rm -rf {s} && mkdir -p {s}", .{ package_directory, package_directory }),
-        });
-
-        const build_playground_package = b.addSystemCommand(&.{
-            "zig",
-            "build",
-            "-Doptimize=Debug",
-        });
-        build_playground_package.step.dependOn(&prepare_package_directory.step);
-
-        const archive_playground = b.addSystemCommand(&.{
-            "tar",
-            "-C",
-            "zig-out/bin",
-            "-czf",
-            b.fmt("{s}/{s}", .{ package_directory, playground_archive_name }),
+        const package_context = createForbearModule(b, "forbear_package", target, .Debug);
+        var package_dependencies = package_context.dependencies;
+        const package_playground_exe = addPlaygroundExecutable(
+            b,
+            "playground_package",
             "playground",
-        });
-        archive_playground.step.dependOn(&build_playground_package.step);
-
-        const build_uhoh_package = b.addSystemCommand(&.{
-            "zig",
-            "build",
-            "-Doptimize=Debug",
-        });
-        build_uhoh_package.setCwd(b.path("examples/uhoh.com"));
-        build_uhoh_package.step.dependOn(&prepare_package_directory.step);
-
-        const archive_uhoh = b.addSystemCommand(&.{
-            "tar",
-            "-C",
-            "examples/uhoh.com/zig-out/bin",
-            "-czf",
-            b.fmt("{s}/{s}", .{ package_directory, uhoh_archive_name }),
+            target,
+            .Debug,
+            package_context.forbear,
+            &package_dependencies,
+        );
+        const package_uhoh_exe = addUhohExecutable(
+            b,
+            "uhoh_package",
             "uhoh.com",
-        });
-        archive_uhoh.step.dependOn(&build_uhoh_package.step);
+            target,
+            .Debug,
+            package_context.forbear,
+        );
 
-        package_step.dependOn(&archive_playground.step);
-        package_step.dependOn(&archive_uhoh.step);
+        const archive_playground = b.addSystemCommand(&.{ "tar", "-C" });
+        archive_playground.addDirectoryArg(package_playground_exe.getEmittedBinDirectory());
+        archive_playground.addArg("-czf");
+        const playground_archive = archive_playground.addOutputFileArg(playground_archive_name);
+        archive_playground.addArg(package_playground_exe.out_filename);
+
+        const archive_uhoh = b.addSystemCommand(&.{ "tar", "-C" });
+        archive_uhoh.addDirectoryArg(package_uhoh_exe.getEmittedBinDirectory());
+        archive_uhoh.addArg("-czf");
+        const uhoh_archive = archive_uhoh.addOutputFileArg(uhoh_archive_name);
+        archive_uhoh.addArg(package_uhoh_exe.out_filename);
+
+        const install_playground_archive = b.addInstallFileWithDir(
+            playground_archive,
+            package_directory,
+            playground_archive_name,
+        );
+        const install_uhoh_archive = b.addInstallFileWithDir(
+            uhoh_archive,
+            package_directory,
+            uhoh_archive_name,
+        );
+
+        package_step.dependOn(&install_playground_archive.step);
+        package_step.dependOn(&install_uhoh_archive.step);
     }
 }
