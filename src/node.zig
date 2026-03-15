@@ -516,7 +516,7 @@ pub const Node = struct {
             },
             .glyphs => |glyphs| {
                 for (glyphs.slice) |glyph| {
-                    for (0..indent) |_| {
+                    for (0..indent + 1) |_| {
                         std.debug.print("  ", .{});
                     }
                     std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
