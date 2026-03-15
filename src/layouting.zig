@@ -249,7 +249,7 @@ pub fn fit(node: *Node) void {
 }
 
 pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
-    std.debug.assert(node.children == .glyphds);
+    std.debug.assert(node.children == .glyphs);
     if (node.style.textWrapping == .none) {
         return;
     }
@@ -358,7 +358,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
                 // TODO: ensure the max and min sizes here
                 ancestor.minSize[1] = @max(
                     ancestor.minSize[1],
-                    node.minSize[1] + node.style.margin.y[0] + node.margin.y[1],
+                    node.minSize[1] + node.style.margin.y[0] + node.style.margin.y[1],
                 );
             } else if (ancestor.style.direction == .topToBottom) {
                 // no need to add anything else since it should already be here
@@ -383,7 +383,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
             }
         } else {
             // means the streak should be ended as only a sequence of fits
-            // should continue  
+            // should continue
             break;
         }
 
@@ -395,14 +395,96 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
 pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
     switch (node.children) {
         .nodes => |children| {
-            var cursor = Vec2{
-                node.style.padding.x[0] + node.style.padding.x[1],
-                node.style.padding.y[0] + node.style.padding.y[1],
+            var cursor = node.position + Vec2{
+                node.style.padding.x[0],
+                node.style.padding.y[0],
             };
+
+            const Line = struct {
+                start: usize,
+                end: usize,
+                width: f32,
+                height: f32,
+            };
+
+            // Kept track so that they can be aligned
+            var lines = std.ArrayList(Line).empty;
+
+            var currentLine = Line{
+                .start = 0,
+                .end = 0,
+                .width = 0.0,
+                .height = 0.0,
+            };
+
             // understand the direction, and place elements following the direction
             for (children.items) |*child| {
+                if (node.style.direction == .leftToRight) {
+                    if (node.style.overflow == .wrap) {
+                        const remainingSpace = node.size[0] - (cursor[0] + node.style.padding.x[1]);
+                        if (child.style.margin.x[0] + child.size[0] + child.style.margin.x[1] > remainingSpace) {
+                            // breaks the line
+                            cursor[1] += node.size[1] + child.style.margin.y[0];
+                            cursor[0] = node.style.padding.x[0];
+                            try lines.append(arena, currentLine);
+                            currentLine.start = currentLine.end;
+                            currentLine.width = 0;
+                            currentLine.height = 0;
+                        }
+                    }
+                    cursor[0] += child.style.margin.x[0];
+                    child.position = cursor;
+                    cursor[0] += child.size[0] + child.style.margin.x[1];
 
-                try wrapAndPlace(arena, child);
+                    currentLine.end += 1;
+                    currentLine.width += child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
+                    currentLine.height = @max(
+                        currentLine.height,
+                        child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
+                    );
+                } else if (node.style.direction == .topToBottom) {
+                    cursor[1] += child.style.margin.y[0];
+                    child.position = cursor;
+                    cursor[1] += child.size[1] + child.style.margin.y[1];
+                }
+            }
+
+            const availableSize = Vec2{
+                node.size[0] - node.style.padding.x[0] - node.style.padding.x[1],
+                node.size[1] - node.style.padding.y[0] - node.style.padding.y[1],
+            };
+            if (node.style.direction == .leftToRight) {
+                for (lines.items) |line| {
+                    const alignmentOffset = switch (node.style.alignment.x) {
+                        .start => 0.0,
+                        .center => (availableSize[0] - line.width) / 2.0,
+                        .end => availableSize[0] - line.width,
+                    };
+                    for (children.items[line.start .. line.end + 1]) |*child| {
+                        child.position[0] += alignmentOffset;
+                        child.position[1] += switch (node.style.alignment.y) {
+                            .start => 0.0,
+                            .center => (line.height - child.size[1]) / 2.0,
+                            .end => line.height - child.size[1],
+                        };
+                        try wrapAndPlace(arena, child);
+                    }
+                }
+            } else if (node.style.direction == .topToBottom) {
+                const alignmentOffset = switch (node.style.alignment.y) {
+                    .start => 0.0,
+                    .center => (availableSize[1] - cursor[1]) / 2.0,
+                    .end => availableSize[1] - cursor[1],
+                };
+                for (children.items) |*child| {
+                    child.position[0] += switch (node.style.alignment.y) {
+                        .start => 0.0,
+                        .center => (availableSize[0] - child.size[1]) / 2.0,
+                        .end => availableSize[0] - child.size[1],
+                    };
+                    child.position[1] += alignmentOffset;
+                    try wrapAndPlace(arena, child);
+                }
             }
         },
         .glyphs => {
