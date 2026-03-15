@@ -13,7 +13,12 @@ existing_wayland_socket=""
 if [[ -n "${XDG_RUNTIME_DIR:-}" && -n "${WAYLAND_DISPLAY:-}" && -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]]; then
     existing_wayland_socket="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
 else
-    existing_wayland_socket="$(ls /run/user/*/wayland-* 2>/dev/null | head -n 1 || true)"
+    for candidate in /run/user/*/wayland-*; do
+        if [[ -S "${candidate}" ]]; then
+            existing_wayland_socket="${candidate}"
+            break
+        fi
+    done
 fi
 
 if [[ -n "${existing_wayland_socket}" ]]; then
@@ -72,3 +77,6 @@ done
 
 export XDG_RUNTIME_DIR="${runtime_dir}"
 export WAYLAND_DISPLAY="${socket_name}"
+
+printf "export XDG_RUNTIME_DIR=%q\n" "${XDG_RUNTIME_DIR}"
+printf "export WAYLAND_DISPLAY=%q\n" "${WAYLAND_DISPLAY}"
