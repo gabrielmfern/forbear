@@ -594,9 +594,51 @@ pub const Node = struct {
         }
         return self.size[1];
     }
+
+    pub fn iterateTree(self: *const @This(), allocator: std.mem.Allocator) !NodeTreeItrator {
+        var iterator = NodeTreeItrator{
+            .stack = try std.ArrayList(*const Node).initCapacity(allocator, 16),
+            .allocator = allocator,
+            .root = self,
+        };
+        try iterator.stack.append(allocator, self);
+        return iterator;
+    }
 };
 
 pub const Element = struct {
     style: IncompleteStyle,
     children: std.ArrayList(Node) = .empty,
+};
+
+pub const NodeTreeItrator = struct {
+    stack: std.ArrayList(*const Node),
+    allocator: std.mem.Allocator,
+
+    root: *const Node,
+
+    pub fn deinit(self: *@This()) void {
+        self.stack.deinit(self.allocator);
+    }
+
+    pub fn reset(self: *@This()) !void {
+        self.stack.clearRetainingCapacity();
+        try self.stack.append(self.allocator, self.root);
+    }
+
+    pub fn next(self: *@This()) !?*const Node {
+        if (self.stack.items.len == 0) {
+            return null;
+        }
+        if (self.stack.pop()) |current| {
+            if (current.children == .nodes) {
+                for (current.children.nodes.items) |*child| {
+                    try self.stack.append(self.allocator, child);
+                }
+            }
+            return current;
+        } else {
+            return null;
+        }
+    }
 };

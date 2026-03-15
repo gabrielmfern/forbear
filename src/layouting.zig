@@ -257,8 +257,8 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
     const glyphs = node.children.glyphs;
 
     const Line = struct {
-        startIndex: usize,
-        endIndex: usize,
+        start: usize,
+        end: usize,
     };
     var lines = try std.ArrayList(Line).initCapacity(arena, 4);
 
@@ -270,8 +270,8 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
             for (glyphs.slice, 0..) |*glyph, index| {
                 if (cursor[0] + glyph.advance[0] > lineWidth) {
                     try lines.append(arena, .{
-                        .startIndex = lineStartIndex,
-                        .endIndex = index - 1,
+                        .start = lineStartIndex,
+                        .end = index - 1,
                     });
                     lineStartIndex = index;
                     cursor[0] = 0.0;
@@ -295,8 +295,8 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
 
                         const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
                         try lines.append(arena, .{
-                            .startIndex = lineStartIndex,
-                            .endIndex = lastSpaceInfo.index,
+                            .start = lineStartIndex,
+                            .end = lastSpaceInfo.index,
                         });
 
                         for (lastSpaceInfo.index + 1..index) |reverseIndex| {
@@ -324,23 +324,23 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
         else => unreachable,
     }
     if (lines.getLastOrNull()) |lastLine| {
-        if (lastLine.endIndex != glyphs.slice.len - 1) {
+        if (lastLine.end != glyphs.slice.len - 1) {
             try lines.append(arena, .{
-                .startIndex = lastLine.endIndex + 1,
-                .endIndex = glyphs.slice.len - 1,
+                .start = lastLine.end + 1,
+                .end = glyphs.slice.len - 1,
             });
         }
     } else {
         try lines.append(arena, .{
-            .startIndex = 0,
-            .endIndex = glyphs.slice.len - 1,
+            .start = 0,
+            .end = glyphs.slice.len - 1,
         });
     }
     for (lines.items) |line| {
-        const startX = glyphs.slice[line.startIndex].position[0];
-        const endX = glyphs.slice[line.endIndex].position[0] + glyphs.slice[line.endIndex].advance[0];
+        const startX = glyphs.slice[line.start].position[0];
+        const endX = glyphs.slice[line.end].position[0] + glyphs.slice[line.end].advance[0];
         const width = endX - startX;
-        for (glyphs.slice[line.startIndex .. line.endIndex + 1]) |*glyph| {
+        for (glyphs.slice[line.start .. line.end + 1]) |*glyph| {
             switch (node.style.alignment.x) {
                 .start => {},
                 .center => glyph.position[0] += (lineWidth - width) / 2.0,
@@ -414,120 +414,138 @@ pub fn updateFittingForAncestors(node: *Node, addition: f32) void {
 pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
     switch (node.children) {
         .nodes => |children| {
-            var cursor = node.position + Vec2{
+            const base = node.position + Vec2{
                 node.style.padding.x[0],
                 node.style.padding.y[0],
             };
 
-            const Line = struct {
-                start: usize,
-                end: usize,
-                width: f32,
-                height: f32,
-            };
-
-            // Kept track so that they can be aligned
-            var lines = std.ArrayList(Line).empty;
-
-            var currentLine = Line{
-                .start = 0,
-                .end = 1,
-                .width = 0.0,
-                .height = 0.0,
-            };
-
-            const nodeHeightBeforeIteration = node.size[1];
-
-            // place elements, wrapping in .leftToRight if overflow is .wrap, appending the line information to `lines`
-            for (children.items) |*child| {
-                if (child.style.placement == .standard) {
-                    if (node.style.direction == .leftToRight) {
-                        if (node.style.overflow == .wrap) {
-                            const remainingSpace = node.size[0] - (cursor[0] + node.style.padding.x[1]);
-                            if (child.style.margin.x[0] + child.size[0] + child.style.margin.x[1] > remainingSpace) {
-                                // breaks the line
-                                cursor[1] += node.size[1] + child.style.margin.y[0];
-                                // TODO: where does the bottom margin get used in this flow? I believe we're missing something
-                                node.size[1] += node.size[1] + child.style.margin.y[0];
-                                if (node.style.width == .ratio) {
-                                    node.size[0] = node.size[1] + node.style.width.ratio;
-                                }
-                                cursor[0] = node.style.padding.x[0];
-                                try lines.append(arena, currentLine);
-                                currentLine.start = currentLine.end - 1;
-                                currentLine.width = 0;
-                                currentLine.height = 0;
-                            }
-                        }
-                        cursor[0] += child.style.margin.x[0];
-                        child.position = cursor;
-                        cursor[0] += child.size[0] + child.style.margin.x[1];
-
-                        currentLine.end += 1;
-                        currentLine.width += child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
-                        currentLine.height = @max(
-                            currentLine.height,
-                            child.size[1] + child.style.margin.y[0] + child.style.margin.y[1],
-                        );
-                    } else if (node.style.direction == .topToBottom) {
-                        cursor[1] += child.style.margin.y[0];
-                        child.position = cursor;
-                        cursor[1] += child.size[1] + child.style.margin.y[1];
-                    }
-                }
-            }
-            try lines.append(arena, currentLine);
-
-            // 2. update consecutive ancestors with a fit height
-            const addition = node.size[1] - nodeHeightBeforeIteration;
-            updateFittingForAncestors(node, addition);
-
-            // 3. alignment
             const availableSize = Vec2{
                 node.size[0] - node.style.padding.x[0] - node.style.padding.x[1],
                 node.size[1] - node.style.padding.y[0] - node.style.padding.y[1],
             };
+
             if (node.style.direction == .leftToRight) {
-                for (lines.items) |line| {
-                    const horizontalAlignmentOffset = switch (node.style.alignment.x) {
-                        .start => 0.0,
-                        .center => (availableSize[0] - line.width) / 2.0,
-                        .end => availableSize[0] - line.width,
-                    };
-                    for (children.items[line.start..line.end]) |*child| {
-                        if (child.style.placement == .standard) {
-                            child.position[0] += horizontalAlignmentOffset;
-                            child.position[1] += switch (node.style.alignment.y) {
-                                .start => 0.0,
-                                .center => (line.height - child.size[1]) / 2.0,
-                                .end => line.height - child.size[1],
-                            };
-                        }
-                        try wrapAndPlace(arena, child);
-                    }
-                }
-            } else if (node.style.direction == .topToBottom) {
-                const verticalAlignmentOffset = switch (node.style.alignment.y) {
-                    .start => 0.0,
-                    .center => (availableSize[1] - cursor[1]) / 2.0,
-                    .end => availableSize[1] - cursor[1],
-                };
-                for (children.items) |*child| {
-                    if (child.style.placement == .standard) {
-                        child.position[0] += switch (node.style.alignment.y) {
-                            .start => 0.0,
-                            .center => (availableSize[0] - child.size[1]) / 2.0,
-                            .end => availableSize[0] - child.size[1],
-                        };
-                        child.position[1] += verticalAlignmentOffset;
-                    }
-                    try wrapAndPlace(arena, child);
-                }
+                try placeLeftToRight(arena, node, children.items, base, availableSize);
+            } else {
+                placeTopToBottom(node, children.items, base, availableSize);
+            }
+
+            for (children.items) |*child| {
+                try wrapAndPlace(arena, child);
             }
         },
         .glyphs => {
             try wrapGlyphs(arena, node);
         },
+    }
+}
+
+fn placeLeftToRight(
+    arena: std.mem.Allocator,
+    node: *Node,
+    items: []Node,
+    base: Vec2,
+    availableSize: Vec2,
+) !void {
+    const Line = struct {
+        start: usize,
+        end: usize,
+        width: f32,
+        height: f32,
+    };
+
+    var cursor = base;
+    var lines = std.ArrayList(Line).empty;
+    var currentLine = Line{ .start = 0, .end = 0, .width = 0.0, .height = 0.0 };
+    const nodeHeightBeforeIteration = node.size[1];
+
+    for (items) |*child| {
+        if (child.style.placement == .standard) {
+            const childOuterWidth = child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
+            const childOuterHeight = child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
+
+            if (node.style.overflow == .wrap) {
+                const remainingSpace = node.size[0] - (cursor[0] + node.style.padding.x[1]);
+                if (childOuterWidth > remainingSpace) {
+                    cursor[1] += currentLine.height + child.style.margin.y[0];
+                    // TODO: where does the bottom margin get used in this flow? I believe we're missing something
+                    node.size[1] += currentLine.height + child.style.margin.y[0];
+                    if (node.style.width == .ratio) {
+                        node.size[0] = node.size[1] * node.style.width.ratio;
+                    }
+                    cursor[0] = base[0];
+                    try lines.append(arena, currentLine);
+
+                    currentLine = .{ .start = currentLine.end, .end = currentLine.end, .width = 0, .height = 0 };
+                }
+            }
+
+            cursor[0] += child.style.margin.x[0];
+            child.position = cursor;
+            cursor[0] += child.size[0] + child.style.margin.x[1];
+
+            currentLine.width += childOuterWidth;
+            currentLine.height = @max(currentLine.height, childOuterHeight);
+        }
+
+        currentLine.end += 1;
+    }
+    try lines.append(arena, currentLine);
+
+    if (node.size[1] != nodeHeightBeforeIteration) {
+        updateFittingForAncestors(node, node.size[1] - nodeHeightBeforeIteration);
+    }
+
+    for (lines.items) |line| {
+        const xOffset: f32 = switch (node.style.alignment.x) {
+            .start => 0.0,
+            .center => (availableSize[0] - line.width) / 2.0,
+            .end => availableSize[0] - line.width,
+        };
+        for (items[line.start..line.end]) |*child| {
+            if (child.style.placement == .standard) {
+                child.position[0] += xOffset;
+                child.position[1] += switch (node.style.alignment.y) {
+                    .start => 0.0,
+                    .center => (line.height - child.size[1]) / 2.0,
+                    .end => line.height - child.size[1],
+                };
+            }
+        }
+    }
+}
+
+fn placeTopToBottom(
+    node: *Node,
+    items: []Node,
+    base: Vec2,
+    availableSize: Vec2,
+) void {
+    var cursor = base;
+
+    for (items) |*child| {
+        if (child.style.placement == .standard) {
+            cursor[1] += child.style.margin.y[0];
+            child.position = cursor;
+            cursor[1] += child.size[1] + child.style.margin.y[1];
+        }
+    }
+
+    const contentHeight = cursor[1] - base[1];
+    const yOffset: f32 = switch (node.style.alignment.y) {
+        .start => 0.0,
+        .center => (availableSize[1] - contentHeight) / 2.0,
+        .end => availableSize[1] - contentHeight,
+    };
+    for (items) |*child| {
+        if (child.style.placement == .standard) {
+            child.position[0] += switch (node.style.alignment.x) {
+                .start => 0.0,
+                .center => (availableSize[0] - child.size[0]) / 2.0,
+                .end => availableSize[0] - child.size[0],
+            };
+            child.position[1] += yOffset;
+        }
     }
 }
 
@@ -554,8 +572,8 @@ pub fn layout() !*Node {
         if (node.style.height == .grow) {
             node.size[1] = @min(@max(viewportSize[1], node.minSize[1]), node.maxSize[1]);
         }
-        try growAndShrink(arena, node);
 
+        try growAndShrink(arena, node);
         try wrapAndPlace(arena, node);
 
         return node;
@@ -564,45 +582,3 @@ pub fn layout() !*Node {
         return error.NoRootFrameNode;
     }
 }
-
-pub const LayoutTreeIterator = struct {
-    stack: std.ArrayList(*const Node),
-    allocator: std.mem.Allocator,
-
-    root: *const Node,
-
-    pub fn init(allocator: std.mem.Allocator, root: *const Node) !@This() {
-        var iterator = @This(){
-            .stack = try std.ArrayList(*const Node).initCapacity(allocator, 16),
-            .allocator = allocator,
-            .root = root,
-        };
-        try iterator.stack.append(allocator, root);
-        return iterator;
-    }
-
-    pub fn deinit(self: *@This()) void {
-        self.stack.deinit(self.allocator);
-    }
-
-    pub fn reset(self: *@This()) !void {
-        self.stack.clearRetainingCapacity();
-        try self.stack.append(self.allocator, self.root);
-    }
-
-    pub fn next(self: *@This()) !?*const Node {
-        if (self.stack.items.len == 0) {
-            return null;
-        }
-        if (self.stack.pop()) |current| {
-            if (current.children == .nodes) {
-                for (current.children.nodes.items) |*child| {
-                    try self.stack.append(self.allocator, child);
-                }
-            }
-            return current;
-        } else {
-            return null;
-        }
-    }
-};

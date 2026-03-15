@@ -956,7 +956,7 @@ pub fn update() !void {
             events.clearRetainingCapacity();
         }
 
-        var iterator = try layouting.LayoutTreeIterator.init(arena, root);
+        var iterator = try root.iterateTree(arena);
 
         var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
         missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);

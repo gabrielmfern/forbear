@@ -9,7 +9,6 @@ const c = @import("c.zig").c;
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const countTreeSize = layouting.countTreeSize;
-const LayoutTreeIterator = layouting.LayoutTreeIterator;
 const Window = @import("window/root.zig").Window;
 const win32 = @import("windows/win32.zig");
 
