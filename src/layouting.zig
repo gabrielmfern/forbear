@@ -21,25 +21,6 @@ fn approxEq(a: f32, b: f32) bool {
     return @abs(a - b) < 0.001;
 }
 
-fn makeAbsolute(node: *Node, base: Vec2) void {
-    if (node.style.placement != .manual) {
-        node.position += base;
-    }
-
-    switch (node.children) {
-        .nodes => |nodes| {
-            for (nodes.items) |*child| {
-                makeAbsolute(child, node.position);
-            }
-        },
-        .glyphs => |glyphs| {
-            for (glyphs.slice) |*glyph| {
-                glyph.position += node.position;
-            }
-        },
-    }
-}
-
 fn growChildren(
     children: []Node,
     activelyModifying: *std.ArrayList(*Node),
