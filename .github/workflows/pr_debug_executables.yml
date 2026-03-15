@@ -1,0 +1,63 @@
+name: PR Debug Executables
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-debug-executables-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build debug executables
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
+        with:
+          persist-credentials: false
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with:
+          version: 0.15.2
+
+      - name: Install project dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            glslang-tools \
+            libvulkan-dev \
+            libwayland-bin \
+            libwayland-dev \
+            libxkbcommon-dev \
+            spirv-tools \
+            wayland-protocols
+
+      - name: Package debug executables
+        run: ./scripts/package_pr_binaries.sh
+
+      - name: Upload playground executable
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: playground-debug-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
+          path: dist/pr-binaries/playground-debug-*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload uhoh.com executable
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: uhoh.com-debug-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
+          path: dist/pr-binaries/uhoh.com-debug-*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
