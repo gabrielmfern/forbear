@@ -48,19 +48,13 @@ jobs:
       - name: Package debug executables
         run: zig build package
 
-      - name: Upload playground executable
+      - name: Upload combined debug executables
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
-          name: playground-debug-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
-          path: zig-out/pr-binaries/playground*
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload uhoh.com executable
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
-        with:
-          name: uhoh.com-debug-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
-          path: zig-out/pr-binaries/uhoh.com*
+          name: debug-executables-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            zig-out/pr-binaries/playground*
+            zig-out/pr-binaries/uhoh.com*
           if-no-files-found: error
           retention-days: 14
 
@@ -79,7 +73,7 @@ jobs:
             const runUrl = `${serverUrl}/${owner}/${repo}/actions/runs/${runId}`;
             const eventHeadSha = context.payload.pull_request.head.sha;
             const shortSha = eventHeadSha.slice(0, 7);
-            const expectedArtifacts = 2;
+            const expectedArtifacts = 1;
 
             const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             const sectionPattern = new RegExp(
@@ -135,7 +129,7 @@ jobs:
                 `- [${artifact.name}](${serverUrl}/${owner}/${repo}/actions/runs/${runId}/artifacts/${artifact.id})`,
               ),
               "",
-              "Each artifact zip contains the raw binary directly. GitHub's artifact service still wraps downloads in zip, so you may need `chmod +x` after unzipping on Unix.",
+              "This artifact zip contains both raw binaries directly. GitHub's artifact service still wraps downloads in zip, so you may need `chmod +x` after unzipping on Unix.",
             ];
 
             const wrappedSection = [
