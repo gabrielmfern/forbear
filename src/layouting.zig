@@ -206,30 +206,7 @@ pub fn growAndShrink(
     }
 }
 
-pub fn fit(node: *Node) void {
-    switch (node.children) {
-        .nodes => |nodes| {
-            inline for (Direction.array) |direction| {
-                const fittingBase = node.fittingBase(direction);
-                const preferredSize = node.style.getPreferredSize(direction);
-
-                if (preferredSize == .fit) {
-                    node.setSize(direction, fittingBase);
-                }
-                if (node.shouldFitMin(direction)) {
-                    node.setMinSize(direction, fittingBase);
-                }
-            }
-            for (nodes.items) |*child| {
-                fit(child);
-                node.fitChild(child);
-            }
-        },
-        else => {},
-    }
-}
-
-pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
+pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
     std.debug.assert(node.children == .glyphs);
     if (node.style.textWrapping == .none) {
         return;
@@ -244,7 +221,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
     var lines = try std.ArrayList(Line).initCapacity(arena, 4);
 
     const lineWidth = node.size[0];
-    var cursor: Vec2 = @splat(0.0);
+    var cursor = base;
     var lineStartIndex: usize = 0;
     switch (node.style.textWrapping) {
         .character => {
@@ -329,13 +306,15 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
             }
         }
     }
-    const addition = node.size[1] - cursor[1] - glyphs.lineHeight;
-    node.size[1] = cursor[1] + glyphs.lineHeight;
-    if (node.style.width == .ratio) {
-        node.size[0] = node.size[1] * node.style.width.ratio;
-    }
 
-    updateFittingForAncestors(node, addition);
+    const previousHeight = node.size[1];
+    node.size[1] = cursor[1] + glyphs.lineHeight;
+    if (previousHeight != node.size[1]) {
+        if (node.style.width == .ratio) {
+            node.size[0] = node.size[1] * node.style.width.ratio;
+        }
+        updateFittingForAncestors(node, node.size[1] - previousHeight);
+    }
 }
 
 /// Iterates upwards in the ancestry of the node, adding `addition` if in the
@@ -396,13 +375,12 @@ pub fn updateFittingForAncestors(node: *Node, addition: f32) void {
 
 /// does not change the size of children, but recursively updates the sizes of parents
 pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
+    const base = node.position + Vec2{
+        node.style.padding.x[0],
+        node.style.padding.y[0],
+    };
     switch (node.children) {
         .nodes => |children| {
-            const base = node.position + Vec2{
-                node.style.padding.x[0],
-                node.style.padding.y[0],
-            };
-
             const availableSize = Vec2{
                 node.size[0] - node.style.padding.x[0] - node.style.padding.x[1],
                 node.size[1] - node.style.padding.y[0] - node.style.padding.y[1],
@@ -419,7 +397,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
             }
         },
         .glyphs => {
-            try wrapGlyphs(arena, node);
+            try wrapGlyphs(arena, node, base);
         },
     }
 }
@@ -549,6 +527,8 @@ pub fn layout() !*Node {
         // the side effects can be done minimally inside of the functions. what
         // really needs to be done if height fitting for consecutive height
         // fitting ancestors, aspect ratio maintenance, and width/height percentage value calculations.
+        //
+        // for children percetange sizes, we can apply those to the children of a grown element
 
         if (node.style.width == .grow) {
             node.size[0] = @min(@max(viewportSize[0], node.minSize[0]), node.maxSize[0]);
@@ -559,7 +539,6 @@ pub fn layout() !*Node {
 
         try growAndShrink(arena, node);
         try wrapAndPlace(arena, node);
-
 
         return node;
     } else {
