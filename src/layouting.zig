@@ -350,44 +350,63 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node) !void {
     }
     const addition = node.size[1] - cursor[1] - glyphs.lineHeight;
     node.size[1] = cursor[1] + glyphs.lineHeight;
+    if (node.style.width == .ratio) {
+        node.size[0] = node.size[1] * node.style.width.ratio;
+    }
 
-    var ancestorOpt = node.parent;
-    while (ancestorOpt) |ancestor| {
-        if (ancestor.shouldFitMin(.topToBottom)) {
-            if (ancestor.style.direction == .leftToRight) {
-                // TODO: ensure the max and min sizes here
-                ancestor.minSize[1] = @max(
-                    ancestor.minSize[1],
-                    node.minSize[1] + node.style.margin.y[0] + node.style.margin.y[1],
-                );
-            } else if (ancestor.style.direction == .topToBottom) {
-                // no need to add anything else since it should already be here
-                ancestor.minSize[1] += addition;
+    updateFittingForAncestors(node, addition);
+}
+
+/// Iterates upwards in the ancestry of the node, adding `addition` if in the
+/// right direction, or calculating the max otherwise. Also updates the
+/// minSizes accordingly, though (?) there shouldn't be a growth or shrinking after
+/// this
+pub fn updateFittingForAncestors(node: *Node, addition: f32) void {
+    inline for (Direction.array) |direction| {
+        const minSize = node.getMinSize(direction);
+        const size = node.getSize(direction);
+        const margin = node.style.margin.get(direction);
+
+        var ancestorOpt = node.parent;
+        while (ancestorOpt) |ancestor| {
+            const ancestorSize = ancestor.getSize(direction);
+            const ancestorMinSize = ancestor.getMinSize(direction);
+            if (ancestor.shouldFitMin(direction)) {
+                if (ancestor.style.direction == direction) {
+                    // just addition is fine since it should already be here
+                    ancestor.addMinSize(direction, addition);
+                } else {
+                    ancestor.setMinSize(direction, @max(
+                        ancestorMinSize,
+                        minSize + margin[0] + margin[1],
+                    ));
+                }
             }
+
+            if (ancestor.style.getPreferredSize(direction) == .fit) {
+                if (ancestor.style.direction == direction) {
+                    // just addition is fine since it should already be here
+                    ancestor.addSize(direction, addition);
+                } else {
+                    // TODO: ensure the max and min sizes here
+                    // TODO: also add the padding and margins of nodes
+                    ancestor.setSize(direction, @max(
+                        ancestorSize,
+                        size + margin[0] + margin[1],
+                    ));
+                }
+                const perpendicularPreferredSize = ancestor.style.getPreferredSize(direction.perpendicular());
+                if (perpendicularPreferredSize == .ratio) {
+                    ancestor.setSize(direction, ancestorSize * perpendicularPreferredSize.ratio);
+                }
+            } else {
+                // means the streak should be ended as only a sequence of fits
+                // would continue increasing
+                break;
+            }
+
+            ancestorOpt = ancestor.parent;
         }
-
-        if (ancestor.style.height == .fit) {
-            if (ancestor.style.direction == .leftToRight) {
-                // TODO: ensure the max and min sizes here
-                // TODO: also add the padding and margins of nodes
-                ancestor.size[1] = @max(
-                    ancestor.size[1],
-                    node.size[1] + node.style.margin.y[0] + node.style.margin.y[1],
-                );
-            } else if (ancestor.style.direction == .topToBottom) {
-                // no need to add anything else since it should already be here
-                ancestor.size[1] += addition;
-            }
-            if (ancestor.style.width == .ratio) {
-                ancestor.size[0] = ancestor.size[1] * ancestor.style.width.ratio;
-            }
-        } else {
-            // means the streak should be ended as only a sequence of fits
-            // should continue
-            break;
-        }
-
-        ancestorOpt = ancestor.parent;
     }
 }
 
@@ -412,12 +431,14 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
 
             var currentLine = Line{
                 .start = 0,
-                .end = 0,
+                .end = 1,
                 .width = 0.0,
                 .height = 0.0,
             };
 
-            // understand the direction, and place elements following the direction
+            const nodeHeightBeforeIteration = node.size[1];
+
+            // place elements, wrapping in .leftToRight if overflow is .wrap, appending the line information to `lines`
             for (children.items) |*child| {
                 if (node.style.direction == .leftToRight) {
                     if (node.style.overflow == .wrap) {
@@ -425,9 +446,11 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
                         if (child.style.margin.x[0] + child.size[0] + child.style.margin.x[1] > remainingSpace) {
                             // breaks the line
                             cursor[1] += node.size[1] + child.style.margin.y[0];
+                            // TODO: where does the bottom margin get used in this flow? I believe we're missing something
+                            node.size[1] += node.size[1] + child.style.margin.y[0];
                             cursor[0] = node.style.padding.x[0];
                             try lines.append(arena, currentLine);
-                            currentLine.start = currentLine.end;
+                            currentLine.start = currentLine.end - 1;
                             currentLine.width = 0;
                             currentLine.height = 0;
                         }
@@ -449,19 +472,24 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
                 }
             }
 
+            // 2. update consecutive ancestors with a fit height
+            const addition = node.size[1] - nodeHeightBeforeIteration;
+            updateFittingForAncestors(node, addition);
+
+            // 3. alignment
             const availableSize = Vec2{
                 node.size[0] - node.style.padding.x[0] - node.style.padding.x[1],
                 node.size[1] - node.style.padding.y[0] - node.style.padding.y[1],
             };
             if (node.style.direction == .leftToRight) {
                 for (lines.items) |line| {
-                    const alignmentOffset = switch (node.style.alignment.x) {
+                    const horizontalAlignmentOffset = switch (node.style.alignment.x) {
                         .start => 0.0,
                         .center => (availableSize[0] - line.width) / 2.0,
                         .end => availableSize[0] - line.width,
                     };
-                    for (children.items[line.start .. line.end + 1]) |*child| {
-                        child.position[0] += alignmentOffset;
+                    for (children.items[line.start .. line.end]) |*child| {
+                        child.position[0] += horizontalAlignmentOffset;
                         child.position[1] += switch (node.style.alignment.y) {
                             .start => 0.0,
                             .center => (line.height - child.size[1]) / 2.0,
@@ -471,7 +499,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
                     }
                 }
             } else if (node.style.direction == .topToBottom) {
-                const alignmentOffset = switch (node.style.alignment.y) {
+                const verticalAlignmentOffset = switch (node.style.alignment.y) {
                     .start => 0.0,
                     .center => (availableSize[1] - cursor[1]) / 2.0,
                     .end => availableSize[1] - cursor[1],
@@ -482,7 +510,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
                         .center => (availableSize[0] - child.size[1]) / 2.0,
                         .end => availableSize[0] - child.size[1],
                     };
-                    child.position[1] += alignmentOffset;
+                    child.position[1] += verticalAlignmentOffset;
                     try wrapAndPlace(arena, child);
                 }
             }
@@ -502,16 +530,20 @@ pub fn layout() !*Node {
         const viewportSize = context.frameMeta.?.viewportSize;
         const arena = context.frameMeta.?.arena;
 
+        // what should this do, not considering any side effects? let's think from first principles
+        // 1. grow and shrink
+        // 2. place in absolute positions and wrap
+        //
+        // the side effects can be done minimally inside of the functions. what
+        // really needs to be done if height fitting for consecutive height
+        // fitting ancestors, and aspect ratio maintenance.
+
         if (node.style.width == .grow) {
             node.size[0] = @min(@max(viewportSize[0], node.minSize[0]), node.maxSize[0]);
         }
         if (node.style.height == .grow) {
             node.size[1] = @min(@max(viewportSize[1], node.minSize[1]), node.maxSize[1]);
         }
-
-        // what should this do, not considering any side effects? let's think from first principles
-        // 1. grow and shrink
-        // 2. place in absolute positions and wrap
         try growAndShrink(arena, node);
 
         try wrapAndPlace(arena, node);
