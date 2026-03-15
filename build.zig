@@ -234,4 +234,64 @@ pub fn build(b: *std.Build) void {
         uhoh_build.setCwd(b.path("examples/uhoh.com"));
         check_step.dependOn(&uhoh_build.step);
     }
+
+    // Package step - builds debug executables and archives them for CI upload
+    {
+        const package_step = b.step("package", "Build and package debug executables");
+        const package_directory = "zig-out/pr-binaries";
+        const package_os = @tagName(target.result.os.tag);
+        const package_arch = @tagName(target.result.cpu.arch);
+        const playground_archive_name = b.fmt(
+            "playground-debug-{s}-{s}.tar.gz",
+            .{ package_os, package_arch },
+        );
+        const uhoh_archive_name = b.fmt(
+            "uhoh.com-debug-{s}-{s}.tar.gz",
+            .{ package_os, package_arch },
+        );
+
+        const prepare_package_directory = b.addSystemCommand(&.{
+            "bash",
+            "-lc",
+            b.fmt("rm -rf {s} && mkdir -p {s}", .{ package_directory, package_directory }),
+        });
+
+        const build_playground_package = b.addSystemCommand(&.{
+            "zig",
+            "build",
+            "-Doptimize=Debug",
+        });
+        build_playground_package.step.dependOn(&prepare_package_directory.step);
+
+        const archive_playground = b.addSystemCommand(&.{
+            "tar",
+            "-C",
+            "zig-out/bin",
+            "-czf",
+            b.fmt("{s}/{s}", .{ package_directory, playground_archive_name }),
+            "playground",
+        });
+        archive_playground.step.dependOn(&build_playground_package.step);
+
+        const build_uhoh_package = b.addSystemCommand(&.{
+            "zig",
+            "build",
+            "-Doptimize=Debug",
+        });
+        build_uhoh_package.setCwd(b.path("examples/uhoh.com"));
+        build_uhoh_package.step.dependOn(&prepare_package_directory.step);
+
+        const archive_uhoh = b.addSystemCommand(&.{
+            "tar",
+            "-C",
+            "examples/uhoh.com/zig-out/bin",
+            "-czf",
+            b.fmt("{s}/{s}", .{ package_directory, uhoh_archive_name }),
+            "uhoh.com",
+        });
+        archive_uhoh.step.dependOn(&build_uhoh_package.step);
+
+        package_step.dependOn(&archive_playground.step);
+        package_step.dependOn(&archive_uhoh.step);
+    }
 }

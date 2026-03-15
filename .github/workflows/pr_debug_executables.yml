@@ -44,13 +44,13 @@ jobs:
             wayland-protocols
 
       - name: Package debug executables
-        run: ./scripts/package_pr_binaries.sh
+        run: zig build package
 
       - name: Upload playground executable
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: playground-debug-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
-          path: dist/pr-binaries/playground-debug-*.tar.gz
+          path: zig-out/pr-binaries/playground-debug-*.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -58,6 +58,6 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: uhoh.com-debug-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
-          path: dist/pr-binaries/uhoh.com-debug-*.tar.gz
+          path: zig-out/pr-binaries/uhoh.com-debug-*.tar.gz
           if-no-files-found: error
           retention-days: 14
