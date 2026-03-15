@@ -220,13 +220,13 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
     };
     var lines = try std.ArrayList(Line).initCapacity(arena, 4);
 
-    const lineWidth = node.size[0];
+    const lineEnd = node.size[0] + base[0];
     var cursor = base;
     var lineStartIndex: usize = 0;
     switch (node.style.textWrapping) {
         .character => {
             for (glyphs.slice, 0..) |*glyph, index| {
-                if (cursor[0] + glyph.advance[0] > lineWidth) {
+                if (cursor[0] + glyph.advance[0] > lineEnd) {
                     try lines.append(arena, .{
                         .start = lineStartIndex,
                         .end = index - 1,
@@ -246,7 +246,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
                 position: Vec2,
             } = null;
             for (glyphs.slice, 0..) |*glyph, index| {
-                if (cursor[0] + glyph.advance[0] > lineWidth) {
+                if (cursor[0] + glyph.advance[0] > lineEnd) {
                     if (lastSpaceInfoOpt) |lastSpaceInfo| {
                         cursor[0] = 0;
                         cursor[1] += glyphs.lineHeight;
@@ -301,8 +301,8 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
         for (glyphs.slice[line.start .. line.end + 1]) |*glyph| {
             switch (node.style.alignment.x) {
                 .start => {},
-                .center => glyph.position[0] += (lineWidth - width) / 2.0,
-                .end => glyph.position[0] += lineWidth - width,
+                .center => glyph.position[0] += (lineEnd - width) / 2.0,
+                .end => glyph.position[0] += lineEnd - width,
             }
         }
     }
