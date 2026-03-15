@@ -1,6 +1,6 @@
 {
   "install": "sudo apt-get update && sudo apt-get install -y glslang-tools libvulkan-dev libwayland-bin libwayland-dev libxkbcommon-dev mesa-vulkan-drivers spirv-tools vulkan-tools wayland-protocols weston",
-  "start": "wayland_exports=\"$(./scripts/cursor_cloud_wayland_start.sh)\" && eval \"$wayland_exports\"",
+  "start": "wayland_exports=\"$(bash ./scripts/cursor_cloud_wayland_start.sh)\" && eval \"$wayland_exports\"",
   "env": {
     "GALLIUM_DRIVER": "llvmpipe",
     "LIBGL_ALWAYS_SOFTWARE": "1",
