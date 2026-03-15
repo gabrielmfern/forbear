@@ -299,11 +299,11 @@ pub fn build(b: *std.Build) void {
         const package_os = @tagName(target.result.os.tag);
         const package_arch = @tagName(target.result.cpu.arch);
         const playground_archive_name = b.fmt(
-            "playground-debug-{s}-{s}.tar.gz",
+            "playground-debug-{s}-{s}.tar",
             .{ package_os, package_arch },
         );
         const uhoh_archive_name = b.fmt(
-            "uhoh.com-debug-{s}-{s}.tar.gz",
+            "uhoh.com-debug-{s}-{s}.tar",
             .{ package_os, package_arch },
         );
         const package_context = createForbearModule(b, "forbear_package", target, .Debug);
@@ -328,13 +328,13 @@ pub fn build(b: *std.Build) void {
 
         const archive_playground = b.addSystemCommand(&.{ "tar", "-C" });
         archive_playground.addDirectoryArg(package_playground_exe.getEmittedBinDirectory());
-        archive_playground.addArg("-czf");
+        archive_playground.addArg("-cf");
         const playground_archive = archive_playground.addOutputFileArg(playground_archive_name);
         archive_playground.addArg(package_playground_exe.out_filename);
 
         const archive_uhoh = b.addSystemCommand(&.{ "tar", "-C" });
         archive_uhoh.addDirectoryArg(package_uhoh_exe.getEmittedBinDirectory());
-        archive_uhoh.addArg("-czf");
+        archive_uhoh.addArg("-cf");
         const uhoh_archive = archive_uhoh.addOutputFileArg(uhoh_archive_name);
         archive_uhoh.addArg(package_uhoh_exe.out_filename);
 
