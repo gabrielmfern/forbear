@@ -374,11 +374,11 @@ pub fn updateFittingForAncestors(node: *Node, addition: f32) void {
 }
 
 /// does not change the size of children, but recursively updates the sizes of parents
-pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
+pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, offset: Vec2) !void {
     const base = node.position + Vec2{
         node.style.padding.x[0],
         node.style.padding.y[0],
-    };
+    } - offset;
     switch (node.children) {
         .nodes => |children| {
             const availableSize = Vec2{
@@ -393,7 +393,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node) !void {
             }
 
             for (children.items) |*child| {
-                try wrapAndPlace(arena, child);
+                try wrapAndPlace(arena, child, @splat(0.0));
             }
         },
         .glyphs => {
@@ -538,7 +538,7 @@ pub fn layout() !*Node {
         }
 
         try growAndShrink(arena, node);
-        try wrapAndPlace(arena, node);
+        try wrapAndPlace(arena, node, context.scrollPosition);
 
         return node;
     } else {
