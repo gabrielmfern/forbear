@@ -753,6 +753,16 @@ const wlKeyboardListener: c.wl_keyboard_listener = .{
 
 pub fn updateDpi(self: *Self) void {
     const millimetersPerInch = 25.4;
+
+    if (self.monitorWidth <= 0 or self.monitorHeight <= 0 or self.physicalWidthMilimeters <= 0 or self.physicalHeightMilimeters <= 0) {
+        const fallbackDpi = @max(
+            @as(u32, 1),
+            @as(u32, @intFromFloat(@round(96.0 * self.scale))),
+        );
+        self.dpi = .{ fallbackDpi, fallbackDpi };
+        return;
+    }
+
     const monitorWidth: f32 = @floatFromInt(self.monitorWidth);
     const monitorHeight: f32 = @floatFromInt(self.monitorHeight);
     const physicalWidth: f32 = @floatFromInt(self.physicalWidthMilimeters);

@@ -1,11 +1,10 @@
-- [x] text selection
-    - Not doing it for now since it's not central to build the app I want yet
 - [ ] find a way to avoid having to use `try` everwhere
 - [ ] implement 10 examples of UI that I find inspiring
     - [ ] uhoh.com
     - [ ] https://wayland-book.com
-- [ ] implement scrolling 
-- [ ] I need a way to define the percentage width that an element would take 
+- [x] implement scrolling 
+- [ ] text selection
+- [x] I need a way to define the percentage width that an element would take 
   of its parent
 - [ ] a way to define children for components
     - most likely using a "slotting" solution where
