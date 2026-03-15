@@ -1,0 +1,162 @@
+name: PR Debug Executables
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-debug-executables-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build debug executables
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
+        with:
+          persist-credentials: false
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with:
+          version: 0.15.2
+
+      - name: Install project dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            glslang-tools \
+            libvulkan-dev \
+            libwayland-bin \
+            libwayland-dev \
+            libxkbcommon-dev \
+            spirv-tools \
+            wayland-protocols
+
+      - name: Package debug executables
+        run: zig build package
+
+      - name: Verify both debug executables exist
+        run: |
+          test -f zig-out/pr-binaries/playground
+          test -f zig-out/pr-binaries/uhoh.com
+
+      - name: Upload combined debug executables
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: debug-executables-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            zig-out/pr-binaries/playground*
+            zig-out/pr-binaries/uhoh.com*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Update PR body with artifact links
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+            const runId = Number(process.env.GITHUB_RUN_ID);
+            const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
+            const startMarker = "<!-- pr-debug-executables:start -->";
+            const endMarker = "<!-- pr-debug-executables:end -->";
+            const runUrl = `${serverUrl}/${owner}/${repo}/actions/runs/${runId}`;
+            const eventHeadSha = context.payload.pull_request.head.sha;
+            const shortSha = eventHeadSha.slice(0, 7);
+            const expectedArtifacts = 1;
+
+            const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const sectionPattern = new RegExp(
+              `${escapeRegExp(startMarker)}[\\s\\S]*?${escapeRegExp(endMarker)}`,
+              "m",
+            );
+
+            let artifacts = [];
+            for (let attempt = 1; attempt <= 10; attempt += 1) {
+              const response = await github.rest.actions.listWorkflowRunArtifacts({
+                owner,
+                repo,
+                run_id: runId,
+                per_page: 100,
+              });
+              artifacts = response.data.artifacts
+                .filter((artifact) => !artifact.expired)
+                .sort((left, right) => left.name.localeCompare(right.name));
+
+              if (artifacts.length >= expectedArtifacts) {
+                break;
+              }
+
+              core.info(
+                `Attempt ${attempt}: found ${artifacts.length}/${expectedArtifacts} artifacts, waiting for upload indexing.`,
+              );
+              await new Promise((resolve) => setTimeout(resolve, 3000));
+            }
+
+            if (artifacts.length < expectedArtifacts) {
+              core.setFailed(`Expected ${expectedArtifacts} artifacts, found ${artifacts.length}.`);
+              return;
+            }
+
+            const pullRequest = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber,
+            });
+            if (pullRequest.data.head.sha !== eventHeadSha) {
+              core.info(
+                `PR #${pullNumber} head moved to ${pullRequest.data.head.sha}; skipping stale artifact update for ${eventHeadSha}.`,
+              );
+              return;
+            }
+
+            const bodySectionLines = [
+              "## Debug executables",
+              `Latest commit: \`${shortSha}\``,
+              `Workflow run: [#${process.env.GITHUB_RUN_NUMBER}](${runUrl})`,
+              "",
+              ...artifacts.map((artifact) =>
+                `- [${artifact.name}](${serverUrl}/${owner}/${repo}/actions/runs/${runId}/artifacts/${artifact.id})`,
+              ),
+              "",
+              "This artifact zip contains both raw binaries directly. GitHub's artifact service still wraps downloads in zip, so you may need `chmod +x` after unzipping on Unix.",
+            ];
+
+            const wrappedSection = [
+              startMarker,
+              ...bodySectionLines,
+              endMarker,
+            ].join("\n");
+
+            const currentBody = pullRequest.data.body ?? "";
+            const nextBody = sectionPattern.test(currentBody)
+              ? currentBody.replace(sectionPattern, wrappedSection)
+              : [currentBody.trimEnd(), wrappedSection].filter(Boolean).join("\n\n");
+
+            if (nextBody === currentBody) {
+              core.info(`PR #${pullNumber} body already up to date.`);
+              return;
+            }
+
+            await github.rest.pulls.update({
+              owner,
+              repo,
+              pull_number: pullNumber,
+              body: nextBody,
+            });
+            core.info(`Updated PR #${pullNumber} body.`);
