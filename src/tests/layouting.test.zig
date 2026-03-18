@@ -3,7 +3,6 @@ const std = @import("std");
 const wrapAndPlace = @import("../layouting.zig").wrapAndPlace;
 const applyRatios = @import("../layouting.zig").applyRatios;
 const growAndShrink = @import("../layouting.zig").growAndShrink;
-const fit = @import("../layouting.zig").fit;
 const layout = @import("../layouting.zig").layout;
 const Node = @import("../node.zig").Node;
 const Glyphs = @import("../node.zig").Glyphs;
@@ -39,6 +38,7 @@ fn testWrapConfiguration(configuration: struct {
     }
 
     var node = Node{
+        .parent = null,
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -190,6 +190,7 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
     var children = try std.ArrayList(Node).initCapacity(arenaAllocator, configuration.children.len);
     for (configuration.children, 0..) |child, i| {
         children.appendAssumeCapacity(Node{
+            .parent = null,
             .key = @intCast(i),
             .position = .{ 0.0, 0.0 },
             .z = 0,
@@ -205,6 +206,7 @@ fn testGrowAndShrinkConfiguration(configuration: struct {
     }
 
     var parent = Node{
+        .parent = null,
         .key = 999,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -527,6 +529,7 @@ fn testFitConfiguration(configuration: struct {
 
     var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
     children.appendAssumeCapacity(Node{
+        .parent = null,
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -541,6 +544,7 @@ fn testFitConfiguration(configuration: struct {
         }).completeWith(utilities.shallowBaseStyle),
     });
     children.appendAssumeCapacity(Node{
+        .parent = null,
         .key = 2,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -556,6 +560,7 @@ fn testFitConfiguration(configuration: struct {
     });
 
     var parent = Node{
+        .parent = null,
         .key = 999,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -938,6 +943,71 @@ test "layout pipeline - text wrapping character wrap works with mounted text" {
     try std.testing.expectApproxEqAbs(wrapped.lineHeight * 2.0, wrapped.textNodeSize[1], 0.01);
 }
 
+test "layout pipeline - updateFittingAncestors propagates wrapped glyph height to fit parents" {
+    const measured = try layoutMountedText(.{
+        .width = .fit,
+        .textWrapping = .word,
+        .content = "hello hello",
+    });
+    defer measured.deinit();
+
+    const lineWidth = (measured.textNodeMinSize[0] + measured.textNodeSize[0]) / 2.0;
+    const singleLineHeight = measured.textNodeSize[1];
+
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var root: Node = undefined;
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .direction = .topToBottom,
+            .width = .{ .fixed = lineWidth },
+            .height = .fit,
+        })({
+            forbear.element(.{
+                .direction = .topToBottom,
+                .width = .{ .fixed = lineWidth },
+                .height = .fit,
+            })({
+                forbear.element(.{
+                    .direction = .leftToRight,
+                    .width = .{ .fixed = lineWidth },
+                    .height = .fit,
+                    .textWrapping = .word,
+                })({
+                    forbear.text("hello hello");
+                });
+            });
+        });
+        root = (try layout()).*;
+    });
+
+    try std.testing.expectEqual(@as(usize, 1), root.children.nodes.items.len);
+    const parent = root.children.nodes.items[0];
+    try std.testing.expectEqual(@as(usize, 1), parent.children.nodes.items.len);
+    const textNode = parent.children.nodes.items[0];
+    std.debug.assert(textNode.children == .glyphs);
+
+    const glyphs = textNode.children.glyphs;
+    const glyphPositions = try std.testing.allocator.alloc(Vec2, glyphs.slice.len);
+    defer std.testing.allocator.free(glyphPositions);
+    for (glyphs.slice, 0..) |glyph, index| {
+        glyphPositions[index] = glyph.position;
+    }
+
+    try std.testing.expectEqual(@as(usize, 2), lineCountFromGlyphPositions(glyphPositions));
+
+    const wrappedHeight = glyphs.lineHeight * 2.0;
+    try std.testing.expect(singleLineHeight < wrappedHeight);
+    try std.testing.expectApproxEqAbs(wrappedHeight, textNode.size[1], 0.01);
+    try std.testing.expectApproxEqAbs(wrappedHeight, parent.size[1], 0.01);
+    try std.testing.expectApproxEqAbs(wrappedHeight, root.size[1], 0.01);
+}
+
 test "ratio and grow passes are stable when reapplied" {
     const allocator = std.testing.allocator;
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -946,6 +1016,7 @@ test "ratio and grow passes are stable when reapplied" {
 
     var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
     children.appendAssumeCapacity(Node{
+        .parent = null,
         .key = 1,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -959,6 +1030,7 @@ test "ratio and grow passes are stable when reapplied" {
         }).completeWith(utilities.shallowBaseStyle),
     });
     children.appendAssumeCapacity(Node{
+        .parent = null,
         .key = 2,
         .position = .{ 0.0, 0.0 },
         .z = 0,
@@ -973,6 +1045,7 @@ test "ratio and grow passes are stable when reapplied" {
     });
 
     var parent = Node{
+        .parent = null,
         .key = 99,
         .position = .{ 0.0, 0.0 },
         .z = 0,
