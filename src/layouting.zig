@@ -248,23 +248,22 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
             for (glyphs.slice, 0..) |*glyph, index| {
                 if (cursor[0] + glyph.advance[0] > lineEnd) {
                     if (lastSpaceInfoOpt) |lastSpaceInfo| {
-                        cursor[0] = 0;
-                        cursor[1] += glyphs.lineHeight;
-
                         const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
                         try lines.append(arena, .{
                             .start = lineStartIndex,
                             .end = lastSpaceInfo.index,
                         });
+                        lineStartIndex = lastSpaceInfo.index + 1;
+                        cursor[0] = 0.0;
+                        cursor[1] += glyphs.lineHeight;
 
                         for (lastSpaceInfo.index + 1..index) |reverseIndex| {
                             const reverseGlyph = &glyphs.slice[reverseIndex];
-                            reverseGlyph.position[0] -= firstWordGlyph.position[0];
+                            reverseGlyph.position[0] -= firstWordGlyph.position[0] - base[0];
                             reverseGlyph.position[1] += glyphs.lineHeight;
 
                             cursor += reverseGlyph.advance;
                         }
-                        lineStartIndex = lastSpaceInfo.index + 1;
                         lastSpaceInfoOpt = null;
                     }
                 }
