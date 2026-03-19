@@ -74,13 +74,14 @@ test "wrapping does not cause stale heights for ancestors when there are sibling
 
         const root = try layout();
 
-        forbear.getPreviousNode().?.debugPrint(0);
+        try std.testing.expectEqual(100, textNode.size[0]);
 
         try std.testing.expectEqual(100, root.size[0]);
-        try std.testing.expectEqual(100, textNode.size[0]);
         try std.testing.expectEqual(textNode.size[1] + 100, root.size[1]);
 
         try std.testing.expectEqual(100, root.children.nodes.items[0].size[0]);
-        try std.testing.expectEqual(textNode.size[1] + 100, root.children.nodes.items[0].size[1]);
+        try std.testing.expectEqual(textNode.size[1], root.children.nodes.items[0].size[1]);
+
+        try std.testing.expectEqual(100, root.children.nodes.items[1].size[1]);
     });
 }
