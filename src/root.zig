@@ -378,6 +378,12 @@ pub fn useLastUpdateTime() f64 {
     return self.lastUpdateTime orelse self.startTime;
 }
 
+pub fn getPreviousNode() ?*Node {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    return self.frameMeta.?.previousPushedNode;
+}
+
 pub fn useArena() !std.mem.Allocator {
     const self = getContext();
     if (self.frameMeta) |meta| {
@@ -738,6 +744,7 @@ pub fn text(content: []const u8) void {
             .text
         else
             baseStyle.cursor,
+        .background = .{ .color = .{ 1.0, 0.0, 0.0, 0.5 } },
         .alignment = if (result.ptr.parent) |parent| .{
             .x = parent.style.alignment.x,
             .y = .start,
