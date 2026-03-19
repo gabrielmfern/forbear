@@ -356,9 +356,11 @@ pub fn updateFittingForAncestors(node: *Node, addition: f32) void {
                             size + margin[0] + margin[1],
                         ));
                     }
-                    const perpendicularPreferredSize = ancestor.style.getPreferredSize(direction.perpendicular());
+
+                    const perpendicularDirection = direction.perpendicular();
+                    const perpendicularPreferredSize = ancestor.style.getPreferredSize(perpendicularDirection);
                     if (perpendicularPreferredSize == .ratio) {
-                        ancestor.setSize(direction, ancestorSize * perpendicularPreferredSize.ratio);
+                        ancestor.setSize(perpendicularDirection, ancestorSize * perpendicularPreferredSize.ratio);
                     }
                 } else {
                     // means the streak should be ended as only a sequence of fits
@@ -380,15 +382,103 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, offset: Vec2) !void {
     } - offset;
     switch (node.children) {
         .nodes => |children| {
-            const availableSize = Vec2{
-                node.size[0] - node.style.padding.x[0] - node.style.padding.x[1],
-                node.size[1] - node.style.padding.y[0] - node.style.padding.y[1],
-            };
-
             if (node.style.direction == .leftToRight) {
-                try placeLeftToRight(arena, node, children.items, base, availableSize);
+                const Line = struct {
+                    start: usize,
+                    end: usize,
+                    width: f32,
+                    height: f32,
+                };
+
+                var cursor = base;
+                var lines = std.ArrayList(Line).empty;
+                var currentLine = Line{ .start = 0, .end = 0, .width = 0.0, .height = 0.0 };
+                const nodeHeightBeforeIteration = node.size[1];
+
+                for (children.items) |*child| {
+                    if (child.style.placement == .standard) {
+                        const childOuterWidth = child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
+                        const childOuterHeight = child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
+
+                        if (node.style.overflow == .wrap) {
+                            const remainingSpace = node.size[0] - (cursor[0] + node.style.padding.x[1]);
+                            if (childOuterWidth > remainingSpace) {
+                                cursor[1] += currentLine.height + child.style.margin.y[0];
+                                // TODO: where does the bottom margin get used in this flow? I believe we're missing something
+                                node.size[1] += currentLine.height + child.style.margin.y[0];
+                                if (node.style.width == .ratio) {
+                                    node.size[0] = node.size[1] * node.style.width.ratio;
+                                }
+                                cursor[0] = base[0];
+                                try lines.append(arena, currentLine);
+
+                                currentLine = .{ .start = currentLine.end, .end = currentLine.end, .width = 0, .height = 0 };
+                            }
+                        }
+
+                        cursor[0] += child.style.margin.x[0];
+                        child.position = cursor;
+                        cursor[0] += child.size[0] + child.style.margin.x[1];
+
+                        currentLine.width += childOuterWidth;
+                        currentLine.height = @max(currentLine.height, childOuterHeight);
+                    }
+
+                    currentLine.end += 1;
+                }
+                try lines.append(arena, currentLine);
+
+                if (node.size[1] != nodeHeightBeforeIteration) {
+                    updateFittingForAncestors(node, node.size[1] - nodeHeightBeforeIteration);
+                }
+
+                const availableWidth = node.size[0] - node.style.padding.x[0] - node.style.padding.x[1];
+                for (lines.items) |line| {
+                    const xOffset: f32 = switch (node.style.alignment.x) {
+                        .start => 0.0,
+                        .center => (availableWidth - line.width) / 2.0,
+                        .end => availableWidth - line.width,
+                    };
+                    for (children.items[line.start..line.end]) |*child| {
+                        if (child.style.placement == .standard) {
+                            child.position[0] += xOffset;
+                            child.position[1] += switch (node.style.alignment.y) {
+                                .start => 0.0,
+                                .center => (line.height - child.size[1]) / 2.0,
+                                .end => line.height - child.size[1],
+                            };
+                        }
+                    }
+                }
             } else {
-                placeTopToBottom(node, children.items, base, availableSize);
+                var cursor = base;
+
+                for (children.items) |*child| {
+                    if (child.style.placement == .standard) {
+                        cursor[1] += child.style.margin.y[0];
+                        child.position = cursor;
+                        cursor[1] += child.size[1] + child.style.margin.y[1];
+                    }
+                }
+
+                const contentHeight = cursor[1] - base[1];
+                const availableWidth = node.size[0] - node.style.padding.x[0] - node.style.padding.x[1];
+                const availableHeight = node.size[1] - node.style.padding.y[0] - node.style.padding.y[1];
+                const yOffset: f32 = switch (node.style.alignment.y) {
+                    .start => 0.0,
+                    .center => (availableHeight - contentHeight) / 2.0,
+                    .end => availableHeight - contentHeight,
+                };
+                for (children.items) |*child| {
+                    if (child.style.placement == .standard) {
+                        child.position[0] += switch (node.style.alignment.x) {
+                            .start => 0.0,
+                            .center => (availableWidth - child.size[0]) / 2.0,
+                            .end => availableWidth - child.size[0],
+                        };
+                        child.position[1] += yOffset;
+                    }
+                }
             }
 
             for (children.items) |*child| {
@@ -398,115 +488,6 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, offset: Vec2) !void {
         .glyphs => {
             try wrapGlyphs(arena, node, base);
         },
-    }
-}
-
-fn placeLeftToRight(
-    arena: std.mem.Allocator,
-    node: *Node,
-    items: []Node,
-    base: Vec2,
-    availableSize: Vec2,
-) !void {
-    const Line = struct {
-        start: usize,
-        end: usize,
-        width: f32,
-        height: f32,
-    };
-
-    var cursor = base;
-    var lines = std.ArrayList(Line).empty;
-    var currentLine = Line{ .start = 0, .end = 0, .width = 0.0, .height = 0.0 };
-    const nodeHeightBeforeIteration = node.size[1];
-
-    for (items) |*child| {
-        if (child.style.placement == .standard) {
-            const childOuterWidth = child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
-            const childOuterHeight = child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
-
-            if (node.style.overflow == .wrap) {
-                const remainingSpace = node.size[0] - (cursor[0] + node.style.padding.x[1]);
-                if (childOuterWidth > remainingSpace) {
-                    cursor[1] += currentLine.height + child.style.margin.y[0];
-                    // TODO: where does the bottom margin get used in this flow? I believe we're missing something
-                    node.size[1] += currentLine.height + child.style.margin.y[0];
-                    if (node.style.width == .ratio) {
-                        node.size[0] = node.size[1] * node.style.width.ratio;
-                    }
-                    cursor[0] = base[0];
-                    try lines.append(arena, currentLine);
-
-                    currentLine = .{ .start = currentLine.end, .end = currentLine.end, .width = 0, .height = 0 };
-                }
-            }
-
-            cursor[0] += child.style.margin.x[0];
-            child.position = cursor;
-            cursor[0] += child.size[0] + child.style.margin.x[1];
-
-            currentLine.width += childOuterWidth;
-            currentLine.height = @max(currentLine.height, childOuterHeight);
-        }
-
-        currentLine.end += 1;
-    }
-    try lines.append(arena, currentLine);
-
-    if (node.size[1] != nodeHeightBeforeIteration) {
-        updateFittingForAncestors(node, node.size[1] - nodeHeightBeforeIteration);
-    }
-
-    for (lines.items) |line| {
-        const xOffset: f32 = switch (node.style.alignment.x) {
-            .start => 0.0,
-            .center => (availableSize[0] - line.width) / 2.0,
-            .end => availableSize[0] - line.width,
-        };
-        for (items[line.start..line.end]) |*child| {
-            if (child.style.placement == .standard) {
-                child.position[0] += xOffset;
-                child.position[1] += switch (node.style.alignment.y) {
-                    .start => 0.0,
-                    .center => (line.height - child.size[1]) / 2.0,
-                    .end => line.height - child.size[1],
-                };
-            }
-        }
-    }
-}
-
-fn placeTopToBottom(
-    node: *Node,
-    items: []Node,
-    base: Vec2,
-    availableSize: Vec2,
-) void {
-    var cursor = base;
-
-    for (items) |*child| {
-        if (child.style.placement == .standard) {
-            cursor[1] += child.style.margin.y[0];
-            child.position = cursor;
-            cursor[1] += child.size[1] + child.style.margin.y[1];
-        }
-    }
-
-    const contentHeight = cursor[1] - base[1];
-    const yOffset: f32 = switch (node.style.alignment.y) {
-        .start => 0.0,
-        .center => (availableSize[1] - contentHeight) / 2.0,
-        .end => availableSize[1] - contentHeight,
-    };
-    for (items) |*child| {
-        if (child.style.placement == .standard) {
-            child.position[0] += switch (node.style.alignment.x) {
-                .start => 0.0,
-                .center => (availableSize[0] - child.size[0]) / 2.0,
-                .end => availableSize[0] - child.size[0],
-            };
-            child.position[1] += yOffset;
-        }
     }
 }
 
