@@ -1,6 +1,6 @@
 ---
 name: trees-of-things
-description: Models tree state with a flat pool of Thing records plus parent/child/sibling links. Use when implementing ownership, containment, equipment, scene graphs, or "move without copy" behavior via detach+append link rewiring.
+description: Models tree state with a flat pool of thing records plus parent/child/sibling links. Use when implementing ownership, containment, equipment, scene graphs, or "move without copy" behavior via detach+append link rewiring.
 ---
 
 # Trees of Things
@@ -16,11 +16,12 @@ description: Models tree state with a flat pool of Thing records plus parent/chi
 
 Use one flat storage pool for all entities, then express structure with links:
 
-- `ThingId` identifies a stable slot in `Things`
-- `Thing` stores normal payload fields (`kind`, position, stats, etc.)
+- `id` is the stable slot index in the flat array (integer handle, not a pointer)
+- each thing record stores normal payload fields (`kind`, position, stats, etc.)
 - Parent/child/sibling links encode containment and ordering
 - `null` means "no link"
 - Any relationship can be absent independently: no parent, no children, no previous sibling, and no next sibling are all valid states
+- The pool storage is allocated as one flat array up front; nodes are not individually heap-allocated
 
 Ownership is represented by where a node is linked, not by duplicating payload.
 
@@ -28,15 +29,16 @@ Ownership is represented by where a node is linked, not by duplicating payload.
 
 - A live node has at most one parent.
 - Reparenting must detach from the old parent before appending to the new one.
-- `appendChild(new_parent, child)` must work for both first-time attach and move.
-- `alloc` and moves keep identity stable: IDs do not change.
+- `appendChild(newParent, child)` must work for both first-time attach and move.
+- Slot claims and moves keep identity stable: IDs do not change.
 - Tree traversals skip dead IDs (`isAlive` guard).
 
 ## Required Operations
 
 Implement and reuse these operations:
 
-1. `alloc(kind)` -> create one node in the pool and return stable ID.
+1. `claim(kind)` -> reserve/reuse a free slot in the pool and return a stable ID (no per-node heap allocation).
+   - Use naming like `claim`, `claimSlot`, or `createInPool` to avoid heap-allocation confusion.
 2. `get(id)` -> mutate/read payload in place.
 3. `appendChild(parent, child)` -> detach child from old parent, then append under `parent`.
 4. `children(parent)` iterator -> traverse direct children in order.
