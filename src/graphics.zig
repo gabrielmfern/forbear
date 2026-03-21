@@ -3587,7 +3587,7 @@ pub const Renderer = struct {
             const viewport = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
             const insideView = node.position[0] + node.size[0] > 0.0 and node.position[1] + node.size[1] > 0.0 and viewport[0] > node.position[0] and viewport[1] > node.position[1];
             if (!insideView) {
-                return;
+                continue;
             }
 
             try nodesToRender.append(arena, i);
