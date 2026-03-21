@@ -31,14 +31,17 @@ test "wrapping does not cause stale heights for simple ancestry" {
             });
         });
 
-        const root = try layout();
+        const tree = try layout();
+        const rootNode = tree.at(0);
+        const innerIdx = rootNode.firstChild.?;
+        const innerNode = tree.at(innerIdx);
 
-        try std.testing.expectEqual(100, root.size[0]);
+        try std.testing.expectEqual(100, rootNode.size[0]);
         try std.testing.expectEqual(100, textNode.size[0]);
-        try std.testing.expectEqual(textNode.size[1], root.size[1]);
+        try std.testing.expectEqual(textNode.size[1], rootNode.size[1]);
 
-        try std.testing.expectEqual(100, root.children.nodes.items[0].size[0]);
-        try std.testing.expectEqual(textNode.size[1], root.children.nodes.items[0].size[1]);
+        try std.testing.expectEqual(100, innerNode.size[0]);
+        try std.testing.expectEqual(textNode.size[1], innerNode.size[1]);
     });
 }
 
@@ -72,16 +75,19 @@ test "wrapping does not cause stale heights for ancestors when there are sibling
             })({});
         });
 
-        const root = try layout();
+        const tree = try layout();
+        const rootNode = tree.at(0);
+        const firstChild = tree.at(rootNode.firstChild.?);
+        const secondChild = tree.at(firstChild.nextSibling.?);
 
         try std.testing.expectEqual(100, textNode.size[0]);
 
-        try std.testing.expectEqual(100, root.size[0]);
-        try std.testing.expectEqual(textNode.size[1] + 100, root.size[1]);
+        try std.testing.expectEqual(100, rootNode.size[0]);
+        try std.testing.expectEqual(textNode.size[1] + 100, rootNode.size[1]);
 
-        try std.testing.expectEqual(100, root.children.nodes.items[0].size[0]);
-        try std.testing.expectEqual(textNode.size[1], root.children.nodes.items[0].size[1]);
+        try std.testing.expectEqual(100, firstChild.size[0]);
+        try std.testing.expectEqual(textNode.size[1], firstChild.size[1]);
 
-        try std.testing.expectEqual(100, root.children.nodes.items[1].size[1]);
+        try std.testing.expectEqual(100, secondChild.size[1]);
     });
 }

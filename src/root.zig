@@ -387,7 +387,8 @@ pub fn useLastUpdateTime() f64 {
 pub fn getPreviousNode() ?*Node {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
-    return self.frameMeta.?.previousPushedNodeIndex;
+    const index = self.frameMeta.?.previousPushedNodeIndex orelse return null;
+    return self.nodeTree.at(index);
 }
 
 pub fn useArena() !std.mem.Allocator {
@@ -562,6 +563,7 @@ fn frameEnd(block: void) anyerror!void {
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
 
+    self.nodeTree.clear();
     self.frameMeta = meta;
     return &frameEnd;
 }

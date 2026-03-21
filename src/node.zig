@@ -469,7 +469,8 @@ pub const NodeTree = struct {
                 self.current = self.start;
             }
 
-            return self.tree.at(self.current.?);
+            const idx = self.current orelse return null;
+            return self.tree.at(idx);
         }
     };
 
@@ -524,51 +525,53 @@ pub const NodeTree = struct {
         };
         if (parentOpt) |parentIndex| {
             const parent = self.at(parentIndex);
+            if (parent.lastChild) |old_last| {
+                self.at(old_last).nextSibling = index;
+            }
             node.previousSibling = parent.lastChild;
-            parent.lastChild = index;
             if (parent.firstChild == null) {
                 parent.firstChild = index;
             }
+            parent.lastChild = index;
         }
         try self.list.append(allocator, node);
         return .{ .ptr = self.at(index), .index = index };
     }
 
     test {
+        const gpa = std.testing.allocator;
         var tree = NodeTree.empty;
-        defer tree.deinit();
+        defer tree.deinit(gpa);
 
-        const dummy = std.mem.zeroes(Node);
-
-        try tree.putNode(null, dummy); // 1
-        try tree.putNode(0, dummy); // 2
-        try tree.putNode(0, dummy); // 5
-        try tree.putNode(1, dummy); // 3
-        try tree.putNode(0, dummy); // 6
-        try tree.putNode(1, dummy); // 4
-        try tree.putNode(0, dummy); // 7
-        try tree.putNode(null, dummy); // 8
+        _ = try tree.putNode(gpa, null); // root 0
+        _ = try tree.putNode(gpa, 0); // 1
+        _ = try tree.putNode(gpa, 0); // 2
+        _ = try tree.putNode(gpa, 1); // 3
+        _ = try tree.putNode(gpa, 0); // 4
+        _ = try tree.putNode(gpa, 1); // 5
+        _ = try tree.putNode(gpa, 0); // 6
+        _ = try tree.putNode(gpa, 0); // 7
 
         var walker = tree.walk();
         for (0..10) |_| {
-            std.testing.expect(walker.next() != null);
-            std.testing.expectEqual(0, walker.current);
-            std.testing.expect(walker.next() != null);
-            std.testing.expectEqual(1, walker.current);
-            std.testing.expect(walker.next() != null);
-            std.testing.expectEqual(3, walker.current);
-            std.testing.expect(walker.next() != null);
-            std.testing.expectEqual(5, walker.current);
-            std.testing.expect(walker.next() != null);
-            std.testing.expectEqual(2, walker.current);
-            std.testing.expect(walker.next() != null);
-            std.testing.expectEqual(4, walker.current);
-            std.testing.expect(walker.next() != null);
-            std.testing.expectEqual(6, walker.current);
-            std.testing.expect(walker.next() != null);
-            std.testing.expectEqual(7, walker.current);
-            std.testing.expect(walker.next() == null);
-            std.testing.expectEqual(null, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(0, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(1, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(3, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(5, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(2, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(4, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(6, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(7, walker.current);
+            try std.testing.expect(walker.next() == null);
+            try std.testing.expectEqual(null, walker.current);
         }
     }
 };
@@ -653,20 +656,19 @@ pub const Node = struct {
             std.debug.print("  ", .{});
         }
         std.debug.print("node (key: {}, pos: {}, size: {}, z: {})\n", .{ self.key, self.position, self.size, self.z });
-        switch (self.children) {
-            .nodes => |nodes| {
-                for (nodes.items) |*child| {
-                    child.debugPrint(indent + 1);
+        if (self.glyphs) |glyphs| {
+            for (glyphs.slice) |glyph| {
+                for (0..indent + 1) |_| {
+                    std.debug.print("  ", .{});
                 }
-            },
-            .glyphs => |glyphs| {
-                for (glyphs.slice) |glyph| {
-                    for (0..indent + 1) |_| {
-                        std.debug.print("  ", .{});
-                    }
-                    std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
-                }
-            },
+                std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
+            }
+        }
+        var childIndex = self.firstChild;
+        while (childIndex) |idx| {
+            const child = self.tree.at(idx);
+            child.debugPrint(indent + 1);
+            childIndex = child.nextSibling;
         }
     }
 
