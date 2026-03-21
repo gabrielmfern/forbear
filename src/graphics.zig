@@ -5,6 +5,7 @@ const zmath = @import("zmath");
 
 const BlendMode = @import("node.zig").BlendMode;
 const Node = @import("node.zig").Node;
+const NodeTree = @import("node.zig").NodeTree;
 const c = @import("c.zig").c;
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
@@ -3523,30 +3524,10 @@ pub const Renderer = struct {
         try self.recreateSwapchain(capabilities.currentExtent.width, capabilities.currentExtent.height);
     }
 
-    /// Flattens the entire layout tree, and also filters out the layouts outside of the viewport
-    fn prepareLayoutTree(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-        list: *std.ArrayList(*const Node),
-        node: *const Node,
-    ) !void {
-        const viewport = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
-        const insideView = node.position[0] + node.size[0] > 0.0 and node.position[1] + node.size[1] > 0.0 and viewport[0] > node.position[0] and viewport[1] > node.position[1];
-        if (!insideView) {
-            return;
-        }
-        try list.append(allocator, node);
-        if (node.children == .nodes) {
-            for (node.children.nodes.items) |*child| {
-                try self.prepareLayoutTree(allocator, list, child);
-            }
-        }
-    }
-
     pub fn drawFrame(
         self: *Self,
         arena: std.mem.Allocator,
-        node: *const Node,
+        nodeTree: *const NodeTree,
         clearColor: Vec4,
         dpi: [2]u32,
         targetFrameTimeNs: u64,
@@ -3601,15 +3582,26 @@ pub const Renderer = struct {
             1.0,
         );
 
-        var layoutTreeToRender = std.ArrayList(*const Node).empty;
-        try self.prepareLayoutTree(arena, &layoutTreeToRender, node);
-        std.mem.sort(*const Node, layoutTreeToRender.items, {}, (struct {
-            fn lessThan(_: void, lhs: *const Node, rhs: *const Node) bool {
-                return lhs.z < rhs.z;
+        var nodesToRender = std.ArrayList(usize).empty;
+        for (nodeTree.list.items, 0..) |node, i| {
+            const viewport = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
+            const insideView = node.position[0] + node.size[0] > 0.0 and node.position[1] + node.size[1] > 0.0 and viewport[0] > node.position[0] and viewport[1] > node.position[1];
+            if (!insideView) {
+                return;
+            }
+
+            try nodesToRender.append(arena, i);
+        }
+
+        std.mem.sort(usize, nodesToRender.items, nodeTree, (struct {
+            fn lessThan(tree: *const NodeTree, lhs: usize, rhs: usize) bool {
+                const lhsNode = tree.at(lhs);
+                const rhsNode = tree.at(rhs);
+                return lhsNode.z < rhsNode.z;
             }
         }).lessThan);
 
-        const orderedLayoutBoxes = layoutTreeToRender.items;
+        const orderedNodes = nodesToRender.items;
         const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
 
         start = std.time.microTimestamp();
@@ -3617,13 +3609,14 @@ pub const Renderer = struct {
         // glyphs and then allocate enough memory on the shader buffers ---
         var totalShadowCount: usize = 0;
         var totalGlyphCount: usize = 0;
-        const totalElementCount: usize = orderedLayoutBoxes.len;
-        for (orderedLayoutBoxes) |layoutBox| {
-            if (layoutBox.style.shadow != null) {
+        const totalElementCount: usize = orderedNodes.len;
+        for (orderedNodes) |nodeIndex| {
+            const node = nodeTree.at(nodeIndex);
+            if (node.style.shadow != null) {
                 totalShadowCount += 1;
             }
-            if (layoutBox.children == .glyphs) {
-                totalGlyphCount += layoutBox.children.glyphs.slice.len;
+            if (node.glyphs) |glyphs| {
+                totalGlyphCount += glyphs.slice.len;
             }
         }
 
@@ -3652,8 +3645,8 @@ pub const Renderer = struct {
             );
         }
 
-        const maxZ = if (orderedLayoutBoxes.len > 0)
-            orderedLayoutBoxes[orderedLayoutBoxes.len - 1].z
+        const maxZ = if (orderedNodes.len > 0)
+            nodeTree.at(orderedNodes[orderedNodes.len - 1]).z
         else
             0;
         var shadowIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
@@ -3675,25 +3668,27 @@ pub const Renderer = struct {
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
         var totalBlendAddElementCount: usize = 0;
-        for (orderedLayoutBoxes) |layoutBox| {
-            if (layoutBox.style.blendMode == .normal) {
+        for (orderedNodes) |nodeIndex| {
+            const node = nodeTree.at(nodeIndex);
+            if (node.style.blendMode == .normal) {
                 totalBlendAddElementCount += 1;
             }
         }
         var blendAddElementIndex: usize = 0;
         var blendMultiplyElementIndex: usize = totalBlendAddElementCount;
 
-        for (orderedLayoutBoxes) |layoutBox| {
-            const elementIndex = switch (layoutBox.style.blendMode) {
+        for (orderedNodes) |nodeIndex| {
+            const node = nodeTree.at(nodeIndex);
+            const elementIndex = switch (node.style.blendMode) {
                 .normal => blk: {
                     const idx = blendAddElementIndex;
                     blendAddElementIndex += 1;
 
-                    if (blendAddElementIntervals[layoutBox.z - 1]) |*interval| {
+                    if (blendAddElementIntervals[node.z - 1]) |*interval| {
                         std.debug.assert(interval.end + 1 == idx);
                         interval.end = idx;
                     } else {
-                        blendAddElementIntervals[layoutBox.z - 1] = LayerInterval{
+                        blendAddElementIntervals[node.z - 1] = LayerInterval{
                             .start = idx,
                             .end = idx,
                         };
@@ -3705,11 +3700,11 @@ pub const Renderer = struct {
                     const idx = blendMultiplyElementIndex;
                     blendMultiplyElementIndex += 1;
 
-                    if (blendMultiplyElementIntervals[layoutBox.z - 1]) |*interval| {
+                    if (blendMultiplyElementIntervals[node.z - 1]) |*interval| {
                         std.debug.assert(interval.end + 1 == idx);
                         interval.end = idx;
                     } else {
-                        blendMultiplyElementIntervals[layoutBox.z - 1] = LayerInterval{
+                        blendMultiplyElementIntervals[node.z - 1] = LayerInterval{
                             .start = idx,
                             .end = idx,
                         };
@@ -3719,42 +3714,42 @@ pub const Renderer = struct {
                 },
             };
 
-            const textureIndex: i32 = switch (layoutBox.style.background) {
+            const textureIndex: i32 = switch (node.style.background) {
                 .color => -1,
                 .image => |imgPtr| @intCast(try self.elementsPipeline.registerImage(imgPtr, self.logicalDevice)),
             };
             self.elementsPipeline.elementsShaderData[frameIndex][elementIndex] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
-                        zmath.scaling(layoutBox.size[0], layoutBox.size[1], 1.0),
-                        zmath.translation(layoutBox.position[0], layoutBox.position[1], 0.0),
+                        zmath.scaling(node.size[0], node.size[1], 1.0),
+                        zmath.translation(node.position[0], node.position[1], 0.0),
                     ),
                     projectionMatrix,
                 ),
-                .backgroundColor = switch (layoutBox.style.background) {
+                .backgroundColor = switch (node.style.background) {
                     .color => |color| srgbToLinearColor(color),
                     .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
                 },
-                .size = layoutBox.size,
-                .borderRadius = layoutBox.style.borderRadius,
-                .borderColor = srgbToLinearColor(layoutBox.style.borderColor),
+                .size = node.size,
+                .borderRadius = node.style.borderRadius,
+                .borderColor = srgbToLinearColor(node.style.borderColor),
                 .borderSize = .{
-                    layoutBox.style.borderWidth.y[0],
-                    layoutBox.style.borderWidth.y[1],
-                    layoutBox.style.borderWidth.x[0],
-                    layoutBox.style.borderWidth.x[1],
+                    node.style.borderWidth.y[0],
+                    node.style.borderWidth.y[1],
+                    node.style.borderWidth.x[0],
+                    node.style.borderWidth.x[1],
                 },
                 .imageIndex = textureIndex,
-                .blendMode = @intCast(@intFromEnum(layoutBox.style.blendMode)),
-                .filterType = @intCast(@intFromEnum(layoutBox.style.filter)),
+                .blendMode = @intCast(@intFromEnum(node.style.blendMode)),
+                .filterType = @intCast(@intFromEnum(node.style.filter)),
             };
 
-            if (layoutBox.style.shadow) |shadow| {
-                if (shadowIntervals[layoutBox.z - 1]) |*interval| {
+            if (node.style.shadow) |shadow| {
+                if (shadowIntervals[node.z - 1]) |*interval| {
                     std.debug.assert(interval.end + 1 == shadowIndex);
                     interval.end = shadowIndex;
                 } else {
-                    shadowIntervals[layoutBox.z - 1] = LayerInterval{
+                    shadowIntervals[node.z - 1] = LayerInterval{
                         .start = shadowIndex,
                         .end = shadowIndex,
                     };
@@ -3764,12 +3759,12 @@ pub const Renderer = struct {
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.y[0] + shadow.offset.y[1],
                 };
                 const position = Vec2{
-                    layoutBox.position[0] - padding[0] - shadow.offset.x[0] + shadow.offset.x[1],
-                    layoutBox.position[1] - padding[1] - shadow.offset.y[0] + shadow.offset.y[1],
+                    node.position[0] - padding[0] - shadow.offset.x[0] + shadow.offset.x[1],
+                    node.position[1] - padding[1] - shadow.offset.y[0] + shadow.offset.y[1],
                 };
-                const size = layoutBox.size + padding * Vec2{ 2, 2 };
+                const size = node.size + padding * Vec2{ 2, 2 };
                 const shadowCenter = position + size * Vec2{ 0.5, 0.5 };
-                const elementCenter = layoutBox.position + layoutBox.size * Vec2{ 0.5, 0.5 };
+                const elementCenter = node.position + node.size * Vec2{ 0.5, 0.5 };
                 const elementOffset = elementCenter - shadowCenter;
                 self.shadowsPipeline.shadowShaderData[frameIndex][shadowIndex] = ShadowRenderingData{
                     .modelViewProjectionMatrix = zmath.mul(
@@ -3782,42 +3777,41 @@ pub const Renderer = struct {
                     .color = srgbToLinearColor(shadow.color),
                     .blur = shadow.blurRadius,
                     .spread = shadow.spread,
-                    .elementSize = layoutBox.size,
+                    .elementSize = node.size,
                     .elementOffset = .{ elementOffset[0], elementOffset[1] },
                     .size = size,
-                    .borderRadius = layoutBox.style.borderRadius,
+                    .borderRadius = node.style.borderRadius,
                 };
                 shadowIndex += 1;
             }
 
-            if (layoutBox.children == .glyphs) {
-                const glyphs = layoutBox.children.glyphs.slice;
-                const glyphCount = glyphs.len;
+            if (node.glyphs) |glyphs| {
+                const glyphCount = glyphs.slice.len;
 
                 if (glyphCount > 0) {
                     const startIdx = glyphIndex;
                     const endIdx = glyphIndex + glyphCount - 1;
-                    if (textIntervals[layoutBox.z - 1]) |*interval| {
+                    if (textIntervals[node.z - 1]) |*interval| {
                         std.debug.assert(interval.end + 1 == startIdx);
                         interval.end = endIdx;
                     } else {
-                        textIntervals[layoutBox.z - 1] = LayerInterval{
+                        textIntervals[node.z - 1] = LayerInterval{
                             .start = startIdx,
                             .end = endIdx,
                         };
                     }
                 }
 
-                const linearColor = srgbToLinearColor(layoutBox.style.color);
-                const unitsPerEm: f32 = @floatFromInt(layoutBox.style.font.unitsPerEm());
-                const pixelAscent = (layoutBox.style.font.ascent() / unitsPerEm) * layoutBox.style.fontSize * resolutionMultiplier[0];
+                const linearColor = srgbToLinearColor(node.style.color);
+                const unitsPerEm: f32 = @floatFromInt(node.style.font.unitsPerEm());
+                const pixelAscent = (node.style.font.ascent() / unitsPerEm) * node.style.fontSize * resolutionMultiplier[0];
 
                 // Outer lookup: once per layout box (per font/size/weight/dpi combo)
                 const glyphPageKey = TextPipeline.GlyphPageKey{
                     .dpi = dpi,
-                    .fontKey = layoutBox.style.font.key,
-                    .fontSize = layoutBox.style.fontSize,
-                    .fontWeight = layoutBox.style.fontWeight,
+                    .fontKey = node.style.font.key,
+                    .fontSize = node.style.fontSize,
+                    .fontWeight = node.style.fontWeight,
                 };
                 const glyphPageGetResult = try self.textPipeline.glyphPageCache.getOrPut(glyphPageKey);
                 if (!glyphPageGetResult.found_existing) {
@@ -3825,18 +3819,18 @@ pub const Renderer = struct {
                 }
                 const glyphPage = glyphPageGetResult.value_ptr;
 
-                for (glyphs) |glyph| {
+                for (glyphs.slice) |glyph| {
                     // Inner lookup: LRU per glyph index (no hashing of the full key)
                     const glyphRenderingData = blk: {
                         // TODO: render glyphs in the GPU using the font texture atlas as frame buffer
                         if (glyphPage.get(glyph.index)) |entry| {
                             break :blk entry.value;
                         } else {
-                            try layoutBox.style.font.setWeight(layoutBox.style.fontWeight, arena);
-                            const rasterizedGlyph = try layoutBox.style.font.rasterize(
+                            try node.style.font.setWeight(node.style.fontWeight, arena);
+                            const rasterizedGlyph = try node.style.font.rasterize(
                                 glyph.index,
                                 dpi,
-                                layoutBox.style.fontSize,
+                                node.style.fontSize,
                             );
 
                             const textureCoordinates = try self.textPipeline.fontTextureAtlas.upload(

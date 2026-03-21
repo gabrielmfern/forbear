@@ -430,13 +430,158 @@ pub const Glyphs = struct {
     slice: []LayoutGlyph,
 };
 
-pub const Node = struct {
-    pub const Children = union(enum) {
-        nodes: std.ArrayList(Node),
-        glyphs: Glyphs,
+/// Utilizies a flat tree structure where ndoes can reference one another by
+/// using indices, this way keeping stable references without using pointers.
+pub const NodeTree = struct {
+    list: std.ArrayList(Node),
+
+    pub const empty = @This(){ .list = .empty };
+
+    pub const Walker = struct {
+        start: usize,
+        current: ?usize,
+        tree: *const NodeTree,
+
+        pub fn reset(self: *@This()) !void {
+            self.current = null;
+        }
+
+        fn nextOutside(self: *@This(), index: usize) ?usize {
+            const node = self.tree.at(index);
+            if (node.nextSibling) |nextSibling| {
+                return nextSibling;
+            } else if (node.parent) |parentIndex| {
+                return self.nextOutside(parentIndex);
+            } else {
+                return null;
+            }
+        }
+
+        pub fn next(self: *@This()) ?*const Node {
+            if (self.current) |current| {
+                const node = self.tree.at(current);
+                if (node.firstChild) |firstChild| {
+                    self.current = firstChild;
+                } else {
+                    self.current = self.nextOutside(current);
+                }
+            } else {
+                self.current = self.start;
+            }
+
+            return self.tree.at(self.current.?);
+        }
     };
 
-    parent: ?*Node,
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+        self.list.deinit(allocator);
+    }
+
+    pub fn clear(self: *@This()) void {
+        self.list.clearRetainingCapacity();
+    }
+
+    pub fn walk(self: *@This()) Walker {
+        return Walker{
+            .start = 0,
+            .current = null,
+            .tree = self,
+        };
+    }
+
+    pub fn at(self: @This(), index: usize) *Node {
+        return &self.list.items[index];
+    }
+
+    pub fn putNode(
+        self: *@This(),
+        allocator: std.mem.Allocator,
+        parentOpt: ?usize,
+    ) !struct { ptr: *Node, index: usize } {
+        const index = self.list.items.len;
+        if (index != 0 and parentOpt == null) {
+            return error.MultipleRootsAreNotAllowed;
+        }
+
+        var node = Node{
+            .tree = self,
+
+            .parent = parentOpt,
+            .firstChild = null,
+            .lastChild = null,
+            .previousSibling = null,
+            .nextSibling = null,
+
+            .key = undefined,
+
+            .position = undefined,
+            .z = undefined,
+            .size = undefined,
+            .maxSize = undefined,
+            .minSize = undefined,
+
+            .style = undefined,
+        };
+        if (parentOpt) |parentIndex| {
+            const parent = self.at(parentIndex);
+            node.previousSibling = parent.lastChild;
+            parent.lastChild = index;
+            if (parent.firstChild == null) {
+                parent.firstChild = index;
+            }
+        }
+        try self.list.append(allocator, node);
+        return .{ .ptr = self.at(index), .index = index };
+    }
+
+    test {
+        var tree = NodeTree.empty;
+        defer tree.deinit();
+
+        const dummy = std.mem.zeroes(Node);
+
+        try tree.putNode(null, dummy); // 1
+        try tree.putNode(0, dummy); // 2
+        try tree.putNode(0, dummy); // 5
+        try tree.putNode(1, dummy); // 3
+        try tree.putNode(0, dummy); // 6
+        try tree.putNode(1, dummy); // 4
+        try tree.putNode(0, dummy); // 7
+        try tree.putNode(null, dummy); // 8
+
+        var walker = tree.walk();
+        for (0..10) |_| {
+            std.testing.expect(walker.next() != null);
+            std.testing.expectEqual(0, walker.current);
+            std.testing.expect(walker.next() != null);
+            std.testing.expectEqual(1, walker.current);
+            std.testing.expect(walker.next() != null);
+            std.testing.expectEqual(3, walker.current);
+            std.testing.expect(walker.next() != null);
+            std.testing.expectEqual(5, walker.current);
+            std.testing.expect(walker.next() != null);
+            std.testing.expectEqual(2, walker.current);
+            std.testing.expect(walker.next() != null);
+            std.testing.expectEqual(4, walker.current);
+            std.testing.expect(walker.next() != null);
+            std.testing.expectEqual(6, walker.current);
+            std.testing.expect(walker.next() != null);
+            std.testing.expectEqual(7, walker.current);
+            std.testing.expect(walker.next() == null);
+            std.testing.expectEqual(null, walker.current);
+        }
+    }
+};
+
+pub const Node = struct {
+    tree: *NodeTree,
+
+    parent: ?usize = null,
+    firstChild: ?usize = null,
+    lastChild: ?usize = null,
+    nextSibling: ?usize = null,
+    previousSibling: ?usize = null,
+    glyphs: ?Glyphs = null,
 
     key: u64,
 
@@ -445,7 +590,7 @@ pub const Node = struct {
     size: Vec2,
     maxSize: Vec2,
     minSize: Vec2,
-    children: Children,
+    // children: Children,
 
     style: Style,
 
@@ -525,23 +670,6 @@ pub const Node = struct {
         }
     }
 
-    pub fn free(self: @This(), allocator: std.mem.Allocator) void {
-        switch (self.children) {
-            .nodes => |nodes| {
-                for (nodes.items) |*child| {
-                    child.free(allocator);
-                }
-                nodes.deinit(allocator);
-            },
-            .glyphs => |glyphs| {
-                for (glyphs.slice) |*glyph| {
-                    allocator.free(glyph.text);
-                }
-                allocator.free(glyphs.slice);
-            },
-        }
-    }
-
     pub fn setMinSize(self: *@This(), direction: Direction, size: f32) void {
         if (direction == .leftToRight) {
             self.minSize[0] = size;
@@ -594,51 +722,9 @@ pub const Node = struct {
         }
         return self.size[1];
     }
-
-    pub fn iterateTree(self: *const @This(), allocator: std.mem.Allocator) !NodeTreeItrator {
-        var iterator = NodeTreeItrator{
-            .stack = try std.ArrayList(*const Node).initCapacity(allocator, 16),
-            .allocator = allocator,
-            .root = self,
-        };
-        try iterator.stack.append(allocator, self);
-        return iterator;
-    }
 };
 
 pub const Element = struct {
     style: IncompleteStyle,
     children: std.ArrayList(Node) = .empty,
-};
-
-pub const NodeTreeItrator = struct {
-    stack: std.ArrayList(*const Node),
-    allocator: std.mem.Allocator,
-
-    root: *const Node,
-
-    pub fn deinit(self: *@This()) void {
-        self.stack.deinit(self.allocator);
-    }
-
-    pub fn reset(self: *@This()) !void {
-        self.stack.clearRetainingCapacity();
-        try self.stack.append(self.allocator, self.root);
-    }
-
-    pub fn next(self: *@This()) !?*const Node {
-        if (self.stack.items.len == 0) {
-            return null;
-        }
-        if (self.stack.pop()) |current| {
-            if (current.children == .nodes) {
-                for (current.children.nodes.items) |*child| {
-                    try self.stack.append(self.allocator, child);
-                }
-            }
-            return current;
-        } else {
-            return null;
-        }
-    }
 };

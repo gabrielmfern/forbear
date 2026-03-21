@@ -9,6 +9,7 @@ const Glyphs = @import("node.zig").Glyphs;
 const forbear = @import("root.zig");
 const IncompleteStyle = @import("node.zig").IncompleteStyle;
 const Node = @import("node.zig").Node;
+const NodeTree = @import("node.zig").NodeTree;
 const Sizing = @import("node.zig").Sizing;
 const Style = @import("node.zig").Style;
 const TextWrapping = @import("node.zig").TextWrapping;
@@ -22,17 +23,21 @@ fn approxEq(a: f32, b: f32) bool {
 }
 
 fn growChildren(
-    children: []Node,
+    node: *Node,
+    nodeTree: *const NodeTree,
     activelyModifying: *std.ArrayList(*Node),
     direction: Direction,
     remaining: *f32,
 ) void {
-    for (children) |*child| {
+    var childIndexOption = node.firstChild;
+    while (childIndexOption) |childIndex| {
+        const child = nodeTree.at(childIndex);
         if (child.style.placement == .standard) {
             if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
                 activelyModifying.appendAssumeCapacity(child);
             }
         }
+        childIndexOption = child.nextSibling;
     }
 
     var iteration: usize = 0;
@@ -94,7 +99,8 @@ fn growChildren(
 }
 
 fn shrinkChildren(
-    children: []Node,
+    node: *Node,
+    nodeTree: *const NodeTree,
     activelyModifying: *std.ArrayList(*Node),
     direction: Direction,
     remaining: *f32,
@@ -104,12 +110,15 @@ fn shrinkChildren(
     }
 
     activelyModifying.clearRetainingCapacity();
-    for (children) |*child| {
+    var childIndexOption = node.firstChild;
+    while (childIndexOption) |childIndex| {
+        const child = nodeTree.at(childIndex);
         if (child.style.placement == .standard) {
             if (child.getSize(direction) > child.getMinSize(direction)) {
                 activelyModifying.appendAssumeCapacity(child);
             }
         }
+        childIndexOption = child.nextSibling;
     }
     var iteration: usize = 0;
     while (remaining.* < -0.001 and activelyModifying.items.len > 0) {
@@ -170,49 +179,59 @@ fn shrinkChildren(
 pub fn growAndShrink(
     arena: std.mem.Allocator,
     node: *Node,
+    nodeTree: *NodeTree,
 ) !void {
-    if (node.children == .nodes) {
-        const children = node.children.nodes;
-        const direction = node.style.direction;
+    const direction = node.style.direction;
 
-        var remaining = node.getSize(direction);
-        for (children.items) |*child| {
-            if (child.style.placement == .standard) {
-                if (direction.perpendicular() == .topToBottom) {
-                    if (child.style.height == .grow or (child.size[1] > node.size[1] and child.minSize[1] < child.size[1])) {
-                        child.size[1] = @max(@min(node.size[1], child.maxSize[1]), child.minSize[1]);
-                    }
-                } else if (direction.perpendicular() == .leftToRight) {
-                    if (child.style.width == .grow or (child.size[0] > node.size[0] and child.minSize[0] < child.size[0])) {
-                        child.size[0] = @max(@min(node.size[0], child.maxSize[0]), child.minSize[0]);
-                    }
+    var childIndexOption = node.firstChild;
+    var childCount: usize = 0;
+    var remaining = node.getSize(direction);
+    while (childIndexOption) |childIndex| {
+        const child = nodeTree.at(childIndex);
+        childCount += 1;
+
+        if (child.style.placement == .standard) {
+            if (direction.perpendicular() == .topToBottom) {
+                if (child.style.height == .grow or (child.size[1] > node.size[1] and child.minSize[1] < child.size[1])) {
+                    child.size[1] = @max(@min(node.size[1], child.maxSize[1]), child.minSize[1]);
                 }
-                if (child.style.width == .percentage) {
-                    child.size[0] = child.style.width.percentage * node.size[0];
+            } else if (direction.perpendicular() == .leftToRight) {
+                if (child.style.width == .grow or (child.size[0] > node.size[0] and child.minSize[0] < child.size[0])) {
+                    child.size[0] = @max(@min(node.size[0], child.maxSize[0]), child.minSize[0]);
                 }
-                if (child.style.height == .percentage) {
-                    child.size[1] = child.style.height.percentage * node.size[1];
-                }
-                remaining -= child.getSize(direction);
             }
+            if (child.style.width == .percentage) {
+                child.size[0] = child.style.width.percentage * node.size[0];
+            }
+            if (child.style.height == .percentage) {
+                child.size[1] = child.style.height.percentage * node.size[1];
+            }
+            remaining -= child.getSize(direction);
         }
+        childIndexOption = child.nextSibling;
+    }
 
-        var activelyModifying = try std.ArrayList(*Node).initCapacity(arena, children.items.len);
-        growChildren(children.items, &activelyModifying, direction, &remaining);
-        shrinkChildren(children.items, &activelyModifying, direction, &remaining);
-        for (children.items) |*child| {
-            try growAndShrink(arena, child);
-        }
+    var activelyModifying = try std.ArrayList(*Node).initCapacity(arena, childCount);
+    growChildren(node, nodeTree, &activelyModifying, direction, &remaining);
+    shrinkChildren(node, nodeTree, &activelyModifying, direction, &remaining);
+
+    childIndexOption = node.firstChild;
+    while (childIndexOption) |childIndex| {
+        // TODO: explore if we can remove this recursion
+        const child = nodeTree.at(childIndex);
+        try growAndShrink(arena, child, nodeTree);
+
+        childIndexOption = child.nextSibling;
     }
 }
 
-pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
-    std.debug.assert(node.children == .glyphs);
+pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTree, base: Vec2) !void {
+    std.debug.assert(node.glyphs != null);
     if (node.style.textWrapping == .none) {
         return;
     }
 
-    const glyphs = node.children.glyphs;
+    const glyphs = node.glyphs.?;
 
     const Line = struct {
         start: usize,
@@ -312,7 +331,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
         if (node.style.width == .ratio) {
             node.size[0] = node.size[1] * node.style.width.ratio;
         }
-        updateFittingForAncestors(node, node.size[1] - previousHeight);
+        updateFittingForAncestors(node, nodeTree, node.size[1] - previousHeight);
     }
 }
 
@@ -320,7 +339,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
 /// right direction, or calculating the max otherwise. Also updates the
 /// minSizes accordingly, though (?) there shouldn't be a growth or shrinking after
 /// this
-pub fn updateFittingForAncestors(node: *Node, addition: f32) void {
+pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, addition: f32) void {
     // If it's not standard we can't account for it in the flow of updates
     if (node.style.placement == .standard) {
         inline for (Direction.array) |direction| {
@@ -328,8 +347,10 @@ pub fn updateFittingForAncestors(node: *Node, addition: f32) void {
             const size = node.getSize(direction);
             const margin = node.style.margin.get(direction);
 
-            var ancestorOpt = node.parent;
-            while (ancestorOpt) |ancestor| {
+            var ancestorIndexOptional = node.parent;
+            while (ancestorIndexOptional) |ancestorIndex| {
+                const ancestor = nodeTree.at(ancestorIndex);
+
                 const ancestorSize = ancestor.getSize(direction);
                 const ancestorMinSize = ancestor.getMinSize(direction);
                 if (ancestor.shouldFitMin(direction)) {
@@ -368,34 +389,40 @@ pub fn updateFittingForAncestors(node: *Node, addition: f32) void {
                     break;
                 }
 
-                ancestorOpt = ancestor.parent;
+                ancestorIndexOptional = ancestor.parent;
             }
         }
     }
 }
 
 /// does not change the size of children, but recursively updates the sizes of parents
-pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, offset: Vec2) !void {
+pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTree, offset: Vec2) !void {
     const base = node.position + Vec2{
         node.style.padding.x[0],
         node.style.padding.y[0],
     } - offset;
-    switch (node.children) {
-        .nodes => |children| {
-            if (node.style.direction == .leftToRight) {
-                const Line = struct {
-                    start: usize,
-                    end: usize,
-                    width: f32,
-                    height: f32,
-                };
 
+    // TODO: find a way to not have ambiguity between children and glyphs
+    if (node.glyphs != null) {
+        try wrapGlyphs(arena, node, nodeTree, base);
+    } else {
+        if (node.style.direction == .leftToRight) {
+            const Line = struct {
+                start: usize,
+                end: usize,
+                width: f32,
+                height: f32,
+            };
+
+            if (node.firstChild) |firstChildIndex| {
                 var cursor = base;
                 var lines = std.ArrayList(Line).empty;
-                var currentLine = Line{ .start = 0, .end = 0, .width = 0.0, .height = 0.0 };
+                var currentLine = Line{ .start = firstChildIndex, .end = firstChildIndex, .width = 0.0, .height = 0.0 };
                 const nodeHeightBeforeIteration = node.size[1];
 
-                for (children.items) |*child| {
+                var childIndexOption = node.firstChild;
+                while (childIndexOption) |childIndex| {
+                    const child = nodeTree.at(childIndex);
                     if (child.style.placement == .standard) {
                         const childOuterWidth = child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
                         const childOuterHeight = child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
@@ -424,12 +451,13 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, offset: Vec2) !void {
                         currentLine.height = @max(currentLine.height, childOuterHeight);
                     }
 
-                    currentLine.end += 1;
+                    currentLine.end = childIndex;
+                    childIndexOption = child.nextSibling;
                 }
                 try lines.append(arena, currentLine);
 
                 if (node.size[1] != nodeHeightBeforeIteration) {
-                    updateFittingForAncestors(node, node.size[1] - nodeHeightBeforeIteration);
+                    updateFittingForAncestors(node, nodeTree, node.size[1] - nodeHeightBeforeIteration);
                 }
 
                 const availableWidth = node.size[0] - node.style.padding.x[0] - node.style.padding.x[1];
@@ -439,7 +467,9 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, offset: Vec2) !void {
                         .center => (availableWidth - line.width) / 2.0,
                         .end => availableWidth - line.width,
                     };
-                    for (children.items[line.start..line.end]) |*child| {
+                    childIndexOption = line.start;
+                    while (childIndexOption) |childIndex| {
+                        const child = nodeTree.at(childIndex);
                         if (child.style.placement == .standard) {
                             child.position[0] += xOffset;
                             child.position[1] += switch (node.style.alignment.y) {
@@ -448,81 +478,88 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, offset: Vec2) !void {
                                 .end => line.height - child.size[1],
                             };
                         }
-                    }
-                }
-            } else {
-                var cursor = base;
-
-                for (children.items) |*child| {
-                    if (child.style.placement == .standard) {
-                        cursor[1] += child.style.margin.y[0];
-                        child.position = cursor;
-                        cursor[1] += child.size[1] + child.style.margin.y[1];
-                    }
-                }
-
-                const contentHeight = cursor[1] - base[1];
-                const availableWidth = node.size[0] - node.style.padding.x[0] - node.style.padding.x[1];
-                const availableHeight = node.size[1] - node.style.padding.y[0] - node.style.padding.y[1];
-                const yOffset: f32 = switch (node.style.alignment.y) {
-                    .start => 0.0,
-                    .center => (availableHeight - contentHeight) / 2.0,
-                    .end => availableHeight - contentHeight,
-                };
-                for (children.items) |*child| {
-                    if (child.style.placement == .standard) {
-                        child.position[0] += switch (node.style.alignment.x) {
-                            .start => 0.0,
-                            .center => (availableWidth - child.size[0]) / 2.0,
-                            .end => availableWidth - child.size[0],
-                        };
-                        child.position[1] += yOffset;
+                        childIndexOption = child.nextSibling;
+                        if (child.nextSibling == line.end) {
+                            break;
+                        }
                     }
                 }
             }
+        } else {
+            var cursor = base;
 
-            for (children.items) |*child| {
-                try wrapAndPlace(arena, child, @splat(0.0));
+            var childIndexOption = node.firstChild;
+            while (childIndexOption) |childIndex| {
+                const child = nodeTree.at(childIndex);
+                if (child.style.placement == .standard) {
+                    cursor[1] += child.style.margin.y[0];
+                    child.position = cursor;
+                    cursor[1] += child.size[1] + child.style.margin.y[1];
+                }
+                childIndexOption = child.nextSibling;
             }
-        },
-        .glyphs => {
-            try wrapGlyphs(arena, node, base);
-        },
+
+            const contentHeight = cursor[1] - base[1];
+            const availableWidth = node.size[0] - node.style.padding.x[0] - node.style.padding.x[1];
+            const availableHeight = node.size[1] - node.style.padding.y[0] - node.style.padding.y[1];
+            const yOffset: f32 = switch (node.style.alignment.y) {
+                .start => 0.0,
+                .center => (availableHeight - contentHeight) / 2.0,
+                .end => availableHeight - contentHeight,
+            };
+            childIndexOption = node.firstChild;
+            while (childIndexOption) |childIndex| {
+                const child = nodeTree.at(childIndex);
+                if (child.style.placement == .standard) {
+                    child.position[0] += switch (node.style.alignment.x) {
+                        .start => 0.0,
+                        .center => (availableWidth - child.size[0]) / 2.0,
+                        .end => availableWidth - child.size[0],
+                    };
+                    child.position[1] += yOffset;
+                }
+                childIndexOption = child.nextSibling;
+            }
+        }
+
+        var childIndexOption = node.firstChild;
+        while (childIndexOption) |childIndex| {
+            const child = nodeTree.at(childIndex);
+            try wrapAndPlace(arena, child, nodeTree, @splat(0.0));
+            childIndexOption = child.nextSibling;
+        }
     }
 }
 
-pub fn layout() !*Node {
+pub fn layout() !*NodeTree {
     const context = forbear.getContext();
 
     std.debug.assert(context.frameMeta != null);
     if (context.frameMeta.?.err) |err| return err;
-    if (context.frameMeta.?.rootNode) |*node| {
-        const viewportSize = context.frameMeta.?.viewportSize;
-        const arena = context.frameMeta.?.arena;
+    const viewportSize = context.frameMeta.?.viewportSize;
+    const arena = context.frameMeta.?.arena;
 
-        // what should this do, not considering any side effects? let's think from first principles
-        // 1. grow and shrink
-        // 2. place in absolute positions and wrap
-        //
-        // the side effects can be done minimally inside of the functions. what
-        // really needs to be done if height fitting for consecutive height
-        // fitting ancestors, aspect ratio maintenance, and width/height percentage value calculations.
-        //
-        // for children percetange sizes, we can apply those to the children of a grown element
+    // what should this do, not considering any side effects? let's think from first principles
+    // 1. grow and shrink
+    // 2. place in absolute positions and wrap
+    //
+    // the side effects can be done minimally inside of the functions. what
+    // really needs to be done if height fitting for consecutive height
+    // fitting ancestors, aspect ratio maintenance, and width/height percentage value calculations.
+    //
+    // for children percetange sizes, we can apply those to the children of a grown element
 
-        if (node.style.width == .grow) {
-            node.size[0] = @min(@max(viewportSize[0], node.minSize[0]), node.maxSize[0]);
-        }
-        if (node.style.height == .grow) {
-            node.size[1] = @min(@max(viewportSize[1], node.minSize[1]), node.maxSize[1]);
-        }
+    const root = context.nodeTree.at(0);
 
-        try growAndShrink(arena, node);
-        try wrapAndPlace(arena, node, context.scrollPosition);
-
-        return node;
-    } else {
-        std.log.err("You need to define a root node before layouting, any node will suffice.", .{});
-        return error.NoRootFrameNode;
+    if (root.style.width == .grow) {
+        root.size[0] = @min(@max(viewportSize[0], root.minSize[0]), root.maxSize[0]);
     }
+    if (root.style.height == .grow) {
+        root.size[1] = @min(@max(viewportSize[1], root.minSize[1]), root.maxSize[1]);
+    }
+
+    try growAndShrink(arena, root, &context.nodeTree);
+    try wrapAndPlace(arena, root, &context.nodeTree, context.scrollPosition);
+
+    return &context.nodeTree;
 }

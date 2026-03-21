@@ -9,6 +9,7 @@ const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
+pub const NodeTree = nodeImport.NodeTree;
 pub const Direction = nodeImport.Direction;
 pub const LayoutGlyph = nodeImport.LayoutGlyph;
 pub const Glyphs = nodeImport.Glyphs;
@@ -51,15 +52,19 @@ pub const FrameMeta = struct {
     dpi: Vec2,
     baseStyle: BaseStyle,
 
+    // TODO: find a way to include this data as part of the frame, but without
+    // hinthering the intellisense for the fields and adding nose to the ones
+    // that user actually has to fill out.
     err: ?anyerror = null,
 
     componentResolutionState: std.ArrayList(ComponentResolutionState) = .empty,
+    /// An index counting the amount of components behind the current one. This
+    /// helps differentiate the same components being used sequentially, since
+    /// they're not included in the node tree at all
+    componentIndex: usize = 0,
 
-    rootNode: ?Node = null,
-    previousPushedNode: ?*Node = null,
-
-    nodeParentStack: std.ArrayList(*Node) = .empty,
-    nodePath: std.ArrayList(usize) = .empty,
+    previousPushedNodeIndex: ?usize = null,
+    nodeParentStack: std.ArrayList(usize) = .empty,
 };
 
 allocator: std.mem.Allocator,
@@ -84,8 +89,8 @@ lastUpdateTime: ?f64,
 viewportSize: Vec2,
 
 componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
-// images: std.StringHashMap(Image),
 
+nodeTree: NodeTree,
 frameMeta: ?FrameMeta,
 pendingEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 
@@ -116,6 +121,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .componentStates = .init(allocator),
 
         .frameMeta = null,
+        .nodeTree = .empty,
         .pendingEventQueue = .init(allocator),
 
         .images = std.StringHashMap(Image).init(allocator),
@@ -381,7 +387,7 @@ pub fn useLastUpdateTime() f64 {
 pub fn getPreviousNode() ?*Node {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
-    return self.frameMeta.?.previousPushedNode;
+    return self.frameMeta.?.previousPushedNodeIndex;
 }
 
 pub fn useArena() !std.mem.Allocator {
@@ -450,6 +456,7 @@ fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
     if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
         std.debug.assert(self.frameMeta.?.rootNode != null);
         std.debug.assert(parent.children == .nodes);
+
         // How can we make sure that these asserts aren't really necessary? HOw
         // can we make sure that the compiler will ensure that the parent here
         // always allows for children?
@@ -567,11 +574,12 @@ fn elementEnd(block: void) void {
     std.debug.assert(self.frameMeta != null);
     std.debug.assert(self.frameMeta.?.nodeParentStack.items.len > 0);
 
-    self.frameMeta.?.previousPushedNode = self.frameMeta.?.nodeParentStack.pop();
-    _ = self.frameMeta.?.nodePath.pop();
+    self.frameMeta.?.previousPushedNodeIndex = self.frameMeta.?.nodeParentStack.pop();
 
-    const node = self.frameMeta.?.previousPushedNode.?;
-    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
+    const perviousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
+    const node = self.nodeTree.at(perviousNodeIndex);
+    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parentIndex| {
+        const parent = self.nodeTree.at(parentIndex);
         if (node.style.placement == .standard) {
             parent.fitChild(node);
         }
@@ -583,15 +591,16 @@ fn elementEnd(block: void) void {
     if (node.style.height == .ratio) {
         node.size[1] = node.style.height.ratio * node.size[0];
     }
-    if (node.children == .nodes) {
-        for (node.children.nodes.items) |*child| {
-            if (child.style.width == .percentage) {
-                child.size[0] = child.style.width.percentage * node.size[0];
-            }
-            if (child.style.height == .percentage) {
-                child.size[1] = child.style.height.percentage * node.size[1];
-            }
+    var childIndexOption = node.firstChild;
+    while (childIndexOption) |childIndex| {
+        const child = self.nodeTree.at(childIndex);
+        if (child.style.width == .percentage) {
+            child.size[0] = child.style.width.percentage * node.size[0];
         }
+        if (child.style.height == .percentage) {
+            child.size[1] = child.style.height.percentage * node.size[1];
+        }
+        childIndexOption = child.nextSibling;
     }
 }
 
@@ -602,12 +611,19 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
 
     if (self.frameMeta.?.err != null) return &endNoop;
 
-    const result = putNode(self.frameMeta.?.arena) catch |err| {
+    const parentIndexOptional = self.frameMeta.?.nodeParentStack.getLastOrNull();
+
+    const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
 
-    const baseStyle = if (result.ptr.parent) |parent|
+    const parentOptional = if (parentIndexOptional) |parentIndex|
+        self.nodeTree.at(parentIndex)
+    else
+        null;
+
+    const baseStyle = if (parentOptional) |parent|
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
@@ -627,83 +643,79 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
     style.margin.y *= @splat(resolutionMultiplier[1]);
     style.borderRadius *= resolutionMultiplier[0];
 
-    const parentZ = if (result.ptr.parent) |parent|
+    const parentZ = if (parentOptional) |parent|
         parent.z
     else
         0;
 
     var hasher = std.hash.Wyhash.init(0);
-    hasher.update(std.mem.sliceAsBytes(self.frameMeta.?.nodePath.items));
     hasher.update(std.mem.asBytes(&result.index));
-    result.ptr.* = .{
-        .key = hasher.final(),
-        .parent = result.ptr.parent,
-        .style = style,
-        .children = .{ .nodes = .empty },
-        .z = if (incompleteStyle.zIndex) |zIndex|
-            zIndex
-        else if (parentZ < std.math.maxInt(u16))
-            parentZ + 1
-        else
-            parentZ,
-        .position = if (style.placement == .manual)
-            style.placement.manual
-        else
-            @splat(0.0),
-        .size = .{
-            switch (style.width) {
-                .fixed => |width| width,
-                .percentage => 0.0,
-                .ratio => |ratio| if (style.height == .fixed)
-                    style.height.fixed * ratio
-                else
-                    0.0,
-                .fit, .grow => 0.0,
-            },
-            switch (style.height) {
-                .fixed => |height| height,
-                .percentage => 0.0,
-                .ratio => |ratio| if (style.width == .fixed)
-                    style.width.fixed * ratio
-                else
-                    0.0,
-                .fit, .grow => 0.0,
-            },
-        },
-        .minSize = .{
-            if (style.minWidth) |minWidth|
-                minWidth
-            else if (style.width == .fixed)
-                style.width.fixed
+    // TODO: as is, it doesn't really work making a list of elements that might
+    // lose one or gain one in the midst of other ones, becasue it will
+    // invalidate the keys for all subsequent nodes, therefore also freeing
+    // state that it shouldn't
+    result.ptr.key = hasher.final();
+    result.ptr.style = style;
+    result.ptr.z = if (incompleteStyle.zIndex) |zIndex|
+        zIndex
+    else if (parentZ < std.math.maxInt(u16))
+        parentZ + 1
+    else
+        parentZ;
+    result.ptr.position = if (style.placement == .manual)
+        style.placement.manual
+    else
+        @splat(0.0);
+    result.ptr.size = .{
+        switch (style.width) {
+            .fixed => |width| width,
+            .percentage => 0.0,
+            .ratio => |ratio| if (style.height == .fixed)
+                style.height.fixed * ratio
             else
                 0.0,
-            if (style.minHeight) |minHeight|
-                minHeight
-            else if (style.height == .fixed)
-                style.height.fixed
+            .fit, .grow => 0.0,
+        },
+        switch (style.height) {
+            .fixed => |height| height,
+            .percentage => 0.0,
+            .ratio => |ratio| if (style.width == .fixed)
+                style.width.fixed * ratio
             else
                 0.0,
-        },
-        .maxSize = .{
-            if (style.maxWidth) |maxWidth|
-                maxWidth
-            else if (style.width == .fixed)
-                style.width.fixed
-            else
-                std.math.inf(f32),
-            if (style.maxHeight) |maxHeight|
-                maxHeight
-            else if (style.height == .fixed)
-                style.height.fixed
-            else
-                std.math.inf(f32),
+            .fit, .grow => 0.0,
         },
     };
-    self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, result.ptr) catch |err| {
-        handleFrameError(err);
-        return &endNoop;
+    result.ptr.minSize = .{
+        if (style.minWidth) |minWidth|
+            minWidth
+        else if (style.width == .fixed)
+            style.width.fixed
+        else
+            0.0,
+        if (style.minHeight) |minHeight|
+            minHeight
+        else if (style.height == .fixed)
+            style.height.fixed
+        else
+            0.0,
     };
-    self.frameMeta.?.nodePath.append(self.frameMeta.?.arena, result.index) catch |err| {
+    result.ptr.maxSize = .{
+        if (style.maxWidth) |maxWidth|
+            maxWidth
+        else if (style.width == .fixed)
+            style.width.fixed
+        else
+            std.math.inf(f32),
+        if (style.maxHeight) |maxHeight|
+            maxHeight
+        else if (style.height == .fixed)
+            style.height.fixed
+        else
+            std.math.inf(f32),
+    };
+
+    self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, result.index) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
@@ -726,15 +738,22 @@ pub fn text(content: []const u8) void {
 
     if (self.frameMeta.?.err != null) return;
 
+    const parentIndexOptional = self.frameMeta.?.nodeParentStack.getLastOrNull();
+
     const arena = self.frameMeta.?.arena;
-    const result = putNode(arena) catch |err| {
+    const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
         handleFrameError(err);
         return;
     };
 
+    const parentOptional = if (parentIndexOptional) |parentIndex|
+        self.nodeTree.at(parentIndex)
+    else
+        null;
+
     const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
 
-    const baseStyle = if (result.ptr.parent) |parent|
+    const baseStyle = if (parentOptional) |parent|
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
@@ -745,7 +764,7 @@ pub fn text(content: []const u8) void {
         else
             baseStyle.cursor,
         .background = .{ .color = .{ 1.0, 0.0, 0.0, 0.5 } },
-        .alignment = if (result.ptr.parent) |parent| .{
+        .alignment = if (parentOptional) |parent| .{
             .x = parent.style.alignment.x,
             .y = .start,
         } else null,
@@ -808,33 +827,29 @@ pub fn text(content: []const u8) void {
     }
     maxSize[0] = cursor[0];
 
-    const parentZ = if (result.ptr.parent) |parent|
+    const parentZ = if (parentOptional) |parent|
         parent.z
     else
         0;
 
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(content);
-    hasher.update(std.mem.sliceAsBytes(self.frameMeta.?.nodePath.items));
     hasher.update(std.mem.asBytes(&result.index));
-    result.ptr.* = Node{
-        .key = hasher.final(),
-        .parent = result.ptr.parent,
-        .position = .{ 0.0, 0.0 },
-        .z = if (parentZ < std.math.maxInt(u16))
-            parentZ + 1
-        else
-            parentZ,
-        .size = .{ cursor[0], pixelLineHeight },
-        .minSize = minSize,
-        .maxSize = maxSize,
-        .children = .{ .glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight } },
-        .style = style,
-    };
+    result.ptr.key = hasher.final();
+    result.ptr.position = @splat(0.0);
+    result.ptr.z = if (parentZ < std.math.maxInt(u16))
+        parentZ + 1
+    else
+        parentZ;
+    result.ptr.size = .{ cursor[0], pixelLineHeight };
+    result.ptr.minSize = minSize;
+    result.ptr.maxSize = maxSize;
+    result.ptr.glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight };
+    result.ptr.style = style;
 
-    self.frameMeta.?.previousPushedNode = result.ptr;
+    self.frameMeta.?.previousPushedNodeIndex = result.index;
 
-    if (result.ptr.parent) |parent| {
+    if (parentOptional) |parent| {
         parent.fitChild(result.ptr);
     }
 }
@@ -914,8 +929,13 @@ pub fn component(key: []const u8) *const fn (void) void {
 
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(key);
-    hasher.update(std.mem.sliceAsBytes(self.frameMeta.?.nodePath.items));
+    if (self.frameMeta.?.previousPushedNodeIndex) |previousPushedNodeIndex| {
+        hasher.update(std.mem.asBytes(&previousPushedNodeIndex));
+    }
+    hasher.update(std.mem.asBytes(&self.frameMeta.?.componentIndex));
     const componentKey = hasher.final();
+
+    self.frameMeta.?.componentIndex += 1;
 
     self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
         .key = componentKey,
@@ -941,8 +961,9 @@ pub fn pushEvent(key: u64, event: Event) !void {
 pub fn useNextEvent() ?Event {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
-    if (self.frameMeta.?.previousPushedNode) |previous| {
-        const key = previous.key;
+    if (self.frameMeta.?.previousPushedNodeIndex) |previousPushedNodeIndex| {
+        const previousPushedNode = self.nodeTree.at(previousPushedNodeIndex);
+        const key = previousPushedNode.key;
         // std.log.debug("handling events for {}", .{key});
         if (self.pendingEventQueue.getPtr(key)) |eventQueue| {
             return eventQueue.pop();
@@ -959,75 +980,72 @@ pub fn update() !void {
     const viewportSize = self.frameMeta.?.viewportSize;
     const arena = self.frameMeta.?.arena;
 
-    if (self.frameMeta.?.rootNode) |*root| {
-        var queueIterator = self.pendingEventQueue.valueIterator();
-        while (queueIterator.next()) |events| {
-            events.clearRetainingCapacity();
-        }
-
-        var iterator = try root.iterateTree(arena);
-
-        var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
-        missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
-
-        var uiEdges: Vec2 = @splat(0.0);
-        var hoveredCursor: WindowCursor = .default;
-        var topHoveredZ: ?u16 = null;
-
-        while (try iterator.next()) |layoutBox| {
-            if (layoutBox.style.placement == .standard) {
-                // this +scrollPosition term feels hacky to do, it's only required
-                // because layouting adds in the scroll position
-                uiEdges = @max(uiEdges, layoutBox.position + self.scrollPosition + layoutBox.size);
-            }
-            const isMouseAfter = layoutBox.position[0] <= self.mousePosition[0] and layoutBox.position[1] <= self.mousePosition[1];
-            const isMouseBefore = layoutBox.position[0] + layoutBox.size[0] >= self.mousePosition[0] and layoutBox.position[1] + layoutBox.size[1] >= self.mousePosition[1];
-            const isMouseInside = isMouseAfter and isMouseBefore;
-
-            const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, layoutBox.key);
-
-            if (std.mem.indexOfScalar(u64, missingHoveredKeys.items, layoutBox.key)) |i| {
-                _ = missingHoveredKeys.swapRemove(i);
-            }
-
-            if (isMouseInside) {
-                if (topHoveredZ == null or layoutBox.z > topHoveredZ.?) {
-                    topHoveredZ = layoutBox.z;
-                    hoveredCursor = layoutBox.style.cursor;
-                }
-
-                if (hoveredElementKeysIndexOpt == null) {
-                    try pushEvent(layoutBox.key, .mouseOver);
-
-                    try self.hoveredElementKeys.append(self.allocator, layoutBox.key);
-                }
-            } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
-                try pushEvent(layoutBox.key, .mouseOut);
-
-                _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
-            }
-        }
-
-        for (missingHoveredKeys.items) |key| {
-            if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
-                _ = self.hoveredElementKeys.swapRemove(i);
-            }
-        }
-
-        if (self.window) |window| {
-            window.setCursor(hoveredCursor, 0) catch |err| {
-                std.log.err("Failed to set cursor: {}", .{err});
-            };
-        }
-
-        self.viewportSize = viewportSize;
-
-        const timestamp = timestampSeconds();
-        self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
-        self.lastUpdateTime = timestamp;
-
-        try scroller(uiEdges);
+    var queueIterator = self.pendingEventQueue.valueIterator();
+    while (queueIterator.next()) |events| {
+        events.clearRetainingCapacity();
     }
+
+    var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
+    missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
+
+    var uiEdges: Vec2 = @splat(0.0);
+    var hoveredCursor: WindowCursor = .default;
+    var topHoveredZ: ?u16 = null;
+
+    var iterator = self.nodeTree.walk();
+    while (iterator.next()) |node| {
+        if (node.style.placement == .standard) {
+            // this +scrollPosition term feels hacky to do, it's only required
+            // because layouting adds in the scroll position
+            uiEdges = @max(uiEdges, node.position + self.scrollPosition + node.size);
+        }
+        const isMouseAfter = node.position[0] <= self.mousePosition[0] and node.position[1] <= self.mousePosition[1];
+        const isMouseBefore = node.position[0] + node.size[0] >= self.mousePosition[0] and node.position[1] + node.size[1] >= self.mousePosition[1];
+        const isMouseInside = isMouseAfter and isMouseBefore;
+
+        const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, node.key);
+
+        if (std.mem.indexOfScalar(u64, missingHoveredKeys.items, node.key)) |i| {
+            _ = missingHoveredKeys.swapRemove(i);
+        }
+
+        if (isMouseInside) {
+            if (topHoveredZ == null or node.z > topHoveredZ.?) {
+                topHoveredZ = node.z;
+                hoveredCursor = node.style.cursor;
+            }
+
+            if (hoveredElementKeysIndexOpt == null) {
+                try pushEvent(node.key, .mouseOver);
+
+                try self.hoveredElementKeys.append(self.allocator, node.key);
+            }
+        } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
+            try pushEvent(node.key, .mouseOut);
+
+            _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
+        }
+    }
+
+    for (missingHoveredKeys.items) |key| {
+        if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
+            _ = self.hoveredElementKeys.swapRemove(i);
+        }
+    }
+
+    if (self.window) |window| {
+        window.setCursor(hoveredCursor, 0) catch |err| {
+            std.log.err("Failed to set cursor: {}", .{err});
+        };
+    }
+
+    self.viewportSize = viewportSize;
+
+    const timestamp = timestampSeconds();
+    self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
+    self.lastUpdateTime = timestamp;
+
+    try scroller(uiEdges);
 }
 
 fn scroller(uiEdges: Vec2) !void {
@@ -1148,6 +1166,8 @@ pub fn deinit() void {
         img.deinit();
     }
     self.images.deinit();
+
+    self.nodeTree.deinit(self.allocator);
 
     context = null;
 }
