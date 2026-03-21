@@ -763,7 +763,6 @@ pub fn text(content: []const u8) void {
             .text
         else
             baseStyle.cursor,
-        .background = .{ .color = .{ 1.0, 0.0, 0.0, 0.5 } },
         .alignment = if (parentOptional) |parent| .{
             .x = parent.style.alignment.x,
             .y = .start,
