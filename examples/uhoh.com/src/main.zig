@@ -898,9 +898,10 @@ fn renderingMain(
                 std.log.debug("[uhoh-layout-debug] frame={} before layout viewport={any} dpi={any}", .{ frameIndex, renderer.viewportSize(), window.dpi });
             }
 
-            const rootNode = try forbear.layout();
+            const rootTree = try forbear.layout();
             if (shouldLog) {
                 const layoutMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - layoutStartNs)) / 1_000_000.0;
+                const rootNode = rootTree.at(0);
                 std.log.debug(
                     "[uhoh-layout-debug] frame={} after layout: {d:.3}ms rootPos={any} rootSize={any}",
                     .{ frameIndex, layoutMs, rootNode.position, rootNode.size },
@@ -911,7 +912,7 @@ fn renderingMain(
             if (shouldLog) {
                 drawStartNs = std.time.nanoTimestamp();
             }
-            try renderer.drawFrame(arena, rootNode, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
+            try renderer.drawFrame(arena, rootTree, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
             if (shouldLog) {
                 const drawMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - drawStartNs)) / 1_000_000.0;
                 std.log.debug("[uhoh-layout-debug] frame={} after drawFrame: {d:.3}ms", .{ frameIndex, drawMs });
