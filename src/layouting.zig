@@ -396,11 +396,11 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
 }
 
 /// does not change the size of children, but recursively updates the sizes of parents
-pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTree, offset: Vec2) !void {
-    const base = node.position + Vec2{
+pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTree) !void {
+    const base = Vec2{
         node.style.padding.x[0],
         node.style.padding.y[0],
-    } - offset;
+    };
 
     // TODO: find a way to not have ambiguity between children and glyphs
     if (node.glyphs != null) {
@@ -423,6 +423,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                 var childIndexOption = node.firstChild;
                 while (childIndexOption) |childIndex| {
                     const child = nodeTree.at(childIndex);
+                    try wrapAndPlace(arena, child, nodeTree);
+
                     if (child.style.placement == .standard) {
                         const childOuterWidth = child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
                         const childOuterHeight = child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
@@ -491,6 +493,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
             var childIndexOption = node.firstChild;
             while (childIndexOption) |childIndex| {
                 const child = nodeTree.at(childIndex);
+                try wrapAndPlace(arena, child, nodeTree);
+
                 if (child.style.placement == .standard) {
                     cursor[1] += child.style.margin.y[0];
                     child.position = cursor;
@@ -520,13 +524,6 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                 }
                 childIndexOption = child.nextSibling;
             }
-        }
-
-        var childIndexOption = node.firstChild;
-        while (childIndexOption) |childIndex| {
-            const child = nodeTree.at(childIndex);
-            try wrapAndPlace(arena, child, nodeTree, @splat(0.0));
-            childIndexOption = child.nextSibling;
         }
     }
 }
@@ -559,7 +556,19 @@ pub fn layout() !*NodeTree {
     }
 
     try growAndShrink(arena, root, &context.nodeTree);
-    try wrapAndPlace(arena, root, &context.nodeTree, context.scrollPosition);
+    try wrapAndPlace(arena, root, &context.nodeTree);
+
+    var walker = context.nodeTree.walk();
+    while (walker.next()) |node| {
+        var childIndexOption = node.firstChild;
+        while (childIndexOption) |childIndex| {
+            const child = context.nodeTree.at(childIndex);
+
+            child.position += node.position + context.effectiveScrollPosition;
+
+            childIndexOption = child.nextSibling;
+        }
+    }
 
     return &context.nodeTree;
 }

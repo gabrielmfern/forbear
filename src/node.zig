@@ -457,7 +457,7 @@ pub const NodeTree = struct {
             }
         }
 
-        pub fn next(self: *@This()) ?*const Node {
+        pub fn next(self: *@This()) ?*Node {
             if (self.current) |current| {
                 const node = self.tree.at(current);
                 if (node.firstChild) |firstChild| {
