@@ -562,27 +562,22 @@ fn processEvent(self: *Self, event: c.id) void {
     if (event_type == NSEventTypeScrollWheel) {
         if (self.handlers.scroll) |handler| {
             const scrollingDeltaY = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
-            var deltaY: f32 = @floatCast(scrollingDeltaY(event, sel("scrollingDeltaY")));
+            const deltaY: f32 = @floatCast(scrollingDeltaY(event, sel("scrollingDeltaY")));
 
             const scrollingDeltaX = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
-            var deltaX: f32 = @floatCast(scrollingDeltaX(event, sel("scrollingDeltaX")));
+            const deltaX: f32 = @floatCast(scrollingDeltaX(event, sel("scrollingDeltaX")));
 
-            // With natural scrolling enabled, macOS inverts the direction:
-            // swiping up gives positive deltaY (meaning "scroll content up"),
-            // but our convention expects positive = scroll content down.
-            // When natural scrolling is off, the direction already matches.
-            // We negate when natural scrolling is on to match the expected convention.
-            const isDirectionInverted = msgSend(*const fn (c.id, c.SEL) callconv(.c) BOOL);
-            if (isDirectionInverted(event, sel("isDirectionInvertedFromDevice"))) {
-                deltaY = -deltaY;
-                deltaX = -deltaX;
-            }
-
+            // macOS already applies the user's scroll direction preference
+            // (natural scrolling, Mac Mouse Fix reversal, etc.) to the delta
+            // values. We negate unconditionally to convert from macOS convention
+            // (positive deltaY = traditional scroll-up / content-down) to
+            // Forbear's convention (positive offset = scroll position increases
+            // = viewport moves down).
             if (deltaY != 0) {
-                handler.function(self, .vertical, deltaY, handler.data);
+                handler.function(self, .vertical, -deltaY, handler.data);
             }
             if (deltaX != 0) {
-                handler.function(self, .horizontal, deltaX, handler.data);
+                handler.function(self, .horizontal, -deltaX, handler.data);
             }
         }
     }
