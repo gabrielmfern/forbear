@@ -418,7 +418,11 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                 var cursor = base;
                 var lines = std.ArrayList(Line).empty;
                 var currentLine = Line{ .start = firstChildIndex, .end = firstChildIndex, .width = 0.0, .height = 0.0 };
-                const nodeHeightBeforeIteration = node.size[1];
+                // Height additions from element wrapping (overflow: wrap) that
+                // have not yet been propagated to ancestors. Descendant text
+                // wrapping propagates its own height changes via wrapGlyphs →
+                // updateFittingForAncestors, so we must not re-propagate those.
+                var wrapHeightAddition: f32 = 0.0;
 
                 var childIndexOption = node.firstChild;
                 while (childIndexOption) |childIndex| {
@@ -432,9 +436,11 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                         if (node.style.overflow == .wrap) {
                             const remainingSpace = node.size[0] - (cursor[0] + node.style.padding.x[1]);
                             if (childOuterWidth > remainingSpace) {
-                                cursor[1] += currentLine.height + child.style.margin.y[0];
+                                const addition = currentLine.height + child.style.margin.y[0];
+                                cursor[1] += addition;
                                 // TODO: where does the bottom margin get used in this flow? I believe we're missing something
-                                node.size[1] += currentLine.height + child.style.margin.y[0];
+                                node.size[1] += addition;
+                                wrapHeightAddition += addition;
                                 if (node.style.width == .ratio) {
                                     node.size[0] = node.size[1] * node.style.width.ratio;
                                 }
@@ -458,8 +464,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                 }
                 try lines.append(arena, currentLine);
 
-                if (node.size[1] != nodeHeightBeforeIteration) {
-                    updateFittingForAncestors(node, nodeTree, node.size[1] - nodeHeightBeforeIteration);
+                if (wrapHeightAddition > 0.001) {
+                    updateFittingForAncestors(node, nodeTree, wrapHeightAddition);
                 }
 
                 const availableWidth = node.size[0] - node.style.padding.x[0] - node.style.padding.x[1];
@@ -558,13 +564,20 @@ pub fn layout() !*NodeTree {
     try growAndShrink(arena, root, &context.nodeTree);
     try wrapAndPlace(arena, root, &context.nodeTree);
 
+    root.position -= context.effectiveScrollPosition;
+
     var walker = context.nodeTree.walk();
     while (walker.next()) |node| {
         var childIndexOption = node.firstChild;
         while (childIndexOption) |childIndex| {
             const child = context.nodeTree.at(childIndex);
 
-            child.position += node.position + context.effectiveScrollPosition;
+            child.position += node.position;
+            if (child.glyphs) |glyphs| {
+                for (glyphs.slice) |*glyph| {
+                    glyph.position += child.position;
+                }
+            }
 
             childIndexOption = child.nextSibling;
         }
