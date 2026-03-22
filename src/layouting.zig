@@ -217,8 +217,17 @@ pub fn growAndShrink(
 
     childIndexOption = node.firstChild;
     while (childIndexOption) |childIndex| {
-        // TODO: explore if we can remove this recursion
         const child = nodeTree.at(childIndex);
+
+        // Ratio axes depend on the opposite axis which may have just been
+        // resolved by grow/shrink or perpendicular clamping above.
+        if (child.style.width == .ratio) {
+            child.size[0] = child.size[1] * child.style.width.ratio;
+        }
+        if (child.style.height == .ratio) {
+            child.size[1] = child.size[0] * child.style.height.ratio;
+        }
+
         try growAndShrink(arena, child, nodeTree);
 
         childIndexOption = child.nextSibling;
