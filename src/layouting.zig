@@ -574,6 +574,7 @@ pub fn layout() !*NodeTree {
     try wrapAndPlace(arena, root, &context.nodeTree);
 
     root.position -= context.effectiveScrollPosition;
+    root.position += root.style.translate;
 
     var walker = context.nodeTree.walk();
     while (walker.next()) |node| {
@@ -581,7 +582,7 @@ pub fn layout() !*NodeTree {
         while (childIndexOption) |childIndex| {
             const child = context.nodeTree.at(childIndex);
 
-            child.position += node.position;
+            child.position += node.position + child.style.translate;
             if (child.glyphs) |glyphs| {
                 for (glyphs.slice) |*glyph| {
                     glyph.position += child.position;
