@@ -244,6 +244,200 @@ test "cross-axis fit row height reflects full column height after text wrapping"
     });
 }
 
+test "percentage children resolve against grown parent" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport is 800x600
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .percentage = 0.25 },
+            })({});
+            forbear.element(.{
+                .width = .{ .percentage = 1.0 },
+                .height = .{ .percentage = 0.75 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const childA = tree.at(root.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 800), root.size[0]);
+        try std.testing.expectEqual(@as(f32, 600), root.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 400), childA.size[0]);
+        try std.testing.expectEqual(@as(f32, 150), childA.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 800), childB.size[0]);
+        try std.testing.expectEqual(@as(f32, 450), childB.size[1]);
+    });
+}
+
+test "percentage children positioned correctly among fixed siblings" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport is 800x600; leftToRight row
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .leftToRight,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 60 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const fixedA = tree.at(root.firstChild.?);
+        const pctChild = tree.at(fixedA.nextSibling.?);
+        const fixedB = tree.at(pctChild.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 400), pctChild.size[0]);
+
+        try std.testing.expectEqual(@as(f32, 0), fixedA.position[0]);
+        try std.testing.expectEqual(@as(f32, 100), pctChild.position[0]);
+        try std.testing.expectEqual(100.0 + 400.0, fixedB.position[0]);
+    });
+}
+
+test "ratio height resolves after grow distributes width" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport 800x600; leftToRight root
+        // child: width grows to fill 800, height = ratio(0.5) → 400
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .leftToRight,
+        })({
+            forbear.element(.{
+                .width = .grow,
+                .height = .{ .ratio = 0.5 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const child = tree.at(root.firstChild.?);
+
+        try std.testing.expectEqual(@as(f32, 800), child.size[0]);
+        try std.testing.expectEqual(@as(f32, 400), child.size[1]);
+    });
+}
+
+test "ratio width resolves after grow distributes height" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport 800x600; topToBottom root
+        // child: height grows to fill 600, width = ratio(2.0) → 1200
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .ratio = 2.0 },
+                .height = .grow,
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const child = tree.at(root.firstChild.?);
+
+        try std.testing.expectEqual(@as(f32, 600), child.size[1]);
+        try std.testing.expectEqual(@as(f32, 1200), child.size[0]);
+    });
+}
+
+test "percentage and ratio children coexist in a row" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport 800x600; leftToRight root
+        // child A: width = 50% of 800 = 400, height = ratio(0.5) → 200
+        // child B: width = fixed 200, height = percentage(0.5) of 600 = 300
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .leftToRight,
+        })({
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .ratio = 0.5 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 200 },
+                .height = .{ .percentage = 0.5 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const childA = tree.at(root.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 400), childA.size[0]);
+        try std.testing.expectEqual(@as(f32, 200), childA.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 200), childB.size[0]);
+        try std.testing.expectEqual(@as(f32, 300), childB.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
+        try std.testing.expectEqual(@as(f32, 400), childB.position[0]);
+    });
+}
+
 test "grow children split remaining space and stretch cross-axis" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
