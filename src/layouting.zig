@@ -343,9 +343,14 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
     // If it's not standard we can't account for it in the flow of updates
     if (node.style.placement == .standard) {
         inline for (Direction.array) |direction| {
-            const minSize = node.getMinSize(direction);
-            const size = node.getSize(direction);
-            const margin = node.style.margin.get(direction);
+            // Track the propagating child's contribution as we walk up.
+            // Same-direction ancestors use the incremental `addition`;
+            // cross-direction ancestors need the full size of the child
+            // that was just updated (which may be an intermediate ancestor,
+            // not the original node).
+            var currentMinSize = node.getMinSize(direction);
+            var currentSize = node.getSize(direction);
+            var currentMargin = node.style.margin.get(direction);
 
             var ancestorIndexOptional = node.parent;
             while (ancestorIndexOptional) |ancestorIndex| {
@@ -355,26 +360,24 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
                 const ancestorMinSize = ancestor.getMinSize(direction);
                 if (ancestor.shouldFitMin(direction)) {
                     if (ancestor.style.direction == direction) {
-                        // just addition is fine since it should already be here
                         ancestor.addMinSize(direction, addition);
                     } else {
                         ancestor.setMinSize(direction, @max(
                             ancestorMinSize,
-                            minSize + margin[0] + margin[1],
+                            currentMinSize + currentMargin[0] + currentMargin[1],
                         ));
                     }
                 }
 
                 if (ancestor.style.getPreferredSize(direction) == .fit) {
                     if (ancestor.style.direction == direction) {
-                        // just addition is fine since it should already be here
                         ancestor.addSize(direction, addition);
                     } else {
                         // TODO: ensure the max and min sizes here
                         // TODO: also add the padding and margins of nodes
                         ancestor.setSize(direction, @max(
                             ancestorSize,
-                            size + margin[0] + margin[1],
+                            currentSize + currentMargin[0] + currentMargin[1],
                         ));
                     }
 
@@ -383,6 +386,12 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
                     if (perpendicularPreferredSize == .ratio) {
                         ancestor.setSize(perpendicularDirection, ancestorSize * perpendicularPreferredSize.ratio);
                     }
+
+                    // For the next ancestor up, the propagating contribution
+                    // is this ancestor's (now-updated) size and margin.
+                    currentSize = ancestor.getSize(direction);
+                    currentMinSize = ancestor.getMinSize(direction);
+                    currentMargin = ancestor.style.margin.get(direction);
                 } else {
                     // means the streak should be ended as only a sequence of fits
                     // would continue increasing
