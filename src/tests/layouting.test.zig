@@ -621,3 +621,120 @@ test "grow children split remaining space and stretch cross-axis" {
         try std.testing.expectEqual(100.0 + expectedGrowWidth, growB.position[0]);
     });
 }
+
+test "percentage children resolve against non-root grown parent" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Fixed outer gives a known reference size (400x300).
+        // Inner grow child should expand to fill it entirely.
+        // Percentage grandchildren should resolve against the grown
+        // inner's 400x300, not against zero.
+        forbear.element(.{
+            .width = .{ .fixed = 400 },
+            .height = .{ .fixed = 300 },
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+                .direction = .leftToRight,
+            })({
+                forbear.element(.{
+                    .width = .{ .percentage = 0.5 },
+                    .height = .{ .percentage = 0.5 },
+                })({});
+                forbear.element(.{
+                    .width = .{ .percentage = 0.25 },
+                    .height = .{ .percentage = 1.0 },
+                })({});
+            });
+        });
+
+        const tree = try layout();
+        const outer = tree.at(0);
+        const inner = tree.at(outer.firstChild.?);
+        const pctA = tree.at(inner.firstChild.?);
+        const pctB = tree.at(pctA.nextSibling.?);
+
+        // Inner grows to fill the fixed outer
+        try std.testing.expectEqual(@as(f32, 400), inner.size[0]);
+        try std.testing.expectEqual(@as(f32, 300), inner.size[1]);
+
+        // Percentage children resolve against the grown inner
+        try std.testing.expectEqual(@as(f32, 200), pctA.size[0]);
+        try std.testing.expectEqual(@as(f32, 150), pctA.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 100), pctB.size[0]);
+        try std.testing.expectEqual(@as(f32, 300), pctB.size[1]);
+
+        // Positioned side by side in the leftToRight row
+        try std.testing.expectEqual(@as(f32, 0), pctA.position[0]);
+        try std.testing.expectEqual(@as(f32, 200), pctB.position[0]);
+    });
+}
+
+test "percentage children wrap correctly inside a wrapping parent" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Fixed 400px-wide leftToRight container with overflow:wrap.
+        // Three children each at 50% width (200px): the first two fit
+        // on line 1 (400 == 400), the third wraps to line 2.
+        forbear.element(.{
+            .width = .{ .fixed = 400 },
+            .height = .fit,
+            .direction = .leftToRight,
+            .overflow = .wrap,
+        })({
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .fixed = 60 },
+            })({});
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .fixed = 60 },
+            })({});
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .fixed = 60 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const childA = tree.at(root.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+        const childC = tree.at(childB.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 400), root.size[0]);
+
+        // Each child resolves to 50% of 400 = 200px wide
+        try std.testing.expectEqual(@as(f32, 200), childA.size[0]);
+        try std.testing.expectEqual(@as(f32, 200), childB.size[0]);
+        try std.testing.expectEqual(@as(f32, 200), childC.size[0]);
+
+        // Line 1: A and B side by side at y=0
+        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
+
+        try std.testing.expectEqual(@as(f32, 200), childB.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
+
+        // Line 2: C wraps to a new row
+        try std.testing.expectEqual(@as(f32, 0), childC.position[0]);
+        try std.testing.expectEqual(@as(f32, 60), childC.position[1]);
+    });
+}
