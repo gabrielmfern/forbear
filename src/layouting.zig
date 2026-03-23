@@ -114,7 +114,7 @@ fn shrinkChildren(
     while (childIndexOption) |childIndex| {
         const child = nodeTree.at(childIndex);
         if (child.style.placement == .standard) {
-            if (child.getSize(direction) > child.getMinSize(direction)) {
+            if (child.getSize(direction) > child.getMinSize(direction) and child.style.getPreferredSize(direction) != .percentage) {
                 activelyModifying.appendAssumeCapacity(child);
             }
         }
