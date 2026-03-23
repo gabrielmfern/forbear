@@ -775,7 +775,7 @@ test "text inside percentage card inside wrapping container stays within bounds"
                             .margin = .right(10.5),
                         })({});
 
-                        forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua");
+                        forbear.text("I'll be honest, we didn't know we needed help with the IT side of our business. After bringing on uhoh, I realized that I was very wrong. In the first month we built out systems and processes that will give us the capacity to scale well past where we were targeting for this year. Bonus is any time we have a problem and hit a wall, they just fix it. It really is like having a full IT team on standby. 10/10 recommend this. Clifton Sellers, Founder Legacy Builders");
                     });
                 });
             });
@@ -801,5 +801,10 @@ test "text inside percentage card inside wrapping container stays within bounds"
 
         // Text must be shrunk to fit within the card's content area
         try std.testing.expect(textNode.size[0] <= availableForText + 1.0);
+
+        // Card height must contain the tallest child plus padding
+        const tallestChild = @max(image.size[1], textNode.size[1]);
+        const expectedMinCardHeight = tallestChild + 13.5 * 2.0;
+        try std.testing.expect(card.size[1] >= expectedMinCardHeight - 1.0);
     });
 }
