@@ -438,6 +438,125 @@ test "percentage and ratio children coexist in a row" {
     });
 }
 
+test "overflow wrap places children on new lines and grows parent height" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // A 300px-wide leftToRight container with overflow: wrap.
+        // Three 120x50 children: the first two fit on line 1 (240px < 300px),
+        // the third overflows and wraps to line 2.
+        forbear.element(.{
+            .width = .{ .fixed = 300 },
+            .height = .fit,
+            .direction = .leftToRight,
+            .overflow = .wrap,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 120 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 120 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 120 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const childA = tree.at(root.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+        const childC = tree.at(childB.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 300), root.size[0]);
+
+        // Line 1: childA and childB side by side at y=0
+        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
+
+        try std.testing.expectEqual(@as(f32, 120), childB.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
+
+        // Line 2: childC wraps to a new row, x resets and y advances by
+        // line 1's height (50)
+        try std.testing.expectEqual(@as(f32, 0), childC.position[0]);
+        try std.testing.expectEqual(@as(f32, 50), childC.position[1]);
+
+        // Fit height = initial cross-axis max (50) + wrap addition (50) = 100
+        try std.testing.expectEqual(@as(f32, 100), root.size[1]);
+    });
+}
+
+test "overflow wrap with percentage-width parent wraps against resolved size" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Outer container anchors to the viewport (800x600).
+        // The wrapping container uses percentage(1.0) to resolve to
+        // the parent's full 800px width — the common CSS "width:100%;
+        // flex-wrap:wrap" pattern.
+        // Three 300x60 children: the first two fit on line 1 (600 < 800),
+        // the third overflows and wraps to line 2.
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 300 },
+                .height = .{ .fixed = 60 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 300 },
+                .height = .{ .fixed = 60 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 300 },
+                .height = .{ .fixed = 60 },
+            })({});
+        });
+
+        const tree = try layout();
+        const outer = tree.at(0);
+        const wrapper = tree.at(outer.firstChild.?);
+        const childA = tree.at(wrapper.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+        const childC = tree.at(childB.nextSibling.?);
+
+        // Wrapper resolves to 100% of outer's 800px
+        try std.testing.expectEqual(@as(f32, 800), wrapper.size[0]);
+
+        // Line 1: A and B side by side at y=0
+        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
+
+        try std.testing.expectEqual(@as(f32, 300), childB.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
+
+        // Line 2: C wraps, x resets and y advances by line 1 height (60)
+        try std.testing.expectEqual(@as(f32, 0), childC.position[0]);
+        try std.testing.expectEqual(@as(f32, 60), childC.position[1]);
+
+        // Fit height = initial cross-axis max (60) + wrap addition (60) = 120
+        try std.testing.expectEqual(@as(f32, 120), wrapper.size[1]);
+    });
+}
+
 test "grow children split remaining space and stretch cross-axis" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
