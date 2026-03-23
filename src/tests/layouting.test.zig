@@ -496,7 +496,7 @@ test "overflow wrap places children on new lines and grows parent height" {
     });
 }
 
-test "overflow wrap with percentage-width parent wraps against resolved size" {
+test "overflow wrap with grow-width parent wraps against resolved size" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
 
@@ -507,9 +507,10 @@ test "overflow wrap with percentage-width parent wraps against resolved size" {
 
     try forbear.frame(try utilities.frameMeta(arena))({
         // Outer container anchors to the viewport (800x600).
-        // The wrapping container uses percentage(1.0) to resolve to
-        // the parent's full 800px width — the common CSS "width:100%;
-        // flex-wrap:wrap" pattern.
+        // The wrapping container uses grow so it fills the parent's
+        // full 800px width. With wrapping-aware fitting, minSize is
+        // the widest child (300) instead of the sum (900), so the
+        // grow resolves to 800 rather than being floored at 900.
         // Three 300x60 children: the first two fit on line 1 (600 < 800),
         // the third overflows and wraps to line 2.
         forbear.element(.{
@@ -518,17 +519,24 @@ test "overflow wrap with percentage-width parent wraps against resolved size" {
             .direction = .topToBottom,
         })({
             forbear.element(.{
-                .width = .{ .fixed = 300 },
-                .height = .{ .fixed = 60 },
-            })({});
-            forbear.element(.{
-                .width = .{ .fixed = 300 },
-                .height = .{ .fixed = 60 },
-            })({});
-            forbear.element(.{
-                .width = .{ .fixed = 300 },
-                .height = .{ .fixed = 60 },
-            })({});
+                .width = .grow,
+                .height = .fit,
+                .direction = .leftToRight,
+                .overflow = .wrap,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 300 },
+                    .height = .{ .fixed = 60 },
+                })({});
+                forbear.element(.{
+                    .width = .{ .fixed = 300 },
+                    .height = .{ .fixed = 60 },
+                })({});
+                forbear.element(.{
+                    .width = .{ .fixed = 300 },
+                    .height = .{ .fixed = 60 },
+                })({});
+            });
         });
 
         const tree = try layout();
@@ -538,7 +546,8 @@ test "overflow wrap with percentage-width parent wraps against resolved size" {
         const childB = tree.at(childA.nextSibling.?);
         const childC = tree.at(childB.nextSibling.?);
 
-        // Wrapper resolves to 100% of outer's 800px
+        // Wrapper grows to parent's 800px (not 900, since minSize
+        // is now the widest child, not the sum)
         try std.testing.expectEqual(@as(f32, 800), wrapper.size[0]);
 
         // Line 1: A and B side by side at y=0

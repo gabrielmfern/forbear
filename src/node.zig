@@ -604,6 +604,8 @@ pub const Node = struct {
 
     pub fn fitChild(self: *@This(), child: *const Node) void {
         if (child.style.placement != .manual) {
+            const wraps = self.style.overflow == .wrap and self.style.direction == .leftToRight;
+
             inline for (Direction.array) |fitDirection| {
                 const preferredSize = self.style.getPreferredSize(fitDirection);
                 const layoutDirection = self.style.direction;
@@ -614,12 +616,29 @@ pub const Node = struct {
                 const minContribution = margins + child.getMinSize(fitDirection);
 
                 if (layoutDirection == fitDirection) {
-                    if (preferredSize == .fit) {
-                        // TODO: ensure the max and min sizes here
-                        self.addSize(fitDirection, contribution);
-                    }
-                    if (self.shouldFitMin(fitDirection)) {
-                        self.addMinSize(fitDirection, minContribution);
+                    if (wraps) {
+                        // With wrapping, inline-axis min is the widest single
+                        // child (any child could end up alone on a line).
+                        if (preferredSize == .fit) {
+                            self.setSize(fitDirection, @max(
+                                self.getSize(fitDirection),
+                                contribution + self.fittingBase(fitDirection),
+                            ));
+                        }
+                        if (self.shouldFitMin(fitDirection)) {
+                            self.setMinSize(fitDirection, @max(
+                                self.getMinSize(fitDirection),
+                                minContribution + self.fittingBase(fitDirection),
+                            ));
+                        }
+                    } else {
+                        if (preferredSize == .fit) {
+                            // TODO: ensure the max and min sizes here
+                            self.addSize(fitDirection, contribution);
+                        }
+                        if (self.shouldFitMin(fitDirection)) {
+                            self.addMinSize(fitDirection, minContribution);
+                        }
                     }
                 } else {
                     // cross axis fitting

@@ -367,9 +367,18 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
 
                 const ancestorSize = ancestor.getSize(direction);
                 const ancestorMinSize = ancestor.getMinSize(direction);
+                const ancestorWraps = ancestor.style.overflow == .wrap and ancestor.style.direction == .leftToRight;
+
                 if (ancestor.shouldFitMin(direction)) {
                     if (ancestor.style.direction == direction) {
-                        ancestor.addMinSize(direction, addition);
+                        if (ancestorWraps) {
+                            ancestor.setMinSize(direction, @max(
+                                ancestorMinSize,
+                                currentMinSize + currentMargin[0] + currentMargin[1],
+                            ));
+                        } else {
+                            ancestor.addMinSize(direction, addition);
+                        }
                     } else {
                         ancestor.setMinSize(direction, @max(
                             ancestorMinSize,
@@ -380,7 +389,14 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
 
                 if (ancestor.style.getPreferredSize(direction) == .fit) {
                     if (ancestor.style.direction == direction) {
-                        ancestor.addSize(direction, addition);
+                        if (ancestorWraps) {
+                            ancestor.setSize(direction, @max(
+                                ancestorSize,
+                                currentSize + currentMargin[0] + currentMargin[1],
+                            ));
+                        } else {
+                            ancestor.addSize(direction, addition);
+                        }
                     } else {
                         // TODO: ensure the max and min sizes here
                         // TODO: also add the padding and margins of nodes
