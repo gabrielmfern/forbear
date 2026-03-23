@@ -370,12 +370,14 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
                 const ancestorMinSize = ancestor.getMinSize(direction);
                 const ancestorWraps = ancestor.style.overflow == .wrap and ancestor.style.direction == .leftToRight;
 
+                const ancestorFittingBase = ancestor.fittingBase(direction);
+
                 if (ancestor.shouldFitMin(direction)) {
                     if (ancestor.style.direction == direction) {
                         if (ancestorWraps) {
                             ancestor.setMinSize(direction, @max(
                                 ancestorMinSize,
-                                currentMinSize + currentMargin[0] + currentMargin[1],
+                                currentMinSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                             ));
                         } else {
                             ancestor.addMinSize(direction, addition);
@@ -383,7 +385,7 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
                     } else {
                         ancestor.setMinSize(direction, @max(
                             ancestorMinSize,
-                            currentMinSize + currentMargin[0] + currentMargin[1],
+                            currentMinSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                         ));
                     }
                 }
@@ -393,17 +395,15 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
                         if (ancestorWraps) {
                             ancestor.setSize(direction, @max(
                                 ancestorSize,
-                                currentSize + currentMargin[0] + currentMargin[1],
+                                currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                             ));
                         } else {
                             ancestor.addSize(direction, addition);
                         }
                     } else {
-                        // TODO: ensure the max and min sizes here
-                        // TODO: also add the padding and margins of nodes
                         ancestor.setSize(direction, @max(
                             ancestorSize,
-                            currentSize + currentMargin[0] + currentMargin[1],
+                            currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                         ));
                     }
 
