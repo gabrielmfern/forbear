@@ -150,7 +150,7 @@ fn App() !void {
                     forbear.element(.{
                         .direction = .leftToRight,
                         .alignment = .centerLeft,
-                        .width = .grow,
+                        .width = .{ .percentage = 1.0 / 3.0 },
                         .fontWeight = 500,
                         .fontSize = 12.0,
                         .padding = .inLine(7.5),
@@ -265,39 +265,41 @@ fn App() !void {
                 .width = .grow,
                 .maxWidth = 810.0,
                 .alignment = .topCenter,
+                .direction = .topToBottom,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
                 forbear.element(.{
-                    .direction = .topToBottom,
-                    .alignment = .topCenter,
+                    .fontWeight = 700,
+                    .fontSize = 30,
+                    .margin = forbear.Margin.top(15.0).withBottom(18.75),
                 })({
-                    forbear.element(.{
-                        .fontWeight = 700,
-                        .fontSize = 30,
-                        .margin = forbear.Margin.top(15.0).withBottom(18.75),
-                    })({
-                        forbear.text("Don't take our word for it.");
-                    });
+                    forbear.text("Don't take our word for it.");
+                });
+                forbear.element(.{
+                    .overflow = .wrap,
+                    .width = .grow,
+                })({
                     for (testimonials) |testimonial| {
                         forbear.element(.{
-                            .width = .grow,
-                            .borderRadius = 12.0,
-                            .borderColor = black,
-                            .borderWidth = .all(0.75),
-                            .padding = .all(13.5),
-                            .margin = forbear.Margin.block(0.0).withBottom(12.0),
-                            .direction = .leftToRight,
+                            .width = .{ .percentage = 1.0 / 3.0 },
+                            .direction = .topToBottom,
+                            .fontSize = 11.25,
+                            .lineHeight = 1.4,
                         })({
-                            forbear.image(.{
-                                .width = .{ .fixed = 80.0 },
-                                .height = .{ .fixed = 80.0 },
-                                .borderRadius = 12.0,
-                                .margin = forbear.Margin.inLine(0.0).withRight(10.5),
-                            }, try forbear.useImage(testimonial.imageId));
                             forbear.element(.{
-                                .fontSize = 11.25,
-                                .lineHeight = 1.4,
+                                .width = .grow,
+                                .padding = .all(13.5),
+                                .margin = forbear.Margin.bottom(12.0).withInLine(10.0),
+                                .borderRadius = 12.0,
+                                .borderColor = black,
+                                .borderWidth = .all(0.75),
                             })({
+                                forbear.image(.{
+                                    .width = .{ .fixed = 80.0 },
+                                    .height = .{ .fixed = 80.0 },
+                                    .borderRadius = 12.0,
+                                    .margin = .right(10.5),
+                                }, try forbear.useImage(testimonial.imageId));
                                 forbear.text(testimonial.body);
                             });
                         });
