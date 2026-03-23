@@ -185,7 +185,7 @@ pub fn growAndShrink(
 
     var childIndexOption = node.firstChild;
     var childCount: usize = 0;
-    var remaining = node.getSize(direction);
+    var remaining = node.getSize(direction) - node.fittingBase(direction);
     while (childIndexOption) |childIndex| {
         const child = nodeTree.at(childIndex);
         childCount += 1;
@@ -206,7 +206,8 @@ pub fn growAndShrink(
             if (child.style.height == .percentage) {
                 child.size[1] = child.style.height.percentage * node.size[1];
             }
-            remaining -= child.getSize(direction);
+            const marginVector = child.style.margin.get(direction);
+            remaining -= child.getSize(direction) + marginVector[0] + marginVector[1];
         }
         childIndexOption = child.nextSibling;
     }

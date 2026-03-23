@@ -738,3 +738,68 @@ test "percentage children wrap correctly inside a wrapping parent" {
         try std.testing.expectEqual(@as(f32, 60), childC.position[1]);
     });
 }
+
+test "text inside percentage card inside wrapping container stays within bounds" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+            .textWrapping = .word,
+        })({
+            forbear.element(.{
+                .width = .grow,
+                .maxWidth = 810,
+                .direction = .topToBottom,
+            })({
+                forbear.element(.{
+                    .overflow = .wrap,
+                    .width = .grow,
+                })({
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .padding = .all(13.5),
+                        .direction = .leftToRight,
+                    })({
+                        forbear.element(.{
+                            .width = .{ .fixed = 80 },
+                            .height = .{ .fixed = 80 },
+                            .margin = .right(10.5),
+                        })({});
+
+                        forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua");
+                    });
+                });
+            });
+        });
+
+        const tree = try layout();
+
+        // outer -> section -> wrapper -> card
+        const outer = tree.at(0);
+        const section = tree.at(outer.firstChild.?);
+        const wrapper = tree.at(section.firstChild.?);
+        const card = tree.at(wrapper.firstChild.?);
+
+        // Viewport is 800, maxWidth 810, so section = 800. Card = 50% = 400.
+        try std.testing.expectEqual(@as(f32, 400), card.size[0]);
+
+        // card -> image, text
+        const image = tree.at(card.firstChild.?);
+        const textNode = tree.at(image.nextSibling.?);
+
+        // Available width for text = card_width - padding*2 - image_width - image_margin_right
+        const availableForText = 400.0 - 13.5 * 2.0 - 80.0 - 10.5;
+
+        // Text must be shrunk to fit within the card's content area
+        try std.testing.expect(textNode.size[0] <= availableForText + 1.0);
+    });
+}
