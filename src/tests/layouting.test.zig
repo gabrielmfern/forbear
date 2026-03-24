@@ -739,6 +739,93 @@ test "percentage children wrap correctly inside a wrapping parent" {
     });
 }
 
+test "wrapping container with text cards does not inflate ancestor height" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Reproduces the uhoh.com testimonials bug: a topToBottom section contains
+    // a leftToRight wrapping container with multiple percentage-width cards
+    // that have word-wrapped text. Each card's text wrapping fires
+    // updateFittingForAncestors, which should NOT additively inflate the
+    // section's height — only the wrapping container's actual height change
+    // should propagate.
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .fit,
+            .direction = .topToBottom,
+            .textWrapping = .word,
+        })({
+            // Section with wrapping cards
+            forbear.element(.{
+                .width = .grow,
+                .maxWidth = 810,
+                .direction = .topToBottom,
+            })({
+                forbear.element(.{
+                    .overflow = .wrap,
+                    .width = .grow,
+                })({
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .direction = .topToBottom,
+                        .padding = .all(10),
+                    })({
+                        forbear.text("Card A with enough words to trigger word wrapping when constrained to half width");
+                    });
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .direction = .topToBottom,
+                        .padding = .all(10),
+                    })({
+                        forbear.text("Card B also with enough words to trigger word wrapping when constrained to half width");
+                    });
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .direction = .topToBottom,
+                        .padding = .all(10),
+                    })({
+                        forbear.text("Card C third card with words that will wrap when the percentage width takes effect");
+                    });
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .direction = .topToBottom,
+                        .padding = .all(10),
+                    })({
+                        forbear.text("Card D fourth card with text content that wraps during layout resolution pass");
+                    });
+                });
+            });
+            // Sibling below the section
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        const tree = try layout();
+
+        const outer = tree.at(0);
+        const section = tree.at(outer.firstChild.?);
+        const wrapper = tree.at(section.firstChild.?);
+        const sibling = tree.at(section.nextSibling.?);
+
+        // Section height should equal wrapper height (no extra inflation)
+        try std.testing.expectEqual(wrapper.size[1], section.size[1]);
+
+        // Sibling should be positioned right after the section
+        try std.testing.expectEqual(section.position[1] + section.size[1], sibling.position[1]);
+
+        // Outer height should be section + sibling, not grossly inflated
+        try std.testing.expectEqual(section.size[1] + 50.0, outer.size[1]);
+    });
+}
+
 test "text inside percentage card inside wrapping container stays within bounds" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
