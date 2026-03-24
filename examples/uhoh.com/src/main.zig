@@ -282,26 +282,22 @@ fn App() !void {
                     for (testimonials) |testimonial| {
                         forbear.element(.{
                             .width = .{ .percentage = 1.0 / 3.0 },
-                            .direction = .topToBottom,
                             .fontSize = 11.25,
                             .lineHeight = 1.4,
+                            .padding = .all(13.5),
+                            .margin = forbear.Margin.bottom(12.0).withInLine(10.0),
+                            .borderRadius = 12.0,
+                            .borderColor = black,
+                            .direction = .topToBottom,
+                            .borderWidth = .all(0.75),
                         })({
-                            forbear.element(.{
-                                .width = .grow,
-                                .padding = .all(13.5),
-                                .margin = forbear.Margin.bottom(12.0).withInLine(10.0),
+                            forbear.image(.{
+                                .width = .{ .fixed = 80.0 },
+                                .height = .{ .fixed = 80.0 },
                                 .borderRadius = 12.0,
-                                .borderColor = black,
-                                .borderWidth = .all(0.75),
-                            })({
-                                forbear.image(.{
-                                    .width = .{ .fixed = 80.0 },
-                                    .height = .{ .fixed = 80.0 },
-                                    .borderRadius = 12.0,
-                                    .margin = .right(10.5),
-                                }, try forbear.useImage(testimonial.imageId));
-                                forbear.text(testimonial.body);
-                            });
+                                .margin = .right(10.5),
+                            }, try forbear.useImage(testimonial.imageId));
+                            forbear.text(testimonial.body);
                         });
                     }
                 });
