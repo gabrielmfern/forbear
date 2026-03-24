@@ -771,33 +771,35 @@ test "wrapping container with text cards does not inflate ancestor height" {
                     .overflow = .wrap,
                     .width = .grow,
                 })({
+                    // Line 1: two cards with LONG text (tall after wrapping)
                     forbear.element(.{
                         .width = .{ .percentage = 0.5 },
                         .direction = .topToBottom,
                         .padding = .all(10),
                     })({
-                        forbear.text("Card A with enough words to trigger word wrapping when constrained to half width");
+                        forbear.text("Card A has a very long body of text that will wrap to many lines when constrained to half the container width. This creates a tall card on line one which is important for reproducing the height inflation bug where the tallest card from any line inflates the wrapping containers base height. We need this to be significantly taller than the cards on line two to expose the double counting.");
                     });
                     forbear.element(.{
                         .width = .{ .percentage = 0.5 },
                         .direction = .topToBottom,
                         .padding = .all(10),
                     })({
-                        forbear.text("Card B also with enough words to trigger word wrapping when constrained to half width");
+                        forbear.text("Card B also has a very long body of text that will wrap to many lines when constrained to half width. This ensures line one is tall. The bug causes the wrapping container height to include this line height twice: once from the text wrapping cross axis max and once from the element wrapping line addition.");
+                    });
+                    // Line 2: two cards with SHORT text (short after wrapping)
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .direction = .topToBottom,
+                        .padding = .all(10),
+                    })({
+                        forbear.text("Card C short.");
                     });
                     forbear.element(.{
                         .width = .{ .percentage = 0.5 },
                         .direction = .topToBottom,
                         .padding = .all(10),
                     })({
-                        forbear.text("Card C third card with words that will wrap when the percentage width takes effect");
-                    });
-                    forbear.element(.{
-                        .width = .{ .percentage = 0.5 },
-                        .direction = .topToBottom,
-                        .padding = .all(10),
-                    })({
-                        forbear.text("Card D fourth card with text content that wraps during layout resolution pass");
+                        forbear.text("Card D short.");
                     });
                 });
             });
@@ -823,6 +825,28 @@ test "wrapping container with text cards does not inflate ancestor height" {
 
         // Outer height should be section + sibling, not grossly inflated
         try std.testing.expectEqual(section.size[1] + 50.0, outer.size[1]);
+
+        // The wrapping container's height must equal the sum of its line
+        // heights (not inflated by text wrapping cross-axis max).
+        // With 4 cards at 50% width, there are 2 lines. Compute expected
+        // height from the actual card sizes.
+        const cardA = tree.at(wrapper.firstChild.?);
+        const cardB = tree.at(cardA.nextSibling.?);
+        const cardC = tree.at(cardB.nextSibling.?);
+        const cardD = tree.at(cardC.nextSibling.?);
+
+        const line1Height = @max(
+            cardA.style.margin.y[0] + cardA.size[1] + cardA.style.margin.y[1],
+            cardB.style.margin.y[0] + cardB.size[1] + cardB.style.margin.y[1],
+        );
+        const line2Height = @max(
+            cardC.style.margin.y[0] + cardC.size[1] + cardC.style.margin.y[1],
+            cardD.style.margin.y[0] + cardD.size[1] + cardD.style.margin.y[1],
+        );
+        // Inter-line margin is the top margin of the first child on line 2
+        const interLineMargin = cardC.style.margin.y[0];
+        const expectedWrapperHeight = line1Height + interLineMargin + line2Height;
+        try std.testing.expectEqual(expectedWrapperHeight, wrapper.size[1]);
     });
 }
 
