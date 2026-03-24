@@ -354,10 +354,11 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
     if (node.style.placement == .standard) {
         inline for (Direction.array) |direction| {
             // Track the propagating child's contribution as we walk up.
-            // Same-direction ancestors use the incremental `addition`;
+            // Same-direction ancestors use the incremental `currentAddition`;
             // cross-direction ancestors need the full size of the child
             // that was just updated (which may be an intermediate ancestor,
             // not the original node).
+            var currentAddition = addition;
             var currentMinSize = node.getMinSize(direction);
             var currentSize = node.getSize(direction);
             var currentMargin = node.style.margin.get(direction);
@@ -380,7 +381,7 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
                                 currentMinSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                             ));
                         } else {
-                            ancestor.addMinSize(direction, addition);
+                            ancestor.addMinSize(direction, currentAddition);
                         }
                     } else {
                         ancestor.setMinSize(direction, @max(
@@ -398,7 +399,7 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
                                 currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                             ));
                         } else {
-                            ancestor.addSize(direction, addition);
+                            ancestor.addSize(direction, currentAddition);
                         }
                     } else {
                         ancestor.setSize(direction, @max(
@@ -406,6 +407,12 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
                             currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                         ));
                     }
+
+                    // Track the actual change at this ancestor so that
+                    // higher ancestors receive the correct delta — not
+                    // the original addition which may have been absorbed
+                    // by a cross-axis max or wrapping boundary.
+                    currentAddition = ancestor.getSize(direction) - ancestorSize;
 
                     const perpendicularDirection = direction.perpendicular();
                     const perpendicularPreferredSize = ancestor.style.getPreferredSize(perpendicularDirection);
