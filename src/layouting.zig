@@ -406,6 +406,13 @@ pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, additio
                             ancestorSize,
                             currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                         ));
+                        // Wrapping containers manage their cross-axis height
+                        // via wrapAndPlace which computes the authoritative
+                        // height from actual line data. Stop propagation here;
+                        // wrapAndPlace will propagate the correct total.
+                        if (ancestorWraps) {
+                            break;
+                        }
                     }
 
                     // Track the actual change at this ancestor so that
@@ -457,6 +464,9 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
             };
 
             if (node.firstChild) |firstChildIndex| {
+                // Save height before processing children so we can compute
+                // the correct total change for wrapping containers.
+                const preWrapHeight = node.size[1];
                 var cursor = base;
                 var lines = std.ArrayList(Line).empty;
                 var currentLine = Line{ .start = firstChildIndex, .end = firstChildIndex, .width = 0.0, .height = 0.0 };
@@ -506,7 +516,21 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                 }
                 try lines.append(arena, currentLine);
 
-                if (wrapHeightAddition > 0.001) {
+                if (node.style.overflow == .wrap) {
+                    // Compute authoritative height from actual line data.
+                    // Text wrapping propagation via updateFittingForAncestors
+                    // stops at the wrapping container, so we compute the correct
+                    // total here: fitting base + all wrap additions (previous
+                    // lines + inter-line margins) + last line's height.
+                    node.size[1] = node.fittingBase(.topToBottom) + wrapHeightAddition + currentLine.height;
+                    if (node.style.width == .ratio) {
+                        node.size[0] = node.size[1] * node.style.width.ratio;
+                    }
+                    const totalChange = node.size[1] - preWrapHeight;
+                    if (totalChange > 0.001) {
+                        updateFittingForAncestors(node, nodeTree, totalChange);
+                    }
+                } else if (wrapHeightAddition > 0.001) {
                     updateFittingForAncestors(node, nodeTree, wrapHeightAddition);
                 }
 
