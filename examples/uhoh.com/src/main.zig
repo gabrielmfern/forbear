@@ -81,9 +81,9 @@ fn App() !void {
                 })({
                     forbear.text("Pricing");
                 });
-                Button(.{
-                    .text = "Try it risk-free",
-                })({});
+                Button(.{})({
+                    forbear.text("Try it risk-free");
+                });
             });
 
             forbear.element(.{
@@ -113,7 +113,9 @@ fn App() !void {
                     })({
                         forbear.text("It doesn't just annoy you. It slows you and your staff down. That's our job now.");
                     });
-                    Button(.{ .text = "Let us prove it*" })({});
+                    Button(.{})({
+                        forbear.text("Let us prove it*");
+                    });
                     forbear.element(.{
                         .fontSize = 9.0,
                         .color = black,
@@ -228,7 +230,9 @@ fn App() !void {
                     })({
                         forbear.text("Imagine if you could delegate all these issues to a genie?");
                     });
-                    Button(.{ .text = "Get a free trial" })({});
+                    Button(.{})({
+                        forbear.text("Get a free trial");
+                    });
                 });
             });
             const testimonials = [_]struct {
@@ -761,7 +765,8 @@ fn App() !void {
                         forbear.text("Just get the free trial already if you're that interested. You scrolled all the way here.");
                     });
 
-                    Button(.{ .text = "Come on, click on this" })({
+                    Button(.{})({
+                        forbear.text("Come on, click on this");
                         forbear.element(.{
                             .fontSize = 9.0,
                             .color = theme.Colors.muted,
