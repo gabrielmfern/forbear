@@ -313,33 +313,33 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
-                .padding = forbear.Padding.top(22.5).withBottom(30.0),
-                .background = .{ .color = theme.Colors.soft },
+                .padding = .all(15.0),
+                .borderWidth = .all(1.5),
+                .borderColor = black,
+                .borderRadius = 9.0,
+                .direction = .topToBottom,
             })({
                 forbear.element(.{
-                    .direction = .topToBottom,
+                    .fontWeight = 700,
+                    .width = .grow,
+                    .alignment = .center,
+                    .fontSize = 18.0,
+                    .margin = forbear.Margin.block(0.0).withBottom(13.5),
                 })({
-                    forbear.element(.{
-                        .fontWeight = 600,
-                        .fontSize = 13.5,
-                        .margin = forbear.Margin.block(0.0).withBottom(13.5),
-                    })({
-                        forbear.text("Our partners");
-                    });
-                    forbear.element(.{
-                        .direction = .leftToRight,
-                        .alignment = .centerLeft,
-                    })({
-                        for (logos) |id| {
-                            forbear.image(.{
-                                .maxWidth = 128,
-                                .maxHeight = 112,
-                                .filter = .grayscale,
-                                .margin = forbear.Margin.right(13.5),
-                            }, try forbear.useImage(id));
-                        }
-                    });
+                    forbear.text("Our partners");
+                });
+                forbear.element(.{
+                    .direction = .leftToRight,
+                    .alignment = .center,
+                })({
+                    for (logos) |id| {
+                        forbear.image(.{
+                            .maxWidth = 128,
+                            .maxHeight = 112,
+                            .filter = .grayscale,
+                            .margin = forbear.Margin.right(13.5),
+                        }, try forbear.useImage(id));
+                    }
                 });
             });
 
