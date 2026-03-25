@@ -502,7 +502,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                                 cursor[0] = base[0];
                                 try lines.append(arena, currentLine);
 
-                                currentLine = .{ .start = currentLine.end, .end = currentLine.end, .width = 0, .height = 0 };
+                                // New line starts at the overflow child; .end is still the prior line until assigned below.
+                                currentLine = .{ .start = childIndex, .end = childIndex, .width = 0, .height = 0 };
                             }
                         }
 
@@ -555,10 +556,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                                 .end => line.height - child.size[1],
                             };
                         }
+                        if (childIndex == line.end) break;
                         childIndexOption = child.nextSibling;
-                        if (child.nextSibling == line.end) {
-                            break;
-                        }
                     }
                 }
             }
