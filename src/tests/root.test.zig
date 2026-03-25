@@ -1063,3 +1063,135 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
         try std.testing.expect(parent.size[0] > textNode.minSize[0]);
     });
 }
+
+test "Component children slotting" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = forbear.getContext();
+
+    // A component that defines a children slot between a header and footer
+    const Card = struct {
+        fn card() *const fn (void) void {
+            forbear.component("card")({
+                forbear.element(.{})({
+                    forbear.text("Header");
+                    forbear.componentChildrenSlot();
+                    forbear.text("Footer");
+                });
+            });
+            return forbear.componentChildrenEnd();
+        }
+    }.card;
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            Card()({
+                forbear.text("Slotted child 1");
+                forbear.text("Slotted child 2");
+            });
+        });
+
+        // Verify stack is clean after
+        try std.testing.expectEqual(0, self.frameMeta.?.nodeParentStack.items.len);
+
+        // Verify tree structure:
+        // root_element > card_element > [Header, slot_wrapper > [child1, child2], Footer]
+        const rootNode = self.nodeTree.at(0);
+        const cardElement = self.nodeTree.at(rootNode.firstChild.?);
+
+        // First child of card: "Header" text
+        const headerNode = self.nodeTree.at(cardElement.firstChild.?);
+        try std.testing.expect(headerNode.glyphs != null);
+
+        // Second child: slot wrapper element with 2 slotted children
+        const slotWrapper = self.nodeTree.at(headerNode.nextSibling.?);
+        try std.testing.expect(slotWrapper.glyphs == null); // element, not text
+
+        const slottedChild1 = self.nodeTree.at(slotWrapper.firstChild.?);
+        try std.testing.expect(slottedChild1.glyphs != null);
+
+        const slottedChild2 = self.nodeTree.at(slottedChild1.nextSibling.?);
+        try std.testing.expect(slottedChild2.glyphs != null);
+
+        // Third child: "Footer" text
+        const footerNode = self.nodeTree.at(slotWrapper.nextSibling.?);
+        try std.testing.expect(footerNode.glyphs != null);
+    });
+}
+
+test "Nested component children slotting" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = forbear.getContext();
+
+    const Outer = struct {
+        fn outer() *const fn (void) void {
+            forbear.component("outer")({
+                forbear.element(.{})({
+                    forbear.text("Outer");
+                    forbear.componentChildrenSlot();
+                });
+            });
+            return forbear.componentChildrenEnd();
+        }
+    }.outer;
+
+    const Inner = struct {
+        fn inner() *const fn (void) void {
+            forbear.component("inner")({
+                forbear.element(.{})({
+                    forbear.componentChildrenSlot();
+                });
+            });
+            return forbear.componentChildrenEnd();
+        }
+    }.inner;
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            Outer()({
+                Inner()({
+                    forbear.text("Deep child");
+                });
+            });
+        });
+
+        // Verify stack is clean
+        try std.testing.expectEqual(0, self.frameMeta.?.nodeParentStack.items.len);
+
+        // Verify structure:
+        // root > outer_elem > ["Outer", slot_wrapper > [inner_elem > [slot_wrapper > ["Deep child"]]]]
+        const root = self.nodeTree.at(0);
+        const outerElem = self.nodeTree.at(root.firstChild.?);
+
+        // "Outer" text
+        const outerText = self.nodeTree.at(outerElem.firstChild.?);
+        try std.testing.expect(outerText.glyphs != null);
+
+        // Outer slot wrapper
+        const outerSlot = self.nodeTree.at(outerText.nextSibling.?);
+        try std.testing.expect(outerSlot.glyphs == null);
+
+        // Inner element inside outer slot
+        const innerElem = self.nodeTree.at(outerSlot.firstChild.?);
+        try std.testing.expect(innerElem.glyphs == null);
+
+        // Inner slot wrapper
+        const innerSlot = self.nodeTree.at(innerElem.firstChild.?);
+        try std.testing.expect(innerSlot.glyphs == null);
+
+        // Deep child text
+        const deepChild = self.nodeTree.at(innerSlot.firstChild.?);
+        try std.testing.expect(deepChild.glyphs != null);
+    });
+}

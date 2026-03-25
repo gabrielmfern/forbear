@@ -36,6 +36,7 @@ var context: ?@This() = null;
 const ComponentResolutionState = struct {
     useStateCursor: usize,
     key: u64,
+    childrenSlotNodeIndex: ?usize = null,
 };
 
 pub const Event = union(enum) {
@@ -896,6 +897,15 @@ fn componentEnd(block: void) void {
                 handleFrameError(error.RulesOfHooksViolated);
             }
         }
+
+        // If the component declared a children slot, push the slot node
+        // onto the parent stack so componentChildrenEnd()/elementEnd()
+        // can be used to accept children from the caller
+        if (endedResolutionState.childrenSlotNodeIndex) |slotIndex| {
+            self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, slotIndex) catch |err| {
+                handleFrameError(err);
+            };
+        }
     }
 }
 
@@ -926,6 +936,97 @@ pub fn component(key: []const u8) *const fn (void) void {
     };
 
     return &componentEnd;
+}
+
+/// Marks the current parent element as the slot where component children will
+/// be inserted. Creates a transparent wrapper element so that children appear
+/// at the correct position in the tree, even when there are sibling nodes after
+/// the slot.
+///
+/// Must be called inside a component body, within an element block.
+///
+/// Example:
+/// ```zig
+/// pub fn Card() *const fn (void) void {
+///     forbear.component("card")({
+///         forbear.element(.{ .direction = .topToBottom })({
+///             forbear.text("Header");
+///             forbear.componentChildrenSlot();
+///             forbear.text("Footer");
+///         });
+///     });
+///     return forbear.componentChildrenEnd();
+/// }
+///
+/// // Usage - same DX as element:
+/// Card()({
+///     forbear.text("Slotted content");
+/// });
+/// ```
+pub fn componentChildrenSlot() void {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) return;
+
+    const resolutionState = self.frameMeta.?.componentResolutionState.items;
+    if (resolutionState.len == 0) {
+        handleFrameError(error.ComponentChildrenSlotOutsideComponent);
+        return;
+    }
+
+    const parentIndexOptional = self.frameMeta.?.nodeParentStack.getLastOrNull();
+
+    // Create a transparent wrapper element to hold slotted children
+    const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
+        handleFrameError(err);
+        return;
+    };
+
+    const parentOptional = if (parentIndexOptional) |parentIndex|
+        self.nodeTree.at(parentIndex)
+    else
+        null;
+
+    const baseStyle = if (parentOptional) |parent|
+        BaseStyle.from(parent.style)
+    else
+        self.frameMeta.?.baseStyle;
+
+    const defaultStyle: IncompleteStyle = .{};
+    result.ptr.style = defaultStyle.completeWith(baseStyle);
+
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(std.mem.asBytes(&result.index));
+    result.ptr.key = hasher.final();
+    result.ptr.size = @splat(0.0);
+    result.ptr.minSize = @splat(0.0);
+    result.ptr.maxSize = @splat(std.math.inf(f32));
+    result.ptr.z = if (parentOptional) |parent| parent.z + 1 else 1;
+
+    // Record the slot in the current component's resolution state
+    resolutionState[resolutionState.len - 1].childrenSlotNodeIndex = result.index;
+}
+
+/// Returns a callback that allows the caller to provide children for a
+/// component's slot. Must be called after the component body
+/// (`forbear.component("key")({...})`) has executed and after
+/// `componentChildrenSlot()` was called inside it.
+///
+/// The component function should return the result of this function.
+pub fn componentChildrenEnd() *const fn (void) void {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) return &endNoop;
+
+    // componentEnd already pushed the slot node onto the parent stack
+    // if a slot was declared, so we just return elementEnd to pop it
+    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |topIndex| {
+        // Verify the top of the stack is actually a slot node
+        _ = self.nodeTree.at(topIndex);
+        return &elementEnd;
+    }
+
+    return &endNoop;
 }
 
 pub fn pushEvent(key: u64, event: Event) !void {
