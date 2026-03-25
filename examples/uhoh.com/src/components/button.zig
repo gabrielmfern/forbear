@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 const theme = @import("theme.zig");
 
 pub const ButtonProps = struct {
-    text: []const u8,
     sizing: enum { medium, large } = .medium,
 };
 
@@ -40,7 +39,6 @@ pub fn Button(props: ButtonProps) !*const fn (void) void {
                 .alignment = .center,
                 .direction = .topToBottom,
             })({
-                forbear.text(props.text);
                 forbear.componentChildrenSlot();
             });
         });
