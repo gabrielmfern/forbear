@@ -176,6 +176,90 @@ fn shrinkChildren(
     }
 }
 
+/// Propagates a size change along one physical axis (`direction`) up through
+/// `.fit` / `shouldFitMin` ancestors. Used by `wrapGlyphs` (via
+/// `updateFittingForAncestors`) and by `growAndShrink` when ratio sizing
+/// changes a child's main-axis contribution to its parent.
+fn updateFittingForAncestorsInDirection(
+    node: *Node,
+    nodeTree: *const NodeTree,
+    addition: f32,
+    direction: Direction,
+) void {
+    if (node.style.placement != .standard) return;
+
+    var currentAddition = addition;
+    var currentMinSize = node.getMinSize(direction);
+    var currentSize = node.getSize(direction);
+    var currentMargin = node.style.margin.get(direction);
+
+    var ancestorIndexOptional = node.parent;
+    while (ancestorIndexOptional) |ancestorIndex| {
+        const ancestor = nodeTree.at(ancestorIndex);
+
+        const ancestorSize = ancestor.getSize(direction);
+        const ancestorMinSize = ancestor.getMinSize(direction);
+        const ancestorWraps = ancestor.style.overflow == .wrap and ancestor.style.direction == .leftToRight;
+
+        const ancestorFittingBase = ancestor.fittingBase(direction);
+
+        if (ancestor.shouldFitMin(direction)) {
+            if (ancestor.style.direction == direction) {
+                if (ancestorWraps) {
+                    ancestor.setMinSize(direction, @max(
+                        ancestorMinSize,
+                        currentMinSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
+                    ));
+                } else {
+                    ancestor.addMinSize(direction, currentAddition);
+                }
+            } else {
+                ancestor.setMinSize(direction, @max(
+                    ancestorMinSize,
+                    currentMinSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
+                ));
+            }
+        }
+
+        if (ancestor.style.getPreferredSize(direction) == .fit) {
+            if (ancestor.style.direction == direction) {
+                if (ancestorWraps) {
+                    ancestor.setSize(direction, @max(
+                        ancestorSize,
+                        currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
+                    ));
+                } else {
+                    ancestor.addSize(direction, currentAddition);
+                }
+            } else {
+                ancestor.setSize(direction, @max(
+                    ancestorSize,
+                    currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
+                ));
+                if (ancestorWraps) {
+                    break;
+                }
+            }
+
+            currentAddition = ancestor.getSize(direction) - ancestorSize;
+
+            const perpendicularDirection = direction.perpendicular();
+            const perpendicularPreferredSize = ancestor.style.getPreferredSize(perpendicularDirection);
+            if (perpendicularPreferredSize == .ratio) {
+                ancestor.setSize(perpendicularDirection, ancestorSize * perpendicularPreferredSize.ratio);
+            }
+
+            currentSize = ancestor.getSize(direction);
+            currentMinSize = ancestor.getMinSize(direction);
+            currentMargin = ancestor.style.margin.get(direction);
+        } else {
+            break;
+        }
+
+        ancestorIndexOptional = ancestor.parent;
+    }
+}
+
 pub fn growAndShrink(
     arena: std.mem.Allocator,
     node: *Node,
@@ -224,11 +308,17 @@ pub fn growAndShrink(
 
         // Ratio axes depend on the opposite axis which may have just been
         // resolved by grow/shrink or perpendicular clamping above.
+        const beforeMain = child.getSize(direction);
         if (child.style.width == .ratio) {
             child.size[0] = child.size[1] * child.style.width.ratio;
         }
         if (child.style.height == .ratio) {
             child.size[1] = child.size[0] * child.style.height.ratio;
+        }
+        const afterMain = child.getSize(direction);
+        const mainDelta = afterMain - beforeMain;
+        if (!approxEq(mainDelta, 0)) {
+            updateFittingForAncestorsInDirection(child, nodeTree, mainDelta, direction);
         }
 
         try growAndShrink(arena, child, nodeTree);
@@ -347,102 +437,13 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTr
     }
 }
 
-/// Iterates upwards in the ancestry of the node, adding `addition` if in the
-/// right direction, or calculating the max otherwise. Also updates the
-/// minSizes accordingly, though (?) there shouldn't be a growth or shrinking after
-/// this
+/// Runs `updateFittingForAncestorsInDirection` for both axes with the same `addition`
+/// (used after glyph wrapping changes text height; width ratio on the node is
+/// applied before this runs from `wrapGlyphs`).
 pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, addition: f32) void {
-    // If it's not standard we can't account for it in the flow of updates
-    if (node.style.placement == .standard) {
-        inline for (Direction.array) |direction| {
-            // Track the propagating child's contribution as we walk up.
-            // Same-direction ancestors use the incremental `currentAddition`;
-            // cross-direction ancestors need the full size of the child
-            // that was just updated (which may be an intermediate ancestor,
-            // not the original node).
-            var currentAddition = addition;
-            var currentMinSize = node.getMinSize(direction);
-            var currentSize = node.getSize(direction);
-            var currentMargin = node.style.margin.get(direction);
-
-            var ancestorIndexOptional = node.parent;
-            while (ancestorIndexOptional) |ancestorIndex| {
-                const ancestor = nodeTree.at(ancestorIndex);
-
-                const ancestorSize = ancestor.getSize(direction);
-                const ancestorMinSize = ancestor.getMinSize(direction);
-                const ancestorWraps = ancestor.style.overflow == .wrap and ancestor.style.direction == .leftToRight;
-
-                const ancestorFittingBase = ancestor.fittingBase(direction);
-
-                if (ancestor.shouldFitMin(direction)) {
-                    if (ancestor.style.direction == direction) {
-                        if (ancestorWraps) {
-                            ancestor.setMinSize(direction, @max(
-                                ancestorMinSize,
-                                currentMinSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
-                            ));
-                        } else {
-                            ancestor.addMinSize(direction, currentAddition);
-                        }
-                    } else {
-                        ancestor.setMinSize(direction, @max(
-                            ancestorMinSize,
-                            currentMinSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
-                        ));
-                    }
-                }
-
-                if (ancestor.style.getPreferredSize(direction) == .fit) {
-                    if (ancestor.style.direction == direction) {
-                        if (ancestorWraps) {
-                            ancestor.setSize(direction, @max(
-                                ancestorSize,
-                                currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
-                            ));
-                        } else {
-                            ancestor.addSize(direction, currentAddition);
-                        }
-                    } else {
-                        ancestor.setSize(direction, @max(
-                            ancestorSize,
-                            currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
-                        ));
-                        // Wrapping containers manage their cross-axis height
-                        // via wrapAndPlace which computes the authoritative
-                        // height from actual line data. Stop propagation here;
-                        // wrapAndPlace will propagate the correct total.
-                        if (ancestorWraps) {
-                            break;
-                        }
-                    }
-
-                    // Track the actual change at this ancestor so that
-                    // higher ancestors receive the correct delta — not
-                    // the original addition which may have been absorbed
-                    // by a cross-axis max or wrapping boundary.
-                    currentAddition = ancestor.getSize(direction) - ancestorSize;
-
-                    const perpendicularDirection = direction.perpendicular();
-                    const perpendicularPreferredSize = ancestor.style.getPreferredSize(perpendicularDirection);
-                    if (perpendicularPreferredSize == .ratio) {
-                        ancestor.setSize(perpendicularDirection, ancestorSize * perpendicularPreferredSize.ratio);
-                    }
-
-                    // For the next ancestor up, the propagating contribution
-                    // is this ancestor's (now-updated) size and margin.
-                    currentSize = ancestor.getSize(direction);
-                    currentMinSize = ancestor.getMinSize(direction);
-                    currentMargin = ancestor.style.margin.get(direction);
-                } else {
-                    // means the streak should be ended as only a sequence of fits
-                    // would continue increasing
-                    break;
-                }
-
-                ancestorIndexOptional = ancestor.parent;
-            }
-        }
+    if (node.style.placement != .standard) return;
+    inline for (Direction.array) |direction| {
+        updateFittingForAncestorsInDirection(node, nodeTree, addition, direction);
     }
 }
 

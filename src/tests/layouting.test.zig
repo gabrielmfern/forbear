@@ -85,8 +85,9 @@ test "wrapped text simple ancestry stays at origin" {
 
 // Regression: `forbear.image()` uses `width: grow` + `height: ratio`. Build-time
 // `fitChild` saw height 0, so a `height: fit` hero column stayed short and the
-// next root sibling (e.g. offerings card) overlapped the headline. Layout must
-// refresh `.fit` main-axis size after ratio resolution. Uses the same flex
+// next root sibling (e.g. offerings card) overlapped the headline. `growAndShrink`
+// applies ratio sizing then incrementally propagates the main-axis delta with
+// `updateFittingForAncestorsInDirection` (same machinery as wrapped text). Same flex
 // shape as examples/uhoh.com (hero block + text + sibling section).
 test "uhoh-shaped grow-width ratio hero does not overlap following sibling section" {
     try forbear.init(std.testing.allocator, undefined);
