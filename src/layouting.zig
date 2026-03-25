@@ -192,12 +192,14 @@ pub fn growAndShrink(
 
         if (child.style.placement == .standard) {
             if (direction.perpendicular() == .topToBottom) {
-                if (child.style.height == .grow or (child.size[1] > node.size[1] and child.minSize[1] < child.size[1])) {
-                    child.size[1] = @max(@min(node.size[1], child.maxSize[1]), child.minSize[1]);
+                const available = node.size[1] - node.fittingBase(.topToBottom);
+                if (child.style.height == .grow or (child.size[1] > available and child.minSize[1] < child.size[1])) {
+                    child.size[1] = @max(@min(available, child.maxSize[1]), child.minSize[1]);
                 }
             } else if (direction.perpendicular() == .leftToRight) {
-                if (child.style.width == .grow or (child.size[0] > node.size[0] and child.minSize[0] < child.size[0])) {
-                    child.size[0] = @max(@min(node.size[0], child.maxSize[0]), child.minSize[0]);
+                const available = node.size[0] - node.fittingBase(.leftToRight);
+                if (child.style.width == .grow or (child.size[0] > available and child.minSize[0] < child.size[0])) {
+                    child.size[0] = @max(@min(available, child.maxSize[0]), child.minSize[0]);
                 }
             }
             if (child.style.width == .percentage) {

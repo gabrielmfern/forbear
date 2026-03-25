@@ -919,3 +919,37 @@ test "text inside percentage card inside wrapping container stays within bounds"
         try std.testing.expect(card.size[1] >= expectedMinCardHeight - 1.0);
     });
 }
+
+test "perpendicular clamping respects parent padding" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // A topToBottom parent with fixed width and padding,
+        // containing a long text that should be clamped to the content area.
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .fit,
+            .direction = .topToBottom,
+            .padding = .all(20),
+            .textWrapping = .word,
+        })({
+            forbear.text("This is a long piece of text that should definitely wrap within the parent's content area and not overflow beyond its padding boundaries");
+        });
+
+        const tree = try layout();
+        const parent = tree.at(0);
+        const textNode = tree.at(parent.firstChild.?);
+
+        // Content area = 200 - 20 - 20 = 160
+        const contentWidth = 200.0 - 20.0 - 20.0;
+
+        // The text node's width must not exceed the parent's content area
+        try std.testing.expect(textNode.size[0] <= contentWidth + 0.001);
+    });
+}
