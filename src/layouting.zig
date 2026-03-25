@@ -611,49 +611,41 @@ pub fn layout() !*NodeTree {
     const viewportSize = context.frameMeta.?.viewportSize;
     const arena = context.frameMeta.?.arena;
 
-    // what should this do, not considering any side effects? let's think from first principles
-    // 1. grow and shrink
-    // 2. place in absolute positions and wrap
-    //
-    // the side effects can be done minimally inside of the functions. what
-    // really needs to be done if height fitting for consecutive height
-    // fitting ancestors, aspect ratio maintenance, and width/height percentage value calculations.
-    //
-    // for children percetange sizes, we can apply those to the children of a grown element
+    if (context.nodeTree.list.items.len > 0) {
+        const root = context.nodeTree.at(0);
 
-    const root = context.nodeTree.at(0);
+        if (root.style.width == .grow) {
+            root.size[0] = @min(@max(viewportSize[0], root.minSize[0]), root.maxSize[0]);
+        }
+        if (root.style.height == .grow) {
+            root.size[1] = @min(@max(viewportSize[1], root.minSize[1]), root.maxSize[1]);
+        }
 
-    if (root.style.width == .grow) {
-        root.size[0] = @min(@max(viewportSize[0], root.minSize[0]), root.maxSize[0]);
-    }
-    if (root.style.height == .grow) {
-        root.size[1] = @min(@max(viewportSize[1], root.minSize[1]), root.maxSize[1]);
-    }
+        try growAndShrink(arena, root, &context.nodeTree);
+        try wrapAndPlace(arena, root, &context.nodeTree);
 
-    try growAndShrink(arena, root, &context.nodeTree);
-    try wrapAndPlace(arena, root, &context.nodeTree);
+        root.position -= context.effectiveScrollPosition;
+        root.position += root.style.translate;
 
-    root.position -= context.effectiveScrollPosition;
-    root.position += root.style.translate;
+        var walker = context.nodeTree.walk();
+        while (walker.next()) |node| {
+            var childIndexOption = node.firstChild;
+            while (childIndexOption) |childIndex| {
+                const child = context.nodeTree.at(childIndex);
 
-    var walker = context.nodeTree.walk();
-    while (walker.next()) |node| {
-        var childIndexOption = node.firstChild;
-        while (childIndexOption) |childIndex| {
-            const child = context.nodeTree.at(childIndex);
-
-            if (child.style.placement == .manual) {
-                child.position += child.style.translate;
-            } else {
-                child.position += node.position + child.style.translate;
-            }
-            if (child.glyphs) |glyphs| {
-                for (glyphs.slice) |*glyph| {
-                    glyph.position += child.position;
+                if (child.style.placement == .manual) {
+                    child.position += child.style.translate;
+                } else {
+                    child.position += node.position + child.style.translate;
                 }
-            }
+                if (child.glyphs) |glyphs| {
+                    for (glyphs.slice) |*glyph| {
+                        glyph.position += child.position;
+                    }
+                }
 
-            childIndexOption = child.nextSibling;
+                childIndexOption = child.nextSibling;
+            }
         }
     }
 
