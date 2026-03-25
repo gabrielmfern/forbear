@@ -526,8 +526,8 @@ fn elementEnd(block: void) void {
 
     self.frameMeta.?.previousPushedNodeIndex = self.frameMeta.?.nodeParentStack.pop();
 
-    const perviousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
-    const node = self.nodeTree.at(perviousNodeIndex);
+    const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
+    const node = self.nodeTree.at(previousNodeIndex);
 
     // Apply ratios and clamp before fitting into parent so the parent
     // sees the actual constrained size (not the unclamped value).
