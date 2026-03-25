@@ -516,6 +516,38 @@ test "percentage and ratio children coexist in a row" {
     });
 }
 
+test "wrapAndPlace offsets standard children by border plus padding" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 80 },
+            .direction = .leftToRight,
+            .borderWidth = .left(8),
+            .padding = .left(7),
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 40 },
+                .height = .{ .fixed = 24 },
+            })({});
+        });
+
+        const tree = try layout();
+        const parent = tree.at(0);
+        const child = tree.at(parent.firstChild.?);
+
+        try std.testing.expectEqual(@as(f32, 15), child.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), child.position[1]);
+    });
+}
+
 test "overflow wrap places children on new lines and grows parent height" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
