@@ -22,12 +22,16 @@ pub fn FpsCounter() !void {
             .color = .{ 1.0, 1.0, 0.0, 1.0 },
             .direction = .topToBottom,
         })({
-            forbear.element(.{ .width = .grow, })({
+            forbear.element(.{
+                .width = .grow,
+            })({
                 forbear.text("FPS:");
                 forbear.element(.{ .width = .grow })({});
                 forbear.text(try std.fmt.allocPrint(arena, "{d:.1}", .{fps}));
             });
-            forbear.element(.{ .width = .grow, })({
+            forbear.element(.{
+                .width = .grow,
+            })({
                 forbear.text("delta time:");
                 forbear.element(.{ .width = .grow })({});
                 forbear.text(try std.fmt.allocPrint(arena, "{d:.1}ms", .{deltaTime * 1000.0}));
