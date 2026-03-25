@@ -83,6 +83,83 @@ test "wrapped text simple ancestry stays at origin" {
     });
 }
 
+// Regression: `forbear.image()` uses `width: grow` + `height: ratio`. Build-time
+// `fitChild` saw height 0, so a `height: fit` hero column stayed short and the
+// next root sibling (e.g. offerings card) overlapped the headline. Layout must
+// refresh `.fit` main-axis size after ratio resolution. Uses the same flex
+// shape as examples/uhoh.com (hero block + text + sibling section).
+test "uhoh-shaped grow-width ratio hero does not overlap following sibling section" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport 800px wide from utilities.frameMeta
+        forbear.element(.{
+            .width = .grow,
+            .height = .fit,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .grow,
+                .maxWidth = 600,
+                .alignment = .topCenter,
+                .padding = forbear.Padding.top(22.5).withBottom(30.0),
+                .direction = .topToBottom,
+            })({
+                // Stand-in for `forbear.image` (grow width + intrinsic aspect).
+                forbear.element(.{
+                    .width = .grow,
+                    .height = .{ .ratio = 0.5 },
+                })({});
+                forbear.element(.{
+                    .fontSize = 18,
+                    .margin = forbear.Margin.block(13.5).withBottom(7.5),
+                })({
+                    forbear.text("We're here to reinvent how tech gets done.");
+                });
+                forbear.element(.{
+                    .fontSize = 12,
+                })({
+                    forbear.text("We're replacing clunky IT with clean, fast, and flexible support.");
+                });
+            });
+            forbear.element(.{
+                .width = .grow,
+                .height = .{ .fixed = 80 },
+                .background = .{ .color = .{ 1, 1, 1, 1 } },
+            })({});
+        });
+
+        const tree = try layout();
+        const rootNode = tree.at(0);
+        const hero = tree.at(rootNode.firstChild.?);
+        const card = tree.at(hero.nextSibling.?);
+
+        const illustration = tree.at(hero.firstChild.?);
+        const heading = tree.at(illustration.nextSibling.?);
+        const subtext = tree.at(heading.nextSibling.?);
+
+        try std.testing.expectApproxEqAbs(600.0, illustration.size[0], 0.02);
+        try std.testing.expectApproxEqAbs(300.0, illustration.size[1], 0.02);
+
+        // `wrapAndPlace` advances the next sibling by this node's `size[1]` only.
+        // That always equals `card.y - hero.y`, even when `hero.size[1]` is
+        // stale — so comparing those two is useless. What breaks is: inner
+        // children were laid out with the real illustration height, but `hero`
+        // stayed short, so the card is placed in the middle of the hero text.
+        const heroContentBottom = subtext.position[1] + subtext.size[1];
+        try std.testing.expect(hero.size[1] >= illustration.size[1] + hero.fittingBase(.topToBottom) - 0.02);
+        try std.testing.expect(heroContentBottom <= card.position[1] + 0.02);
+
+        try std.testing.expect(heading.position[1] > illustration.position[1] + illustration.size[1] - 0.02);
+    });
+}
+
 test "wrapped text propagates height upward with siblings" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
