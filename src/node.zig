@@ -512,6 +512,7 @@ pub const NodeTree = struct {
 
         var node = Node{
             .tree = self,
+            .treeIndex = index,
 
             .parent = parentOpt,
             .firstChild = null,
@@ -584,6 +585,7 @@ pub const NodeTree = struct {
 
 pub const Node = struct {
     tree: *NodeTree,
+    treeIndex: usize,
 
     parent: ?usize = null,
     firstChild: ?usize = null,
@@ -698,7 +700,7 @@ pub const Node = struct {
     }
 
     pub fn index(self: *const @This()) usize {
-        return (@intFromPtr(self) - @intFromPtr(self.tree.list.items.ptr)) / @sizeOf(@This());
+        return self.treeIndex;
     }
 
     fn formatSizing(sizing: Sizing) [24]u8 {
