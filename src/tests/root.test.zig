@@ -17,7 +17,7 @@ test "Element tree stack stability" {
         forbear.element(.{})({
             const nodeParentStack = &self.frameMeta.?.nodeParentStack;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
-            try forbear.FpsCounter();
+            forbear.FpsCounter();
 
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             forbear.element(.{})({
@@ -45,7 +45,7 @@ test "Element tree stack stability" {
         forbear.element(.{})({
             const nodeParentStack = &self.frameMeta.?.nodeParentStack;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
-            try forbear.FpsCounter();
+            forbear.FpsCounter();
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             forbear.element(.{})({
                 try std.testing.expectEqual(2, nodeParentStack.items.len);
@@ -158,8 +158,8 @@ test "Component resolution" {
         fn myComponent(props: MyComponentProps) !void {
             forbear.component("component-resolution-test")({
                 props.callCount.* += 1;
-                const counter = try forbear.useState(u32, props.value);
-                const innerArena = try forbear.useArena();
+                const counter = forbear.useState(u32, props.value);
+                const innerArena = forbear.useArena();
                 try std.testing.expectEqual(10, counter.*);
                 forbear.element(.{})({
                     forbear.text(try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
@@ -202,7 +202,7 @@ fn resolveSpringTransition(
 ) !void {
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.component(componentKey)({
-            result.* = try forbear.useSpringTransition(target, config);
+            result.* = forbear.useSpringTransition(target, config);
         });
     });
 }
@@ -626,12 +626,12 @@ test "State creation with manual handling" {
         try forbear.frame(try utilities.frameMeta(arenaAllocator))({
             forbear.component("random")({
                 componentKey = self.frameMeta.?.componentResolutionState.getLast().key;
-                const state1 = try forbear.useState(i32, 42);
+                const state1 = forbear.useState(i32, 42);
                 try std.testing.expectEqual(1, self.componentStates.get(componentKey).?.items.len);
                 try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(componentKey).?.items[0].len);
                 try std.testing.expectEqual(42, state1.*);
 
-                const state2 = try forbear.useState(f32, 3.14);
+                const state2 = forbear.useState(f32, 3.14);
                 try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
                 try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(componentKey).?.items[1].len);
                 try std.testing.expectEqual(42, state1.*);
@@ -648,10 +648,10 @@ test "State creation with manual handling" {
         _ = arena.reset(.retain_capacity);
         try forbear.frame(try utilities.frameMeta(arenaAllocator))({
             forbear.component("random")({
-                const state1 = try forbear.useState(i32, 42);
+                const state1 = forbear.useState(i32, 42);
                 try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
                 try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(componentKey).?.items[0].len);
-                const state2 = try forbear.useState(f32, 3.14);
+                const state2 = forbear.useState(f32, 3.14);
                 try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
                 try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(componentKey).?.items[1].len);
 
@@ -662,9 +662,13 @@ test "State creation with manual handling" {
     }
     {
         _ = arena.reset(.retain_capacity);
-        try forbear.frame(try utilities.frameMeta(arenaAllocator))({
-            try std.testing.expectError(error.NoComponentContext, forbear.useState(i32, 42));
-        });
+        // useState called outside a component captures NoComponentContext in frameMeta.err
+        try std.testing.expectError(
+            error.NoComponentContext,
+            forbear.frame(try utilities.frameMeta(arenaAllocator))({
+                _ = forbear.useState(i32, 42);
+            }),
+        );
     }
 }
 
@@ -684,14 +688,14 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
         try forbear.frame(try utilities.frameMeta(arenaAllocator))({
             forbear.component("use-transition-realloc-test")({
                 // Mimics useTransition's calls:
-                //   const valueToTransitionFrom = try useState(f32, value);
-                //   const valueToTransitionTo = try useState(f32, value);
-                //   const animation = try useAnimation(duration);  -> useState(?AnimationState, null)
-                const valueToTransitionFrom = try forbear.useState(f32, 1.0);
+                //   const valueToTransitionFrom = useState(f32, value);
+                //   const valueToTransitionTo = useState(f32, value);
+                //   const animation = useAnimation(duration);  -> useState(?AnimationState, null)
+                const valueToTransitionFrom = forbear.useState(f32, 1.0);
                 try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
-                const valueToTransitionTo = try forbear.useState(f32, 1.0);
+                const valueToTransitionTo = forbear.useState(f32, 1.0);
                 try std.testing.expectEqual(1.0, valueToTransitionTo.*);
-                const animationState = try forbear.useState(?forbear.AnimationState, null);
+                const animationState = forbear.useState(?forbear.AnimationState, null);
                 try std.testing.expectEqual(null, animationState.*);
 
                 // These dereferences should not segfault — if realloc moved the buffer,
@@ -718,9 +722,9 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
         _ = arena.reset(.retain_capacity);
         try forbear.frame(try utilities.frameMeta(arenaAllocator))({
             forbear.component("use-transition-realloc-test")({
-                const valueToTransitionFrom = try forbear.useState(f32, 1.0);
-                const valueToTransitionTo = try forbear.useState(f32, 1.0);
-                const animationState = try forbear.useState(?forbear.AnimationState, null);
+                const valueToTransitionFrom = forbear.useState(f32, 1.0);
+                const valueToTransitionTo = forbear.useState(f32, 1.0);
+                const animationState = forbear.useState(?forbear.AnimationState, null);
 
                 // Second frame should preserve mutated state from first frame
                 try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
