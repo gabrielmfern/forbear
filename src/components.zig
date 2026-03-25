@@ -15,13 +15,23 @@ pub fn FpsCounter() !void {
             .zIndex = 10,
             .background = .{ .color = .{ 0.0, 0.0, 0.0, 0.9 } },
             .fontSize = 12,
+            .textWrapping = .none,
+            .minWidth = 152,
             .padding = .all(4),
             .borderRadius = 2,
             .color = .{ 1.0, 1.0, 0.0, 1.0 },
             .direction = .topToBottom,
         })({
-            forbear.text(try std.fmt.allocPrint(arena, "FPS: {d:.1}", .{fps}));
-            forbear.text(try std.fmt.allocPrint(arena, "delta time: {d:.1}ms", .{deltaTime * 1000.0}));
+            forbear.element(.{ .width = .grow, })({
+                forbear.text("FPS:");
+                forbear.element(.{ .width = .grow })({});
+                forbear.text(try std.fmt.allocPrint(arena, "{d:.1}", .{fps}));
+            });
+            forbear.element(.{ .width = .grow, })({
+                forbear.text("delta time:");
+                forbear.element(.{ .width = .grow })({});
+                forbear.text(try std.fmt.allocPrint(arena, "{d:.1}ms", .{deltaTime * 1000.0}));
+            });
         });
     });
 }
