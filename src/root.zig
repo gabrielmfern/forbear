@@ -451,58 +451,6 @@ fn endNoop(block: void) void {
     _ = block;
 }
 
-fn putNode(arena: std.mem.Allocator) !struct { ptr: *Node, index: usize } {
-    const self = getContext();
-    std.debug.assert(self.frameMeta != null);
-    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parent| {
-        std.debug.assert(self.frameMeta.?.rootNode != null);
-        std.debug.assert(parent.children == .nodes);
-
-        // How can we make sure that these asserts aren't really necessary? HOw
-        // can we make sure that the compiler will ensure that the parent here
-        // always allows for children?
-        if (parent.children.nodes.items.len > 0) {
-            const newNode = try parent.children.nodes.addOne(arena);
-            newNode.parent = parent;
-            return .{
-                .ptr = newNode,
-                .index = parent.children.nodes.items.len - 1,
-            };
-        } else {
-            var children = try std.ArrayList(Node).initCapacity(arena, 1);
-            defer parent.children = .{ .nodes = children };
-            const newNode = children.addOneAssumeCapacity();
-            newNode.parent = parent;
-            return .{
-                .ptr = newNode,
-                .index = children.items.len - 1,
-            };
-        }
-    } else {
-        if (self.frameMeta.?.rootNode != null) {
-            return error.MultipleRootNodesNotSupported;
-        }
-        self.frameMeta.?.rootNode = Node{
-            .key = undefined,
-
-            .parent = null,
-
-            .position = undefined,
-            .z = undefined,
-            .size = undefined,
-            .maxSize = undefined,
-            .minSize = undefined,
-            .children = undefined,
-
-            .style = undefined,
-        };
-        return .{
-            .ptr = &self.frameMeta.?.rootNode.?,
-            .index = 0,
-        };
-    }
-}
-
 /// A thin wrapper around `element` that includes some aspect ratio handling
 /// definition logic in a way that feels more intuitve
 pub fn image(style: IncompleteStyle, img: *Image) void {
