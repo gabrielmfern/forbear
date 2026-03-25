@@ -81,9 +81,9 @@ fn App() !void {
                 })({
                     forbear.text("Pricing");
                 });
-                try Button(.{
+                (try Button(.{
                     .text = "Try it risk-free",
-                });
+                }))({});
             });
 
             forbear.element(.{
@@ -113,7 +113,7 @@ fn App() !void {
                     })({
                         forbear.text("It doesn't just annoy you. It slows you and your staff down. That's our job now.");
                     });
-                    try Button(.{ .text = "Let us prove it*" });
+                    (try Button(.{ .text = "Let us prove it*" }))({});
                     forbear.element(.{
                         .fontSize = 9.0,
                         .color = black,
@@ -228,7 +228,7 @@ fn App() !void {
                     })({
                         forbear.text("Imagine if you could delegate all these issues to a genie?");
                     });
-                    try Button(.{ .text = "Get a free trial" });
+                    (try Button(.{ .text = "Get a free trial" }))({});
                 });
             });
             const testimonials = [_]struct {
@@ -765,9 +765,15 @@ fn App() !void {
                         forbear.text("Just get the free trial already if you're that interested. You scrolled all the way here.");
                     });
 
-                    // TODO: make component slotting work so we can include the
-                    // "Don't make me beg" sub text here
-                    try Button(.{ .text = "Come on, click on this" });
+                    (try Button(.{ .text = "Come on, click on this" }))({
+                        forbear.element(.{
+                            .fontSize = 9.0,
+                            .color = theme.Colors.muted,
+                            .margin = forbear.Margin.block(6.0).withTop(0.0),
+                        })({
+                            forbear.text("Don't make me beg");
+                        });
+                    });
                 });
             });
             forbear.element(.{

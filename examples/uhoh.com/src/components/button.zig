@@ -6,7 +6,7 @@ pub const ButtonProps = struct {
     sizing: enum { medium, large } = .medium,
 };
 
-pub fn Button(props: ButtonProps) !void {
+pub fn Button(props: ButtonProps) !*const fn (void) void {
     forbear.component("button")({
         const isHovering = try forbear.useState(bool, false);
 
@@ -41,6 +41,7 @@ pub fn Button(props: ButtonProps) !void {
                 .direction = .topToBottom,
             })({
                 forbear.text(props.text);
+                forbear.componentChildrenSlot();
             });
         });
 
@@ -55,4 +56,5 @@ pub fn Button(props: ButtonProps) !void {
             }
         }
     });
+    return forbear.componentChildrenEnd();
 }
