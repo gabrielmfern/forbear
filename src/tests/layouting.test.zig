@@ -997,3 +997,62 @@ test "manually placed elements are not affected by scroll" {
         try std.testing.expectEqual(@as(f32, -100.0), standardNode.position[1]);
     });
 }
+
+test "fixed-width ratio-height children with maxSize don't inflate parent cross-axis" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Simulates the image() pattern: fixed width, ratio height, maxWidth/maxHeight constraints.
+    // Without clamping, the parent sees the unclamped size and inflates its cross-axis height.
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 800 },
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .direction = .leftToRight,
+            })({
+                // Mimics an image: fixed width 400, ratio height 0.75, maxWidth 128, maxHeight 112.
+                // Unclamped size would be (400, 300); clamped should be (128, 96).
+                forbear.element(.{
+                    .width = .{ .fixed = 400 },
+                    .height = .{ .ratio = 0.75 },
+                    .minWidth = 0,
+                    .minHeight = 0,
+                    .maxWidth = 128,
+                    .maxHeight = 112,
+                })({});
+
+                forbear.element(.{
+                    .width = .{ .fixed = 300 },
+                    .height = .{ .ratio = 0.5 },
+                    .minWidth = 0,
+                    .minHeight = 0,
+                    .maxWidth = 128,
+                    .maxHeight = 112,
+                })({});
+            });
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const container = tree.at(root.firstChild.?);
+        const child1 = tree.at(container.firstChild.?);
+        const child2 = tree.at(child1.nextSibling.?);
+
+        // Children should be clamped to their maxWidth, and height follows ratio
+        try std.testing.expectEqual(@as(f32, 128), child1.size[0]);
+        try std.testing.expectEqual(@as(f32, 96), child1.size[1]); // 128 * 0.75
+
+        try std.testing.expectEqual(@as(f32, 128), child2.size[0]);
+        try std.testing.expectEqual(@as(f32, 64), child2.size[1]); // 128 * 0.5
+
+        // The container's cross-axis height should be max(96, 64) = 96, NOT 300
+        try std.testing.expectEqual(@as(f32, 96), container.size[1]);
+    });
+}

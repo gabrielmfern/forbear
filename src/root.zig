@@ -580,18 +580,23 @@ fn elementEnd(block: void) void {
 
     const perviousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
     const node = self.nodeTree.at(perviousNodeIndex);
-    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parentIndex| {
-        const parent = self.nodeTree.at(parentIndex);
-        if (node.style.placement == .standard) {
-            parent.fitChild(node);
-        }
-    }
 
+    // Apply ratios and clamp before fitting into parent so the parent
+    // sees the actual constrained size (not the unclamped value).
     if (node.style.width == .ratio) {
         node.size[0] = node.style.width.ratio * node.size[1];
     }
     if (node.style.height == .ratio) {
         node.size[1] = node.style.height.ratio * node.size[0];
+    }
+    node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
+    node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
+
+    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parentIndex| {
+        const parent = self.nodeTree.at(parentIndex);
+        if (node.style.placement == .standard) {
+            parent.fitChild(node);
+        }
     }
     var childIndexOption = node.firstChild;
     while (childIndexOption) |childIndex| {
@@ -716,6 +721,12 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         else
             std.math.inf(f32),
     };
+
+    // Clamp initial size to [minSize, maxSize] so that fitChild sees correct
+    // values (e.g. image elements with fixed width and ratio height that
+    // exceed their maxWidth/maxHeight constraints).
+    result.ptr.size[0] = @min(@max(result.ptr.size[0], result.ptr.minSize[0]), result.ptr.maxSize[0]);
+    result.ptr.size[1] = @min(@max(result.ptr.size[1], result.ptr.minSize[1]), result.ptr.maxSize[1]);
 
     self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, result.index) catch |err| {
         handleFrameError(err);
