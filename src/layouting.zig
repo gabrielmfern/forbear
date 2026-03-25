@@ -641,7 +641,11 @@ pub fn layout() !*NodeTree {
         while (childIndexOption) |childIndex| {
             const child = context.nodeTree.at(childIndex);
 
-            child.position += node.position + child.style.translate;
+            if (child.style.placement == .manual) {
+                child.position += child.style.translate;
+            } else {
+                child.position += node.position + child.style.translate;
+            }
             if (child.glyphs) |glyphs| {
                 for (glyphs.slice) |*glyph| {
                     glyph.position += child.position;

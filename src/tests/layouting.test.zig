@@ -953,3 +953,47 @@ test "perpendicular clamping respects parent padding" {
         try std.testing.expect(textNode.size[0] <= contentWidth + 0.001);
     });
 }
+
+test "manually placed elements are not affected by scroll" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+                .placement = .{ .manual = .{ 10.0, 20.0 } },
+            })({});
+
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        // Simulate a scroll offset
+        forbear.getContext().effectiveScrollPosition = .{ 0.0, 100.0 };
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const manualNode = tree.at(root.firstChild.?);
+        const standardNode = tree.at(manualNode.nextSibling.?);
+
+        // The manually placed element should be at its manual position, not offset by scroll
+        try std.testing.expectEqual(@as(f32, 10.0), manualNode.position[0]);
+        try std.testing.expectEqual(@as(f32, 20.0), manualNode.position[1]);
+
+        // The standard element should be offset by scroll (root moves by -100)
+        try std.testing.expectEqual(@as(f32, -100.0), standardNode.position[1]);
+    });
+}
