@@ -1293,10 +1293,10 @@ test "layoutDump produces expected output for a simple tree" {
 
         const tree = try layout();
 
-        var buf = std.ArrayList(u8).init(std.testing.allocator);
-        defer buf.deinit();
+        var buf = try std.ArrayList(u8).initCapacity(std.testing.allocator, 256);
+        defer buf.deinit(std.testing.allocator);
 
-        try tree.layoutDump(buf.writer().any());
+        try tree.layoutDump(buf.writer(std.testing.allocator).any());
 
         const output = buf.items;
 
@@ -1332,10 +1332,10 @@ test "layoutDump reports glyph line count" {
 
         const tree = try layout();
 
-        var buf = std.ArrayList(u8).init(std.testing.allocator);
-        defer buf.deinit();
+        var buf = try std.ArrayList(u8).initCapacity(std.testing.allocator, 256);
+        defer buf.deinit(std.testing.allocator);
 
-        try tree.layoutDump(buf.writer().any());
+        try tree.layoutDump(buf.writer(std.testing.allocator).any());
 
         const output = buf.items;
         // The text node should have glyphs reported
@@ -1368,9 +1368,9 @@ test "trace_writer logs propagation through ancestors" {
             });
         });
 
-        var buf = std.ArrayList(u8).init(std.testing.allocator);
-        defer buf.deinit();
-        layouting.trace_writer = buf.writer().any();
+        var buf = try std.ArrayList(u8).initCapacity(std.testing.allocator, 256);
+        defer buf.deinit(std.testing.allocator);
+        layouting.trace_writer = buf.writer(std.testing.allocator).any();
         defer {
             layouting.trace_writer = null;
         }
