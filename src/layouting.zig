@@ -194,8 +194,7 @@ fn updateFittingForAncestorsInDirection(
     if (node.style.placement != .standard) return;
 
     if (trace_writer) |tw| {
-        std.fmt.format(tw, "[fit-propagate] node[{d}] addition={d:.1} dir={s}\n", .{
-            node.index(),
+        std.fmt.format(tw, "[fit-propagate] addition={d:.1} dir={s}\n", .{
             addition,
             @tagName(direction),
         }) catch {};
@@ -218,7 +217,7 @@ fn updateFittingForAncestorsInDirection(
 
         if (trace_writer) |tw| {
             std.fmt.format(tw, "  ancestor[{d}] (dir={s}, overflow={s}, fit={s})\n", .{
-                ancestor.index(),
+                ancestorIndex,
                 @tagName(ancestor.style.direction),
                 @tagName(ancestor.style.overflow),
                 if (ancestor.style.getPreferredSize(direction) == .fit) "true" else "false",

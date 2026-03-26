@@ -496,7 +496,7 @@ pub const NodeTree = struct {
 
     pub fn layoutDump(self: *const @This(), writer: std.io.AnyWriter) !void {
         if (self.list.items.len > 0) {
-            try self.list.items[0].layoutDump(writer, 0);
+            try self.list.items[0].layoutDump(writer, 0, 0);
         }
     }
 
@@ -512,7 +512,6 @@ pub const NodeTree = struct {
 
         var node = Node{
             .tree = self,
-            .treeIndex = index,
 
             .parent = parentOpt,
             .firstChild = null,
@@ -585,7 +584,6 @@ pub const NodeTree = struct {
 
 pub const Node = struct {
     tree: *NodeTree,
-    treeIndex: usize,
 
     parent: ?usize = null,
     firstChild: ?usize = null,
@@ -699,10 +697,6 @@ pub const Node = struct {
         }
     }
 
-    pub fn index(self: *const @This()) usize {
-        return self.treeIndex;
-    }
-
     fn formatSizing(sizing: Sizing) [24]u8 {
         var buf: [24]u8 = undefined;
         @memset(&buf, 0);
@@ -724,9 +718,7 @@ pub const Node = struct {
         }
     }
 
-    pub fn layoutDump(self: *const @This(), writer: std.io.AnyWriter, indent: usize) !void {
-        const idx = self.index();
-
+    pub fn layoutDump(self: *const @This(), writer: std.io.AnyWriter, idx: usize, indent: usize) !void {
         // Line 1: index, direction, overflow, placement
         try writeIndent(writer, indent);
         try std.fmt.format(writer, "[{d}] dir={s}  overflow={s}  placement={s}\n", .{
@@ -797,13 +789,13 @@ pub const Node = struct {
         var childIdx = self.firstChild;
         while (childIdx) |ci| {
             const child = self.tree.at(ci);
-            try child.layoutDump(writer, indent + 1);
+            try child.layoutDump(writer, ci, indent + 1);
             childIdx = child.nextSibling;
         }
     }
 
-    pub fn layoutDumpStderr(self: *const @This(), indent: usize) void {
-        self.layoutDump(std.io.getStdErr().writer().any(), indent) catch {};
+    pub fn layoutDumpStderr(self: *const @This(), idx: usize, indent: usize) void {
+        self.layoutDump(std.io.getStdErr().writer().any(), idx, indent) catch {};
     }
 
     pub fn setMinSize(self: *@This(), direction: Direction, size: f32) void {

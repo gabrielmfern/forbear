@@ -1267,3 +1267,123 @@ test "fixed-width ratio-height children with maxSize don't inflate parent cross-
         try std.testing.expectEqual(@as(f32, 96), container.size[1]);
     });
 }
+
+test "layoutDump produces expected output for a simple tree" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 100 },
+            .padding = .all(10),
+            .direction = .leftToRight,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 80 },
+                .height = .{ .fixed = 40 },
+                .margin = .all(5),
+            })({});
+        });
+
+        const tree = try layout();
+
+        var buf = std.ArrayList(u8).init(std.testing.allocator);
+        defer buf.deinit();
+
+        try tree.layoutDump(buf.writer().any());
+
+        const output = buf.items;
+
+        // Verify the dump contains key structural markers
+        try std.testing.expect(std.mem.indexOf(u8, output, "[0]") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "[1]") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "dir=leftToRight") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "fixed(200.0)") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "fixed(80.0)") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "padding=x[10.0,10.0] y[10.0,10.0]") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "margin=x[5.0,5.0] y[5.0,5.0]") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "fittingBase:") != null);
+    });
+}
+
+test "layoutDump reports glyph line count" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .fit,
+            .textWrapping = .word,
+        })({
+            forbear.text("Hello world, this is a test of wrapping text output");
+        });
+
+        const tree = try layout();
+
+        var buf = std.ArrayList(u8).init(std.testing.allocator);
+        defer buf.deinit();
+
+        try tree.layoutDump(buf.writer().any());
+
+        const output = buf.items;
+        // The text node should have glyphs reported
+        try std.testing.expect(std.mem.indexOf(u8, output, "glyphs=") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "lines)") != null);
+    });
+}
+
+test "trace_writer logs propagation through ancestors" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .fit,
+            .height = .fit,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .fit,
+                .textWrapping = .word,
+            })({
+                forbear.text("Hello world, this is a test of wrapping text for trace output");
+            });
+        });
+
+        var buf = std.ArrayList(u8).init(std.testing.allocator);
+        defer buf.deinit();
+        layouting.trace_writer = buf.writer().any();
+        defer {
+            layouting.trace_writer = null;
+        }
+
+        _ = try layout();
+
+        const output = buf.items;
+        // Should contain entry markers
+        try std.testing.expect(std.mem.indexOf(u8, output, "[fit-propagate]") != null);
+        // Should contain ancestor visit
+        try std.testing.expect(std.mem.indexOf(u8, output, "ancestor[") != null);
+        // Should contain a STOP reason
+        const hasStop = std.mem.indexOf(u8, output, "STOP:") != null;
+        try std.testing.expect(hasStop);
+    });
+}
