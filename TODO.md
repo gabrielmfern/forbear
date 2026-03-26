@@ -39,7 +39,7 @@ missing things for the entire uhoh.com website:
     - lazily decompressing images causes huge frame drops for large images
     - we should probably have `forbear.image` instead of always using backgroundImage, and have its size calculated from the aspect ratio while filling up the parent
 - [x] support for filter: grayscale()
-- [ ] element wrapping
+- [x] element wrapping
 - [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
     - is having lots of them bad? I understand having no type-safety though
 - [ ] svg support
