@@ -414,22 +414,15 @@ fn currentComponentResolutionState() ?*ComponentResolutionState {
 pub fn useState(T: type, initialValue: T) *T {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
-    const arena = self.frameMeta.?.arena;
 
-    const errDummy = struct {
-        fn make(a: std.mem.Allocator, v: T) *T {
-            const dummy = a.create(T) catch @panic("forbear: out of memory allocating dummy state");
-            dummy.* = v;
-            return dummy;
-        }
-    }.make;
-
-    if (self.frameMeta.?.err != null) return errDummy(arena, initialValue);
+    if (self.frameMeta.?.err != null) {
+        return undefined;
+    }
 
     if (currentComponentResolutionState()) |state| {
         const stateResult = self.componentStates.getOrPut(state.key) catch |err| {
-            handleFrameError(err);
-            return errDummy(arena, initialValue);
+            std.log.err("Failed to get or put a new component state {}", .{err});
+            @panic("Failed to get or put a new component state");
         };
         defer state.useStateCursor += 1;
         if (stateResult.found_existing) {
@@ -440,12 +433,12 @@ pub fn useState(T: type, initialValue: T) *T {
             stateResult.value_ptr.* = .empty;
         }
         const buffer = self.allocator.alignedAlloc(u8, stateAlignment, @sizeOf(T)) catch |err| {
-            handleFrameError(err);
-            return errDummy(arena, initialValue);
+            std.log.err("Failed to allocate new state {}", .{err});
+            @panic("Failed to allocate new state");
         };
         stateResult.value_ptr.*.append(self.allocator, buffer) catch |err| {
             handleFrameError(err);
-            return errDummy(arena, initialValue);
+            return @ptrCast(@alignCast(buffer));
         };
         @memcpy(
             stateResult.value_ptr.*.items[state.useStateCursor],
@@ -456,8 +449,7 @@ pub fn useState(T: type, initialValue: T) *T {
         if (!builtin.is_test) {
             std.log.err("You might be calling a hook (useState) outside of a component, and forbear cannot track things outside of one.", .{});
         }
-        handleFrameError(error.NoComponentContext);
-        return errDummy(arena, initialValue);
+        @panic("No component resolution state found, you must be calling useState outside of a component, otherwise this is a bug.");
     }
 }
 
@@ -870,14 +862,10 @@ pub fn handleFrameError(err: anyerror) void {
 
     if (builtin.is_test) return;
 
-    var address_buffer: [32]usize = undefined;
-    var stack_trace = std.builtin.StackTrace{
-        .index = 0,
-        .instruction_addresses = address_buffer[0..],
-    };
-    std.debug.captureStackTrace(@returnAddress(), &stack_trace);
+    var stackTrace: std.builtin.StackTrace = undefined;
+    std.debug.captureStackTrace(@returnAddress(), &stackTrace);
     std.debug.print("There was an error during frame's UI mounting stage: ", .{});
-    std.debug.dumpStackTrace(stack_trace);
+    std.debug.dumpStackTrace(stackTrace);
 }
 
 fn componentEnd(block: void) void {
