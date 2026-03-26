@@ -110,6 +110,11 @@ pub const TextWrapping = enum {
     none,
 };
 
+pub const Overflow = enum {
+    visible,
+    wrap,
+};
+
 pub const Padding = struct {
     x: Vec2,
     y: Vec2,
@@ -249,6 +254,7 @@ pub const Style = struct {
     textWrapping: TextWrapping,
     cursor: Cursor,
 
+    overflow: Overflow,
     placement: Placement,
     zIndex: ?u16 = null,
 
@@ -339,8 +345,10 @@ pub const IncompleteStyle = struct {
     fontSize: ?f32 = null,
     lineHeight: ?f32 = null,
     textWrapping: ?TextWrapping = null,
+
     cursor: ?Cursor = null,
 
+    overflow: ?Overflow = null,
     placement: Placement = .standard,
     zIndex: ?u16 = null,
 
@@ -380,6 +388,7 @@ pub const IncompleteStyle = struct {
             .textWrapping = self.textWrapping orelse base.textWrapping,
             .cursor = self.cursor orelse base.cursor,
 
+            .overflow = self.overflow orelse .visible,
             .placement = self.placement,
             .zIndex = self.zIndex,
 
@@ -421,11 +430,161 @@ pub const Glyphs = struct {
     slice: []LayoutGlyph,
 };
 
-pub const Node = struct {
-    pub const Children = union(enum) {
-        nodes: std.ArrayList(Node),
-        glyphs: Glyphs,
+/// Utilizies a flat tree structure where ndoes can reference one another by
+/// using indices, this way keeping stable references without using pointers.
+pub const NodeTree = struct {
+    list: std.ArrayList(Node),
+
+    pub const empty = @This(){ .list = .empty };
+
+    pub const Walker = struct {
+        start: usize,
+        current: ?usize,
+        tree: *const NodeTree,
+
+        pub fn reset(self: *@This()) !void {
+            self.current = null;
+        }
+
+        fn nextOutside(self: *@This(), index: usize) ?usize {
+            const node = self.tree.at(index);
+            if (node.nextSibling) |nextSibling| {
+                return nextSibling;
+            } else if (node.parent) |parentIndex| {
+                return self.nextOutside(parentIndex);
+            } else {
+                return null;
+            }
+        }
+
+        pub fn next(self: *@This()) ?*Node {
+            if (self.current) |current| {
+                const node = self.tree.at(current);
+                if (node.firstChild) |firstChild| {
+                    self.current = firstChild;
+                } else {
+                    self.current = self.nextOutside(current);
+                }
+            } else {
+                self.current = self.start;
+            }
+
+            const idx = self.current orelse return null;
+            return self.tree.at(idx);
+        }
     };
+
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+        self.list.deinit(allocator);
+    }
+
+    pub fn clear(self: *@This()) void {
+        self.list.clearRetainingCapacity();
+    }
+
+    pub fn walk(self: *@This()) Walker {
+        return Walker{
+            .start = 0,
+            .current = null,
+            .tree = self,
+        };
+    }
+
+    pub fn at(self: @This(), index: usize) *Node {
+        return &self.list.items[index];
+    }
+
+    pub fn putNode(
+        self: *@This(),
+        allocator: std.mem.Allocator,
+        parentOpt: ?usize,
+    ) !struct { ptr: *Node, index: usize } {
+        const index = self.list.items.len;
+        if (index != 0 and parentOpt == null) {
+            return error.MultipleRootsAreNotAllowed;
+        }
+
+        var node = Node{
+            .tree = self,
+
+            .parent = parentOpt,
+            .firstChild = null,
+            .lastChild = null,
+            .previousSibling = null,
+            .nextSibling = null,
+
+            .key = undefined,
+
+            .position = undefined,
+            .z = undefined,
+            .size = undefined,
+            .maxSize = undefined,
+            .minSize = undefined,
+
+            .style = undefined,
+        };
+        if (parentOpt) |parentIndex| {
+            const parent = self.at(parentIndex);
+            if (parent.lastChild) |old_last| {
+                self.at(old_last).nextSibling = index;
+            }
+            node.previousSibling = parent.lastChild;
+            if (parent.firstChild == null) {
+                parent.firstChild = index;
+            }
+            parent.lastChild = index;
+        }
+        try self.list.append(allocator, node);
+        return .{ .ptr = self.at(index), .index = index };
+    }
+
+    test {
+        const gpa = std.testing.allocator;
+        var tree = NodeTree.empty;
+        defer tree.deinit(gpa);
+
+        _ = try tree.putNode(gpa, null); // root 0
+        _ = try tree.putNode(gpa, 0); // 1
+        _ = try tree.putNode(gpa, 0); // 2
+        _ = try tree.putNode(gpa, 1); // 3
+        _ = try tree.putNode(gpa, 0); // 4
+        _ = try tree.putNode(gpa, 1); // 5
+        _ = try tree.putNode(gpa, 0); // 6
+        _ = try tree.putNode(gpa, 0); // 7
+
+        var walker = tree.walk();
+        for (0..10) |_| {
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(0, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(1, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(3, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(5, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(2, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(4, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(6, walker.current);
+            try std.testing.expect(walker.next() != null);
+            try std.testing.expectEqual(7, walker.current);
+            try std.testing.expect(walker.next() == null);
+            try std.testing.expectEqual(null, walker.current);
+        }
+    }
+};
+
+pub const Node = struct {
+    tree: *NodeTree,
+
+    parent: ?usize = null,
+    firstChild: ?usize = null,
+    lastChild: ?usize = null,
+    nextSibling: ?usize = null,
+    previousSibling: ?usize = null,
+    glyphs: ?Glyphs = null,
 
     key: u64,
 
@@ -434,7 +593,7 @@ pub const Node = struct {
     size: Vec2,
     maxSize: Vec2,
     minSize: Vec2,
-    children: Children,
+    // children: Children,
 
     style: Style,
 
@@ -443,17 +602,10 @@ pub const Node = struct {
         return preferredSize != .fixed and preferredSize != .percentage and self.style.getMinSize(direction) == null;
     }
 
-    pub fn applyRatios(self: *@This()) void {
-        if (self.style.width == .ratio) {
-            self.size[0] = self.style.width.ratio * self.size[1];
-        }
-        if (self.style.height == .ratio) {
-            self.size[1] = self.style.height.ratio * self.size[0];
-        }
-    }
-
     pub fn fitChild(self: *@This(), child: *const Node) void {
         if (child.style.placement != .manual) {
+            const wraps = self.style.overflow == .wrap and self.style.direction == .leftToRight;
+
             inline for (Direction.array) |fitDirection| {
                 const preferredSize = self.style.getPreferredSize(fitDirection);
                 const layoutDirection = self.style.direction;
@@ -464,15 +616,34 @@ pub const Node = struct {
                 const minContribution = margins + child.getMinSize(fitDirection);
 
                 if (layoutDirection == fitDirection) {
-                    if (preferredSize == .fit) {
-                        self.addSize(fitDirection, contribution);
-                    }
-                    if (self.shouldFitMin(fitDirection)) {
-                        self.addMinSize(fitDirection, minContribution);
+                    if (wraps) {
+                        // With wrapping, inline-axis min is the widest single
+                        // child (any child could end up alone on a line).
+                        if (preferredSize == .fit) {
+                            self.setSize(fitDirection, @max(
+                                self.getSize(fitDirection),
+                                contribution + self.fittingBase(fitDirection),
+                            ));
+                        }
+                        if (self.shouldFitMin(fitDirection)) {
+                            self.setMinSize(fitDirection, @max(
+                                self.getMinSize(fitDirection),
+                                minContribution + self.fittingBase(fitDirection),
+                            ));
+                        }
+                    } else {
+                        if (preferredSize == .fit) {
+                            // TODO: ensure the max and min sizes here
+                            self.addSize(fitDirection, contribution);
+                        }
+                        if (self.shouldFitMin(fitDirection)) {
+                            self.addMinSize(fitDirection, minContribution);
+                        }
                     }
                 } else {
                     // cross axis fitting
                     if (preferredSize == .fit) {
+                        // TODO: ensure the max and min sizes here
                         self.setSize(fitDirection, @max(
                             contribution + self.fittingBase(fitDirection),
                             self.getSize(fitDirection),
@@ -504,37 +675,19 @@ pub const Node = struct {
             std.debug.print("  ", .{});
         }
         std.debug.print("node (key: {}, pos: {}, size: {}, z: {})\n", .{ self.key, self.position, self.size, self.z });
-        switch (self.children) {
-            .nodes => |nodes| {
-                for (nodes.items) |*child| {
-                    child.debugPrint(indent + 1);
+        if (self.glyphs) |glyphs| {
+            for (glyphs.slice) |glyph| {
+                for (0..indent + 1) |_| {
+                    std.debug.print("  ", .{});
                 }
-            },
-            .glyphs => |glyphs| {
-                for (glyphs.slice) |glyph| {
-                    for (0..indent) |_| {
-                        std.debug.print("  ", .{});
-                    }
-                    std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
-                }
-            },
+                std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
+            }
         }
-    }
-
-    pub fn free(self: @This(), allocator: std.mem.Allocator) void {
-        switch (self.children) {
-            .nodes => |nodes| {
-                for (nodes.items) |*child| {
-                    child.free(allocator);
-                }
-                nodes.deinit(allocator);
-            },
-            .glyphs => |glyphs| {
-                for (glyphs.slice) |*glyph| {
-                    allocator.free(glyph.text);
-                }
-                allocator.free(glyphs.slice);
-            },
+        var childIndex = self.firstChild;
+        while (childIndex) |idx| {
+            const child = self.tree.at(idx);
+            child.debugPrint(indent + 1);
+            childIndex = child.nextSibling;
         }
     }
 

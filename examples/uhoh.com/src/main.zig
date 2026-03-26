@@ -150,7 +150,7 @@ fn App() !void {
                     forbear.element(.{
                         .direction = .leftToRight,
                         .alignment = .centerLeft,
-                        .width = .grow,
+                        .width = .{ .percentage = 1.0 / 3.0 },
                         .fontWeight = 500,
                         .fontSize = 12.0,
                         .padding = .inLine(7.5),
@@ -265,41 +265,39 @@ fn App() !void {
                 .width = .grow,
                 .maxWidth = 810.0,
                 .alignment = .topCenter,
+                .direction = .topToBottom,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
                 forbear.element(.{
-                    .direction = .topToBottom,
-                    .alignment = .topCenter,
+                    .fontWeight = 700,
+                    .fontSize = 30,
+                    .margin = forbear.Margin.top(15.0).withBottom(18.75),
                 })({
-                    forbear.element(.{
-                        .fontWeight = 700,
-                        .fontSize = 30,
-                        .margin = forbear.Margin.top(15.0).withBottom(18.75),
-                    })({
-                        forbear.text("Don't take our word for it.");
-                    });
+                    forbear.text("Don't take our word for it.");
+                });
+                forbear.element(.{
+                    .overflow = .wrap,
+                    .width = .grow,
+                })({
                     for (testimonials) |testimonial| {
                         forbear.element(.{
-                            .width = .grow,
+                            .width = .{ .percentage = 1.0 / 3.0 },
+                            .fontSize = 11.25,
+                            .lineHeight = 1.4,
+                            .padding = .all(13.5),
+                            .margin = forbear.Margin.bottom(12.0).withInLine(10.0),
                             .borderRadius = 12.0,
                             .borderColor = black,
+                            .direction = .topToBottom,
                             .borderWidth = .all(0.75),
-                            .padding = .all(13.5),
-                            .margin = forbear.Margin.block(0.0).withBottom(12.0),
-                            .direction = .leftToRight,
                         })({
                             forbear.image(.{
                                 .width = .{ .fixed = 80.0 },
                                 .height = .{ .fixed = 80.0 },
                                 .borderRadius = 12.0,
-                                .margin = forbear.Margin.inLine(0.0).withRight(10.5),
+                                .margin = .right(10.5),
                             }, try forbear.useImage(testimonial.imageId));
-                            forbear.element(.{
-                                .fontSize = 11.25,
-                                .lineHeight = 1.4,
-                            })({
-                                forbear.text(testimonial.body);
-                            });
+                            forbear.text(testimonial.body);
                         });
                     }
                 });
@@ -315,33 +313,33 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
-                .padding = forbear.Padding.top(22.5).withBottom(30.0),
-                .background = .{ .color = theme.Colors.soft },
+                .padding = .all(15.0),
+                .borderWidth = .all(1.5),
+                .borderColor = black,
+                .borderRadius = 9.0,
+                .direction = .topToBottom,
             })({
                 forbear.element(.{
-                    .direction = .topToBottom,
+                    .fontWeight = 700,
+                    .width = .grow,
+                    .alignment = .center,
+                    .fontSize = 18.0,
+                    .margin = forbear.Margin.block(0.0).withBottom(13.5),
                 })({
-                    forbear.element(.{
-                        .fontWeight = 600,
-                        .fontSize = 13.5,
-                        .margin = forbear.Margin.block(0.0).withBottom(13.5),
-                    })({
-                        forbear.text("Our partners");
-                    });
-                    forbear.element(.{
-                        .direction = .leftToRight,
-                        .alignment = .centerLeft,
-                    })({
-                        for (logos) |id| {
-                            forbear.image(.{
-                                .maxWidth = 128,
-                                .maxHeight = 112,
-                                .filter = .grayscale,
-                                .margin = forbear.Margin.right(13.5),
-                            }, try forbear.useImage(id));
-                        }
-                    });
+                    forbear.text("Our partners");
+                });
+                forbear.element(.{
+                    .direction = .leftToRight,
+                    .alignment = .center,
+                })({
+                    for (logos) |id| {
+                        forbear.image(.{
+                            .maxWidth = 128,
+                            .maxHeight = 112,
+                            .filter = .grayscale,
+                            .margin = forbear.Margin.right(13.5),
+                        }, try forbear.useImage(id));
+                    }
                 });
             });
 
@@ -350,30 +348,26 @@ fn App() !void {
                 .maxWidth = 810.0,
                 .alignment = .topCenter,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
+                .direction = .topToBottom,
             })({
+                forbear.image(.{
+                    .width = .grow,
+                    .maxWidth = 600,
+                    .blendMode = .multiply,
+                }, try forbear.useImage("uhoh-solution"));
                 forbear.element(.{
-                    .direction = .topToBottom,
+                    .fontWeight = 700,
+                    .fontSize = 22.5,
+                    .margin = forbear.Margin.block(13.5).withBottom(7.5),
+                })({
+                    forbear.text("We're here to reinvent how tech gets done.");
+                });
+                forbear.element(.{
+                    .fontSize = 12.0,
+                    .color = theme.Colors.muted,
                     .alignment = .topCenter,
                 })({
-                    forbear.image(.{
-                        .width = .grow,
-                        .maxWidth = 600,
-                        .blendMode = .multiply,
-                    }, try forbear.useImage("uhoh-solution"));
-                    forbear.element(.{
-                        .fontWeight = 700,
-                        .fontSize = 22.5,
-                        .margin = forbear.Margin.block(13.5).withBottom(7.5),
-                    })({
-                        forbear.text("We're here to reinvent how tech gets done.");
-                    });
-                    forbear.element(.{
-                        .fontSize = 12.0,
-                        .color = theme.Colors.muted,
-                        .alignment = .topCenter,
-                    })({
-                        forbear.text("We're replacing clunky IT with clean, fast, and flexible support. Built for startups and teams that just want things to work.");
-                    });
+                    forbear.text("We're replacing clunky IT with clean, fast, and flexible support. Built for startups and teams that just want things to work.");
                 });
             });
 
@@ -898,9 +892,10 @@ fn renderingMain(
                 std.log.debug("[uhoh-layout-debug] frame={} before layout viewport={any} dpi={any}", .{ frameIndex, renderer.viewportSize(), window.dpi });
             }
 
-            const rootNode = try forbear.layout();
+            const rootTree = try forbear.layout();
             if (shouldLog) {
                 const layoutMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - layoutStartNs)) / 1_000_000.0;
+                const rootNode = rootTree.at(0);
                 std.log.debug(
                     "[uhoh-layout-debug] frame={} after layout: {d:.3}ms rootPos={any} rootSize={any}",
                     .{ frameIndex, layoutMs, rootNode.position, rootNode.size },
@@ -911,7 +906,7 @@ fn renderingMain(
             if (shouldLog) {
                 drawStartNs = std.time.nanoTimestamp();
             }
-            try renderer.drawFrame(arena, rootNode, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
+            try renderer.drawFrame(arena, rootTree, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
             if (shouldLog) {
                 const drawMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - drawStartNs)) / 1_000_000.0;
                 std.log.debug("[uhoh-layout-debug] frame={} after drawFrame: {d:.3}ms", .{ frameIndex, drawMs });

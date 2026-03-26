@@ -1,1209 +1,1268 @@
 const std = @import("std");
 
-const wrap = @import("../layouting.zig").wrap;
-const applyRatios = @import("../layouting.zig").applyRatios;
-const growAndShrink = @import("../layouting.zig").growAndShrink;
-const fit = @import("../layouting.zig").fit;
 const layout = @import("../layouting.zig").layout;
-const Node = @import("../node.zig").Node;
-const Glyphs = @import("../node.zig").Glyphs;
-const IncompleteStyle = @import("../node.zig").IncompleteStyle;
-const Sizing = @import("../node.zig").Sizing;
-const Direction = @import("../node.zig").Direction;
-const BaseStyle = @import("../node.zig").BaseStyle;
-const LayoutGlyph = @import("../node.zig").LayoutGlyph;
-const Alignment = @import("../node.zig").Alignment;
-const TextWrapping = @import("../node.zig").TextWrapping;
-const forbear = @import("../root.zig");
 const utilities = @import("utilities.zig");
-
+const forbear = @import("../root.zig");
 const Vec2 = @Vector(2, f32);
 
-fn testWrapConfiguration(configuration: struct {
-    mode: TextWrapping,
-    alignment: Alignment,
-    lineWidth: f32,
-    lineHeight: f32,
-    glyphs: []LayoutGlyph,
-    expectedPositions: []const Vec2,
-}) !void {
-    std.debug.assert(configuration.expectedPositions.len == configuration.glyphs.len);
-    const allocator = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
+test "wrapped text propagates height upward" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
 
-    var totalAdvanceX: f32 = 0.0;
-    for (configuration.glyphs) |glyph| {
-        totalAdvanceX += glyph.advance[0];
-    }
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
 
-    var node = Node{
-        .key = 1,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ configuration.lineWidth, configuration.lineHeight },
-        .minSize = .{ 0.0, 20.0 },
-        .maxSize = .{ totalAdvanceX, configuration.lineHeight * @as(f32, @floatFromInt(configuration.glyphs.len)) },
-        .children = .{
-            .glyphs = Glyphs{
-                .slice = configuration.glyphs,
-                .lineHeight = configuration.lineHeight,
-            },
-        },
-        .style = (IncompleteStyle{
-            .alignment = configuration.alignment,
-        }).completeWith(BaseStyle{
-            .font = undefined,
-            .color = .{ 0.0, 0.0, 0.0, 1.0 },
-            .fontSize = 16,
-            .fontWeight = 400,
-            .lineHeight = 1.0,
-            .textWrapping = configuration.mode,
-            .blendMode = .normal,
-            .cursor = .default,
-        }),
-    };
+    const arena = arenaAllocator.allocator();
 
-    try wrap(arenaAllocator, &node);
+    try forbear.frame(try utilities.frameMeta(arena))({
+        var textNode: *forbear.Node = undefined;
 
-    const glyphPositions = try arenaAllocator.alloc(Vec2, configuration.glyphs.len);
-    for (configuration.glyphs, 0..) |glyph, i| {
-        glyphPositions[i] = glyph.position;
-    }
-    try std.testing.expectEqualDeep(configuration.expectedPositions, glyphPositions);
-}
-
-const TestChild = struct {
-    width: Sizing = .fit,
-    height: Sizing = .fit,
-    size: Vec2,
-    minSize: Vec2 = .{ 0.0, 0.0 },
-    maxSize: Vec2 = .{ std.math.inf(f32), std.math.inf(f32) },
-};
-
-fn testGrowAndShrinkConfiguration(configuration: struct {
-    direction: Direction,
-    parentSize: Vec2,
-    children: []const TestChild,
-    expectedSizes: []const Vec2,
-}) !void {
-    std.debug.assert(configuration.children.len == configuration.expectedSizes.len);
-    const allocator = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, configuration.children.len);
-    for (configuration.children, 0..) |child, i| {
-        children.appendAssumeCapacity(Node{
-            .key = @intCast(i),
-            .position = .{ 0.0, 0.0 },
-            .z = 0,
-            .size = child.size,
-            .minSize = child.minSize,
-            .maxSize = child.maxSize,
-            .children = .{ .nodes = .empty },
-            .style = (IncompleteStyle{
-                .width = child.width,
-                .height = child.height,
-            }).completeWith(utilities.shallowBaseStyle),
-        });
-    }
-
-    var parent = Node{
-        .key = 999,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = configuration.parentSize,
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = configuration.parentSize,
-        .children = .{ .nodes = children },
-        .style = (IncompleteStyle{
-            .direction = configuration.direction,
-        }).completeWith(utilities.shallowBaseStyle),
-    };
-
-    try growAndShrink(arenaAllocator, &parent);
-
-    const actualSizes = try arenaAllocator.alloc(Vec2, configuration.children.len);
-    for (parent.children.nodes.items, 0..) |child, i| {
-        actualSizes[i] = child.size;
-    }
-    std.log.debug("Expecting {any}", .{configuration.expectedSizes});
-    std.log.debug("Finding {any}", .{actualSizes});
-    try std.testing.expectEqualDeep(configuration.expectedSizes, actualSizes);
-}
-
-test "growAndShrink - single grow child fills remaining space horizontally" {
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 100.0, 50.0 },
-        .children = &.{
-            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 100.0, 50.0 },
-        },
-    });
-}
-
-test "growAndShrink - all grow children at maxSize with remaining space" {
-    // Both grow children reach maxSize (40 each) but parent is 200 wide,
-    // leaving 120 remaining. The loop must terminate even though no child
-    // can grow further.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 200.0, 50.0 },
-        .children = &.{
-            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
-            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 40.0, 50.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 40.0, 50.0 },
-            .{ 40.0, 50.0 },
-        },
-    });
-}
-
-test "growAndShrink - grow child clamped by maxSize" {
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 200.0, 50.0 },
-        .children = &.{
-            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 80.0, 50.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 80.0, 50.0 },
-        },
-    });
-}
-
-test "growAndShrink - grow child respects minSize when parent is small" {
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 100.0, 50.0 },
-        .children = &.{
-            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 60.0, 0.0 } },
-            .{ .width = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 60.0, 50.0 },
-            .{ 80.0, 50.0 },
-        },
-    });
-}
-
-test "growAndShrink - two grow children split space equally" {
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 200.0, 50.0 },
-        .children = &.{
-            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
-            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 100.0, 50.0 },
-            .{ 100.0, 50.0 },
-        },
-    });
-}
-
-test "growAndShrink - two grow children with different maxSize" {
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 200.0, 50.0 },
-        .children = &.{
-            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 60.0, 50.0 } },
-            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 60.0, 50.0 },
-            .{ 140.0, 50.0 },
-        },
-    });
-}
-
-test "growAndShrink - shrink respects minSize" {
-    // Two fixed children that together exceed parent width; shrink should
-    // reduce them but not below their minSize.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 100.0, 50.0 },
-        .children = &.{
-            .{ .width = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
-            .{ .width = .{ .fixed = 80.0 }, .size = .{ 80.0, 50.0 }, .minSize = .{ 50.0, 0.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 50.0, 50.0 },
-            .{ 50.0, 50.0 },
-        },
-    });
-}
-
-test "growAndShrink - grow vertically with maxSize constraint" {
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .topToBottom,
-        .parentSize = .{ 100.0, 300.0 },
-        .children = &.{
-            .{ .height = .grow, .size = .{ 100.0, 0.0 }, .maxSize = .{ 100.0, 120.0 } },
-            .{ .height = .grow, .size = .{ 100.0, 0.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 100.0, 120.0 },
-            .{ 100.0, 180.0 },
-        },
-    });
-}
-
-test "growAndShrink - grow with both minSize and maxSize" {
-    // Three grow children: one clamped by maxSize, one has a minSize floor,
-    // one unconstrained. Parent has 300 width.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 300.0, 50.0 },
-        .children = &.{
-            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .maxSize = .{ 50.0, 50.0 } },
-            .{ .width = .grow, .size = .{ 0.0, 50.0 }, .minSize = .{ 80.0, 0.0 } },
-            .{ .width = .grow, .size = .{ 0.0, 50.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 50.0, 50.0 },
-            .{ 125.0, 50.0 },
-            .{ 125.0, 50.0 },
-        },
-    });
-}
-
-test "growAndShrink - shrink with asymmetric minSize" {
-    // Two children overflow by 80. One has a high minSize so the other must
-    // absorb more of the shrink.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 120.0, 50.0 },
-        .children = &.{
-            .{ .width = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 90.0, 0.0 } },
-            .{ .width = .{ .fixed = 100.0 }, .size = .{ 100.0, 50.0 }, .minSize = .{ 20.0, 0.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 90.0, 50.0 },
-            .{ 30.0, 50.0 },
-        },
-    });
-}
-
-test "growAndShrink - cross-axis grow clamped by maxSize" {
-    // Direction is leftToRight, so cross-axis is height. Child has
-    // preferredHeight = .grow, which should expand to parent height but
-    // be clamped by maxSize.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 200.0, 100.0 },
-        .children = &.{
-            .{ .width = .{ .fixed = 200.0 }, .height = .grow, .size = .{ 200.0, 30.0 }, .maxSize = .{ 200.0, 60.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 200.0, 60.0 },
-        },
-    });
-}
-
-test "growAndShrink - cross-axis grow respects minSize" {
-    // Direction is topToBottom, cross-axis is width. Child has
-    // preferredWidth = .grow with a minSize larger than parent — minSize wins.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .topToBottom,
-        .parentSize = .{ 80.0, 200.0 },
-        .children = &.{
-            .{ .height = .{ .fixed = 200.0 }, .width = .grow, .size = .{ 50.0, 200.0 }, .minSize = .{ 100.0, 0.0 }, .maxSize = .{ 200.0, 200.0 } },
-        },
-        .expectedSizes = &.{
-            .{ 100.0, 200.0 },
-        },
-    });
-}
-
-test "growAndShrink - horizontal ratio uses cross-axis grow before remaining split" {
-    // Child 0 gets its height from cross-axis grow and then derives width from
-    // ratio. That derived width must be subtracted before grow children split
-    // the remaining main-axis space.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 300.0, 100.0 },
-        .children = &.{
-            .{
-                .width = .{ .ratio = 0.2 },
-                .height = .grow,
-                .size = .{ 0.0, 0.0 },
-            },
-            .{
-                .width = .grow,
-                .height = .grow,
-                .size = .{ 0.0, 0.0 },
-            },
-        },
-        .expectedSizes = &.{
-            .{ 20.0, 100.0 },
-            .{ 280.0, 100.0 },
-        },
-    });
-}
-
-test "growAndShrink - vertical ratio uses cross-axis grow before remaining split" {
-    // Mirror case for topToBottom: child 0 gets width from cross-axis grow and
-    // then derives height from ratio before the remaining height is allocated.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .topToBottom,
-        .parentSize = .{ 120.0, 300.0 },
-        .children = &.{
-            .{
-                .width = .grow,
-                .height = .{ .ratio = 0.5 },
-                .size = .{ 0.0, 0.0 },
-            },
-            .{
-                .width = .grow,
-                .height = .grow,
-                .size = .{ 0.0, 0.0 },
-            },
-        },
-        .expectedSizes = &.{
-            .{ 120.0, 60.0 },
-            .{ 120.0, 240.0 },
-        },
-    });
-}
-
-test "growAndShrink - horizontal ratio participates in shrink distribution" {
-    // Child 0 derives width from ratio after cross-axis grow. Since total width
-    // overflows the parent, shrink must include that derived width.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .leftToRight,
-        .parentSize = .{ 40.0, 100.0 },
-        .children = &.{
-            .{
-                .width = .{ .ratio = 0.5 },
-                .height = .grow,
-                .size = .{ 0.0, 0.0 },
-            },
-            .{
-                .width = .{ .fixed = 30.0 },
-                .height = .grow,
-                .size = .{ 30.0, 0.0 },
-            },
-        },
-        .expectedSizes = &.{
-            .{ 20.0, 100.0 },
-            .{ 20.0, 100.0 },
-        },
-    });
-}
-
-test "growAndShrink - vertical ratio participates in shrink distribution" {
-    // Mirror case for topToBottom.
-    try testGrowAndShrinkConfiguration(.{
-        .direction = .topToBottom,
-        .parentSize = .{ 100.0, 50.0 },
-        .children = &.{
-            .{
-                .width = .grow,
-                .height = .{ .ratio = 0.8 },
-                .size = .{ 0.0, 0.0 },
-            },
-            .{
-                .width = .grow,
-                .height = .{ .fixed = 30.0 },
-                .size = .{ 0.0, 30.0 },
-            },
-        },
-        .expectedSizes = &.{
-            .{ 100.0, 25.0 },
-            .{ 100.0, 25.0 },
-        },
-    });
-}
-
-fn testFitConfiguration(configuration: struct {
-    direction: Direction,
-    expectedHeight: f32,
-}) !void {
-    const allocator = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
-    children.appendAssumeCapacity(Node{
-        .key = 1,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 20.0, 30.0 },
-        .minSize = .{ 20.0, 30.0 },
-        .maxSize = .{ 20.0, 30.0 },
-        .children = .{ .nodes = .empty },
-        .style = (IncompleteStyle{
-            .width = .{ .fixed = 20.0 },
-            .height = .{ .fixed = 30.0 },
-            .margin = forbear.Margin.block(1.0).withBottom(2.0),
-        }).completeWith(utilities.shallowBaseStyle),
-    });
-    children.appendAssumeCapacity(Node{
-        .key = 2,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 20.0, 40.0 },
-        .minSize = .{ 20.0, 40.0 },
-        .maxSize = .{ 20.0, 40.0 },
-        .children = .{ .nodes = .empty },
-        .style = (IncompleteStyle{
-            .width = .{ .fixed = 20.0 },
-            .height = .{ .fixed = 40.0 },
-            .margin = forbear.Margin.block(3.0).withBottom(4.0),
-        }).completeWith(utilities.shallowBaseStyle),
-    });
-
-    var parent = Node{
-        .key = 999,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 100.0, 0.0 },
-        .minSize = .{ 100.0, 0.0 },
-        .maxSize = .{ 100.0, std.math.inf(f32) },
-        .children = .{ .nodes = children },
-        .style = (IncompleteStyle{
-            .direction = configuration.direction,
-            .width = .{ .fixed = 100.0 },
+        forbear.element(.{
+            .textWrapping = .word,
+            .width = .fit,
             .height = .fit,
-            .padding = forbear.Padding.block(10.0).withBottom(20.0),
-            .borderWidth = forbear.BorderWidth.block(2.0).withBottom(3.0),
-        }).completeWith(utilities.shallowBaseStyle),
-    };
-
-    fit(&parent);
-
-    try std.testing.expectEqual(configuration.expectedHeight, parent.size[1]);
-    try std.testing.expectEqual(configuration.expectedHeight, parent.minSize[1]);
-}
-
-test "fit - fitted height handles main and cross axis cases" {
-    try testFitConfiguration(.{
-        .direction = .topToBottom,
-        .expectedHeight = 115.0,
-    });
-    try testFitConfiguration(.{
-        .direction = .leftToRight,
-        .expectedHeight = 82.0,
-    });
-}
-
-test "wrap - no wrapping when glyphs fit on single line" {
-    var glyphs = [_]LayoutGlyph{
-        .{
-            .index = 0,
-            .position = .{ 0.0, 0.0 },
-            .text = "a",
-            .advance = .{ 10.0, 0.0 },
-            .offset = .{ 0.0, 0.0 },
-        },
-    } ** 5;
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .topLeft,
-        .mode = .character,
-        .lineWidth = 100.0,
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            .{ 0.0, 0.0 },
-            .{ 10.0, 0.0 },
-            .{ 20.0, 0.0 },
-            .{ 30.0, 0.0 },
-            .{ 40.0, 0.0 },
-        },
-    });
-}
-
-test "wrap - character wrapping with small width" {
-    var glyphs = [_]LayoutGlyph{
-        .{
-            .index = 0,
-            .position = .{ 0.0, 0.0 },
-            .text = "a",
-            .advance = .{ 15.0, 0.0 },
-            .offset = .{ 0.0, 0.0 },
-        },
-    } ** 6;
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .topLeft,
-        .mode = .character,
-        .lineWidth = 35.0,
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            .{ 0.0, 0.0 },
-            .{ 15.0, 0.0 },
-            .{ 0.0, 20.0 },
-            .{ 15.0, 20.0 },
-            .{ 0.0, 40.0 },
-            .{ 15.0, 40.0 },
-        },
-    });
-}
-
-test "wrap - word wrapping with small width" {
-    // Create glyphs representing "hello world" (11 glyphs including space)
-    var glyphs = [_]LayoutGlyph{
-        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "w", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-    };
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .topLeft,
-        .mode = .word,
-        .lineWidth = 60.0,
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            .{ 0.0, 0.0 }, // h
-            .{ 10.0, 0.0 }, // e
-            .{ 20.0, 0.0 }, // l
-            .{ 30.0, 0.0 }, // l
-            .{ 40.0, 0.0 }, // o
-            .{ 50.0, 0.0 }, // (space)
-            .{ 0.0, 20.0 }, // w
-            .{ 10.0, 20.0 }, // o
-            .{ 20.0, 20.0 }, // r
-            .{ 30.0, 20.0 }, // l
-            .{ 40.0, 20.0 }, // d
-        },
-    });
-}
-
-test "wrap - alignment start" {
-    var glyphs = [_]LayoutGlyph{
-        .{
-            .index = 0,
-            .position = .{ 0.0, 0.0 },
-            .text = "a",
-            .advance = .{ 20.0, 0.0 },
-            .offset = .{ 0.0, 0.0 },
-        },
-    } ** 5;
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .topLeft,
-        .mode = .character,
-        .lineWidth = 45.0,
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            .{ 0.0, 0.0 },
-            .{ 20.0, 0.0 },
-            .{ 0.0, 20.0 },
-            .{ 20.0, 20.0 },
-            .{ 0.0, 40.0 },
-        },
-    });
-}
-
-test "wrap - alignment center" {
-    var glyphs = [_]LayoutGlyph{
-        .{
-            .index = 0,
-            .position = .{ 0.0, 0.0 },
-            .text = "a",
-            .advance = .{ 20.0, 0.0 },
-            .offset = .{ 0.0, 0.0 },
-        },
-    } ** 5;
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .center,
-        .mode = .character,
-        .lineWidth = 45.0,
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            .{ 2.5, 0.0 }, // line offest 2.5 (45 - 20 * 2) / 2
-            .{ 22.5, 0.0 },
-            .{ 2.5, 20.0 }, // line offest 2.5 (45 - 20 * 2) / 2
-            .{ 22.5, 20.0 },
-            .{ 12.5, 40.0 }, // line offset 12.5 (45 - 20) / 2
-        },
-    });
-}
-
-test "wrap - alignment end" {
-    var glyphs = [_]LayoutGlyph{
-        .{
-            .index = 0,
-            .position = .{ 0.0, 0.0 },
-            .text = "a",
-            .advance = .{ 20.0, 0.0 },
-            .offset = .{ 0.0, 0.0 },
-        },
-    } ** 5;
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .topRight,
-        .mode = .character,
-        .lineWidth = 45.0,
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            .{ 5.0, 0.0 }, // line offset 5 = 45 - 20 * 2
-            .{ 25.0, 0.0 },
-            .{ 5.0, 20.0 }, // line offset 5 = 45 - 20 * 2
-            .{ 25.0, 20.0 },
-            .{ 25.0, 40.0 }, // line offset 25 = 45 - 20
-        },
-    });
-}
-
-test "wrap - word wrapping with alignment start" {
-    var glyphs = [_]LayoutGlyph{
-        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "w", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-    };
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .topLeft,
-        .mode = .word,
-        .lineWidth = 60.0,
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            .{ 0.0, 0.0 }, // h - Line 0 starts at x=0
-            .{ 10.0, 0.0 }, // e
-            .{ 20.0, 0.0 }, // l
-            .{ 30.0, 0.0 }, // l
-            .{ 40.0, 0.0 }, // o
-            .{ 50.0, 0.0 }, // (space)
-            .{ 0.0, 20.0 }, // w - Line 1 starts at x=0
-            .{ 10.0, 20.0 }, // o
-            .{ 20.0, 20.0 }, // r
-            .{ 30.0, 20.0 }, // l
-            .{ 40.0, 20.0 }, // d
-        },
-    });
-}
-
-test "wrap - word wrapping with alignment center" {
-    var glyphs = [_]LayoutGlyph{
-        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "w", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-    };
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .center,
-        .mode = .word,
-        .lineWidth = 100.0,
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            // Expected: "hello" on line 0 (centered), space stays in place, "world" on line 1 (centered)
-            .{ 20.0, 0.0 }, // h - placeholder, needs actual values
-            .{ 30.0, 0.0 }, // e
-            .{ 40.0, 0.0 }, // l
-            .{ 50.0, 0.0 }, // l
-            .{ 60.0, 0.0 }, // o
-            .{ 70.0, 0.0 }, // (space)
-            .{ 25.0, 20.0 }, // w
-            .{ 35.0, 20.0 }, // o
-            .{ 45.0, 20.0 }, // r
-            .{ 55.0, 20.0 }, // l
-            .{ 65.0, 20.0 }, // d
-        },
-    });
-}
-
-test "wrap - word wrapping with alignment end" {
-    var glyphs = [_]LayoutGlyph{
-        .{ .index = 0, .position = .{ 0.0, 0.0 }, .text = "h", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 1, .position = .{ 0.0, 0.0 }, .text = "e", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 2, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 3, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 4, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 5, .position = .{ 0.0, 0.0 }, .text = " ", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 6, .position = .{ 0.0, 0.0 }, .text = "w", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 7, .position = .{ 0.0, 0.0 }, .text = "o", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 8, .position = .{ 0.0, 0.0 }, .text = "r", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 9, .position = .{ 0.0, 0.0 }, .text = "l", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-        .{ .index = 10, .position = .{ 0.0, 0.0 }, .text = "d", .advance = .{ 10.0, 0.0 }, .offset = .{ 0.0, 0.0 } },
-    };
-    try testWrapConfiguration(.{
-        .glyphs = &glyphs,
-        .alignment = .topRight,
-        .mode = .word,
-        .lineWidth = 100.0,
-        .lineHeight = 20.0,
-        .expectedPositions = &.{
-            // Expected: "hello" on line 0 (end-aligned), space stays in place, "world" on line 1 (end-aligned)
-            .{ 40.0, 0.0 }, // h - placeholder, needs actual values
-            .{ 50.0, 0.0 }, // e
-            .{ 60.0, 0.0 }, // l
-            .{ 70.0, 0.0 }, // l
-            .{ 80.0, 0.0 }, // o
-            .{ 90.0, 0.0 }, // (space)
-            .{ 50.0, 20.0 }, // w
-            .{ 60.0, 20.0 }, // o
-            .{ 70.0, 20.0 }, // r
-            .{ 80.0, 20.0 }, // l
-            .{ 90.0, 20.0 }, // d
-        },
-    });
-}
-
-test "ratio and grow passes are stable when reapplied" {
-    const allocator = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var children = try std.ArrayList(Node).initCapacity(arenaAllocator, 2);
-    children.appendAssumeCapacity(Node{
-        .key = 1,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 0.0, 50.0 },
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = .{ std.math.inf(f32), 50.0 },
-        .children = .{ .nodes = .empty },
-        .style = (IncompleteStyle{
-            .width = .{ .ratio = 0.2 },
-            .height = .{ .fixed = 50.0 },
-        }).completeWith(utilities.shallowBaseStyle),
-    });
-    children.appendAssumeCapacity(Node{
-        .key = 2,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 0.0, 50.0 },
-        .minSize = .{ 0.0, 0.0 },
-        .maxSize = .{ std.math.inf(f32), 50.0 },
-        .children = .{ .nodes = .empty },
-        .style = (IncompleteStyle{
-            .width = .grow,
-            .height = .{ .fixed = 50.0 },
-        }).completeWith(utilities.shallowBaseStyle),
-    });
-
-    var parent = Node{
-        .key = 99,
-        .position = .{ 0.0, 0.0 },
-        .z = 0,
-        .size = .{ 300.0, 50.0 },
-        .minSize = .{ 300.0, 50.0 },
-        .maxSize = .{ 300.0, 50.0 },
-        .children = .{ .nodes = children },
-        .style = (IncompleteStyle{
-            .direction = .leftToRight,
-            .width = .{ .fixed = 300.0 },
-            .height = .{ .fixed = 50.0 },
-        }).completeWith(utilities.shallowBaseStyle),
-    };
-
-    applyRatios(&parent);
-    try growAndShrink(arenaAllocator, &parent);
-    const firstRatio = parent.children.nodes.items[0].size[0];
-    const firstGrow = parent.children.nodes.items[1].size[0];
-
-    applyRatios(&parent);
-    try growAndShrink(arenaAllocator, &parent);
-
-    try std.testing.expectEqual(firstRatio, parent.children.nodes.items[0].size[0]);
-    try std.testing.expectEqual(firstGrow, parent.children.nodes.items[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 10.0), parent.children.nodes.items[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 290.0), parent.children.nodes.items[1].size[0]);
-}
-
-test "layout pipeline - ratio and grow produce stable geometry" {
-    try forbear.init(std.testing.allocator, undefined);
-    defer forbear.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var first: Node = undefined;
-    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .direction = .leftToRight,
-            .width = .grow,
-            .height = .{ .fixed = 100.0 },
-        })({
-            forbear.element(.{
-                .width = .{ .ratio = 0.2 },
-                .height = .grow,
-            })({});
-            forbear.element(.{
-                .width = .grow,
-                .height = .grow,
-            })({});
-        });
-        first = (try layout()).*;
-    });
-
-    const firstChildren = try std.testing.allocator.dupe(Node, first.children.nodes.items);
-    defer std.testing.allocator.free(firstChildren);
-    try std.testing.expectEqual(@as(usize, 2), firstChildren.len);
-    try std.testing.expectEqual(@as(f32, 800.0), first.size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), first.size[1]);
-
-    try std.testing.expectEqual(@as(f32, 20.0), firstChildren[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), firstChildren[0].size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[0].position[1]);
-
-    try std.testing.expectEqual(@as(f32, 780.0), firstChildren[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), firstChildren[1].size[1]);
-    try std.testing.expectEqual(@as(f32, 20.0), firstChildren[1].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstChildren[1].position[1]);
-
-    _ = arena.reset(.retain_capacity);
-
-    var second: Node = undefined;
-    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .direction = .leftToRight,
-            .width = .grow,
-            .height = .{ .fixed = 100.0 },
-        })({
-            forbear.element(.{
-                .width = .{ .ratio = 0.2 },
-                .height = .grow,
-            })({});
-            forbear.element(.{
-                .width = .grow,
-                .height = .grow,
-            })({});
-        });
-        second = (try layout()).*;
-    });
-    const secondChildren = second.children.nodes.items;
-
-    try std.testing.expectEqual(first.size[0], second.size[0]);
-    try std.testing.expectEqual(first.size[1], second.size[1]);
-    try std.testing.expectEqual(first.position[0], second.position[0]);
-    try std.testing.expectEqual(first.position[1], second.position[1]);
-
-    try std.testing.expectEqual(firstChildren[0].size[0], secondChildren[0].size[0]);
-    try std.testing.expectEqual(firstChildren[0].size[1], secondChildren[0].size[1]);
-    try std.testing.expectEqual(firstChildren[0].position[0], secondChildren[0].position[0]);
-    try std.testing.expectEqual(firstChildren[0].position[1], secondChildren[0].position[1]);
-
-    try std.testing.expectEqual(firstChildren[1].size[0], secondChildren[1].size[0]);
-    try std.testing.expectEqual(firstChildren[1].size[1], secondChildren[1].size[1]);
-    try std.testing.expectEqual(firstChildren[1].position[0], secondChildren[1].position[0]);
-    try std.testing.expectEqual(firstChildren[1].position[1], secondChildren[1].position[1]);
-}
-
-test "layout pipeline - manual children stay out of flow" {
-    try forbear.init(std.testing.allocator, undefined);
-    defer forbear.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var node: Node = undefined;
-    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .direction = .leftToRight,
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 100.0 },
-        })({
-            forbear.element(.{
-                .width = .{ .ratio = 0.5 },
-                .height = .grow,
-            })({});
-            forbear.element(.{
-                .placement = .{ .manual = .{ 10.0, 7.0 } },
-                .width = .{ .fixed = 15.0 },
-                .height = .{ .fixed = 12.0 },
-            })({});
-            forbear.element(.{
-                .width = .{ .fixed = 20.0 },
-                .height = .grow,
-            })({});
-        });
-        node = (try layout()).*;
-    });
-
-    try std.testing.expectEqual(@as(f32, 200.0), node.size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), node.size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), node.position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), node.position[1]);
-
-    const children = node.children.nodes.items;
-
-    try std.testing.expectEqual(@as(usize, 3), children.len);
-
-    try std.testing.expectEqual(@as(f32, 50.0), children[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), children[0].size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), children[0].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), children[0].position[1]);
-
-    try std.testing.expectEqual(@as(f32, 15.0), children[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 12.0), children[1].size[1]);
-    try std.testing.expectEqual(@as(f32, 10.0), children[1].position[0]);
-    try std.testing.expectEqual(@as(f32, 7.0), children[1].position[1]);
-
-    try std.testing.expectEqual(@as(f32, 20.0), children[2].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), children[2].size[1]);
-    try std.testing.expectEqual(@as(f32, 50.0), children[2].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), children[2].position[1]);
-}
-
-test "layout pipeline - vertical ratio and grow produce stable geometry" {
-    try forbear.init(std.testing.allocator, undefined);
-    defer forbear.deinit();
-
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
-
-    var first: Node = undefined;
-    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
-        forbear.element(.{
             .direction = .topToBottom,
-            .width = .{ .fixed = 120.0 },
-            .height = .{ .fixed = 300.0 },
         })({
             forbear.element(.{
-                .width = .grow,
-                .height = .{ .ratio = 0.5 },
-            })({});
-            forbear.element(.{
-                .width = .grow,
-                .height = .grow,
-            })({});
+                .width = .{ .fixed = 100 },
+                .height = .fit,
+            })({
+                forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
+                textNode = forbear.getPreviousNode().?;
+            });
         });
-        first = (try layout()).*;
+
+        const tree = try layout();
+        const rootNode = tree.at(0);
+        const innerIdx = rootNode.firstChild.?;
+        const innerNode = tree.at(innerIdx);
+
+        try std.testing.expectEqual(100, rootNode.size[0]);
+        try std.testing.expectEqual(100, textNode.size[0]);
+        try std.testing.expectEqual(textNode.size[1], rootNode.size[1]);
+
+        try std.testing.expectEqual(100, innerNode.size[0]);
+        try std.testing.expectEqual(textNode.size[1], innerNode.size[1]);
     });
+}
 
-    const firstsChildren = try std.testing.allocator.dupe(Node, first.children.nodes.items);
-    defer std.testing.allocator.free(firstsChildren);
-    try std.testing.expectEqual(@as(usize, 2), firstsChildren.len);
-    try std.testing.expectEqual(@as(f32, 120.0), first.size[0]);
-    try std.testing.expectEqual(@as(f32, 300.0), first.size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), first.position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), first.position[1]);
+test "wrapped text simple ancestry stays at origin" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
 
-    try std.testing.expectEqual(@as(f32, 120.0), firstsChildren[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 60.0), firstsChildren[0].size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[0].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[0].position[1]);
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
 
-    try std.testing.expectEqual(@as(f32, 120.0), firstsChildren[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 240.0), firstsChildren[1].size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[1].position[0]);
-    try std.testing.expectEqual(@as(f32, 60.0), firstsChildren[1].position[1]);
+    const arena = arenaAllocator.allocator();
 
-    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try utilities.frameMeta(arena))({
+        var textNode: *forbear.Node = undefined;
 
-    var second: Node = undefined;
-    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
+            .textWrapping = .word,
+            .width = .fit,
+            .height = .fit,
             .direction = .topToBottom,
-            .width = .{ .fixed = 120.0 },
-            .height = .{ .fixed = 300.0 },
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .fit,
+            })({
+                forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
+                textNode = forbear.getPreviousNode().?;
+            });
+        });
+
+        const tree = try layout();
+        const rootNode = tree.at(0);
+        const innerNode = tree.at(rootNode.firstChild.?);
+
+        try std.testing.expectEqualDeep(Vec2{ 0.0, 0.0 }, textNode.position);
+        try std.testing.expectEqualDeep(Vec2{ 0.0, 0.0 }, rootNode.position);
+        try std.testing.expectEqualDeep(Vec2{ 0.0, 0.0 }, innerNode.position);
+    });
+}
+
+// Regression: `forbear.image()` uses `width: grow` + `height: ratio`. Build-time
+// `fitChild` saw height 0, so a `height: fit` hero column stayed short and the
+// next root sibling (e.g. offerings card) overlapped the headline. `growAndShrink`
+// applies ratio sizing then incrementally propagates the main-axis delta with
+// `updateFittingForAncestorsInDirection` (same machinery as wrapped text). Same flex
+// shape as examples/uhoh.com (hero block + text + sibling section).
+test "uhoh-shaped grow-width ratio hero does not overlap following sibling section" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport 800px wide from utilities.frameMeta
+        forbear.element(.{
+            .width = .grow,
+            .height = .fit,
+            .direction = .topToBottom,
         })({
             forbear.element(.{
                 .width = .grow,
-                .height = .{ .ratio = 0.5 },
-            })({});
+                .maxWidth = 600,
+                .alignment = .topCenter,
+                .padding = forbear.Padding.top(22.5).withBottom(30.0),
+                .direction = .topToBottom,
+            })({
+                // Stand-in for `forbear.image` (grow width + intrinsic aspect).
+                forbear.element(.{
+                    .width = .grow,
+                    .height = .{ .ratio = 0.5 },
+                })({});
+                forbear.element(.{
+                    .fontSize = 18,
+                    .margin = forbear.Margin.block(13.5).withBottom(7.5),
+                })({
+                    forbear.text("We're here to reinvent how tech gets done.");
+                });
+                forbear.element(.{
+                    .fontSize = 12,
+                })({
+                    forbear.text("We're replacing clunky IT with clean, fast, and flexible support.");
+                });
+            });
             forbear.element(.{
                 .width = .grow,
-                .height = .grow,
+                .height = .{ .fixed = 80 },
+                .background = .{ .color = .{ 1, 1, 1, 1 } },
             })({});
         });
-        second = (try layout()).*;
+
+        const tree = try layout();
+        const rootNode = tree.at(0);
+        const hero = tree.at(rootNode.firstChild.?);
+        const card = tree.at(hero.nextSibling.?);
+
+        const illustration = tree.at(hero.firstChild.?);
+        const heading = tree.at(illustration.nextSibling.?);
+        const subtext = tree.at(heading.nextSibling.?);
+
+        try std.testing.expectApproxEqAbs(600.0, illustration.size[0], 0.02);
+        try std.testing.expectApproxEqAbs(300.0, illustration.size[1], 0.02);
+
+        // `wrapAndPlace` advances the next sibling by this node's `size[1]` only.
+        // That always equals `card.y - hero.y`, even when `hero.size[1]` is
+        // stale — so comparing those two is useless. What breaks is: inner
+        // children were laid out with the real illustration height, but `hero`
+        // stayed short, so the card is placed in the middle of the hero text.
+        const heroContentBottom = subtext.position[1] + subtext.size[1];
+        try std.testing.expect(hero.size[1] >= illustration.size[1] + hero.fittingBase(.topToBottom) - 0.02);
+        try std.testing.expect(heroContentBottom <= card.position[1] + 0.02);
+
+        try std.testing.expect(heading.position[1] > illustration.position[1] + illustration.size[1] - 0.02);
     });
-    const secondsChildren = second.children.nodes.items;
-
-    try std.testing.expectEqual(first.size[0], second.size[0]);
-    try std.testing.expectEqual(first.size[1], second.size[1]);
-    try std.testing.expectEqual(first.position[0], second.position[0]);
-    try std.testing.expectEqual(first.position[1], second.position[1]);
-
-    try std.testing.expectEqual(firstsChildren[0].size[0], secondsChildren[0].size[0]);
-    try std.testing.expectEqual(firstsChildren[0].size[1], secondsChildren[0].size[1]);
-    try std.testing.expectEqual(firstsChildren[0].position[0], secondsChildren[0].position[0]);
-    try std.testing.expectEqual(firstsChildren[0].position[1], secondsChildren[0].position[1]);
-
-    try std.testing.expectEqual(firstsChildren[1].size[0], secondsChildren[1].size[0]);
-    try std.testing.expectEqual(firstsChildren[1].size[1], secondsChildren[1].size[1]);
-    try std.testing.expectEqual(firstsChildren[1].position[0], secondsChildren[1].position[0]);
-    try std.testing.expectEqual(firstsChildren[1].position[1], secondsChildren[1].position[1]);
 }
 
-test "layout pipeline - manual ratio child stays out of flow" {
+test "wrapped text propagates height upward with siblings" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
 
-    var node: Node = undefined;
-    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        var textNode: *forbear.Node = undefined;
+
         forbear.element(.{
-            .direction = .leftToRight,
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 100.0 },
+            .textWrapping = .word,
+            .width = .fit,
+            .height = .fit,
+            .direction = .topToBottom,
         })({
             forbear.element(.{
-                .width = .{ .ratio = 0.5 },
-                .height = .grow,
-            })({});
+                .width = .{ .fixed = 100 },
+                .height = .fit,
+            })({
+                forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
+                textNode = forbear.getPreviousNode().?;
+            });
             forbear.element(.{
-                .placement = .{ .manual = .{ 10.0, 7.0 } },
-                .width = .{ .ratio = 0.5 },
-                .height = .{ .fixed = 40.0 },
-            })({});
-            forbear.element(.{
-                .width = .{ .fixed = 20.0 },
-                .height = .grow,
+                .height = .{ .fixed = 100 },
             })({});
         });
-        node = (try layout()).*;
+
+        const tree = try layout();
+        const rootNode = tree.at(0);
+        const firstChild = tree.at(rootNode.firstChild.?);
+        const secondChild = tree.at(firstChild.nextSibling.?);
+
+        try std.testing.expectEqual(100, textNode.size[0]);
+        try std.testing.expectEqual(100, rootNode.size[0]);
+        try std.testing.expectEqual(textNode.size[1] + 100, rootNode.size[1]);
+        try std.testing.expectEqual(100, firstChild.size[0]);
+        try std.testing.expectEqual(textNode.size[1], firstChild.size[1]);
+        try std.testing.expectEqual(100, secondChild.size[1]);
     });
-    const children = node.children.nodes.items;
-
-    try std.testing.expectEqual(@as(usize, 3), children.len);
-
-    try std.testing.expectEqual(@as(f32, 50.0), children[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), children[0].size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), children[0].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), children[0].position[1]);
-
-    try std.testing.expectEqual(@as(f32, 20.0), children[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 40.0), children[1].size[1]);
-    try std.testing.expectEqual(@as(f32, 10.0), children[1].position[0]);
-    try std.testing.expectEqual(@as(f32, 7.0), children[1].position[1]);
-
-    try std.testing.expectEqual(@as(f32, 20.0), children[2].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), children[2].size[1]);
-    try std.testing.expectEqual(@as(f32, 50.0), children[2].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), children[2].position[1]);
 }
 
-test "layout pipeline - ratio and shrink keep children within parent flow" {
+test "wrapped text stacks siblings after wrapping" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
 
-    var first: Node = undefined;
-    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        var textNode: *forbear.Node = undefined;
+
         forbear.element(.{
-            .direction = .leftToRight,
-            .width = .{ .fixed = 40.0 },
-            .height = .{ .fixed = 100.0 },
+            .textWrapping = .word,
+            .width = .fit,
+            .height = .fit,
+            .direction = .topToBottom,
         })({
             forbear.element(.{
-                .width = .{ .ratio = 0.5 },
-                .height = .grow,
-            })({});
+                .width = .{ .fixed = 100 },
+                .height = .fit,
+            })({
+                forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
+                textNode = forbear.getPreviousNode().?;
+            });
             forbear.element(.{
-                .width = .{ .fixed = 30.0 },
-                .height = .grow,
+                .height = .{ .fixed = 100 },
             })({});
         });
-        first = (try layout()).*;
+
+        const tree = try layout();
+        const rootNode = tree.at(0);
+        const firstChild = tree.at(rootNode.firstChild.?);
+        const secondChild = tree.at(firstChild.nextSibling.?);
+
+        try std.testing.expectEqualDeep(Vec2{ 0.0, 0.0 }, textNode.position);
+        try std.testing.expectEqualDeep(Vec2{ 0.0, 0.0 }, rootNode.position);
+        try std.testing.expectEqualDeep(Vec2{ 0.0, 0.0 }, firstChild.position);
+        try std.testing.expectEqual(firstChild.position[0], secondChild.position[0]);
+        try std.testing.expectEqual(firstChild.position[1] + firstChild.size[1], secondChild.position[1]);
     });
-    const firstsChildren = try std.testing.allocator.dupe(Node, first.children.nodes.items);
-    defer std.testing.allocator.free(firstsChildren);
-
-    try std.testing.expectEqual(@as(usize, 2), firstsChildren.len);
-    try std.testing.expectEqual(@as(f32, 40.0), first.size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), first.size[1]);
-
-    try std.testing.expectEqual(@as(f32, 10.0), firstsChildren[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), firstsChildren[0].size[1]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[0].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[0].position[1]);
-
-    try std.testing.expectEqual(@as(f32, 30.0), firstsChildren[1].size[0]);
-    try std.testing.expectEqual(@as(f32, 100.0), firstsChildren[1].size[1]);
-    try std.testing.expectEqual(@as(f32, 10.0), firstsChildren[1].position[0]);
-    try std.testing.expectEqual(@as(f32, 0.0), firstsChildren[1].position[1]);
-
-    _ = arena.reset(.retain_capacity);
-
-    var second: Node = undefined;
-    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .direction = .leftToRight,
-            .width = .{ .fixed = 40.0 },
-            .height = .{ .fixed = 100.0 },
-        })({
-            forbear.element(.{
-                .width = .{ .ratio = 0.5 },
-                .height = .grow,
-            })({});
-            forbear.element(.{
-                .width = .{ .fixed = 30.0 },
-                .height = .grow,
-            })({});
-        });
-        second = (try layout()).*;
-    });
-    const secondsChildren = second.children.nodes.items;
-
-    try std.testing.expectEqual(firstsChildren[0].size[0], secondsChildren[0].size[0]);
-    try std.testing.expectEqual(firstsChildren[1].size[0], secondsChildren[1].size[0]);
-    try std.testing.expectEqual(firstsChildren[1].position[0], secondsChildren[1].position[0]);
 }
 
-test "layout pipeline - percentage sizes track parent axis" {
+test "cross-axis fit row height reflects full column height after text wrapping" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const arenaAllocator = arena.allocator();
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
 
-    var result: Node = undefined;
-    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+    const arena = arenaAllocator.allocator();
+
+    // Reproduces the uhoh.com hero section pattern:
+    //   topToBottom outer
+    //     leftToRight row (fit height)
+    //       topToBottom column (grow width)
+    //         wrapped text  (height grows during wrapGlyphs)
+    //         fixed child   (50px)
+    //     sibling below
+    //
+    // After text wrapping, the column's total height is text + 50.
+    // The row's height must match the column's total, not just the text's height.
+    // The sibling must start below the row — not overlap it.
+    try forbear.frame(try utilities.frameMeta(arena))({
+        var textNode: *forbear.Node = undefined;
+
         forbear.element(.{
-            .direction = .leftToRight,
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 100.0 },
+            .width = .grow,
+            .height = .fit,
+            .direction = .topToBottom,
+            .textWrapping = .word,
+        })({
+            // Row (fit height, leftToRight)
+            forbear.element(.{
+                .width = .grow,
+                .direction = .leftToRight,
+            })({
+                // Inner column stacking text + fixed child
+                forbear.element(.{
+                    .direction = .topToBottom,
+                    .width = .grow,
+                })({
+                    forbear.element(.{
+                        .width = .{ .fixed = 200 },
+                        .height = .fit,
+                    })({
+                        forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt");
+                        textNode = forbear.getPreviousNode().?;
+                    });
+                    forbear.element(.{
+                        .width = .{ .fixed = 100 },
+                        .height = .{ .fixed = 50 },
+                    })({});
+                });
+            });
+            // Sibling that must appear below the row
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 30 },
+            })({});
+        });
+
+        const tree = try layout();
+        const outer = tree.at(0);
+        const row = tree.at(outer.firstChild.?);
+        const column = tree.at(row.firstChild.?);
+        const sibling = tree.at(row.nextSibling.?);
+
+        const expectedColumnHeight = textNode.size[1] + 50.0;
+        try std.testing.expectEqual(expectedColumnHeight, column.size[1]);
+        try std.testing.expectEqual(expectedColumnHeight, row.size[1]);
+
+        // The sibling must start at or below the row's bottom edge, not overlap
+        try std.testing.expect(sibling.position[1] >= row.position[1] + row.size[1]);
+    });
+}
+
+test "percentage children resolve against grown parent" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport is 800x600
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
         })({
             forbear.element(.{
                 .width = .{ .percentage = 0.5 },
                 .height = .{ .percentage = 0.25 },
             })({});
+            forbear.element(.{
+                .width = .{ .percentage = 1.0 },
+                .height = .{ .percentage = 0.75 },
+            })({});
         });
-        result = (try layout()).*;
-    });
-    const children = result.children.nodes.items;
 
-    try std.testing.expectEqual(@as(usize, 1), children.len);
-    try std.testing.expectEqual(@as(f32, 100.0), children[0].size[0]);
-    try std.testing.expectEqual(@as(f32, 25.0), children[0].size[1]);
+        const tree = try layout();
+        const root = tree.at(0);
+        const childA = tree.at(root.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 800), root.size[0]);
+        try std.testing.expectEqual(@as(f32, 600), root.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 400), childA.size[0]);
+        try std.testing.expectEqual(@as(f32, 150), childA.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 800), childB.size[0]);
+        try std.testing.expectEqual(@as(f32, 450), childB.size[1]);
+    });
+}
+
+test "percentage children positioned correctly among fixed siblings" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport is 800x600; leftToRight row
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .leftToRight,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 60 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const fixedA = tree.at(root.firstChild.?);
+        const pctChild = tree.at(fixedA.nextSibling.?);
+        const fixedB = tree.at(pctChild.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 400), pctChild.size[0]);
+
+        try std.testing.expectEqual(@as(f32, 0), fixedA.position[0]);
+        try std.testing.expectEqual(@as(f32, 100), pctChild.position[0]);
+        try std.testing.expectEqual(100.0 + 400.0, fixedB.position[0]);
+    });
+}
+
+// Regression: `updateFittingForAncestorsInDirection` must apply perpendicular
+// `.ratio` against the ancestor's size *after* `setSize` on the propagation axis.
+// A row with `width: ratio` (width = height × r) and `height: fit` gets its height
+// from a word-wrapped text column; that height updates during `wrapGlyphs`. Using
+// the pre-update main-axis size for the ratio left `width` too small (stale h × r).
+test "ratio width tracks fit height after propagated text wrap" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .ratio = 2.0 },
+                .height = .fit,
+                .direction = .leftToRight,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 120 },
+                    .height = .fit,
+                    .direction = .topToBottom,
+                    .textWrapping = .word,
+                })({
+                    forbear.text("One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.");
+                });
+            });
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const row = tree.at(root.firstChild.?);
+
+        // Wrapped text should make the row noticeably tall (not a single line).
+        try std.testing.expect(row.size[1] > 45.0);
+        // width = height × 2 after propagation from wrapGlyphs
+        try std.testing.expectApproxEqAbs(row.size[0], row.size[1] * 2.0, 1.0);
+    });
+}
+
+test "ratio height resolves after grow distributes width" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport 800x600; leftToRight root
+        // child: width grows to fill 800, height = ratio(0.5) → 400
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .leftToRight,
+        })({
+            forbear.element(.{
+                .width = .grow,
+                .height = .{ .ratio = 0.5 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const child = tree.at(root.firstChild.?);
+
+        try std.testing.expectEqual(@as(f32, 800), child.size[0]);
+        try std.testing.expectEqual(@as(f32, 400), child.size[1]);
+    });
+}
+
+test "ratio width resolves after grow distributes height" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport 800x600; topToBottom root
+        // child: height grows to fill 600, width = ratio(2.0) → 1200
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .ratio = 2.0 },
+                .height = .grow,
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const child = tree.at(root.firstChild.?);
+
+        try std.testing.expectEqual(@as(f32, 600), child.size[1]);
+        try std.testing.expectEqual(@as(f32, 1200), child.size[0]);
+    });
+}
+
+test "percentage and ratio children coexist in a row" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // viewport 800x600; leftToRight root
+        // child A: width = 50% of 800 = 400, height = ratio(0.5) → 200
+        // child B: width = fixed 200, height = percentage(0.5) of 600 = 300
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .leftToRight,
+        })({
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .ratio = 0.5 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 200 },
+                .height = .{ .percentage = 0.5 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const childA = tree.at(root.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 400), childA.size[0]);
+        try std.testing.expectEqual(@as(f32, 200), childA.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 200), childB.size[0]);
+        try std.testing.expectEqual(@as(f32, 300), childB.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
+        try std.testing.expectEqual(@as(f32, 400), childB.position[0]);
+    });
+}
+
+test "wrapAndPlace offsets standard children by border plus padding" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 80 },
+            .direction = .leftToRight,
+            .borderWidth = .left(8),
+            .padding = .left(7),
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 40 },
+                .height = .{ .fixed = 24 },
+            })({});
+        });
+
+        const tree = try layout();
+        const parent = tree.at(0);
+        const child = tree.at(parent.firstChild.?);
+
+        try std.testing.expectEqual(@as(f32, 15), child.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), child.position[1]);
+    });
+}
+
+test "overflow wrap places children on new lines and grows parent height" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // A 300px-wide leftToRight container with overflow: wrap.
+        // Three 120x50 children: the first two fit on line 1 (240px < 300px),
+        // the third overflows and wraps to line 2.
+        forbear.element(.{
+            .width = .{ .fixed = 300 },
+            .height = .fit,
+            .direction = .leftToRight,
+            .overflow = .wrap,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 120 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 120 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 120 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const childA = tree.at(root.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+        const childC = tree.at(childB.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 300), root.size[0]);
+
+        // Line 1: childA and childB side by side at y=0
+        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
+
+        try std.testing.expectEqual(@as(f32, 120), childB.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
+
+        // Line 2: childC wraps to a new row, x resets and y advances by
+        // line 1's height (50)
+        try std.testing.expectEqual(@as(f32, 0), childC.position[0]);
+        try std.testing.expectEqual(@as(f32, 50), childC.position[1]);
+
+        // Fit height = initial cross-axis max (50) + wrap addition (50) = 100
+        try std.testing.expectEqual(@as(f32, 100), root.size[1]);
+    });
+}
+
+test "overflow wrap line ranges start at the wrapping child for cross-axis alignment" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Same geometry as the basic wrap test, but center each row. The row that
+        // wraps must still align every child on that row (including the wrapped
+        // one); buggy line .start would attach the previous row's last child to
+        // the new row and skip applying x alignment to the real wrapped child.
+        forbear.element(.{
+            .width = .{ .fixed = 300 },
+            .height = .fit,
+            .direction = .leftToRight,
+            .overflow = .wrap,
+            .alignment = .{ .x = .center, .y = .start },
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 120 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 120 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 120 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const childA = tree.at(root.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+        const childC = tree.at(childB.nextSibling.?);
+
+        // Inner width 300px; line 1 is 240px wide → +30; line 2 is 120px → +90
+        try std.testing.expectEqual(@as(f32, 30), childA.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
+
+        try std.testing.expectEqual(@as(f32, 150), childB.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
+
+        try std.testing.expectEqual(@as(f32, 90), childC.position[0]);
+        try std.testing.expectEqual(@as(f32, 50), childC.position[1]);
+    });
+}
+
+test "overflow wrap with grow-width parent wraps against resolved size" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Outer container anchors to the viewport (800x600).
+        // The wrapping container uses grow so it fills the parent's
+        // full 800px width. With wrapping-aware fitting, minSize is
+        // the widest child (300) instead of the sum (900), so the
+        // grow resolves to 800 rather than being floored at 900.
+        // Three 300x60 children: the first two fit on line 1 (600 < 800),
+        // the third overflows and wraps to line 2.
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .grow,
+                .height = .fit,
+                .direction = .leftToRight,
+                .overflow = .wrap,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 300 },
+                    .height = .{ .fixed = 60 },
+                })({});
+                forbear.element(.{
+                    .width = .{ .fixed = 300 },
+                    .height = .{ .fixed = 60 },
+                })({});
+                forbear.element(.{
+                    .width = .{ .fixed = 300 },
+                    .height = .{ .fixed = 60 },
+                })({});
+            });
+        });
+
+        const tree = try layout();
+        const outer = tree.at(0);
+        const wrapper = tree.at(outer.firstChild.?);
+        const childA = tree.at(wrapper.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+        const childC = tree.at(childB.nextSibling.?);
+
+        // Wrapper grows to parent's 800px (not 900, since minSize
+        // is now the widest child, not the sum)
+        try std.testing.expectEqual(@as(f32, 800), wrapper.size[0]);
+
+        // Line 1: A and B side by side at y=0
+        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
+
+        try std.testing.expectEqual(@as(f32, 300), childB.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
+
+        // Line 2: C wraps, x resets and y advances by line 1 height (60)
+        try std.testing.expectEqual(@as(f32, 0), childC.position[0]);
+        try std.testing.expectEqual(@as(f32, 60), childC.position[1]);
+
+        // Fit height = initial cross-axis max (60) + wrap addition (60) = 120
+        try std.testing.expectEqual(@as(f32, 120), wrapper.size[1]);
+    });
+}
+
+test "grow children split remaining space and stretch cross-axis" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .leftToRight,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 40 },
+            })({});
+            forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+            })({});
+            forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+
+        try std.testing.expectEqual(@as(f32, 800), root.size[0]);
+        try std.testing.expectEqual(@as(f32, 600), root.size[1]);
+
+        const fixedChild = tree.at(root.firstChild.?);
+        const growA = tree.at(fixedChild.nextSibling.?);
+        const growB = tree.at(growA.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 100), fixedChild.size[0]);
+        try std.testing.expectEqual(@as(f32, 40), fixedChild.size[1]);
+
+        const remainingWidth = 800.0 - 100.0;
+        const expectedGrowWidth = remainingWidth / 2.0;
+        try std.testing.expectEqual(expectedGrowWidth, growA.size[0]);
+        try std.testing.expectEqual(expectedGrowWidth, growB.size[0]);
+
+        try std.testing.expectEqual(@as(f32, 600), growA.size[1]);
+        try std.testing.expectEqual(@as(f32, 600), growB.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 0), fixedChild.position[0]);
+        try std.testing.expectEqual(@as(f32, 100), growA.position[0]);
+        try std.testing.expectEqual(100.0 + expectedGrowWidth, growB.position[0]);
+    });
+}
+
+test "percentage children resolve against non-root grown parent" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Fixed outer gives a known reference size (400x300).
+        // Inner grow child should expand to fill it entirely.
+        // Percentage grandchildren should resolve against the grown
+        // inner's 400x300, not against zero.
+        forbear.element(.{
+            .width = .{ .fixed = 400 },
+            .height = .{ .fixed = 300 },
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .grow,
+                .height = .grow,
+                .direction = .leftToRight,
+            })({
+                forbear.element(.{
+                    .width = .{ .percentage = 0.5 },
+                    .height = .{ .percentage = 0.5 },
+                })({});
+                forbear.element(.{
+                    .width = .{ .percentage = 0.25 },
+                    .height = .{ .percentage = 1.0 },
+                })({});
+            });
+        });
+
+        const tree = try layout();
+        const outer = tree.at(0);
+        const inner = tree.at(outer.firstChild.?);
+        const pctA = tree.at(inner.firstChild.?);
+        const pctB = tree.at(pctA.nextSibling.?);
+
+        // Inner grows to fill the fixed outer
+        try std.testing.expectEqual(@as(f32, 400), inner.size[0]);
+        try std.testing.expectEqual(@as(f32, 300), inner.size[1]);
+
+        // Percentage children resolve against the grown inner
+        try std.testing.expectEqual(@as(f32, 200), pctA.size[0]);
+        try std.testing.expectEqual(@as(f32, 150), pctA.size[1]);
+
+        try std.testing.expectEqual(@as(f32, 100), pctB.size[0]);
+        try std.testing.expectEqual(@as(f32, 300), pctB.size[1]);
+
+        // Positioned side by side in the leftToRight row
+        try std.testing.expectEqual(@as(f32, 0), pctA.position[0]);
+        try std.testing.expectEqual(@as(f32, 200), pctB.position[0]);
+    });
+}
+
+test "percentage children wrap correctly inside a wrapping parent" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Fixed 400px-wide leftToRight container with overflow:wrap.
+        // Three children each at 50% width (200px): the first two fit
+        // on line 1 (400 == 400), the third wraps to line 2.
+        forbear.element(.{
+            .width = .{ .fixed = 400 },
+            .height = .fit,
+            .direction = .leftToRight,
+            .overflow = .wrap,
+        })({
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .fixed = 60 },
+            })({});
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .fixed = 60 },
+            })({});
+            forbear.element(.{
+                .width = .{ .percentage = 0.5 },
+                .height = .{ .fixed = 60 },
+            })({});
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const childA = tree.at(root.firstChild.?);
+        const childB = tree.at(childA.nextSibling.?);
+        const childC = tree.at(childB.nextSibling.?);
+
+        try std.testing.expectEqual(@as(f32, 400), root.size[0]);
+
+        // Each child resolves to 50% of 400 = 200px wide
+        try std.testing.expectEqual(@as(f32, 200), childA.size[0]);
+        try std.testing.expectEqual(@as(f32, 200), childB.size[0]);
+        try std.testing.expectEqual(@as(f32, 200), childC.size[0]);
+
+        // Line 1: A and B side by side at y=0
+        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
+
+        try std.testing.expectEqual(@as(f32, 200), childB.position[0]);
+        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
+
+        // Line 2: C wraps to a new row
+        try std.testing.expectEqual(@as(f32, 0), childC.position[0]);
+        try std.testing.expectEqual(@as(f32, 60), childC.position[1]);
+    });
+}
+
+test "wrapping container with text cards does not inflate ancestor height" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Reproduces the uhoh.com testimonials bug: a topToBottom section contains
+    // a leftToRight wrapping container with multiple percentage-width cards
+    // that have word-wrapped text. Each card's text wrapping fires
+    // updateFittingForAncestors, which should NOT additively inflate the
+    // section's height — only the wrapping container's actual height change
+    // should propagate.
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .fit,
+            .direction = .topToBottom,
+            .textWrapping = .word,
+        })({
+            // Section with wrapping cards
+            forbear.element(.{
+                .width = .grow,
+                .maxWidth = 810,
+                .direction = .topToBottom,
+            })({
+                forbear.element(.{
+                    .overflow = .wrap,
+                    .width = .grow,
+                })({
+                    // Line 1: two cards with LONG text (tall after wrapping)
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .direction = .topToBottom,
+                        .padding = .all(10),
+                    })({
+                        forbear.text("Card A has a very long body of text that will wrap to many lines when constrained to half the container width. This creates a tall card on line one which is important for reproducing the height inflation bug where the tallest card from any line inflates the wrapping containers base height. We need this to be significantly taller than the cards on line two to expose the double counting.");
+                    });
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .direction = .topToBottom,
+                        .padding = .all(10),
+                    })({
+                        forbear.text("Card B also has a very long body of text that will wrap to many lines when constrained to half width. This ensures line one is tall. The bug causes the wrapping container height to include this line height twice: once from the text wrapping cross axis max and once from the element wrapping line addition.");
+                    });
+                    // Line 2: two cards with SHORT text (short after wrapping)
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .direction = .topToBottom,
+                        .padding = .all(10),
+                    })({
+                        forbear.text("Card C short.");
+                    });
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .direction = .topToBottom,
+                        .padding = .all(10),
+                    })({
+                        forbear.text("Card D short.");
+                    });
+                });
+            });
+            // Sibling below the section
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        const tree = try layout();
+
+        const outer = tree.at(0);
+        const section = tree.at(outer.firstChild.?);
+        const wrapper = tree.at(section.firstChild.?);
+        const sibling = tree.at(section.nextSibling.?);
+
+        // Section height should equal wrapper height (no extra inflation)
+        try std.testing.expectEqual(wrapper.size[1], section.size[1]);
+
+        // Sibling should be positioned right after the section
+        try std.testing.expectEqual(section.position[1] + section.size[1], sibling.position[1]);
+
+        // Outer height should be section + sibling, not grossly inflated
+        try std.testing.expectEqual(section.size[1] + 50.0, outer.size[1]);
+
+        // The wrapping container's height must equal the sum of its line
+        // heights (not inflated by text wrapping cross-axis max).
+        // With 4 cards at 50% width, there are 2 lines. Compute expected
+        // height from the actual card sizes.
+        const cardA = tree.at(wrapper.firstChild.?);
+        const cardB = tree.at(cardA.nextSibling.?);
+        const cardC = tree.at(cardB.nextSibling.?);
+        const cardD = tree.at(cardC.nextSibling.?);
+
+        const line1Height = @max(
+            cardA.style.margin.y[0] + cardA.size[1] + cardA.style.margin.y[1],
+            cardB.style.margin.y[0] + cardB.size[1] + cardB.style.margin.y[1],
+        );
+        const line2Height = @max(
+            cardC.style.margin.y[0] + cardC.size[1] + cardC.style.margin.y[1],
+            cardD.style.margin.y[0] + cardD.size[1] + cardD.style.margin.y[1],
+        );
+        // Inter-line margin is the top margin of the first child on line 2
+        const interLineMargin = cardC.style.margin.y[0];
+        const expectedWrapperHeight = line1Height + interLineMargin + line2Height;
+        try std.testing.expectEqual(expectedWrapperHeight, wrapper.size[1]);
+    });
+}
+
+test "text inside percentage card inside wrapping container stays within bounds" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+            .textWrapping = .word,
+        })({
+            forbear.element(.{
+                .width = .grow,
+                .maxWidth = 810,
+                .direction = .topToBottom,
+            })({
+                forbear.element(.{
+                    .overflow = .wrap,
+                    .width = .grow,
+                })({
+                    forbear.element(.{
+                        .width = .{ .percentage = 0.5 },
+                        .padding = .all(13.5),
+                        .direction = .leftToRight,
+                    })({
+                        forbear.element(.{
+                            .width = .{ .fixed = 80 },
+                            .height = .{ .fixed = 80 },
+                            .margin = .right(10.5),
+                        })({});
+
+                        forbear.text("I'll be honest, we didn't know we needed help with the IT side of our business. After bringing on uhoh, I realized that I was very wrong. In the first month we built out systems and processes that will give us the capacity to scale well past where we were targeting for this year. Bonus is any time we have a problem and hit a wall, they just fix it. It really is like having a full IT team on standby. 10/10 recommend this. Clifton Sellers, Founder Legacy Builders");
+                    });
+                });
+            });
+        });
+
+        const tree = try layout();
+
+        // outer -> section -> wrapper -> card
+        const outer = tree.at(0);
+        const section = tree.at(outer.firstChild.?);
+        const wrapper = tree.at(section.firstChild.?);
+        const card = tree.at(wrapper.firstChild.?);
+
+        // Viewport is 800, maxWidth 810, so section = 800. Card = 50% = 400.
+        try std.testing.expectEqual(@as(f32, 400), card.size[0]);
+
+        // card -> image, text
+        const image = tree.at(card.firstChild.?);
+        const textNode = tree.at(image.nextSibling.?);
+
+        // Available width for text = card_width - padding*2 - image_width - image_margin_right
+        const availableForText = 400.0 - 13.5 * 2.0 - 80.0 - 10.5;
+
+        // Text must be shrunk to fit within the card's content area
+        try std.testing.expect(textNode.size[0] <= availableForText + 1.0);
+
+        // Card height must contain the tallest child plus padding
+        const tallestChild = @max(image.size[1], textNode.size[1]);
+        const expectedMinCardHeight = tallestChild + 13.5 * 2.0;
+        try std.testing.expect(card.size[1] >= expectedMinCardHeight - 1.0);
+    });
+}
+
+test "perpendicular clamping respects parent padding" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // A topToBottom parent with fixed width and padding,
+        // containing a long text that should be clamped to the content area.
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .fit,
+            .direction = .topToBottom,
+            .padding = .all(20),
+            .textWrapping = .word,
+        })({
+            forbear.text("This is a long piece of text that should definitely wrap within the parent's content area and not overflow beyond its padding boundaries");
+        });
+
+        const tree = try layout();
+        const parent = tree.at(0);
+        const textNode = tree.at(parent.firstChild.?);
+
+        // Content area = 200 - 20 - 20 = 160
+        const contentWidth = 200.0 - 20.0 - 20.0;
+
+        // The text node's width must not exceed the parent's content area
+        try std.testing.expect(textNode.size[0] <= contentWidth + 0.001);
+    });
+}
+
+test "manually placed elements are not affected by scroll" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+                .placement = .{ .manual = .{ 10.0, 20.0 } },
+            })({});
+
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        // Simulate a scroll offset
+        forbear.getContext().effectiveScrollPosition = .{ 0.0, 100.0 };
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const manualNode = tree.at(root.firstChild.?);
+        const standardNode = tree.at(manualNode.nextSibling.?);
+
+        // The manually placed element should be at its manual position, not offset by scroll
+        try std.testing.expectEqual(@as(f32, 10.0), manualNode.position[0]);
+        try std.testing.expectEqual(@as(f32, 20.0), manualNode.position[1]);
+
+        // The standard element should be offset by scroll (root moves by -100)
+        try std.testing.expectEqual(@as(f32, -100.0), standardNode.position[1]);
+    });
+}
+
+test "fixed-width ratio-height children with maxSize don't inflate parent cross-axis" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Simulates the image() pattern: fixed width, ratio height, maxWidth/maxHeight constraints.
+    // Without clamping, the parent sees the unclamped size and inflates its cross-axis height.
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 800 },
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .direction = .leftToRight,
+            })({
+                // Mimics an image: fixed width 400, ratio height 0.75, maxWidth 128, maxHeight 112.
+                // Unclamped size would be (400, 300); clamped should be (128, 96).
+                forbear.element(.{
+                    .width = .{ .fixed = 400 },
+                    .height = .{ .ratio = 0.75 },
+                    .minWidth = 0,
+                    .minHeight = 0,
+                    .maxWidth = 128,
+                    .maxHeight = 112,
+                })({});
+
+                forbear.element(.{
+                    .width = .{ .fixed = 300 },
+                    .height = .{ .ratio = 0.5 },
+                    .minWidth = 0,
+                    .minHeight = 0,
+                    .maxWidth = 128,
+                    .maxHeight = 112,
+                })({});
+            });
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const container = tree.at(root.firstChild.?);
+        const child1 = tree.at(container.firstChild.?);
+        const child2 = tree.at(child1.nextSibling.?);
+
+        // Children should be clamped to their maxWidth, and height follows ratio
+        try std.testing.expectEqual(@as(f32, 128), child1.size[0]);
+        try std.testing.expectEqual(@as(f32, 96), child1.size[1]); // 128 * 0.75
+
+        try std.testing.expectEqual(@as(f32, 128), child2.size[0]);
+        try std.testing.expectEqual(@as(f32, 64), child2.size[1]); // 128 * 0.5
+
+        // The container's cross-axis height should be max(96, 64) = 96, NOT 300
+        try std.testing.expectEqual(@as(f32, 96), container.size[1]);
+    });
 }
