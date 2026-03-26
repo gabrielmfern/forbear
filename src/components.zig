@@ -3,10 +3,8 @@ const forbear = @import("root.zig");
 
 const Vec4 = @Vector(4, f32);
 
-pub fn FpsCounter() !void {
+pub fn FpsCounter() void {
     forbear.component("forbear-native-fps-counter")({
-        const arena = try forbear.useArena();
-
         const deltaTime = forbear.useDeltaTime();
         const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
 
@@ -27,14 +25,14 @@ pub fn FpsCounter() !void {
             })({
                 forbear.text("FPS:");
                 forbear.element(.{ .width = .grow })({});
-                forbear.text(try std.fmt.allocPrint(arena, "{d:.1}", .{fps}));
+                forbear.printText("{d:.1}", .{fps});
             });
             forbear.element(.{
                 .width = .grow,
             })({
                 forbear.text("delta time:");
                 forbear.element(.{ .width = .grow })({});
-                forbear.text(try std.fmt.allocPrint(arena, "{d:.1}ms", .{deltaTime * 1000.0}));
+                forbear.printText("{d:.1}ms", .{deltaTime * 1000.0});
             });
         });
     });

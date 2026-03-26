@@ -225,11 +225,11 @@ pub const Animation = struct {
     }
 };
 
-pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) !f32 {
-    const startValue = try useState(f32, value);
-    const currentValue = try useState(f32, value);
-    const targetValue = try useState(f32, value);
-    const animation = try useAnimation(duration);
+pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) f32 {
+    const startValue = useState(f32, value);
+    const currentValue = useState(f32, value);
+    const targetValue = useState(f32, value);
+    const animation = useAnimation(duration);
     const epsilon: f32 = 0.0001;
 
     if (targetValue.* != currentValue.*) {
@@ -259,10 +259,10 @@ pub const SpringConfig = struct {
     mass: f32,
 };
 
-pub fn useSpringTransition(target: f32, config: SpringConfig) !f32 {
+pub fn useSpringTransition(target: f32, config: SpringConfig) f32 {
     const self = getContext();
-    const value = try useState(f32, target);
-    const velocity = try useState(f32, 0.0);
+    const value = useState(f32, target);
+    const velocity = useState(f32, 0.0);
 
     const dt: f32 = @floatCast(self.deltaTime orelse 0.0);
     if (dt == 0.0) return value.*;
@@ -281,9 +281,9 @@ pub fn useSpringTransition(target: f32, config: SpringConfig) !f32 {
     return value.*;
 }
 
-pub fn useAnimation(duration: f32) !Animation {
+pub fn useAnimation(duration: f32) Animation {
     const self = getContext();
-    const state = try useState(?AnimationState, null);
+    const state = useState(?AnimationState, null);
 
     if (state.* != null) {
         if (state.*.?.progress < 1.0) {
@@ -391,16 +391,10 @@ pub fn getPreviousNode() ?*Node {
     return self.nodeTree.at(index);
 }
 
-pub fn useArena() !std.mem.Allocator {
+pub fn useArena() std.mem.Allocator {
     const self = getContext();
-    if (self.frameMeta) |meta| {
-        return meta.arena;
-    } else {
-        if (!builtin.is_test) {
-            std.log.err("You might be calling a hook (useArena) outside of a frame, and forbear cannot track things outside of one.", .{});
-        }
-        return error.NoFrame;
-    }
+    std.debug.assert(self.frameMeta != null);
+    return self.frameMeta.?.arena;
 }
 
 const stateAlignment: std.mem.Alignment = .@"8";
@@ -414,14 +408,22 @@ fn currentComponentResolutionState() ?*ComponentResolutionState {
     }
 }
 
-// TODO: in debug mode, we should be adding some guard rail here to make sure
+/// TODO: in debug mode, we should be adding some guard rail here to make sure
 // of warning the user if they called the hook in an unexpected order, as it
 // can cause undefined behavior as is right now
-pub fn useState(T: type, initialValue: T) !*T {
+pub fn useState(T: type, initialValue: T) *T {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
+
+    if (self.frameMeta.?.err != null) {
+        return undefined;
+    }
+
     if (currentComponentResolutionState()) |state| {
-        const stateResult = try self.componentStates.getOrPut(state.key);
+        const stateResult = self.componentStates.getOrPut(state.key) catch |err| {
+            std.log.err("Failed to get or put a new component state {}", .{err});
+            @panic("Failed to get or put a new component state");
+        };
         defer state.useStateCursor += 1;
         if (stateResult.found_existing) {
             if (stateResult.value_ptr.items.len > state.useStateCursor) {
@@ -430,10 +432,14 @@ pub fn useState(T: type, initialValue: T) !*T {
         } else {
             stateResult.value_ptr.* = .empty;
         }
-        try stateResult.value_ptr.*.append(
-            self.allocator,
-            try self.allocator.alignedAlloc(u8, stateAlignment, @sizeOf(T)),
-        );
+        const buffer = self.allocator.alignedAlloc(u8, stateAlignment, @sizeOf(T)) catch |err| {
+            std.log.err("Failed to allocate new state {}", .{err});
+            @panic("Failed to allocate new state");
+        };
+        stateResult.value_ptr.*.append(self.allocator, buffer) catch |err| {
+            handleFrameError(err);
+            return @ptrCast(@alignCast(buffer));
+        };
         @memcpy(
             stateResult.value_ptr.*.items[state.useStateCursor],
             std.mem.asBytes(&initialValue),
@@ -443,7 +449,7 @@ pub fn useState(T: type, initialValue: T) !*T {
         if (!builtin.is_test) {
             std.log.err("You might be calling a hook (useState) outside of a component, and forbear cannot track things outside of one.", .{});
         }
-        return error.NoComponentContext;
+        @panic("No component resolution state found, you must be calling useState outside of a component, otherwise this is a bug.");
     }
 }
 
@@ -693,6 +699,18 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
     return &elementEnd;
 }
 
+pub fn printText(comptime fmt: []const u8, args: anytype) void {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+
+    const arena = self.frameMeta.?.arena;
+
+    text(std.fmt.allocPrint(arena, fmt, args) catch |err| blk: {
+        handleFrameError(err);
+        break :blk "N/A";
+    });
+}
+
 pub fn text(content: []const u8) void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
@@ -854,6 +872,8 @@ pub fn handleFrameError(err: anyerror) void {
 
     self.frameMeta.?.err = err;
 
+    if (builtin.is_test) return;
+
     var stackTrace: std.builtin.StackTrace = undefined;
     std.debug.captureStackTrace(@returnAddress(), &stackTrace);
     std.debug.print("There was an error during frame's UI mounting stage: ", .{});
@@ -1005,10 +1025,10 @@ pub fn update() !void {
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
     self.lastUpdateTime = timestamp;
 
-    try scroller(uiEdges);
+    scroller(uiEdges);
 }
 
-fn scroller(uiEdges: Vec2) !void {
+fn scroller(uiEdges: Vec2) void {
     const self = getContext();
     // This is fine since we're not really inserting any node, so it won't clash
     // with the current root node. The only purpose of this is to use the same
@@ -1030,8 +1050,8 @@ fn scroller(uiEdges: Vec2) !void {
                 .damping = 32.0,
                 .mass = 1.0,
             };
-            self.scrollPosition[0] = try useSpringTransition(self.effectiveScrollPosition[0], spring);
-            self.scrollPosition[1] = try useSpringTransition(self.effectiveScrollPosition[1], spring);
+            self.scrollPosition[0] = useSpringTransition(self.effectiveScrollPosition[0], spring);
+            self.scrollPosition[1] = useSpringTransition(self.effectiveScrollPosition[1], spring);
         }
     });
 }
