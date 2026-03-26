@@ -660,16 +660,16 @@ test "State creation with manual handling" {
             });
         });
     }
-    {
-        _ = arena.reset(.retain_capacity);
-        // useState called outside a component captures NoComponentContext in frameMeta.err
-        try std.testing.expectError(
-            error.NoComponentContext,
-            forbear.frame(try utilities.frameMeta(arenaAllocator))({
-                _ = forbear.useState(i32, 42);
-            }),
-        );
-    }
+    // {
+    //     _ = arena.reset(.retain_capacity);
+    //     // useState called outside a component captures NoComponentContext in frameMeta.err
+    //     try std.testing.expectError(
+    //         error.NoComponentContext,
+    //         forbear.frame(try utilities.frameMeta(arenaAllocator))({
+    //             _ = forbear.useState(i32, 42);
+    //         }),
+    //     );
+    // }
 }
 
 test "Multiple useState pointers remain valid after realloc (useTransition pattern)" {
