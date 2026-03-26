@@ -1283,33 +1283,40 @@ test "ltr row with fixed height centers children vertically" {
         // With .end alignment the child should be at y = 200-50 = 150.
         forbear.element(.{
             .width = .{ .fixed = 400 },
-            .height = .{ .fixed = 200 },
-            .direction = .leftToRight,
-            .alignment = .{ .x = .start, .y = .center },
+            .height = .fit,
+            .direction = .topToBottom,
         })({
             forbear.element(.{
-                .width = .{ .fixed = 100 },
-                .height = .{ .fixed = 50 },
-            })({});
-        });
+                .width = .{ .fixed = 400 },
+                .height = .{ .fixed = 200 },
+                .direction = .leftToRight,
+                .alignment = .{ .x = .start, .y = .center },
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 50 },
+                })({});
+            });
 
-        forbear.element(.{
-            .width = .{ .fixed = 400 },
-            .height = .{ .fixed = 200 },
-            .direction = .leftToRight,
-            .alignment = .{ .x = .start, .y = .end },
-        })({
             forbear.element(.{
-                .width = .{ .fixed = 100 },
-                .height = .{ .fixed = 50 },
-            })({});
+                .width = .{ .fixed = 400 },
+                .height = .{ .fixed = 200 },
+                .direction = .leftToRight,
+                .alignment = .{ .x = .start, .y = .end },
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 50 },
+                })({});
+            });
         });
 
         const tree = try layout();
 
         const root = tree.at(0);
+        const wrapper = tree.at(root.firstChild.?);
 
-        const centerRow = tree.at(root.firstChild.?);
+        const centerRow = tree.at(wrapper.firstChild.?);
         const centerChild = tree.at(centerRow.firstChild.?);
 
         const endRow = tree.at(centerRow.nextSibling.?);
