@@ -16,74 +16,56 @@ test "Element tree stack stability" {
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{})({
             const nodeParentStack = &self.frameMeta.?.nodeParentStack;
-            const nodePath = &self.frameMeta.?.nodePath;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
-            try std.testing.expectEqual(1, nodePath.items.len);
             try forbear.FpsCounter();
 
             try std.testing.expectEqual(1, nodeParentStack.items.len);
-            try std.testing.expectEqual(1, nodePath.items.len);
             forbear.element(.{})({
                 try std.testing.expectEqual(2, nodeParentStack.items.len);
-                try std.testing.expectEqual(2, nodePath.items.len);
 
                 forbear.text("Hello, world!");
                 try std.testing.expectEqual(2, nodeParentStack.items.len);
-                try std.testing.expectEqual(2, nodePath.items.len);
 
                 forbear.element(.{})({
                     try std.testing.expectEqual(3, nodeParentStack.items.len);
-                    try std.testing.expectEqual(3, nodePath.items.len);
 
                     forbear.text("Nested element");
                     try std.testing.expectEqual(3, nodeParentStack.items.len);
-                    try std.testing.expectEqual(3, nodePath.items.len);
                 });
 
                 try std.testing.expectEqual(2, nodeParentStack.items.len);
-                try std.testing.expectEqual(2, nodePath.items.len);
             });
             try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
         try std.testing.expectEqual(0, self.frameMeta.?.nodeParentStack.items.len);
-        try std.testing.expectEqual(0, self.frameMeta.?.nodePath.items.len);
-        try std.testing.expect(self.frameMeta.?.rootNode != null);
+        try std.testing.expect(self.nodeTree.list.items.len > 0);
     });
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{})({
             const nodeParentStack = &self.frameMeta.?.nodeParentStack;
-            const nodePath = &self.frameMeta.?.nodePath;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
-            try std.testing.expectEqual(1, nodePath.items.len);
             try forbear.FpsCounter();
             try std.testing.expectEqual(1, nodeParentStack.items.len);
-            try std.testing.expectEqual(1, nodePath.items.len);
             forbear.element(.{})({
                 try std.testing.expectEqual(2, nodeParentStack.items.len);
-                try std.testing.expectEqual(2, nodePath.items.len);
 
                 forbear.text("Hello, world!");
                 try std.testing.expectEqual(2, nodeParentStack.items.len);
-                try std.testing.expectEqual(2, nodePath.items.len);
 
                 forbear.element(.{})({
                     try std.testing.expectEqual(3, nodeParentStack.items.len);
-                    try std.testing.expectEqual(3, nodePath.items.len);
 
                     forbear.text("Nested element");
                     try std.testing.expectEqual(3, nodeParentStack.items.len);
-                    try std.testing.expectEqual(3, nodePath.items.len);
                 });
 
                 try std.testing.expectEqual(2, nodeParentStack.items.len);
-                try std.testing.expectEqual(2, nodePath.items.len);
             });
             try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
         try std.testing.expectEqual(0, self.frameMeta.?.nodeParentStack.items.len);
-        try std.testing.expectEqual(0, self.frameMeta.?.nodePath.items.len);
-        try std.testing.expect(self.frameMeta.?.rootNode != null);
+        try std.testing.expect(self.nodeTree.list.items.len > 0);
     });
 }
 
@@ -101,14 +83,16 @@ test "Element key stability across frames" {
     const collectKeys = struct {
         fn collect(
             allocator: std.mem.Allocator,
-            node: *const forbear.Node,
+            tree: *const forbear.NodeTree,
+            nodeIndex: usize,
             arrayList: *std.ArrayList(u64),
         ) !void {
+            const node = tree.at(nodeIndex);
             try arrayList.append(allocator, node.key);
-            if (node.children == .nodes) {
-                for (node.children.nodes.items) |*child| {
-                    try collect(allocator, child, arrayList);
-                }
+            var childIndex = node.firstChild;
+            while (childIndex) |idx| {
+                try collect(allocator, tree, idx, arrayList);
+                childIndex = tree.at(idx).nextSibling;
             }
         }
     }.collect;
@@ -126,7 +110,7 @@ test "Element key stability across frames" {
                 forbear.element(.{})({});
             });
         });
-        try collectKeys(std.testing.allocator, &self.frameMeta.?.rootNode.?, &firstFrameKeys);
+        try collectKeys(std.testing.allocator, &self.nodeTree, 0, &firstFrameKeys);
     });
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
@@ -137,7 +121,7 @@ test "Element key stability across frames" {
                 forbear.element(.{})({});
             });
         });
-        try collectKeys(std.testing.allocator, &self.frameMeta.?.rootNode.?, &secondFrameKeys);
+        try collectKeys(std.testing.allocator, &self.nodeTree, 0, &secondFrameKeys);
     });
 
     // Keys should be identical across frames for the same structure
@@ -755,15 +739,13 @@ test "Event queue dispatches events to correct elements" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
-
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{})({
             forbear.element(.{})({});
-            const firstChildKey = self.frameMeta.?.previousPushedNode.?.key;
+            const firstChildKey = forbear.getPreviousNode().?.key;
 
             forbear.element(.{})({});
-            const secondChildKey = self.frameMeta.?.previousPushedNode.?.key;
+            const secondChildKey = forbear.getPreviousNode().?.key;
 
             try std.testing.expect(firstChildKey != secondChildKey);
 
@@ -778,14 +760,14 @@ test "Event queue dispatches events to correct elements" {
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{})({
             forbear.element(.{})({});
-            const firstChildKey = self.frameMeta.?.previousPushedNode.?.key;
+            const firstChildKey = forbear.getPreviousNode().?.key;
 
             try std.testing.expectEqual(forbear.Event.mouseOut, forbear.useNextEvent().?);
             try std.testing.expectEqual(forbear.Event.mouseOver, forbear.useNextEvent().?);
             try std.testing.expectEqual(null, forbear.useNextEvent());
 
             forbear.element(.{})({});
-            const secondChildKey = self.frameMeta.?.previousPushedNode.?.key;
+            const secondChildKey = forbear.getPreviousNode().?.key;
 
             try std.testing.expect(firstChildKey != secondChildKey);
 
@@ -807,11 +789,9 @@ fn testCreateElementConfiguration(configuration: struct {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
-
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(configuration.style)({});
-        if (self.frameMeta.?.previousPushedNode) |previousNode| {
+        if (forbear.getPreviousNode()) |previousNode| {
             try std.testing.expectEqualDeep(configuration.expectedSize, previousNode.size);
         }
     });
@@ -867,8 +847,6 @@ test "element fitting - fit parent with padding accumulates fixed child inline" 
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
-
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
             .direction = .topToBottom,
@@ -882,7 +860,7 @@ test "element fitting - fit parent with padding accumulates fixed child inline" 
                 .margin = forbear.Margin.block(5.0),
             })({});
         });
-        const parent = self.frameMeta.?.previousPushedNode.?;
+        const parent = forbear.getPreviousNode().?;
         // height = padding(10+10) + margin(5+5) + child(20) = 50
         try std.testing.expectEqual(@as(f32, 50.0), parent.size[1]);
         try std.testing.expectEqual(@as(f32, 50.0), parent.minSize[1]);
@@ -898,8 +876,6 @@ test "element fitting - fit parent cross-axis takes max child height" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
-
-    const self = forbear.getContext();
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
@@ -917,7 +893,7 @@ test "element fitting - fit parent cross-axis takes max child height" {
                 .height = .{ .fixed = 50.0 },
             })({});
         });
-        const parent = self.frameMeta.?.previousPushedNode.?;
+        const parent = forbear.getPreviousNode().?;
         // height = padding(8+8) + max child height(50) = 66
         try std.testing.expectEqual(@as(f32, 66.0), parent.size[1]);
         try std.testing.expectEqual(@as(f32, 66.0), parent.minSize[1]);
@@ -933,8 +909,6 @@ test "element fitting - fit parent with padding accumulates fixed child inline w
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
-
-    const self = forbear.getContext();
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
@@ -954,7 +928,7 @@ test "element fitting - fit parent with padding accumulates fixed child inline w
                 .margin = forbear.Margin.inLine(6.0),
             })({});
         });
-        const parent = self.frameMeta.?.previousPushedNode.?;
+        const parent = forbear.getPreviousNode().?;
         // width = padding(12+12) + child0(4+30+4) + child1(6+20+6) = 94
         try std.testing.expectEqual(@as(f32, 94.0), parent.size[0]);
         try std.testing.expectEqual(@as(f32, 94.0), parent.minSize[0]);
@@ -970,8 +944,6 @@ test "element fitting - nested fit parents propagate size upward" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
-
-    const self = forbear.getContext();
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
@@ -990,7 +962,7 @@ test "element fitting - nested fit parents propagate size upward" {
                 })({});
             });
         });
-        const outer = self.frameMeta.?.previousPushedNode.?;
+        const outer = forbear.getPreviousNode().?;
         try std.testing.expectEqual(@as(f32, 60.0), outer.size[0]);
         try std.testing.expectEqual(@as(f32, 30.0), outer.size[1]);
         try std.testing.expectEqual(@as(f32, 60.0), outer.minSize[0]);
@@ -1008,8 +980,6 @@ test "element fitting - manual child does not contribute to fit parent" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
-
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
             .direction = .topToBottom,
@@ -1022,7 +992,7 @@ test "element fitting - manual child does not contribute to fit parent" {
                 .height = .{ .fixed = 999.0 },
             })({});
         });
-        const parent = self.frameMeta.?.previousPushedNode.?;
+        const parent = forbear.getPreviousNode().?;
         // Manual child must not inflate the fit parent
         try std.testing.expectEqual(@as(f32, 0.0), parent.size[0]);
         try std.testing.expectEqual(@as(f32, 0.0), parent.size[1]);
@@ -1049,9 +1019,9 @@ test "element fitting - text child inflates fit parent inline" {
         })({
             forbear.text("hello");
         });
-        const parent = self.frameMeta.?.previousPushedNode.?;
+        const parent = forbear.getPreviousNode().?;
         // Parent must be at least as wide and tall as the text node itself.
-        const textNode = parent.children.nodes.items[0];
+        const textNode = self.nodeTree.at(parent.firstChild.?);
         try std.testing.expect(parent.size[0] >= textNode.size[0]);
         try std.testing.expect(parent.size[1] >= textNode.size[1]);
         try std.testing.expect(parent.size[0] > 0.0);
@@ -1081,8 +1051,8 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
         })({
             forbear.text("hello world");
         });
-        const parent = self.frameMeta.?.previousPushedNode.?;
-        const textNode = parent.children.nodes.items[0];
+        const parent = forbear.getPreviousNode().?;
+        const textNode = self.nodeTree.at(parent.firstChild.?);
         // The full text width (size[0]) must be reflected in the parent —
         // not just the longest-word minSize.
         try std.testing.expectEqual(textNode.size[0], parent.size[0]);

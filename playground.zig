@@ -73,10 +73,10 @@ fn renderingMain(
         })({
             try App();
 
-            const rootNode = try forbear.layout();
+            const rootTree = try forbear.layout();
             try renderer.drawFrame(
                 arena,
-                rootNode,
+                rootTree,
                 .{ 1.0, 1.0, 1.0, 1.0 },
                 window.dpi,
                 window.targetFrameTimeNs(),

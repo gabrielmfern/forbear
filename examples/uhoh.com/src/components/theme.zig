@@ -1,5 +1,3 @@
-pub const dpiScale = 72.0 / 96.0;
-
 pub const Colors = struct {
     pub const page = .{ 0.99, 0.98, 0.95, 1.0 };
     pub const text = .{ 0.1, 0.1, 0.1, 1.0 };

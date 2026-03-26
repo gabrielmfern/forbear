@@ -100,7 +100,22 @@ forbear/
 
 ## Skills References
 
-Make sure to check the relevant skills under `.cursor/skills/` for:
-- Writing Forbear app UI code (`forbear` skill)
-- Developing Forbear framework internals, testing, shaders, or common internal tasks (`forbear-internals` skill)
-- Running and troubleshooting Forbear within Cursor Cloud environments with Wayland/Weston (`cloud-env` skill)
+## Learned User Preferences
+
+- Prefer unified code paths over duplicated branches for related behaviors (e.g., wrap vs non-wrap placement should share one path with only the policy predicate differing)
+- Prefer design analysis explaining WHY something should or shouldn't be done, rather than immediately implementing whatever is asked
+- Prefer single-pass solutions folded into existing tree walks over adding separate traversal passes with extra allocations
+- When a helper like `utilities.frameMeta()` exists, use it consistently everywhere rather than hand-constructing equivalent literals
+- Always verify that file edits were actually applied before reporting completion
+- Source-location-based identity for UI nodes is preferred over positional/index-based identity, but the API should hide complexity rather than forcing users to pass `@src()` at every call site
+
+## Learned Workspace Facts
+
+- Node structs constructed in tests require `parent: null` for root nodes; omitting the field causes compilation errors
+- Tests do not require Vulkan or a GPU; `undefined` is passed as the renderer parameter, and `update()` is fully testable without graphics
+- The `uhoh.com` example app reproduces a real website; comparing the live site's CSS (especially flex-wrap) against the example output is a valid way to find missing layout features
+- `Node.fitChild()` in `node.zig` is the single source of truth for fit-size accumulation; layout code should delegate to it rather than duplicating the logic
+- `Node.fit()` is a local-only operation that fits a single node from its current children; it should not recurse into the subtree
+- Fitting flows bottom-up (children report size to parents) and can happen during element creation; growing flows top-down (parents distribute space to children) and requires the full tree plus viewport anchoring
+- For word-wrapped text, `src/root.zig` computes `minSize` width as the longest word; if a fit parent fails to pick up the text child's full size, the shrink pass can squeeze the text node to that minimum, causing each word to stack in a narrow column
+
