@@ -1312,9 +1312,7 @@ test "ltr row with fixed height centers children vertically" {
         });
 
         const tree = try layout();
-
-        const root = tree.at(0);
-        const wrapper = tree.at(root.firstChild.?);
+        const wrapper = tree.at(0);
 
         const centerRow = tree.at(wrapper.firstChild.?);
         const centerChild = tree.at(centerRow.firstChild.?);
@@ -1323,10 +1321,10 @@ test "ltr row with fixed height centers children vertically" {
         const endChild = tree.at(endRow.firstChild.?);
 
         // Center: child should be vertically centered within the 200px parent
-        try std.testing.expectEqual(@as(f32, 75), centerChild.position[1]);
+        try std.testing.expectEqual(@as(f32, 75), centerChild.position[1] - centerRow.position[1]);
 
         // End: child should be at the bottom of the 200px parent
-        try std.testing.expectEqual(@as(f32, 150), endChild.position[1]);
+        try std.testing.expectEqual(@as(f32, 150), endChild.position[1] - endRow.position[1]);
     });
 }
 
