@@ -246,7 +246,7 @@ fn updateFittingForAncestorsInDirection(
             const perpendicularDirection = direction.perpendicular();
             const perpendicularPreferredSize = ancestor.style.getPreferredSize(perpendicularDirection);
             if (perpendicularPreferredSize == .ratio) {
-                ancestor.setSize(perpendicularDirection, ancestorSize * perpendicularPreferredSize.ratio);
+                ancestor.setSize(perpendicularDirection, ancestor.getSize(direction) * perpendicularPreferredSize.ratio);
             }
 
             currentSize = ancestor.getSize(direction);

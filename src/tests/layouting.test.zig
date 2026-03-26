@@ -408,6 +408,53 @@ test "percentage children positioned correctly among fixed siblings" {
     });
 }
 
+// Regression: `updateFittingForAncestorsInDirection` must apply perpendicular
+// `.ratio` against the ancestor's size *after* `setSize` on the propagation axis.
+// A row with `width: ratio` (width = height × r) and `height: fit` gets its height
+// from a word-wrapped text column; that height updates during `wrapGlyphs`. Using
+// the pre-update main-axis size for the ratio left `width` too small (stale h × r).
+test "ratio width tracks fit height after propagated text wrap" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .ratio = 2.0 },
+                .height = .fit,
+                .direction = .leftToRight,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 120 },
+                    .height = .fit,
+                    .direction = .topToBottom,
+                    .textWrapping = .word,
+                })({
+                    forbear.text("One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.");
+                });
+            });
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const row = tree.at(root.firstChild.?);
+
+        // Wrapped text should make the row noticeably tall (not a single line).
+        try std.testing.expect(row.size[1] > 45.0);
+        // width = height × 2 after propagation from wrapGlyphs
+        try std.testing.expectApproxEqAbs(row.size[0], row.size[1] * 2.0, 1.0);
+    });
+}
+
 test "ratio height resolves after grow distributes width" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
