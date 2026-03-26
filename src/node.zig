@@ -742,9 +742,9 @@ pub const Node = struct {
         // Line 3: size, min, max
         try writeIndent(writer, indent);
         try std.fmt.format(writer, "  size=[{d:.1}, {d:.1}]  min=[{d:.1}, {d:.1}]  max=[{d:.1}, {d:.1}]\n", .{
-            self.size[0],       self.size[1],
-            self.minSize[0],    self.minSize[1],
-            self.maxSize[0],    self.maxSize[1],
+            self.size[0],    self.size[1],
+            self.minSize[0], self.minSize[1],
+            self.maxSize[0], self.maxSize[1],
         });
 
         // Line 4: position
