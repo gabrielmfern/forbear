@@ -1,16 +1,16 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
-fn App() !void {
+fn App() void {
     forbear.component("app")({
-        const isHovering = try forbear.useState(bool, false);
+        const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{
             .width = .grow,
             .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
             .padding = .inLine(10),
         })({
-            try forbear.FpsCounter();
+            forbear.FpsCounter();
 
             forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
             forbear.element(.{
@@ -19,7 +19,7 @@ fn App() !void {
                 .background = .{
                     .color = .{
                         1.0,
-                        try forbear.useTransition(if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
+                        forbear.useTransition(if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
                         0.0,
                         1.0,
                     },
@@ -71,7 +71,7 @@ fn renderingMain(
             },
             .dpi = .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         })({
-            try App();
+            App();
 
             const rootTree = try forbear.layout();
             try renderer.drawFrame(

@@ -442,7 +442,7 @@ pub const NodeTree = struct {
         current: ?usize,
         tree: *const NodeTree,
 
-        pub fn reset(self: *@This()) !void {
+        pub fn reset(self: *@This()) void {
             self.current = null;
         }
 

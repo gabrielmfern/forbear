@@ -6,9 +6,9 @@ pub const ButtonProps = struct {
     sizing: enum { medium, large } = .medium,
 };
 
-pub fn Button(props: ButtonProps) !void {
+pub fn Button(props: ButtonProps) void {
     forbear.component("button")({
-        const isHovering = try forbear.useState(bool, false);
+        const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{})({
             forbear.element(.{
@@ -23,14 +23,14 @@ pub fn Button(props: ButtonProps) !void {
                 },
                 .translate = .{
                     0.0,
-                    try forbear.useTransition(if (isHovering.*) -4.5 else 0.0, 0.1, forbear.easeInOut),
+                    forbear.useTransition(if (isHovering.*) -4.5 else 0.0, 0.1, forbear.easeInOut),
                 },
                 .shadow = .{
                     .blurRadius = 0.0,
                     .spread = 0.0,
                     .color = .{ 0.0, 0.0, 0.0, 1.0 },
                     .offset = forbear.Offset.bottom(
-                        try forbear.useTransition(if (isHovering.*) 4.5 else 0.0, 0.1, forbear.easeInOut),
+                        forbear.useTransition(if (isHovering.*) 4.5 else 0.0, 0.1, forbear.easeInOut),
                     ),
                 },
                 .padding = switch (props.sizing) {

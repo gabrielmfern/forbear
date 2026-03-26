@@ -42,7 +42,7 @@ fn App() !void {
             .fontSize = 12.0,
             .color = theme.Colors.text,
         })({
-            try forbear.FpsCounter();
+            forbear.FpsCounter();
 
             forbear.element(.{
                 .width = .grow,
@@ -81,7 +81,7 @@ fn App() !void {
                 })({
                     forbear.text("Pricing");
                 });
-                try Button(.{
+                Button(.{
                     .text = "Try it risk-free",
                 });
             });
@@ -113,7 +113,7 @@ fn App() !void {
                     })({
                         forbear.text("It doesn't just annoy you. It slows you and your staff down. That's our job now.");
                     });
-                    try Button(.{ .text = "Let us prove it*" });
+                    Button(.{ .text = "Let us prove it*" });
                     forbear.element(.{
                         .fontSize = 9.0,
                         .color = black,
@@ -228,7 +228,7 @@ fn App() !void {
                     })({
                         forbear.text("Imagine if you could delegate all these issues to a genie?");
                     });
-                    try Button(.{ .text = "Get a free trial" });
+                    Button(.{ .text = "Get a free trial" });
                 });
             });
             const testimonials = [_]struct {
@@ -763,7 +763,7 @@ fn App() !void {
 
                     // TODO: make component slotting work so we can include the
                     // "Don't make me beg" sub text here
-                    try Button(.{ .text = "Come on, click on this" });
+                    Button(.{ .text = "Come on, click on this" });
                 });
             });
             forbear.element(.{
