@@ -1344,7 +1344,7 @@ test "layoutDump reports glyph line count" {
     });
 }
 
-test "trace_writer logs propagation through ancestors" {
+test "traceWriter logs propagation through ancestors" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
 
@@ -1370,9 +1370,9 @@ test "trace_writer logs propagation through ancestors" {
 
         var buf = try std.ArrayList(u8).initCapacity(std.testing.allocator, 256);
         defer buf.deinit(std.testing.allocator);
-        layouting.trace_writer = buf.writer(std.testing.allocator).any();
+        layouting.traceWriter = buf.writer(std.testing.allocator).any();
         defer {
-            layouting.trace_writer = null;
+            layouting.traceWriter = null;
         }
 
         _ = try layout();
