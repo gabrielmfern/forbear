@@ -21,7 +21,7 @@ const Vec2 = @Vector(2, f32);
 /// When set, `updateFittingForAncestors` writes a trace of each ancestor
 /// visited, the decision made, values before/after, and why propagation
 /// stopped. Leave `null` (the default) for zero overhead.
-pub var trace_writer: ?std.io.AnyWriter = null;
+pub var traceWriter: ?std.io.AnyWriter = null;
 
 fn approxEq(a: f32, b: f32) bool {
     return @abs(a - b) < 0.001;
@@ -193,7 +193,7 @@ fn updateFittingForAncestorsInDirection(
 ) void {
     if (node.style.placement != .standard) return;
 
-    if (trace_writer) |tw| {
+    if (traceWriter) |tw| {
         std.fmt.format(tw, "[fit-propagate] addition={d:.1} dir={s}\n", .{
             addition,
             @tagName(direction),
@@ -215,7 +215,7 @@ fn updateFittingForAncestorsInDirection(
 
         const ancestorFittingBase = ancestor.fittingBase(direction);
 
-        if (trace_writer) |tw| {
+        if (traceWriter) |tw| {
             std.fmt.format(tw, "  ancestor[{d}] (dir={s}, overflow={s}, fit={s})\n", .{
                 ancestorIndex,
                 @tagName(ancestor.style.direction),
@@ -258,14 +258,14 @@ fn updateFittingForAncestorsInDirection(
                     currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                 ));
                 if (ancestorWraps) {
-                    if (trace_writer) |tw| {
+                    if (traceWriter) |tw| {
                         std.fmt.format(tw, "    STOP: wrapping boundary\n", .{}) catch {};
                     }
                     break;
                 }
             }
 
-            if (trace_writer) |tw| {
+            if (traceWriter) |tw| {
                 std.fmt.format(tw, "    {s}-axis: size {d:.1} -> {d:.1}, delta={d:.1}\n", .{
                     if (ancestor.style.direction == direction) "same" else "cross",
                     ancestorSize,
@@ -286,7 +286,7 @@ fn updateFittingForAncestorsInDirection(
             currentMinSize = ancestor.getMinSize(direction);
             currentMargin = ancestor.style.margin.get(direction);
         } else {
-            if (trace_writer) |tw| {
+            if (traceWriter) |tw| {
                 std.fmt.format(tw, "    STOP: non-fit ancestor\n", .{}) catch {};
             }
             break;
@@ -294,13 +294,13 @@ fn updateFittingForAncestorsInDirection(
 
         ancestorIndexOptional = ancestor.parent;
         if (ancestorIndexOptional == null) {
-            if (trace_writer) |tw| {
+            if (traceWriter) |tw| {
                 std.fmt.format(tw, "    STOP: reached root\n", .{}) catch {};
             }
         }
     }
 
-    if (trace_writer) |tw| {
+    if (traceWriter) |tw| {
         tw.writeAll("\n") catch {};
     }
 }
