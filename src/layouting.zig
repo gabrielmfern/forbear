@@ -18,6 +18,11 @@ const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
 
+/// When set, `updateFittingForAncestors` writes a trace of each ancestor
+/// visited, the decision made, values before/after, and why propagation
+/// stopped. Leave `null` (the default) for zero overhead.
+pub var traceWriter: ?std.io.AnyWriter = null;
+
 fn approxEq(a: f32, b: f32) bool {
     return @abs(a - b) < 0.001;
 }
@@ -188,6 +193,13 @@ fn updateFittingForAncestorsInDirection(
 ) void {
     if (node.style.placement != .standard) return;
 
+    if (traceWriter) |tw| {
+        std.fmt.format(tw, "[fit-propagate] addition={d:.1} dir={s}\n", .{
+            addition,
+            @tagName(direction),
+        }) catch {};
+    }
+
     var currentAddition = addition;
     var currentMinSize = node.getMinSize(direction);
     var currentSize = node.getSize(direction);
@@ -202,6 +214,15 @@ fn updateFittingForAncestorsInDirection(
         const ancestorWraps = ancestor.style.overflow == .wrap and ancestor.style.direction == .leftToRight;
 
         const ancestorFittingBase = ancestor.fittingBase(direction);
+
+        if (traceWriter) |tw| {
+            std.fmt.format(tw, "  ancestor[{d}] (dir={s}, overflow={s}, fit={s})\n", .{
+                ancestorIndex,
+                @tagName(ancestor.style.direction),
+                @tagName(ancestor.style.overflow),
+                if (ancestor.style.getPreferredSize(direction) == .fit) "true" else "false",
+            }) catch {};
+        }
 
         if (ancestor.shouldFitMin(direction)) {
             if (ancestor.style.direction == direction) {
@@ -237,8 +258,20 @@ fn updateFittingForAncestorsInDirection(
                     currentSize + currentMargin[0] + currentMargin[1] + ancestorFittingBase,
                 ));
                 if (ancestorWraps) {
+                    if (traceWriter) |tw| {
+                        std.fmt.format(tw, "    STOP: wrapping boundary\n", .{}) catch {};
+                    }
                     break;
                 }
+            }
+
+            if (traceWriter) |tw| {
+                std.fmt.format(tw, "    {s}-axis: size {d:.1} -> {d:.1}, delta={d:.1}\n", .{
+                    if (ancestor.style.direction == direction) "same" else "cross",
+                    ancestorSize,
+                    ancestor.getSize(direction),
+                    ancestor.getSize(direction) - ancestorSize,
+                }) catch {};
             }
 
             currentAddition = ancestor.getSize(direction) - ancestorSize;
@@ -253,10 +286,22 @@ fn updateFittingForAncestorsInDirection(
             currentMinSize = ancestor.getMinSize(direction);
             currentMargin = ancestor.style.margin.get(direction);
         } else {
+            if (traceWriter) |tw| {
+                std.fmt.format(tw, "    STOP: non-fit ancestor\n", .{}) catch {};
+            }
             break;
         }
 
         ancestorIndexOptional = ancestor.parent;
+        if (ancestorIndexOptional == null) {
+            if (traceWriter) |tw| {
+                std.fmt.format(tw, "    STOP: reached root\n", .{}) catch {};
+            }
+        }
+    }
+
+    if (traceWriter) |tw| {
+        tw.writeAll("\n") catch {};
     }
 }
 
@@ -539,12 +584,18 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                 }
 
                 const availableWidth = node.size[0] - node.fittingBase(.leftToRight);
+                const availableHeight = node.size[1] - node.fittingBase(.topToBottom);
                 for (lines.items) |line| {
                     const xOffset: f32 = switch (node.style.alignment.x) {
                         .start => 0.0,
                         .center => (availableWidth - line.width) / 2.0,
                         .end => availableWidth - line.width,
                     };
+                    // For single-line containers, align children within the
+                    // full available height so .center/.end work when the
+                    // parent is taller than its content. For multi-line
+                    // (wrapping), align within each line's height.
+                    const alignHeight = if (lines.items.len == 1) @max(line.height, availableHeight) else line.height;
                     childIndexOption = line.start;
                     while (childIndexOption) |childIndex| {
                         const child = nodeTree.at(childIndex);
@@ -552,8 +603,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                             child.position[0] += xOffset;
                             child.position[1] += switch (node.style.alignment.y) {
                                 .start => 0.0,
-                                .center => (line.height - child.size[1]) / 2.0,
-                                .end => line.height - child.size[1],
+                                .center => (alignHeight - child.size[1]) / 2.0,
+                                .end => alignHeight - child.size[1],
                             };
                         }
                         if (childIndex == line.end) break;

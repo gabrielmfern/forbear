@@ -1,21 +1,25 @@
 - [ ] find a way to avoid having to use `try` everwhere
 - [ ] implement 10 examples of UI that I find inspiring
-    - [ ] uhoh.com
-    - [ ] https://wayland-book.com
+  - [ ] uhoh.com
+  - [ ] https://wayland-book.com
 - [x] implement scrolling 
 - [ ] text selection
 - [x] I need a way to define the percentage width that an element would take 
   of its parent
-- [ ] a way to define children for components
-    - most likely using a "slotting" solution where
-      `forbear.componentChildrenSlot()` would mark the parent/path to slot
-      component children into parent
+
+deal-breaker problems:
+- [ ] keying is not really stable for elements that can be removed or added back in
+  - we need manual keying for loops of children
+- [ ] stutters drops when images load in
+  - we should decompress images async, across frames to avoid this
+    - is stb_image enough for this?
+    - how can we show the image while it's being decompressed?
 
 ## uhoh.com
 
 - [x] fix where image should be transparent being white
-    - Decided to not do it, it's caused by uhoh.com using blendMode: multiply
-      which we don't do at all
+  - Decided to not do it, it's caused by uhoh.com using blendMode: multiply
+    which we don't do at all
 - [x] fix image anti aliasing to look more like the browser
 - [x] what do I need to have variant fonts?
 - [x] text wrapping
@@ -36,23 +40,25 @@ missing things for the entire uhoh.com website:
 - [x] can't make an element fully transparent?
 - [x] blend multiply
 - [x] images are quite awkaward, specifically when it comes to sizing
-    - lazily decompressing images causes huge frame drops for large images
-    - we should probably have `forbear.image` instead of always using backgroundImage, and have its size calculated from the aspect ratio while filling up the parent
+  - lazily decompressing images causes huge frame drops for large images
+  - we should probably have `forbear.image` instead of always using backgroundImage, and have its size calculated from the aspect ratio while filling up the parent
 - [x] support for filter: grayscale()
 - [x] element wrapping
-- [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
-    - is having lots of them bad? I understand having no type-safety though
+- [ ] component children slotting
+  - most likely using a "slotting" solution where
+    `forbear.componentChildrenSlot()` would mark the parent/path to slot
+    component children into parent
+- [ ] feature equivalent to display: grid in css
+- [ ] linear gradient support
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
-- [ ] linear gradient support
-- [ ] component children slotting
 
 problems:
-- image loading causes stutters, we should decompress images async, across frames to avoid this
-    - is stb_image enough for this?
 - when there's scaling in linux, the scale only drops in after some frames
-- could not figure out what `useNextEvent` was for, and just ignored it leaving it in place
-- created a utilty for px so that it didn't have to calculate the proper value
+- new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
+  - is having lots of them bad? I understand having no type-safety though
+- AI
+  - could not figure out what `useNextEvent` was for, and just ignored it leaving it in place
+  - created a utilty for px so that it didn't have to calculate the proper value
     - should we maybe have px as the default value? I've noticed that the DPI isn't as reliable as I thought, as it can be used for scaling for example
 - grow parent, one fit child and one grow child, the grow doesn't behave as expected
-- we need manual keying for loops of children

@@ -1,6 +1,7 @@
 const std = @import("std");
 
-const layout = @import("../layouting.zig").layout;
+const layouting = @import("../layouting.zig");
+const layout = layouting.layout;
 const utilities = @import("utilities.zig");
 const forbear = @import("../root.zig");
 const Vec2 = @Vector(2, f32);
@@ -1264,5 +1265,185 @@ test "fixed-width ratio-height children with maxSize don't inflate parent cross-
 
         // The container's cross-axis height should be max(96, 64) = 96, NOT 300
         try std.testing.expectEqual(@as(f32, 96), container.size[1]);
+    });
+}
+
+test "ltr row with fixed height centers children vertically" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // A 400x200 horizontal row with a 50px tall child.
+        // With .center alignment the child should be at y = (200-50)/2 = 75.
+        // With .end alignment the child should be at y = 200-50 = 150.
+        forbear.element(.{
+            .width = .{ .fixed = 400 },
+            .height = .fit,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 400 },
+                .height = .{ .fixed = 200 },
+                .direction = .leftToRight,
+                .alignment = .{ .x = .start, .y = .center },
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 50 },
+                })({});
+            });
+
+            forbear.element(.{
+                .width = .{ .fixed = 400 },
+                .height = .{ .fixed = 200 },
+                .direction = .leftToRight,
+                .alignment = .{ .x = .start, .y = .end },
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 50 },
+                })({});
+            });
+        });
+
+        const tree = try layout();
+        const wrapper = tree.at(0);
+
+        const centerRow = tree.at(wrapper.firstChild.?);
+        const centerChild = tree.at(centerRow.firstChild.?);
+
+        const endRow = tree.at(centerRow.nextSibling.?);
+        const endChild = tree.at(endRow.firstChild.?);
+
+        // Center: child should be vertically centered within the 200px parent
+        try std.testing.expectEqual(@as(f32, 75), centerChild.position[1] - centerRow.position[1]);
+
+        // End: child should be at the bottom of the 200px parent
+        try std.testing.expectEqual(@as(f32, 150), endChild.position[1] - endRow.position[1]);
+    });
+}
+
+test "layoutDump produces expected output for a simple tree" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 100 },
+            .padding = .all(10),
+            .direction = .leftToRight,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 80 },
+                .height = .{ .fixed = 40 },
+                .margin = .all(5),
+            })({});
+        });
+
+        const tree = try layout();
+
+        var buf = try std.ArrayList(u8).initCapacity(std.testing.allocator, 256);
+        defer buf.deinit(std.testing.allocator);
+
+        try tree.layoutDump(buf.writer(std.testing.allocator).any());
+
+        const output = buf.items;
+
+        // Verify the dump contains key structural markers
+        try std.testing.expect(std.mem.indexOf(u8, output, "[0]") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "[1]") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "dir=leftToRight") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "fixed(200.0)") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "fixed(80.0)") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "padding=x[10.0,10.0] y[10.0,10.0]") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "margin=x[5.0,5.0] y[5.0,5.0]") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "fittingBase:") != null);
+    });
+}
+
+test "layoutDump reports glyph line count" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .fit,
+            .textWrapping = .word,
+        })({
+            forbear.text("Hello world, this is a test of wrapping text output");
+        });
+
+        const tree = try layout();
+
+        var buf = try std.ArrayList(u8).initCapacity(std.testing.allocator, 256);
+        defer buf.deinit(std.testing.allocator);
+
+        try tree.layoutDump(buf.writer(std.testing.allocator).any());
+
+        const output = buf.items;
+        // The text node should have glyphs reported
+        try std.testing.expect(std.mem.indexOf(u8, output, "glyphs=") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "lines)") != null);
+    });
+}
+
+test "traceWriter logs propagation through ancestors" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .fit,
+            .height = .fit,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .fit,
+                .textWrapping = .word,
+            })({
+                forbear.text("Hello world, this is a test of wrapping text for trace output");
+            });
+        });
+
+        var buf = try std.ArrayList(u8).initCapacity(std.testing.allocator, 256);
+        defer buf.deinit(std.testing.allocator);
+        layouting.traceWriter = buf.writer(std.testing.allocator).any();
+        defer {
+            layouting.traceWriter = null;
+        }
+
+        _ = try layout();
+
+        const output = buf.items;
+        // Should contain entry markers
+        try std.testing.expect(std.mem.indexOf(u8, output, "[fit-propagate]") != null);
+        // Should contain ancestor visit
+        try std.testing.expect(std.mem.indexOf(u8, output, "ancestor[") != null);
+        // Should contain a STOP reason
+        const hasStop = std.mem.indexOf(u8, output, "STOP:") != null;
+        try std.testing.expect(hasStop);
     });
 }
