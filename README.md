@@ -78,11 +78,11 @@ See [TODO.md](./TODO.md) for most of everything, and [open questions](./notes/op
 ## Roadmap
 
 1. Build 10 real-world UIs
-  - https://uhoh.com: In progress
-  - https://wayland-book.com: Planned
+    - https://uhoh.com: In progress
+    - https://wayland-book.com: Planned
 2. Build real applications with it
 3. Multi-language bindings
-  - JSX specially, so it can actually be a good subsitute for how I'd use Electron
+    - JSX specially, so it can actually be a good subsitute for how I'd use Electron
 
 This is a multi-year project, so I'm planning might change and that's actually very likely, so I don't want to tie myselfs to the priorities of today.
 
