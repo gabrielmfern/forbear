@@ -1,5 +1,7 @@
 const std = @import("std");
 const forbear = @import("../root.zig");
+const layouting = @import("../layouting.zig");
+const layout = layouting.layout;
 const utilities = @import("utilities.zig");
 const Vec2 = @Vector(2, f32);
 
@@ -1099,5 +1101,193 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
         // not just the longest-word minSize.
         try std.testing.expectEqual(textNode.size[0], parent.size[0]);
         try std.testing.expect(parent.size[0] > textNode.minSize[0]);
+    });
+}
+
+test "mouseDown dispatches on button press" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Frame 1: create an element and run layout + update with mouse press
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        _ = try layout();
+
+        self.mousePosition = .{ 50.0, 50.0 };
+        self.mouseButtonJustPressed = true;
+        self.mouseButtonPressed = true;
+        try forbear.update();
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: consume events
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({
+            try std.testing.expectEqual(forbear.Event.mouseDown, forbear.on(.mouseDown).?);
+        });
+    });
+}
+
+test "mouseUp dispatches on button release" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        _ = try layout();
+
+        self.mousePosition = .{ 50.0, 50.0 };
+        self.mouseButtonJustReleased = true;
+        self.mouseButtonPressed = false;
+        try forbear.update();
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({
+            try std.testing.expectEqual(forbear.Event.mouseUp, forbear.on(.mouseUp).?);
+        });
+    });
+}
+
+test "click fires when mouseDown and mouseUp on same element" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Frame 1: mouseDown
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        _ = try layout();
+
+        self.mousePosition = .{ 50.0, 50.0 };
+        self.mouseButtonJustPressed = true;
+        self.mouseButtonPressed = true;
+        try forbear.update();
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: mouseUp on same element
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        _ = try layout();
+
+        self.mousePosition = .{ 50.0, 50.0 };
+        self.mouseButtonJustPressed = false;
+        self.mouseButtonJustReleased = true;
+        self.mouseButtonPressed = false;
+        try forbear.update();
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 3: consume events
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({
+            try std.testing.expectEqual(forbear.Event.click, forbear.on(.click).?);
+            try std.testing.expectEqual(forbear.Event.mouseUp, forbear.on(.mouseUp).?);
+        });
+    });
+}
+
+test "no click when mouse moves away between mouseDown and mouseUp" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Frame 1: mouseDown on element
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        _ = try layout();
+
+        self.mousePosition = .{ 50.0, 50.0 };
+        self.mouseButtonJustPressed = true;
+        self.mouseButtonPressed = true;
+        try forbear.update();
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: move mouse outside and release
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        _ = try layout();
+
+        self.mousePosition = .{ 200.0, 200.0 };
+        self.mouseButtonJustPressed = false;
+        self.mouseButtonJustReleased = true;
+        self.mouseButtonPressed = false;
+        try forbear.update();
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 3: consume events -- should have mouseOut but no click or mouseUp on this element
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({
+            try std.testing.expectEqual(null, forbear.on(.click));
+            try std.testing.expectEqual(null, forbear.on(.mouseUp));
+        });
     });
 }

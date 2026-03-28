@@ -41,6 +41,9 @@ const ComponentResolutionState = struct {
 pub const Event = union(enum) {
     mouseOver,
     mouseOut,
+    mouseDown,
+    mouseUp,
+    click,
 };
 
 const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
@@ -70,7 +73,11 @@ pub const FrameMeta = struct {
 allocator: std.mem.Allocator,
 
 mousePosition: Vec2,
+mouseButtonPressed: bool,
+mouseButtonJustPressed: bool,
+mouseButtonJustReleased: bool,
 hoveredElementKeys: std.ArrayList(u64),
+mouseDownElementKeys: std.ArrayList(u64),
 /// The eased in value of `effectiveScrollPosition`
 scrollPosition: Vec2,
 /// The final value of the scrolling, without considering any animations, snaps
@@ -106,7 +113,11 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .allocator = allocator,
 
         .mousePosition = @splat(0.0),
+        .mouseButtonPressed = false,
+        .mouseButtonJustPressed = false,
+        .mouseButtonJustReleased = false,
         .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
+        .mouseDownElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .scrollPosition = @splat(0.0),
         .effectiveScrollPosition = @splat(0.0),
 
@@ -986,6 +997,11 @@ pub fn update() !void {
         events.clearRetainingCapacity();
     }
 
+    const justPressed = self.mouseButtonJustPressed;
+    const justReleased = self.mouseButtonJustReleased;
+    self.mouseButtonJustPressed = false;
+    self.mouseButtonJustReleased = false;
+
     var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
     missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
 
@@ -1021,11 +1037,26 @@ pub fn update() !void {
 
                 try self.hoveredElementKeys.append(self.allocator, node.key);
             }
+
+            if (justPressed) {
+                try pushEvent(node.key, .mouseDown);
+                try self.mouseDownElementKeys.append(self.allocator, node.key);
+            }
+            if (justReleased) {
+                try pushEvent(node.key, .mouseUp);
+                if (std.mem.indexOfScalar(u64, self.mouseDownElementKeys.items, node.key) != null) {
+                    try pushEvent(node.key, .click);
+                }
+            }
         } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
             try pushEvent(node.key, .mouseOut);
 
             _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
         }
+    }
+
+    if (justReleased) {
+        self.mouseDownElementKeys.clearRetainingCapacity();
     }
 
     for (missingHoveredKeys.items) |key| {
@@ -1135,12 +1166,31 @@ pub fn setWindowHandlers(window: *Window) void {
         }).handler,
         .data = @ptrCast(@alignCast(self)),
     };
+    window.handlers.pointerButton = .{
+        .function = &(struct {
+            fn handler(_: *Window, _: u32, _: u32, button: u32, state: u32, data: *anyopaque) void {
+                const ctx: *Context = @ptrCast(@alignCast(data));
+                // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
+                if (button == 272) {
+                    if (state == 1) {
+                        ctx.mouseButtonJustPressed = true;
+                        ctx.mouseButtonPressed = true;
+                    } else {
+                        ctx.mouseButtonJustReleased = true;
+                        ctx.mouseButtonPressed = false;
+                    }
+                }
+            }
+        }).handler,
+        .data = @ptrCast(@alignCast(self)),
+    };
 }
 
 pub fn deinit() void {
     const self = getContext();
 
     self.hoveredElementKeys.deinit(self.allocator);
+    self.mouseDownElementKeys.deinit(self.allocator);
 
     var componentStatesIterator = self.componentStates.valueIterator();
     while (componentStatesIterator.next()) |states| {

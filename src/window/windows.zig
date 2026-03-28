@@ -32,6 +32,10 @@ pub const Handlers = struct {
         data: *anyopaque,
         function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
     } = null,
+    pointerButton: ?struct {
+        data: *anyopaque,
+        function: *const fn (window: *Self, serial: u32, time: u32, button: u32, state: u32, data: *anyopaque) void,
+    } = null,
     scroll: ?struct {
         data: *anyopaque,
         function: *const fn (window: *Self, axis: ScrollAxis, offset: f32, data: *anyopaque) void,
