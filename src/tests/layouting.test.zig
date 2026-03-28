@@ -1447,3 +1447,177 @@ test "traceWriter logs propagation through ancestors" {
         try std.testing.expect(hasStop);
     });
 }
+
+test "slotted component children propagate size to fit ancestors" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const SlottedComponent = struct {
+        fn render() *const fn (void) void {
+            forbear.component("slotted")({
+                forbear.element(.{
+                    .width = .fit,
+                    .height = .fit,
+                    .padding = forbear.Padding.all(10),
+                })({
+                    forbear.componentChildrenSlot();
+                });
+            });
+            return forbear.componentChildrenSlotEnd();
+        }
+    };
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .fit,
+            .height = .fit,
+        })({
+            SlottedComponent.render()({
+                forbear.element(.{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 50 },
+                })({});
+            });
+        });
+
+        const tree = try layout();
+
+        // Root element (index 0) should fit around the slotted component's
+        // inner element (padding 10 on each side) + the fixed 100×50 child.
+        const root = tree.at(0);
+        try std.testing.expectEqual(120, root.size[0]); // 100 + 10 + 10
+        try std.testing.expectEqual(70, root.size[1]); // 50 + 10 + 10
+
+        // Inner element (index 1) from the slotted component
+        const inner = tree.at(1);
+        try std.testing.expectEqual(120, inner.size[0]);
+        try std.testing.expectEqual(70, inner.size[1]);
+    });
+}
+
+test "slotted component with before/after content sizes correctly" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const SlottedComponent = struct {
+        fn render() *const fn (void) void {
+            forbear.component("slotted")({
+                forbear.element(.{
+                    .width = .fit,
+                    .height = .fit,
+                    .direction = .leftToRight,
+                })({
+                    forbear.element(.{
+                        .width = .{ .fixed = 20 },
+                        .height = .{ .fixed = 30 },
+                    })({});
+                    forbear.componentChildrenSlot();
+                    forbear.element(.{
+                        .width = .{ .fixed = 20 },
+                        .height = .{ .fixed = 30 },
+                    })({});
+                });
+            });
+            return forbear.componentChildrenSlotEnd();
+        }
+    };
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .fit,
+            .height = .fit,
+        })({
+            SlottedComponent.render()({
+                forbear.element(.{
+                    .width = .{ .fixed = 60 },
+                    .height = .{ .fixed = 40 },
+                })({});
+            });
+        });
+
+        const tree = try layout();
+
+        // Inner element: 20 (before) + 60 (child) + 20 (after) = 100 width
+        // Height: max(30, 40, 30) = 40
+        const inner = tree.at(1);
+        try std.testing.expectEqual(100, inner.size[0]);
+        try std.testing.expectEqual(40, inner.size[1]);
+
+        // Root should match
+        const root = tree.at(0);
+        try std.testing.expectEqual(100, root.size[0]);
+        try std.testing.expectEqual(40, root.size[1]);
+    });
+}
+
+test "nested slotted components propagate sizes correctly" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const Inner = struct {
+        fn render() *const fn (void) void {
+            forbear.component("inner")({
+                forbear.element(.{
+                    .width = .fit,
+                    .height = .fit,
+                    .padding = forbear.Padding.all(5),
+                })({
+                    forbear.componentChildrenSlot();
+                });
+            });
+            return forbear.componentChildrenSlotEnd();
+        }
+    };
+
+    const Outer = struct {
+        fn render() *const fn (void) void {
+            forbear.component("outer")({
+                forbear.element(.{
+                    .width = .fit,
+                    .height = .fit,
+                    .padding = forbear.Padding.all(10),
+                })({
+                    forbear.componentChildrenSlot();
+                });
+            });
+            return forbear.componentChildrenSlotEnd();
+        }
+    };
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .fit,
+            .height = .fit,
+        })({
+            Outer.render()({
+                Inner.render()({
+                    forbear.element(.{
+                        .width = .{ .fixed = 50 },
+                        .height = .{ .fixed = 30 },
+                    })({});
+                });
+            });
+        });
+
+        const tree = try layout();
+
+        // Inner element: 50 + 5+5 = 60 width, 30 + 5+5 = 40 height
+        // Outer element: 60 + 10+10 = 80 width, 40 + 10+10 = 60 height
+        // Root: 80 × 60
+        const root = tree.at(0);
+        try std.testing.expectEqual(80, root.size[0]);
+        try std.testing.expectEqual(60, root.size[1]);
+    });
+}
