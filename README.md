@@ -1,14 +1,12 @@
 # forbear
 
-[![definition](./assets/definition.png)](./assets/definition.png)
+![early uhoh example recording](./assets/early%20uhoh%20example%20recording.mp4)
 
 A GUI application framework with the purpose of creating apps that are as beautiful as the app, as performant as game engines, and with the DX of the web. 
 
 > [!WARNING]
 > actively built since ~2025, everything will
 > change, proceed at your own caution.
-
-
 
 ## At a glance
 
@@ -111,4 +109,8 @@ For now, the code is source-available. If this concerns you or blocks you from c
 ## Contributing
 
 forbear is early and the API will certainly change. That said, if you're interested in GUI frameworks, Vulkan rendering, or Zig — I'd love to talk. The [open questions](./notes/open-questions.md) document is a good starting point to understand the design decisions being made, and the [TODOs](./TODO.md) also have some problems I'm thikning about.
+
+---
+
+<img src="./assets/definition.png" alt="definition" />
 
