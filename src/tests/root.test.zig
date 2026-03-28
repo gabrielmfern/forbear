@@ -781,6 +781,44 @@ test "Event queue dispatches events to correct elements" {
     });
 }
 
+test "on() returns matching events inside element body" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Frame 1: build elements and push events
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            forbear.element(.{})({});
+            const childKey = forbear.getPreviousNode().?.key;
+
+            try forbear.pushEvent(childKey, .mouseOver);
+            try forbear.pushEvent(childKey, .mouseOut);
+        });
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: use on() inside element body to consume specific events
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            forbear.element(.{})({
+                // on(.mouseOut) should find and return the mouseOut event,
+                // even though mouseOver was pushed first
+                try std.testing.expectEqual(forbear.Event.mouseOut, forbear.on(.mouseOut).?);
+                // on(.mouseOver) should still find mouseOver since only mouseOut was consumed
+                try std.testing.expectEqual(forbear.Event.mouseOver, forbear.on(.mouseOver).?);
+                // No more events of either type
+                try std.testing.expectEqual(null, forbear.on(.mouseOver));
+                try std.testing.expectEqual(null, forbear.on(.mouseOut));
+            });
+        });
+    });
+}
+
 fn testCreateElementConfiguration(configuration: struct {
     style: forbear.IncompleteStyle,
     expectedSize: Vec2,
