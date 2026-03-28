@@ -1193,7 +1193,7 @@ test "manually placed elements are not affected by scroll" {
         });
 
         // Simulate a scroll offset
-        forbear.getContext().effectiveScrollPosition = .{ 0.0, 100.0 };
+        forbear.getContext().scrollPosition = .{ 0.0, 100.0 };
 
         const tree = try layout();
         const root = tree.at(0);
