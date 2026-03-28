@@ -5,7 +5,7 @@
 A GUI application framework with the purpose of creating apps that are as beautiful as the app, as performant as game engines, and with the DX of the web. 
 
 > [!WARNING]
-> **🚧 Under heavy development** — actively built since ~2025, everything will
+> actively built since ~2025, everything will
 > change, proceed at your own caution.
 
 
