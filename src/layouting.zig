@@ -478,17 +478,9 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTr
         if (node.style.width == .ratio) {
             node.size[0] = node.size[1] * node.style.width.ratio;
         }
-        updateFittingForAncestors(node, nodeTree, node.size[1] - previousHeight);
-    }
-}
-
-/// Runs `updateFittingForAncestorsInDirection` for both axes with the same `addition`
-/// (used after glyph wrapping changes text height; width ratio on the node is
-/// applied before this runs from `wrapGlyphs`).
-pub fn updateFittingForAncestors(node: *Node, nodeTree: *const NodeTree, addition: f32) void {
-    if (node.style.placement != .standard) return;
-    inline for (Direction.array) |direction| {
-        updateFittingForAncestorsInDirection(node, nodeTree, addition, direction);
+        inline for (Direction.array) |direction| {
+            updateFittingForAncestorsInDirection(node, nodeTree, node.size[1] - previousHeight, direction);
+        }
     }
 }
 
@@ -577,10 +569,14 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                     }
                     const totalChange = node.size[1] - preWrapHeight;
                     if (totalChange > 0.001) {
-                        updateFittingForAncestors(node, nodeTree, totalChange);
+                        inline for (Direction.array) |direction| {
+                            updateFittingForAncestorsInDirection(node, nodeTree, totalChange, direction);
+                        }
                     }
                 } else if (wrapHeightAddition > 0.001) {
-                    updateFittingForAncestors(node, nodeTree, wrapHeightAddition);
+                    inline for (Direction.array) |direction| {
+                        updateFittingForAncestorsInDirection(node, nodeTree, wrapHeightAddition, direction);
+                    }
                 }
 
                 const availableWidth = node.size[0] - node.fittingBase(.leftToRight);

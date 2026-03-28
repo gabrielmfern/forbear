@@ -991,6 +991,31 @@ fn componentChildrenSlotEndFn(block: void) void {
         parent.lastChild = slotState.afterChainEnd;
     }
 
+    // The slot parent's size is correct (text/element fitChild calls updated
+    // it), but ancestors computed their sizes before slot children existed.
+    // Reset each ancestor's fit dimensions and recompute from their current
+    // children. This handles nested slots correctly (no double-counting).
+    var ancestorOpt = parent.parent;
+    while (ancestorOpt) |ancestorIndex| {
+        const ancestor = self.nodeTree.at(ancestorIndex);
+        inline for (Direction.array) |dir| {
+            if (ancestor.style.getPreferredSize(dir) == .fit) {
+                ancestor.setSize(dir, ancestor.fittingBase(dir));
+            }
+            if (ancestor.shouldFitMin(dir)) {
+                ancestor.setMinSize(dir, ancestor.fittingBase(dir));
+            }
+        }
+        var childOpt = ancestor.firstChild;
+        while (childOpt) |childIndex| {
+            ancestor.fitChild(self.nodeTree.at(childIndex));
+            childOpt = self.nodeTree.at(childIndex).nextSibling;
+        }
+        ancestor.size[0] = @min(@max(ancestor.size[0], ancestor.minSize[0]), ancestor.maxSize[0]);
+        ancestor.size[1] = @min(@max(ancestor.size[1], ancestor.minSize[1]), ancestor.maxSize[1]);
+        ancestorOpt = ancestor.parent;
+    }
+
     // Restore parent stack to pre-slotEnd state
     fm.nodeParentStack.clearRetainingCapacity();
     fm.nodeParentStack.appendSlice(fm.arena, slotState.savedPreEndParentStack) catch |err| {
