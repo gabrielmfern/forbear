@@ -2,6 +2,10 @@ const std = @import("std");
 const win32 = @import("../windows/win32.zig");
 const Cursor = @import("root.zig").Cursor;
 
+const linux_left_mouse_button: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
+const button_pressed: u32 = 1;
+const button_released: u32 = 0;
+
 handle: win32.HWND,
 hInstance: win32.HINSTANCE,
 
@@ -193,6 +197,20 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                 const mouseY: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
                 if (self.handlers.pointerMotion) |handler| {
                     handler.function(self, @floatFromInt(mouseX), @floatFromInt(mouseY), handler.data);
+                }
+            }
+        },
+        win32.WM_LBUTTONDOWN => {
+            if (window) |self| {
+                if (self.handlers.pointerButton) |handler| {
+                    handler.function(self, 0, 0, linux_left_mouse_button, button_pressed, handler.data);
+                }
+            }
+        },
+        win32.WM_LBUTTONUP => {
+            if (window) |self| {
+                if (self.handlers.pointerButton) |handler| {
+                    handler.function(self, 0, 0, linux_left_mouse_button, button_released, handler.data);
                 }
             }
         },
