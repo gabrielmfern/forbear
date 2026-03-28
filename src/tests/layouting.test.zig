@@ -1268,6 +1268,66 @@ test "fixed-width ratio-height children with maxSize don't inflate parent cross-
     });
 }
 
+test "ltr row with fixed height centers children vertically" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // A 400x200 horizontal row with a 50px tall child.
+        // With .center alignment the child should be at y = (200-50)/2 = 75.
+        // With .end alignment the child should be at y = 200-50 = 150.
+        forbear.element(.{
+            .width = .{ .fixed = 400 },
+            .height = .fit,
+            .direction = .topToBottom,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 400 },
+                .height = .{ .fixed = 200 },
+                .direction = .leftToRight,
+                .alignment = .{ .x = .start, .y = .center },
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 50 },
+                })({});
+            });
+
+            forbear.element(.{
+                .width = .{ .fixed = 400 },
+                .height = .{ .fixed = 200 },
+                .direction = .leftToRight,
+                .alignment = .{ .x = .start, .y = .end },
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 50 },
+                })({});
+            });
+        });
+
+        const tree = try layout();
+        const wrapper = tree.at(0);
+
+        const centerRow = tree.at(wrapper.firstChild.?);
+        const centerChild = tree.at(centerRow.firstChild.?);
+
+        const endRow = tree.at(centerRow.nextSibling.?);
+        const endChild = tree.at(endRow.firstChild.?);
+
+        // Center: child should be vertically centered within the 200px parent
+        try std.testing.expectEqual(@as(f32, 75), centerChild.position[1] - centerRow.position[1]);
+
+        // End: child should be at the bottom of the 200px parent
+        try std.testing.expectEqual(@as(f32, 150), endChild.position[1] - endRow.position[1]);
+    });
+}
+
 test "layoutDump produces expected output for a simple tree" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
