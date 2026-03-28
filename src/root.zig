@@ -38,6 +38,15 @@ const ComponentResolutionState = struct {
     key: u64,
 };
 
+const ComponentChildrenSlotState = struct {
+    savedSlotParentStack: []usize,
+    savedPreEndParentStack: []usize,
+    slotPredecessor: ?usize,
+    afterChainStart: ?usize,
+    afterChainEnd: ?usize,
+    slotParentIndex: usize,
+};
+
 pub const Event = union(enum) {
     mouseOver,
     mouseOut,
@@ -65,6 +74,7 @@ pub const FrameMeta = struct {
 
     previousPushedNodeIndex: ?usize = null,
     nodeParentStack: std.ArrayList(usize) = .empty,
+    componentChildrenSlotStates: std.ArrayList(ComponentChildrenSlotState) = .empty,
 };
 
 allocator: std.mem.Allocator,
@@ -926,6 +936,116 @@ pub fn component(key: []const u8) *const fn (void) void {
     };
 
     return &componentEnd;
+}
+
+pub fn componentChildrenSlot() void {
+    const self = getContext();
+
+    std.debug.assert(self.frameMeta != null);
+    const fm = &self.frameMeta.?;
+    if (fm.err != null) return;
+
+    const parentIndex = fm.nodeParentStack.getLastOrNull() orelse {
+        handleFrameError(error.NoParentForSlot);
+        return;
+    };
+
+    const savedStack = fm.arena.dupe(usize, fm.nodeParentStack.items) catch |err| {
+        handleFrameError(err);
+        return;
+    };
+
+    fm.componentChildrenSlotStates.append(fm.arena, .{
+        .savedSlotParentStack = savedStack,
+        .savedPreEndParentStack = &.{},
+        .slotPredecessor = self.nodeTree.at(parentIndex).lastChild,
+        .afterChainStart = null,
+        .afterChainEnd = null,
+        .slotParentIndex = parentIndex,
+    }) catch |err| {
+        handleFrameError(err);
+    };
+}
+
+fn componentChildrenSlotEndFn(block: void) void {
+    _ = block;
+    const self = getContext();
+
+    std.debug.assert(self.frameMeta != null);
+    const fm = &self.frameMeta.?;
+    if (fm.err != null) return;
+
+    const slotState = fm.componentChildrenSlotStates.pop() orelse return;
+    const parent = self.nodeTree.at(slotState.slotParentIndex);
+
+    // Reattach the after-chain
+    if (slotState.afterChainStart) |afterStart| {
+        const currentLast = parent.lastChild;
+        if (currentLast) |last| {
+            self.nodeTree.at(last).nextSibling = afterStart;
+            self.nodeTree.at(afterStart).previousSibling = last;
+        } else {
+            parent.firstChild = afterStart;
+            self.nodeTree.at(afterStart).previousSibling = null;
+        }
+        parent.lastChild = slotState.afterChainEnd;
+    }
+
+    // Restore parent stack to pre-slotEnd state
+    fm.nodeParentStack.clearRetainingCapacity();
+    fm.nodeParentStack.appendSlice(fm.arena, slotState.savedPreEndParentStack) catch |err| {
+        handleFrameError(err);
+    };
+}
+
+pub fn componentChildrenSlotEnd() *const fn (void) void {
+    const self = getContext();
+
+    std.debug.assert(self.frameMeta != null);
+    const fm = &self.frameMeta.?;
+    if (fm.err != null) return &endNoop;
+
+    const states = &fm.componentChildrenSlotStates;
+    if (states.items.len == 0) {
+        handleFrameError(error.NoMatchingSlotBegin);
+        return &endNoop;
+    }
+    const slotState = &states.items[states.items.len - 1];
+    const parent = self.nodeTree.at(slotState.slotParentIndex);
+
+    // Determine after-chain (nodes added after slot by the component body)
+    const afterStart = if (slotState.slotPredecessor) |pred|
+        self.nodeTree.at(pred).nextSibling
+    else
+        parent.firstChild;
+
+    if (afterStart) |start| {
+        // Detach the after-chain from the parent
+        slotState.afterChainStart = start;
+        slotState.afterChainEnd = parent.lastChild;
+
+        if (slotState.slotPredecessor) |pred| {
+            self.nodeTree.at(pred).nextSibling = null;
+            parent.lastChild = pred;
+        } else {
+            parent.firstChild = null;
+            parent.lastChild = null;
+        }
+        self.nodeTree.at(start).previousSibling = null;
+    }
+
+    // Save current parent stack, then restore to slot-time stack
+    slotState.savedPreEndParentStack = fm.arena.dupe(usize, fm.nodeParentStack.items) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+    fm.nodeParentStack.clearRetainingCapacity();
+    fm.nodeParentStack.appendSlice(fm.arena, slotState.savedSlotParentStack) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+
+    return &componentChildrenSlotEndFn;
 }
 
 pub fn pushEvent(key: u64, event: Event) !void {
