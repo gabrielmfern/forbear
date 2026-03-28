@@ -8,6 +8,10 @@ extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;
 
 const Self = @This();
 
+const linux_left_mouse_button: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
+const button_pressed: u32 = 1;
+const button_released: u32 = 0;
+
 pub const ScrollAxis = enum(u32) {
     vertical = 0,
     horizontal = 1,
@@ -20,6 +24,10 @@ pub const Handlers = struct {
     pointerMotion: ?struct {
         data: *anyopaque,
         function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
+    } = null,
+    pointerButton: ?struct {
+        data: *anyopaque,
+        function: *const fn (window: *Self, serial: u32, time: u32, button: u32, state: u32, data: *anyopaque) void,
     } = null,
     scroll: ?struct {
         data: *anyopaque,
@@ -68,6 +76,8 @@ const NSApplicationActivationPolicyRegular: NSInteger = 0;
 const NSBackingStoreBuffered: NSUInteger = 2;
 
 // NSEventType constants
+const NSEventTypeLeftMouseDown: NSUInteger = 1;
+const NSEventTypeLeftMouseUp: NSUInteger = 2;
 const NSEventTypeMouseMoved: NSUInteger = 5;
 const NSEventTypeLeftMouseDragged: NSUInteger = 6;
 const NSEventTypeRightMouseDragged: NSUInteger = 7;
@@ -555,6 +565,16 @@ fn processEvent(self: *Self, event: c.id) void {
             const y: f32 = @as(f32, @floatCast(content_bounds.size.height)) - @as(f32, @floatCast(location.y));
 
             handler.function(self, x, y, handler.data);
+        }
+    }
+
+    if (event_type == NSEventTypeLeftMouseDown or event_type == NSEventTypeLeftMouseUp) {
+        if (self.handlers.pointerButton) |handler| {
+            const state = if (event_type == NSEventTypeLeftMouseDown)
+                button_pressed
+            else
+                button_released;
+            handler.function(self, 0, 0, linux_left_mouse_button, state, handler.data);
         }
     }
 
