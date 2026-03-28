@@ -584,12 +584,18 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                 }
 
                 const availableWidth = node.size[0] - node.fittingBase(.leftToRight);
+                const availableHeight = node.size[1] - node.fittingBase(.topToBottom);
                 for (lines.items) |line| {
                     const xOffset: f32 = switch (node.style.alignment.x) {
                         .start => 0.0,
                         .center => (availableWidth - line.width) / 2.0,
                         .end => availableWidth - line.width,
                     };
+                    // For single-line containers, align children within the
+                    // full available height so .center/.end work when the
+                    // parent is taller than its content. For multi-line
+                    // (wrapping), align within each line's height.
+                    const alignHeight = if (lines.items.len == 1) @max(line.height, availableHeight) else line.height;
                     childIndexOption = line.start;
                     while (childIndexOption) |childIndex| {
                         const child = nodeTree.at(childIndex);
@@ -597,8 +603,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                             child.position[0] += xOffset;
                             child.position[1] += switch (node.style.alignment.y) {
                                 .start => 0.0,
-                                .center => (line.height - child.size[1]) / 2.0,
-                                .end => line.height - child.size[1],
+                                .center => (alignHeight - child.size[1]) / 2.0,
+                                .end => alignHeight - child.size[1],
                             };
                         }
                         if (childIndex == line.end) break;
