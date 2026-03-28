@@ -1,19 +1,50 @@
 const std = @import("std");
 const forbear = @import("forbear");
 
+fn CounterExample() void {
+    forbear.component("counter-example")({
+        const count = forbear.useState(u32, 0);
+
+        forbear.element(.{
+            .direction = .topToBottom,
+            .padding = .all(16.0),
+            .background = .{ .color = .{ 0.12, 0.12, 0.12, 1.0 } },
+            .borderRadius = 12.0,
+        })({
+            forbear.printText("Count: {d}", .{count.*});
+
+            forbear.element(.{
+                .margin = .top(12.0),
+                .padding = forbear.Padding.block(10.0).withInLine(16.0),
+                .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
+                .borderRadius = 8.0,
+                .cursor = .pointer,
+            })({
+                if (forbear.on(.click)) |_| {
+                    count.* += 1;
+                }
+
+                forbear.text("Increment");
+            });
+        });
+    });
+}
+
 fn App() void {
     forbear.component("app")({
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{
             .width = .grow,
+            .direction = .topToBottom,
             .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
-            .padding = .inLine(10),
+            .padding = .all(10),
         })({
             forbear.FpsCounter();
 
             forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
             forbear.element(.{
+                .margin = forbear.Margin.top(12.0),
                 .width = .{ .fixed = 100 },
                 .height = .{ .fixed = 100 },
                 .background = .{
@@ -33,6 +64,8 @@ fn App() void {
                     isHovering.* = false;
                 }
             });
+
+            CounterExample();
         });
     });
 }
