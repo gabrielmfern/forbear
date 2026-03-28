@@ -17,12 +17,10 @@ const forbear = @import("forbear");
 
 fn App() void {
   const count = forbear.useState(u32, 0);
-  
 
   // forbear uses is immediate-mode GUI framework. Each frame, your code
-  // describes the UI tree using function calls. The framework diffs against the
-  // previous frame to determine what changed, updates the Vulkan resources, and
-  // renders.
+  // describes the UI tree using function calls and re-renders everything, 
+  // doing layouting again as well
   forbear.element(.{ .width = .grow, .direction = .topToBottom })({
     forbear.printText("Count: {d}", .{count.value.*});
     
@@ -106,7 +104,7 @@ This is a multi-year project, so I'm planning might change and that's actually v
 
 ## No license (yet)
 
-Building forbear has taken over a year of my life at this point where I've been turning down other ideas. I haven't decided on the final licensing model yet. The most likely direction is **free for individuals, paid for companies** — similar to how some creative tools are licensed, exactly because it has been so hard to build.
+Building forbear has taken over a year of my life at this point where I've been turning down other ideas to focus on it. I haven't decided on the final licensing model yet. The most likely direction is **free for individuals, paid for companies** — similar to how some creative tools are licensed, exactly because it has been so hard on me to build.
 
 For now, the code is source-available. If this concerns you or blocks you from contributing, I understand — I'm actively thinking through this and welcome the conversation. Open an issue or reach out through anywhere.
 
