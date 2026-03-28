@@ -40,8 +40,6 @@ missing things for the entire uhoh.com website:
     - we should probably have `forbear.image` instead of always using backgroundImage, and have its size calculated from the aspect ratio while filling up the parent
 - [x] support for filter: grayscale()
 - [x] element wrapping
-- [ ] new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
-    - is having lots of them bad? I understand having no type-safety though
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
 - [ ] linear gradient support
@@ -52,6 +50,8 @@ problems:
     - is stb_image enough for this?
 - when there's scaling in linux, the scale only drops in after some frames
 - could not figure out what `useNextEvent` was for, and just ignored it leaving it in place
+- new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
+    - is having lots of them bad? I understand having no type-safety though
 - created a utilty for px so that it didn't have to calculate the proper value
     - should we maybe have px as the default value? I've noticed that the DPI isn't as reliable as I thought, as it can be used for scaling for example
 - grow parent, one fit child and one grow child, the grow doesn't behave as expected
