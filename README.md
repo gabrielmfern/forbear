@@ -1,6 +1,6 @@
 # forbear
 
-<video src="./assets/early uhoh example recording.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/166ccfc5-71d4-4ded-a9ed-c6db7f7c2631
 
 A GUI application framework with the purpose of creating apps that are as beautiful as the app, as performant as game engines, and with the DX of the web. 
 
