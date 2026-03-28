@@ -1,6 +1,6 @@
 # forbear
 
-![early uhoh example recording](./assets/early%20uhoh%20example%20recording.mp4)
+<video src="./assets/early uhoh example recording.mp4" controls width="100%"></video>
 
 A GUI application framework with the purpose of creating apps that are as beautiful as the app, as performant as game engines, and with the DX of the web. 
 
@@ -26,7 +26,7 @@ fn App() void {
       .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
       .borderRadius = 8.0,
     })({
-      if (forbear.useEvent(.click)) {
+      if (forbear.on(.click)) {
         count.value.* += 1;
       }
 
