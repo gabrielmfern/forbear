@@ -8,7 +8,7 @@ A GUI application framework with the purpose of creating apps that are as beauti
 > **🚧 Under heavy development** — actively built since ~2025, everything will
 > change, proceed at your own caution.
 
-[![Early uhoh example recording](./assets/early%20uhoh%20example%20recording.gif)](https://github.com/gabrielmfern/forbear/blob/main/assets/early%20uhoh%20example%20recording.mp4)
+
 
 ## At a glance
 
@@ -111,3 +111,4 @@ For now, the code is source-available. If this concerns you or blocks you from c
 ## Contributing
 
 forbear is early and the API will certainly change. That said, if you're interested in GUI frameworks, Vulkan rendering, or Zig — I'd love to talk. The [open questions](./notes/open-questions.md) document is a good starting point to understand the design decisions being made, and the [TODOs](./TODO.md) also have some problems I'm thikning about.
+
