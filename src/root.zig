@@ -952,6 +952,27 @@ pub fn useNextEvent() ?Event {
     return null;
 }
 
+/// Returns and consumes a matching event from the current element's pending
+/// event queue. Must be called inside an element body block.
+pub fn on(comptime eventTag: std.meta.Tag(Event)) ?Event {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+
+    const currentNodeIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return null;
+    const currentNode = self.nodeTree.at(currentNodeIndex);
+    const key = currentNode.key;
+
+    const eventQueue = self.pendingEventQueue.getPtr(key) orelse return null;
+
+    for (eventQueue.items, 0..) |event, i| {
+        if (std.meta.activeTag(event) == eventTag) {
+            return eventQueue.orderedRemove(i);
+        }
+    }
+
+    return null;
+}
+
 pub fn update() !void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);

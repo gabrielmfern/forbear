@@ -25,18 +25,14 @@ fn App() void {
                     },
                 },
                 .borderRadius = 20,
-            })({});
-
-            while (forbear.useNextEvent()) |event| {
-                switch (event) {
-                    .mouseOver => {
-                        isHovering.* = true;
-                    },
-                    .mouseOut => {
-                        isHovering.* = false;
-                    },
+            })({
+                if (forbear.on(.mouseOver)) |_| {
+                    isHovering.* = true;
                 }
-            }
+                if (forbear.on(.mouseOut)) |_| {
+                    isHovering.* = false;
+                }
+            });
         });
     });
 }
