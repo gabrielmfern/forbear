@@ -212,10 +212,10 @@ pub fn refitAncetors(node: *Node, nodeTree: *const NodeTree) void {
         while (childIndexOpt) |childIndex| {
             const child = nodeTree.at(childIndex);
             if (child.style.width == .percentage) {
-                child.size[0] = child.style.width.percentage * node.size[0];
+                child.size[0] = child.style.width.percentage * ancestor.size[0];
             }
             if (child.style.height == .percentage) {
-                child.size[1] = child.style.height.percentage * node.size[1];
+                child.size[1] = child.style.height.percentage * ancestor.size[1];
             }
             childIndexOpt = child.nextSibling;
         }

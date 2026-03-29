@@ -999,10 +999,7 @@ fn componentChildrenSlotEndFn(block: void) void {
         parent.lastChild = slotState.afterChainEnd;
     }
 
-    if (parent.parent) |grandparentIndex| {
-        const grandparent = self.nodeTree.at(grandparentIndex);
-        layouting.refitAncetors(grandparent, &self.nodeTree);
-    }
+    layouting.refitAncetors(parent, &self.nodeTree);
 
     // Restore parent stack to pre-slotEnd state
     fm.nodeParentStack.clearRetainingCapacity();
