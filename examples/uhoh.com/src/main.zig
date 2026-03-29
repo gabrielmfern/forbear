@@ -766,7 +766,16 @@ fn App() !void {
                     });
 
                     Button(.{})({
-                        forbear.text("Come on, click on this");
+                        forbear.element(.{
+                            .fontSize = 18.0,
+                        })({
+                            forbear.text("Come on, click on this");
+                        });
+                        forbear.element(.{
+                            .fontSize = 10.5,
+                        })({
+                            forbear.text("Don't make me beg");
+                        });
                     });
                 });
             });
