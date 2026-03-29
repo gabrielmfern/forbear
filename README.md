@@ -1,6 +1,6 @@
 # forbear
 
-https://github.com/user-attachments/assets/166ccfc5-71d4-4ded-a9ed-c6db7f7c2631
+https://github.com/user-attachments/assets/fb5a6097-2e6e-468b-a0bb-ed1e1a0f773a
 
 A GUI application framework with the purpose of creating apps that are as beautiful as the app, as performant as game engines, and with the DX of the web. 
 
