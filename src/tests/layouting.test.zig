@@ -1404,50 +1404,6 @@ test "layoutDump reports glyph line count" {
     });
 }
 
-test "traceWriter logs propagation through ancestors" {
-    try forbear.init(std.testing.allocator, undefined);
-    defer forbear.deinit();
-
-    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arenaAllocator.deinit();
-
-    const arena = arenaAllocator.allocator();
-
-    try forbear.frame(try utilities.frameMeta(arena))({
-        forbear.element(.{
-            .width = .fit,
-            .height = .fit,
-            .direction = .topToBottom,
-        })({
-            forbear.element(.{
-                .width = .{ .fixed = 100 },
-                .height = .fit,
-                .textWrapping = .word,
-            })({
-                forbear.text("Hello world, this is a test of wrapping text for trace output");
-            });
-        });
-
-        var buf = try std.ArrayList(u8).initCapacity(std.testing.allocator, 256);
-        defer buf.deinit(std.testing.allocator);
-        layouting.traceWriter = buf.writer(std.testing.allocator).any();
-        defer {
-            layouting.traceWriter = null;
-        }
-
-        _ = try layout();
-
-        const output = buf.items;
-        // Should contain entry markers
-        try std.testing.expect(std.mem.indexOf(u8, output, "[fit-propagate]") != null);
-        // Should contain ancestor visit
-        try std.testing.expect(std.mem.indexOf(u8, output, "ancestor[") != null);
-        // Should contain a STOP reason
-        const hasStop = std.mem.indexOf(u8, output, "STOP:") != null;
-        try std.testing.expect(hasStop);
-    });
-}
-
 test "slotted component children propagate size to fit ancestors" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();

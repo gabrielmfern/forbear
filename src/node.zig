@@ -544,6 +544,15 @@ pub const NodeTree = struct {
         return .{ .ptr = self.at(index), .index = index };
     }
 
+    pub fn fitAncestors(self: *@This(), nodeIndex: usize, child: *const Node) void {
+        var currentIndexOpt = self.at(nodeIndex).parent;
+        while (currentIndexOpt) |currentIndex| {
+            const current = self.at(currentIndex);
+            current.fitChild(child);
+            currentIndexOpt = current.parent;
+        }
+    }
+
     test {
         const gpa = std.testing.allocator;
         var tree = NodeTree.empty;
@@ -609,7 +618,7 @@ pub const Node = struct {
     }
 
     pub fn fitChild(self: *@This(), child: *const Node) void {
-        if (child.style.placement != .manual) {
+        if (child.style.placement == .standard) {
             const wraps = self.style.overflow == .wrap and self.style.direction == .leftToRight;
 
             inline for (Direction.array) |fitDirection| {

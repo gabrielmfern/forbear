@@ -556,8 +556,6 @@ fn elementEnd(block: void) void {
     const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
     const node = self.nodeTree.at(previousNodeIndex);
 
-    // Apply ratios and clamp before fitting into parent so the parent
-    // sees the actual constrained size (not the unclamped value).
     if (node.style.width == .ratio) {
         node.size[0] = node.style.width.ratio * node.size[1];
     }
@@ -569,9 +567,8 @@ fn elementEnd(block: void) void {
 
     if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parentIndex| {
         const parent = self.nodeTree.at(parentIndex);
-        if (node.style.placement == .standard) {
-            parent.fitChild(node);
-        }
+
+        parent.fitChild(node);
     }
     var childIndexOption = node.firstChild;
     while (childIndexOption) |childIndex| {
@@ -1002,29 +999,9 @@ fn componentChildrenSlotEndFn(block: void) void {
         parent.lastChild = slotState.afterChainEnd;
     }
 
-    // The slot parent's size is correct (text/element fitChild calls updated
-    // it), but ancestors computed their sizes before slot children existed.
-    // Reset each ancestor's fit dimensions and recompute from their current
-    // children. This handles nested slots correctly (no double-counting).
-    var ancestorOpt = parent.parent;
-    while (ancestorOpt) |ancestorIndex| {
-        const ancestor = self.nodeTree.at(ancestorIndex);
-        inline for (Direction.array) |dir| {
-            if (ancestor.style.getPreferredSize(dir) == .fit) {
-                ancestor.setSize(dir, ancestor.fittingBase(dir));
-            }
-            if (ancestor.shouldFitMin(dir)) {
-                ancestor.setMinSize(dir, ancestor.fittingBase(dir));
-            }
-        }
-        var childOpt = ancestor.firstChild;
-        while (childOpt) |childIndex| {
-            ancestor.fitChild(self.nodeTree.at(childIndex));
-            childOpt = self.nodeTree.at(childIndex).nextSibling;
-        }
-        ancestor.size[0] = @min(@max(ancestor.size[0], ancestor.minSize[0]), ancestor.maxSize[0]);
-        ancestor.size[1] = @min(@max(ancestor.size[1], ancestor.minSize[1]), ancestor.maxSize[1]);
-        ancestorOpt = ancestor.parent;
+    if (parent.parent) |grandparentIndex| {
+        const grandparent = self.nodeTree.at(grandparentIndex);
+        layouting.refitAncetors(grandparent, &self.nodeTree);
     }
 
     // Restore parent stack to pre-slotEnd state
