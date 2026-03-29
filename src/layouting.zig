@@ -18,11 +18,6 @@ const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
 
-/// When set, `updateFittingForAncestors` writes a trace of each ancestor
-/// visited, the decision made, values before/after, and why propagation
-/// stopped. Leave `null` (the default) for zero overhead.
-pub var traceWriter: ?std.io.AnyWriter = null;
-
 fn approxEq(a: f32, b: f32) bool {
     return @abs(a - b) < 0.001;
 }
@@ -43,6 +38,12 @@ fn growChildren(
             }
         }
         childIndexOption = child.nextSibling;
+    }
+
+    if (forbear.traceWriter) |w| {
+        w.print("[grow] node={d} dir={s} remaining={d:.1} candidates={d}\n", .{
+            node.key, @tagName(direction), remaining.*, activelyModifying.items.len,
+        }) catch {};
     }
 
     var iteration: usize = 0;
@@ -83,16 +84,22 @@ fn growChildren(
         const remainingBeforeLoop = remaining.*;
         for (activelyModifying.items) |child| {
             if (approxEq(child.getSize(direction), smallest)) {
+                const oldSize = child.getSize(direction);
                 const allowedDifference = @min(
-                    @max(child.getSize(direction) + toAdd, child.getMinSize(direction)),
+                    @max(oldSize + toAdd, child.getMinSize(direction)),
                     child.getMaxSize(direction),
-                ) - child.getSize(direction);
+                ) - oldSize;
                 if (direction == .leftToRight) {
                     child.size[0] += allowedDifference;
                 } else {
                     child.size[1] += allowedDifference;
                 }
                 remaining.* -= allowedDifference;
+                if (forbear.traceWriter) |w| {
+                    w.print("[grow]   child={d} {d:.1} -> {d:.1}\n", .{
+                        child.key, oldSize, child.getSize(direction),
+                    }) catch {};
+                }
             }
         }
         if (remaining.* == remainingBeforeLoop) {
@@ -125,6 +132,12 @@ fn shrinkChildren(
         }
         childIndexOption = child.nextSibling;
     }
+    if (forbear.traceWriter) |w| {
+        w.print("[shrink] node={d} dir={s} remaining={d:.1} candidates={d}\n", .{
+            node.key, @tagName(direction), remaining.*, activelyModifying.items.len,
+        }) catch {};
+    }
+
     var iteration: usize = 0;
     while (remaining.* < -0.001 and activelyModifying.items.len > 0) {
         iteration += 1;
@@ -163,16 +176,22 @@ fn shrinkChildren(
         const remainingBeforeLoop = remaining.*;
         for (activelyModifying.items) |child| {
             if (approxEq(child.getSize(direction), largest)) {
+                const oldSize = child.getSize(direction);
                 const allowedDifference = @max(
-                    child.getSize(direction) - toSubtract,
+                    oldSize - toSubtract,
                     child.getMinSize(direction),
-                ) - child.getSize(direction);
+                ) - oldSize;
                 if (direction == .leftToRight) {
                     child.size[0] += allowedDifference;
                 } else {
                     child.size[1] += allowedDifference;
                 }
                 remaining.* -= allowedDifference;
+                if (forbear.traceWriter) |w| {
+                    w.print("[shrink]   child={d} {d:.1} -> {d:.1}\n", .{
+                        child.key, oldSize, child.getSize(direction),
+                    }) catch {};
+                }
             }
         }
         if (remaining.* == remainingBeforeLoop) {

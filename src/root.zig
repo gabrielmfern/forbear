@@ -7,6 +7,10 @@ pub const Graphics = @import("graphics.zig");
 pub const Image = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
+pub var traceWriter: ?*std.io.Writer = null;
+pub fn setTraceWriter(writer: *std.io.Writer) void {
+    traceWriter = writer;
+}
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
 pub const NodeTree = nodeImport.NodeTree;
