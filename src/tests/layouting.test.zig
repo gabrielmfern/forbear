@@ -22,7 +22,7 @@ test "wrapped text propagates height upward" {
             .textWrapping = .word,
             .width = .fit,
             .height = .fit,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 100 },
@@ -63,7 +63,7 @@ test "wrapped text simple ancestry stays at origin" {
             .textWrapping = .word,
             .width = .fit,
             .height = .fit,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 100 },
@@ -104,14 +104,14 @@ test "uhoh-shaped grow-width ratio hero does not overlap following sibling secti
         forbear.element(.{
             .width = .grow,
             .height = .fit,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 600,
                 .alignment = .topCenter,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
-                .direction = .topToBottom,
+                .direction = .vertical,
             })({
                 // Stand-in for `forbear.image` (grow width + intrinsic aspect).
                 forbear.element(.{
@@ -155,7 +155,7 @@ test "uhoh-shaped grow-width ratio hero does not overlap following sibling secti
         // children were laid out with the real illustration height, but `hero`
         // stayed short, so the card is placed in the middle of the hero text.
         const heroContentBottom = subtext.position[1] + subtext.size[1];
-        try std.testing.expect(hero.size[1] >= illustration.size[1] + hero.fittingBase(.topToBottom) - 0.02);
+        try std.testing.expect(hero.size[1] >= illustration.size[1] + hero.fittingBase(.vertical) - 0.02);
         try std.testing.expect(heroContentBottom <= card.position[1] + 0.02);
 
         try std.testing.expect(heading.position[1] > illustration.position[1] + illustration.size[1] - 0.02);
@@ -178,7 +178,7 @@ test "wrapped text propagates height upward with siblings" {
             .textWrapping = .word,
             .width = .fit,
             .height = .fit,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 100 },
@@ -222,7 +222,7 @@ test "wrapped text stacks siblings after wrapping" {
             .textWrapping = .word,
             .width = .fit,
             .height = .fit,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 100 },
@@ -259,9 +259,9 @@ test "cross-axis fit row height reflects full column height after text wrapping"
     const arena = arenaAllocator.allocator();
 
     // Reproduces the uhoh.com hero section pattern:
-    //   topToBottom outer
-    //     leftToRight row (fit height)
-    //       topToBottom column (grow width)
+    //   vertical outer
+    //     horizontal row (fit height)
+    //       vertical column (grow width)
     //         wrapped text  (height grows during wrapGlyphs)
     //         fixed child   (50px)
     //     sibling below
@@ -275,17 +275,17 @@ test "cross-axis fit row height reflects full column height after text wrapping"
         forbear.element(.{
             .width = .grow,
             .height = .fit,
-            .direction = .topToBottom,
+            .direction = .vertical,
             .textWrapping = .word,
         })({
-            // Row (fit height, leftToRight)
+            // Row (fit height, horizontal)
             forbear.element(.{
                 .width = .grow,
-                .direction = .leftToRight,
+                .direction = .horizontal,
             })({
                 // Inner column stacking text + fixed child
                 forbear.element(.{
-                    .direction = .topToBottom,
+                    .direction = .vertical,
                     .width = .grow,
                 })({
                     forbear.element(.{
@@ -337,7 +337,7 @@ test "percentage children resolve against grown parent" {
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .percentage = 0.5 },
@@ -375,11 +375,11 @@ test "percentage children positioned correctly among fixed siblings" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try utilities.frameMeta(arena))({
-        // viewport is 800x600; leftToRight row
+        // viewport is 800x600; horizontal row
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .leftToRight,
+            .direction = .horizontal,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 100 },
@@ -427,17 +427,17 @@ test "ratio width tracks fit height after propagated text wrap" {
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .ratio = 2.0 },
                 .height = .fit,
-                .direction = .leftToRight,
+                .direction = .horizontal,
             })({
                 forbear.element(.{
                     .width = .{ .fixed = 120 },
                     .height = .fit,
-                    .direction = .topToBottom,
+                    .direction = .vertical,
                     .textWrapping = .word,
                 })({
                     forbear.text("One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.");
@@ -466,12 +466,12 @@ test "ratio height resolves after grow distributes width" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try utilities.frameMeta(arena))({
-        // viewport 800x600; leftToRight root
+        // viewport 800x600; horizontal root
         // child: width grows to fill 800, height = ratio(0.5) → 400
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .leftToRight,
+            .direction = .horizontal,
         })({
             forbear.element(.{
                 .width = .grow,
@@ -498,12 +498,12 @@ test "ratio width resolves after grow distributes height" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try utilities.frameMeta(arena))({
-        // viewport 800x600; topToBottom root
+        // viewport 800x600; vertical root
         // child: height grows to fill 600, width = ratio(2.0) → 1200
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .ratio = 2.0 },
@@ -530,13 +530,13 @@ test "percentage and ratio children coexist in a row" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try utilities.frameMeta(arena))({
-        // viewport 800x600; leftToRight root
+        // viewport 800x600; horizontal root
         // child A: width = 50% of 800 = 400, height = ratio(0.5) → 200
         // child B: width = fixed 200, height = percentage(0.5) of 600 = 300
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .leftToRight,
+            .direction = .horizontal,
         })({
             forbear.element(.{
                 .width = .{ .percentage = 0.5 },
@@ -577,7 +577,7 @@ test "wrapAndPlace offsets standard children by border plus padding" {
         forbear.element(.{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 80 },
-            .direction = .leftToRight,
+            .direction = .horizontal,
             .borderWidth = .left(8),
             .padding = .left(7),
         })({
@@ -606,13 +606,13 @@ test "overflow wrap places children on new lines and grows parent height" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try utilities.frameMeta(arena))({
-        // A 300px-wide leftToRight container with overflow: wrap.
+        // A 300px-wide horizontal container with overflow: wrap.
         // Three 120x50 children: the first two fit on line 1 (240px < 300px),
         // the third overflows and wraps to line 2.
         forbear.element(.{
             .width = .{ .fixed = 300 },
             .height = .fit,
-            .direction = .leftToRight,
+            .direction = .horizontal,
             .overflow = .wrap,
         })({
             forbear.element(.{
@@ -671,7 +671,7 @@ test "overflow wrap line ranges start at the wrapping child for cross-axis align
         forbear.element(.{
             .width = .{ .fixed = 300 },
             .height = .fit,
-            .direction = .leftToRight,
+            .direction = .horizontal,
             .overflow = .wrap,
             .alignment = .{ .x = .center, .y = .start },
         })({
@@ -727,12 +727,12 @@ test "overflow wrap with grow-width parent wraps against resolved size" {
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .grow,
                 .height = .fit,
-                .direction = .leftToRight,
+                .direction = .horizontal,
                 .overflow = .wrap,
             })({
                 forbear.element(.{
@@ -790,7 +790,7 @@ test "grow children split remaining space and stretch cross-axis" {
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .leftToRight,
+            .direction = .horizontal,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 100 },
@@ -850,12 +850,12 @@ test "percentage children resolve against non-root grown parent" {
         forbear.element(.{
             .width = .{ .fixed = 400 },
             .height = .{ .fixed = 300 },
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .grow,
                 .height = .grow,
-                .direction = .leftToRight,
+                .direction = .horizontal,
             })({
                 forbear.element(.{
                     .width = .{ .percentage = 0.5 },
@@ -885,7 +885,7 @@ test "percentage children resolve against non-root grown parent" {
         try std.testing.expectEqual(@as(f32, 100), pctB.size[0]);
         try std.testing.expectEqual(@as(f32, 300), pctB.size[1]);
 
-        // Positioned side by side in the leftToRight row
+        // Positioned side by side in the horizontal row
         try std.testing.expectEqual(@as(f32, 0), pctA.position[0]);
         try std.testing.expectEqual(@as(f32, 200), pctB.position[0]);
     });
@@ -901,13 +901,13 @@ test "percentage children wrap correctly inside a wrapping parent" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try utilities.frameMeta(arena))({
-        // Fixed 400px-wide leftToRight container with overflow:wrap.
+        // Fixed 400px-wide horizontal container with overflow:wrap.
         // Three children each at 50% width (200px): the first two fit
         // on line 1 (400 == 400), the third wraps to line 2.
         forbear.element(.{
             .width = .{ .fixed = 400 },
             .height = .fit,
-            .direction = .leftToRight,
+            .direction = .horizontal,
             .overflow = .wrap,
         })({
             forbear.element(.{
@@ -959,8 +959,8 @@ test "wrapping container with text cards does not inflate ancestor height" {
 
     const arena = arenaAllocator.allocator();
 
-    // Reproduces the uhoh.com testimonials bug: a topToBottom section contains
-    // a leftToRight wrapping container with multiple percentage-width cards
+    // Reproduces the uhoh.com testimonials bug: a vertical section contains
+    // a horizontal wrapping container with multiple percentage-width cards
     // that have word-wrapped text. Each card's text wrapping fires
     // updateFittingForAncestors, which should NOT additively inflate the
     // section's height — only the wrapping container's actual height change
@@ -969,14 +969,14 @@ test "wrapping container with text cards does not inflate ancestor height" {
         forbear.element(.{
             .width = .grow,
             .height = .fit,
-            .direction = .topToBottom,
+            .direction = .vertical,
             .textWrapping = .word,
         })({
             // Section with wrapping cards
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810,
-                .direction = .topToBottom,
+                .direction = .vertical,
             })({
                 forbear.element(.{
                     .overflow = .wrap,
@@ -985,14 +985,14 @@ test "wrapping container with text cards does not inflate ancestor height" {
                     // Line 1: two cards with LONG text (tall after wrapping)
                     forbear.element(.{
                         .width = .{ .percentage = 0.5 },
-                        .direction = .topToBottom,
+                        .direction = .vertical,
                         .padding = .all(10),
                     })({
                         forbear.text("Card A has a very long body of text that will wrap to many lines when constrained to half the container width. This creates a tall card on line one which is important for reproducing the height inflation bug where the tallest card from any line inflates the wrapping containers base height. We need this to be significantly taller than the cards on line two to expose the double counting.");
                     });
                     forbear.element(.{
                         .width = .{ .percentage = 0.5 },
-                        .direction = .topToBottom,
+                        .direction = .vertical,
                         .padding = .all(10),
                     })({
                         forbear.text("Card B also has a very long body of text that will wrap to many lines when constrained to half width. This ensures line one is tall. The bug causes the wrapping container height to include this line height twice: once from the text wrapping cross axis max and once from the element wrapping line addition.");
@@ -1000,14 +1000,14 @@ test "wrapping container with text cards does not inflate ancestor height" {
                     // Line 2: two cards with SHORT text (short after wrapping)
                     forbear.element(.{
                         .width = .{ .percentage = 0.5 },
-                        .direction = .topToBottom,
+                        .direction = .vertical,
                         .padding = .all(10),
                     })({
                         forbear.text("Card C short.");
                     });
                     forbear.element(.{
                         .width = .{ .percentage = 0.5 },
-                        .direction = .topToBottom,
+                        .direction = .vertical,
                         .padding = .all(10),
                     })({
                         forbear.text("Card D short.");
@@ -1074,13 +1074,13 @@ test "text inside percentage card inside wrapping container stays within bounds"
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .topToBottom,
+            .direction = .vertical,
             .textWrapping = .word,
         })({
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810,
-                .direction = .topToBottom,
+                .direction = .vertical,
             })({
                 forbear.element(.{
                     .overflow = .wrap,
@@ -1089,7 +1089,7 @@ test "text inside percentage card inside wrapping container stays within bounds"
                     forbear.element(.{
                         .width = .{ .percentage = 0.5 },
                         .padding = .all(13.5),
-                        .direction = .leftToRight,
+                        .direction = .horizontal,
                     })({
                         forbear.element(.{
                             .width = .{ .fixed = 80 },
@@ -1141,12 +1141,12 @@ test "perpendicular clamping respects parent padding" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try utilities.frameMeta(arena))({
-        // A topToBottom parent with fixed width and padding,
+        // A vertical parent with fixed width and padding,
         // containing a long text that should be clamped to the content area.
         forbear.element(.{
             .width = .{ .fixed = 200 },
             .height = .fit,
-            .direction = .topToBottom,
+            .direction = .vertical,
             .padding = .all(20),
             .textWrapping = .word,
         })({
@@ -1178,7 +1178,7 @@ test "manually placed elements are not affected by scroll" {
         forbear.element(.{
             .width = .grow,
             .height = .grow,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 50 },
@@ -1223,10 +1223,10 @@ test "fixed-width ratio-height children with maxSize don't inflate parent cross-
     try forbear.frame(try utilities.frameMeta(arena))({
         forbear.element(.{
             .width = .{ .fixed = 800 },
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
-                .direction = .leftToRight,
+                .direction = .horizontal,
             })({
                 // Mimics an image: fixed width 400, ratio height 0.75, maxWidth 128, maxHeight 112.
                 // Unclamped size would be (400, 300); clamped should be (128, 96).
@@ -1284,12 +1284,12 @@ test "ltr row with fixed height centers children vertically" {
         forbear.element(.{
             .width = .{ .fixed = 400 },
             .height = .fit,
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 400 },
                 .height = .{ .fixed = 200 },
-                .direction = .leftToRight,
+                .direction = .horizontal,
                 .alignment = .{ .x = .start, .y = .center },
             })({
                 forbear.element(.{
@@ -1301,7 +1301,7 @@ test "ltr row with fixed height centers children vertically" {
             forbear.element(.{
                 .width = .{ .fixed = 400 },
                 .height = .{ .fixed = 200 },
-                .direction = .leftToRight,
+                .direction = .horizontal,
                 .alignment = .{ .x = .start, .y = .end },
             })({
                 forbear.element(.{
@@ -1342,7 +1342,7 @@ test "layoutDump produces expected output for a simple tree" {
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 100 },
             .padding = .all(10),
-            .direction = .leftToRight,
+            .direction = .horizontal,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 80 },
@@ -1363,7 +1363,7 @@ test "layoutDump produces expected output for a simple tree" {
         // Verify the dump contains key structural markers
         try std.testing.expect(std.mem.indexOf(u8, output, "[0]") != null);
         try std.testing.expect(std.mem.indexOf(u8, output, "[1]") != null);
-        try std.testing.expect(std.mem.indexOf(u8, output, "dir=leftToRight") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "dir=horizontal") != null);
         try std.testing.expect(std.mem.indexOf(u8, output, "fixed(200.0)") != null);
         try std.testing.expect(std.mem.indexOf(u8, output, "fixed(80.0)") != null);
         try std.testing.expect(std.mem.indexOf(u8, output, "padding=x[10.0,10.0] y[10.0,10.0]") != null);
@@ -1469,7 +1469,7 @@ test "slotted component with before/after content sizes correctly" {
                 forbear.element(.{
                     .width = .fit,
                     .height = .fit,
-                    .direction = .leftToRight,
+                    .direction = .horizontal,
                 })({
                     forbear.element(.{
                         .width = .{ .fixed = 20 },

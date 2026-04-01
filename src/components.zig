@@ -18,7 +18,7 @@ pub fn FpsCounter() void {
             .padding = .all(4),
             .borderRadius = 2,
             .color = .{ 1.0, 1.0, 0.0, 1.0 },
-            .direction = .topToBottom,
+            .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .grow,

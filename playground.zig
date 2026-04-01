@@ -6,7 +6,7 @@ fn CounterExample() void {
         const count = forbear.useState(u32, 0);
 
         forbear.element(.{
-            .direction = .topToBottom,
+            .direction = .vertical,
             .padding = .all(16.0),
             .background = .{ .color = .{ 0.12, 0.12, 0.12, 1.0 } },
             .borderRadius = 12.0,
@@ -36,7 +36,7 @@ fn App() void {
 
         forbear.element(.{
             .width = .grow,
-            .direction = .topToBottom,
+            .direction = .vertical,
             .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
             .padding = .all(10),
         })({

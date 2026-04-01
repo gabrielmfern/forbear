@@ -89,7 +89,7 @@ fn growChildren(
                     @max(oldSize + toAdd, child.getMinSize(direction)),
                     child.getMaxSize(direction),
                 ) - oldSize;
-                if (direction == .leftToRight) {
+                if (direction == .horizontal) {
                     child.size[0] += allowedDifference;
                 } else {
                     child.size[1] += allowedDifference;
@@ -181,7 +181,7 @@ fn shrinkChildren(
                     oldSize - toSubtract,
                     child.getMinSize(direction),
                 ) - oldSize;
-                if (direction == .leftToRight) {
+                if (direction == .horizontal) {
                     child.size[0] += allowedDifference;
                 } else {
                     child.size[1] += allowedDifference;
@@ -258,13 +258,13 @@ pub fn growAndShrink(
         childCount += 1;
 
         if (child.style.placement == .standard) {
-            if (direction.perpendicular() == .topToBottom) {
-                const available = node.size[1] - node.fittingBase(.topToBottom);
+            if (direction.perpendicular() == .vertical) {
+                const available = node.size[1] - node.fittingBase(.vertical);
                 if (child.style.height == .grow or (child.size[1] > available and child.minSize[1] < child.size[1])) {
                     child.size[1] = @max(@min(available, child.maxSize[1]), child.minSize[1]);
                 }
-            } else if (direction.perpendicular() == .leftToRight) {
-                const available = node.size[0] - node.fittingBase(.leftToRight);
+            } else if (direction.perpendicular() == .horizontal) {
+                const available = node.size[0] - node.fittingBase(.horizontal);
                 if (child.style.width == .grow or (child.size[0] > available and child.minSize[0] < child.size[0])) {
                     child.size[0] = @max(@min(available, child.maxSize[0]), child.minSize[0]);
                 }
@@ -319,7 +319,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTr
     };
     var lines = try std.ArrayList(Line).initCapacity(arena, 4);
 
-    const lineEnd = node.size[0] - node.fittingBase(.leftToRight);
+    const lineEnd = node.size[0] - node.fittingBase(.horizontal);
     var cursor: Vec2 = @splat(0.0);
     var lineStartIndex: usize = 0;
     switch (node.style.textWrapping) {
@@ -427,7 +427,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
     if (node.glyphs != null) {
         try wrapGlyphs(arena, node, nodeTree, base);
     } else {
-        if (node.style.direction == .leftToRight) {
+        if (node.style.direction == .horizontal) {
             const Line = struct {
                 start: usize,
                 end: usize,
@@ -495,7 +495,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                     // stops at the wrapping container, so we compute the correct
                     // total here: fitting base + all wrap additions (previous
                     // lines + inter-line margins) + last line's height.
-                    node.size[1] = node.fittingBase(.topToBottom) + wrapHeightAddition + currentLine.height;
+                    node.size[1] = node.fittingBase(.vertical) + wrapHeightAddition + currentLine.height;
                     if (node.style.width == .ratio) {
                         node.size[0] = node.size[1] * node.style.width.ratio;
                     }
@@ -507,8 +507,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                     refitAncetors(node, nodeTree);
                 }
 
-                const availableWidth = node.size[0] - node.fittingBase(.leftToRight);
-                const availableHeight = node.size[1] - node.fittingBase(.topToBottom);
+                const availableWidth = node.size[0] - node.fittingBase(.horizontal);
+                const availableHeight = node.size[1] - node.fittingBase(.vertical);
                 for (lines.items) |line| {
                     const xOffset: f32 = switch (node.style.alignment.x) {
                         .start => 0.0,
@@ -553,8 +553,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
             }
 
             const contentHeight = cursor[1] - base[1];
-            const availableWidth = node.size[0] - node.fittingBase(.leftToRight);
-            const availableHeight = node.size[1] - node.fittingBase(.topToBottom);
+            const availableWidth = node.size[0] - node.fittingBase(.horizontal);
+            const availableHeight = node.size[1] - node.fittingBase(.vertical);
             const yOffset: f32 = switch (node.style.alignment.y) {
                 .start => 0.0,
                 .center => (availableHeight - contentHeight) / 2.0,

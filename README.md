@@ -20,7 +20,7 @@ fn App() void {
   // doing layouting again as well.
   //
   // the second call opens a scope for children — this is how you nest elements.
-  forbear.element(.{ .width = .grow, .direction = .topToBottom })({
+  forbear.element(.{ .width = .grow, .direction = .vertical })({
     forbear.printText("Count: {d}", .{count.value.*});
     
     forbear.element(.{ 
