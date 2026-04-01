@@ -35,7 +35,8 @@ fn App() !void {
         forbear.element(.{
             .width = .grow,
             .direction = .vertical,
-            .alignment = .topCenter,
+            .xJustification = .center,
+            .yJustification = .start,
             .background = .{ .color = theme.Colors.page },
             .font = try forbear.useFont("SpaceGrotesk"),
             .fontWeight = 400,
@@ -48,7 +49,8 @@ fn App() !void {
                 .width = .grow,
                 .background = .{ .color = black },
                 .padding = .block(6.0),
-                .alignment = .center,
+                .xJustification = .center,
+                .yJustification = .center,
             })({
                 forbear.element(.{
                     .fontWeight = 500,
@@ -64,7 +66,8 @@ fn App() !void {
                 .width = .grow,
                 .maxWidth = 810.0,
                 .padding = .block(6.0),
-                .alignment = .center,
+                .xJustification = .center,
+                .yJustification = .center,
             })({
                 forbear.image(.{
                     .width = .{ .fixed = 100.0 },
@@ -91,7 +94,8 @@ fn App() !void {
                 .maxWidth = 810.0,
                 .margin = .block(36.0),
                 .direction = .horizontal,
-                .alignment = .centerLeft,
+                .xJustification = .start,
+                .yJustification = .center,
             })({
                 forbear.element(.{
                     .direction = .vertical,
@@ -142,7 +146,8 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = .block(22.5),
                 .margin = .block(36.0),
                 .borderWidth = .block(1.5),
@@ -151,7 +156,8 @@ fn App() !void {
                 for (statements) |statement| {
                     forbear.element(.{
                         .direction = .horizontal,
-                        .alignment = .centerLeft,
+                        .xJustification = .start,
+                        .yJustification = .center,
                         .width = .{ .percentage = 1.0 / 3.0 },
                         .fontWeight = 500,
                         .fontSize = 12.0,
@@ -177,7 +183,8 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
                 forbear.image(.{
@@ -268,7 +275,8 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .direction = .vertical,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
@@ -326,7 +334,8 @@ fn App() !void {
                 forbear.element(.{
                     .fontWeight = 700,
                     .width = .grow,
-                    .alignment = .center,
+                    .xJustification = .center,
+                    .yJustification = .center,
                     .fontSize = 18.0,
                     .margin = forbear.Margin.block(0.0).withBottom(13.5),
                 })({
@@ -334,7 +343,8 @@ fn App() !void {
                 });
                 forbear.element(.{
                     .direction = .horizontal,
-                    .alignment = .center,
+                    .xJustification = .center,
+                    .yJustification = .center,
                 })({
                     for (logos) |id| {
                         forbear.image(.{
@@ -350,7 +360,8 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
                 .direction = .vertical,
             })({
@@ -369,7 +380,8 @@ fn App() !void {
                 forbear.element(.{
                     .fontSize = 12.0,
                     .color = theme.Colors.muted,
-                    .alignment = .topCenter,
+                    .xJustification = .center,
+                    .yJustification = .start,
                 })({
                     forbear.text("We're replacing clunky IT with clean, fast, and flexible support. Built for startups and teams that just want things to work.");
                 });
@@ -488,7 +500,8 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(37.5),
             })({
                 forbear.element(.{ .direction = .vertical })({
@@ -505,7 +518,8 @@ fn App() !void {
                         })({
                             forbear.element(.{
                                 .direction = .horizontal,
-                                .alignment = .centerLeft,
+                                .xJustification = .start,
+                                .yJustification = .center,
                                 .margin = forbear.Margin.block(0.0).withBottom(9.0),
                             })({
                                 forbear.image(.{
@@ -566,7 +580,8 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = forbear.Padding.top(15.0).withBottom(30.0),
             })({
                 forbear.element(.{
@@ -608,12 +623,14 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
                 forbear.element(.{
                     .direction = .horizontal,
-                    .alignment = .centerLeft,
+                    .xJustification = .start,
+                    .yJustification = .center,
                 })({
                     forbear.element(.{
                         .width = .{ .fixed = 390.0 },
@@ -630,7 +647,8 @@ fn App() !void {
                             forbear.element(.{
                                 .direction = .horizontal,
                                 .margin = forbear.Margin.block(0.0).withBottom(6.0),
-                                .alignment = .centerLeft,
+                                .xJustification = .start,
+                                .yJustification = .center,
                             })({
                                 forbear.element(.{
                                     .width = .{ .fixed = 6.0 },
@@ -654,7 +672,8 @@ fn App() !void {
                 });
                 forbear.element(.{
                     .direction = .horizontal,
-                    .alignment = .centerLeft,
+                    .xJustification = .start,
+                    .yJustification = .center,
                     .margin = forbear.Margin.block(13.5).withBottom(0.0),
                 })({
                     forbear.image(.{
@@ -697,7 +716,8 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
                 forbear.element(.{ .direction = .vertical })({
@@ -739,12 +759,14 @@ fn App() !void {
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 810.0,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(37.5),
             })({
                 forbear.element(.{
                     .direction = .vertical,
-                    .alignment = .topCenter,
+                    .xJustification = .center,
+                    .yJustification = .start,
                 })({
                     forbear.image(.{
                         .height = .{ .fixed = 200.0 },
@@ -783,7 +805,8 @@ fn App() !void {
                 .width = .grow,
                 .maxWidth = 810.0,
                 .background = .{ .color = theme.Colors.soft },
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = forbear.Padding.top(15.0).withBottom(19.5),
             })({
                 forbear.element(.{
@@ -791,7 +814,8 @@ fn App() !void {
                 })({
                     forbear.element(.{
                         .direction = .horizontal,
-                        .alignment = .center,
+                        .xJustification = .center,
+                        .yJustification = .center,
                     })({
                         forbear.image(.{
                             .width = .{ .fixed = 90.0 },

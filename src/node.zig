@@ -42,61 +42,10 @@ pub const Shadow = struct {
     color: Vec4,
 };
 
-pub const Alignment = struct {
-    const Value = enum {
-        start,
-        center,
-        end,
-    };
-
-    x: Value,
-    y: Value,
-
-    pub const topLeft = @This(){
-        .x = .start,
-        .y = .start,
-    };
-
-    pub const topCenter = @This(){
-        .x = .center,
-        .y = .start,
-    };
-
-    pub const topRight = @This(){
-        .x = .end,
-        .y = .start,
-    };
-
-    pub const centerLeft = @This(){
-        .x = .start,
-        .y = .center,
-    };
-
-    /// Centered across all axis
-    pub const center = @This(){
-        .x = .center,
-        .y = .center,
-    };
-
-    pub const centerRight = @This(){
-        .x = .end,
-        .y = .center,
-    };
-
-    pub const bottomLeft = @This(){
-        .x = .start,
-        .y = .end,
-    };
-
-    pub const bottomCenter = @This(){
-        .x = .center,
-        .y = .end,
-    };
-
-    pub const bottomRight = @This(){
-        .x = .end,
-        .y = .end,
-    };
+pub const Alignment = enum {
+    start,
+    center,
+    end,
 };
 
 /// Will modify the min size of layout boxes that wrap text accordingly
@@ -271,7 +220,8 @@ pub const Style = struct {
     margin: Margin,
 
     direction: Direction,
-    alignment: Alignment,
+    xJustification: Alignment,
+    yJustification: Alignment,
 
     pub fn getPreferredSize(self: @This(), direction: Direction) Sizing {
         if (direction == .horizontal) {
@@ -364,7 +314,8 @@ pub const IncompleteStyle = struct {
     padding: ?Padding = null,
     margin: ?Margin = null,
 
-    alignment: ?Alignment = null,
+    xJustification: ?Alignment = null,
+    yJustification: ?Alignment = null,
     direction: ?Direction = null,
 
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
@@ -406,7 +357,8 @@ pub const IncompleteStyle = struct {
             .margin = self.margin orelse .all(0.0),
 
             .direction = self.direction orelse .horizontal,
-            .alignment = self.alignment orelse Alignment.topLeft,
+            .xJustification = self.xJustification orelse .start,
+            .yJustification = self.yJustification orelse .start,
         };
     }
 };
@@ -737,15 +689,15 @@ pub const Node = struct {
             @tagName(self.style.placement),
         });
 
-        // Line 2: sizing, alignment
+        // Line 2: sizing, justification
         try writeIndent(writer, indent);
         const wBuf = formatSizing(self.style.width);
         const hBuf = formatSizing(self.style.height);
-        try std.fmt.format(writer, "  w={s}  h={s}  alignment={s},{s}\n", .{
+        try std.fmt.format(writer, "  w={s}  h={s}  justification={s},{s}\n", .{
             std.mem.sliceTo(&wBuf, 0),
             std.mem.sliceTo(&hBuf, 0),
-            @tagName(self.style.alignment.x),
-            @tagName(self.style.alignment.y),
+            @tagName(self.style.xJustification),
+            @tagName(self.style.yJustification),
         });
 
         // Line 3: size, min, max

@@ -764,10 +764,8 @@ pub fn text(content: []const u8) void {
             .text
         else
             baseStyle.cursor,
-        .alignment = if (parentOptional) |parent| .{
-            .x = parent.style.alignment.x,
-            .y = .start,
-        } else null,
+        .xJustification = if (parentOptional) |parent| parent.style.xJustification else null,
+        .yJustification = .start,
     }).completeWith(baseStyle);
 
     const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());

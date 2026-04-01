@@ -44,7 +44,8 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
                     .medium => forbear.Padding.block(10).withInLine(20),
                     .large => forbear.Padding.block(28).withInLine(48),
                 },
-                .alignment = .center,
+                .xJustification = .center,
+                .yJustification = .center,
                 .direction = .vertical,
             })({
                 forbear.componentChildrenSlot();
