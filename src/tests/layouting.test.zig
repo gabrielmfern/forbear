@@ -109,7 +109,8 @@ test "uhoh-shaped grow-width ratio hero does not overlap following sibling secti
             forbear.element(.{
                 .width = .grow,
                 .maxWidth = 600,
-                .alignment = .topCenter,
+                .xJustification = .center,
+                .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
                 .direction = .vertical,
             })({
@@ -654,7 +655,7 @@ test "overflow wrap places children on new lines and grows parent height" {
     });
 }
 
-test "overflow wrap line ranges start at the wrapping child for cross-axis alignment" {
+test "overflow wrap line ranges start at the wrapping child for cross-axis justification" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
 
@@ -667,13 +668,14 @@ test "overflow wrap line ranges start at the wrapping child for cross-axis align
         // Same geometry as the basic wrap test, but center each row. The row that
         // wraps must still align every child on that row (including the wrapped
         // one); buggy line .start would attach the previous row's last child to
-        // the new row and skip applying x alignment to the real wrapped child.
+        // the new row and skip applying x justification to the real wrapped child.
         forbear.element(.{
             .width = .{ .fixed = 300 },
             .height = .fit,
             .direction = .horizontal,
             .overflow = .wrap,
-            .alignment = .{ .x = .center, .y = .start },
+            .xJustification = .center,
+            .yJustification = .start,
         })({
             forbear.element(.{
                 .width = .{ .fixed = 120 },
@@ -1279,8 +1281,8 @@ test "ltr row with fixed height centers children vertically" {
 
     try forbear.frame(try utilities.frameMeta(arena))({
         // A 400x200 horizontal row with a 50px tall child.
-        // With .center alignment the child should be at y = (200-50)/2 = 75.
-        // With .end alignment the child should be at y = 200-50 = 150.
+        // With .center justification the child should be at y = (200-50)/2 = 75.
+        // With .end justification the child should be at y = 200-50 = 150.
         forbear.element(.{
             .width = .{ .fixed = 400 },
             .height = .fit,
@@ -1290,7 +1292,8 @@ test "ltr row with fixed height centers children vertically" {
                 .width = .{ .fixed = 400 },
                 .height = .{ .fixed = 200 },
                 .direction = .horizontal,
-                .alignment = .{ .x = .start, .y = .center },
+                .xJustification = .start,
+                .yJustification = .center,
             })({
                 forbear.element(.{
                     .width = .{ .fixed = 100 },
@@ -1302,7 +1305,8 @@ test "ltr row with fixed height centers children vertically" {
                 .width = .{ .fixed = 400 },
                 .height = .{ .fixed = 200 },
                 .direction = .horizontal,
-                .alignment = .{ .x = .start, .y = .end },
+                .xJustification = .start,
+                .yJustification = .end,
             })({
                 forbear.element(.{
                     .width = .{ .fixed = 100 },
