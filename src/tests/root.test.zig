@@ -882,7 +882,7 @@ test "element - percentage sizing starts at zero before parent resolution" {
 }
 
 test "element fitting - fit parent with padding accumulates fixed child inline" {
-    // A topToBottom fit parent with padding should grow its height by the
+    // A vertical fit parent with padding should grow its height by the
     // child's height plus margins, plus its own padding/border.
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
@@ -893,7 +893,7 @@ test "element fitting - fit parent with padding accumulates fixed child inline" 
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
-            .direction = .topToBottom,
+            .direction = .vertical,
             .height = .fit,
             .width = .{ .fixed = 100.0 },
             .padding = forbear.Padding.block(10.0),
@@ -912,7 +912,7 @@ test "element fitting - fit parent with padding accumulates fixed child inline" 
 }
 
 test "element fitting - fit parent cross-axis takes max child height" {
-    // A leftToRight fit parent fitting height should use the tallest child
+    // A horizontal fit parent fitting height should use the tallest child
     // contribution plus its own vertical padding.
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
@@ -923,7 +923,7 @@ test "element fitting - fit parent cross-axis takes max child height" {
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
-            .direction = .leftToRight,
+            .direction = .horizontal,
             .height = .fit,
             .width = .{ .fixed = 200.0 },
             .padding = forbear.Padding.block(8.0),
@@ -945,7 +945,7 @@ test "element fitting - fit parent cross-axis takes max child height" {
 }
 
 test "element fitting - fit parent with padding accumulates fixed child inline width" {
-    // A leftToRight fit parent should sum child widths plus margins plus its
+    // A horizontal fit parent should sum child widths plus margins plus its
     // own horizontal padding.
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
@@ -956,7 +956,7 @@ test "element fitting - fit parent with padding accumulates fixed child inline w
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
-            .direction = .leftToRight,
+            .direction = .horizontal,
             .width = .fit,
             .height = .{ .fixed = 50.0 },
             .padding = forbear.Padding.inLine(12.0),
@@ -991,12 +991,12 @@ test "element fitting - nested fit parents propagate size upward" {
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
-            .direction = .topToBottom,
+            .direction = .vertical,
             .width = .fit,
             .height = .fit,
         })({
             forbear.element(.{
-                .direction = .topToBottom,
+                .direction = .vertical,
                 .width = .fit,
                 .height = .fit,
             })({
@@ -1026,7 +1026,7 @@ test "element fitting - manual child does not contribute to fit parent" {
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
-            .direction = .topToBottom,
+            .direction = .vertical,
             .width = .fit,
             .height = .fit,
         })({
@@ -1057,7 +1057,7 @@ test "element fitting - text child inflates fit parent inline" {
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
-            .direction = .leftToRight,
+            .direction = .horizontal,
             .width = .fit,
             .height = .fit,
         })({
@@ -1088,7 +1088,7 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
 
     try forbear.frame(try utilities.frameMeta(arenaAllocator))({
         forbear.element(.{
-            .direction = .leftToRight,
+            .direction = .horizontal,
             .width = .fit,
             .height = .fit,
             .textWrapping = .word,

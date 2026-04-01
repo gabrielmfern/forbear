@@ -34,7 +34,7 @@ fn App() !void {
     forbear.component("app")({
         forbear.element(.{
             .width = .grow,
-            .direction = .topToBottom,
+            .direction = .vertical,
             .alignment = .topCenter,
             .background = .{ .color = theme.Colors.page },
             .font = try forbear.useFont("SpaceGrotesk"),
@@ -90,11 +90,11 @@ fn App() !void {
                 .width = .grow,
                 .maxWidth = 810.0,
                 .margin = .block(36.0),
-                .direction = .leftToRight,
+                .direction = .horizontal,
                 .alignment = .centerLeft,
             })({
                 forbear.element(.{
-                    .direction = .topToBottom,
+                    .direction = .vertical,
                     .width = .grow,
                 })({
                     forbear.element(.{
@@ -150,7 +150,7 @@ fn App() !void {
             })({
                 for (statements) |statement| {
                     forbear.element(.{
-                        .direction = .leftToRight,
+                        .direction = .horizontal,
                         .alignment = .centerLeft,
                         .width = .{ .percentage = 1.0 / 3.0 },
                         .fontWeight = 500,
@@ -187,7 +187,7 @@ fn App() !void {
                     .margin = forbear.Margin.inLine(0.0).withRight(24.0),
                 }, try forbear.useImage("uhoh-problem"));
                 forbear.element(.{
-                    .direction = .topToBottom,
+                    .direction = .vertical,
                     .width = .grow,
                 })({
                     forbear.element(.{
@@ -207,7 +207,7 @@ fn App() !void {
 
                     for (issues, 0..) |issue, i| {
                         forbear.element(.{
-                            .direction = .leftToRight,
+                            .direction = .horizontal,
                             .padding = .block(9.0),
                             .fontSize = 10.5,
                             .borderWidth = if (i == 0) null else .top(1.5),
@@ -269,7 +269,7 @@ fn App() !void {
                 .width = .grow,
                 .maxWidth = 810.0,
                 .alignment = .topCenter,
-                .direction = .topToBottom,
+                .direction = .vertical,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
                 forbear.element(.{
@@ -292,7 +292,7 @@ fn App() !void {
                             .margin = forbear.Margin.bottom(12.0).withInLine(10.0),
                             .borderRadius = 12.0,
                             .borderColor = black,
-                            .direction = .topToBottom,
+                            .direction = .vertical,
                             .borderWidth = .all(0.75),
                         })({
                             forbear.image(.{
@@ -321,7 +321,7 @@ fn App() !void {
                 .borderWidth = .all(1.5),
                 .borderColor = black,
                 .borderRadius = 9.0,
-                .direction = .topToBottom,
+                .direction = .vertical,
             })({
                 forbear.element(.{
                     .fontWeight = 700,
@@ -333,7 +333,7 @@ fn App() !void {
                     forbear.text("Our partners");
                 });
                 forbear.element(.{
-                    .direction = .leftToRight,
+                    .direction = .horizontal,
                     .alignment = .center,
                 })({
                     for (logos) |id| {
@@ -352,7 +352,7 @@ fn App() !void {
                 .maxWidth = 810.0,
                 .alignment = .topCenter,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
-                .direction = .topToBottom,
+                .direction = .vertical,
             })({
                 forbear.image(.{
                     .width = .grow,
@@ -491,7 +491,7 @@ fn App() !void {
                 .alignment = .topCenter,
                 .padding = forbear.Padding.top(22.5).withBottom(37.5),
             })({
-                forbear.element(.{ .direction = .topToBottom })({
+                forbear.element(.{ .direction = .vertical })({
                     inline for (offerings) |offering| {
                         forbear.element(.{
                             .width = .grow,
@@ -501,10 +501,10 @@ fn App() !void {
                             .borderWidth = .all(0.75),
                             .padding = .all(15.0),
                             .margin = forbear.Margin.block(0.0).withBottom(12.0),
-                            .direction = .topToBottom,
+                            .direction = .vertical,
                         })({
                             forbear.element(.{
-                                .direction = .leftToRight,
+                                .direction = .horizontal,
                                 .alignment = .centerLeft,
                                 .margin = forbear.Margin.block(0.0).withBottom(9.0),
                             })({
@@ -523,7 +523,7 @@ fn App() !void {
                             });
                             inline for (offering.bullets) |bullet| {
                                 forbear.element(.{
-                                    .direction = .leftToRight,
+                                    .direction = .horizontal,
                                     .margin = forbear.Margin.block(0.0).withBottom(4.5),
                                 })({
                                     forbear.element(.{
@@ -570,7 +570,7 @@ fn App() !void {
                 .padding = forbear.Padding.top(15.0).withBottom(30.0),
             })({
                 forbear.element(.{
-                    .direction = .leftToRight,
+                    .direction = .horizontal,
                 })({
                     forbear.image(.{
                         .width = .{ .fixed = 150.0 },
@@ -578,7 +578,7 @@ fn App() !void {
                         .margin = forbear.Margin.inLine(0.0).withRight(12.0),
                     }, try forbear.useImage("uhoh-jon-avatar"));
                     forbear.element(.{
-                        .direction = .topToBottom,
+                        .direction = .vertical,
                     })({
                         forbear.element(.{
                             .fontSize = 13.5,
@@ -612,12 +612,12 @@ fn App() !void {
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
                 forbear.element(.{
-                    .direction = .leftToRight,
+                    .direction = .horizontal,
                     .alignment = .centerLeft,
                 })({
                     forbear.element(.{
                         .width = .{ .fixed = 390.0 },
-                        .direction = .topToBottom,
+                        .direction = .vertical,
                     })({
                         forbear.element(.{
                             .fontWeight = 700,
@@ -628,7 +628,7 @@ fn App() !void {
                         });
                         inline for (benefits) |benefit| {
                             forbear.element(.{
-                                .direction = .leftToRight,
+                                .direction = .horizontal,
                                 .margin = forbear.Margin.block(0.0).withBottom(6.0),
                                 .alignment = .centerLeft,
                             })({
@@ -653,7 +653,7 @@ fn App() !void {
                     }, try forbear.useImage("uhoh-group-21"));
                 });
                 forbear.element(.{
-                    .direction = .leftToRight,
+                    .direction = .horizontal,
                     .alignment = .centerLeft,
                     .margin = forbear.Margin.block(13.5).withBottom(0.0),
                 })({
@@ -700,7 +700,7 @@ fn App() !void {
                 .alignment = .topCenter,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
-                forbear.element(.{ .direction = .topToBottom })({
+                forbear.element(.{ .direction = .vertical })({
                     forbear.element(.{
                         .fontWeight = 700,
                         .fontSize = 21.0,
@@ -743,7 +743,7 @@ fn App() !void {
                 .padding = forbear.Padding.top(22.5).withBottom(37.5),
             })({
                 forbear.element(.{
-                    .direction = .topToBottom,
+                    .direction = .vertical,
                     .alignment = .topCenter,
                 })({
                     forbear.image(.{
@@ -787,10 +787,10 @@ fn App() !void {
                 .padding = forbear.Padding.top(15.0).withBottom(19.5),
             })({
                 forbear.element(.{
-                    .direction = .topToBottom,
+                    .direction = .vertical,
                 })({
                     forbear.element(.{
-                        .direction = .leftToRight,
+                        .direction = .horizontal,
                         .alignment = .center,
                     })({
                         forbear.image(.{
@@ -802,7 +802,7 @@ fn App() !void {
                         });
                     });
                     forbear.element(.{
-                        .direction = .leftToRight,
+                        .direction = .horizontal,
                         .margin = forbear.Margin.block(12.0).withBottom(0.0),
                     })({
                         forbear.element(.{

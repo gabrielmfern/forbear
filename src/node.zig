@@ -10,17 +10,17 @@ const Vec4 = @Vector(4, f32);
 const Vec2 = @Vector(2, f32);
 
 pub const Direction = enum {
-    leftToRight,
-    topToBottom,
+    horizontal,
+    vertical,
 
     pub fn perpendicular(self: @This()) @This() {
         return switch (self) {
-            .leftToRight => .topToBottom,
-            .topToBottom => .leftToRight,
+            .horizontal => .vertical,
+            .vertical => .horizontal,
         };
     }
 
-    pub const array = [_]Direction{ .leftToRight, .topToBottom };
+    pub const array = [_]Direction{ .horizontal, .vertical };
 };
 
 pub const Sizing = union(enum) {
@@ -121,8 +121,8 @@ pub const Padding = struct {
 
     pub fn get(self: @This(), direction: Direction) Vec2 {
         return switch (direction) {
-            .leftToRight => self.x,
-            .topToBottom => self.y,
+            .horizontal => self.x,
+            .vertical => self.y,
         };
     }
 
@@ -274,14 +274,14 @@ pub const Style = struct {
     alignment: Alignment,
 
     pub fn getPreferredSize(self: @This(), direction: Direction) Sizing {
-        if (direction == .leftToRight) {
+        if (direction == .horizontal) {
             return self.width;
         }
         return self.height;
     }
 
     pub fn getMinSize(self: @This(), direction: Direction) ?f32 {
-        if (direction == .leftToRight) {
+        if (direction == .horizontal) {
             return self.minWidth;
         }
         return self.minHeight;
@@ -405,7 +405,7 @@ pub const IncompleteStyle = struct {
             .padding = self.padding orelse .all(0.0),
             .margin = self.margin orelse .all(0.0),
 
-            .direction = self.direction orelse .leftToRight,
+            .direction = self.direction orelse .horizontal,
             .alignment = self.alignment orelse Alignment.topLeft,
         };
     }
@@ -619,7 +619,7 @@ pub const Node = struct {
 
     pub fn fitChild(self: *@This(), child: *const Node) void {
         if (child.style.placement == .standard) {
-            const wraps = self.style.overflow == .wrap and self.style.direction == .leftToRight;
+            const wraps = self.style.overflow == .wrap and self.style.direction == .horizontal;
 
             inline for (Direction.array) |fitDirection| {
                 const preferredSize = self.style.getPreferredSize(fitDirection);
@@ -772,8 +772,8 @@ pub const Node = struct {
         // Line 6: fittingBase
         try writeIndent(writer, indent);
         try std.fmt.format(writer, "  fittingBase: x={d:.1}  y={d:.1}\n", .{
-            self.fittingBase(.leftToRight),
-            self.fittingBase(.topToBottom),
+            self.fittingBase(.horizontal),
+            self.fittingBase(.vertical),
         });
 
         // Line 7: glyphs (if present)
@@ -808,7 +808,7 @@ pub const Node = struct {
     }
 
     pub fn setMinSize(self: *@This(), direction: Direction, size: f32) void {
-        if (direction == .leftToRight) {
+        if (direction == .horizontal) {
             self.minSize[0] = size;
         } else {
             self.minSize[1] = size;
@@ -816,7 +816,7 @@ pub const Node = struct {
     }
 
     pub fn addMinSize(self: *@This(), direction: Direction, increment: f32) void {
-        if (direction == .leftToRight) {
+        if (direction == .horizontal) {
             self.minSize[0] += increment;
         } else {
             self.minSize[1] += increment;
@@ -824,7 +824,7 @@ pub const Node = struct {
     }
 
     pub fn setSize(self: *@This(), direction: Direction, size: f32) void {
-        if (direction == .leftToRight) {
+        if (direction == .horizontal) {
             self.size[0] = size;
         } else {
             self.size[1] = size;
@@ -832,7 +832,7 @@ pub const Node = struct {
     }
 
     pub fn addSize(self: *@This(), direction: Direction, increment: f32) void {
-        if (direction == .leftToRight) {
+        if (direction == .horizontal) {
             self.size[0] += increment;
         } else {
             self.size[1] += increment;
@@ -840,21 +840,21 @@ pub const Node = struct {
     }
 
     pub fn getMinSize(self: @This(), direction: Direction) f32 {
-        if (direction == .leftToRight) {
+        if (direction == .horizontal) {
             return self.minSize[0];
         }
         return self.minSize[1];
     }
 
     pub fn getMaxSize(self: @This(), direction: Direction) f32 {
-        if (direction == .leftToRight) {
+        if (direction == .horizontal) {
             return self.maxSize[0];
         }
         return self.maxSize[1];
     }
 
     pub fn getSize(self: @This(), direction: Direction) f32 {
-        if (direction == .leftToRight) {
+        if (direction == .horizontal) {
             return self.size[0];
         }
         return self.size[1];
