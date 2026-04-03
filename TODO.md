@@ -1,8 +1,8 @@
-- [ ] find a way to avoid having to use `try` everwhere
+- [x] find a way to avoid having to use `try` everwhere
 - [x] implement scrolling 
-- [ ] text selection
 - [x] I need a way to define the percentage width that an element would take 
   of its parent
+- [ ] text selection
 
 ## deal breakers
 
