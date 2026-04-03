@@ -55,7 +55,7 @@ missing things for the entire uhoh.com website:
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
 
-### wayland-book.com
+### [ ] wayland-book.com
 
 - [ ] svg support
 - [ ] per element clipping
