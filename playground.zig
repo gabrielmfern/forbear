@@ -109,6 +109,7 @@ fn renderingMain(
                 .{ 1.0, 1.0, 1.0, 1.0 },
                 window.dpi,
                 window.targetFrameTimeNs(),
+                forbear.getContext().scrollPosition,
             );
 
             try forbear.update();

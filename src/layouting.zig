@@ -598,7 +598,6 @@ pub fn layout() !*NodeTree {
         try growAndShrink(arena, root, &context.nodeTree);
         try wrapAndPlace(arena, root, &context.nodeTree);
 
-        root.position -= context.scrollPosition;
         root.position += root.style.translate;
 
         var walker = context.nodeTree.walk();

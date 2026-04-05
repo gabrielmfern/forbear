@@ -3531,6 +3531,7 @@ pub const Renderer = struct {
         clearColor: Vec4,
         dpi: [2]u32,
         targetFrameTimeNs: u64,
+        scrollPosition: Vec2,
     ) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -3573,19 +3574,22 @@ pub const Renderer = struct {
         const framebuffers = self.swapchainFramebuffers;
         const framebufferIndex: usize = @intCast(imageIndex);
 
+        const viewportWidth: f32 = @floatFromInt(self.swapchain.extent.width);
+        const viewportHeight: f32 = @floatFromInt(self.swapchain.extent.height);
         const projectionMatrix = zmath.orthographicOffCenterRh(
-            0.0,
-            @floatFromInt(self.swapchain.extent.width),
-            @floatFromInt(self.swapchain.extent.height),
-            0.0,
+            scrollPosition[0],
+            scrollPosition[0] + viewportWidth,
+            scrollPosition[1] + viewportHeight,
+            scrollPosition[1],
             -1.0,
             1.0,
         );
 
         var nodesToRender = std.ArrayList(usize).empty;
         for (nodeTree.list.items, 0..) |node, i| {
-            const viewport = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
-            const insideView = node.position[0] + node.size[0] > 0.0 and node.position[1] + node.size[1] > 0.0 and viewport[0] > node.position[0] and viewport[1] > node.position[1];
+            const viewport = Vec2{ viewportWidth, viewportHeight };
+            const screenPosition = node.position - scrollPosition;
+            const insideView = screenPosition[0] + node.size[0] > 0.0 and screenPosition[1] + node.size[1] > 0.0 and viewport[0] > screenPosition[0] and viewport[1] > screenPosition[1];
             if (!insideView) {
                 continue;
             }

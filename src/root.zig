@@ -1147,12 +1147,11 @@ pub fn update() !void {
     var iterator = self.nodeTree.walk();
     while (iterator.next()) |node| {
         if (node.style.placement == .standard) {
-            // this +scrollPosition term feels hacky to do, it's only required
-            // because layouting adds in the scroll position
-            uiEdges = @max(uiEdges, node.position + self.scrollPosition + node.size);
+            uiEdges = @max(uiEdges, node.position + node.size);
         }
-        const isMouseAfter = node.position[0] <= self.mousePosition[0] and node.position[1] <= self.mousePosition[1];
-        const isMouseBefore = node.position[0] + node.size[0] >= self.mousePosition[0] and node.position[1] + node.size[1] >= self.mousePosition[1];
+        const mouseInContent = self.mousePosition + self.scrollPosition;
+        const isMouseAfter = node.position[0] <= mouseInContent[0] and node.position[1] <= mouseInContent[1];
+        const isMouseBefore = node.position[0] + node.size[0] >= mouseInContent[0] and node.position[1] + node.size[1] >= mouseInContent[1];
         const isMouseInside = isMouseAfter and isMouseBefore;
 
         const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, node.key);

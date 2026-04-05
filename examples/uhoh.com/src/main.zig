@@ -943,7 +943,7 @@ fn renderingMain(
             if (shouldLog) {
                 drawStartNs = std.time.nanoTimestamp();
             }
-            try renderer.drawFrame(arena, rootTree, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
+            try renderer.drawFrame(arena, rootTree, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs(), forbear.getContext().scrollPosition);
             if (shouldLog) {
                 const drawMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - drawStartNs)) / 1_000_000.0;
                 std.log.debug("[uhoh-layout-debug] frame={} after drawFrame: {d:.3}ms", .{ frameIndex, drawMs });

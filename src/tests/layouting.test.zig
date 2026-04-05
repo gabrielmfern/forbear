@@ -1167,7 +1167,7 @@ test "perpendicular clamping respects parent padding" {
     });
 }
 
-test "manually placed elements are not affected by scroll" {
+test "scroll position does not affect layout positions" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
 
@@ -1202,12 +1202,13 @@ test "manually placed elements are not affected by scroll" {
         const manualNode = tree.at(root.firstChild.?);
         const standardNode = tree.at(manualNode.nextSibling.?);
 
-        // The manually placed element should be at its manual position, not offset by scroll
+        // Scroll is now applied at render time, not during layout.
+        // All positions should reflect pure layout values.
         try std.testing.expectEqual(@as(f32, 10.0), manualNode.position[0]);
         try std.testing.expectEqual(@as(f32, 20.0), manualNode.position[1]);
 
-        // The standard element should be offset by scroll (root moves by -100)
-        try std.testing.expectEqual(@as(f32, -100.0), standardNode.position[1]);
+        // The standard element should be at its layout position, unaffected by scroll
+        try std.testing.expectEqual(@as(f32, 0.0), standardNode.position[1]);
     });
 }
 
