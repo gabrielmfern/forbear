@@ -718,6 +718,8 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         return &endNoop;
     };
 
+    self.frameMeta.?.previousPushedNodeIndex = result.index;
+
     return &elementEnd;
 }
 
