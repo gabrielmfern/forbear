@@ -40,3 +40,19 @@ Let's actually go back to first principles. What am I trying to achieve that's n
 - Grid-like layouting: sharing the sizes of a parent among the children
 
 It doesn't seem like there's a single solution to all of these problems. Right now I'm only particularly thinking about the Grid-like layouts, I don't want to move the children's size controls over to the parent, I want to keep it in the children.
+
+The grid-fitting and percentage sizing in particular would be solved by getting access to the previous frame. I don't know how this could feel in the end since it is using values for last frame there will be one frame with layout shift so I think experimenting first is the way to go here.
+
+Tried it, and it does not feel good. It's really easy to just get into bugs with values infinitely increasing just because of padding or a margin. A measure step would feel so much better, but I don't know if it's posibble without having to write duplicated code.
+
+Stepping back I think maybe I should focus in a single thing instead. Let's think about the pressing thing I want to do right now: the grid-like layouting. I need for the user to be able to access the value 
+
+I need to know the size of the parent to determine the size of the children. Can't that be done at the end of the element then? No, because the parent might be growing too, meaning that it can't grow its children
+
+The parent might also shrink too, so that means even if it's fit, the children can't grow at the moment that the layout is defined.
+
+This narrows down our options quite a lot I feel. Even if I were to have the measure function it wouldn't know the final size, and we could never because its own parent wouldn't have the final size. It could be useful to measure text size anyway for exmaple, but that's already not much trouble since the font has shaping in it.
+
+What if frames always run twice? Meaning they run once for fitting, and another time for you to do what right now is the top-to-bottom layouting step. This kind of already happens with the current layouting because it has to traverse the entire node tree from top-to-bottom. It's not the exact same thing, but this would mean the user has complete control over what I would say is trickiest about layouting because things have been measured already
+
+
