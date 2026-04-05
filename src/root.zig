@@ -111,6 +111,9 @@ viewportSize: Vec2,
 
 componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
 
+/// This does not copy over anything that's allocated inside of the Node
+/// itself, so a segmentation fault will happen if accessing fields in there. 
+previousNodeTree: NodeTree,
 nodeTree: NodeTree,
 frameMeta: ?FrameMeta,
 pendingEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
@@ -146,6 +149,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .componentStates = .init(allocator),
 
         .frameMeta = null,
+        .previousNodeTree = .empty,
         .nodeTree = .empty,
         .pendingEventQueue = .init(allocator),
 
@@ -433,6 +437,18 @@ fn currentComponentResolutionState() ?*ComponentResolutionState {
     }
 }
 
+/// Gets the previous node in its final state before rendering in the previous frame.
+/// This allows for accessing sizes of nodes after layouting, but it will always have one frame as delay.
+pub fn getLastSize() ?Vec2 {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    const index = self.frameMeta.?.previousPushedNodeIndex orelse return null;
+    if (self.previousNodeTree.list.items.len < index + 1) {
+        return null;
+    }
+    return self.previousNodeTree.at(index).size;
+}
+
 /// TODO: in debug mode, we should be adding some guard rail here to make sure
 // of warning the user if they called the hook in an unexpected order, as it
 // can cause undefined behavior as is right now
@@ -537,12 +553,21 @@ fn frameEnd(block: void) anyerror!void {
     const frameMeta = self.frameMeta.?;
     self.frameMeta = null;
     if (frameMeta.err) |err| return err;
+
+    if (self.previousNodeTree.list.capacity != self.nodeTree.list.capacity) {
+        try self.previousNodeTree.list.ensureTotalCapacity(self.allocator, self.nodeTree.list.capacity);
+    }
+    self.previousNodeTree.list.items = self.previousNodeTree.list.items.ptr[0..self.nodeTree.list.items.len];
+    @memmove(
+        self.previousNodeTree.list.items,
+        self.nodeTree.list.items,
+    );
+    self.nodeTree.clear();
 }
 
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
 
-    self.nodeTree.clear();
     self.frameMeta = meta;
     return &frameEnd;
 }
@@ -717,6 +742,8 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
             result.ptr.setMinSize(fitDirection, result.ptr.fittingBase(fitDirection));
         }
     }
+
+    self.frameMeta.?.previousPushedNodeIndex = result.index;
 
     return &elementEnd;
 }
@@ -1340,6 +1367,7 @@ pub fn deinit() void {
     self.images.deinit();
 
     self.nodeTree.deinit(self.allocator);
+    self.previousNodeTree.deinit(self.allocator);
 
     context = null;
 }
