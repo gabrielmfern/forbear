@@ -18,9 +18,6 @@
 
 ### [ ] uhoh.com
 
-- [x] fix where image should be transparent being white
-  - Decided to not do it, it's caused by uhoh.com using blendMode: multiply
-    which we don't do at all
 - [x] fix image anti aliasing to look more like the browser
 - [x] what do I need to have variant fonts?
 - [x] text wrapping
@@ -28,8 +25,6 @@
 - [x] text wrapping only breaking at the beginning of characters 
 - [x] wrapped text should also conform to parent alignment
 - [x] fix parts of shadow that draw nothing going over parent borders
-
-missing things for the entire uhoh.com website:
 - [x] forbear.text requires comptime fmt, so users can't plug in dynamic text
 - [x] vulkan error with multi sampling being disabled for text
 - [x] page scrolling
@@ -50,10 +45,10 @@ missing things for the entire uhoh.com website:
         `forbear.componentChildrenSlot()` would mark the parent/path to slot
         component children into parent
 - [ ] feature equivalent to display: grid in css
-    - 
 - [ ] linear gradient support
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
+- [ ] images look really bad
 
 ### [ ] wayland-book.com
 
