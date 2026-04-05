@@ -118,6 +118,12 @@ pendingEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 images: std.StringHashMap(Image),
 fonts: std.StringHashMap(Font),
 
+/// Stores node sizes from a measure pass, keyed by node key.
+/// Populated by `saveMeasurements()` after layout, queried by `useMeasuredSize()`.
+measuredSizes: std.AutoHashMap(u64, Vec2),
+/// Stores ordered children sizes from a measure pass, keyed by parent node key.
+measuredChildrenSizes: std.AutoHashMap(u64, std.ArrayList(Vec2)),
+
 pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
     if (context != null) {
         return error.AlreadyInitialized;
@@ -151,6 +157,9 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
 
         .images = std.StringHashMap(Image).init(allocator),
         .fonts = std.StringHashMap(Font).init(allocator),
+
+        .measuredSizes = .init(allocator),
+        .measuredChildrenSizes = .init(allocator),
     };
 }
 
@@ -407,6 +416,80 @@ pub fn useDeltaTime() f64 {
 pub fn useLastUpdateTime() f64 {
     const self = getContext();
     return self.lastUpdateTime orelse self.startTime;
+}
+
+/// Saves the current node tree's laid-out sizes into `measuredSizes`,
+/// keyed by each node's key. Call this after `layout()` in a measure pass
+/// so that a subsequent render pass can query sizes via `useMeasuredSize()`.
+pub fn saveMeasurements() void {
+    const self = getContext();
+    self.measuredSizes.clearRetainingCapacity();
+
+    // Clear old children-size lists but reuse the map entries
+    var childIter = self.measuredChildrenSizes.valueIterator();
+    while (childIter.next()) |list| {
+        list.clearRetainingCapacity();
+    }
+
+    for (self.nodeTree.list.items) |node| {
+        self.measuredSizes.put(node.key, node.size) catch {};
+
+        // Build parent -> ordered children sizes map
+        if (node.parent) |parentIndex| {
+            const parentKey = self.nodeTree.at(parentIndex).key;
+            const result = self.measuredChildrenSizes.getOrPut(parentKey) catch continue;
+            if (!result.found_existing) {
+                result.value_ptr.* = .empty;
+            }
+            result.value_ptr.append(self.allocator, node.size) catch {};
+        }
+    }
+}
+
+/// Returns the laid-out size that the node currently being constructed had
+/// in the measure pass (matched by key). Returns `null` if no measurement
+/// exists (e.g. during the first/measure pass itself).
+pub fn useMeasuredSize() ?Vec2 {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+
+    // The node currently being constructed is at the top of the parent stack
+    const currentIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse
+        self.frameMeta.?.previousPushedNodeIndex orelse return null;
+    const node = self.nodeTree.at(currentIndex);
+    return self.measuredSizes.get(node.key);
+}
+
+/// Returns the full map of measured sizes so user code can perform custom
+/// queries (e.g. computing max height across a set of nodes).
+pub fn getMeasuredSizes() *const std.AutoHashMap(u64, Vec2) {
+    const self = getContext();
+    return &self.measuredSizes;
+}
+
+/// For the current parent node, returns the max measured child height per
+/// row of `cols` columns. Returns an array of optionals — `null` for rows
+/// without measurements (e.g. during the measure pass itself).
+/// Max 8 rows supported.
+pub fn useMeasuredChildrenRowMaxHeights(cols: usize) [8]?f32 {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    var result: [8]?f32 = .{null} ** 8;
+
+    const parentIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return result;
+    const parentKey = self.nodeTree.at(parentIndex).key;
+
+    const childrenSizes = self.measuredChildrenSizes.get(parentKey) orelse return result;
+    for (childrenSizes.items, 0..) |size, i| {
+        const row = i / cols;
+        if (row >= result.len) break;
+        if (result[row]) |current| {
+            result[row] = @max(current, size[1]);
+        } else {
+            result[row] = size[1];
+        }
+    }
+    return result;
 }
 
 pub fn getPreviousNode() ?*Node {

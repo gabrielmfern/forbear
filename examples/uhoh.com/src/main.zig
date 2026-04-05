@@ -26,10 +26,6 @@ fn readEnvBool(allocator: std.mem.Allocator, key: []const u8, default: bool) boo
     return default;
 }
 
-fn shouldLogFrame(frameIndex: u64) bool {
-    return frameIndex < 8 or frameIndex % 120 == 0;
-}
-
 fn App() !void {
     forbear.component("app")({
         forbear.element(.{
@@ -291,9 +287,18 @@ fn App() !void {
                     .overflow = .wrap,
                     .width = .grow,
                 })({
-                    for (testimonials) |testimonial| {
+                    // Grid layout using measure pass: compute max height
+                    // per row of 3. Inside this element block, the parent
+                    // (wrap container) is on the stack, so we can query its
+                    // measured children to pre-compute row max heights.
+                    const cols = 3;
+                    const rowMaxHeights = forbear.useMeasuredChildrenRowMaxHeights(cols);
+
+                    for (testimonials, 0..) |testimonial, i| {
+                        const row = i / cols;
                         forbear.element(.{
                             .width = .{ .percentage = 1.0 / 3.0 },
+                            .height = if (rowMaxHeights[row]) |h| .{ .fixed = h } else .fit,
                             .fontSize = 11.25,
                             .lineHeight = 1.4,
                             .padding = .all(13.5),
@@ -890,22 +895,11 @@ fn renderingMain(
     try forbear.registerImage("uhoh-failure", @embedFile("static/uhoh-failure.png"), .png);
     try forbear.registerImage("uhoh-bottom-cta", @embedFile("static/uhoh-bottom-cta.png"), .png);
 
-    const layoutDebugEnabled = readEnvBool(allocator, "FORBEAR_LAYOUT_DEBUG", false);
-    if (layoutDebugEnabled) {
-        std.log.info("FORBEAR_LAYOUT_DEBUG enabled for uhoh.com frame diagnostics", .{});
-    }
-
     var frameIndex: u64 = 0;
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
-        const shouldLog = layoutDebugEnabled and shouldLogFrame(frameIndex);
-        var frameStartNs: i128 = 0;
-        if (shouldLog) {
-            frameStartNs = std.time.nanoTimestamp();
-            std.log.debug("[uhoh-layout-debug] frame={} start", .{frameIndex});
-        }
 
-        try forbear.frame(.{
+        const frameMeta: forbear.FrameMeta = .{
             .arena = arena,
             .dpi = .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             .viewportSize = renderer.viewportSize(),
@@ -919,49 +913,30 @@ fn renderingMain(
                 .lineHeight = 1.0,
                 .blendMode = .normal,
             },
-        })({
-            // I want this to include more than one element if it's the case I'm defining it like this
+        };
+
+        // Pass 1: Measure — build the tree and layout to capture natural sizes
+        try forbear.frame(frameMeta)({
+            try App();
+            _ = try forbear.layout();
+            forbear.saveMeasurements();
+        });
+
+        // Pass 2: Render — rebuild with measured sizes available for grid equalization
+        try forbear.frame(frameMeta)({
             try App();
 
-            var layoutStartNs: i128 = 0;
-            if (shouldLog) {
-                layoutStartNs = std.time.nanoTimestamp();
-                std.log.debug("[uhoh-layout-debug] frame={} before layout viewport={any} dpi={any}", .{ frameIndex, renderer.viewportSize(), window.dpi });
-            }
-
             const rootTree = try forbear.layout();
-            if (shouldLog) {
-                const layoutMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - layoutStartNs)) / 1_000_000.0;
-                const rootNode = rootTree.at(0);
-                std.log.debug(
-                    "[uhoh-layout-debug] frame={} after layout: {d:.3}ms rootPos={any} rootSize={any}",
-                    .{ frameIndex, layoutMs, rootNode.position, rootNode.size },
-                );
-            }
 
-            var drawStartNs: i128 = 0;
-            if (shouldLog) {
-                drawStartNs = std.time.nanoTimestamp();
-            }
-            try renderer.drawFrame(arena, rootTree, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
-            if (shouldLog) {
-                const drawMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - drawStartNs)) / 1_000_000.0;
-                std.log.debug("[uhoh-layout-debug] frame={} after drawFrame: {d:.3}ms", .{ frameIndex, drawMs });
-            }
+            try renderer.drawFrame(
+                arena,
+                rootTree,
+                .{ 0.99, 0.98, 0.96, 1.0 },
+                window.dpi,
+                window.targetFrameTimeNs(),
+            );
 
-            var updateStartNs: i128 = 0;
-            if (shouldLog) {
-                updateStartNs = std.time.nanoTimestamp();
-            }
             try forbear.update();
-            if (shouldLog) {
-                const updateMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - updateStartNs)) / 1_000_000.0;
-                const totalMs: f64 = @as(f64, @floatFromInt(std.time.nanoTimestamp() - frameStartNs)) / 1_000_000.0;
-                std.log.debug(
-                    "[uhoh-layout-debug] frame={} after update: {d:.3}ms total={d:.3}ms",
-                    .{ frameIndex, updateMs, totalMs },
-                );
-            }
 
             frameIndex += 1;
         });
