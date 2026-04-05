@@ -676,6 +676,28 @@ pub const Node = struct {
         return buf;
     }
 
+    const ChildrenIterator = struct {
+        childIndex: ?usize,
+        node: *const Node, 
+
+        pub fn next(self: *@This()) ?*Node {
+            if (self.childIndex) |idx| {
+                const child = self.node.tree.at(idx);
+                self.childIndex = child.nextSibling;
+                return child;
+            } else {
+                return null;
+            }
+        }
+    };
+
+    pub fn iterateChildren(self: *const @This()) ChildrenIterator {
+        return ChildrenIterator{
+            .childIndex = self.firstChild,
+            .node = self,
+        };
+    }
+
     fn writeIndent(writer: std.io.AnyWriter, indent: usize) !void {
         for (0..indent) |_| {
             try writer.writeAll("  ");
