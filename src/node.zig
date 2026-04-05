@@ -385,9 +385,10 @@ pub const Glyphs = struct {
 /// Utilizies a flat tree structure where ndoes can reference one another by
 /// using indices, this way keeping stable references without using pointers.
 pub const NodeTree = struct {
-    list: std.ArrayList(Node),
+    list: std.ArrayList(Node) = .empty,
+    insertionIndex: usize = 0,
 
-    pub const empty = @This(){ .list = .empty };
+    pub const empty = @This(){};
 
     pub const Walker = struct {
         start: usize,
@@ -430,10 +431,6 @@ pub const NodeTree = struct {
         self.list.deinit(allocator);
     }
 
-    pub fn clear(self: *@This()) void {
-        self.list.clearRetainingCapacity();
-    }
-
     pub fn walk(self: *@This()) Walker {
         return Walker{
             .start = 0,
@@ -457,43 +454,49 @@ pub const NodeTree = struct {
         allocator: std.mem.Allocator,
         parentOpt: ?usize,
     ) !struct { ptr: *Node, index: usize } {
-        const index = self.list.items.len;
-        if (index != 0 and parentOpt == null) {
+        if (self.insertionIndex != 0 and parentOpt == null) {
             return error.MultipleRootsAreNotAllowed;
         }
+        defer self.insertionIndex += 1;
+        // const index = self.list.items.len;
+        // if (index != 0 and parentOpt == null) {
+        //     return error.MultipleRootsAreNotAllowed;
+        // }
 
-        var node = Node{
-            .tree = self,
+        if (self.list.items.len == self.insertionIndex) {
+            var node = Node{
+                .tree = self,
 
-            .parent = parentOpt,
-            .firstChild = null,
-            .lastChild = null,
-            .previousSibling = null,
-            .nextSibling = null,
+                .parent = parentOpt,
+                .firstChild = null,
+                .lastChild = null,
+                .previousSibling = null,
+                .nextSibling = null,
 
-            .key = undefined,
+                .key = undefined,
 
-            .position = undefined,
-            .z = undefined,
-            .size = undefined,
-            .maxSize = undefined,
-            .minSize = undefined,
+                .position = @splat(0.0),
+                .z = undefined,
+                .size = @splat(0.0),
+                .maxSize = @splat(0.0),
+                .minSize = @splat(0.0),
 
-            .style = undefined,
-        };
-        if (parentOpt) |parentIndex| {
-            const parent = self.at(parentIndex);
-            if (parent.lastChild) |old_last| {
-                self.at(old_last).nextSibling = index;
+                .style = undefined,
+            };
+            if (parentOpt) |parentIndex| {
+                const parent = self.at(parentIndex);
+                if (parent.lastChild) |old_last| {
+                    self.at(old_last).nextSibling = self.insertionIndex;
+                }
+                node.previousSibling = parent.lastChild;
+                if (parent.firstChild == null) {
+                    parent.firstChild = self.insertionIndex;
+                }
+                parent.lastChild = self.insertionIndex;
             }
-            node.previousSibling = parent.lastChild;
-            if (parent.firstChild == null) {
-                parent.firstChild = index;
-            }
-            parent.lastChild = index;
+            try self.list.append(allocator, node);
         }
-        try self.list.append(allocator, node);
-        return .{ .ptr = self.at(index), .index = index };
+        return .{ .ptr = self.at(self.insertionIndex), .index = self.insertionIndex };
     }
 
     pub fn fitAncestors(self: *@This(), nodeIndex: usize, child: *const Node) void {

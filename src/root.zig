@@ -542,7 +542,6 @@ fn frameEnd(block: void) anyerror!void {
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
 
-    self.nodeTree.clear();
     self.frameMeta = meta;
     return &frameEnd;
 }
@@ -571,6 +570,17 @@ fn elementEnd(block: void) void {
 
     if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parentIndex| {
         const parent = self.nodeTree.at(parentIndex);
+
+        if (parent.firstChild == previousNodeIndex) {
+            inline for (Direction.array) |fitDirection| {
+                if (parent.style.getPreferredSize(fitDirection) == .fit) {
+                    parent.setSize(fitDirection, parent.fittingBase(fitDirection));
+                }
+                if (parent.shouldFitMin(fitDirection)) {
+                    parent.setMinSize(fitDirection, parent.fittingBase(fitDirection));
+                }
+            }
+        }
 
         parent.fitChild(node);
     }
@@ -648,25 +658,23 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
     result.ptr.position = if (style.placement == .manual)
         style.placement.manual
     else
-        @splat(0.0);
+        result.ptr.position;
     result.ptr.size = .{
         switch (style.width) {
             .fixed => |width| width,
-            .percentage => 0.0,
             .ratio => |ratio| if (style.height == .fixed)
                 style.height.fixed * ratio
             else
-                0.0,
-            .fit, .grow => 0.0,
+                result.ptr.size[0],
+            .fit, .grow, .percentage => result.ptr.size[0],
         },
         switch (style.height) {
             .fixed => |height| height,
-            .percentage => 0.0,
             .ratio => |ratio| if (style.width == .fixed)
                 style.width.fixed * ratio
             else
-                0.0,
-            .fit, .grow => 0.0,
+                result.ptr.size[1],
+            .fit, .grow, .percentage => result.ptr.size[1],
         },
     };
     result.ptr.minSize = .{
@@ -675,13 +683,13 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         else if (style.width == .fixed)
             style.width.fixed
         else
-            0.0,
+            result.ptr.minSize[0],
         if (style.minHeight) |minHeight|
             minHeight
         else if (style.height == .fixed)
             style.height.fixed
         else
-            0.0,
+            result.ptr.minSize[1],
     };
     result.ptr.maxSize = .{
         if (style.maxWidth) |maxWidth|
@@ -689,13 +697,13 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         else if (style.width == .fixed)
             style.width.fixed
         else
-            std.math.inf(f32),
+            result.ptr.maxSize[0],
         if (style.maxHeight) |maxHeight|
             maxHeight
         else if (style.height == .fixed)
             style.height.fixed
         else
-            std.math.inf(f32),
+            result.ptr.maxSize[1],
     };
 
     // Clamp initial size to [minSize, maxSize] so that fitChild sees correct
@@ -708,15 +716,6 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         handleFrameError(err);
         return &endNoop;
     };
-
-    inline for (Direction.array) |fitDirection| {
-        if (result.ptr.style.getPreferredSize(fitDirection) == .fit) {
-            result.ptr.setSize(fitDirection, result.ptr.fittingBase(fitDirection));
-        }
-        if (result.ptr.shouldFitMin(fitDirection)) {
-            result.ptr.setMinSize(fitDirection, result.ptr.fittingBase(fitDirection));
-        }
-    }
 
     return &elementEnd;
 }
@@ -848,6 +847,16 @@ pub fn text(content: []const u8) void {
     self.frameMeta.?.previousPushedNodeIndex = result.index;
 
     if (parentOptional) |parent| {
+        if (parent.firstChild == result.index) {
+            inline for (Direction.array) |fitDirection| {
+                if (parent.style.getPreferredSize(fitDirection) == .fit) {
+                    parent.setSize(fitDirection, parent.fittingBase(fitDirection));
+                }
+                if (parent.shouldFitMin(fitDirection)) {
+                    parent.setMinSize(fitDirection, parent.fittingBase(fitDirection));
+                }
+            }
+        }
         parent.fitChild(result.ptr);
     }
 }
