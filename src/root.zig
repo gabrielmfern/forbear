@@ -409,6 +409,10 @@ pub fn useLastUpdateTime() f64 {
     return self.lastUpdateTime orelse self.startTime;
 }
 
+pub fn getNode(index: usize) ?*Node {
+    return getContext().nodeTree.at(index);
+}
+
 pub fn getPreviousNode() ?*Node {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
