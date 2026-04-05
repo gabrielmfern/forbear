@@ -45,6 +45,8 @@ The grid-fitting and percentage sizing in particular would be solved by getting 
 
 Tried it, and it does not feel good. It's really easy to just get into bugs with values infinitely increasing just because of padding or a margin. A measure step would feel so much better, but I don't know if it's posibble without having to write duplicated code.
 
+## 2.
+
 Stepping back I think maybe I should focus in a single thing instead. Let's think about the pressing thing I want to do right now: the grid-like layouting. I need for the user to be able to access the value 
 
 I need to know the size of the parent to determine the size of the children. Can't that be done at the end of the element then? No, because the parent might be growing too, meaning that it can't grow its children
@@ -55,4 +57,5 @@ This narrows down our options quite a lot I feel. Even if I were to have the mea
 
 What if frames always run twice? Meaning they run once for fitting, and another time for you to do what right now is the top-to-bottom layouting step. This kind of already happens with the current layouting because it has to traverse the entire node tree from top-to-bottom. It's not the exact same thing, but this would mean the user has complete control over what I would say is trickiest about layouting because things have been measured already
 
+Running it twice has a bunch of unknowns that worry me. It could also introduce unexpected behavior for users that they will need to learn and understand. At this point, I can also only think of how to make it possible by the user calling the code twice on their side and that makes the setup DX even worse, though it provides interesting control which I quite like, and it could not very hard if considering that we can have a starter script.
 
