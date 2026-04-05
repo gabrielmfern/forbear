@@ -478,7 +478,7 @@ pub const NodeTree = struct {
                 .position = @splat(0.0),
                 .z = undefined,
                 .size = @splat(0.0),
-                .maxSize = @splat(0.0),
+                .maxSize = @splat(std.math.inf(f32)),
                 .minSize = @splat(0.0),
 
                 .style = undefined,
