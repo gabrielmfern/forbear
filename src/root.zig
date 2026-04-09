@@ -625,21 +625,21 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
-    var style = incompleteStyle.completeWith(baseStyle);
-    const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
-    style.borderWidth.x *= @splat(resolutionMultiplier[0]);
-    style.borderWidth.y *= @splat(resolutionMultiplier[1]);
-    if (style.shadow) |*shadow| {
-        shadow.offset.x *= @splat(resolutionMultiplier[0]);
-        shadow.offset.y *= @splat(resolutionMultiplier[1]);
-        shadow.blurRadius *= resolutionMultiplier[0];
-        shadow.spread *= resolutionMultiplier[0];
-    }
-    style.padding.x *= @splat(resolutionMultiplier[0]);
-    style.padding.y *= @splat(resolutionMultiplier[1]);
-    style.margin.x *= @splat(resolutionMultiplier[0]);
-    style.margin.y *= @splat(resolutionMultiplier[1]);
-    style.borderRadius *= resolutionMultiplier[0];
+    const style = incompleteStyle.completeWith(baseStyle);
+    // const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
+    // style.borderWidth.x *= @splat(resolutionMultiplier[0]);
+    // style.borderWidth.y *= @splat(resolutionMultiplier[1]);
+    // if (style.shadow) |*shadow| {
+    //     shadow.offset.x *= @splat(resolutionMultiplier[0]);
+    //     shadow.offset.y *= @splat(resolutionMultiplier[1]);
+    //     shadow.blurRadius *= resolutionMultiplier[0];
+    //     shadow.spread *= resolutionMultiplier[0];
+    // }
+    // style.padding.x *= @splat(resolutionMultiplier[0]);
+    // style.padding.y *= @splat(resolutionMultiplier[1]);
+    // style.margin.x *= @splat(resolutionMultiplier[0]);
+    // style.margin.y *= @splat(resolutionMultiplier[1]);
+    // style.borderRadius *= resolutionMultiplier[0];
 
     const parentZ = if (parentOptional) |parent|
         parent.z

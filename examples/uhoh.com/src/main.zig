@@ -303,10 +303,9 @@ fn App() !void {
                             while (columnIterator.next()) |column| {
                                 columnHeight = @max(column.size[1], columnHeight);
                             }
-                            std.log.debug("row.size[0] / 3.0 - 20.0 = {}", .{row.size[0] / 3.0 - 30.0});
                             for (testimonials[rowIndex * 3 .. (rowIndex + 1) * 3]) |testimonial| {
                                 forbear.element(.{
-                                    .width = .{ .fixed = row.size[0] / 3.0 - 30.0 },
+                                    .width = .{ .fixed = row.size[0] / 3.0 - 20.0 },
                                     .height = if (columnHeight > 0)
                                         .{ .fixed = columnHeight }
                                     else
