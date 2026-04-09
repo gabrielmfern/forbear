@@ -2,14 +2,17 @@ const std = @import("std");
 const forbear = @import("root.zig");
 
 const Vec4 = @Vector(4, f32);
+const Vec2 = @Vector(2, f32);
 
 pub fn FpsCounter() void {
     forbear.component("forbear-native-fps-counter")({
         const deltaTime = forbear.useDeltaTime();
         const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
 
+        const scrolling = forbear.useScrolling();
+
         forbear.element(.{
-            .placement = .{ .manual = .{ 10, 10 } },
+            .placement = .{ .manual = Vec2{ 10, 10 } + scrolling },
             .zIndex = 10,
             .background = .{ .color = .{ 0.0, 0.0, 0.0, 0.9 } },
             .fontSize = 12,

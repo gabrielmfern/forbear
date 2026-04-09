@@ -1089,6 +1089,11 @@ pub fn pushEvent(key: u64, event: Event) !void {
     try result.value_ptr.*.append(self.allocator, event);
 }
 
+pub fn useScrolling() Vec2 {
+    const self = getContext();
+    return self.scrollPosition;
+}
+
 /// Returns the next event in the queue to handle for the current element key.
 pub fn useNextEvent() ?Event {
     const self = getContext();
