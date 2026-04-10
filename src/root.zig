@@ -445,7 +445,7 @@ pub fn useState(T: type, initialValue: T) *T {
     std.debug.assert(self.frameMeta != null);
 
     if (self.frameMeta.?.err != null) {
-        return @constCast(&initialValue);
+        return undefined;
     }
 
     if (currentComponentResolutionState()) |state| {
@@ -541,7 +541,6 @@ fn frameEnd(block: void) anyerror!void {
     const frameMeta = self.frameMeta.?;
     self.frameMeta = null;
     if (frameMeta.err) |err| return err;
-    self.nodeTree.insertionIndex = 0;
 }
 
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
@@ -910,11 +909,7 @@ pub fn handleFrameError(err: anyerror) void {
 
     if (builtin.is_test) return;
 
-    var addrs: [32]usize = undefined;
-    var stackTrace: std.builtin.StackTrace = .{
-        .index = 0,
-        .instruction_addresses = &addrs,
-    };
+    var stackTrace: std.builtin.StackTrace = undefined;
     std.debug.captureStackTrace(@returnAddress(), &stackTrace);
     std.debug.print("There was an error during frame's UI mounting stage: ", .{});
     std.debug.dumpStackTrace(stackTrace);
