@@ -290,44 +290,26 @@ fn App() !void {
                 forbear.element(.{
                     .overflow = .wrap,
                     .width = .grow,
-                    .direction = .vertical,
                 })({
-                    for (0..testimonials.len / 3) |rowIndex| {
+                    for (testimonials) |testimonial| {
                         forbear.element(.{
-                            .width = .grow,
-                            .height = .fit,
+                            .width = .{ .percentage = 1.0 / 3.0 },
+                            .fontSize = 11.25,
+                            .lineHeight = 1.4,
+                            .padding = .all(13.5),
+                            .margin = forbear.Margin.bottom(12.0).withInLine(10.0),
+                            .borderRadius = 12.0,
+                            .borderColor = black,
+                            .direction = .vertical,
+                            .borderWidth = .all(0.75),
                         })({
-                            const row = forbear.getPreviousNode().?;
-                            var columnHeight: f32 = 0.0;
-                            var columnIterator = row.iterateChildren();
-                            while (columnIterator.next()) |column| {
-                                columnHeight = @max(column.size[1], columnHeight);
-                            }
-                            for (testimonials[rowIndex * 3 .. (rowIndex + 1) * 3]) |testimonial| {
-                                forbear.element(.{
-                                    .width = .{ .fixed = row.size[0] / 3.0 - 20.0 },
-                                    .height = if (columnHeight > 0)
-                                        .{ .fixed = columnHeight }
-                                    else
-                                        .fit,
-                                    .fontSize = 11.25,
-                                    .lineHeight = 1.4,
-                                    .padding = .all(13.5),
-                                    .margin = forbear.Margin.bottom(12.0).withInLine(10.0),
-                                    .borderRadius = 12.0,
-                                    .borderColor = black,
-                                    .direction = .vertical,
-                                    .borderWidth = .all(0.75),
-                                })({
-                                    forbear.image(.{
-                                        .width = .{ .fixed = 80.0 },
-                                        .height = .{ .fixed = 80.0 },
-                                        .borderRadius = 12.0,
-                                        .margin = .right(10.5),
-                                    }, try forbear.useImage(testimonial.imageId));
-                                    forbear.text(testimonial.body);
-                                });
-                            }
+                            forbear.image(.{
+                                .width = .{ .fixed = 80.0 },
+                                .height = .{ .fixed = 80.0 },
+                                .borderRadius = 12.0,
+                                .margin = .right(10.5),
+                            }, try forbear.useImage(testimonial.imageId));
+                            forbear.text(testimonial.body);
                         });
                     }
                 });
