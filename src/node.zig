@@ -430,7 +430,7 @@ pub const NodeTree = struct {
         self.list.deinit(allocator);
     }
 
-    pub fn clear(self: *@This()) void {
+    pub fn clearRetainingCapacity(self: *@This()) void {
         self.list.clearRetainingCapacity();
     }
 
