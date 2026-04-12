@@ -269,25 +269,35 @@ fn App() !void {
                     .overflow = .wrap,
                     .width = .grow,
                 })({
-                    for (testimonials) |testimonial| {
+                    for (0..testimonials.len / 3) |rowIndex| {
                         forbear.element(.{
-                            .width = .{ .percentage = 1.0 / 3.0 },
-                            .fontSize = 11.25,
-                            .lineHeight = 1.4,
-                            .padding = .all(13.5),
-                            .margin = forbear.Margin.bottom(12.0).withInLine(10.0),
-                            .borderRadius = 12.0,
-                            .borderColor = black,
-                            .direction = .vertical,
-                            .borderWidth = .all(0.75),
+                            .width = .grow,
                         })({
-                            forbear.image(.{
-                                .width = .{ .fixed = 80.0 },
-                                .height = .{ .fixed = 80.0 },
-                                .borderRadius = 12.0,
-                                .margin = .right(10.5),
-                            }, try forbear.useImage(testimonial.imageId));
-                            forbear.text(testimonial.body);
+                            const rowMeasurement = forbear.useMeasurement();
+                            for (testimonials[rowIndex * 3 .. (rowIndex + 1) * 3]) |testimonial| {
+                                forbear.element(.{
+                                    .width = if (rowMeasurement.done)
+                                        .{ .fixed = rowMeasurement.size[0] / 3.0 - 20.0 }
+                                    else
+                                        .fit,
+                                    .fontSize = 11.25,
+                                    .lineHeight = 1.4,
+                                    .padding = .all(13.5),
+                                    .margin = forbear.Margin.bottom(12.0).withInLine(10.0),
+                                    .borderRadius = 12.0,
+                                    .borderColor = black,
+                                    .direction = .vertical,
+                                    .borderWidth = .all(0.75),
+                                })({
+                                    forbear.image(.{
+                                        .width = .{ .fixed = 80.0 },
+                                        .height = .{ .fixed = 80.0 },
+                                        .borderRadius = 12.0,
+                                        .margin = .right(10.5),
+                                    }, try forbear.useImage(testimonial.imageId));
+                                    forbear.text(testimonial.body);
+                                });
+                            }
                         });
                     }
                 });
@@ -887,10 +897,11 @@ fn renderingMain(
                 .blendMode = .normal,
             },
         })({
-            forbear.measure()({
+            try forbear.measure()({
                 try App();
-                const rootTree = try forbear.layout();
+                _ = try forbear.layout();
             });
+
             // I want this to include more than one element if it's the case I'm defining it like this
             try App();
             const rootTree = try forbear.layout();
