@@ -56,3 +56,37 @@ This narrows down our options quite a lot I feel. Even if I were to have the mea
 What if frames always run twice? Meaning they run once for fitting, and another time for you to do what right now is the top-to-bottom layouting step. This kind of already happens with the current layouting because it has to traverse the entire node tree from top-to-bottom. It's not the exact same thing, but this would mean the user has complete control over what I would say is trickiest about layouting because things have been measured already
 
 
+I think running twice is the next thing I'm going to try in uhoh.com and see how it goes, here's how I see this happening:
+
+```zig
+fn App() {
+  forbear.component("App")({
+    forbear.element(.{
+      .width = .fit,
+    })({
+      // what value would this take the first run
+      const measurement = forbear.useMeasurement(); // just size and position of the node
+      forbear.element(.{
+        .width = if (measurement.done) .{ .fixed = measurement.size[0] / 2.0 - 10.0 } else .fit,
+        .padding = .inLine(5.0),
+      })({});
+      forbear.text("something else here");
+    });
+  });
+}
+```
+
+```zig
+forbear.frame(...)({
+  forbear.measure()({
+    App();
+    forbear.layout();
+  });
+
+  // here forbear.useMeasurement() would return the values from the previous measure step, and then we can run the layout with those values
+  // this also might allow for grow in userspace 🤔, and then maybe we can kill the layout function 🤞
+  App();
+  forbear.layout()
+});
+```
+
