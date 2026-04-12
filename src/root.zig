@@ -542,7 +542,7 @@ fn frameEnd(block: void) anyerror!void {
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
 
-    self.nodeTree.clear();
+    self.nodeTree.clearRetainingCapacity();
     self.frameMeta = meta;
     return &frameEnd;
 }
