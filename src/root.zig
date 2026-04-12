@@ -441,7 +441,12 @@ pub fn useState(T: type, initialValue: T) *T {
     std.debug.assert(self.frameMeta != null);
 
     if (self.frameMeta.?.err != null) {
-        return undefined;
+        // Return a pointer to valid (but dummy) storage to avoid crashes
+        // when error handling continues to evaluate the rest of the frame
+        const Static = struct {
+            var dummy: T = std.mem.zeroes(T);
+        };
+        return &Static.dummy;
     }
 
     if (currentComponentResolutionState()) |state| {
@@ -894,7 +899,11 @@ pub fn handleFrameError(err: anyerror) void {
 
     if (builtin.is_test) return;
 
-    var stackTrace: std.builtin.StackTrace = undefined;
+    var addresses: [32]usize = undefined;
+    var stackTrace = std.builtin.StackTrace{
+        .index = 0,
+        .instruction_addresses = &addresses,
+    };
     std.debug.captureStackTrace(@returnAddress(), &stackTrace);
     std.debug.print("There was an error during frame's UI mounting stage: ", .{});
     std.debug.dumpStackTrace(stackTrace);
