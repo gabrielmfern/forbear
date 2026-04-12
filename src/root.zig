@@ -584,6 +584,9 @@ fn measureEnd(block: void) !void {
             return error.MeasurementNotFound;
         }
     }
+
+    // Clear the tree so the main render pass can start fresh
+    self.nodeTree.clearRetainingCapacity();
 }
 
 pub fn measure() *const fn (void) error{MeasurementNotFound}!void {
