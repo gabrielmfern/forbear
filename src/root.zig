@@ -109,6 +109,8 @@ deltaTime: ?f64,
 lastUpdateTime: ?f64,
 viewportSize: Vec2,
 
+nodesToMeasure: std.ArrayList(usize),
+measurements: std.AutoHashMap(u64, Measurement),
 componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
 
 nodeTree: NodeTree,
@@ -117,6 +119,12 @@ pendingEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 
 images: std.StringHashMap(Image),
 fonts: std.StringHashMap(Font),
+
+pub const Measurement = struct {
+    size: Vec2 = undefined,
+    position: Vec2 = undefined,
+    done: bool = false,
+};
 
 pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
     if (context != null) {
@@ -143,6 +151,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .lastUpdateTime = null,
         .viewportSize = @splat(0.0),
 
+        .nodesToMeasure = .empty,
         .componentStates = .init(allocator),
 
         .frameMeta = null,
@@ -527,6 +536,52 @@ pub fn image(style: IncompleteStyle, img: *Image) void {
     complementedStyle.background = .{ .image = img };
 
     element(complementedStyle)({});
+}
+
+pub fn useMeasurement() Measurement {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+
+    if (self.frameMeta.?.previousPushedNodeIndex) |index| {
+        self.nodesToMeasure.append(index) catch |err| {
+            handleFrameError(err);
+            return .{};
+        };
+        const node = self.nodeTree.at(index);
+        const result = self.measurements.getOrPut(node.key) catch |err| {
+            handleFrameError(err);
+            return .{};
+        };
+        if (!result.found_existing) {
+            result.value_ptr.* = .{};
+        }
+        return result.value_ptr.*;
+    }
+}
+
+fn measureEnd(block: void) !void {
+    _ = block;
+    const self = getContext();
+
+    for (self.nodesToMeasure.items) |index| {
+        const node = self.nodeTree.at(index);
+        if (self.measurements.getPtr(node.key)) |measurement| {
+            measurement.size = node.size;
+            measurement.position = node.position;
+            measurement.done = true;
+        } else {
+            std.log.err("Failed to find a measurement for node with key {d}. This is a bug in Forbear.", .{node.key});
+            return error.MeasurementNotFound;
+        }
+    }
+}
+
+pub fn measure() *const fn (void) void {
+    const self = getContext();
+
+    self.nodesToMeasure.clearRetainingCapacity();
+    self.measurements.clearRetainingCapacity();
+    return &measureEnd;
 }
 
 fn frameEnd(block: void) anyerror!void {
@@ -1327,6 +1382,8 @@ pub fn deinit() void {
         events.deinit(self.allocator);
     }
     self.pendingEventQueue.deinit();
+
+    self.nodesToMeasure.deinit(self.allocator);
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {

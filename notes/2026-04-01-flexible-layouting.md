@@ -64,8 +64,9 @@ fn App() {
     forbear.element(.{
       .width = .fit,
     })({
-      // what value would this take the first run
-      const measurement = forbear.useMeasurement(); // just size and position of the node
+      // uses the size and position of the previous node modified 
+      // it being called during measurement marks this node to be measured actually
+      const measurement = forbear.useMeasurement();
       forbear.element(.{
         .width = if (measurement.done) .{ .fixed = measurement.size[0] / 2.0 - 10.0 } else .fit,
         .padding = .inLine(5.0),
