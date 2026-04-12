@@ -152,6 +152,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .viewportSize = @splat(0.0),
 
         .nodesToMeasure = .empty,
+        .measurements = .init(allocator),
         .componentStates = .init(allocator),
 
         .frameMeta = null,
@@ -543,7 +544,7 @@ pub fn useMeasurement() Measurement {
     std.debug.assert(self.frameMeta != null);
 
     if (self.frameMeta.?.previousPushedNodeIndex) |index| {
-        self.nodesToMeasure.append(index) catch |err| {
+        self.nodesToMeasure.append(self.allocator, index) catch |err| {
             handleFrameError(err);
             return .{};
         };
@@ -556,6 +557,10 @@ pub fn useMeasurement() Measurement {
             result.value_ptr.* = .{};
         }
         return result.value_ptr.*;
+    } else {
+        std.log.err("There's no previous node to be measured", .{});
+        handleFrameError(error.NoNodeToMeasure);
+        return .{};
     }
 }
 
@@ -576,7 +581,7 @@ fn measureEnd(block: void) !void {
     }
 }
 
-pub fn measure() *const fn (void) void {
+pub fn measure() *const fn (void) error{MeasurementNotFound}!void {
     const self = getContext();
 
     self.nodesToMeasure.clearRetainingCapacity();
@@ -1384,6 +1389,7 @@ pub fn deinit() void {
     self.pendingEventQueue.deinit();
 
     self.nodesToMeasure.deinit(self.allocator);
+    self.measurements.deinit();
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
