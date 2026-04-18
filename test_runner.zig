@@ -293,6 +293,66 @@ fn runSingleTestProcess(selectedTestName: []const u8) !u8 {
 }
 
 fn runTestInChildProcess(allocator: Allocator, argv: []const [:0]u8, testName: []const u8) !ChildOutcome {
+    if (native_os != .windows) {
+        return runTestWithFork(allocator, testName);
+    }
+    return runTestWithExec(allocator, argv, testName);
+}
+
+fn runTestWithFork(allocator: Allocator, testName: []const u8) !ChildOutcome {
+    const pipefd = try std.posix.pipe();
+    const readEnd = pipefd[0];
+    const writeEnd = pipefd[1];
+
+    const pid = try std.posix.fork();
+    if (pid == 0) {
+        // Child: wire both stdout and stderr into the pipe, then run the test.
+        std.posix.close(readEnd);
+        std.posix.dup2(writeEnd, std.posix.STDOUT_FILENO) catch {};
+        std.posix.dup2(writeEnd, std.posix.STDERR_FILENO) catch {};
+        std.posix.close(writeEnd);
+        // Null out realStderr so the panic handler doesn't try to restore it;
+        // fd 2 is already the pipe and that's where we want crash output.
+        realStderr = null;
+        CrashOutput.install();
+        const code = runSingleTestProcess(testName) catch childExitFail;
+        std.posix.exit(code);
+    }
+
+    // Parent: close write end, drain child output, then reap the child.
+    std.posix.close(writeEnd);
+
+    var outputList = std.ArrayListUnmanaged(u8){};
+    var chunk: [4096]u8 = undefined;
+    while (true) {
+        const n = std.posix.read(readEnd, &chunk) catch break;
+        if (n == 0) break;
+        outputList.appendSlice(allocator, chunk[0..n]) catch {};
+    }
+    std.posix.close(readEnd);
+
+    const waited = std.posix.waitpid(pid, 0);
+    const output = try outputList.toOwnedSlice(allocator);
+    const s = waited.status;
+
+    if (std.posix.W.IFEXITED(s)) {
+        const code = std.posix.W.EXITSTATUS(s);
+        return switch (code) {
+            0 => .{ .status = .pass, .leaked = false, .output = output, .unexpectedTerm = null },
+            childExitSkip => .{ .status = .skip, .leaked = false, .output = output, .unexpectedTerm = null },
+            childExitFail => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = null },
+            childExitLeak => .{ .status = .fail, .leaked = true, .output = output, .unexpectedTerm = null },
+            childExitFailLeak => .{ .status = .fail, .leaked = true, .output = output, .unexpectedTerm = null },
+            else => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = .{ .Exited = code } },
+        };
+    }
+    if (std.posix.W.IFSIGNALED(s)) {
+        return .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = .{ .Signal = std.posix.W.TERMSIG(s) } };
+    }
+    return .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = .{ .Unknown = 0 } };
+}
+
+fn runTestWithExec(allocator: Allocator, argv: []const [:0]u8, testName: []const u8) !ChildOutcome {
     var envMap = try std.process.getEnvMap(allocator);
     try envMap.put(childTestEnv, testName);
 
