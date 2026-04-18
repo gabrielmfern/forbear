@@ -266,8 +266,8 @@ fn App() !void {
                     forbear.text("Don't take our word for it.");
                 });
                 forbear.element(.{
-                    .overflow = .wrap,
                     .width = .grow,
+                    .direction = .vertical,
                 })({
                     for (0..testimonials.len / 3) |rowIndex| {
                         forbear.element(.{
@@ -910,8 +910,6 @@ fn renderingMain(
             // I want this to include more than one element if it's the case I'm defining it like this
             try App();
             const rootTree = try forbear.layout();
-
-            std.process.exit(0);
 
             try renderer.drawFrame(arena, rootTree, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
             try forbear.update();
