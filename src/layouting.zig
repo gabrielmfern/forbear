@@ -601,7 +601,7 @@ pub fn layout() !*NodeTree {
         root.position -= context.scrollPosition;
         root.position += root.style.translate;
 
-        var walker = context.nodeTree.walk();
+        var walker = context.nodeTree.walk(.pre);
         while (walker.next()) |node| {
             var childIndexOption = node.firstChild;
             while (childIndexOption) |childIndex| {

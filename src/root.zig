@@ -395,11 +395,13 @@ fn bezierXDerivative(x1: f32, x2: f32, t: f32) f32 {
 }
 
 /// Equivalent to CSS's ease timing function
+/// > fn(progress) cubicBezier(0.42, 0.0, 0.58, 1.0, progress)
 pub fn easeInOut(progress: f32) f32 {
     return cubicBezier(0.42, 0.0, 0.58, 1.0, progress);
 }
 
 /// Equivalent to CSS's ease timing function
+/// > fn(progress) cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
 pub fn ease(progress: f32) f32 {
     return cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
 }
@@ -1206,7 +1208,7 @@ pub fn update() !void {
     var hoveredCursor: WindowCursor = .default;
     var topHoveredZ: ?u16 = null;
 
-    var iterator = self.nodeTree.walk();
+    var iterator = self.nodeTree.walk(.pre);
     while (iterator.next()) |node| {
         if (node.style.placement == .standard) {
             // this +scrollPosition term feels hacky to do, it's only required
