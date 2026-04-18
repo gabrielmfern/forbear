@@ -446,9 +446,10 @@ pub const NodeTree = struct {
         return &self.list.items[index];
     }
 
-    pub fn layoutDump(self: *const @This(), writer: std.io.AnyWriter) !void {
+    pub fn layoutDump(self: *const @This(), writer: *std.io.Writer) !void {
         if (self.list.items.len > 0) {
             try self.list.items[0].layoutDump(writer, 0, 0);
+            try writer.flush();
         }
     }
 
@@ -678,16 +679,16 @@ pub const Node = struct {
         return buf;
     }
 
-    fn writeIndent(writer: std.io.AnyWriter, indent: usize) !void {
+    fn writeIndent(writer: *std.io.Writer, indent: usize) !void {
         for (0..indent) |_| {
             try writer.writeAll("  ");
         }
     }
 
-    pub fn layoutDump(self: *const @This(), writer: std.io.AnyWriter, idx: usize, indent: usize) !void {
+    pub fn layoutDump(self: *const @This(), writer: *std.io.Writer, idx: usize, indent: usize) !void {
         // Line 1: index, direction, overflow, placement
         try writeIndent(writer, indent);
-        try std.fmt.format(writer, "[{d}] dir={s}  overflow={s}  placement={s}\n", .{
+        try writer.print("[{d}] dir={s}  overflow={s}  placement={s}\n", .{
             idx,
             @tagName(self.style.direction),
             @tagName(self.style.overflow),
@@ -698,7 +699,7 @@ pub const Node = struct {
         try writeIndent(writer, indent);
         const wBuf = formatSizing(self.style.width);
         const hBuf = formatSizing(self.style.height);
-        try std.fmt.format(writer, "  w={s}  h={s}  justification={s},{s}\n", .{
+        try writer.print("  w={s}  h={s}  justification={s},{s}\n", .{
             std.mem.sliceTo(&wBuf, 0),
             std.mem.sliceTo(&hBuf, 0),
             @tagName(self.style.xJustification),
@@ -707,7 +708,7 @@ pub const Node = struct {
 
         // Line 3: size, min, max
         try writeIndent(writer, indent);
-        try std.fmt.format(writer, "  size=[{d:.1}, {d:.1}]  min=[{d:.1}, {d:.1}]  max=[{d:.1}, {d:.1}]\n", .{
+        try writer.print("  size=[{d:.1}, {d:.1}]  min=[{d:.1}, {d:.1}]  max=[{d:.1}, {d:.1}]\n", .{
             self.size[0],    self.size[1],
             self.minSize[0], self.minSize[1],
             self.maxSize[0], self.maxSize[1],
@@ -715,11 +716,11 @@ pub const Node = struct {
 
         // Line 4: position
         try writeIndent(writer, indent);
-        try std.fmt.format(writer, "  pos=[{d:.1}, {d:.1}]\n", .{ self.position[0], self.position[1] });
+        try writer.print("  pos=[{d:.1}, {d:.1}]\n", .{ self.position[0], self.position[1] });
 
         // Line 5: padding, margin
         try writeIndent(writer, indent);
-        try std.fmt.format(writer, "  padding=x[{d:.1},{d:.1}] y[{d:.1},{d:.1}]  margin=x[{d:.1},{d:.1}] y[{d:.1},{d:.1}]\n", .{
+        try writer.print("  padding=x[{d:.1},{d:.1}] y[{d:.1},{d:.1}]  margin=x[{d:.1},{d:.1}] y[{d:.1},{d:.1}]\n", .{
             self.style.padding.x[0], self.style.padding.x[1],
             self.style.padding.y[0], self.style.padding.y[1],
             self.style.margin.x[0],  self.style.margin.x[1],
@@ -728,7 +729,7 @@ pub const Node = struct {
 
         // Line 6: fittingBase
         try writeIndent(writer, indent);
-        try std.fmt.format(writer, "  fittingBase: x={d:.1}  y={d:.1}\n", .{
+        try writer.print("  fittingBase: x={d:.1}  y={d:.1}\n", .{
             self.fittingBase(.horizontal),
             self.fittingBase(.vertical),
         });
@@ -748,7 +749,7 @@ pub const Node = struct {
                 lineCount = 0;
             }
             try writeIndent(writer, indent);
-            try std.fmt.format(writer, "  glyphs={d} ({d} lines)\n", .{ glyphs.slice.len, lineCount });
+            try writer.print("  glyphs={d} ({d} lines)\n", .{ glyphs.slice.len, lineCount });
         }
 
         // Recurse into children
