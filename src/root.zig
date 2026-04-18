@@ -553,6 +553,7 @@ pub fn useMeasurement() Measurement {
             handleFrameError(err);
             return .{};
         };
+
         const node = self.nodeTree.at(index);
         const result = self.measurements.getOrPut(node.key) catch |err| {
             handleFrameError(err);
@@ -605,12 +606,13 @@ fn frameEnd(block: void) anyerror!void {
     const frameMeta = self.frameMeta.?;
     self.frameMeta = null;
     if (frameMeta.err) |err| return err;
+
+    self.nodeTree.clearRetainingCapacity();
 }
 
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
 
-    self.nodeTree.clearRetainingCapacity();
     self.frameMeta = meta;
     return &frameEnd;
 }
@@ -785,6 +787,8 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
             result.ptr.setMinSize(fitDirection, result.ptr.fittingBase(fitDirection));
         }
     }
+
+    self.frameMeta.?.previousPushedNodeIndex = result.index;
 
     return &elementEnd;
 }
