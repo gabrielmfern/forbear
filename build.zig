@@ -247,6 +247,26 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
 
+    // Benchmarks
+    {
+        const zbench_dep = b.dependency("zbench", .{ .target = target, .optimize = optimize });
+        const bench_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/bench.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        bench_module.addImport("forbear", forbear);
+        bench_module.addImport("zbench", zbench_dep.artifact("zbench").root_module);
+
+        const bench_exe = b.addTest(.{
+            .root_module = bench_module,
+            .test_runner = .{ .path = b.path("test_runner.zig"), .mode = .simple },
+        });
+        const run_bench = b.addRunArtifact(bench_exe);
+        const bench_step = b.step("bench", "Run benchmarks");
+        bench_step.dependOn(&run_bench.step);
+    }
+
     {
         // Playground
         const playground_exe = addPlaygroundExecutable(
