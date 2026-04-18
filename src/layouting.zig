@@ -259,14 +259,26 @@ pub fn growAndShrink(
 
         if (child.style.placement == .standard) {
             if (direction.perpendicular() == .vertical) {
-                const available = node.size[1] - node.fittingBase(.vertical);
+                const available = node.size[1] - node.fittingBase(.vertical) - child.style.margin.y[0] - child.style.margin.y[1];
                 if (child.style.height == .grow or (child.size[1] > available and child.minSize[1] < child.size[1])) {
-                    child.size[1] = @max(@min(available, child.maxSize[1]), child.minSize[1]);
+                    child.size[1] = @max(
+                        @min(
+                            available,
+                            child.maxSize[1],
+                        ),
+                        child.minSize[1],
+                    );
                 }
             } else if (direction.perpendicular() == .horizontal) {
-                const available = node.size[0] - node.fittingBase(.horizontal);
+                const available = node.size[0] - node.fittingBase(.horizontal) - child.style.margin.x[0] - child.style.margin.x[1];
                 if (child.style.width == .grow or (child.size[0] > available and child.minSize[0] < child.size[0])) {
-                    child.size[0] = @max(@min(available, child.maxSize[0]), child.minSize[0]);
+                    child.size[0] = @max(
+                        @min(
+                            available,
+                            child.maxSize[0],
+                        ),
+                        child.minSize[0],
+                    );
                 }
             }
             if (child.style.width == .percentage) {
@@ -275,8 +287,7 @@ pub fn growAndShrink(
             if (child.style.height == .percentage) {
                 child.size[1] = child.style.height.percentage * node.size[1];
             }
-            const marginVector = child.style.margin.get(direction);
-            remaining -= child.getSize(direction) + marginVector[0] + marginVector[1];
+            remaining -= child.getOuterSize(direction);
         }
         childIndexOption = child.nextSibling;
     }

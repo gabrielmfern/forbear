@@ -627,6 +627,11 @@ pub const Node = struct {
         }
     }
 
+    /// The size of the element + the margins around it
+    pub fn getOuterSize(self: @This(), direction: Direction) f32 {
+        return self.getSize(direction) + self.style.margin.get(direction)[0] + self.style.margin.get(direction)[1];
+    }
+
     pub fn fittingBase(self: @This(), direction: Direction) f32 {
         const paddingVector = self.style.padding.get(direction);
         const padding = paddingVector[0] + paddingVector[1];
