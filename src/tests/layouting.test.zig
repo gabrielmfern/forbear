@@ -6,6 +6,88 @@ const utilities = @import("utilities.zig");
 const forbear = @import("../root.zig");
 const Vec2 = @Vector(2, f32);
 
+test "fit height parent, with grow height child containing wrapping text" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Reproduces the uhoh.com testimonials pattern:
+    //   horizontal row (fit height)
+    //     card A (fixed width, grow height) - short text
+    //     card B (fixed width, grow height) - long wrapped text (tallest)
+    //     card C (fixed width, grow height) - medium text
+    //
+    // After text wrapping, card B is tallest. The row should fit to B's height,
+    // then cards A and C (with height: .grow) should stretch to match.
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .fit,
+            .direction = .horizontal,
+            .textWrapping = .word,
+        })({
+            // Card A: short text (single line)
+            // direction: .vertical is required so children get width constrained
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .grow,
+                .direction = .vertical,
+            })({
+                forbear.text("Short.");
+            });
+
+            // Card B: long text (will be tallest after wrapping)
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .grow,
+                .direction = .vertical,
+            })({
+                forbear.text("This testimonial will wrap to many lines when constrained to 100px width forcing this card to be taller.");
+            });
+
+            // Card C: medium text
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .grow,
+                .direction = .vertical,
+            })({
+                forbear.text("Medium.");
+            });
+        });
+
+        const stdout = std.fs.File.stdout();
+        var stdoutBuffer: [4096]u8 = undefined;
+        var stdoutWriter = stdout.writer(&stdoutBuffer);
+        try forbear.getContext().nodeTree.layoutDump(&stdoutWriter.interface);
+
+        const tree = try layout();
+        // const stdout = std.fs.File.stdout();
+        // var stdoutBuffer: [4096]u8 = undefined;
+        // var stdoutWriter = stdout.writer(&stdoutBuffer);
+        // try tree.layoutDump(&stdoutWriter.interface);
+
+        const row = tree.at(0);
+        const cardA = tree.at(row.firstChild.?);
+        const cardB = tree.at(cardA.nextSibling.?);
+        const cardC = tree.at(cardB.nextSibling.?);
+        const textB = tree.at(cardB.firstChild.?);
+
+        // Text B should wrap to multiple lines (significantly taller than single line ~20px)
+        try std.testing.expect(textB.size[1] > 50.0);
+
+        // All cards should have equal height (stretched to tallest)
+        try std.testing.expectEqual(cardA.size[1], cardB.size[1]);
+        try std.testing.expectEqual(cardB.size[1], cardC.size[1]);
+
+        // Row should fit to the card height
+        try std.testing.expectEqual(cardA.size[1], row.size[1]);
+    });
+}
+
 test "wrapped text propagates height upward" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
