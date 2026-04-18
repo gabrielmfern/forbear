@@ -1337,23 +1337,22 @@ test "Component children slotting: basic before + children + after" {
                 forbear.text("Child2");
             });
         });
+        // Node creation order:
+        //   0: root element
+        //   1: component's inner element
+        //   2: text("Before")
+        //   3: text("After")
+        //   4: text("Child1")
+        //   5: text("Child2")
+        // After slotting, element 1's children should be: Before(2), Child1(4), Child2(5), After(3)
+        var buf: [10]usize = undefined;
+        const children = collectChildIndices(&self.nodeTree, 1, &buf);
+        try std.testing.expectEqual(4, children.len);
+        try std.testing.expectEqual(2, children[0]); // Before
+        try std.testing.expectEqual(4, children[1]); // Child1
+        try std.testing.expectEqual(5, children[2]); // Child2
+        try std.testing.expectEqual(3, children[3]); // After
     });
-
-    // Node creation order:
-    //   0: root element
-    //   1: component's inner element
-    //   2: text("Before")
-    //   3: text("After")
-    //   4: text("Child1")
-    //   5: text("Child2")
-    // After slotting, element 1's children should be: Before(2), Child1(4), Child2(5), After(3)
-    var buf: [10]usize = undefined;
-    const children = collectChildIndices(&self.nodeTree, 1, &buf);
-    try std.testing.expectEqual(4, children.len);
-    try std.testing.expectEqual(2, children[0]); // Before
-    try std.testing.expectEqual(4, children[1]); // Child1
-    try std.testing.expectEqual(5, children[2]); // Child2
-    try std.testing.expectEqual(3, children[3]); // After
 }
 
 test "Component children slotting: empty slot (no children passed)" {
@@ -1383,15 +1382,14 @@ test "Component children slotting: empty slot (no children passed)" {
         forbear.element(.{})({
             TestComponent()({});
         });
+        // 0: root, 1: inner elem, 2: Before, 3: After
+        // No children → Before(2), After(3)
+        var buf: [10]usize = undefined;
+        const children = collectChildIndices(&self.nodeTree, 1, &buf);
+        try std.testing.expectEqual(2, children.len);
+        try std.testing.expectEqual(2, children[0]); // Before
+        try std.testing.expectEqual(3, children[1]); // After
     });
-
-    // 0: root, 1: inner elem, 2: Before, 3: After
-    // No children → Before(2), After(3)
-    var buf: [10]usize = undefined;
-    const children = collectChildIndices(&self.nodeTree, 1, &buf);
-    try std.testing.expectEqual(2, children.len);
-    try std.testing.expectEqual(2, children[0]); // Before
-    try std.testing.expectEqual(3, children[1]); // After
 }
 
 test "Component children slotting: slot at beginning (no before-content)" {
@@ -1422,15 +1420,14 @@ test "Component children slotting: slot at beginning (no before-content)" {
                 forbear.text("Child1");
             });
         });
+        // 0: root, 1: inner elem, 2: After, 3: Child1
+        // After slotting: Child1(3), After(2)
+        var buf: [10]usize = undefined;
+        const children = collectChildIndices(&self.nodeTree, 1, &buf);
+        try std.testing.expectEqual(2, children.len);
+        try std.testing.expectEqual(3, children[0]); // Child1
+        try std.testing.expectEqual(2, children[1]); // After
     });
-
-    // 0: root, 1: inner elem, 2: After, 3: Child1
-    // After slotting: Child1(3), After(2)
-    var buf: [10]usize = undefined;
-    const children = collectChildIndices(&self.nodeTree, 1, &buf);
-    try std.testing.expectEqual(2, children.len);
-    try std.testing.expectEqual(3, children[0]); // Child1
-    try std.testing.expectEqual(2, children[1]); // After
 }
 
 test "Component children slotting: slot at end (no after-content)" {
@@ -1461,15 +1458,14 @@ test "Component children slotting: slot at end (no after-content)" {
                 forbear.text("Child1");
             });
         });
+        // 0: root, 1: inner elem, 2: Before, 3: Child1
+        // No after-content → Before(2), Child1(3)
+        var buf: [10]usize = undefined;
+        const children = collectChildIndices(&self.nodeTree, 1, &buf);
+        try std.testing.expectEqual(2, children.len);
+        try std.testing.expectEqual(2, children[0]); // Before
+        try std.testing.expectEqual(3, children[1]); // Child1
     });
-
-    // 0: root, 1: inner elem, 2: Before, 3: Child1
-    // No after-content → Before(2), Child1(3)
-    var buf: [10]usize = undefined;
-    const children = collectChildIndices(&self.nodeTree, 1, &buf);
-    try std.testing.expectEqual(2, children.len);
-    try std.testing.expectEqual(2, children[0]); // Before
-    try std.testing.expectEqual(3, children[1]); // Child1
 }
 
 test "Component children slotting: multiple instances with different children" {
@@ -1505,30 +1501,29 @@ test "Component children slotting: multiple instances with different children" {
                 forbear.text("C");
             });
         });
+        // First instance: 0:root, 1:elem, 2:Before, 3:After, 4:A
+        // After slotting: Before(2), A(4), After(3)
+        var buf: [10]usize = undefined;
+        const children1 = collectChildIndices(&self.nodeTree, 1, &buf);
+        try std.testing.expectEqual(3, children1.len);
+        try std.testing.expectEqual(2, children1[0]); // Before
+        try std.testing.expectEqual(4, children1[1]); // A
+        try std.testing.expectEqual(3, children1[2]); // After
+
+        // Second instance: 5:elem, 6:Before, 7:After, 8:B, 9:C
+        // After slotting: Before(6), B(8), C(9), After(7)
+        const rootChildren = collectChildIndices(&self.nodeTree, 0, &buf);
+        try std.testing.expectEqual(2, rootChildren.len);
+        const secondElem = rootChildren[1];
+        try std.testing.expectEqual(5, secondElem);
+
+        const children2 = collectChildIndices(&self.nodeTree, 5, &buf);
+        try std.testing.expectEqual(4, children2.len);
+        try std.testing.expectEqual(6, children2[0]); // Before
+        try std.testing.expectEqual(8, children2[1]); // B
+        try std.testing.expectEqual(9, children2[2]); // C
+        try std.testing.expectEqual(7, children2[3]); // After
     });
-
-    // First instance: 0:root, 1:elem, 2:Before, 3:After, 4:A
-    // After slotting: Before(2), A(4), After(3)
-    var buf: [10]usize = undefined;
-    const children1 = collectChildIndices(&self.nodeTree, 1, &buf);
-    try std.testing.expectEqual(3, children1.len);
-    try std.testing.expectEqual(2, children1[0]); // Before
-    try std.testing.expectEqual(4, children1[1]); // A
-    try std.testing.expectEqual(3, children1[2]); // After
-
-    // Second instance: 5:elem, 6:Before, 7:After, 8:B, 9:C
-    // After slotting: Before(6), B(8), C(9), After(7)
-    const rootChildren = collectChildIndices(&self.nodeTree, 0, &buf);
-    try std.testing.expectEqual(2, rootChildren.len);
-    const secondElem = rootChildren[1];
-    try std.testing.expectEqual(5, secondElem);
-
-    const children2 = collectChildIndices(&self.nodeTree, 5, &buf);
-    try std.testing.expectEqual(4, children2.len);
-    try std.testing.expectEqual(6, children2[0]); // Before
-    try std.testing.expectEqual(8, children2[1]); // B
-    try std.testing.expectEqual(9, children2[2]); // C
-    try std.testing.expectEqual(7, children2[3]); // After
 }
 
 test "Component children slotting: nested slotted components" {
@@ -1562,31 +1557,30 @@ test "Component children slotting: nested slotted components" {
                 });
             });
         });
+        // Creation order:
+        //   0: root element
+        //   1: outer element
+        //   2: "before"
+        //   3: "after"
+        //   4: inner element
+        //   5: "before"
+        //   6: "after"
+        //   7: "Deep"
+        // Outer element (1) children after slotting: before(2), inner-elem(4), after(3)
+        var buf: [10]usize = undefined;
+        const outerChildren = collectChildIndices(&self.nodeTree, 1, &buf);
+        try std.testing.expectEqual(3, outerChildren.len);
+        try std.testing.expectEqual(2, outerChildren[0]); // "before"
+        try std.testing.expectEqual(4, outerChildren[1]); // inner element
+        try std.testing.expectEqual(3, outerChildren[2]); // "after"
+
+        // Inner element (4) children after slotting: before(5), Deep(7), after(6)
+        const innerChildren = collectChildIndices(&self.nodeTree, 4, &buf);
+        try std.testing.expectEqual(3, innerChildren.len);
+        try std.testing.expectEqual(5, innerChildren[0]); // "before"
+        try std.testing.expectEqual(7, innerChildren[1]); // "deep"
+        try std.testing.expectEqual(6, innerChildren[2]); // "after"
     });
-
-    // Creation order:
-    //   0: root element
-    //   1: outer element
-    //   2: "before"
-    //   3: "after"
-    //   4: inner element
-    //   5: "before"
-    //   6: "after"
-    //   7: "Deep"
-    // Outer element (1) children after slotting: before(2), inner-elem(4), after(3)
-    var buf: [10]usize = undefined;
-    const outerChildren = collectChildIndices(&self.nodeTree, 1, &buf);
-    try std.testing.expectEqual(3, outerChildren.len);
-    try std.testing.expectEqual(2, outerChildren[0]); // "before"
-    try std.testing.expectEqual(4, outerChildren[1]); // inner element
-    try std.testing.expectEqual(3, outerChildren[2]); // "after"
-
-    // Inner element (4) children after slotting: before(5), Deep(7), after(6)
-    const innerChildren = collectChildIndices(&self.nodeTree, 4, &buf);
-    try std.testing.expectEqual(3, innerChildren.len);
-    try std.testing.expectEqual(5, innerChildren[0]); // "before"
-    try std.testing.expectEqual(7, innerChildren[1]); // "deep"
-    try std.testing.expectEqual(6, innerChildren[2]); // "after"
 }
 
 test "Component children slotting: parent stack stability" {
@@ -1630,13 +1624,12 @@ test "Component children slotting: parent stack stability" {
             // Verify that subsequent elements are still added correctly
             forbear.text("AfterComponent");
         });
+        var buf: [10]usize = undefined;
+        // Root element (0) should have: inner element (1) + AfterComponent text node
+        const rootChildren = collectChildIndices(&self.nodeTree, 0, &buf);
+        try std.testing.expectEqual(2, rootChildren.len);
+        try std.testing.expectEqual(1, rootChildren[0]); // component's inner element
     });
-
-    var buf: [10]usize = undefined;
-    // Root element (0) should have: inner element (1) + AfterComponent text node
-    const rootChildren = collectChildIndices(&self.nodeTree, 0, &buf);
-    try std.testing.expectEqual(2, rootChildren.len);
-    try std.testing.expectEqual(1, rootChildren[0]); // component's inner element
 }
 
 test "Component children slotting: element children in slot" {
@@ -1670,20 +1663,19 @@ test "Component children slotting: element children in slot" {
                 });
             });
         });
+        // 0: root, 1: inner elem, 2: Before, 3: After, 4: slotted element, 5: Nested
+        // Inner element (1) children: Before(2), slotted-elem(4), After(3)
+        var buf: [10]usize = undefined;
+        const children = collectChildIndices(&self.nodeTree, 1, &buf);
+        try std.testing.expectEqual(3, children.len);
+        try std.testing.expectEqual(2, children[0]); // Before
+        try std.testing.expectEqual(4, children[1]); // slotted element
+        try std.testing.expectEqual(3, children[2]); // After
+
+        // Slotted element (4) should contain Nested (5)
+        try std.testing.expect(self.nodeTree.at(4).glyphs == null); // element, not text
+        const nestedChildren = collectChildIndices(&self.nodeTree, 4, &buf);
+        try std.testing.expectEqual(1, nestedChildren.len);
+        try std.testing.expectEqual(5, nestedChildren[0]); // Nested
     });
-
-    // 0: root, 1: inner elem, 2: Before, 3: After, 4: slotted element, 5: Nested
-    // Inner element (1) children: Before(2), slotted-elem(4), After(3)
-    var buf: [10]usize = undefined;
-    const children = collectChildIndices(&self.nodeTree, 1, &buf);
-    try std.testing.expectEqual(3, children.len);
-    try std.testing.expectEqual(2, children[0]); // Before
-    try std.testing.expectEqual(4, children[1]); // slotted element
-    try std.testing.expectEqual(3, children[2]); // After
-
-    // Slotted element (4) should contain Nested (5)
-    try std.testing.expect(self.nodeTree.at(4).glyphs == null); // element, not text
-    const nestedChildren = collectChildIndices(&self.nodeTree, 4, &buf);
-    try std.testing.expectEqual(1, nestedChildren.len);
-    try std.testing.expectEqual(5, nestedChildren[0]); // Nested
 }
