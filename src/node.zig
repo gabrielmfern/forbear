@@ -393,32 +393,69 @@ pub const NodeTree = struct {
         start: usize,
         current: ?usize,
         tree: *const NodeTree,
+        order: TraversalOrder,
+
+        const TraversalOrder = enum {
+            /// Parents first, children after
+            pre,
+            /// Children first, parents after
+            post,
+        };
 
         pub fn reset(self: *@This()) void {
             self.current = null;
         }
 
-        fn nextOutside(self: *@This(), index: usize) ?usize {
+        /// For pre-order: after visiting current, find the next node to visit.
+        fn nextOutsidePre(self: *@This(), index: usize) ?usize {
             const node = self.tree.at(index);
             if (node.nextSibling) |nextSibling| {
                 return nextSibling;
             } else if (node.parent) |parentIndex| {
-                return self.nextOutside(parentIndex);
+                return self.nextOutsidePre(parentIndex);
             } else {
                 return null;
             }
         }
 
+        /// For post-order: descend to the deepest leftmost leaf starting from index.
+        fn descendToLeaf(self: *@This(), index: usize) usize {
+            var current = index;
+            while (self.tree.at(current).firstChild) |firstChild| {
+                current = firstChild;
+            }
+            return current;
+        }
+
         pub fn next(self: *@This()) ?*Node {
-            if (self.current) |current| {
-                const node = self.tree.at(current);
-                if (node.firstChild) |firstChild| {
-                    self.current = firstChild;
-                } else {
-                    self.current = self.nextOutside(current);
-                }
-            } else {
-                self.current = self.start;
+            switch (self.order) {
+                .pre => {
+                    if (self.current) |current| {
+                        const node = self.tree.at(current);
+                        if (node.firstChild) |firstChild| {
+                            self.current = firstChild;
+                        } else {
+                            self.current = self.nextOutsidePre(current);
+                        }
+                    } else {
+                        self.current = self.start;
+                    }
+                },
+                .post => {
+                    if (self.current) |current| {
+                        const node = self.tree.at(current);
+                        if (node.nextSibling) |nextSibling| {
+                            // Move to sibling, then descend to its deepest leaf
+                            self.current = self.descendToLeaf(nextSibling);
+                        } else {
+                            // No sibling — parent is next (we visit parent after all children)
+                            self.current = node.parent;
+                        }
+                    } else {
+                        // First call: descend from root to deepest leftmost leaf
+                        self.current = self.descendToLeaf(self.start);
+                    }
+                },
             }
 
             const idx = self.current orelse return null;
@@ -434,10 +471,11 @@ pub const NodeTree = struct {
         self.list.clearRetainingCapacity();
     }
 
-    pub fn walk(self: *@This()) Walker {
+    pub fn walk(self: *@This(), order: Walker.TraversalOrder) Walker {
         return Walker{
             .start = 0,
             .current = null,
+            .order = order,
             .tree = self,
         };
     }
@@ -505,7 +543,7 @@ pub const NodeTree = struct {
         }
     }
 
-    test {
+    test "node creation, and walking" {
         const gpa = std.testing.allocator;
         var tree = NodeTree.empty;
         defer tree.deinit(gpa);
@@ -519,27 +557,56 @@ pub const NodeTree = struct {
         _ = try tree.putNode(gpa, 0); // 6
         _ = try tree.putNode(gpa, 0); // 7
 
-        var walker = tree.walk();
+        // Test pre-order: parent before children
+        var preWalker = tree.walk(.pre);
         for (0..10) |_| {
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(0, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(1, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(3, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(5, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(2, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(4, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(6, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(7, walker.current);
-            try std.testing.expect(walker.next() == null);
-            try std.testing.expectEqual(null, walker.current);
+            try std.testing.expect(preWalker.next() != null);
+            try std.testing.expectEqual(0, preWalker.current);
+            try std.testing.expect(preWalker.next() != null);
+            try std.testing.expectEqual(1, preWalker.current);
+            try std.testing.expect(preWalker.next() != null);
+            try std.testing.expectEqual(3, preWalker.current);
+            try std.testing.expect(preWalker.next() != null);
+            try std.testing.expectEqual(5, preWalker.current);
+            try std.testing.expect(preWalker.next() != null);
+            try std.testing.expectEqual(2, preWalker.current);
+            try std.testing.expect(preWalker.next() != null);
+            try std.testing.expectEqual(4, preWalker.current);
+            try std.testing.expect(preWalker.next() != null);
+            try std.testing.expectEqual(6, preWalker.current);
+            try std.testing.expect(preWalker.next() != null);
+            try std.testing.expectEqual(7, preWalker.current);
+            try std.testing.expect(preWalker.next() == null);
+            try std.testing.expectEqual(null, preWalker.current);
         }
+
+        // Test post-order: children before parent
+        // Tree structure:
+        //       0
+        //    /  |  \  \  \
+        //   1   2   4  6  7
+        //  / \
+        // 3   5
+        // Post-order: 3, 5, 1, 2, 4, 6, 7, 0
+        var postWalker = tree.walk(.post);
+        try std.testing.expect(postWalker.next() != null);
+        try std.testing.expectEqual(3, postWalker.current);
+        try std.testing.expect(postWalker.next() != null);
+        try std.testing.expectEqual(5, postWalker.current);
+        try std.testing.expect(postWalker.next() != null);
+        try std.testing.expectEqual(1, postWalker.current);
+        try std.testing.expect(postWalker.next() != null);
+        try std.testing.expectEqual(2, postWalker.current);
+        try std.testing.expect(postWalker.next() != null);
+        try std.testing.expectEqual(4, postWalker.current);
+        try std.testing.expect(postWalker.next() != null);
+        try std.testing.expectEqual(6, postWalker.current);
+        try std.testing.expect(postWalker.next() != null);
+        try std.testing.expectEqual(7, postWalker.current);
+        try std.testing.expect(postWalker.next() != null);
+        try std.testing.expectEqual(0, postWalker.current);
+        try std.testing.expect(postWalker.next() == null);
+        try std.testing.expectEqual(null, postWalker.current);
     }
 };
 
