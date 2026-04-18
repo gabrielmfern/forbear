@@ -239,8 +239,10 @@ pub fn build(b: *std.Build) void {
     const forbear = default_context.forbear;
     var dependencies = default_context.dependencies;
 
+    const testFilterOption = b.option([]const u8, "test-filter", "Only run tests matching the given filter");
     const mod_tests = b.addTest(.{
         .root_module = forbear,
+        .filters = if (testFilterOption) |testFilter| &.{testFilter} else &.{},
         .test_runner = .{ .path = b.path("test_runner.zig"), .mode = .simple },
     });
     const run_mod_tests = b.addRunArtifact(mod_tests);
