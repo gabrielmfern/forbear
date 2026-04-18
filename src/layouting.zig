@@ -245,63 +245,63 @@ pub fn refitAncetors(node: *Node, nodeTree: *const NodeTree) void {
 
 pub fn growAndShrink(
     arena: std.mem.Allocator,
-    node: *Node,
     nodeTree: *NodeTree,
 ) !void {
-    const direction = node.style.direction;
+    var walker = nodeTree.walk();
+    while (walker.next()) |node| {
+        const direction = node.style.direction;
 
-    var childIndexOption = node.firstChild;
-    var childCount: usize = 0;
-    var remaining = node.getSize(direction) - node.fittingBase(direction);
-    while (childIndexOption) |childIndex| {
-        const child = nodeTree.at(childIndex);
-        childCount += 1;
+        var childIndexOption = node.firstChild;
+        var childCount: usize = 0;
+        var remaining = node.getSize(direction) - node.fittingBase(direction);
+        while (childIndexOption) |childIndex| {
+            const child = nodeTree.at(childIndex);
+            childCount += 1;
 
-        if (child.style.placement == .standard) {
-            if (direction.perpendicular() == .vertical) {
-                const available = node.size[1] - node.fittingBase(.vertical);
-                if (child.style.height == .grow or (child.size[1] > available and child.minSize[1] < child.size[1])) {
-                    child.size[1] = @max(@min(available, child.maxSize[1]), child.minSize[1]);
+            if (child.style.placement == .standard) {
+                if (direction.perpendicular() == .vertical) {
+                    const available = node.size[1] - node.fittingBase(.vertical);
+                    if (child.style.height == .grow or (child.size[1] > available and child.minSize[1] < child.size[1])) {
+                        child.size[1] = @max(@min(available, child.maxSize[1]), child.minSize[1]);
+                    }
+                } else if (direction.perpendicular() == .horizontal) {
+                    const available = node.size[0] - node.fittingBase(.horizontal);
+                    if (child.style.width == .grow or (child.size[0] > available and child.minSize[0] < child.size[0])) {
+                        child.size[0] = @max(@min(available, child.maxSize[0]), child.minSize[0]);
+                    }
                 }
-            } else if (direction.perpendicular() == .horizontal) {
-                const available = node.size[0] - node.fittingBase(.horizontal);
-                if (child.style.width == .grow or (child.size[0] > available and child.minSize[0] < child.size[0])) {
-                    child.size[0] = @max(@min(available, child.maxSize[0]), child.minSize[0]);
+                if (child.style.width == .percentage) {
+                    child.size[0] = child.style.width.percentage * node.size[0];
                 }
+                if (child.style.height == .percentage) {
+                    child.size[1] = child.style.height.percentage * node.size[1];
+                }
+                const marginVector = child.style.margin.get(direction);
+                remaining -= child.getSize(direction) + marginVector[0] + marginVector[1];
             }
-            if (child.style.width == .percentage) {
-                child.size[0] = child.style.width.percentage * node.size[0];
+            childIndexOption = child.nextSibling;
+        }
+
+        var activelyModifying = try std.ArrayList(*Node).initCapacity(arena, childCount);
+        growChildren(node, nodeTree, &activelyModifying, direction, &remaining);
+        shrinkChildren(node, nodeTree, &activelyModifying, direction, &remaining);
+
+        childIndexOption = node.firstChild;
+        while (childIndexOption) |childIndex| {
+            const child = nodeTree.at(childIndex);
+
+            // Ratio axes depend on the opposite axis which may have just been
+            // resolved by grow/shrink or perpendicular clamping above.
+            if (child.style.width == .ratio) {
+                child.size[0] = child.size[1] * child.style.width.ratio;
             }
-            if (child.style.height == .percentage) {
-                child.size[1] = child.style.height.percentage * node.size[1];
+            if (child.style.height == .ratio) {
+                child.size[1] = child.size[0] * child.style.height.ratio;
             }
-            const marginVector = child.style.margin.get(direction);
-            remaining -= child.getSize(direction) + marginVector[0] + marginVector[1];
+            refitAncetors(child, nodeTree);
+
+            childIndexOption = child.nextSibling;
         }
-        childIndexOption = child.nextSibling;
-    }
-
-    var activelyModifying = try std.ArrayList(*Node).initCapacity(arena, childCount);
-    growChildren(node, nodeTree, &activelyModifying, direction, &remaining);
-    shrinkChildren(node, nodeTree, &activelyModifying, direction, &remaining);
-
-    childIndexOption = node.firstChild;
-    while (childIndexOption) |childIndex| {
-        const child = nodeTree.at(childIndex);
-
-        // Ratio axes depend on the opposite axis which may have just been
-        // resolved by grow/shrink or perpendicular clamping above.
-        if (child.style.width == .ratio) {
-            child.size[0] = child.size[1] * child.style.width.ratio;
-        }
-        if (child.style.height == .ratio) {
-            child.size[1] = child.size[0] * child.style.height.ratio;
-        }
-        refitAncetors(child, nodeTree);
-
-        try growAndShrink(arena, child, nodeTree);
-
-        childIndexOption = child.nextSibling;
     }
 }
 
@@ -595,7 +595,7 @@ pub fn layout() !*NodeTree {
             root.size[1] = @min(@max(viewportSize[1], root.minSize[1]), root.maxSize[1]);
         }
 
-        try growAndShrink(arena, root, &context.nodeTree);
+        try growAndShrink(arena, &context.nodeTree);
         try wrapAndPlace(arena, root, &context.nodeTree);
 
         root.position -= context.scrollPosition;
