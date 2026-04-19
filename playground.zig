@@ -98,7 +98,6 @@ fn renderingMain(
                 .lineHeight = 1.0,
                 .cursor = .default,
             },
-            .dpi = .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
         })({
             App();
 
@@ -107,7 +106,6 @@ fn renderingMain(
                 arena,
                 rootTree,
                 .{ 1.0, 1.0, 1.0, 1.0 },
-                window.dpi,
                 window.targetFrameTimeNs(),
             );
 

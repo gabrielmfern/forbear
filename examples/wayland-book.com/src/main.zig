@@ -224,7 +224,6 @@ fn renderingMain(
 
         try forbear.frame(.{
             .arena = arena,
-            .dpi = .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             .viewportSize = renderer.viewportSize(),
             .baseStyle = .{
                 .font = try forbear.useFont("Inter"),
@@ -242,7 +241,7 @@ fn renderingMain(
             const rootTree = try forbear.layout();
             try rootTree.dump(&traceWriter.interface);
 
-            try renderer.drawFrame(arena, rootTree, Colors.page, window.dpi, window.targetFrameTimeNs());
+            try renderer.drawFrame(arena, rootTree, Colors.page, window.targetFrameTimeNs());
             try forbear.update();
         });
     }

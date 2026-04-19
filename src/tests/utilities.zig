@@ -17,7 +17,6 @@ pub fn frameMeta(arena: std.mem.Allocator) !forbear.FrameMeta {
     try forbear.registerFont("Inter", @embedFile("inter_font"));
     return forbear.FrameMeta{
         .arena = arena,
-        .dpi = .{ 72.0, 72.0 },
         .viewportSize = .{ 800, 600 },
         .baseStyle = BaseStyle{
             .font = try forbear.useFont("Inter"),

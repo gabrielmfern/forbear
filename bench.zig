@@ -12,7 +12,6 @@ fn benchLayout(alloc: std.mem.Allocator) void {
 
     const meta = forbear.FrameMeta{
         .arena = arena,
-        .dpi = .{ 72.0, 72.0 },
         .viewportSize = .{ 800, 600 },
         .baseStyle = .{
             .font = gFont,
@@ -155,7 +154,6 @@ fn benchHugeLayout(alloc: std.mem.Allocator) void {
 
     const meta = forbear.FrameMeta{
         .arena = arena,
-        .dpi = .{ 72.0, 72.0 },
         .viewportSize = .{ 1920, 1080 },
         .baseStyle = .{
             .font = gFont,
@@ -182,7 +180,6 @@ fn benchLargeLayout(alloc: std.mem.Allocator) void {
 
     const meta = forbear.FrameMeta{
         .arena = arena,
-        .dpi = .{ 72.0, 72.0 },
         .viewportSize = .{ 1920, 1080 },
         .baseStyle = .{
             .font = gFont,
