@@ -502,18 +502,18 @@ pub fn image(style: IncompleteStyle, img: *Image) void {
                     complementedStyle.minWidth = 0;
                     complementedStyle.minHeight = 0;
                 },
-                .grow, .fixed, .percentage => {
+                .grow, .fixed => {
                     complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
                 },
                 .ratio => {},
             }
         },
-        .fixed, .percentage => {
+        .fixed => {
             switch (complementedStyle.height) {
                 .fit, .grow => {
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
-                .fixed, .percentage, .ratio => {},
+                .fixed, .ratio => {},
             }
         },
         .grow => {
@@ -521,7 +521,7 @@ pub fn image(style: IncompleteStyle, img: *Image) void {
                 .grow, .fit => {
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
-                .fixed, .percentage => {
+                .fixed => {
                     complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
                 },
                 .ratio => {},
@@ -579,17 +579,6 @@ fn elementEnd(block: void) void {
         const parent = self.nodeTree.at(parentIndex);
 
         parent.fitChild(node);
-    }
-    var childIndexOption = node.firstChild;
-    while (childIndexOption) |childIndex| {
-        const child = self.nodeTree.at(childIndex);
-        if (child.style.width == .percentage) {
-            child.size[0] = child.style.width.percentage * node.size[0];
-        }
-        if (child.style.height == .percentage) {
-            child.size[1] = child.style.height.percentage * node.size[1];
-        }
-        childIndexOption = child.nextSibling;
     }
 }
 
@@ -658,7 +647,6 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
     result.ptr.size = .{
         switch (style.width) {
             .fixed => |width| width,
-            .percentage => 0.0,
             .ratio => |ratio| if (style.height == .fixed)
                 style.height.fixed * ratio
             else
@@ -667,7 +655,6 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         },
         switch (style.height) {
             .fixed => |height| height,
-            .percentage => 0.0,
             .ratio => |ratio| if (style.width == .fixed)
                 style.width.fixed * ratio
             else

@@ -871,16 +871,6 @@ test "element - ratio without opposite fixed axis starts at zero" {
     });
 }
 
-test "element - percentage sizing starts at zero before parent resolution" {
-    try testCreateElementConfiguration(.{
-        .style = .{
-            .width = .{ .percentage = 0.5 },
-            .height = .{ .percentage = 0.5 },
-        },
-        .expectedSize = .{ 0.0, 0.0 },
-    });
-}
-
 test "element fitting - fit parent with padding accumulates fixed child inline" {
     // A vertical fit parent with padding should grow its height by the
     // child's height plus margins, plus its own padding/border.

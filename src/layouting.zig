@@ -126,7 +126,7 @@ fn shrinkChildren(
     while (childIndexOption) |childIndex| {
         const child = nodeTree.at(childIndex);
         if (child.style.placement == .standard) {
-            if (child.getSize(direction) > child.getMinSize(direction) and child.style.getPreferredSize(direction) != .percentage) {
+            if (child.getSize(direction) > child.getMinSize(direction)) {
                 activelyModifying.appendAssumeCapacity(child);
             }
         }
@@ -227,18 +227,6 @@ pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
         ancestor.size[0] = @min(@max(ancestor.size[0], ancestor.minSize[0]), ancestor.maxSize[0]);
         ancestor.size[1] = @min(@max(ancestor.size[1], ancestor.minSize[1]), ancestor.maxSize[1]);
 
-        childIndexOpt = ancestor.firstChild;
-        while (childIndexOpt) |childIndex| {
-            const child = nodeTree.at(childIndex);
-            if (child.style.width == .percentage) {
-                child.size[0] = child.style.width.percentage * ancestor.size[0];
-            }
-            if (child.style.height == .percentage) {
-                child.size[1] = child.style.height.percentage * ancestor.size[1];
-            }
-            childIndexOpt = child.nextSibling;
-        }
-
         ancestorIndexOpt = ancestor.parent;
     }
 }
@@ -280,12 +268,6 @@ pub fn growAndShrink(
                         child.minSize[0],
                     );
                 }
-            }
-            if (child.style.width == .percentage) {
-                child.size[0] = child.style.width.percentage * node.size[0];
-            }
-            if (child.style.height == .percentage) {
-                child.size[1] = child.style.height.percentage * node.size[1];
             }
             remaining -= child.getOuterSize(direction);
         }
@@ -423,6 +405,9 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTr
             node.size[0] = node.size[1] * node.style.width.ratio;
         }
 
+        std.log.debug("refitting ancestors of node {d} due to text wrapping height change from {d:.1} to {d:.1}", .{
+            node.key, previousHeight, node.size[1],
+        });
         refitAncestors(node, nodeTree);
     }
 }

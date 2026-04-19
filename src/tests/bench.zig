@@ -40,9 +40,9 @@ fn buildTree() void {
             forbear.element(.{ .width = .grow, .height = .{ .fixed = 60 } })({});
         });
         forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
-            forbear.element(.{ .width = .{ .percentage = 0.33 }, .height = .{ .fixed = 80 } })({});
-            forbear.element(.{ .width = .{ .percentage = 0.33 }, .height = .{ .fixed = 80 } })({});
-            forbear.element(.{ .width = .{ .percentage = 0.33 }, .height = .{ .fixed = 80 } })({});
+            forbear.element(.{ .width = .grow, .height = .{ .fixed = 80 } })({});
+            forbear.element(.{ .width = .grow, .height = .{ .fixed = 80 } })({});
+            forbear.element(.{ .width = .grow, .height = .{ .fixed = 80 } })({});
         });
         forbear.element(.{ .width = .grow, .height = .fit, .direction = .vertical })({
             forbear.element(.{ .width = .grow, .height = .{ .fixed = 40 } })({});
@@ -52,8 +52,8 @@ fn buildTree() void {
         });
         forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
             forbear.element(.{ .width = .grow, .height = .{ .fixed = 100 } })({
-                forbear.element(.{ .width = .{ .percentage = 0.5 }, .height = .grow })({});
-                forbear.element(.{ .width = .{ .percentage = 0.5 }, .height = .grow })({});
+                forbear.element(.{ .width = .grow, .height = .grow })({});
+                forbear.element(.{ .width = .grow, .height = .grow })({});
             });
             forbear.element(.{ .width = .grow, .height = .{ .fixed = 100 } })({
                 forbear.element(.{ .width = .grow, .height = .{ .fixed = 30 } })({});
