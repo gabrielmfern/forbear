@@ -259,7 +259,7 @@ pub fn build(b: *std.Build) void {
     {
         const zbench_dep = b.dependency("zbench", .{ .target = target, .optimize = optimize });
         const bench_module = b.createModule(.{
-            .root_source_file = b.path("src/tests/bench.zig"),
+            .root_source_file = b.path("bench.zig"),
             .target = target,
             .optimize = optimize,
         });
