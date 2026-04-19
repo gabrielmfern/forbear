@@ -9,7 +9,7 @@ pub fn FpsCounter() void {
         const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
 
         forbear.element(.{
-            .placement = .{ .manual = .{ 10, 10 } },
+            .placement = .{ .fixed = .{ 10, 10 } },
             .zIndex = 10,
             .background = .{ .color = .{ 0.0, 0.0, 0.0, 0.9 } },
             .fontSize = 16,

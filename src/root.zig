@@ -656,10 +656,12 @@ pub fn element(incompleteStyle: Style) *const fn (void) void {
         parentZ + 1
     else
         parentZ;
-    result.ptr.position = if (style.placement == .manual)
-        style.placement.manual
-    else
-        @splat(0.0);
+    result.ptr.position = switch (style.placement) {
+        .fixed => |v| v,
+        .absolute => |v| v,
+        .relative => |v| v,
+        .flow => @splat(0.0),
+    };
     result.ptr.size = .{
         switch (style.width) {
             .fixed => |width| width,
@@ -1149,7 +1151,10 @@ pub fn update() !void {
 
     var iterator = self.nodeTree.walk();
     while (iterator.next()) |node| {
-        if (node.style.placement == .standard) {
+        // Only placements that actually live in document space contribute
+        // to scroll bounds. `.fixed` is pinned to the viewport and must not
+        // expand the scrollable area.
+        if (node.style.placement != .fixed) {
             // this +scrollPosition term feels hacky to do, it's only required
             // because layouting adds in the scroll position
             uiEdges = @max(uiEdges, node.position + self.scrollPosition + node.size);
