@@ -1149,3 +1149,100 @@ test "nested slotted components propagate sizes correctly" {
         try std.testing.expectEqual(60, root.size[1]);
     });
 }
+
+// Regression: fitChild must use child.minSize (not child.size) for horizontal minSize
+// propagation. During tree building, unwrapped text has size[0] = full line width,
+// which would bloat parent.minSize[0] beyond maxWidth constraints. Using minSize[0]
+// (longest word) prevents this. Without this, grow containers with maxWidth would
+// have minSize > maxSize, breaking layout.
+test "horizontal minSize uses child.minSize to avoid unwrapped text width bloat" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Container with maxWidth constraint
+        forbear.element(.{
+            .width = .grow,
+            .height = .fit,
+            .maxWidth = 200,
+            .direction = .vertical,
+            .textWrapping = .word,
+        })({
+            // Long text that would be ~500px unwrapped but wraps to fit 200px
+            forbear.text("This is a long sentence that will definitely wrap when constrained to two hundred pixels width.");
+        });
+
+        const tree = try layout();
+        const container = tree.at(0);
+        const text = tree.at(container.firstChild.?);
+
+        // Container width must respect maxWidth, not bloat to unwrapped text width
+        try std.testing.expect(container.size[0] <= 200.0);
+        // minSize should be based on longest word, not full unwrapped line
+        try std.testing.expect(container.minSize[0] <= 200.0);
+        // Text should have wrapped (multiple lines means height > single line)
+        try std.testing.expect(text.size[1] > 25.0);
+    });
+}
+
+// Regression: fitChild must use child.size (not child.minSize) for vertical minSize
+// propagation during refitAncestors. After text wrapping, size[1] = wrapped height,
+// but minSize[1] is still single line height. Using size[1] ensures fit parents
+// pick up the actual content height, allowing grow siblings to stretch correctly.
+test "vertical minSize uses child.size to capture wrapped text height" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Horizontal row with fit height
+        forbear.element(.{
+            .width = .grow,
+            .height = .fit,
+            .direction = .horizontal,
+            .textWrapping = .word,
+        })({
+            // Card A: grow height, short content
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .grow,
+                .direction = .vertical,
+            })({
+                forbear.text("Short");
+            });
+
+            // Card B: grow height, wrapped text that determines row height
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .grow,
+                .direction = .vertical,
+            })({
+                forbear.text("This text will wrap to multiple lines and should determine the row height which siblings then grow to match.");
+            });
+        });
+
+        const tree = try layout();
+        const row = tree.at(0);
+        const cardA = tree.at(row.firstChild.?);
+        const cardB = tree.at(cardA.nextSibling.?);
+        const textB = tree.at(cardB.firstChild.?);
+
+        // Text should have wrapped (height > single line)
+        try std.testing.expect(textB.size[1] > 30.0);
+        // Row height should match wrapped text height
+        try std.testing.expectApproxEqAbs(textB.size[1], row.size[1], 0.1);
+        // Card A (grow height) should stretch to match row
+        try std.testing.expectApproxEqAbs(row.size[1], cardA.size[1], 0.1);
+        // Card B should also match
+        try std.testing.expectApproxEqAbs(row.size[1], cardB.size[1], 0.1);
+    });
+}
