@@ -56,13 +56,17 @@ fn Topbar() void {
     forbear.element(.{
         .width = .grow,
         .direction = .horizontal,
-        .xJustification = .center,
         .yJustification = .center,
         .padding = forbear.Padding.all(15.0),
         .fontSize = 20.0,
         .fontWeight = 200,
     })({
-        Heading(1)({
+        Heading(.{
+            .level = 1,
+            .style = .{
+                .xJustification = .center,
+            },
+        })({
             forbear.text("The Wayland Protocol");
         });
         // TODO: add a printer icon SVG
@@ -75,7 +79,7 @@ fn TodoList() void {
         .direction = .vertical,
         .margin = forbear.Margin.block(6.0).withBottom(18.0),
     })({
-        Heading(1)({
+        Heading(.{ .level = 1 })({
             forbear.text("TODO");
         });
         List()({
@@ -130,12 +134,12 @@ fn Content() void {
                 .padding = forbear.Padding.all(15.0),
                 .maxWidth = 750.0,
             })({
-                Heading(1)({
+                Heading(.{ .level = 1 })({ 
                     forbear.text("Introduction");
                 });
 
                 Paragraph()({
-                   forbear.text("Wayland is the next-generation display server for Unix-like systems, designed and built by the alumni of the venerable Xorg server, and is the best way to get your application windows onto your user's screens. Readers who have worked with X11 in the past will be pleasantly surprised by Wayland's improvements, and those who are new to graphics on Unix will find it a flexible and powerful system for building graphical applications and desktops.");
+                    forbear.text("Wayland is the next-generation display server for Unix-like systems, designed and built by the alumni of the venerable Xorg server, and is the best way to get your application windows onto your user's screens. Readers who have worked with X11 in the past will be pleasantly surprised by Wayland's improvements, and those who are new to graphics on Unix will find it a flexible and powerful system for building graphical applications and desktops.");
                 });
 
                 Paragraph()({
@@ -144,7 +148,7 @@ fn Content() void {
 
                 TodoList();
 
-                Heading(2)({
+                Heading(.{ .level = 2 })({ 
                     forbear.text("About the book");
                 });
                 Paragraph()({
@@ -152,7 +156,7 @@ fn Content() void {
                 });
                 LicenseBadge();
 
-                Heading(2)({
+                Heading(.{ .level = 2 })({ 
                     forbear.text("About the author");
                 });
                 Paragraph()({
