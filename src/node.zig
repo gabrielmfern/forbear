@@ -444,7 +444,7 @@ pub const NodeTree = struct {
         return &self.list.items[index];
     }
 
-    pub fn layoutDump(self: *const @This(), writer: *std.io.Writer) !void {
+    pub fn dump(self: *const @This(), writer: *std.io.Writer) !void {
         if (self.list.items.len > 0) {
             try self.list.items[0].layoutDump(writer, 0, 0);
             try writer.flush();
