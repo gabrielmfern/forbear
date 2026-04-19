@@ -28,4 +28,3 @@ pub fn ListItem() *const fn (void) void {
 
     return forbear.componentChildrenSlotEnd();
 }
-

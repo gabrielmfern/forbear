@@ -134,7 +134,7 @@ fn Content() void {
                 .padding = forbear.Padding.all(15.0),
                 .maxWidth = 750.0,
             })({
-                Heading(.{ .level = 1 })({ 
+                Heading(.{ .level = 1 })({
                     forbear.text("Introduction");
                 });
 
@@ -148,7 +148,7 @@ fn Content() void {
 
                 TodoList();
 
-                Heading(.{ .level = 2 })({ 
+                Heading(.{ .level = 2 })({
                     forbear.text("About the book");
                 });
                 Paragraph()({
@@ -156,7 +156,7 @@ fn Content() void {
                 });
                 LicenseBadge();
 
-                Heading(.{ .level = 2 })({ 
+                Heading(.{ .level = 2 })({
                     forbear.text("About the author");
                 });
                 Paragraph()({

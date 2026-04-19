@@ -42,7 +42,7 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
         forbear.element(.{
             .width = .grow,
             .direction = .horizontal,
-            .textWrapping = .none, 
+            .textWrapping = .none,
             .xJustification = .start,
             .yJustification = .center,
             .padding = forbear.Padding.left(props.depth * 20.0),
@@ -59,4 +59,3 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
     });
     return forbear.componentChildrenSlotEnd();
 }
-

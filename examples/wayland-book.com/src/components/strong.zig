@@ -8,6 +8,6 @@ pub fn Strong() *const fn (void) void {
             forbear.componentChildrenSlot();
         });
     });
-    
+
     return forbear.componentChildrenSlotEnd();
 }
