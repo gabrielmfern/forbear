@@ -12,11 +12,11 @@ pub fn FpsCounter() void {
             .placement = .{ .manual = .{ 10, 10 } },
             .zIndex = 10,
             .background = .{ .color = .{ 0.0, 0.0, 0.0, 0.9 } },
-            .fontSize = 12,
+            .fontSize = 16,
             .textWrapping = .none,
             .minWidth = 152,
             .padding = .all(4),
-            .borderRadius = 2,
+            .borderRadius = 4,
             .color = .{ 1.0, 1.0, 0.0, 1.0 },
             .direction = .vertical,
         })({
