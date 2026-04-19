@@ -204,6 +204,8 @@ pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
     var ancestorIndexOpt = node.parent;
     while (ancestorIndexOpt) |ancestorIndex| {
         const ancestor = nodeTree.at(ancestorIndex);
+        const oldSize = ancestor.size;
+
         inline for (Direction.array) |dir| {
             if (ancestor.style.getPreferredSize(dir) == .fit) {
                 ancestor.setSize(dir, ancestor.fittingBase(dir));
@@ -230,30 +232,35 @@ pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
         ancestor.size[0] = @min(@max(ancestor.size[0], ancestor.minSize[0]), ancestor.maxSize[0]);
         ancestor.size[1] = @min(@max(ancestor.size[1], ancestor.minSize[1]), ancestor.maxSize[1]);
 
-        // Re-apply perpendicular grow to children now that ancestor size is finalized
+        // Re-apply perpendicular grow to children only if ancestor size changed
         const perpendicular = ancestor.style.direction.perpendicular();
-        childIndexOpt = ancestor.firstChild;
-        while (childIndexOpt) |childIndex| {
-            const child = nodeTree.at(childIndex);
-            if (child.style.placement == .standard and child.style.getPreferredSize(perpendicular) == .grow) {
-                const marginVector = child.style.margin.get(perpendicular);
-                const available = ancestor.getSize(perpendicular) - ancestor.fittingBase(perpendicular) - marginVector[0] - marginVector[1];
-                child.setSize(perpendicular, @max(@min(available, child.getMaxSize(perpendicular)), child.getMinSize(perpendicular)));
+        const oldPerpSize = if (perpendicular == .horizontal) oldSize[0] else oldSize[1];
+        if (ancestor.getSize(perpendicular) != oldPerpSize) {
+            const perpFittingBase = ancestor.fittingBase(perpendicular);
+            const availableBase = ancestor.getSize(perpendicular) - perpFittingBase;
+            childIndexOpt = ancestor.firstChild;
+            while (childIndexOpt) |childIndex| {
+                const child = nodeTree.at(childIndex);
+                if (child.style.placement == .standard and child.style.getPreferredSize(perpendicular) == .grow) {
+                    const marginVector = child.style.margin.get(perpendicular);
+                    const available = availableBase - marginVector[0] - marginVector[1];
+                    child.setSize(perpendicular, @max(@min(available, child.getMaxSize(perpendicular)), child.getMinSize(perpendicular)));
 
-                // Re-apply ratio sizing after perpendicular change
-                if (child.style.width == .ratio) {
-                    child.size[0] = child.size[1] * child.style.width.ratio;
+                    // Re-apply ratio sizing after perpendicular change
+                    if (child.style.width == .ratio) {
+                        child.size[0] = child.size[1] * child.style.width.ratio;
+                    }
+                    if (child.style.height == .ratio) {
+                        child.size[1] = child.size[0] * child.style.height.ratio;
+                    }
+                    // Ensure minSize doesn't exceed maxSize, then clamp size
+                    child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
+                    child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
+                    child.size[0] = @min(@max(child.size[0], child.minSize[0]), child.maxSize[0]);
+                    child.size[1] = @min(@max(child.size[1], child.minSize[1]), child.maxSize[1]);
                 }
-                if (child.style.height == .ratio) {
-                    child.size[1] = child.size[0] * child.style.height.ratio;
-                }
-                // Ensure minSize doesn't exceed maxSize, then clamp size
-                child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
-                child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
-                child.size[0] = @min(@max(child.size[0], child.minSize[0]), child.maxSize[0]);
-                child.size[1] = @min(@max(child.size[1], child.minSize[1]), child.maxSize[1]);
+                childIndexOpt = child.nextSibling;
             }
-            childIndexOpt = child.nextSibling;
         }
 
         ancestorIndexOpt = ancestor.parent;
