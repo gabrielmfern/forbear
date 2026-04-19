@@ -180,7 +180,7 @@ pub const Filter = enum(u32) {
     grayscale = 1,
 };
 
-pub const Style = struct {
+pub const CompleteStyle = struct {
     background: Background,
     blendMode: BlendMode,
     filter: Filter,
@@ -247,7 +247,7 @@ pub const BaseStyle = struct {
     filter: Filter = .default,
     cursor: Cursor,
 
-    pub fn from(style: Style) @This() {
+    pub fn from(style: CompleteStyle) @This() {
         return @This(){
             .font = style.font,
             .color = style.color,
@@ -276,7 +276,7 @@ pub const Placement = union(enum) {
     standard,
 };
 
-pub const IncompleteStyle = struct {
+pub const Style = struct {
     background: ?Background = null,
     blendMode: ?BlendMode = null,
     filter: ?Filter = null,
@@ -316,7 +316,7 @@ pub const IncompleteStyle = struct {
     yJustification: ?Alignment = null,
     direction: ?Direction = null,
 
-    pub fn overwrite(self: @This(), other: IncompleteStyle) @This() {
+    pub fn overwrite(self: @This(), other: @This()) @This() {
         return .{
             .background = self.background orelse other.background,
             .blendMode = self.blendMode orelse other.blendMode,
@@ -337,15 +337,15 @@ pub const IncompleteStyle = struct {
             .cursor = self.cursor orelse other.cursor,
 
             .overflow = self.overflow orelse other.overflow,
-            .placement = if (self.placement != .standard) |p| p else other.placement,
+            .placement = if (self.placement != .standard) self.placement else other.placement,
             .zIndex = self.zIndex orelse other.zIndex,
 
             .minWidth = self.minWidth orelse other.minWidth,
             .maxWidth = self.maxWidth orelse other.maxWidth,
-            .width = if (self.width != .fit) |w| w else other.width,
+            .width = if (self.width != .fit) self.width else other.width,
             .minHeight = self.minHeight orelse other.minHeight,
             .maxHeight = self.maxHeight orelse other.maxHeight,
-            .height = if (self.height != .fit) |h| h else other.height,
+            .height = if (self.height != .fit) self.height else other.height,
 
             .translate = self.translate orelse other.translate,
 
@@ -358,8 +358,8 @@ pub const IncompleteStyle = struct {
         };
     }
 
-    pub fn completeWith(self: @This(), base: BaseStyle) Style {
-        return Style{
+    pub fn completeWith(self: @This(), base: BaseStyle) CompleteStyle {
+        return CompleteStyle{
             .background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } },
             .blendMode = self.blendMode orelse base.blendMode,
             .filter = self.filter orelse base.filter,
@@ -602,7 +602,7 @@ pub const Node = struct {
     maxSize: Vec2,
     minSize: Vec2,
 
-    style: Style,
+    style: CompleteStyle,
 
     pub fn shouldFitMin(self: @This(), direction: Direction) bool {
         const preferredSize = self.style.getPreferredSize(direction);
@@ -870,6 +870,6 @@ pub const Node = struct {
 };
 
 pub const Element = struct {
-    style: IncompleteStyle,
+    style: Style,
     children: std.ArrayList(Node) = .empty,
 };

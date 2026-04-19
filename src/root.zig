@@ -23,7 +23,7 @@ pub const Padding = nodeImport.Padding;
 pub const Margin = nodeImport.Margin;
 pub const BorderWidth = nodeImport.BorderWidth;
 pub const Offset = nodeImport.Shadow.Offset;
-pub const IncompleteStyle = nodeImport.IncompleteStyle;
+pub const CompleteStyle = nodeImport.CompleteStyle;
 pub const Style = nodeImport.Style;
 pub const Element = nodeImport.Element;
 pub const Window = @import("window/root.zig").Window;
@@ -516,7 +516,7 @@ fn endNoop(block: void) void {
 
 /// A thin wrapper around `element` that includes some aspect ratio handling
 /// definition logic in a way that feels more intuitve
-pub fn image(style: IncompleteStyle, img: *Image) void {
+pub fn image(style: Style, img: *Image) void {
     var complementedStyle = style;
     const imageWidth: f32 = @floatFromInt(img.width);
     const imageHeight: f32 = @floatFromInt(img.height);
@@ -609,7 +609,7 @@ fn elementEnd(block: void) void {
     }
 }
 
-pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
+pub fn element(incompleteStyle: Style) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -769,7 +769,7 @@ pub fn text(content: []const u8) void {
     else
         self.frameMeta.?.baseStyle;
 
-    const style = (IncompleteStyle{
+    const style = (Style{
         .cursor = if (baseStyle.cursor == .default)
             .text
         else
