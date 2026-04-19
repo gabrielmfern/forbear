@@ -8,6 +8,7 @@ const SidebarItem = sidebar.SidebarItem;
 const SidebarDivider = sidebar.SidebarDivider;
 const Paragraph = @import("components/paragraph.zig").Paragraph;
 const Heading = @import("components/heading.zig").Heading;
+const Strong = @import("components/strong.zig").Strong;
 const list = @import("components/list.zig");
 const List = list.List;
 const ListItem = list.ListItem;
@@ -55,23 +56,14 @@ fn Topbar() void {
     forbear.element(.{
         .width = .grow,
         .direction = .horizontal,
-        .xJustification = .start,
+        .xJustification = .center,
         .yJustification = .center,
         .padding = forbear.Padding.block(12.0).withInLine(24.0),
-        .borderWidth = forbear.BorderWidth.bottom(0.75),
-        .borderColor = Colors.border,
-        .background = .{ .color = Colors.topbar },
     })({
-        forbear.element(.{
-            .fontWeight = 600,
-            .fontSize = 13.5,
-            .color = Colors.heading,
-            .xJustification = .center,
-            .width = .grow,
-        })({
+        Heading(1)({
             forbear.text("The Wayland Protocol");
         });
-        // Printer icon/button
+        // TODO: add a printer icon SVG
     });
 }
 
@@ -195,12 +187,9 @@ fn App() !void {
                         .active = i == activeChapter.*,
                         .depth = chapter.depth,
                     })({
-                        forbear.element(.{
-                            .margin = forbear.Margin.right(6.0),
-                            .fontWeight = 700,
-                            .fontSize = 10.5,
-                        })({
+                        Strong()({
                             forbear.text(chapter.chapter);
+                            forbear.text(" ");
                         });
                         forbear.text(chapter.title);
                     });

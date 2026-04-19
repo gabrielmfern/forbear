@@ -14,10 +14,8 @@ pub fn Heading(level: u8) *const fn (void) void {
             else => 18.0,
         };
         forbear.element(.{
-            .width = .grow,
             .fontWeight = 700,
             .fontSize = size,
-            .color = Colors.heading,
             .margin = forbear.Margin.top(topMargin).withBottom(13.5),
             .lineHeight = 1.2,
         })({

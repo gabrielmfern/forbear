@@ -757,6 +757,10 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn text(content: []const u8) void {
+    if (content.len == 0) {
+        return;
+    }
+
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 

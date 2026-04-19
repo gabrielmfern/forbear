@@ -4,12 +4,12 @@ const Colors = @import("../colors.zig");
 pub fn Sidebar() *const fn (void) void {
     forbear.component("sidebar")({
         forbear.element(.{
-            .width = .{ .fixed = 280.0 },
+            .width = .{ .fixed = 300.0 },
             .height = .grow,
-            .background = .{ .color = Colors.sidebar },
             .direction = .vertical,
             .xJustification = .start,
             .yJustification = .start,
+            .background = .{ .color = Colors.sidebarBackground },
             .padding = forbear.Padding.block(18.0),
             .color = Colors.sidebarText,
         })({
@@ -41,17 +41,12 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
         forbear.element(.{
             .width = .grow,
             .direction = .horizontal,
+            .textWrapping = .none, 
             .xJustification = .start,
             .yJustification = .center,
             .padding = forbear.Padding.block(6.0).withInLine(12.0 + props.depth * 16.0),
             .cursor = .pointer,
-            .color = if (props.active) Colors.sidebarActive else null,
-            .background = .{
-                .color = if (isHovering.* or props.active)
-                    .{ 0.15, 0.17, 0.19, 1.0 }
-                else
-                    .{ 0.0, 0.0, 0.0, 0.0 },
-            },
+            .color = if (props.active or isHovering.*) Colors.sidebarActive else null,
             .fontSize = 10.5,
             .fontWeight = if (props.active) 600 else 400,
         })({
