@@ -395,25 +395,26 @@ pub fn ease(progress: f32) f32 {
 }
 
 pub fn hex(comptime value: []const u8) Vec4 {
+    const digits = if (value.len > 0 and value[0] == '#') value[1..] else value;
     const r = @as(f32, std.fmt.parseInt(
         u8,
-        value[0..2],
+        digits[0..2],
         16,
     ) catch @compileError("can't parse red channel")) / 255.0;
     const g = @as(f32, std.fmt.parseInt(
         u8,
-        value[2..4],
+        digits[2..4],
         16,
     ) catch @compileError("can't parse green channel")) / 255.0;
     const b = @as(f32, std.fmt.parseInt(
         u8,
-        value[4..6],
+        digits[4..6],
         16,
     ) catch @compileError("can't parse blue channel")) / 255.0;
-    const a = if (value.len >= 8)
+    const a = if (digits.len >= 8)
         @as(f32, std.fmt.parseInt(
             u8,
-            value[6..8],
+            digits[6..8],
             16,
         ) catch @compileError("can't parse alpha channel")) / 255.0
     else
