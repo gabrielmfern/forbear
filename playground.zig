@@ -20,7 +20,7 @@ fn CounterExample() void {
                 .borderRadius = 8.0,
                 .cursor = .pointer,
             })({
-                if (forbear.on(.click)) |_| {
+                if (forbear.on(.click)) {
                     count.* += 1;
                 }
 
@@ -57,10 +57,10 @@ fn App() void {
                 },
                 .borderRadius = 20,
             })({
-                if (forbear.on(.mouseOver)) |_| {
+                if (forbear.on(.mouseOver)) {
                     isHovering.* = true;
                 }
-                if (forbear.on(.mouseOut)) |_| {
+                if (forbear.on(.mouseOut)) {
                     isHovering.* = false;
                 }
             });
