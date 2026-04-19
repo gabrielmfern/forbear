@@ -23,7 +23,7 @@ pub const Padding = nodeImport.Padding;
 pub const Margin = nodeImport.Margin;
 pub const BorderWidth = nodeImport.BorderWidth;
 pub const Offset = nodeImport.Shadow.Offset;
-pub const IncompleteStyle = nodeImport.IncompleteStyle;
+pub const CompleteStyle = nodeImport.CompleteStyle;
 pub const Style = nodeImport.Style;
 pub const Element = nodeImport.Element;
 pub const Window = @import("window/root.zig").Window;
@@ -32,6 +32,7 @@ pub const components = @import("components.zig");
 pub const FpsCounter = components.FpsCounter;
 
 const Vec2 = @Vector(2, f32);
+const Vec4 = @Vector(4, f32);
 
 const Context = @This();
 
@@ -65,7 +66,6 @@ pub const FrameMeta = struct {
     arena: std.mem.Allocator,
 
     viewportSize: Vec2,
-    dpi: Vec2,
     baseStyle: BaseStyle,
 
     // TODO: find a way to include this data as part of the frame, but without
@@ -394,6 +394,33 @@ pub fn ease(progress: f32) f32 {
     return cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
 }
 
+pub fn hex(comptime value: []const u8) Vec4 {
+    const r = @as(f32, std.fmt.parseInt(
+        u8,
+        value[0..2],
+        16,
+    ) catch @compileError("can't parse red channel")) / 255.0;
+    const g = @as(f32, std.fmt.parseInt(
+        u8,
+        value[2..4],
+        16,
+    ) catch @compileError("can't parse green channel")) / 255.0;
+    const b = @as(f32, std.fmt.parseInt(
+        u8,
+        value[4..6],
+        16,
+    ) catch @compileError("can't parse blue channel")) / 255.0;
+    const a = if (value.len >= 8)
+        @as(f32, std.fmt.parseInt(
+            u8,
+            value[6..8],
+            16,
+        ) catch @compileError("can't parse alpha channel")) / 255.0
+    else
+        1.0;
+    return .{ r, g, b, a };
+}
+
 pub fn useViewportSize() Vec2 {
     const self = getContext();
     return self.viewportSize;
@@ -489,13 +516,15 @@ fn endNoop(block: void) void {
 
 /// A thin wrapper around `element` that includes some aspect ratio handling
 /// definition logic in a way that feels more intuitve
-pub fn image(style: IncompleteStyle, img: *Image) void {
+pub fn image(style: Style, img: *Image) void {
     var complementedStyle = style;
     const imageWidth: f32 = @floatFromInt(img.width);
     const imageHeight: f32 = @floatFromInt(img.height);
-    switch (complementedStyle.width) {
+    const width = complementedStyle.width orelse .fit;
+    const height = complementedStyle.height orelse .fit;
+    switch (width) {
         .fit => {
-            switch (complementedStyle.height) {
+            switch (height) {
                 .fit => {
                     complementedStyle.width = .{ .fixed = imageWidth };
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
@@ -509,7 +538,7 @@ pub fn image(style: IncompleteStyle, img: *Image) void {
             }
         },
         .fixed => {
-            switch (complementedStyle.height) {
+            switch (height) {
                 .fit, .grow => {
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
@@ -517,7 +546,7 @@ pub fn image(style: IncompleteStyle, img: *Image) void {
             }
         },
         .grow => {
-            switch (complementedStyle.height) {
+            switch (height) {
                 .grow, .fit => {
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
@@ -582,7 +611,7 @@ fn elementEnd(block: void) void {
     }
 }
 
-pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
+pub fn element(incompleteStyle: Style) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -605,21 +634,7 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
-    var style = incompleteStyle.completeWith(baseStyle);
-    const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
-    style.borderWidth.x *= @splat(resolutionMultiplier[0]);
-    style.borderWidth.y *= @splat(resolutionMultiplier[1]);
-    if (style.shadow) |*shadow| {
-        shadow.offset.x *= @splat(resolutionMultiplier[0]);
-        shadow.offset.y *= @splat(resolutionMultiplier[1]);
-        shadow.blurRadius *= resolutionMultiplier[0];
-        shadow.spread *= resolutionMultiplier[0];
-    }
-    style.padding.x *= @splat(resolutionMultiplier[0]);
-    style.padding.y *= @splat(resolutionMultiplier[1]);
-    style.margin.x *= @splat(resolutionMultiplier[0]);
-    style.margin.y *= @splat(resolutionMultiplier[1]);
-    style.borderRadius *= resolutionMultiplier[0];
+    const style = incompleteStyle.completeWith(baseStyle);
 
     const parentZ = if (parentOptional) |parent|
         parent.z
@@ -729,6 +744,10 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn text(content: []const u8) void {
+    if (content.len == 0) {
+        return;
+    }
+
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 
@@ -747,14 +766,12 @@ pub fn text(content: []const u8) void {
     else
         null;
 
-    const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
-
     const baseStyle = if (parentOptional) |parent|
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
 
-    const style = (IncompleteStyle{
+    const style = (Style{
         .cursor = if (baseStyle.cursor == .default)
             .text
         else
@@ -765,8 +782,7 @@ pub fn text(content: []const u8) void {
 
     const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
     const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
-    const pixelSizeVec2: Vec2 = @as(Vec2, @splat(style.fontSize)) * resolutionMultiplier;
-    const pixelLineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * pixelSizeVec2[1];
+    const lineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * style.fontSize;
 
     const shapedGlyphs = style.font.shape(content) catch |err| {
         handleFrameError(err);
@@ -779,14 +795,14 @@ pub fn text(content: []const u8) void {
     errdefer arena.free(layoutGlyphs);
     var cursor: Vec2 = @splat(0.0);
 
-    var minSize: Vec2 = .{ 0.0, pixelLineHeight };
-    var maxSize: Vec2 = .{ 0.0, pixelLineHeight };
+    var minSize: Vec2 = .{ 0.0, lineHeight };
+    var maxSize: Vec2 = .{ 0.0, lineHeight };
 
     var wordStart: usize = 0;
     var wordAdvance: Vec2 = @splat(0.0);
     for (shapedGlyphs, 0..) |shapedGlyph, i| {
-        const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
-        const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
+        const advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
+        const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
         const glyphText = arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]) catch |err| {
             handleFrameError(err);
             return;
@@ -810,10 +826,10 @@ pub fn text(content: []const u8) void {
                 wordAdvance += advance;
             }
             minSize = @max(minSize, wordAdvance);
-            maxSize[1] += pixelLineHeight;
+            maxSize[1] += lineHeight;
         } else if (style.textWrapping == .character) {
             minSize = @max(minSize, advance);
-            maxSize[1] += pixelLineHeight;
+            maxSize[1] += lineHeight;
         } else if (style.textWrapping == .none) {
             minSize = cursor;
         }
@@ -834,10 +850,10 @@ pub fn text(content: []const u8) void {
         parentZ + 1
     else
         parentZ;
-    result.ptr.size = .{ cursor[0], pixelLineHeight };
+    result.ptr.size = .{ cursor[0], lineHeight };
     result.ptr.minSize = minSize;
     result.ptr.maxSize = maxSize;
-    result.ptr.glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight };
+    result.ptr.glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = lineHeight };
     result.ptr.style = style;
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;

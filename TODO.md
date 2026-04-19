@@ -52,6 +52,7 @@
 
 ### [ ] wayland-book.com
 
+- [ ] support for placing elements manually, but relative to their parent still
 - [ ] svg support
 - [ ] per element clipping
 - [ ] scroll bar 🤔

@@ -897,7 +897,6 @@ fn renderingMain(
 
         try forbear.frame(.{
             .arena = arena,
-            .dpi = .{ @floatFromInt(window.dpi[0]), @floatFromInt(window.dpi[1]) },
             .viewportSize = renderer.viewportSize(),
             .baseStyle = .{
                 .font = try forbear.useFont("SpaceGrotesk"),
@@ -916,7 +915,7 @@ fn renderingMain(
             const rootTree = try forbear.layout();
             try rootTree.dump(&traceWriter.interface);
 
-            try renderer.drawFrame(arena, rootTree, .{ 0.99, 0.98, 0.96, 1.0 }, window.dpi, window.targetFrameTimeNs());
+            try renderer.drawFrame(arena, rootTree, .{ 0.99, 0.98, 0.96, 1.0 }, window.targetFrameTimeNs());
             try forbear.update();
         });
     }

@@ -7,11 +7,11 @@ const Element = @import("node.zig").Element;
 const LayoutGlyph = @import("node.zig").LayoutGlyph;
 const Glyphs = @import("node.zig").Glyphs;
 const forbear = @import("root.zig");
-const IncompleteStyle = @import("node.zig").IncompleteStyle;
+const Style = @import("node.zig").Style;
 const Node = @import("node.zig").Node;
 const NodeTree = @import("node.zig").NodeTree;
 const Sizing = @import("node.zig").Sizing;
-const Style = @import("node.zig").Style;
+const CompleteStyle = @import("node.zig").CompleteStyle;
 const TextWrapping = @import("node.zig").TextWrapping;
 
 const Vec4 = @Vector(4, f32);
