@@ -200,7 +200,7 @@ fn shrinkChildren(
     }
 }
 
-pub fn refitAncetors(node: *Node, nodeTree: *const NodeTree) void {
+pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
     var ancestorIndexOpt = node.parent;
     while (ancestorIndexOpt) |ancestorIndex| {
         const ancestor = nodeTree.at(ancestorIndex);
@@ -308,7 +308,7 @@ pub fn growAndShrink(
         if (child.style.height == .ratio) {
             child.size[1] = child.size[0] * child.style.height.ratio;
         }
-        refitAncetors(child, nodeTree);
+        refitAncestors(child, nodeTree);
 
         try growAndShrink(arena, child, nodeTree);
 
@@ -423,7 +423,7 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTr
             node.size[0] = node.size[1] * node.style.width.ratio;
         }
 
-        refitAncetors(node, nodeTree);
+        refitAncestors(node, nodeTree);
     }
 }
 
@@ -512,10 +512,10 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                     }
                     const totalChange = node.size[1] - preWrapHeight;
                     if (totalChange > 0.001) {
-                        refitAncetors(node, nodeTree);
+                        refitAncestors(node, nodeTree);
                     }
                 } else if (wrapHeightAddition > 0.001) {
-                    refitAncetors(node, nodeTree);
+                    refitAncestors(node, nodeTree);
                 }
 
                 const availableWidth = node.size[0] - node.fittingBase(.horizontal);

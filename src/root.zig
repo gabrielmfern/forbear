@@ -1013,7 +1013,7 @@ fn componentChildrenSlotEndFn(block: void) void {
         parent.lastChild = slotState.afterChainEnd;
     }
 
-    layouting.refitAncetors(parent, &self.nodeTree);
+    layouting.refitAncestors(parent, &self.nodeTree);
 
     // Restore parent stack to pre-slotEnd state
     fm.nodeParentStack.clearRetainingCapacity();
