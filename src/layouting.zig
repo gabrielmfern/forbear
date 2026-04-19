@@ -224,6 +224,9 @@ pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
         if (ancestor.style.height == .ratio) {
             ancestor.size[1] = ancestor.style.height.ratio * ancestor.size[0];
         }
+        // Ensure minSize doesn't exceed maxSize (can happen with accumulated text widths)
+        ancestor.minSize[0] = @min(ancestor.minSize[0], ancestor.maxSize[0]);
+        ancestor.minSize[1] = @min(ancestor.minSize[1], ancestor.maxSize[1]);
         ancestor.size[0] = @min(@max(ancestor.size[0], ancestor.minSize[0]), ancestor.maxSize[0]);
         ancestor.size[1] = @min(@max(ancestor.size[1], ancestor.minSize[1]), ancestor.maxSize[1]);
 
@@ -236,6 +239,19 @@ pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
                 const marginVector = child.style.margin.get(perpendicular);
                 const available = ancestor.getSize(perpendicular) - ancestor.fittingBase(perpendicular) - marginVector[0] - marginVector[1];
                 child.setSize(perpendicular, @max(@min(available, child.getMaxSize(perpendicular)), child.getMinSize(perpendicular)));
+
+                // Re-apply ratio sizing after perpendicular change
+                if (child.style.width == .ratio) {
+                    child.size[0] = child.size[1] * child.style.width.ratio;
+                }
+                if (child.style.height == .ratio) {
+                    child.size[1] = child.size[0] * child.style.height.ratio;
+                }
+                // Ensure minSize doesn't exceed maxSize, then clamp size
+                child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
+                child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
+                child.size[0] = @min(@max(child.size[0], child.minSize[0]), child.maxSize[0]);
+                child.size[1] = @min(@max(child.size[1], child.minSize[1]), child.maxSize[1]);
             }
             childIndexOpt = child.nextSibling;
         }
@@ -259,6 +275,10 @@ pub fn growAndShrink(
         childCount += 1;
 
         if (child.style.placement == .standard) {
+            // Ensure minSize doesn't exceed maxSize before using it
+            child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
+            child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
+
             if (direction.perpendicular() == .vertical) {
                 const available = node.size[1] - node.fittingBase(.vertical) - child.style.margin.y[0] - child.style.margin.y[1];
                 if (child.style.height == .grow or (child.size[1] > available and child.minSize[1] < child.size[1])) {
