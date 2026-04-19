@@ -59,7 +59,7 @@ void main() {
 
     vec4 color = vertexColor;
     if (gradientStart >= 0) {
-        color = sampleGradient(localPos.y);
+        color = sampleGradient(localPos.x);
     }
     if (imageIndex >= 0) {
         color *= texture(textures[nonuniformEXT(imageIndex)], localPos.xy);

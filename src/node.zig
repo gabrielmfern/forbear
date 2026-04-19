@@ -271,7 +271,7 @@ pub const GradientStop = struct {
 pub const Background = union(enum) {
     image: *Graphics.Image,
     color: Vec4,
-    /// A linear gradient from the top to the bottom of the element. Stops
+    /// A linear gradient from the left to the right of the element. Stops
     /// define where each color sits along the gradient; positions are
     /// expected to be monotonically increasing within the [0, 1] range.
     gradient: []const GradientStop,
