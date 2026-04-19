@@ -59,32 +59,27 @@ test "fit height parent, with grow height child containing wrapping text" {
             });
         });
 
+        const tree = try layout();
+
         const stdout = std.fs.File.stdout();
         var stdoutBuffer: [4096]u8 = undefined;
         var stdoutWriter = stdout.writer(&stdoutBuffer);
-        try forbear.getContext().nodeTree.layoutDump(&stdoutWriter.interface);
-
-        const tree = try layout();
-        // const stdout = std.fs.File.stdout();
-        // var stdoutBuffer: [4096]u8 = undefined;
-        // var stdoutWriter = stdout.writer(&stdoutBuffer);
-        // try tree.layoutDump(&stdoutWriter.interface);
+        try tree.layoutDump(&stdoutWriter.interface);
 
         const row = tree.at(0);
         const cardA = tree.at(row.firstChild.?);
         const cardB = tree.at(cardA.nextSibling.?);
         const cardC = tree.at(cardB.nextSibling.?);
+
         const textB = tree.at(cardB.firstChild.?);
 
-        // Text B should wrap to multiple lines (significantly taller than single line ~20px)
-        try std.testing.expect(textB.size[1] > 50.0);
+        try std.testing.expectApproxEqAbs(212.95312, textB.size[1], 0.0001);
 
-        // All cards should have equal height (stretched to tallest)
-        try std.testing.expectEqual(cardA.size[1], cardB.size[1]);
-        try std.testing.expectEqual(cardB.size[1], cardC.size[1]);
+        try std.testing.expectApproxEqAbs(textB.size[1], cardB.size[1], 0.0001);
 
-        // Row should fit to the card height
-        try std.testing.expectEqual(cardA.size[1], row.size[1]);
+        try std.testing.expectApproxEqAbs(cardB.size[1], cardA.size[1], 0.0001);
+        try std.testing.expectApproxEqAbs(cardB.size[1], cardC.size[1], 0.0001);
+        try std.testing.expectApproxEqAbs(cardB.size[1], row.size[1], 0.0001);
     });
 }
 
