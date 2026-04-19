@@ -217,9 +217,9 @@ test "bench layout" {
     var file_writer = std.fs.File.stdout().writer(&buf);
     var bench = zbench.Benchmark.init(std.testing.allocator, .{});
     defer bench.deinit();
-    try bench.add("layout() small", benchLayout, .{});
-    try bench.add("layout() large", benchLargeLayout, .{});
-    try bench.add("layout() huge", benchHugeLayout, .{});
+    try bench.add("layout() 27 nodes", benchLayout, .{});
+    try bench.add("layout() 135 nodes", benchLargeLayout, .{});
+    try bench.add("layout() 2641 nodes", benchHugeLayout, .{});
     try bench.run(&file_writer.interface);
     try file_writer.interface.flush();
 }
