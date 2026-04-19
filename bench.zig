@@ -206,7 +206,7 @@ test "bench layout" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
 
-    try forbear.registerFont("Inter", @embedFile("src/tests/Inter.ttf"));
+    try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
     gFont = try forbear.useFont("Inter");
 
     var arenaAlloc = std.heap.ArenaAllocator.init(std.testing.allocator);

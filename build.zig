@@ -176,6 +176,8 @@ fn createForbearModule(
     addShaderImport(b, forbear, "shaders/shadow/vertex.vert", "shadow_vertex_shader");
     addShaderImport(b, forbear, "shaders/shadow/fragment.frag", "shadow_fragment_shader");
 
+    forbear.addAnonymousImport("inter_font", .{ .root_source_file = b.path("Inter.ttf") });
+
     return .{
         .dependencies = dependencies,
         .forbear = forbear,
