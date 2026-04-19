@@ -5,9 +5,9 @@ pub fn Paragraph() *const fn (void) void {
     forbear.component("paragraph")({
         forbear.element(.{
             .width = .grow,
-            .fontSize = 12.0,
-            .lineHeight = 1.6,
-            .margin = .bottom(13.5),
+            .fontSize = 16.0,
+            .lineHeight = 1.5,
+            .margin = .bottom(16.0),
         })({
             forbear.componentChildrenSlot();
         });

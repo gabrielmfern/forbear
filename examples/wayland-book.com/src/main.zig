@@ -58,7 +58,9 @@ fn Topbar() void {
         .direction = .horizontal,
         .xJustification = .center,
         .yJustification = .center,
-        .padding = forbear.Padding.block(12.0).withInLine(24.0),
+        .padding = forbear.Padding.all(15.0),
+        .fontSize = 20.0,
+        .fontWeight = 200,
     })({
         Heading(1)({
             forbear.text("The Wayland Protocol");
@@ -125,8 +127,8 @@ fn Content() void {
                 .direction = .vertical,
                 .xJustification = .center,
                 .yJustification = .start,
-                .padding = forbear.Padding.block(36.0).withInLine(48.0),
-                .maxWidth = 820.0,
+                .padding = forbear.Padding.all(15.0),
+                .maxWidth = 750.0,
             })({
                 Heading(1)({
                     forbear.text("Introduction");
@@ -177,7 +179,7 @@ fn App() !void {
             .yJustification = .start,
             .font = try forbear.useFont("Inter"),
             .fontWeight = 400,
-            .fontSize = 12.0,
+            .fontSize = 16.0,
             .color = Colors.text,
         })({
             forbear.FpsCounter();
@@ -228,7 +230,7 @@ fn renderingMain(
             .baseStyle = .{
                 .font = try forbear.useFont("Inter"),
                 .color = Colors.text,
-                .fontSize = 12.0,
+                .fontSize = 16.0,
                 .textWrapping = .word,
                 .fontWeight = 400,
                 .cursor = .default,

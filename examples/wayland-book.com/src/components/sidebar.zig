@@ -10,7 +10,8 @@ pub fn Sidebar() *const fn (void) void {
             .xJustification = .start,
             .yJustification = .start,
             .background = .{ .color = Colors.sidebarBackground },
-            .padding = forbear.Padding.block(18.0),
+            .padding = forbear.Padding.all(10.0),
+            .fontSize = 14.0,
             .color = Colors.sidebarText,
         })({
             forbear.componentChildrenSlot();
@@ -44,10 +45,10 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
             .textWrapping = .none, 
             .xJustification = .start,
             .yJustification = .center,
-            .padding = forbear.Padding.block(6.0).withInLine(12.0 + props.depth * 16.0),
+            .padding = forbear.Padding.left(props.depth * 20.0),
+            .lineHeight = if (props.depth > 0) 1.9 else 2.2,
             .cursor = .pointer,
             .color = if (props.active or isHovering.*) Colors.sidebarActive else null,
-            .fontSize = 10.5,
             .fontWeight = if (props.active) 600 else 400,
         })({
             if (forbear.on(.mouseOver)) isHovering.* = true;
