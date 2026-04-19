@@ -66,7 +66,6 @@ pub const FrameMeta = struct {
     arena: std.mem.Allocator,
 
     viewportSize: Vec2,
-    dpi: Vec2,
     baseStyle: BaseStyle,
 
     // TODO: find a way to include this data as part of the frame, but without
@@ -633,21 +632,7 @@ pub fn element(incompleteStyle: IncompleteStyle) *const fn (void) void {
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
-    var style = incompleteStyle.completeWith(baseStyle);
-    const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
-    style.borderWidth.x *= @splat(resolutionMultiplier[0]);
-    style.borderWidth.y *= @splat(resolutionMultiplier[1]);
-    if (style.shadow) |*shadow| {
-        shadow.offset.x *= @splat(resolutionMultiplier[0]);
-        shadow.offset.y *= @splat(resolutionMultiplier[1]);
-        shadow.blurRadius *= resolutionMultiplier[0];
-        shadow.spread *= resolutionMultiplier[0];
-    }
-    style.padding.x *= @splat(resolutionMultiplier[0]);
-    style.padding.y *= @splat(resolutionMultiplier[1]);
-    style.margin.x *= @splat(resolutionMultiplier[0]);
-    style.margin.y *= @splat(resolutionMultiplier[1]);
-    style.borderRadius *= resolutionMultiplier[0];
+    const style = incompleteStyle.completeWith(baseStyle);
 
     const parentZ = if (parentOptional) |parent|
         parent.z
@@ -779,8 +764,6 @@ pub fn text(content: []const u8) void {
     else
         null;
 
-    const resolutionMultiplier = self.frameMeta.?.dpi / @as(Vec2, @splat(72));
-
     const baseStyle = if (parentOptional) |parent|
         BaseStyle.from(parent.style)
     else
@@ -797,8 +780,7 @@ pub fn text(content: []const u8) void {
 
     const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
     const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
-    const pixelSizeVec2: Vec2 = @as(Vec2, @splat(style.fontSize)) * resolutionMultiplier;
-    const pixelLineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * pixelSizeVec2[1];
+    const lineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * style.fontSize;
 
     const shapedGlyphs = style.font.shape(content) catch |err| {
         handleFrameError(err);
@@ -811,14 +793,14 @@ pub fn text(content: []const u8) void {
     errdefer arena.free(layoutGlyphs);
     var cursor: Vec2 = @splat(0.0);
 
-    var minSize: Vec2 = .{ 0.0, pixelLineHeight };
-    var maxSize: Vec2 = .{ 0.0, pixelLineHeight };
+    var minSize: Vec2 = .{ 0.0, lineHeight };
+    var maxSize: Vec2 = .{ 0.0, lineHeight };
 
     var wordStart: usize = 0;
     var wordAdvance: Vec2 = @splat(0.0);
     for (shapedGlyphs, 0..) |shapedGlyph, i| {
-        const advance = shapedGlyph.advance / unitsPerEmVec2 * pixelSizeVec2;
-        const offset = shapedGlyph.offset / unitsPerEmVec2 * pixelSizeVec2;
+        const advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
+        const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
         const glyphText = arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]) catch |err| {
             handleFrameError(err);
             return;
@@ -842,10 +824,10 @@ pub fn text(content: []const u8) void {
                 wordAdvance += advance;
             }
             minSize = @max(minSize, wordAdvance);
-            maxSize[1] += pixelLineHeight;
+            maxSize[1] += lineHeight;
         } else if (style.textWrapping == .character) {
             minSize = @max(minSize, advance);
-            maxSize[1] += pixelLineHeight;
+            maxSize[1] += lineHeight;
         } else if (style.textWrapping == .none) {
             minSize = cursor;
         }
@@ -866,10 +848,10 @@ pub fn text(content: []const u8) void {
         parentZ + 1
     else
         parentZ;
-    result.ptr.size = .{ cursor[0], pixelLineHeight };
+    result.ptr.size = .{ cursor[0], lineHeight };
     result.ptr.minSize = minSize;
     result.ptr.maxSize = maxSize;
-    result.ptr.glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = pixelLineHeight };
+    result.ptr.glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = lineHeight };
     result.ptr.style = style;
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;

@@ -596,15 +596,14 @@ pub fn setWeight(self: @This(), weight: c.FT_UInt, allocator: std.mem.Allocator)
 pub fn rasterize(
     self: @This(),
     glyphIndex: c_uint,
-    dpi: [2]u32,
     size: f32,
 ) FreetypeError!RasterizedGlyph {
-    try ensureNoError(c.FT_Set_Char_Size(
+    try ensureNoError(c.FT_Set_Pixel_Sizes(
         self.handle,
-        0,
-        @intFromFloat(@round(size * 64.0)),
-        @intCast(dpi[0]),
-        @intCast(dpi[1]),
+        @intFromFloat(@round(size)),
+        @intFromFloat(@round(size)),
+        // @intCast(dpi[0]),
+        // @intCast(dpi[1]),
     ));
 
     try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_TARGET_LCD));
