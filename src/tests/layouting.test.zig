@@ -61,11 +61,6 @@ test "fit height parent, with grow height child containing wrapping text" {
 
         const tree = try layout();
 
-        const stdout = std.fs.File.stdout();
-        var stdoutBuffer: [4096]u8 = undefined;
-        var stdoutWriter = stdout.writer(&stdoutBuffer);
-        try tree.layoutDump(&stdoutWriter.interface);
-
         const row = tree.at(0);
         const cardA = tree.at(row.firstChild.?);
         const cardB = tree.at(cardA.nextSibling.?);
