@@ -297,15 +297,15 @@ pub const Style = struct {
     cursor: ?Cursor = null,
 
     overflow: ?Overflow = null,
-    placement: Placement = .standard,
+    placement: ?Placement = null,
     zIndex: ?u16 = null,
 
     minWidth: ?f32 = null,
     maxWidth: ?f32 = null,
-    width: Sizing = .fit,
+    width: ?Sizing = null,
     minHeight: ?f32 = null,
     maxHeight: ?f32 = null,
-    height: Sizing = .fit,
+    height: ?Sizing = null,
 
     translate: ?Vec2 = null,
 
@@ -337,15 +337,15 @@ pub const Style = struct {
             .cursor = self.cursor orelse other.cursor,
 
             .overflow = self.overflow orelse other.overflow,
-            .placement = if (self.placement != .standard) self.placement else other.placement,
+            .placement = self.placement orelse other.placement,
             .zIndex = self.zIndex orelse other.zIndex,
 
             .minWidth = self.minWidth orelse other.minWidth,
             .maxWidth = self.maxWidth orelse other.maxWidth,
-            .width = if (self.width != .fit) self.width else other.width,
+            .width = self.width orelse other.width,
             .minHeight = self.minHeight orelse other.minHeight,
             .maxHeight = self.maxHeight orelse other.maxHeight,
-            .height = if (self.height != .fit) self.height else other.height,
+            .height = self.height orelse other.height,
 
             .translate = self.translate orelse other.translate,
 
@@ -380,16 +380,16 @@ pub const Style = struct {
             .cursor = self.cursor orelse base.cursor,
 
             .overflow = self.overflow orelse .visible,
-            .placement = self.placement,
+            .placement = self.placement orelse .standard,
             .zIndex = self.zIndex,
 
             .minWidth = self.minWidth,
             .maxWidth = self.maxWidth,
-            .width = self.width,
+            .width = self.width orelse .fit,
 
             .minHeight = self.minHeight,
             .maxHeight = self.maxHeight,
-            .height = self.height,
+            .height = self.height orelse .fit,
 
             .translate = self.translate orelse @splat(0.0),
 

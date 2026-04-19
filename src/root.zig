@@ -520,9 +520,11 @@ pub fn image(style: Style, img: *Image) void {
     var complementedStyle = style;
     const imageWidth: f32 = @floatFromInt(img.width);
     const imageHeight: f32 = @floatFromInt(img.height);
-    switch (complementedStyle.width) {
+    const width = complementedStyle.width orelse .fit;
+    const height = complementedStyle.height orelse .fit;
+    switch (width) {
         .fit => {
-            switch (complementedStyle.height) {
+            switch (height) {
                 .fit => {
                     complementedStyle.width = .{ .fixed = imageWidth };
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
@@ -536,7 +538,7 @@ pub fn image(style: Style, img: *Image) void {
             }
         },
         .fixed => {
-            switch (complementedStyle.height) {
+            switch (height) {
                 .fit, .grow => {
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
@@ -544,7 +546,7 @@ pub fn image(style: Style, img: *Image) void {
             }
         },
         .grow => {
-            switch (complementedStyle.height) {
+            switch (height) {
                 .grow, .fit => {
                     complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
                 },
