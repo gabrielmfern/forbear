@@ -44,7 +44,7 @@
     - most likely using a "slotting" solution where
         `forbear.componentChildrenSlot()` would mark the parent/path to slot
         component children into parent
-- [ ] feature equivalent to display: grid in css
+- [x] feature equivalent to display: grid in css
 - [ ] linear gradient support
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
