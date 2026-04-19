@@ -579,7 +579,13 @@ pub const Node = struct {
                 const margins = marginVector[0] + marginVector[1];
 
                 const contribution = margins + child.getSize(fitDirection);
-                // const minContribution = margins + child.getMinSize(fitDirection);
+                // For vertical minSize: use max(size, minSize) to capture wrapped text height
+                // For horizontal minSize: use minSize only to avoid unwrapped text width bloat
+                // Text wrapping changes height, not width, so this distinction matters.
+                const minContribution = margins + if (fitDirection == .vertical)
+                    @max(child.getSize(fitDirection), child.getMinSize(fitDirection))
+                else
+                    child.getMinSize(fitDirection);
 
                 if (layoutDirection == fitDirection) {
                     if (wraps) {
@@ -594,7 +600,7 @@ pub const Node = struct {
                         if (self.shouldFitMin(fitDirection)) {
                             self.setMinSize(fitDirection, @max(
                                 self.getMinSize(fitDirection),
-                                contribution + self.fittingBase(fitDirection),
+                                minContribution + self.fittingBase(fitDirection),
                             ));
                         }
                     } else {
@@ -603,7 +609,8 @@ pub const Node = struct {
                             self.addSize(fitDirection, contribution);
                         }
                         if (self.shouldFitMin(fitDirection)) {
-                            self.addMinSize(fitDirection, contribution);
+                            // Main axis: use minSize to avoid unwrapped text bloat
+                            self.addMinSize(fitDirection, minContribution);
                         }
                     }
                 } else {
@@ -617,7 +624,7 @@ pub const Node = struct {
                     }
                     if (self.shouldFitMin(fitDirection)) {
                         self.setMinSize(fitDirection, @max(
-                            contribution + self.fittingBase(fitDirection),
+                            minContribution + self.fittingBase(fitDirection),
                             self.getMinSize(fitDirection),
                         ));
                     }
