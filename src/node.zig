@@ -579,7 +579,7 @@ pub const Node = struct {
                 const margins = marginVector[0] + marginVector[1];
 
                 const contribution = margins + child.getSize(fitDirection);
-                const minContribution = margins + child.getMinSize(fitDirection);
+                // const minContribution = margins + child.getMinSize(fitDirection);
 
                 if (layoutDirection == fitDirection) {
                     if (wraps) {
@@ -594,7 +594,7 @@ pub const Node = struct {
                         if (self.shouldFitMin(fitDirection)) {
                             self.setMinSize(fitDirection, @max(
                                 self.getMinSize(fitDirection),
-                                minContribution + self.fittingBase(fitDirection),
+                                contribution + self.fittingBase(fitDirection),
                             ));
                         }
                     } else {
@@ -603,7 +603,7 @@ pub const Node = struct {
                             self.addSize(fitDirection, contribution);
                         }
                         if (self.shouldFitMin(fitDirection)) {
-                            self.addMinSize(fitDirection, minContribution);
+                            self.addMinSize(fitDirection, contribution);
                         }
                     }
                 } else {
@@ -617,7 +617,7 @@ pub const Node = struct {
                     }
                     if (self.shouldFitMin(fitDirection)) {
                         self.setMinSize(fitDirection, @max(
-                            minContribution + self.fittingBase(fitDirection),
+                            contribution + self.fittingBase(fitDirection),
                             self.getMinSize(fitDirection),
                         ));
                     }
