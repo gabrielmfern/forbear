@@ -26,6 +26,7 @@ pub const Offset = nodeImport.Shadow.Offset;
 pub const CompleteStyle = nodeImport.CompleteStyle;
 pub const Style = nodeImport.Style;
 pub const Element = nodeImport.Element;
+pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("window/root.zig").Window;
 pub const WindowCursor = @import("window/root.zig").Cursor;
 pub const components = @import("components.zig");

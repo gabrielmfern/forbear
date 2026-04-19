@@ -262,12 +262,19 @@ pub const BaseStyle = struct {
     }
 };
 
+pub const GradientStop = struct {
+    color: Vec4,
+    /// Position along the gradient in the [0, 1] range.
+    position: f32,
+};
+
 pub const Background = union(enum) {
     image: *Graphics.Image,
     color: Vec4,
-    /// A linear gradient from the top to the bottom of the element. Stops are
-    /// distributed evenly across the provided colors.
-    gradient: []const Vec4,
+    /// A linear gradient from the top to the bottom of the element. Stops
+    /// define where each color sits along the gradient; positions are
+    /// expected to be monotonically increasing within the [0, 1] range.
+    gradient: []const GradientStop,
 };
 
 pub const Placement = union(enum) {

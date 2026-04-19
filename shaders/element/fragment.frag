@@ -16,9 +16,14 @@ layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 1) uniform sampler2D textures[];
 
-layout(std430, set = 0, binding = 2) readonly buffer GradientColors {
-    vec4 colors[];
-} gradientColors;
+struct GradientStop {
+    vec4 color;
+    float position;
+};
+
+layout(std430, set = 0, binding = 2) readonly buffer GradientStops {
+    GradientStop stops[];
+} gradientStops;
 
 float sdfRoundRect(vec2 point, vec2 halfSize, float radius) {
     vec2 q = abs(point) - halfSize + radius;
@@ -27,17 +32,20 @@ float sdfRoundRect(vec2 point, vec2 halfSize, float radius) {
 
 vec4 sampleGradient(float t) {
     int count = gradientEnd - gradientStart + 1;
-    if (count <= 1) {
-        return gradientColors.colors[gradientStart];
+    GradientStop first = gradientStops.stops[gradientStart];
+    if (count <= 1 || t <= first.position) {
+        return first.color;
     }
-    float scaled = clamp(t, 0.0, 1.0) * float(count - 1);
-    int segment = clamp(int(floor(scaled)), 0, count - 2);
-    float segmentT = scaled - float(segment);
-    return mix(
-        gradientColors.colors[gradientStart + segment],
-        gradientColors.colors[gradientStart + segment + 1],
-        segmentT
-    );
+    for (int i = 0; i < count - 1; i++) {
+        GradientStop curr = gradientStops.stops[gradientStart + i];
+        GradientStop next = gradientStops.stops[gradientStart + i + 1];
+        if (t <= next.position) {
+            float denom = max(next.position - curr.position, 1e-6);
+            float segmentT = clamp((t - curr.position) / denom, 0.0, 1.0);
+            return mix(curr.color, next.color, segmentT);
+        }
+    }
+    return gradientStops.stops[gradientEnd].color;
 }
 
 void main() {

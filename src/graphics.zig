@@ -1664,6 +1664,11 @@ const ElementRenderingData = extern struct {
     size: [2]f32,
 };
 
+const GradientStopGpu = extern struct {
+    color: Vec4,
+    position: f32,
+};
+
 const ElementsPipeline = struct {
     allocator: std.mem.Allocator,
 
@@ -1678,8 +1683,8 @@ const ElementsPipeline = struct {
     elementsShaderDataBuffer: [maxFramesInFlight]Buffer,
     elementsShaderData: [maxFramesInFlight][]ElementRenderingData,
 
-    gradientColorsBuffer: [maxFramesInFlight]Buffer,
-    gradientColors: [maxFramesInFlight][]Vec4,
+    gradientStopsBuffer: [maxFramesInFlight]Buffer,
+    gradientStops: [maxFramesInFlight][]GradientStopGpu,
 
     registeredImages: std.ArrayList(*const Image),
     sampler: c.VkSampler,
@@ -2021,12 +2026,12 @@ const ElementsPipeline = struct {
         errdefer c.vkDestroyPipeline(logicalDevice, blendMultiplyGraphicsPipeline, null);
 
         const initialElementCapacity = 1;
-        const initialGradientColorCapacity = 1;
+        const initialGradientStopCapacity = 1;
 
         var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
         var shaderBuffersMapped: [maxFramesInFlight][]ElementRenderingData = undefined;
         var gradientBuffers: [maxFramesInFlight]Buffer = undefined;
-        var gradientBuffersMapped: [maxFramesInFlight][]Vec4 = undefined;
+        var gradientBuffersMapped: [maxFramesInFlight][]GradientStopGpu = undefined;
         for (0..maxFramesInFlight) |i| {
             const buffer = try Buffer.init(
                 logicalDevice,
@@ -2043,14 +2048,14 @@ const ElementsPipeline = struct {
             const gradientBuffer = try Buffer.init(
                 logicalDevice,
                 physicalDevice,
-                @sizeOf(Vec4) * initialGradientColorCapacity,
+                @sizeOf(GradientStopGpu) * initialGradientStopCapacity,
                 c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             );
             gradientBuffers[i] = gradientBuffer;
             var gradientBufferData: ?*anyopaque = undefined;
             try ensureNoError(c.vkMapMemory(logicalDevice, gradientBuffer.memory, 0, gradientBuffer.size, 0, &gradientBufferData));
-            gradientBuffersMapped[i] = @as([*]Vec4, @ptrCast(@alignCast(gradientBufferData)))[0..initialGradientColorCapacity];
+            gradientBuffersMapped[i] = @as([*]GradientStopGpu, @ptrCast(@alignCast(gradientBufferData)))[0..initialGradientStopCapacity];
         }
 
         const poolSizes = [_]c.VkDescriptorPoolSize{
@@ -2157,8 +2162,8 @@ const ElementsPipeline = struct {
             .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
             .elementsShaderDataBuffer = shaderBuffers,
             .elementsShaderData = shaderBuffersMapped,
-            .gradientColorsBuffer = gradientBuffers,
-            .gradientColors = gradientBuffersMapped,
+            .gradientStopsBuffer = gradientBuffers,
+            .gradientStops = gradientBuffersMapped,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
             .sampler = sampler,
@@ -2298,32 +2303,32 @@ const ElementsPipeline = struct {
         c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
     }
 
-    fn resizeConcurrentGradientColorCapacity(
+    fn resizeConcurrentGradientStopCapacity(
         self: *@This(),
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
         newCapacity: usize,
         frameIndex: usize,
     ) !void {
-        std.log.debug("increasing concurrent gradient color capacity from {d} to {d} for frame {d}", .{
-            self.gradientColors[frameIndex].len,
+        std.log.debug("increasing concurrent gradient stop capacity from {d} to {d} for frame {d}", .{
+            self.gradientStops[frameIndex].len,
             newCapacity,
             frameIndex,
         });
-        c.vkUnmapMemory(logicalDevice, self.gradientColorsBuffer[frameIndex].memory);
-        self.gradientColorsBuffer[frameIndex].deinit(logicalDevice);
+        c.vkUnmapMemory(logicalDevice, self.gradientStopsBuffer[frameIndex].memory);
+        self.gradientStopsBuffer[frameIndex].deinit(logicalDevice);
 
         const buffer = try Buffer.init(
             logicalDevice,
             physicalDevice,
-            @sizeOf(Vec4) * newCapacity,
+            @sizeOf(GradientStopGpu) * newCapacity,
             c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         );
-        self.gradientColorsBuffer[frameIndex] = buffer;
+        self.gradientStopsBuffer[frameIndex] = buffer;
         var storageBufferData: ?*anyopaque = undefined;
         try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-        self.gradientColors[frameIndex] = @as([*]Vec4, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
+        self.gradientStops[frameIndex] = @as([*]GradientStopGpu, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
 
         const bufferInfo = c.VkDescriptorBufferInfo{
             .buffer = buffer.handle,
@@ -2358,7 +2363,7 @@ const ElementsPipeline = struct {
             buffer.deinit(logicalDevice);
         }
 
-        for (self.gradientColorsBuffer) |buffer| {
+        for (self.gradientStopsBuffer) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
             buffer.deinit(logicalDevice);
         }
@@ -3711,7 +3716,7 @@ pub const Renderer = struct {
         // glyphs and then allocate enough memory on the shader buffers ---
         var totalShadowCount: usize = 0;
         var totalGlyphCount: usize = 0;
-        var totalGradientColorCount: usize = 0;
+        var totalGradientStopCount: usize = 0;
         const totalElementCount: usize = orderedNodes.len;
         for (orderedNodes) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
@@ -3722,7 +3727,7 @@ pub const Renderer = struct {
                 totalGlyphCount += glyphs.slice.len;
             }
             if (node.style.background == .gradient) {
-                totalGradientColorCount += node.style.background.gradient.len;
+                totalGradientStopCount += node.style.background.gradient.len;
             }
         }
 
@@ -3742,11 +3747,11 @@ pub const Renderer = struct {
                 frameIndex,
             );
         }
-        if (totalGradientColorCount > self.elementsPipeline.gradientColors[frameIndex].len) {
-            try self.elementsPipeline.resizeConcurrentGradientColorCapacity(
+        if (totalGradientStopCount > self.elementsPipeline.gradientStops[frameIndex].len) {
+            try self.elementsPipeline.resizeConcurrentGradientStopCapacity(
                 self.logicalDevice,
                 self.physicalDevice,
-                try std.math.ceilPowerOfTwo(usize, totalGradientColorCount),
+                try std.math.ceilPowerOfTwo(usize, totalGradientStopCount),
                 frameIndex,
             );
         }
@@ -3777,7 +3782,7 @@ pub const Renderer = struct {
 
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
-        var gradientColorIndex: usize = 0;
+        var gradientStopIndex: usize = 0;
         var totalBlendAddElementCount: usize = 0;
         for (orderedNodes) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
@@ -3832,13 +3837,16 @@ pub const Renderer = struct {
             var gradientStart: i32 = -1;
             var gradientEnd: i32 = -1;
             if (node.style.background == .gradient and node.style.background.gradient.len > 0) {
-                const colors = node.style.background.gradient;
-                gradientStart = @intCast(gradientColorIndex);
-                for (colors) |color| {
-                    self.elementsPipeline.gradientColors[frameIndex][gradientColorIndex] = srgbToLinearColor(color);
-                    gradientColorIndex += 1;
+                const stops = node.style.background.gradient;
+                gradientStart = @intCast(gradientStopIndex);
+                for (stops) |stop| {
+                    self.elementsPipeline.gradientStops[frameIndex][gradientStopIndex] = GradientStopGpu{
+                        .color = srgbToLinearColor(stop.color),
+                        .position = stop.position,
+                    };
+                    gradientStopIndex += 1;
                 }
-                gradientEnd = @intCast(gradientColorIndex - 1);
+                gradientEnd = @intCast(gradientStopIndex - 1);
             }
             self.elementsPipeline.elementsShaderData[frameIndex][elementIndex] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
