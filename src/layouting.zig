@@ -227,6 +227,19 @@ pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
         ancestor.size[0] = @min(@max(ancestor.size[0], ancestor.minSize[0]), ancestor.maxSize[0]);
         ancestor.size[1] = @min(@max(ancestor.size[1], ancestor.minSize[1]), ancestor.maxSize[1]);
 
+        // Re-apply perpendicular grow to children now that ancestor size is finalized
+        const perpendicular = ancestor.style.direction.perpendicular();
+        childIndexOpt = ancestor.firstChild;
+        while (childIndexOpt) |childIndex| {
+            const child = nodeTree.at(childIndex);
+            if (child.style.placement == .standard and child.style.getPreferredSize(perpendicular) == .grow) {
+                const marginVector = child.style.margin.get(perpendicular);
+                const available = ancestor.getSize(perpendicular) - ancestor.fittingBase(perpendicular) - marginVector[0] - marginVector[1];
+                child.setSize(perpendicular, @max(@min(available, child.getMaxSize(perpendicular)), child.getMinSize(perpendicular)));
+            }
+            childIndexOpt = child.nextSibling;
+        }
+
         ancestorIndexOpt = ancestor.parent;
     }
 }
