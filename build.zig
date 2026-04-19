@@ -240,14 +240,20 @@ pub fn build(b: *std.Build) void {
     var dependencies = default_context.dependencies;
 
     const testFilterOption = b.option([]const u8, "test-filter", "Only run tests whose names contain this string");
+    const testDebugOption = b.option(bool, "test-debug", "Generate a debuggable test executable") orelse false;
     const mod_tests = b.addTest(.{
         .root_module = forbear,
         .filters = if (testFilterOption) |filter| &.{filter} else &.{},
         .test_runner = .{ .path = b.path("test_runner.zig"), .mode = .simple },
     });
-    const run_mod_tests = b.addRunArtifact(mod_tests);
     const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_mod_tests.step);
+    if (testDebugOption) {
+        const install_tests = b.addInstallArtifact(mod_tests, .{});
+        test_step.dependOn(&install_tests.step);
+    } else {
+        const run_mod_tests = b.addRunArtifact(mod_tests);
+        test_step.dependOn(&run_mod_tests.step);
+    }
 
     // Benchmarks
     {
