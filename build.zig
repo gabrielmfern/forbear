@@ -320,6 +320,14 @@ pub fn build(b: *std.Build) void {
         });
         uhoh_build.setCwd(b.path("examples/uhoh.com"));
         check_step.dependOn(&uhoh_build.step);
+
+        // Build wayland-book.com example
+        const wayland_book_build = b.addSystemCommand(&.{
+            "zig",
+            "build",
+        });
+        wayland_book_build.setCwd(b.path("examples/wayland-book.com"));
+        check_step.dependOn(&wayland_book_build.step);
     }
 
     // Package step - builds debug executables and copies them for CI upload

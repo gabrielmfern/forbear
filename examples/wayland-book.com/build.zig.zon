@@ -1,0 +1,16 @@
+.{
+    .name = .wayland_book_com,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.15.2",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+    .dependencies = .{
+        .forbear = .{
+            .path = "../..",
+        },
+    },
+    .fingerprint = 0xd1ca667f36feb0e2,
+}
