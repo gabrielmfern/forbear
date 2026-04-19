@@ -25,7 +25,7 @@ pub fn SidebarDivider() void {
     forbear.element(.{
         .width = .grow,
         .borderWidth = forbear.BorderWidth.top(0.75),
-        .borderColor = Colors.boreder,
+        .borderColor = Colors.border,
         .margin = forbear.Margin.bottom(6.0),
     })({});
 }
