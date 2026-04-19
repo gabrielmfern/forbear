@@ -810,19 +810,19 @@ test "on() returns matching events inside element body" {
             forbear.element(.{})({
                 // on(.mouseOut) should find and return the mouseOut event,
                 // even though mouseOver was pushed first
-                try std.testing.expectEqual(forbear.Event.mouseOut, forbear.on(.mouseOut).?);
+                try std.testing.expect(forbear.on(.mouseOut));
                 // on(.mouseOver) should still find mouseOver since only mouseOut was consumed
-                try std.testing.expectEqual(forbear.Event.mouseOver, forbear.on(.mouseOver).?);
+                try std.testing.expect(forbear.on(.mouseOver));
                 // No more events of either type
-                try std.testing.expectEqual(null, forbear.on(.mouseOver));
-                try std.testing.expectEqual(null, forbear.on(.mouseOut));
+                try std.testing.expect(!forbear.on(.mouseOver));
+                try std.testing.expect(!forbear.on(.mouseOut));
             });
         });
     });
 }
 
 fn testCreateElementConfiguration(configuration: struct {
-    style: forbear.IncompleteStyle,
+    style: forbear.Style,
     expectedSize: Vec2,
 }) !void {
     const allocator = std.testing.allocator;
@@ -1127,7 +1127,7 @@ test "mouseDown dispatches on button press" {
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
         })({
-            try std.testing.expectEqual(forbear.Event.mouseDown, forbear.on(.mouseDown).?);
+            try std.testing.expect(forbear.on(.mouseDown));
         });
     });
 }
@@ -1163,7 +1163,7 @@ test "mouseUp dispatches on button release" {
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
         })({
-            try std.testing.expectEqual(forbear.Event.mouseUp, forbear.on(.mouseUp).?);
+            try std.testing.expect(forbear.on(.mouseUp));
         });
     });
 }
@@ -1219,8 +1219,8 @@ test "click fires when mouseDown and mouseUp on same element" {
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
         })({
-            try std.testing.expectEqual(forbear.Event.click, forbear.on(.click).?);
-            try std.testing.expectEqual(forbear.Event.mouseUp, forbear.on(.mouseUp).?);
+            try std.testing.expect(forbear.on(.click));
+            try std.testing.expect(forbear.on(.mouseUp));
         });
     });
 }
@@ -1276,8 +1276,8 @@ test "no click when mouse moves away between mouseDown and mouseUp" {
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
         })({
-            try std.testing.expectEqual(null, forbear.on(.click));
-            try std.testing.expectEqual(null, forbear.on(.mouseUp));
+            try std.testing.expect(!forbear.on(.click));
+            try std.testing.expect(!forbear.on(.mouseUp));
         });
     });
 }

@@ -2314,7 +2314,6 @@ const TextPipeline = struct {
         fontSize: f32,
         fontWeight: u32,
         fontKey: u64,
-        dpi: [2]u32,
     };
 
     const GlyphPage = Font.LRU(c_uint, GlyphRenderingData, 256, std.hash_map.AutoContext(c_uint));
@@ -3529,7 +3528,6 @@ pub const Renderer = struct {
         arena: std.mem.Allocator,
         nodeTree: *const NodeTree,
         clearColor: Vec4,
-        dpi: [2]u32,
         targetFrameTimeNs: u64,
     ) !void {
         self.mutex.lock();
@@ -3660,10 +3658,6 @@ pub const Renderer = struct {
 
         const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
         const atlasHeightInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height));
-        const resolutionMultiplier = Vec2{
-            @as(f32, @floatFromInt(dpi[0])) / 72.0,
-            @as(f32, @floatFromInt(dpi[1])) / 72.0,
-        };
 
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
@@ -3804,11 +3798,10 @@ pub const Renderer = struct {
 
                 const linearColor = srgbToLinearColor(node.style.color);
                 const unitsPerEm: f32 = @floatFromInt(node.style.font.unitsPerEm());
-                const pixelAscent = (node.style.font.ascent() / unitsPerEm) * node.style.fontSize * resolutionMultiplier[0];
+                const pixelAscent = (node.style.font.ascent() / unitsPerEm) * node.style.fontSize;
 
                 // Outer lookup: once per layout box (per font/size/weight/dpi combo)
                 const glyphPageKey = TextPipeline.GlyphPageKey{
-                    .dpi = dpi,
                     .fontKey = node.style.font.key,
                     .fontSize = node.style.fontSize,
                     .fontWeight = node.style.fontWeight,
@@ -3829,7 +3822,6 @@ pub const Renderer = struct {
                             try node.style.font.setWeight(node.style.fontWeight, arena);
                             const rasterizedGlyph = try node.style.font.rasterize(
                                 glyph.index,
-                                dpi,
                                 node.style.fontSize,
                             );
 
