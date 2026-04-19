@@ -405,9 +405,6 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTr
             node.size[0] = node.size[1] * node.style.width.ratio;
         }
 
-        std.log.debug("refitting ancestors of node {d} due to text wrapping height change from {d:.1} to {d:.1}", .{
-            node.key, previousHeight, node.size[1],
-        });
         refitAncestors(node, nodeTree);
     }
 }
