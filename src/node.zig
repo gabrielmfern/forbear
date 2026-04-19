@@ -316,6 +316,48 @@ pub const IncompleteStyle = struct {
     yJustification: ?Alignment = null,
     direction: ?Direction = null,
 
+    pub fn overwrite(self: @This(), other: IncompleteStyle) @This() {
+        return .{
+            .background = self.background orelse other.background,
+            .blendMode = self.blendMode orelse other.blendMode,
+            .filter = self.filter orelse other.filter,
+
+            .color = self.color orelse other.color,
+            .borderRadius = self.borderRadius orelse other.borderRadius,
+            .borderColor = self.borderColor orelse other.borderColor,
+            .borderWidth = self.borderWidth orelse other.borderWidth,
+
+            .shadow = if (self.shadow) |s| s else other.shadow,
+
+            .font = self.font orelse other.font,
+            .fontWeight = self.fontWeight orelse other.fontWeight,
+            .fontSize = self.fontSize orelse other.fontSize,
+            .lineHeight = self.lineHeight orelse other.lineHeight,
+            .textWrapping = self.textWrapping orelse other.textWrapping,
+            .cursor = self.cursor orelse other.cursor,
+
+            .overflow = self.overflow orelse other.overflow,
+            .placement = if (self.placement != .standard) |p| p else other.placement,
+            .zIndex = self.zIndex orelse other.zIndex,
+
+            .minWidth = self.minWidth orelse other.minWidth,
+            .maxWidth = self.maxWidth orelse other.maxWidth,
+            .width = if (self.width != .fit) |w| w else other.width,
+            .minHeight = self.minHeight orelse other.minHeight,
+            .maxHeight = self.maxHeight orelse other.maxHeight,
+            .height = if (self.height != .fit) |h| h else other.height,
+
+            .translate = self.translate orelse other.translate,
+
+            .padding = self.padding orelse other.padding,
+            .margin = self.margin orelse other.margin,
+
+            .xJustification = self.xJustification orelse other.xJustification,
+            .yJustification = self.yJustification orelse other.yJustification,
+            .direction = self.direction orelse other.direction,
+        };
+    }
+
     pub fn completeWith(self: @This(), base: BaseStyle) Style {
         return Style{
             .background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } },
