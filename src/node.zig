@@ -26,8 +26,6 @@ pub const Direction = enum {
 pub const Sizing = union(enum) {
     fit,
     fixed: f32,
-    /// A ratio with respect to the parent axis (e.g. 0.5 = 50% of parent width/height).
-    percentage: f32,
     /// A ratio with respect to the opposite axis.
     ratio: f32,
     grow,
@@ -567,7 +565,7 @@ pub const Node = struct {
 
     pub fn shouldFitMin(self: @This(), direction: Direction) bool {
         const preferredSize = self.style.getPreferredSize(direction);
-        return preferredSize != .fixed and preferredSize != .percentage and self.style.getMinSize(direction) == null;
+        return preferredSize != .fixed and self.style.getMinSize(direction) == null;
     }
 
     pub fn fitChild(self: *@This(), child: *const Node) void {
@@ -673,7 +671,6 @@ pub const Node = struct {
             .fit => w.writeAll("fit") catch {},
             .grow => w.writeAll("grow") catch {},
             .fixed => |v| std.fmt.format(w, "fixed({d:.1})", .{v}) catch {},
-            .percentage => |v| std.fmt.format(w, "pct({d:.2})", .{v}) catch {},
             .ratio => |v| std.fmt.format(w, "ratio({d:.2})", .{v}) catch {},
         }
         return buf;

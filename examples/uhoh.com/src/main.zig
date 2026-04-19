@@ -155,7 +155,7 @@ fn App() !void {
             //             .direction = .horizontal,
             //             .xJustification = .start,
             //             .yJustification = .center,
-            //             .width = .{ .percentage = 1.0 / 3.0 },
+            //             .width = .grow,
             //             .fontWeight = 500,
             //             .fontSize = 12.0,
             //             .padding = .inLine(7.5),
