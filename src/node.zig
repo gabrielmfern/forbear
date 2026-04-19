@@ -559,7 +559,6 @@ pub const Node = struct {
     size: Vec2,
     maxSize: Vec2,
     minSize: Vec2,
-    // children: Children,
 
     style: Style,
 
@@ -569,65 +568,70 @@ pub const Node = struct {
     }
 
     pub fn fitChild(self: *@This(), child: *const Node) void {
-        if (child.style.placement == .standard) {
-            const wraps = self.style.overflow == .wrap and self.style.direction == .horizontal;
+        if (child.style.placement != .standard) return;
 
-            inline for (Direction.array) |fitDirection| {
-                const preferredSize = self.style.getPreferredSize(fitDirection);
-                const layoutDirection = self.style.direction;
-                const marginVector = child.style.margin.get(fitDirection);
-                const margins = marginVector[0] + marginVector[1];
+        // Early exit if parent doesn't fit in either direction
+        const fitH = self.style.width == .fit or self.shouldFitMin(.horizontal);
+        const fitV = self.style.height == .fit or self.shouldFitMin(.vertical);
+        if (!fitH and !fitV) return;
 
-                const contribution = margins + child.getSize(fitDirection);
-                // For vertical minSize: use max(size, minSize) to capture wrapped text height
-                // For horizontal minSize: use minSize only to avoid unwrapped text width bloat
-                // Text wrapping changes height, not width, so this distinction matters.
-                const minContribution = margins + if (fitDirection == .vertical)
-                    @max(child.getSize(fitDirection), child.getMinSize(fitDirection))
-                else
-                    child.getMinSize(fitDirection);
+        const wraps = self.style.overflow == .wrap and self.style.direction == .horizontal;
 
-                if (layoutDirection == fitDirection) {
-                    if (wraps) {
-                        // With wrapping, inline-axis min is the widest single
-                        // child (any child could end up alone on a line).
-                        if (preferredSize == .fit) {
-                            self.setSize(fitDirection, @max(
-                                self.getSize(fitDirection),
-                                contribution + self.fittingBase(fitDirection),
-                            ));
-                        }
-                        if (self.shouldFitMin(fitDirection)) {
-                            self.setMinSize(fitDirection, @max(
-                                self.getMinSize(fitDirection),
-                                minContribution + self.fittingBase(fitDirection),
-                            ));
-                        }
-                    } else {
-                        if (preferredSize == .fit) {
-                            // TODO: ensure the max and min sizes here
-                            self.addSize(fitDirection, contribution);
-                        }
-                        if (self.shouldFitMin(fitDirection)) {
-                            // Main axis: use minSize to avoid unwrapped text bloat
-                            self.addMinSize(fitDirection, minContribution);
-                        }
-                    }
-                } else {
-                    // cross axis fitting
+        inline for (Direction.array) |fitDirection| {
+            const preferredSize = self.style.getPreferredSize(fitDirection);
+            const layoutDirection = self.style.direction;
+            const marginVector = child.style.margin.get(fitDirection);
+            const margins = marginVector[0] + marginVector[1];
+
+            const contribution = margins + child.getSize(fitDirection);
+            // For vertical minSize: use max(size, minSize) to capture wrapped text height
+            // For horizontal minSize: use minSize only to avoid unwrapped text width bloat
+            // Text wrapping changes height, not width, so this distinction matters.
+            const minContribution = margins + if (fitDirection == .vertical)
+                @max(child.getSize(fitDirection), child.getMinSize(fitDirection))
+            else
+                child.getMinSize(fitDirection);
+
+            if (layoutDirection == fitDirection) {
+                if (wraps) {
+                    // With wrapping, inline-axis min is the widest single
+                    // child (any child could end up alone on a line).
                     if (preferredSize == .fit) {
-                        // TODO: ensure the max and min sizes here
                         self.setSize(fitDirection, @max(
-                            contribution + self.fittingBase(fitDirection),
                             self.getSize(fitDirection),
+                            contribution + self.fittingBase(fitDirection),
                         ));
                     }
                     if (self.shouldFitMin(fitDirection)) {
                         self.setMinSize(fitDirection, @max(
-                            minContribution + self.fittingBase(fitDirection),
                             self.getMinSize(fitDirection),
+                            minContribution + self.fittingBase(fitDirection),
                         ));
                     }
+                } else {
+                    if (preferredSize == .fit) {
+                        // TODO: ensure the max and min sizes here
+                        self.addSize(fitDirection, contribution);
+                    }
+                    if (self.shouldFitMin(fitDirection)) {
+                        // Main axis: use minSize to avoid unwrapped text bloat
+                        self.addMinSize(fitDirection, minContribution);
+                    }
+                }
+            } else {
+                // cross axis fitting
+                if (preferredSize == .fit) {
+                    // TODO: ensure the max and min sizes here
+                    self.setSize(fitDirection, @max(
+                        contribution + self.fittingBase(fitDirection),
+                        self.getSize(fitDirection),
+                    ));
+                }
+                if (self.shouldFitMin(fitDirection)) {
+                    self.setMinSize(fitDirection, @max(
+                        minContribution + self.fittingBase(fitDirection),
+                        self.getMinSize(fitDirection),
+                    ));
                 }
             }
         }
