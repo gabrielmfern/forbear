@@ -1656,6 +1656,8 @@ const ElementRenderingData = extern struct {
     borderRadius: f32,
     borderSize: Vec4,
     imageIndex: i32,
+    gradientStart: i32,
+    gradientEnd: i32,
     blendMode: u32,
     filterType: u32,
     modelViewProjectionMatrix: zmath.Mat,
@@ -1675,6 +1677,9 @@ const ElementsPipeline = struct {
 
     elementsShaderDataBuffer: [maxFramesInFlight]Buffer,
     elementsShaderData: [maxFramesInFlight][]ElementRenderingData,
+
+    gradientColorsBuffer: [maxFramesInFlight]Buffer,
+    gradientColors: [maxFramesInFlight][]Vec4,
 
     registeredImages: std.ArrayList(*const Image),
     sampler: c.VkSampler,
@@ -1761,6 +1766,13 @@ const ElementsPipeline = struct {
                 .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
                 .pImmutableSamplers = null,
             },
+            .{
+                .binding = 2,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .pImmutableSamplers = null,
+            },
         };
 
         const bindingFlags = [_]c.VkDescriptorBindingFlags{
@@ -1768,6 +1780,7 @@ const ElementsPipeline = struct {
             c.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
                 c.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
                 c.VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
+            0,
         };
 
         const bindingFlagsCreateInfo = c.VkDescriptorSetLayoutBindingFlagsCreateInfo{
@@ -2008,9 +2021,12 @@ const ElementsPipeline = struct {
         errdefer c.vkDestroyPipeline(logicalDevice, blendMultiplyGraphicsPipeline, null);
 
         const initialElementCapacity = 1;
+        const initialGradientColorCapacity = 1;
 
         var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
         var shaderBuffersMapped: [maxFramesInFlight][]ElementRenderingData = undefined;
+        var gradientBuffers: [maxFramesInFlight]Buffer = undefined;
+        var gradientBuffersMapped: [maxFramesInFlight][]Vec4 = undefined;
         for (0..maxFramesInFlight) |i| {
             const buffer = try Buffer.init(
                 logicalDevice,
@@ -2023,12 +2039,24 @@ const ElementsPipeline = struct {
             var storageBufferData: ?*anyopaque = undefined;
             try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
             shaderBuffersMapped[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..initialElementCapacity];
+
+            const gradientBuffer = try Buffer.init(
+                logicalDevice,
+                physicalDevice,
+                @sizeOf(Vec4) * initialGradientColorCapacity,
+                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            );
+            gradientBuffers[i] = gradientBuffer;
+            var gradientBufferData: ?*anyopaque = undefined;
+            try ensureNoError(c.vkMapMemory(logicalDevice, gradientBuffer.memory, 0, gradientBuffer.size, 0, &gradientBufferData));
+            gradientBuffersMapped[i] = @as([*]Vec4, @ptrCast(@alignCast(gradientBufferData)))[0..initialGradientColorCapacity];
         }
 
         const poolSizes = [_]c.VkDescriptorPoolSize{
             .{
                 .type = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .descriptorCount = maxFramesInFlight,
+                .descriptorCount = maxFramesInFlight * 2,
             },
             .{
                 .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -2061,20 +2089,40 @@ const ElementsPipeline = struct {
                 .range = c.VK_WHOLE_SIZE,
             };
 
-            const descriptorWrite = c.VkWriteDescriptorSet{
-                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = null,
-                .dstSet = descriptorSets[i],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pImageInfo = null,
-                .pBufferInfo = &bufferInfo,
-                .pTexelBufferView = null,
+            const gradientBufferInfo = c.VkDescriptorBufferInfo{
+                .buffer = gradientBuffers[i].handle,
+                .offset = 0,
+                .range = c.VK_WHOLE_SIZE,
             };
 
-            c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+            const descriptorWrites = [_]c.VkWriteDescriptorSet{
+                .{
+                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = null,
+                    .dstSet = descriptorSets[i],
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .pImageInfo = null,
+                    .pBufferInfo = &bufferInfo,
+                    .pTexelBufferView = null,
+                },
+                .{
+                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = null,
+                    .dstSet = descriptorSets[i],
+                    .dstBinding = 2,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .pImageInfo = null,
+                    .pBufferInfo = &gradientBufferInfo,
+                    .pTexelBufferView = null,
+                },
+            };
+
+            c.vkUpdateDescriptorSets(logicalDevice, descriptorWrites.len, &descriptorWrites, 0, null);
         }
 
         var sampler: c.VkSampler = undefined;
@@ -2109,6 +2157,8 @@ const ElementsPipeline = struct {
             .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
             .elementsShaderDataBuffer = shaderBuffers,
             .elementsShaderData = shaderBuffersMapped,
+            .gradientColorsBuffer = gradientBuffers,
+            .gradientColors = gradientBuffersMapped,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
             .sampler = sampler,
@@ -2248,6 +2298,55 @@ const ElementsPipeline = struct {
         c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
     }
 
+    fn resizeConcurrentGradientColorCapacity(
+        self: *@This(),
+        logicalDevice: c.VkDevice,
+        physicalDevice: c.VkPhysicalDevice,
+        newCapacity: usize,
+        frameIndex: usize,
+    ) !void {
+        std.log.debug("increasing concurrent gradient color capacity from {d} to {d} for frame {d}", .{
+            self.gradientColors[frameIndex].len,
+            newCapacity,
+            frameIndex,
+        });
+        c.vkUnmapMemory(logicalDevice, self.gradientColorsBuffer[frameIndex].memory);
+        self.gradientColorsBuffer[frameIndex].deinit(logicalDevice);
+
+        const buffer = try Buffer.init(
+            logicalDevice,
+            physicalDevice,
+            @sizeOf(Vec4) * newCapacity,
+            c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        );
+        self.gradientColorsBuffer[frameIndex] = buffer;
+        var storageBufferData: ?*anyopaque = undefined;
+        try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
+        self.gradientColors[frameIndex] = @as([*]Vec4, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
+
+        const bufferInfo = c.VkDescriptorBufferInfo{
+            .buffer = buffer.handle,
+            .offset = 0,
+            .range = c.VK_WHOLE_SIZE,
+        };
+
+        const descriptorWrite = c.VkWriteDescriptorSet{
+            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = null,
+            .dstSet = self.descriptorSets[frameIndex],
+            .dstBinding = 2,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pImageInfo = null,
+            .pBufferInfo = &bufferInfo,
+            .pTexelBufferView = null,
+        };
+
+        c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+    }
+
     fn deinit(self: *@This(), logicalDevice: c.VkDevice) void {
         self.registeredImages.deinit(self.allocator);
 
@@ -2255,6 +2354,11 @@ const ElementsPipeline = struct {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
 
         for (self.elementsShaderDataBuffer) |buffer| {
+            c.vkUnmapMemory(logicalDevice, buffer.memory);
+            buffer.deinit(logicalDevice);
+        }
+
+        for (self.gradientColorsBuffer) |buffer| {
             c.vkUnmapMemory(logicalDevice, buffer.memory);
             buffer.deinit(logicalDevice);
         }
@@ -3607,6 +3711,7 @@ pub const Renderer = struct {
         // glyphs and then allocate enough memory on the shader buffers ---
         var totalShadowCount: usize = 0;
         var totalGlyphCount: usize = 0;
+        var totalGradientColorCount: usize = 0;
         const totalElementCount: usize = orderedNodes.len;
         for (orderedNodes) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
@@ -3615,6 +3720,9 @@ pub const Renderer = struct {
             }
             if (node.glyphs) |glyphs| {
                 totalGlyphCount += glyphs.slice.len;
+            }
+            if (node.style.background == .gradient) {
+                totalGradientColorCount += node.style.background.gradient.len;
             }
         }
 
@@ -3631,6 +3739,14 @@ pub const Renderer = struct {
                 self.logicalDevice,
                 self.physicalDevice,
                 try std.math.ceilPowerOfTwo(usize, totalElementCount),
+                frameIndex,
+            );
+        }
+        if (totalGradientColorCount > self.elementsPipeline.gradientColors[frameIndex].len) {
+            try self.elementsPipeline.resizeConcurrentGradientColorCapacity(
+                self.logicalDevice,
+                self.physicalDevice,
+                try std.math.ceilPowerOfTwo(usize, totalGradientColorCount),
                 frameIndex,
             );
         }
@@ -3661,6 +3777,7 @@ pub const Renderer = struct {
 
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
+        var gradientColorIndex: usize = 0;
         var totalBlendAddElementCount: usize = 0;
         for (orderedNodes) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
@@ -3709,9 +3826,20 @@ pub const Renderer = struct {
             };
 
             const textureIndex: i32 = switch (node.style.background) {
-                .color => -1,
+                .color, .gradient => -1,
                 .image => |imgPtr| @intCast(try self.elementsPipeline.registerImage(imgPtr, self.logicalDevice)),
             };
+            var gradientStart: i32 = -1;
+            var gradientEnd: i32 = -1;
+            if (node.style.background == .gradient and node.style.background.gradient.len > 0) {
+                const colors = node.style.background.gradient;
+                gradientStart = @intCast(gradientColorIndex);
+                for (colors) |color| {
+                    self.elementsPipeline.gradientColors[frameIndex][gradientColorIndex] = srgbToLinearColor(color);
+                    gradientColorIndex += 1;
+                }
+                gradientEnd = @intCast(gradientColorIndex - 1);
+            }
             self.elementsPipeline.elementsShaderData[frameIndex][elementIndex] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
@@ -3723,6 +3851,7 @@ pub const Renderer = struct {
                 .backgroundColor = switch (node.style.background) {
                     .color => |color| srgbToLinearColor(color),
                     .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
+                    .gradient => Vec4{ 0.0, 0.0, 0.0, 0.0 },
                 },
                 .size = node.size,
                 .borderRadius = node.style.borderRadius,
@@ -3734,6 +3863,8 @@ pub const Renderer = struct {
                     node.style.borderWidth.x[1],
                 },
                 .imageIndex = textureIndex,
+                .gradientStart = gradientStart,
+                .gradientEnd = gradientEnd,
                 .blendMode = @intCast(@intFromEnum(node.style.blendMode)),
                 .filterType = @intCast(@intFromEnum(node.style.filter)),
             };

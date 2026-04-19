@@ -265,6 +265,9 @@ pub const BaseStyle = struct {
 pub const Background = union(enum) {
     image: *Graphics.Image,
     color: Vec4,
+    /// A linear gradient from the top to the bottom of the element. Stops are
+    /// distributed evenly across the provided colors.
+    gradient: []const Vec4,
 };
 
 pub const Placement = union(enum) {
