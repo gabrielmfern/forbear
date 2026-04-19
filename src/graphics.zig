@@ -1178,6 +1178,117 @@ const Buffer = struct {
     }
 };
 
+/// Per-frame host-visible storage buffer with power-of-two growth. Owns one
+/// `Buffer` per frame-in-flight and the memory-mapped slice that writes into
+/// it, and knows how to re-point a descriptor binding at the fresh buffer
+/// after a resize.
+fn ResizableStorageBuffer(comptime T: type) type {
+    return struct {
+        buffers: [maxFramesInFlight]Buffer,
+        mapped: [maxFramesInFlight][]T,
+        binding: u32,
+
+        const Self = @This();
+
+        fn init(
+            logicalDevice: c.VkDevice,
+            physicalDevice: c.VkPhysicalDevice,
+            initialCapacity: usize,
+            binding: u32,
+        ) !Self {
+            var self: Self = .{
+                .buffers = undefined,
+                .mapped = undefined,
+                .binding = binding,
+            };
+            for (0..maxFramesInFlight) |i| {
+                try self.createAndMap(logicalDevice, physicalDevice, initialCapacity, i);
+            }
+            return self;
+        }
+
+        fn deinit(self: *Self, logicalDevice: c.VkDevice) void {
+            for (self.buffers) |buffer| {
+                c.vkUnmapMemory(logicalDevice, buffer.memory);
+                buffer.deinit(logicalDevice);
+            }
+        }
+
+        fn createAndMap(
+            self: *Self,
+            logicalDevice: c.VkDevice,
+            physicalDevice: c.VkPhysicalDevice,
+            capacity: usize,
+            frameIndex: usize,
+        ) !void {
+            const buffer = try Buffer.init(
+                logicalDevice,
+                physicalDevice,
+                @sizeOf(T) * capacity,
+                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            );
+            self.buffers[frameIndex] = buffer;
+            var data: ?*anyopaque = undefined;
+            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &data));
+            self.mapped[frameIndex] = @as([*]T, @ptrCast(@alignCast(data)))[0..capacity];
+        }
+
+        fn writeDescriptor(
+            self: *const Self,
+            logicalDevice: c.VkDevice,
+            descriptorSet: c.VkDescriptorSet,
+            frameIndex: usize,
+        ) void {
+            const bufferInfo = c.VkDescriptorBufferInfo{
+                .buffer = self.buffers[frameIndex].handle,
+                .offset = 0,
+                .range = c.VK_WHOLE_SIZE,
+            };
+            const write = c.VkWriteDescriptorSet{
+                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = null,
+                .dstSet = descriptorSet,
+                .dstBinding = self.binding,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pImageInfo = null,
+                .pBufferInfo = &bufferInfo,
+                .pTexelBufferView = null,
+            };
+            c.vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, null);
+        }
+
+        /// Grows the buffer to at least `required` entries (rounded up to the
+        /// next power of two) for `frameIndex`, rebinding the descriptor so
+        /// the shader sees the fresh buffer. No-op when capacity is already
+        /// sufficient.
+        fn ensureCapacity(
+            self: *Self,
+            logicalDevice: c.VkDevice,
+            physicalDevice: c.VkPhysicalDevice,
+            descriptorSet: c.VkDescriptorSet,
+            required: usize,
+            frameIndex: usize,
+        ) !void {
+            if (required <= self.mapped[frameIndex].len) return;
+
+            const newCapacity = try std.math.ceilPowerOfTwo(usize, required);
+            std.log.debug("resizing {s} buffer from {d} to {d} for frame {d}", .{
+                @typeName(T),
+                self.mapped[frameIndex].len,
+                newCapacity,
+                frameIndex,
+            });
+            c.vkUnmapMemory(logicalDevice, self.buffers[frameIndex].memory);
+            self.buffers[frameIndex].deinit(logicalDevice);
+            try self.createAndMap(logicalDevice, physicalDevice, newCapacity, frameIndex);
+            self.writeDescriptor(logicalDevice, descriptorSet, frameIndex);
+        }
+    };
+}
+
 pub const Vertex = extern struct {
     position: @Vector(3, f32),
 
@@ -1262,8 +1373,7 @@ const ShadowsPipeline = struct {
     descriptorPool: c.VkDescriptorPool,
     descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
 
-    shadowShaderDataBuffers: [maxFramesInFlight]Buffer,
-    shadowShaderData: [maxFramesInFlight][]ShadowRenderingData,
+    shadows: ResizableStorageBuffer(ShadowRenderingData),
 
     const shadowVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("shadow_vertex_shader")));
     const shadowFragmentShader: []const u32 = @ptrCast(@alignCast(@embedFile("shadow_fragment_shader")));
@@ -1468,23 +1578,13 @@ const ShadowsPipeline = struct {
         ));
         errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
 
-        const initialShadowCapacity = 1;
-
-        var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
-        var shaderBuffersMapped: [maxFramesInFlight][]ShadowRenderingData = undefined;
-        for (0..maxFramesInFlight) |i| {
-            const buffer = try Buffer.init(
-                logicalDevice,
-                physicalDevice,
-                @sizeOf(ShadowRenderingData) * initialShadowCapacity,
-                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            );
-            shaderBuffers[i] = buffer;
-            var storageBufferData: ?*anyopaque = undefined;
-            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-            shaderBuffersMapped[i] = @as([*]ShadowRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..initialShadowCapacity];
-        }
+        var shadows = try ResizableStorageBuffer(ShadowRenderingData).init(
+            logicalDevice,
+            physicalDevice,
+            1,
+            0,
+        );
+        errdefer shadows.deinit(logicalDevice);
 
         const poolSizes = [_]c.VkDescriptorPoolSize{
             .{
@@ -1511,27 +1611,8 @@ const ShadowsPipeline = struct {
             .pSetLayouts = &([1]c.VkDescriptorSetLayout{shaderBufferDescriptorSetLayout} ** maxFramesInFlight),
         }, &descriptorSets));
 
-        for (shaderBuffers, 0..) |buffer, i| {
-            const bufferInfo = c.VkDescriptorBufferInfo{
-                .buffer = buffer.handle,
-                .offset = 0,
-                .range = c.VK_WHOLE_SIZE,
-            };
-
-            const descriptorWrite = c.VkWriteDescriptorSet{
-                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = null,
-                .dstSet = descriptorSets[i],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pImageInfo = null,
-                .pBufferInfo = &bufferInfo,
-                .pTexelBufferView = null,
-            };
-
-            c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+        for (0..maxFramesInFlight) |i| {
+            shadows.writeDescriptor(logicalDevice, descriptorSets[i], i);
         }
 
         return ShadowsPipeline{
@@ -1539,8 +1620,7 @@ const ShadowsPipeline = struct {
             .graphicsPipeline = graphicsPipeline,
 
             .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
-            .shadowShaderDataBuffers = shaderBuffers,
-            .shadowShaderData = shaderBuffersMapped,
+            .shadows = shadows,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
         };
@@ -1586,64 +1666,9 @@ const ShadowsPipeline = struct {
         );
     }
 
-    fn resizeConcurrentShadowCapacity(
-        self: *@This(),
-        logicalDevice: c.VkDevice,
-        physicalDevice: c.VkPhysicalDevice,
-        newCapacity: usize,
-        frameIndex: usize,
-    ) !void {
-        std.log.debug("increasing concurrent shadow capacity from {d} to {d} for frame {d}", .{
-            self.shadowShaderData[frameIndex].len,
-            newCapacity,
-            frameIndex,
-        });
-
-        c.vkUnmapMemory(logicalDevice, self.shadowShaderDataBuffers[frameIndex].memory);
-        self.shadowShaderDataBuffers[frameIndex].deinit(logicalDevice);
-
-        const buffer = try Buffer.init(
-            logicalDevice,
-            physicalDevice,
-            @sizeOf(ShadowRenderingData) * newCapacity,
-            c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        );
-        self.shadowShaderDataBuffers[frameIndex] = buffer;
-        var storageBufferData: ?*anyopaque = undefined;
-        try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-        self.shadowShaderData[frameIndex] = @as([*]ShadowRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
-
-        const bufferInfo = c.VkDescriptorBufferInfo{
-            .buffer = buffer.handle,
-            .offset = 0,
-            .range = c.VK_WHOLE_SIZE,
-        };
-
-        const descriptorWrite = c.VkWriteDescriptorSet{
-            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = null,
-            .dstSet = self.descriptorSets[frameIndex],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .pImageInfo = null,
-            .pBufferInfo = &bufferInfo,
-            .pTexelBufferView = null,
-        };
-
-        c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
-    }
-
-    fn deinit(self: @This(), logicalDevice: c.VkDevice) void {
+    fn deinit(self: *@This(), logicalDevice: c.VkDevice) void {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
-
-        for (self.shadowShaderDataBuffers) |buffer| {
-            c.vkUnmapMemory(logicalDevice, buffer.memory);
-            buffer.deinit(logicalDevice);
-        }
-
+        self.shadows.deinit(logicalDevice);
         c.vkDestroyDescriptorSetLayout(logicalDevice, self.shaderBufferDescriptorSetLayout, null);
         c.vkDestroyPipeline(logicalDevice, self.graphicsPipeline, null);
         c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
@@ -1680,11 +1705,8 @@ const ElementsPipeline = struct {
     descriptorPool: c.VkDescriptorPool,
     descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
 
-    elementsShaderDataBuffer: [maxFramesInFlight]Buffer,
-    elementsShaderData: [maxFramesInFlight][]ElementRenderingData,
-
-    gradientStopsBuffer: [maxFramesInFlight]Buffer,
-    gradientStops: [maxFramesInFlight][]GradientStopGpu,
+    elements: ResizableStorageBuffer(ElementRenderingData),
+    gradientStops: ResizableStorageBuffer(GradientStopGpu),
 
     registeredImages: std.ArrayList(*const Image),
     sampler: c.VkSampler,
@@ -2025,38 +2047,21 @@ const ElementsPipeline = struct {
         ));
         errdefer c.vkDestroyPipeline(logicalDevice, blendMultiplyGraphicsPipeline, null);
 
-        const initialElementCapacity = 1;
-        const initialGradientStopCapacity = 1;
+        var elements = try ResizableStorageBuffer(ElementRenderingData).init(
+            logicalDevice,
+            physicalDevice,
+            1,
+            0,
+        );
+        errdefer elements.deinit(logicalDevice);
 
-        var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
-        var shaderBuffersMapped: [maxFramesInFlight][]ElementRenderingData = undefined;
-        var gradientBuffers: [maxFramesInFlight]Buffer = undefined;
-        var gradientBuffersMapped: [maxFramesInFlight][]GradientStopGpu = undefined;
-        for (0..maxFramesInFlight) |i| {
-            const buffer = try Buffer.init(
-                logicalDevice,
-                physicalDevice,
-                @sizeOf(ElementRenderingData) * initialElementCapacity,
-                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            );
-            shaderBuffers[i] = buffer;
-            var storageBufferData: ?*anyopaque = undefined;
-            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-            shaderBuffersMapped[i] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..initialElementCapacity];
-
-            const gradientBuffer = try Buffer.init(
-                logicalDevice,
-                physicalDevice,
-                @sizeOf(GradientStopGpu) * initialGradientStopCapacity,
-                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            );
-            gradientBuffers[i] = gradientBuffer;
-            var gradientBufferData: ?*anyopaque = undefined;
-            try ensureNoError(c.vkMapMemory(logicalDevice, gradientBuffer.memory, 0, gradientBuffer.size, 0, &gradientBufferData));
-            gradientBuffersMapped[i] = @as([*]GradientStopGpu, @ptrCast(@alignCast(gradientBufferData)))[0..initialGradientStopCapacity];
-        }
+        var gradientStops = try ResizableStorageBuffer(GradientStopGpu).init(
+            logicalDevice,
+            physicalDevice,
+            1,
+            2,
+        );
+        errdefer gradientStops.deinit(logicalDevice);
 
         const poolSizes = [_]c.VkDescriptorPoolSize{
             .{
@@ -2087,47 +2092,9 @@ const ElementsPipeline = struct {
             .pSetLayouts = &([1]c.VkDescriptorSetLayout{shaderBufferDescriptorSetLayout} ** maxFramesInFlight),
         }, &descriptorSets));
 
-        for (shaderBuffers, 0..) |buffer, i| {
-            const bufferInfo = c.VkDescriptorBufferInfo{
-                .buffer = buffer.handle,
-                .offset = 0,
-                .range = c.VK_WHOLE_SIZE,
-            };
-
-            const gradientBufferInfo = c.VkDescriptorBufferInfo{
-                .buffer = gradientBuffers[i].handle,
-                .offset = 0,
-                .range = c.VK_WHOLE_SIZE,
-            };
-
-            const descriptorWrites = [_]c.VkWriteDescriptorSet{
-                .{
-                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .pNext = null,
-                    .dstSet = descriptorSets[i],
-                    .dstBinding = 0,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                    .pImageInfo = null,
-                    .pBufferInfo = &bufferInfo,
-                    .pTexelBufferView = null,
-                },
-                .{
-                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .pNext = null,
-                    .dstSet = descriptorSets[i],
-                    .dstBinding = 2,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                    .pImageInfo = null,
-                    .pBufferInfo = &gradientBufferInfo,
-                    .pTexelBufferView = null,
-                },
-            };
-
-            c.vkUpdateDescriptorSets(logicalDevice, descriptorWrites.len, &descriptorWrites, 0, null);
+        for (0..maxFramesInFlight) |i| {
+            elements.writeDescriptor(logicalDevice, descriptorSets[i], i);
+            gradientStops.writeDescriptor(logicalDevice, descriptorSets[i], i);
         }
 
         var sampler: c.VkSampler = undefined;
@@ -2160,10 +2127,8 @@ const ElementsPipeline = struct {
             .blendMultiplyGraphicsPipeline = blendMultiplyGraphicsPipeline,
 
             .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
-            .elementsShaderDataBuffer = shaderBuffers,
-            .elementsShaderData = shaderBuffersMapped,
-            .gradientStopsBuffer = gradientBuffers,
-            .gradientStops = gradientBuffersMapped,
+            .elements = elements,
+            .gradientStops = gradientStops,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
             .sampler = sampler,
@@ -2254,119 +2219,14 @@ const ElementsPipeline = struct {
         );
     }
 
-    fn resizeConcurrentElementCapacity(
-        self: *@This(),
-        logicalDevice: c.VkDevice,
-        physicalDevice: c.VkPhysicalDevice,
-        newCapacity: usize,
-        frameIndex: usize,
-    ) !void {
-        std.log.debug("increasing concurrent element capacity from {d} to {d} for frame {d}", .{
-            self.elementsShaderData[frameIndex].len,
-            newCapacity,
-            frameIndex,
-        });
-        c.vkUnmapMemory(logicalDevice, self.elementsShaderDataBuffer[frameIndex].memory);
-        self.elementsShaderDataBuffer[frameIndex].deinit(logicalDevice);
-
-        const buffer = try Buffer.init(
-            logicalDevice,
-            physicalDevice,
-            @sizeOf(ElementRenderingData) * newCapacity,
-            c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        );
-        self.elementsShaderDataBuffer[frameIndex] = buffer;
-        var storageBufferData: ?*anyopaque = undefined;
-        try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-        self.elementsShaderData[frameIndex] = @as([*]ElementRenderingData, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
-
-        const bufferInfo = c.VkDescriptorBufferInfo{
-            .buffer = buffer.handle,
-            .offset = 0,
-            .range = c.VK_WHOLE_SIZE,
-        };
-
-        const descriptorWrite = c.VkWriteDescriptorSet{
-            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = null,
-            .dstSet = self.descriptorSets[frameIndex],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .pImageInfo = null,
-            .pBufferInfo = &bufferInfo,
-            .pTexelBufferView = null,
-        };
-
-        c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
-    }
-
-    fn resizeConcurrentGradientStopCapacity(
-        self: *@This(),
-        logicalDevice: c.VkDevice,
-        physicalDevice: c.VkPhysicalDevice,
-        newCapacity: usize,
-        frameIndex: usize,
-    ) !void {
-        std.log.debug("increasing concurrent gradient stop capacity from {d} to {d} for frame {d}", .{
-            self.gradientStops[frameIndex].len,
-            newCapacity,
-            frameIndex,
-        });
-        c.vkUnmapMemory(logicalDevice, self.gradientStopsBuffer[frameIndex].memory);
-        self.gradientStopsBuffer[frameIndex].deinit(logicalDevice);
-
-        const buffer = try Buffer.init(
-            logicalDevice,
-            physicalDevice,
-            @sizeOf(GradientStopGpu) * newCapacity,
-            c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        );
-        self.gradientStopsBuffer[frameIndex] = buffer;
-        var storageBufferData: ?*anyopaque = undefined;
-        try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-        self.gradientStops[frameIndex] = @as([*]GradientStopGpu, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
-
-        const bufferInfo = c.VkDescriptorBufferInfo{
-            .buffer = buffer.handle,
-            .offset = 0,
-            .range = c.VK_WHOLE_SIZE,
-        };
-
-        const descriptorWrite = c.VkWriteDescriptorSet{
-            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = null,
-            .dstSet = self.descriptorSets[frameIndex],
-            .dstBinding = 2,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .pImageInfo = null,
-            .pBufferInfo = &bufferInfo,
-            .pTexelBufferView = null,
-        };
-
-        c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
-    }
-
     fn deinit(self: *@This(), logicalDevice: c.VkDevice) void {
         self.registeredImages.deinit(self.allocator);
 
         c.vkDestroySampler(logicalDevice, self.sampler, null);
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
 
-        for (self.elementsShaderDataBuffer) |buffer| {
-            c.vkUnmapMemory(logicalDevice, buffer.memory);
-            buffer.deinit(logicalDevice);
-        }
-
-        for (self.gradientStopsBuffer) |buffer| {
-            c.vkUnmapMemory(logicalDevice, buffer.memory);
-            buffer.deinit(logicalDevice);
-        }
+        self.elements.deinit(logicalDevice);
+        self.gradientStops.deinit(logicalDevice);
 
         c.vkDestroyDescriptorSetLayout(logicalDevice, self.shaderBufferDescriptorSetLayout, null);
         c.vkDestroyPipeline(logicalDevice, self.blendAddGraphicsPipeline, null);
@@ -2408,8 +2268,7 @@ const TextPipeline = struct {
     glyphPageCache: GlyphPageCache,
     sampler: c.VkSampler,
 
-    shaderBuffers: [maxFramesInFlight]Buffer,
-    shaderBuffersMapped: [maxFramesInFlight][]GlypRenderingShaderData,
+    glyphs: ResizableStorageBuffer(GlypRenderingShaderData),
 
     const GlyphRenderingData = struct {
         textureCoordinates: FontTextureAtlas.TextureCoordinates,
@@ -2653,23 +2512,13 @@ const TextPipeline = struct {
         ));
         errdefer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
 
-        const initialGlyphCapacity = 1;
-
-        var shaderBuffers: [maxFramesInFlight]Buffer = undefined;
-        var shaderBuffersMapped: [maxFramesInFlight][]GlypRenderingShaderData = undefined;
-        for (0..maxFramesInFlight) |i| {
-            const buffer = try Buffer.init(
-                logicalDevice,
-                physicalDevice,
-                @sizeOf(GlypRenderingShaderData) * initialGlyphCapacity,
-                c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            );
-            shaderBuffers[i] = buffer;
-            var storageBufferData: ?*anyopaque = undefined;
-            try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-            shaderBuffersMapped[i] = @as([*]GlypRenderingShaderData, @ptrCast(@alignCast(storageBufferData)))[0..initialGlyphCapacity];
-        }
+        var glyphs = try ResizableStorageBuffer(GlypRenderingShaderData).init(
+            logicalDevice,
+            physicalDevice,
+            1,
+            0,
+        );
+        errdefer glyphs.deinit(logicalDevice);
 
         var fontTextureAtlas = try FontTextureAtlas.init(
             allocator,
@@ -2732,11 +2581,7 @@ const TextPipeline = struct {
         }, null, &sampler));
 
         for (0..maxFramesInFlight) |i| {
-            const bufferInfo = c.VkDescriptorBufferInfo{
-                .buffer = shaderBuffers[i].handle,
-                .offset = 0,
-                .range = c.VK_WHOLE_SIZE,
-            };
+            glyphs.writeDescriptor(logicalDevice, descriptorSets[i], i);
 
             const imageInfo = c.VkDescriptorImageInfo{
                 .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -2745,18 +2590,6 @@ const TextPipeline = struct {
             };
 
             const descriptorWrites = [_]c.VkWriteDescriptorSet{
-                .{
-                    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .pNext = null,
-                    .dstSet = descriptorSets[i],
-                    .dstBinding = 0,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                    .pImageInfo = null,
-                    .pBufferInfo = &bufferInfo,
-                    .pTexelBufferView = null,
-                },
                 .{
                     .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                     .pNext = null,
@@ -2779,8 +2612,7 @@ const TextPipeline = struct {
             .graphicsPipeline = graphicsPipeline,
 
             .descriptorSetLayout = descriptorSetLayout,
-            .shaderBuffers = shaderBuffers,
-            .shaderBuffersMapped = shaderBuffersMapped,
+            .glyphs = glyphs,
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
 
@@ -2831,75 +2663,6 @@ const TextPipeline = struct {
         );
     }
 
-    fn resizeConcurrentGlyphCapacity(
-        self: *@This(),
-        logicalDevice: c.VkDevice,
-        physicalDevice: c.VkPhysicalDevice,
-        newCapacity: usize,
-        frameIndex: usize,
-    ) !void {
-        std.log.debug("increasing concurrent glyph capacity from {d} to {d} for frame {d}", .{
-            self.shaderBuffersMapped[frameIndex].len,
-            newCapacity,
-            frameIndex,
-        });
-        c.vkUnmapMemory(logicalDevice, self.shaderBuffers[frameIndex].memory);
-        self.shaderBuffers[frameIndex].deinit(logicalDevice);
-
-        const buffer = try Buffer.init(
-            logicalDevice,
-            physicalDevice,
-            @sizeOf(GlypRenderingShaderData) * newCapacity,
-            c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        );
-        self.shaderBuffers[frameIndex] = buffer;
-        var storageBufferData: ?*anyopaque = undefined;
-        try ensureNoError(c.vkMapMemory(logicalDevice, buffer.memory, 0, buffer.size, 0, &storageBufferData));
-        self.shaderBuffersMapped[frameIndex] = @as([*]GlypRenderingShaderData, @ptrCast(@alignCast(storageBufferData)))[0..newCapacity];
-
-        const bufferInfo = c.VkDescriptorBufferInfo{
-            .buffer = buffer.handle,
-            .offset = 0,
-            .range = c.VK_WHOLE_SIZE,
-        };
-
-        const imageInfo = c.VkDescriptorImageInfo{
-            .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .imageView = self.fontTextureAtlas.imageView,
-            .sampler = self.sampler,
-        };
-
-        const descriptorWrites = [_]c.VkWriteDescriptorSet{
-            .{
-                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = null,
-                .dstSet = self.descriptorSets[frameIndex],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pImageInfo = null,
-                .pBufferInfo = &bufferInfo,
-                .pTexelBufferView = null,
-            },
-            .{
-                .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = null,
-                .dstSet = self.descriptorSets[frameIndex],
-                .dstBinding = 1,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &imageInfo,
-                .pBufferInfo = null,
-                .pTexelBufferView = null,
-            },
-        };
-
-        c.vkUpdateDescriptorSets(logicalDevice, descriptorWrites.len, &descriptorWrites, 0, null);
-    }
-
     fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
         self.fontTextureAtlas.deinit(allocator, logicalDevice);
@@ -2910,10 +2673,7 @@ const TextPipeline = struct {
         }
         self.glyphPageCache.deinit();
 
-        for (self.shaderBuffers) |buffer| {
-            c.vkUnmapMemory(logicalDevice, buffer.memory);
-            buffer.deinit(logicalDevice);
-        }
+        self.glyphs.deinit(logicalDevice);
 
         c.vkDestroyDescriptorSetLayout(logicalDevice, self.descriptorSetLayout, null);
         c.vkDestroyPipeline(logicalDevice, self.graphicsPipeline, null);
@@ -3406,7 +3166,7 @@ pub const Renderer = struct {
         );
         errdefer textPipeline.deinit(logicalDevice, graphics.allocator);
 
-        const shadowsPipeline = try ShadowsPipeline.init(
+        var shadowsPipeline = try ShadowsPipeline.init(
             logicalDevice,
             physicalDevice,
             renderPass,
@@ -3731,38 +3491,34 @@ pub const Renderer = struct {
             }
         }
 
-        if (totalShadowCount > self.shadowsPipeline.shadowShaderData[frameIndex].len) {
-            try self.shadowsPipeline.resizeConcurrentShadowCapacity(
-                self.logicalDevice,
-                self.physicalDevice,
-                try std.math.ceilPowerOfTwo(usize, totalShadowCount),
-                frameIndex,
-            );
-        }
-        if (totalElementCount > self.elementsPipeline.elementsShaderData[frameIndex].len) {
-            try self.elementsPipeline.resizeConcurrentElementCapacity(
-                self.logicalDevice,
-                self.physicalDevice,
-                try std.math.ceilPowerOfTwo(usize, totalElementCount),
-                frameIndex,
-            );
-        }
-        if (totalGradientStopCount > self.elementsPipeline.gradientStops[frameIndex].len) {
-            try self.elementsPipeline.resizeConcurrentGradientStopCapacity(
-                self.logicalDevice,
-                self.physicalDevice,
-                try std.math.ceilPowerOfTwo(usize, totalGradientStopCount),
-                frameIndex,
-            );
-        }
-        if (totalGlyphCount > self.textPipeline.shaderBuffersMapped[frameIndex].len) {
-            try self.textPipeline.resizeConcurrentGlyphCapacity(
-                self.logicalDevice,
-                self.physicalDevice,
-                try std.math.ceilPowerOfTwo(usize, totalGlyphCount),
-                frameIndex,
-            );
-        }
+        try self.shadowsPipeline.shadows.ensureCapacity(
+            self.logicalDevice,
+            self.physicalDevice,
+            self.shadowsPipeline.descriptorSets[frameIndex],
+            totalShadowCount,
+            frameIndex,
+        );
+        try self.elementsPipeline.elements.ensureCapacity(
+            self.logicalDevice,
+            self.physicalDevice,
+            self.elementsPipeline.descriptorSets[frameIndex],
+            totalElementCount,
+            frameIndex,
+        );
+        try self.elementsPipeline.gradientStops.ensureCapacity(
+            self.logicalDevice,
+            self.physicalDevice,
+            self.elementsPipeline.descriptorSets[frameIndex],
+            totalGradientStopCount,
+            frameIndex,
+        );
+        try self.textPipeline.glyphs.ensureCapacity(
+            self.logicalDevice,
+            self.physicalDevice,
+            self.textPipeline.descriptorSets[frameIndex],
+            totalGlyphCount,
+            frameIndex,
+        );
 
         const maxZ = if (orderedNodes.len > 0)
             nodeTree.at(orderedNodes[orderedNodes.len - 1]).z
@@ -3840,7 +3596,7 @@ pub const Renderer = struct {
                 const stops = node.style.background.gradient;
                 gradientStart = @intCast(gradientStopIndex);
                 for (stops) |stop| {
-                    self.elementsPipeline.gradientStops[frameIndex][gradientStopIndex] = GradientStopGpu{
+                    self.elementsPipeline.gradientStops.mapped[frameIndex][gradientStopIndex] = GradientStopGpu{
                         .color = srgbToLinearColor(stop.color),
                         .position = stop.position,
                     };
@@ -3848,7 +3604,7 @@ pub const Renderer = struct {
                 }
                 gradientEnd = @intCast(gradientStopIndex - 1);
             }
-            self.elementsPipeline.elementsShaderData[frameIndex][elementIndex] = ElementRenderingData{
+            self.elementsPipeline.elements.mapped[frameIndex][elementIndex] = ElementRenderingData{
                 .modelViewProjectionMatrix = zmath.mul(
                     zmath.mul(
                         zmath.scaling(node.size[0], node.size[1], 1.0),
@@ -3899,7 +3655,7 @@ pub const Renderer = struct {
                 const shadowCenter = position + size * Vec2{ 0.5, 0.5 };
                 const elementCenter = node.position + node.size * Vec2{ 0.5, 0.5 };
                 const elementOffset = elementCenter - shadowCenter;
-                self.shadowsPipeline.shadowShaderData[frameIndex][shadowIndex] = ShadowRenderingData{
+                self.shadowsPipeline.shadows.mapped[frameIndex][shadowIndex] = ShadowRenderingData{
                     .modelViewProjectionMatrix = zmath.mul(
                         zmath.mul(
                             zmath.scaling(size[0], size[1], 1.0),
@@ -3988,7 +3744,7 @@ pub const Renderer = struct {
                     const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
                     const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
 
-                    self.textPipeline.shaderBuffersMapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
+                    self.textPipeline.glyphs.mapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
                         .modelViewProjectionMatrix = zmath.mul(
                             zmath.mul(
                                 zmath.scaling(width, height, 1.0),
