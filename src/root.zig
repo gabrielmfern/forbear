@@ -32,6 +32,7 @@ pub const components = @import("components.zig");
 pub const FpsCounter = components.FpsCounter;
 
 const Vec2 = @Vector(2, f32);
+const Vec4 = @Vector(4, f32);
 
 const Context = @This();
 
@@ -392,6 +393,33 @@ pub fn easeInOut(progress: f32) f32 {
 /// Equivalent to CSS's ease timing function
 pub fn ease(progress: f32) f32 {
     return cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
+}
+
+pub fn hex(comptime value: []const u8) Vec4 {
+    const r = @as(f32, std.fmt.parseInt(
+        u8,
+        value[0..2],
+        16,
+    ) catch @compileError("can't parse red channel")) / 255.0;
+    const g = @as(f32, std.fmt.parseInt(
+        u8,
+        value[2..4],
+        16,
+    ) catch @compileError("can't parse green channel")) / 255.0;
+    const b = @as(f32, std.fmt.parseInt(
+        u8,
+        value[4..6],
+        16,
+    ) catch @compileError("can't parse blue channel")) / 255.0;
+    const a = if (value.len >= 8)
+        @as(f32, std.fmt.parseInt(
+            u8,
+            value[6..8],
+            16,
+        ) catch @compileError("can't parse alpha channel")) / 255.0
+    else
+        1.0;
+    return .{ r, g, b, a };
 }
 
 pub fn useViewportSize() Vec2 {
