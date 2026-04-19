@@ -16,7 +16,7 @@ pub fn List() *const fn (void) void {
 }
 
 pub fn ListItem() *const fn (void) void {
-    forbear.component("list")({
+    forbear.component("list-item")({
         forbear.element(.{
             .width = .grow,
         })({
