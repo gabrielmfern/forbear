@@ -56,7 +56,7 @@ fn growChildren(
         while (index < activelyModifying.items.len) {
             const child = activelyModifying.items[index];
             if (approxEq(child.getSize(direction), child.getMaxSize(direction))) {
-                _ = activelyModifying.orderedRemove(index);
+                _ = activelyModifying.swapRemove(index);
                 continue;
             }
             if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
@@ -149,7 +149,7 @@ fn shrinkChildren(
         while (index < activelyModifying.items.len) {
             const child = activelyModifying.items[index];
             if (approxEq(child.getSize(direction), child.getMinSize(direction))) {
-                _ = activelyModifying.orderedRemove(index);
+                _ = activelyModifying.swapRemove(index);
                 if (index == 0 and activelyModifying.items.len > 0) {
                     largest = activelyModifying.items[0].getSize(direction);
                 }
@@ -317,13 +317,16 @@ pub fn growAndShrink(
 
         // Ratio axes depend on the opposite axis which may have just been
         // resolved by grow/shrink or perpendicular clamping above.
+        const oldSize = child.size;
         if (child.style.width == .ratio) {
             child.size[0] = child.size[1] * child.style.width.ratio;
         }
         if (child.style.height == .ratio) {
             child.size[1] = child.size[0] * child.style.height.ratio;
         }
-        refitAncestors(child, nodeTree);
+        if (child.size[0] != oldSize[0] or child.size[1] != oldSize[1]) {
+            refitAncestors(child, nodeTree);
+        }
 
         try growAndShrink(arena, child, nodeTree);
 
