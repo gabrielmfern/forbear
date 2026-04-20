@@ -32,7 +32,7 @@ fn growChildren(
     var childIndexOption = node.firstChild;
     while (childIndexOption) |childIndex| {
         const child = nodeTree.at(childIndex);
-        if (child.style.placement == .standard) {
+        if (child.style.placement == .flow) {
             if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
                 activelyModifying.appendAssumeCapacity(child);
             }
@@ -125,7 +125,7 @@ fn shrinkChildren(
     var childIndexOption = node.firstChild;
     while (childIndexOption) |childIndex| {
         const child = nodeTree.at(childIndex);
-        if (child.style.placement == .standard) {
+        if (child.style.placement == .flow) {
             if (child.getSize(direction) > child.getMinSize(direction)) {
                 activelyModifying.appendAssumeCapacity(child);
             }
@@ -241,7 +241,7 @@ pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
             childIndexOpt = ancestor.firstChild;
             while (childIndexOpt) |childIndex| {
                 const child = nodeTree.at(childIndex);
-                if (child.style.placement == .standard and child.style.getPreferredSize(perpendicular) == .grow) {
+                if (child.style.placement == .flow and child.style.getPreferredSize(perpendicular) == .grow) {
                     const marginVector = child.style.margin.get(perpendicular);
                     const available = availableBase - marginVector[0] - marginVector[1];
                     child.setSize(perpendicular, @max(@min(available, child.getMaxSize(perpendicular)), child.getMinSize(perpendicular)));
@@ -281,7 +281,7 @@ pub fn growAndShrink(
         const child = nodeTree.at(childIndex);
         childCount += 1;
 
-        if (child.style.placement == .standard) {
+        if (child.style.placement == .flow) {
             // Ensure minSize doesn't exceed maxSize before using it
             child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
             child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
@@ -489,7 +489,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                     const child = nodeTree.at(childIndex);
                     try wrapAndPlace(arena, child, nodeTree);
 
-                    if (child.style.placement == .standard) {
+                    if (child.style.placement == .flow) {
                         const childOuterWidth = child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
                         const childOuterHeight = child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
 
@@ -559,7 +559,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                     childIndexOption = line.start;
                     while (childIndexOption) |childIndex| {
                         const child = nodeTree.at(childIndex);
-                        if (child.style.placement == .standard) {
+                        if (child.style.placement == .flow) {
                             child.position[0] += xOffset;
                             child.position[1] += switch (node.style.yJustification) {
                                 .start => 0.0,
@@ -580,7 +580,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                 const child = nodeTree.at(childIndex);
                 try wrapAndPlace(arena, child, nodeTree);
 
-                if (child.style.placement == .standard) {
+                if (child.style.placement == .flow) {
                     cursor[1] += child.style.margin.y[0];
                     child.position = cursor;
                     cursor[1] += child.size[1] + child.style.margin.y[1];
@@ -599,7 +599,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
             childIndexOption = node.firstChild;
             while (childIndexOption) |childIndex| {
                 const child = nodeTree.at(childIndex);
-                if (child.style.placement == .standard) {
+                if (child.style.placement == .flow) {
                     child.position[0] += switch (node.style.xJustification) {
                         .start => 0.0,
                         .center => (availableWidth - child.size[0]) / 2.0,
@@ -643,10 +643,22 @@ pub fn layout() !*NodeTree {
             while (childIndexOption) |childIndex| {
                 const child = context.nodeTree.at(childIndex);
 
-                if (child.style.placement == .manual) {
-                    child.position += child.style.translate;
-                } else {
-                    child.position += node.position + child.style.translate;
+                switch (child.style.placement) {
+                    // Viewport-pinned: ignore scroll and ancestor offsets.
+                    .fixed => child.position += child.style.translate,
+                    // Viewport-space but scroll-aware: the root's resolved
+                    // position already contains `-scrollPosition` plus the
+                    // root's own translate, so adding it gives document-space
+                    // placement that scrolls with the page.
+                    .absolute => child.position += root.position + child.style.translate,
+                    // Parent-relative: the user-supplied Vec2 is an offset
+                    // from the parent's top-left corner. `.flow` children
+                    // have their `child.position` computed by wrapAndPlace;
+                    // `.relative` children use the Vec2 stashed at element
+                    // creation time. Both paths then adopt the parent's
+                    // resolved position, so they inherit ancestor offsets
+                    // and scroll naturally.
+                    .flow, .relative => child.position += node.position + child.style.translate,
                 }
                 if (child.glyphs) |glyphs| {
                     for (glyphs.slice) |*glyph| {

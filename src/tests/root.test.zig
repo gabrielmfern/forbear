@@ -1004,8 +1004,8 @@ test "element fitting - nested fit parents propagate size upward" {
     });
 }
 
-test "element fitting - manual child does not contribute to fit parent" {
-    // A manually-placed child should be excluded from the parent's fit
+test "element fitting - fixed child does not contribute to fit parent" {
+    // A fixed-placed child should be excluded from the parent's fit
     // calculation.
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
@@ -1021,13 +1021,13 @@ test "element fitting - manual child does not contribute to fit parent" {
             .height = .fit,
         })({
             forbear.element(.{
-                .placement = .{ .manual = .{ 0.0, 0.0 } },
+                .placement = .{ .fixed = .{ 0.0, 0.0 } },
                 .width = .{ .fixed = 999.0 },
                 .height = .{ .fixed = 999.0 },
             })({});
         });
         const parent = forbear.getPreviousNode().?;
-        // Manual child must not inflate the fit parent
+        // Fixed child must not inflate the fit parent
         try std.testing.expectEqual(@as(f32, 0.0), parent.size[0]);
         try std.testing.expectEqual(@as(f32, 0.0), parent.size[1]);
     });

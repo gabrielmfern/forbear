@@ -656,10 +656,12 @@ pub fn element(incompleteStyle: Style) *const fn (void) void {
         parentZ + 1
     else
         parentZ;
-    result.ptr.position = if (style.placement == .manual)
-        style.placement.manual
-    else
-        @splat(0.0);
+    result.ptr.position = switch (style.placement) {
+        .fixed => |v| v,
+        .absolute => |v| v,
+        .relative => |v| v,
+        .flow => @splat(0.0),
+    };
     result.ptr.size = .{
         switch (style.width) {
             .fixed => |width| width,
@@ -1149,9 +1151,7 @@ pub fn update() !void {
 
     var iterator = self.nodeTree.walk();
     while (iterator.next()) |node| {
-        if (node.style.placement == .standard) {
-            // this +scrollPosition term feels hacky to do, it's only required
-            // because layouting adds in the scroll position
+        if (node.style.placement != .fixed) {
             uiEdges = @max(uiEdges, node.position + self.scrollPosition + node.size);
         }
         const isMouseAfter = node.position[0] <= self.mousePosition[0] and node.position[1] <= self.mousePosition[1];
