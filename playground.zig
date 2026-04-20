@@ -140,7 +140,7 @@ fn renderingMain(
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer {
         if (gpa.deinit() == .leak) {
             std.log.err("Memory was leaked", .{});

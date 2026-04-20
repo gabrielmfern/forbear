@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const forbear = @import("forbear");
 
 const Vec4 = @Vector(4, f32);
@@ -902,14 +903,16 @@ fn renderingMain(
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        if (gpa.deinit() == .leak) {
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const allocator, const is_debug = switch (builtin.mode) {
+        .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+        .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+    };
+    defer if (is_debug) {
+        if (debug_allocator.deinit() == .leak) {
             std.log.err("Memory was leaked", .{});
         }
-    }
-
-    const allocator = gpa.allocator();
+    };
 
     var graphics = try forbear.Graphics.init(
         allocator,
