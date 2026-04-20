@@ -1151,12 +1151,7 @@ pub fn update() !void {
 
     var iterator = self.nodeTree.walk();
     while (iterator.next()) |node| {
-        // Only placements that actually live in document space contribute
-        // to scroll bounds. `.fixed` is pinned to the viewport and must not
-        // expand the scrollable area.
-        if (node.style.placement != .fixed) {
-            // this +scrollPosition term feels hacky to do, it's only required
-            // because layouting adds in the scroll position
+        if (node.style.placement == .flow) {
             uiEdges = @max(uiEdges, node.position + self.scrollPosition + node.size);
         }
         const isMouseAfter = node.position[0] <= self.mousePosition[0] and node.position[1] <= self.mousePosition[1];
