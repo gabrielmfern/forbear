@@ -49,8 +49,18 @@ const Dependencies = struct {
                 module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
             },
             .windows => {
-                module.addIncludePath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Include" });
-                module.addLibraryPath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Lib" });
+                const vulkan_sdk = std.c.getenv("VULKAN_SDK") orelse
+                    @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
+                module.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(
+                    std.heap.page_allocator,
+                    "{s}/Include",
+                    .{vulkan_sdk},
+                ) catch @panic("OOM") });
+                module.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(
+                    std.heap.page_allocator,
+                    "{s}/Lib",
+                    .{vulkan_sdk},
+                ) catch @panic("OOM") });
             },
             else => {},
         }
@@ -137,7 +147,15 @@ fn createForbearModule(
     });
     switch (target.result.os.tag) {
         .linux, .macos => translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
-        .windows => translate_c.addSystemIncludePath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Include" }),
+        .windows => {
+            const vulkan_sdk = std.c.getenv("VULKAN_SDK") orelse
+                @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
+            translate_c.addSystemIncludePath(.{ .cwd_relative = std.fmt.allocPrint(
+                std.heap.page_allocator,
+                "{s}/Include",
+                .{vulkan_sdk},
+            ) catch @panic("OOM") });
+        },
         else => {},
     }
     if (target.result.os.tag == .macos) {
