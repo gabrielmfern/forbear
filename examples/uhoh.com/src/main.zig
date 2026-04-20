@@ -9,6 +9,15 @@ const Testimonial = @import("components/testimonial.zig").Testimonial;
 
 const black: Vec4 = .{ 0.01, 0.019, 0.07, 1.0 };
 
+const rainbowBar = [_]forbear.GradientStop{
+    .{ .color = forbear.hex("ff6b9d"), .position = 0.0 },
+    .{ .color = forbear.hex("ffb066"), .position = 0.18 },
+    .{ .color = forbear.hex("fff066"), .position = 0.36 },
+    .{ .color = forbear.hex("9bf088"), .position = 0.54 },
+    .{ .color = forbear.hex("6bc7ff"), .position = 0.72 },
+    .{ .color = forbear.hex("c69bff"), .position = 1.0 },
+};
+
 fn readEnvBool(allocator: std.mem.Allocator, key: []const u8, default: bool) bool {
     const value = std.process.getEnvVarOwned(allocator, key) catch |err| {
         if (err != error.EnvironmentVariableNotFound) {
@@ -44,7 +53,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .background = .{ .color = black },
+                .background = .{ .gradient = &rainbowBar },
                 .padding = .block(6.0),
                 .xJustification = .center,
                 .yJustification = .center,
@@ -52,9 +61,7 @@ fn App() !void {
                 forbear.element(.{
                     .fontWeight = 500,
                     .fontSize = 10.5,
-                    .color = .{ 1.0, 1.0, 1.0, 1.0 },
                 })({
-                    // TODO: gradient background bar once gradient backgrounds are supported.
                     forbear.text("-> Book a 15 minute meeting today.");
                 });
             });
