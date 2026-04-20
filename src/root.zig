@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub const c = @import("c.zig").c;
+pub const c = @import("c");
 pub const Font = @import("font.zig");
 pub const Graphics = @import("graphics.zig");
 pub const Image = @import("graphics.zig").Image;

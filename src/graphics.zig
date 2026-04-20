@@ -7,7 +7,8 @@ const BlendMode = @import("node.zig").BlendMode;
 const GradientStop = @import("node.zig").GradientStop;
 const Node = @import("node.zig").Node;
 const NodeTree = @import("node.zig").NodeTree;
-const c = @import("c.zig").c;
+const c = @import("c");
+const stb_image = @import("stb_image_c");
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const countTreeSize = layouting.countTreeSize;
@@ -481,10 +482,6 @@ fn findMemoryType(
 }
 
 pub const Image = struct {
-    const stb_image = @cImport({
-        @cInclude("stb_image.h");
-    });
-
     pub const Format = enum {
         png,
     };

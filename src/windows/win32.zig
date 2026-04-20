@@ -2,7 +2,7 @@
 // This provides clean Zig bindings for the Windows APIs needed for windowing
 
 const std = @import("std");
-const c = @import("../c.zig").c;
+const c = @import("c");
 
 // Basic Windows types
 pub const BOOL = c_int;

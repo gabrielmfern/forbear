@@ -123,6 +123,40 @@ fn createForbearModule(
     var dependencies = Dependencies.init(b, target, optimize);
     dependencies.addToModule(forbear);
 
+    const c_header = switch (target.result.os.tag) {
+        .linux => b.path("src/c_linux.h"),
+        .macos => b.path("src/c_macos.h"),
+        .windows => b.path("src/c_windows.h"),
+        else => @panic("Unsupported OS"),
+    };
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = c_header,
+        .target = target,
+        .optimize = optimize,
+    });
+    switch (target.result.os.tag) {
+        .linux, .macos => translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
+        .windows => translate_c.addSystemIncludePath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Include" }),
+        else => {},
+    }
+
+    const font_translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/font_c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    font_translate_c.addIncludePath(dependencies.freetype.path("include"));
+    font_translate_c.addIncludePath(dependencies.kb_text_shape.path("."));
+    forbear.addImport("font_c", font_translate_c.createModule());
+
+    const stb_translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/stb_image_c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    stb_translate_c.addIncludePath(dependencies.stb_image.path("."));
+    forbear.addImport("stb_image_c", stb_translate_c.createModule());
+
     if (target.result.os.tag == .linux) {
         const Protocol = struct {
             name: []const u8,
@@ -167,7 +201,10 @@ fn createForbearModule(
             forbear.addCSourceFile(.{ .file = protocolCPath, .flags = &.{} });
         }
         forbear.addIncludePath(wf.getDirectory());
+        translate_c.addIncludePath(wf.getDirectory());
     }
+
+    forbear.addImport("c", translate_c.createModule());
 
     addShaderImport(b, forbear, "shaders/element/vertex.vert", "element_vertex_shader");
     addShaderImport(b, forbear, "shaders/element/fragment.frag", "element_fragment_shader");
