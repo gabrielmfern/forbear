@@ -354,31 +354,6 @@ fn runTestWithFork(allocator: Allocator, testName: []const u8) !ChildOutcome {
     return .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = .{ .Unknown = 0 } };
 }
 
-fn runTestWithExec(allocator: Allocator, argv: []const [:0]u8, testName: []const u8) !ChildOutcome {
-    var envMap = try std.process.getEnvMap(allocator);
-    try envMap.put(childTestEnv, testName);
-
-    const runResult = try std.process.run(allocator, .{
-        .argv = argv,
-        .env_map = &envMap,
-        .max_output_bytes = childMaxOutputBytes,
-    });
-
-    const output = try joinChildOutput(allocator, runResult.stdout, runResult.stderr);
-
-    return switch (runResult.term) {
-        .Exited => |code| switch (code) {
-            0 => .{ .status = .pass, .leaked = false, .output = output, .unexpectedTerm = null },
-            childExitSkip => .{ .status = .skip, .leaked = false, .output = output, .unexpectedTerm = null },
-            childExitFail => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = null },
-            childExitLeak => .{ .status = .fail, .leaked = true, .output = output, .unexpectedTerm = null },
-            childExitFailLeak => .{ .status = .fail, .leaked = true, .output = output, .unexpectedTerm = null },
-            else => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = runResult.term },
-        },
-        else => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = runResult.term },
-    };
-}
-
 fn joinChildOutput(allocator: Allocator, stdout: []const u8, stderr: []const u8) ![]const u8 {
     if (stdout.len == 0) return stderr;
     if (stderr.len == 0) return stdout;
