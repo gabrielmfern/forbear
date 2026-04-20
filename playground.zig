@@ -35,7 +35,7 @@ fn App() void {
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{
-            .width = .grow,
+            .width = .{ .grow = 1.0 },
             .direction = .vertical,
             .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
             .padding = .all(10),

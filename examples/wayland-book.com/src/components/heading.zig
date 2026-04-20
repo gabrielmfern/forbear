@@ -19,7 +19,7 @@ pub fn Heading(props: HeadingProps) *const fn (void) void {
             else => 32.0,
         };
         forbear.element(props.style.overwrite(.{
-            .width = .grow,
+            .width = .{ .grow = 1.0 },
             .fontWeight = 700,
             .fontSize = size,
             .margin = forbear.Margin.top(topMargin).withBottom(16.0),

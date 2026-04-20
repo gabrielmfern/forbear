@@ -21,17 +21,17 @@ pub fn FpsCounter() void {
             .direction = .vertical,
         })({
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
             })({
                 forbear.text("FPS:");
-                forbear.element(.{ .width = .grow })({});
+                forbear.element(.{ .width = .{ .grow = 1.0 } })({});
                 forbear.printText("{d:.1}", .{fps});
             });
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
             })({
                 forbear.text("delta time:");
-                forbear.element(.{ .width = .grow })({});
+                forbear.element(.{ .width = .{ .grow = 1.0 } })({});
                 forbear.printText("{d:.1}ms", .{deltaTime * 1000.0});
             });
         });
