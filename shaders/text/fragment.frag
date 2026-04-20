@@ -13,7 +13,9 @@ layout(set = 0, binding = 1) uniform sampler2D fontAtlas;
 
 void main() {
     vec3 coverage = texture(fontAtlas, inUV).rgb;
-    
+
+    coverage = pow(coverage, vec3(1.0 / 1.8));
+
     fragColor = vec4(inColor.rgb * coverage, 1.0);
     blendWeights = vec4(coverage * inColor.a, inColor.a);
 }
