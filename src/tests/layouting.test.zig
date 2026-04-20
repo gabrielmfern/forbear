@@ -7,7 +7,7 @@ const forbear = @import("../root.zig");
 const Vec2 = @Vector(2, f32);
 
 test "fit height parent, with grow height child containing wrapping text" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -79,7 +79,7 @@ test "fit height parent, with grow height child containing wrapping text" {
 }
 
 test "wrapped text propagates height upward" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -120,7 +120,7 @@ test "wrapped text propagates height upward" {
 }
 
 test "wrapped text simple ancestry stays at origin" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -163,7 +163,7 @@ test "wrapped text simple ancestry stays at origin" {
 // `updateFittingForAncestorsInDirection` (same machinery as wrapped text). Same flex
 // shape as examples/uhoh.com (hero block + text + sibling section).
 test "uhoh-shaped grow-width ratio hero does not overlap following sibling section" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -236,7 +236,7 @@ test "uhoh-shaped grow-width ratio hero does not overlap following sibling secti
 }
 
 test "wrapped text propagates height upward with siblings" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -280,7 +280,7 @@ test "wrapped text propagates height upward with siblings" {
 }
 
 test "wrapped text stacks siblings after wrapping" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -323,7 +323,7 @@ test "wrapped text stacks siblings after wrapping" {
 }
 
 test "cross-axis fit row height reflects full column height after text wrapping" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -402,7 +402,7 @@ test "cross-axis fit row height reflects full column height after text wrapping"
 // from a word-wrapped text column; that height updates during `wrapGlyphs`. Using
 // the pre-update main-axis size for the ratio left `width` too small (stale h × r).
 test "ratio width tracks fit height after propagated text wrap" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -444,7 +444,7 @@ test "ratio width tracks fit height after propagated text wrap" {
 }
 
 test "ratio height resolves after grow distributes width" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -476,7 +476,7 @@ test "ratio height resolves after grow distributes width" {
 }
 
 test "ratio width resolves after grow distributes height" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -508,7 +508,7 @@ test "ratio width resolves after grow distributes height" {
 }
 
 test "wrapAndPlace offsets standard children by border plus padding" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -540,7 +540,7 @@ test "wrapAndPlace offsets standard children by border plus padding" {
 }
 
 test "overflow wrap places children on new lines and grows parent height" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -598,7 +598,7 @@ test "overflow wrap places children on new lines and grows parent height" {
 }
 
 test "overflow wrap line ranges start at the wrapping child for cross-axis justification" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -652,7 +652,7 @@ test "overflow wrap line ranges start at the wrapping child for cross-axis justi
 }
 
 test "overflow wrap with grow-width parent wraps against resolved size" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -722,7 +722,7 @@ test "overflow wrap with grow-width parent wraps against resolved size" {
 }
 
 test "grow children split remaining space and stretch cross-axis" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -778,7 +778,7 @@ test "grow children split remaining space and stretch cross-axis" {
 }
 
 test "perpendicular clamping respects parent padding" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -812,7 +812,7 @@ test "perpendicular clamping respects parent padding" {
 }
 
 test "fixed-placed elements are not affected by scroll" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -856,7 +856,7 @@ test "fixed-placed elements are not affected by scroll" {
 }
 
 test "absolute-placed elements move with scroll" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -890,7 +890,7 @@ test "absolute-placed elements move with scroll" {
 }
 
 test "relative-placed elements are positioned from parent origin" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -938,7 +938,7 @@ test "relative-placed elements are positioned from parent origin" {
 }
 
 test "relative-placed child does not contribute to parent's fit" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -965,7 +965,7 @@ test "relative-placed child does not contribute to parent's fit" {
 }
 
 test "fixed-width ratio-height children with maxSize don't inflate parent cross-axis" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1024,7 +1024,7 @@ test "fixed-width ratio-height children with maxSize don't inflate parent cross-
 }
 
 test "ltr row with fixed height centers children vertically" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1086,7 +1086,7 @@ test "ltr row with fixed height centers children vertically" {
 }
 
 test "slotted component children propagate size to fit ancestors" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1137,7 +1137,7 @@ test "slotted component children propagate size to fit ancestors" {
 }
 
 test "slotted component with before/after content sizes correctly" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1196,7 +1196,7 @@ test "slotted component with before/after content sizes correctly" {
 }
 
 test "nested slotted components propagate sizes correctly" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1265,7 +1265,7 @@ test "nested slotted components propagate sizes correctly" {
 // (longest word) prevents this. Without this, grow containers with maxWidth would
 // have minSize > maxSize, breaking layout.
 test "horizontal minSize uses child.minSize to avoid unwrapped text width bloat" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1304,7 +1304,7 @@ test "horizontal minSize uses child.minSize to avoid unwrapped text width bloat"
 // but minSize[1] is still single line height. Using size[1] ensures fit parents
 // pick up the actual content height, allowing grow siblings to stretch correctly.
 test "vertical minSize uses child.size to capture wrapped text height" {
-    try forbear.init(std.testing.allocator, undefined);
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
