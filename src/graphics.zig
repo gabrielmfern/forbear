@@ -528,7 +528,67 @@ pub const Image = struct {
         std.debug.assert(self.height == height);
 
         defer stb_image.stbi_image_free(pixelsPtr);
-        try stagingBuffer.set(self.renderer.logicalDevice, pixelsPtr[0..imageSize]);
+
+        // Edge color dilation: extend visible colors into transparent pixels.
+        //
+        // Problem: Transparent pixels in PNGs typically have RGB = (0,0,0) (black). When the GPU
+        // uses linear filtering to sample between a visible pixel and an adjacent transparent pixel,
+        // it interpolates the RGB values, causing dark fringes at content edges.
+        //
+        // Solution: For each transparent pixel, set its RGB to the average of neighboring visible
+        // pixels. The pixel stays transparent (alpha = 0), but now linear filtering produces correct
+        // colors instead of bleeding in black. Multiple passes propagate colors further into large
+        // transparent regions, which is needed for mipmap generation where pixels are averaged.
+        const pixels = pixelsPtr[0..imageSize];
+        const w: usize = @intCast(width);
+        const h: usize = @intCast(height);
+        const maxPasses = self.mipLevels;
+        for (0..maxPasses) |_| {
+            var changed = false;
+            for (0..h) |y| {
+                for (0..w) |x| {
+                    const i = (y * w + x) * 4;
+                    if (pixels[i + 3] != 0) continue;
+
+                    var r: u32 = 0;
+                    var g: u32 = 0;
+                    var b: u32 = 0;
+                    var count: u32 = 0;
+
+                    const offsets = [_][2]i32{
+                        .{ -1, -1 },
+                        .{ 0, -1 },
+                        .{ 1, -1 },
+                        .{ -1, 0 },
+                        .{ 1, 0 },
+                        .{ -1, 1 },
+                        .{ 0, 1 },
+                        .{ 1, 1 },
+                    };
+                    for (offsets) |off| {
+                        const nx: i32 = @as(i32, @intCast(x)) + off[0];
+                        const ny: i32 = @as(i32, @intCast(y)) + off[1];
+                        if (nx < 0 or ny < 0 or nx >= width or ny >= height) continue;
+                        const ni: usize = (@as(usize, @intCast(ny)) * w + @as(usize, @intCast(nx))) * 4;
+                        if (pixels[ni + 3] == 0 and pixels[ni] == 0 and pixels[ni + 1] == 0 and pixels[ni + 2] == 0) continue;
+                        r += pixels[ni];
+                        g += pixels[ni + 1];
+                        b += pixels[ni + 2];
+                        count += 1;
+                    }
+
+                    if (count > 0) {
+                        pixels[i] = @intCast(r / count);
+                        pixels[i + 1] = @intCast(g / count);
+                        pixels[i + 2] = @intCast(b / count);
+                        changed = true;
+                    }
+                }
+            }
+            if (!changed) break;
+        }
+
+        try stagingBuffer.set(self.renderer.logicalDevice, pixels);
 
         var commandBuffer: c.VkCommandBuffer = undefined;
         try ensureNoError(c.vkAllocateCommandBuffers(self.renderer.logicalDevice, &c.VkCommandBufferAllocateInfo{
