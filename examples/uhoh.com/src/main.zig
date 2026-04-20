@@ -3,7 +3,7 @@ const forbear = @import("forbear");
 
 const Vec4 = @Vector(4, f32);
 
-const theme = @import("components/theme.zig");
+const Colors = @import("colors.zig");
 const Button = @import("components/button.zig").Button;
 const Testimonial = @import("components/testimonial.zig").Testimonial;
 
@@ -18,24 +18,6 @@ const rainbowBar = [_]forbear.GradientStop{
     .{ .color = forbear.hex("c69bff"), .position = 1.0 },
 };
 
-fn readEnvBool(allocator: std.mem.Allocator, key: []const u8, default: bool) bool {
-    const value = std.process.getEnvVarOwned(allocator, key) catch |err| {
-        if (err != error.EnvironmentVariableNotFound) {
-            std.log.warn("Failed to read env var {s}: {}", .{ key, err });
-        }
-        return default;
-    };
-    defer allocator.free(value);
-
-    if (std.ascii.eqlIgnoreCase(value, "1") or std.ascii.eqlIgnoreCase(value, "true")) {
-        return true;
-    }
-    if (std.ascii.eqlIgnoreCase(value, "0") or std.ascii.eqlIgnoreCase(value, "false")) {
-        return false;
-    }
-    return default;
-}
-
 fn App() !void {
     forbear.component("app")({
         forbear.element(.{
@@ -43,33 +25,30 @@ fn App() !void {
             .direction = .vertical,
             .xJustification = .center,
             .yJustification = .start,
-            .background = .{ .color = theme.Colors.page },
+            .background = .{ .color = Colors.page },
             .font = try forbear.useFont("SpaceGrotesk"),
             .fontWeight = 400,
-            .fontSize = 12.0,
-            .color = theme.Colors.text,
+            .fontSize = 16.0,
+            .color = Colors.text,
         })({
             forbear.FpsCounter();
 
             forbear.element(.{
                 .width = .grow,
                 .background = .{ .gradient = &rainbowBar },
-                .padding = .block(6.0),
+                .padding = .block(15.0),
                 .xJustification = .center,
                 .yJustification = .center,
+                .fontWeight = 500,
             })({
-                forbear.element(.{
-                    .fontWeight = 500,
-                    .fontSize = 10.5,
-                })({
-                    forbear.text("-> Book a 15 minute meeting today.");
-                });
+                forbear.text("-> Book a 15 minute meeting today.");
             });
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
-                .padding = .block(6.0),
+                .maxWidth = 940.0,
+                .minHeight = 72.0,
+                .padding = .inLine(15.0),
                 .xJustification = .center,
                 .yJustification = .center,
             })({
@@ -83,8 +62,9 @@ fn App() !void {
                 })({});
                 forbear.element(.{
                     .fontWeight = 500,
-                    .fontSize = 10.5,
-                    .margin = forbear.Margin.right(13.5),
+                    .margin = .right(16.0),
+                    .padding = .all(20.0),
+                    .cursor = .pointer,
                 })({
                     forbear.text("Pricing");
                 });
@@ -95,7 +75,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .margin = .block(36.0),
                 .direction = .horizontal,
                 .xJustification = .start,
@@ -107,7 +87,7 @@ fn App() !void {
                 })({
                     forbear.element(.{
                         .fontWeight = 700,
-                        .fontSize = 46,
+                        .fontSize = 64,
                         .lineHeight = 0.75,
                         .margin = forbear.Margin.block(0.0).withBottom(18.0),
                     })({
@@ -149,7 +129,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = .block(22.5),
@@ -186,7 +166,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -204,7 +184,7 @@ fn App() !void {
                     forbear.element(.{
                         .fontWeight = 600,
                         .fontSize = 10.5,
-                        .color = theme.Colors.muted,
+                        .color = Colors.muted,
                     })({
                         forbear.text("You're a growing business.");
                     });
@@ -249,7 +229,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .direction = .vertical,
@@ -328,7 +308,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .padding = .all(15.0),
                 .borderWidth = .all(1.5),
                 .borderColor = black,
@@ -363,7 +343,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -383,7 +363,7 @@ fn App() !void {
                 });
                 forbear.element(.{
                     .fontSize = 12.0,
-                    .color = theme.Colors.muted,
+                    .color = Colors.muted,
                     .xJustification = .center,
                     .yJustification = .start,
                 })({
@@ -503,7 +483,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(37.5),
@@ -512,9 +492,9 @@ fn App() !void {
                     inline for (offerings) |offering| {
                         forbear.element(.{
                             .width = .grow,
-                            .background = .{ .color = theme.Colors.card },
+                            .background = .{ .color = Colors.card },
                             .borderRadius = 12.0,
-                            .borderColor = theme.Colors.border,
+                            .borderColor = Colors.border,
                             .borderWidth = .all(0.75),
                             .padding = .all(15.0),
                             .margin = forbear.Margin.block(0.0).withBottom(12.0),
@@ -547,7 +527,7 @@ fn App() !void {
                                     forbear.element(.{
                                         .width = .{ .fixed = 6.0 },
                                         .height = .{ .fixed = 6.0 },
-                                        .background = .{ .color = theme.Colors.accentDark },
+                                        .background = .{ .color = Colors.accentDark },
                                         .borderRadius = 3.0,
                                         .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                                     })({});
@@ -557,7 +537,7 @@ fn App() !void {
                                 });
                             }
                             forbear.element(.{
-                                .background = .{ .color = theme.Colors.soft },
+                                .background = .{ .color = Colors.soft },
                                 .borderRadius = 9.0,
                                 .padding = .all(9.0),
                                 .margin = forbear.Margin.block(10.5).withBottom(0.0),
@@ -571,7 +551,7 @@ fn App() !void {
                                 });
                                 forbear.element(.{
                                     .fontSize = 10.5,
-                                    .color = theme.Colors.muted,
+                                    .color = Colors.muted,
                                 })({
                                     forbear.text(offering.addonBody);
                                 });
@@ -583,7 +563,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(15.0).withBottom(30.0),
@@ -607,7 +587,7 @@ fn App() !void {
                         });
                         forbear.element(.{
                             .fontSize = 10.5,
-                            .color = theme.Colors.muted,
+                            .color = Colors.muted,
                             .margin = forbear.Margin.block(9.0).withBottom(0.0),
                         })({
                             forbear.text("- Jon Sturgeon, CEO of Dingus & Zazzy & Co-Founder of uhoh");
@@ -626,7 +606,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -657,7 +637,7 @@ fn App() !void {
                                 forbear.element(.{
                                     .width = .{ .fixed = 6.0 },
                                     .height = .{ .fixed = 6.0 },
-                                    .background = .{ .color = theme.Colors.accentDark },
+                                    .background = .{ .color = Colors.accentDark },
                                     .borderRadius = 3.0,
                                     .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                                 })({});
@@ -688,7 +668,7 @@ fn App() !void {
                     }, try forbear.useImage("uhoh-failure"));
                     forbear.element(.{
                         .fontSize = 12.0,
-                        .color = theme.Colors.muted,
+                        .color = Colors.muted,
                     })({
                         forbear.text("Or... keep asking your most tech-savvy employee to fix the WiFi. You could save money, time, and headaches - or keep duct-taping your IT together until it breaks.");
                     });
@@ -719,7 +699,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
@@ -734,9 +714,9 @@ fn App() !void {
                     });
                     inline for (faqs) |faq| {
                         forbear.element(.{
-                            .background = .{ .color = theme.Colors.card },
+                            .background = .{ .color = Colors.card },
                             .borderRadius = 9.0,
-                            .borderColor = theme.Colors.border,
+                            .borderColor = Colors.border,
                             .borderWidth = .all(0.75),
                             .padding = .all(12.0),
                             .margin = forbear.Margin.block(0.0).withBottom(9.0),
@@ -750,7 +730,7 @@ fn App() !void {
                             });
                             forbear.element(.{
                                 .fontSize = 10.5,
-                                .color = theme.Colors.muted,
+                                .color = Colors.muted,
                             })({
                                 forbear.text(faq.answer);
                             });
@@ -762,7 +742,7 @@ fn App() !void {
 
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
+                .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(37.5),
@@ -785,20 +765,16 @@ fn App() !void {
                     });
                     forbear.element(.{
                         .fontSize = 12.0,
-                        .color = theme.Colors.muted,
+                        .color = Colors.muted,
                         .margin = forbear.Margin.block(0.0).withBottom(20.0),
                     })({
                         forbear.text("Just get the free trial already if you're that interested. You scrolled all the way here.");
                     });
 
                     Button(.{})({
+                        forbear.text("Come on, click on this");
                         forbear.element(.{
-                            .fontSize = 18.0,
-                        })({
-                            forbear.text("Come on, click on this");
-                        });
-                        forbear.element(.{
-                            .fontSize = 10.5,
+                            .fontSize = 14.0,
                         })({
                             forbear.text("Don't make me beg");
                         });
@@ -807,8 +783,8 @@ fn App() !void {
             });
             forbear.element(.{
                 .width = .grow,
-                .maxWidth = 810.0,
-                .background = .{ .color = theme.Colors.soft },
+                .maxWidth = 940.0,
+                .background = .{ .color = Colors.soft },
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(15.0).withBottom(19.5),
@@ -835,14 +811,14 @@ fn App() !void {
                     })({
                         forbear.element(.{
                             .fontSize = 9.0,
-                            .color = theme.Colors.muted,
+                            .color = Colors.muted,
                             .margin = forbear.Margin.inLine(0.0).withRight(15.0),
                         })({
                             forbear.text("© 2025 uhoh. All rights reserved.");
                         });
                         forbear.element(.{
                             .fontSize = 9.0,
-                            .color = theme.Colors.muted,
+                            .color = Colors.muted,
                         })({
                             forbear.text("Designed by your lover, Loogart");
                         });
