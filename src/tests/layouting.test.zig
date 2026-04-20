@@ -343,8 +343,6 @@ test "cross-axis fit row height reflects full column height after text wrapping"
     // The row's height must match the column's total, not just the text's height.
     // The sibling must start below the row — not overlap it.
     try forbear.frame(try utilities.frameMeta(arena))({
-        var textNode: *forbear.Node = undefined;
-
         forbear.element(.{
             .width = .grow,
             .height = .fit,
@@ -366,7 +364,6 @@ test "cross-axis fit row height reflects full column height after text wrapping"
                         .height = .fit,
                     })({
                         forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt");
-                        textNode = forbear.getPreviousNode().?;
                     });
                     forbear.element(.{
                         .width = .{ .fixed = 100 },
@@ -386,6 +383,9 @@ test "cross-axis fit row height reflects full column height after text wrapping"
         const row = tree.at(outer.firstChild.?);
         const column = tree.at(row.firstChild.?);
         const sibling = tree.at(row.nextSibling.?);
+        // Navigate: column -> textContainer (firstChild) -> textNode (firstChild)
+        const textContainer = tree.at(column.firstChild.?);
+        const textNode = tree.at(textContainer.firstChild.?);
 
         const expectedColumnHeight = textNode.size[1] + 50.0;
         try std.testing.expectEqual(expectedColumnHeight, column.size[1]);
