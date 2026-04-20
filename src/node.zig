@@ -268,12 +268,21 @@ pub const Background = union(enum) {
 };
 
 pub const Placement = union(enum) {
-    /// When defined, explictily overrides layout positioning, taking it
-    /// outside of the normal element flow, it won't affect the sizing of its
-    /// parent, nor the placement of its siblings. To define width and height,
-    /// use width and height.
-    manual: Vec2,
-    standard,
+    /// The default: the node participates in its parent's layout flow and
+    /// contributes to the parent's fit size and sibling positioning.
+    flow,
+    /// Pinned to the viewport at the given coordinates. Unaffected by
+    /// scrolling. Does not participate in the parent's layout flow.
+    fixed: Vec2,
+    /// Positioned in the viewport's coordinate space like `fixed`, but
+    /// respects the root scroll offset (so it moves with the document as the
+    /// user scrolls). Does not participate in the parent's layout flow.
+    absolute: Vec2,
+    /// Positioned relative to the parent's top-left corner. Inherits scroll
+    /// via the parent's resolved position. Does not participate in the
+    /// parent's layout flow, but is useful for anchoring overlays, tooltips,
+    /// or decorations next to a specific parent.
+    relative: Vec2,
 };
 
 pub const Style = struct {
@@ -380,7 +389,7 @@ pub const Style = struct {
             .cursor = self.cursor orelse base.cursor,
 
             .overflow = self.overflow orelse .visible,
-            .placement = self.placement orelse .standard,
+            .placement = self.placement orelse .flow,
             .zIndex = self.zIndex,
 
             .minWidth = self.minWidth,
@@ -610,7 +619,7 @@ pub const Node = struct {
     }
 
     pub fn fitChild(self: *@This(), child: *const Node) void {
-        if (child.style.placement != .standard) return;
+        if (child.style.placement != .flow) return;
 
         // Early exit if parent doesn't fit in either direction
         const fitH = self.style.width == .fit or self.shouldFitMin(.horizontal);

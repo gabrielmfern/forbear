@@ -811,7 +811,7 @@ test "perpendicular clamping respects parent padding" {
     });
 }
 
-test "manually placed elements are not affected by scroll" {
+test "fixed-placed elements are not affected by scroll" {
     try forbear.init(std.testing.allocator, undefined);
     defer forbear.deinit();
 
@@ -829,7 +829,7 @@ test "manually placed elements are not affected by scroll" {
             forbear.element(.{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
-                .placement = .{ .manual = .{ 10.0, 20.0 } },
+                .placement = .{ .fixed = .{ 10.0, 20.0 } },
             })({});
 
             forbear.element(.{
@@ -843,15 +843,124 @@ test "manually placed elements are not affected by scroll" {
 
         const tree = try layout();
         const root = tree.at(0);
-        const manualNode = tree.at(root.firstChild.?);
-        const standardNode = tree.at(manualNode.nextSibling.?);
+        const fixedNode = tree.at(root.firstChild.?);
+        const flowNode = tree.at(fixedNode.nextSibling.?);
 
-        // The manually placed element should be at its manual position, not offset by scroll
-        try std.testing.expectEqual(@as(f32, 10.0), manualNode.position[0]);
-        try std.testing.expectEqual(@as(f32, 20.0), manualNode.position[1]);
+        // The fixed element should be at its literal position, not offset by scroll
+        try std.testing.expectEqual(@as(f32, 10.0), fixedNode.position[0]);
+        try std.testing.expectEqual(@as(f32, 20.0), fixedNode.position[1]);
 
-        // The standard element should be offset by scroll (root moves by -100)
-        try std.testing.expectEqual(@as(f32, -100.0), standardNode.position[1]);
+        // The flow element should be offset by scroll (root moves by -100)
+        try std.testing.expectEqual(@as(f32, -100.0), flowNode.position[1]);
+    });
+}
+
+test "absolute-placed elements move with scroll" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .vertical,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+                .placement = .{ .absolute = .{ 10.0, 200.0 } },
+            })({});
+        });
+
+        forbear.getContext().scrollPosition = .{ 0.0, 100.0 };
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const absoluteNode = tree.at(root.firstChild.?);
+
+        // At document-space y=200 with scroll=100, rendered y = 200 - 100 = 100.
+        try std.testing.expectEqual(@as(f32, 10.0), absoluteNode.position[0]);
+        try std.testing.expectEqual(@as(f32, 100.0), absoluteNode.position[1]);
+    });
+}
+
+test "relative-placed elements are positioned from parent origin" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .grow,
+            .height = .grow,
+            .direction = .vertical,
+        })({
+            // Sibling that pushes the parent's layout forward but should not
+            // affect the relative child's position.
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+            })({});
+
+            forbear.element(.{
+                .width = .{ .fixed = 200 },
+                .height = .{ .fixed = 100 },
+                .padding = .all(10),
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 20 },
+                    .height = .{ .fixed = 20 },
+                    .placement = .{ .relative = .{ 5.0, 15.0 } },
+                })({});
+            });
+        });
+
+        const tree = try layout();
+        const root = tree.at(0);
+        const firstSibling = tree.at(root.firstChild.?);
+        const parent = tree.at(firstSibling.nextSibling.?);
+        const relChild = tree.at(parent.firstChild.?);
+
+        // Parent sits at y=50 (below the 50px sibling). Relative child is
+        // offset (5, 15) from the parent's top-left corner.
+        try std.testing.expectEqual(parent.position[0] + 5.0, relChild.position[0]);
+        try std.testing.expectEqual(parent.position[1] + 15.0, relChild.position[1]);
+    });
+}
+
+test "relative-placed child does not contribute to parent's fit" {
+    try forbear.init(std.testing.allocator, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .direction = .vertical,
+            .width = .fit,
+            .height = .fit,
+        })({
+            forbear.element(.{
+                .placement = .{ .relative = .{ 0.0, 0.0 } },
+                .width = .{ .fixed = 999.0 },
+                .height = .{ .fixed = 999.0 },
+            })({});
+        });
+        const parent = forbear.getPreviousNode().?;
+        try std.testing.expectEqual(@as(f32, 0.0), parent.size[0]);
+        try std.testing.expectEqual(@as(f32, 0.0), parent.size[1]);
     });
 }
 

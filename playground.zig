@@ -66,6 +66,30 @@ fn App() void {
             });
 
             CounterExample();
+
+            // Demonstrates `.relative` placement: the badge is offset from
+            // the card's top-left corner and does not participate in the
+            // card's layout flow, so the card content below is unaffected.
+            forbear.element(.{
+                .margin = forbear.Margin.top(24.0),
+                .padding = .all(16.0),
+                .fontSize = 16.0,
+                .background = .{ .color = .{ 0.15, 0.15, 0.25, 1.0 } },
+                .borderRadius = 12.0,
+            })({
+                forbear.text("Card with a relative badge");
+
+                forbear.element(.{
+                    .placement = .{ .relative = .{ 200.0, -10.0 } },
+                    .background = .{ .color = .{ 0.9, 0.2, 0.3, 1.0 } },
+                    .borderRadius = 12.0,
+                    .xJustification = .center,
+                    .padding = forbear.Padding.block(2.0).withInLine(4.0),
+                    .fontSize = 14,
+                })({
+                    forbear.text("NEW");
+                });
+            });
         });
     });
 }
