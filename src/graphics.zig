@@ -493,6 +493,7 @@ pub const Image = struct {
     imageExtent: c.VkExtent3D,
     imageView: c.VkImageView,
     memory: c.VkDeviceMemory,
+    mipLevels: u32,
 
     /// The original received contents in `init`, kept around for when the
     /// image is actually decompressed on use
@@ -545,7 +546,8 @@ pub const Image = struct {
             .pInheritanceInfo = null,
         }));
 
-        const barrier1 = c.VkImageMemoryBarrier{
+        // Transition mip level 0 to transfer dst and copy staging buffer
+        c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, c.VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, &c.VkImageMemoryBarrier{
             .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
             .newLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -555,18 +557,16 @@ pub const Image = struct {
             .subresourceRange = .{
                 .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
                 .baseMipLevel = 0,
-                .levelCount = 1,
+                .levelCount = self.mipLevels,
                 .baseArrayLayer = 0,
                 .layerCount = 1,
             },
             .srcAccessMask = 0,
             .dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT,
             .pNext = null,
-        };
+        });
 
-        c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, c.VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, &barrier1);
-
-        const region = c.VkBufferImageCopy{
+        c.vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.handle, self.image, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &c.VkBufferImageCopy{
             .bufferOffset = 0,
             .bufferRowLength = 0,
             .bufferImageHeight = 0,
@@ -578,11 +578,94 @@ pub const Image = struct {
             },
             .imageOffset = .{ .x = 0, .y = 0, .z = 0 },
             .imageExtent = self.imageExtent,
-        };
+        });
 
-        c.vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.handle, self.image, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        // Generate mipmaps via blit chain
+        var mipWidth: i32 = self.width;
+        var mipHeight: i32 = self.height;
 
-        const barrier2 = c.VkImageMemoryBarrier{
+        for (1..self.mipLevels) |i| {
+            // Transition previous level to transfer src
+            c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, null, 0, null, 1, &c.VkImageMemoryBarrier{
+                .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .newLayout = c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                .image = self.image,
+                .subresourceRange = .{
+                    .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = @intCast(i - 1),
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+                .srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT,
+                .dstAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT,
+                .pNext = null,
+            });
+
+            const nextMipWidth = if (mipWidth > 1) @divTrunc(mipWidth, 2) else 1;
+            const nextMipHeight = if (mipHeight > 1) @divTrunc(mipHeight, 2) else 1;
+
+            c.vkCmdBlitImage(
+                commandBuffer,
+                self.image,
+                c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                self.image,
+                c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1,
+                &c.VkImageBlit{
+                    .srcOffsets = .{
+                        .{ .x = 0, .y = 0, .z = 0 },
+                        .{ .x = mipWidth, .y = mipHeight, .z = 1 },
+                    },
+                    .srcSubresource = .{
+                        .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = @intCast(i - 1),
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                    .dstOffsets = .{
+                        .{ .x = 0, .y = 0, .z = 0 },
+                        .{ .x = nextMipWidth, .y = nextMipHeight, .z = 1 },
+                    },
+                    .dstSubresource = .{
+                        .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = @intCast(i),
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                },
+                c.VK_FILTER_LINEAR,
+            );
+
+            // Transition this level to shader read
+            c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, null, 0, null, 1, &c.VkImageMemoryBarrier{
+                .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+                .image = self.image,
+                .subresourceRange = .{
+                    .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = @intCast(i - 1),
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+                .srcAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT,
+                .dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT,
+                .pNext = null,
+            });
+
+            mipWidth = nextMipWidth;
+            mipHeight = nextMipHeight;
+        }
+
+        // Transition the last mip level to shader read
+        c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, null, 0, null, 1, &c.VkImageMemoryBarrier{
             .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             .newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -591,7 +674,7 @@ pub const Image = struct {
             .image = self.image,
             .subresourceRange = .{
                 .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
+                .baseMipLevel = self.mipLevels - 1,
                 .levelCount = 1,
                 .baseArrayLayer = 0,
                 .layerCount = 1,
@@ -599,9 +682,7 @@ pub const Image = struct {
             .srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT,
             .dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT,
             .pNext = null,
-        };
-
-        c.vkCmdPipelineBarrier(commandBuffer, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, null, 0, null, 1, &barrier2);
+        });
 
         try ensureNoError(c.vkEndCommandBuffer(commandBuffer));
 
@@ -631,17 +712,19 @@ pub const Image = struct {
                     .depth = 1,
                 };
 
+                const mipLevels: u32 = std.math.log2(@as(u32, @intCast(@max(width, height)))) + 1;
+
                 var image: c.VkImage = undefined;
                 try ensureNoError(c.vkCreateImage(renderer.logicalDevice, &c.VkImageCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                     .imageType = c.VK_IMAGE_TYPE_2D,
                     .extent = extent,
-                    .mipLevels = 1,
+                    .mipLevels = mipLevels,
                     .arrayLayers = 1,
                     .format = c.VK_FORMAT_R8G8B8A8_SRGB,
                     .tiling = c.VK_IMAGE_TILING_OPTIMAL,
                     .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-                    .usage = c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                    .usage = c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                     .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
                     .samples = c.VK_SAMPLE_COUNT_1_BIT,
                     .flags = 0,
@@ -684,7 +767,7 @@ pub const Image = struct {
                     .subresourceRange = c.VkImageSubresourceRange{
                         .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
                         .baseMipLevel = 0,
-                        .levelCount = 1,
+                        .levelCount = mipLevels,
                         .baseArrayLayer = 0,
                         .layerCount = 1,
                     },
@@ -695,6 +778,7 @@ pub const Image = struct {
                     .imageExtent = extent,
                     .imageView = imageView,
                     .memory = memory,
+                    .mipLevels = mipLevels,
 
                     .contents = contents,
                     .loaded = false,
@@ -2110,7 +2194,7 @@ const ElementsPipeline = struct {
             .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
             .mipLodBias = 0.0,
             .minLod = 0.0,
-            .maxLod = 0.0,
+            .maxLod = c.VK_LOD_CLAMP_NONE,
             .pNext = null,
             .flags = 0,
         }, null, &sampler));
