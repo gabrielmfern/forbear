@@ -46,13 +46,13 @@
         component children into parent
 - [x] feature equivalent to display: grid in css
 - [x] linear gradient support
+- [x] images look really bad
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
-- [ ] images look really bad
 
 ### [ ] wayland-book.com
 
-- [ ] support for placing elements manually, but relative to their parent still
+- [x] support for placing elements manually, but relative to their parent still
 - [ ] svg support
 - [ ] per element clipping
 - [ ] scroll bar 🤔
