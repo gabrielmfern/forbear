@@ -14,8 +14,8 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
     });
 
-    lib.addIncludePath(b.path("."));
-    lib.addCSourceFile(.{
+    lib.root_module.addIncludePath(b.path("."));
+    lib.root_module.addCSourceFile(.{
         .file = b.path("stb_image.c"),
         .flags = &.{
             "-fno-sanitize=alignment",
