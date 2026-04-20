@@ -1151,7 +1151,7 @@ pub fn update() !void {
 
     var iterator = self.nodeTree.walk();
     while (iterator.next()) |node| {
-        if (node.style.placement == .flow) {
+        if (node.style.placement != .fixed) {
             uiEdges = @max(uiEdges, node.position + self.scrollPosition + node.size);
         }
         const isMouseAfter = node.position[0] <= self.mousePosition[0] and node.position[1] <= self.mousePosition[1];
