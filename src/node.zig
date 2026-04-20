@@ -262,7 +262,7 @@ pub const BaseStyle = struct {
     }
 };
 
-pub const GradientStop = struct {
+pub const GradientStop = extern struct {
     color: Vec4,
     /// Position along the gradient in the [0, 1] range.
     position: f32,

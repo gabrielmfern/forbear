@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const zmath = @import("zmath");
 
 const BlendMode = @import("node.zig").BlendMode;
+const GradientStop = @import("node.zig").GradientStop;
 const Node = @import("node.zig").Node;
 const NodeTree = @import("node.zig").NodeTree;
 const c = @import("c.zig").c;
@@ -1689,11 +1690,6 @@ const ElementRenderingData = extern struct {
     size: [2]f32,
 };
 
-const GradientStopGpu = extern struct {
-    color: Vec4,
-    position: f32,
-};
-
 const ElementsPipeline = struct {
     allocator: std.mem.Allocator,
 
@@ -1706,7 +1702,7 @@ const ElementsPipeline = struct {
     descriptorSets: [maxFramesInFlight]c.VkDescriptorSet,
 
     elements: ResizableStorageBuffer(ElementRenderingData),
-    gradientStops: ResizableStorageBuffer(GradientStopGpu),
+    gradientStops: ResizableStorageBuffer(GradientStop),
 
     registeredImages: std.ArrayList(*const Image),
     sampler: c.VkSampler,
@@ -2055,7 +2051,7 @@ const ElementsPipeline = struct {
         );
         errdefer elements.deinit(logicalDevice);
 
-        var gradientStops = try ResizableStorageBuffer(GradientStopGpu).init(
+        var gradientStops = try ResizableStorageBuffer(GradientStop).init(
             logicalDevice,
             physicalDevice,
             1,
@@ -3596,7 +3592,7 @@ pub const Renderer = struct {
                 const stops = node.style.background.gradient;
                 gradientStart = @intCast(gradientStopIndex);
                 for (stops) |stop| {
-                    self.elementsPipeline.gradientStops.mapped[frameIndex][gradientStopIndex] = GradientStopGpu{
+                    self.elementsPipeline.gradientStops.mapped[frameIndex][gradientStopIndex] = GradientStop{
                         .color = srgbToLinearColor(stop.color),
                         .position = stop.position,
                     };
