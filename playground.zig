@@ -72,21 +72,19 @@ fn App() void {
             // card's layout flow, so the card content below is unaffected.
             forbear.element(.{
                 .margin = forbear.Margin.top(24.0),
-                .width = .{ .fixed = 260 },
-                .height = .{ .fixed = 120 },
                 .padding = .all(16.0),
+                .fontSize = 16.0,
                 .background = .{ .color = .{ 0.15, 0.15, 0.25, 1.0 } },
                 .borderRadius = 12.0,
             })({
                 forbear.text("Card with a relative badge");
 
                 forbear.element(.{
-                    .placement = .{ .relative = .{ 220.0, -10.0 } },
-                    .width = .{ .fixed = 60 },
-                    .height = .{ .fixed = 24 },
+                    .placement = .{ .relative = .{ 200.0, -10.0 } },
                     .background = .{ .color = .{ 0.9, 0.2, 0.3, 1.0 } },
                     .borderRadius = 12.0,
-                    .padding = forbear.Padding.block(2.0).withInLine(8.0),
+                    .xJustification = .center,
+                    .padding = forbear.Padding.block(2.0).withInLine(4.0),
                     .fontSize = 14,
                 })({
                     forbear.text("NEW");
