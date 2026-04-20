@@ -2859,7 +2859,7 @@ pub const FrameRateCapper = struct {
 pub const Renderer = struct {
     const Self = @This();
 
-    mutex: std.Thread.Mutex,
+    mutex: std.atomic.Mutex,
 
     allocator: std.mem.Allocator,
     graphics: *const Graphics,
@@ -3406,7 +3406,7 @@ pub const Renderer = struct {
             .allocator = graphics.allocator,
             .graphics = graphics,
             .window = window,
-            .mutex = std.Thread.Mutex{},
+            .mutex = std.atomic.Mutex{},
 
             .physicalDevice = physicalDevice,
             .logicalDevice = logicalDevice,

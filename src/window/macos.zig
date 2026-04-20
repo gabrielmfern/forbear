@@ -114,7 +114,7 @@ fn applicationShouldTerminateAfterLastWindowClosed(self: c.id, _cmd: c.SEL, appl
     _ = self;
     _ = _cmd;
     _ = application;
-    return true; // YES
+    return 1; // YES
 }
 
 fn windowDidResize(self_obj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
@@ -302,7 +302,7 @@ pub fn init(
         contentRect,
         styleMask,
         NSBackingStoreBuffered,
-        false, // NO
+        0, // NO
     );
     if (window_obj == null) return error.WindowCreationFailed;
 
@@ -352,7 +352,7 @@ pub fn init(
     self.metal_layer = null;
     if (self.content_view != null) {
         const setWantsLayer = msgSend(*const fn (c.id, c.SEL, BOOL) callconv(.c) void);
-        setWantsLayer(self.content_view, sel("setWantsLayer:"), true);
+        setWantsLayer(self.content_view, sel("setWantsLayer:"), 1);
 
         // MoltenVK expects a CAMetalLayer for presentation.
         const CAMetalLayer = getClass("CAMetalLayer");
@@ -367,7 +367,7 @@ pub fn init(
     makeKeyAndOrderFront(self.window, sel("makeKeyAndOrderFront:"), null);
 
     const activateIgnoringOtherApps = msgSend(*const fn (c.id, c.SEL, BOOL) callconv(.c) void);
-    activateIgnoringOtherApps(self.app, sel("activateIgnoringOtherApps:"), true);
+    activateIgnoringOtherApps(self.app, sel("activateIgnoringOtherApps:"), 1);
 
     const finishLaunching = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
     finishLaunching(self.app, sel("finishLaunching"));
@@ -618,7 +618,7 @@ pub fn handleEvents(self: *Self) !void {
 
     // Enable mouse moved events for our window
     const setAcceptsMouseMovedEvents = msgSend(*const fn (c.id, c.SEL, BOOL) callconv(.c) void);
-    setAcceptsMouseMovedEvents(self.window, sel("setAcceptsMouseMovedEvents:"), true);
+    setAcceptsMouseMovedEvents(self.window, sel("setAcceptsMouseMovedEvents:"), 1);
 
     while (self.running) {
         // Block waiting for the next event (like GetMessageW on Windows or wl_display_dispatch on Linux)
@@ -659,7 +659,7 @@ pub fn handleEvents(self: *Self) !void {
         }
 
         // Check if window was closed
-        if (isVisible(self.window, sel("isVisible")) == false) {
+        if (isVisible(self.window, sel("isVisible")) == 0) {
             self.running = false;
         }
     }

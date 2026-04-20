@@ -70,6 +70,7 @@ const Dependencies = struct {
                 module.linkFramework("Cocoa", .{});
                 module.linkFramework("Metal", .{});
                 module.linkFramework("QuartzCore", .{});
+                module.linkFramework("CoreGraphics", .{});
             },
             .windows => {
                 module.linkSystemLibrary("user32", .{});
@@ -138,6 +139,11 @@ fn createForbearModule(
         .linux, .macos => translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
         .windows => translate_c.addSystemIncludePath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Include" }),
         else => {},
+    }
+    if (target.result.os.tag == .macos) {
+        const sdk_path_raw = b.run(&.{ "xcrun", "--show-sdk-path" });
+        const sdk_path = std.mem.trim(u8, sdk_path_raw, " \n\t");
+        translate_c.addSystemFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdk_path}) });
     }
 
     const font_translate_c = b.addTranslateC(.{
