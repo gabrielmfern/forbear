@@ -88,16 +88,14 @@ fn App() !void {
                     forbear.element(.{
                         .fontWeight = 700,
                         .fontSize = 64,
-                        .lineHeight = 0.75,
-                        .margin = forbear.Margin.block(0.0).withBottom(18.0),
+                        .lineHeight = 0.9,
+                        .margin = .bottom(24.0),
                     })({
                         forbear.text("You're the boss, why are you still fixing tech issues?");
                     });
                     forbear.element(.{
-                        .fontSize = 15.0,
-                        .color = black,
-                        .fontWeight = 500,
-                        .margin = forbear.Margin.block(12.0).withBottom(15.0),
+                        .fontSize = 20.0,
+                        .margin = .bottom(25.0),
                     })({
                         forbear.text("It doesn't just annoy you. It slows you and your staff down. That's our job now.");
                     });
@@ -105,9 +103,9 @@ fn App() !void {
                         forbear.text("Let us prove it*");
                     });
                     forbear.element(.{
-                        .fontSize = 9.0,
-                        .color = black,
-                        .margin = forbear.Margin.block(10.5).withBottom(0.0),
+                        .fontSize = 12.0,
+                        .lineHeight = 1.3,
+                        .margin = .top(20.0),
                     })({
                         forbear.text(
                             "* You have to promise us that you'll dump all your problems on us so that we can show you what we're made of.",
@@ -116,7 +114,7 @@ fn App() !void {
                 });
                 forbear.image(.{
                     .width = .grow,
-                    .maxWidth = 369,
+                    .padding = .left(30.0),
                     .blendMode = .multiply,
                 }, try forbear.useImage("uhoh-hero"));
             });
@@ -132,20 +130,18 @@ fn App() !void {
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
-                .padding = .block(22.5),
-                .margin = .block(36.0),
-                .borderWidth = .block(1.5),
+                .padding = .block(30.0),
+                .margin = .block(48.0),
+                .borderWidth = .block(2.0),
                 .borderColor = black,
             })({
-                for (statements) |statement| {
+                for (statements, 0..) |statement, i| {
                     forbear.element(.{
                         .direction = .horizontal,
                         .xJustification = .start,
                         .yJustification = .center,
                         .width = .grow,
-                        .fontWeight = 500,
-                        .fontSize = 12.0,
-                        .padding = .inLine(7.5),
+                        .padding = if (i > 0) .left(20.0) else null,
                     })({
                         forbear.image(.{
                             .width = .{ .fixed = 30.0 },
