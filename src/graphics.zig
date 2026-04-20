@@ -3911,8 +3911,8 @@ pub const Renderer = struct {
                             zmath.mul(
                                 zmath.scaling(width, height, 1.0),
                                 zmath.translation(
-                                    glyph.position[0] + left,
-                                    glyph.position[1] + pixelAscent - top,
+                                    @round(glyph.position[0] + left),
+                                    @round(glyph.position[1] + pixelAscent - top),
                                     0.0,
                                 ),
                             ),
