@@ -828,6 +828,7 @@ fn App() !void {
 
 fn renderingMain(
     allocator: std.mem.Allocator,
+    io: std.Io,
     renderer: *forbear.Graphics.Renderer,
     window: *const forbear.Window,
 ) !void {
@@ -867,10 +868,10 @@ fn renderingMain(
     try forbear.registerImage("uhoh-failure", @embedFile("static/uhoh-failure.png"), .png);
     try forbear.registerImage("uhoh-bottom-cta", @embedFile("static/uhoh-bottom-cta.png"), .png);
 
-    var traceFile = try std.fs.cwd().createFile("layouting.log", .{});
-    defer traceFile.close();
+    var traceFile = try std.Io.Dir.cwd().createFile(io, "layouting.log", .{});
+    defer traceFile.close(io);
     var traceBuffer: [4096]u8 = undefined;
-    var traceWriter = traceFile.writer(&traceBuffer);
+    var traceWriter = traceFile.writer(io, &traceBuffer);
 
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
@@ -914,6 +915,10 @@ pub fn main() !void {
         }
     };
 
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+
     var graphics = try forbear.Graphics.init(
         allocator,
         "forbear playground",
@@ -932,7 +937,7 @@ pub fn main() !void {
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
 
-    try forbear.init(allocator, &renderer);
+    try forbear.init(allocator, io, &renderer);
     defer forbear.deinit();
 
     forbear.setWindowHandlers(window);
@@ -942,6 +947,7 @@ pub fn main() !void {
         renderingMain,
         .{
             allocator,
+            io,
             &renderer,
             window,
         },

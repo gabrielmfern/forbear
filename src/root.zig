@@ -7,8 +7,8 @@ pub const Graphics = @import("graphics.zig");
 pub const Image = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
-pub var traceWriter: ?*std.io.Writer = null;
-pub fn setTraceWriter(writer: *std.io.Writer) void {
+pub var traceWriter: ?*std.Io.Writer = null;
+pub fn setTraceWriter(writer: *std.Io.Writer) void {
     traceWriter = writer;
 }
 const nodeImport = @import("node.zig");
@@ -86,6 +86,7 @@ pub const FrameMeta = struct {
 };
 
 allocator: std.mem.Allocator,
+io: std.Io,
 
 mousePosition: Vec2,
 mouseButtonPressed: bool,
@@ -119,13 +120,14 @@ pendingEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 images: std.StringHashMap(Image),
 fonts: std.StringHashMap(Font),
 
-pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Renderer) !void {
     if (context != null) {
         return error.AlreadyInitialized;
     }
 
     context = @This(){
         .allocator = allocator,
+        .io = io,
 
         .mousePosition = @splat(0.0),
         .mouseButtonPressed = false,
@@ -139,7 +141,7 @@ pub fn init(allocator: std.mem.Allocator, renderer: *Graphics.Renderer) !void {
         .renderer = renderer,
         .window = null,
 
-        .startTime = timestampSeconds(),
+        .startTime = timestampSeconds(io),
         .deltaTime = null,
         .lastUpdateTime = null,
         .viewportSize = @splat(0.0),
@@ -909,14 +911,8 @@ pub fn handleFrameError(err: anyerror) void {
 
     if (builtin.is_test) return;
 
-    var addresses: [32]usize = undefined;
-    var stackTrace = std.builtin.StackTrace{
-        .index = 0,
-        .instruction_addresses = &addresses,
-    };
-    std.debug.captureStackTrace(@returnAddress(), &stackTrace);
-    std.debug.print("There was an error during frame's UI mounting stage: ", .{});
-    std.debug.dumpStackTrace(stackTrace);
+    std.debug.print("There was an error during frame's UI mounting stage:\n", .{});
+    std.debug.dumpCurrentStackTrace(.{});
 }
 
 fn componentEnd(block: void) void {
@@ -1212,7 +1208,7 @@ pub fn update() !void {
 
     self.viewportSize = viewportSize;
 
-    const timestamp = timestampSeconds();
+    const timestamp = timestampSeconds(self.io);
     self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
     self.lastUpdateTime = timestamp;
 
@@ -1247,8 +1243,9 @@ fn scroller(uiEdges: Vec2) void {
     });
 }
 
-fn timestampSeconds() f64 {
-    return @as(f64, @floatFromInt(std.time.nanoTimestamp())) / std.time.ns_per_s;
+fn timestampSeconds(io: std.Io) f64 {
+    const ts = std.Io.Clock.awake.now(io);
+    return @as(f64, @floatFromInt(ts.toNanoseconds())) / std.time.ns_per_s;
 }
 
 pub fn setWindowHandlers(window: *Window) void {

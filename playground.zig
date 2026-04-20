@@ -149,6 +149,10 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+
     var graphics = try forbear.Graphics.init(
         allocator,
         "forbear playground",
@@ -167,7 +171,7 @@ pub fn main() !void {
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
 
-    try forbear.init(allocator, &renderer);
+    try forbear.init(allocator, io, &renderer);
     defer forbear.deinit();
     forbear.setWindowHandlers(window);
 

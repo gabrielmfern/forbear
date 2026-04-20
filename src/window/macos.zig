@@ -629,7 +629,7 @@ pub fn handleEvents(self: *Self) !void {
             mask_any,
             blocking_date,
             mode,
-            true,
+            1, // YES
         );
 
         if (event != null) {
@@ -648,7 +648,7 @@ pub fn handleEvents(self: *Self) !void {
                     mask_any,
                     non_blocking_date,
                     mode,
-                    true,
+                    1,
                 );
                 if (pending_event == null) break;
                 self.processEvent(pending_event);
