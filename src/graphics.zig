@@ -505,6 +505,42 @@ pub const Image = struct {
 
     renderer: *const Renderer,
 
+    const offsets = [_][2]isize{
+        .{ -1, -1 }, .{ 0, -1 }, .{ 1, -1 },
+        .{ -1, 0 },  .{ 1, 0 },  .{ -1, 1 },
+        .{ 0, 1 },   .{ 1, 1 },
+    };
+
+    fn dilatePixel(pixels: []u8, x: usize, y: usize, width: usize, height: usize) void {
+        const index = (y * width + x) * 4;
+
+        var r: u32 = 0;
+        var g: u32 = 0;
+        var b: u32 = 0;
+        var count: u32 = 0;
+        for (offsets) |off| {
+            const neighbourX: isize = @as(isize, @intCast(x)) + off[0];
+            const neighbourY: isize = @as(isize, @intCast(y)) + off[1];
+            if (neighbourX < 0 or neighbourY < 0 or neighbourX >= width or neighbourY >= height) {
+                continue;
+            }
+            const neighbourIndex: usize = (@as(usize, @intCast(neighbourY)) * width + @as(usize, @intCast(neighbourX))) * 4;
+            if (pixels[neighbourIndex + 3] == 0 and pixels[neighbourIndex] == 0 and pixels[neighbourIndex + 1] == 0 and pixels[neighbourIndex + 2] == 0) {
+                continue;
+            }
+            r += pixels[neighbourIndex];
+            g += pixels[neighbourIndex + 1];
+            b += pixels[neighbourIndex + 2];
+            count += 1;
+        }
+
+        if (count > 0) {
+            pixels[index] = @intCast(r / count);
+            pixels[index + 1] = @intCast(g / count);
+            pixels[index + 2] = @intCast(b / count);
+        }
+    }
+
     pub fn load(self: *@This()) !void {
         self.loaded = true;
         const imageSize: usize = @intCast(self.width * self.height * 4);
@@ -522,8 +558,10 @@ pub const Image = struct {
         var height: c_int = undefined;
         var channels: c_int = undefined;
         // stb_image doesn't allow to not pass in the width, hegith and channel pointers
+        var timer = std.time.Timer.start() catch null;
         const pixelsPtr = stb_image.stbi_load_from_memory(self.contents.ptr, @intCast(self.contents.len), &width, &height, &channels, 4);
         if (pixelsPtr == null) return error.ImageLoadFailed;
+        const decodeTime = if (timer) |*t| t.read() else 0;
         std.debug.assert(self.width == width);
         std.debug.assert(self.height == height);
 
@@ -542,51 +580,35 @@ pub const Image = struct {
         const pixels = pixelsPtr[0..imageSize];
         const w: usize = @intCast(width);
         const h: usize = @intCast(height);
-        const maxPasses = self.mipLevels;
-        for (0..maxPasses) |_| {
-            var changed = false;
-            for (0..h) |y| {
-                for (0..w) |x| {
-                    const i = (y * w + x) * 4;
-                    if (pixels[i + 3] != 0) continue;
+        var dilationTimer = std.time.Timer.start() catch null;
+        // top edge pixels and bottom edge pxiels
+        for (0..w) |col| {
+            const topX = col;
+            const topY = 0;
+            const bottomX = col;
+            const bottomY = h - 1;
 
-                    var r: u32 = 0;
-                    var g: u32 = 0;
-                    var b: u32 = 0;
-                    var count: u32 = 0;
-
-                    const offsets = [_][2]i32{
-                        .{ -1, -1 },
-                        .{ 0, -1 },
-                        .{ 1, -1 },
-                        .{ -1, 0 },
-                        .{ 1, 0 },
-                        .{ -1, 1 },
-                        .{ 0, 1 },
-                        .{ 1, 1 },
-                    };
-                    for (offsets) |off| {
-                        const nx: i32 = @as(i32, @intCast(x)) + off[0];
-                        const ny: i32 = @as(i32, @intCast(y)) + off[1];
-                        if (nx < 0 or ny < 0 or nx >= width or ny >= height) continue;
-                        const ni: usize = (@as(usize, @intCast(ny)) * w + @as(usize, @intCast(nx))) * 4;
-                        if (pixels[ni + 3] == 0 and pixels[ni] == 0 and pixels[ni + 1] == 0 and pixels[ni + 2] == 0) continue;
-                        r += pixels[ni];
-                        g += pixels[ni + 1];
-                        b += pixels[ni + 2];
-                        count += 1;
-                    }
-
-                    if (count > 0) {
-                        pixels[i] = @intCast(r / count);
-                        pixels[i + 1] = @intCast(g / count);
-                        pixels[i + 2] = @intCast(b / count);
-                        changed = true;
-                    }
-                }
-            }
-            if (!changed) break;
+            dilatePixel(pixels, topX, topY, w, h);
+            dilatePixel(pixels, bottomX, bottomY, w, h);
         }
+        // left edge pixels and right edge pixels
+        for (1..h) |row| {
+            const leftX: usize = 0;
+            const leftY = row;
+            const rightX = w - 1;
+            const rightY = row;
+
+            dilatePixel(pixels, leftX, leftY, w, h);
+            dilatePixel(pixels, rightX, rightY, w, h);
+        }
+        const dilationTime = if (dilationTimer) |*t| t.read() else 0;
+
+        std.log.info("Image {d}x{d}: decode={d:.2}ms, dilation={d:.2}ms", .{
+            width,
+            height,
+            @as(f64, @floatFromInt(decodeTime)) / std.time.ns_per_ms,
+            @as(f64, @floatFromInt(dilationTime)) / std.time.ns_per_ms,
+        });
 
         try stagingBuffer.set(self.renderer.logicalDevice, pixels);
 
