@@ -42,8 +42,8 @@ var realStderr: ?File = null;
 var priorCrashHandlers: ?CrashOutput.PriorHandlers = null;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+    defer arena.deinit();
     const allocator = arena.allocator();
 
     // Save the real stderr for later restoration.
@@ -59,12 +59,7 @@ pub fn main() !void {
         break :blk try runSingleTestProcess(testName);
     } else try runParentProcess(allocator);
 
-    arena.deinit();
-    if (gpa.deinit() == .leak) {
-        printToRealStderr("\n\x1b[31mMemory leak detected in test runner allocator!\n\x1b[0m", .{});
-    }
-
-    std.posix.exit(exitCode);
+    std.process.exit(exitCode);
 }
 
 const ChildOutcome = struct {
