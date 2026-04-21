@@ -1,5 +1,5 @@
 const forbear = @import("forbear");
-const Colors = @import("../colors.zig");
+const colors = @import("../colors.zig");
 const Button = @import("button.zig").Button;
 
 pub fn BottomCta() !void {
@@ -28,7 +28,6 @@ pub fn BottomCta() !void {
             });
             forbear.element(.{
                 .fontSize = 12.0,
-                .color = Colors.muted,
                 .margin = forbear.Margin.block(0.0).withBottom(20.0),
             })({
                 forbear.text("Just get the free trial already if you're that interested. You scrolled all the way here.");

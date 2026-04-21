@@ -1,9 +1,8 @@
 const forbear = @import("forbear");
-const Colors = @import("../colors.zig");
+const colors = @import("../colors.zig");
 const Button = @import("button.zig").Button;
 
 const Vec4 = @Vector(4, f32);
-const black: Vec4 = .{ 0.01, 0.019, 0.07, 1.0 };
 
 const issues = [_][]const u8{
     "You got a cryptic error message on an app. Now you have to submit a ticket.",
@@ -32,7 +31,6 @@ pub fn Problems() !void {
             forbear.element(.{
                 .fontWeight = 600,
                 .fontSize = 10.5,
-                .color = Colors.muted,
             })({
                 forbear.text("You're a growing business.");
             });
@@ -50,7 +48,7 @@ pub fn Problems() !void {
                     .padding = .block(9.0),
                     .fontSize = 10.5,
                     .borderWidth = if (i == 0) null else .top(1.5),
-                    .borderColor = black,
+                    .borderColor = colors.black,
                 })({
                     forbear.image(.{
                         .width = .{ .fixed = 30.0 },

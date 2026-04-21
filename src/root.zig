@@ -401,6 +401,11 @@ pub fn ease(progress: f32) f32 {
     return cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
 }
 
+pub const red = hex("#ff0000");
+pub const white = hex("#ffffff");
+pub const black = hex("#000000");
+// TODO: add all CSS named colors here
+
 pub fn hex(comptime value: []const u8) Vec4 {
     const digits = if (value.len > 0 and value[0] == '#') value[1..] else value;
     const r = @as(f32, std.fmt.parseInt(

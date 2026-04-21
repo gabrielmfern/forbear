@@ -1,5 +1,5 @@
 const forbear = @import("forbear");
-const Colors = @import("../colors.zig");
+const colors = @import("../colors.zig");
 
 const Offering = struct {
     title: []const u8,
@@ -123,9 +123,8 @@ pub fn Offerings() !void {
             inline for (offerings) |offering| {
                 forbear.element(.{
                     .width = .{ .grow = 1.0 },
-                    .background = .{ .color = Colors.card },
                     .borderRadius = 12.0,
-                    .borderColor = Colors.border,
+                    .borderColor = colors.black,
                     .borderWidth = .all(0.75),
                     .padding = .all(15.0),
                     .margin = forbear.Margin.block(0.0).withBottom(12.0),
@@ -158,7 +157,6 @@ pub fn Offerings() !void {
                             forbear.element(.{
                                 .width = .{ .fixed = 6.0 },
                                 .height = .{ .fixed = 6.0 },
-                                .background = .{ .color = Colors.accentDark },
                                 .borderRadius = 3.0,
                                 .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                             })({});
@@ -168,7 +166,6 @@ pub fn Offerings() !void {
                         });
                     }
                     forbear.element(.{
-                        .background = .{ .color = Colors.soft },
                         .borderRadius = 9.0,
                         .padding = .all(9.0),
                         .margin = forbear.Margin.block(10.5).withBottom(0.0),
@@ -182,7 +179,6 @@ pub fn Offerings() !void {
                         });
                         forbear.element(.{
                             .fontSize = 10.5,
-                            .color = Colors.muted,
                         })({
                             forbear.text(offering.addonBody);
                         });

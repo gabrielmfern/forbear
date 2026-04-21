@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 
 const forbear = @import("forbear");
 
-const Colors = @import("colors.zig");
+const colors = @import("colors.zig");
 const Benefits = @import("components/benefits.zig").Benefits;
 const BottomCta = @import("components/bottom_cta.zig").BottomCta;
 const Faq = @import("components/faq.zig").Faq;
@@ -34,11 +34,6 @@ fn App() !void {
             .direction = .vertical,
             .xJustification = .center,
             .yJustification = .start,
-            .background = .{ .color = Colors.page },
-            .font = try forbear.useFont("SpaceGrotesk"),
-            .fontWeight = 400,
-            .fontSize = 16.0,
-            .color = Colors.text,
         })({
             forbear.FpsCounter();
 
@@ -139,7 +134,7 @@ fn renderingMain(
             const rootTree = try forbear.layout();
             try rootTree.dump(&traceWriter.interface);
 
-            try renderer.drawFrame(arena, rootTree, .{ 0.99, 0.98, 0.96, 1.0 }, window.targetFrameTimeNs());
+            try renderer.drawFrame(arena, rootTree, colors.background, window.targetFrameTimeNs());
             try forbear.update();
         });
     }

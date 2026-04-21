@@ -1,12 +1,11 @@
 const forbear = @import("forbear");
-const Colors = @import("../colors.zig");
+const colors = @import("../colors.zig");
 
 pub fn Solution() !void {
     forbear.element(.{
         .width = .{ .grow = 1.0 },
         .maxWidth = 940.0,
         .xJustification = .center,
-        .yJustification = .start,
         .padding = forbear.Padding.top(22.5).withBottom(30.0),
         .direction = .vertical,
     })({
@@ -24,9 +23,7 @@ pub fn Solution() !void {
         });
         forbear.element(.{
             .fontSize = 12.0,
-            .color = Colors.muted,
             .xJustification = .center,
-            .yJustification = .start,
         })({
             forbear.text("We're replacing clunky IT with clean, fast, and flexible support. Built for startups and teams that just want things to work.");
         });

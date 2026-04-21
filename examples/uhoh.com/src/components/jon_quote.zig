@@ -1,5 +1,5 @@
 const forbear = @import("forbear");
-const Colors = @import("../colors.zig");
+const colors = @import("../colors.zig");
 
 pub fn JonQuote() !void {
     forbear.element(.{
@@ -28,7 +28,6 @@ pub fn JonQuote() !void {
                 });
                 forbear.element(.{
                     .fontSize = 10.5,
-                    .color = Colors.muted,
                     .margin = forbear.Margin.block(9.0).withBottom(0.0),
                 })({
                     forbear.text("- Jon Sturgeon, CEO of Dingus & Zazzy & Co-Founder of uhoh");

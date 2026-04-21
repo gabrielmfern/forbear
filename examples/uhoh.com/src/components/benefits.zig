@@ -1,5 +1,5 @@
 const forbear = @import("forbear");
-const Colors = @import("../colors.zig");
+const colors = @import("../colors.zig");
 
 const benefits = [_][]const u8{
     "Faster onboarding for new hires",
@@ -43,7 +43,6 @@ pub fn Benefits() !void {
                         forbear.element(.{
                             .width = .{ .fixed = 6.0 },
                             .height = .{ .fixed = 6.0 },
-                            .background = .{ .color = Colors.accentDark },
                             .borderRadius = 3.0,
                             .margin = forbear.Margin.inLine(0.0).withRight(7.5),
                         })({});
@@ -74,7 +73,6 @@ pub fn Benefits() !void {
             }, try forbear.useImage("uhoh-failure"));
             forbear.element(.{
                 .fontSize = 12.0,
-                .color = Colors.muted,
             })({
                 forbear.text("Or... keep asking your most tech-savvy employee to fix the WiFi. You could save money, time, and headaches - or keep duct-taping your IT together until it breaks.");
             });

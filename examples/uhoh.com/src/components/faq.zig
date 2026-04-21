@@ -1,5 +1,5 @@
 const forbear = @import("forbear");
-const Colors = @import("../colors.zig");
+const colors = @import("../colors.zig");
 
 const faqs = [_]struct {
     question: []const u8,
@@ -41,9 +41,8 @@ pub fn Faq() void {
             });
             inline for (faqs) |faq| {
                 forbear.element(.{
-                    .background = .{ .color = Colors.card },
                     .borderRadius = 9.0,
-                    .borderColor = Colors.border,
+                    .borderColor = colors.black,
                     .borderWidth = .all(0.75),
                     .padding = .all(12.0),
                     .margin = forbear.Margin.block(0.0).withBottom(9.0),
@@ -57,7 +56,6 @@ pub fn Faq() void {
                     });
                     forbear.element(.{
                         .fontSize = 10.5,
-                        .color = Colors.muted,
                     })({
                         forbear.text(faq.answer);
                     });

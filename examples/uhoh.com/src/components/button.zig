@@ -1,4 +1,5 @@
 const forbear = @import("forbear");
+const colors = @import("../colors.zig");
 
 pub const ButtonProps = struct {
     sizing: enum { medium, large } = .medium,
@@ -19,8 +20,8 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
             forbear.element(.{
                 .borderRadius = 8.0,
                 .borderWidth = .all(2.0),
-                .background = .{ .color = .{ 1.0, 1.0, 1.0, 1.0 } },
-                .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
+                .background = .{ .color = forbear.white },
+                .borderColor = colors.black,
                 .cursor = .pointer,
                 .textWrapping = .none,
                 .fontSize = switch (props.sizing) {
