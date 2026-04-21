@@ -505,7 +505,7 @@ pub const NodeTree = struct {
         return &self.list.items[index];
     }
 
-    pub fn dump(self: *const @This(), writer: *std.io.Writer) !void {
+    pub fn dump(self: *const @This(), writer: *std.Io.Writer) !void {
         if (self.list.items.len > 0) {
             try self.list.items[0].layoutDump(writer, 0, 0);
             try writer.flush();
@@ -737,24 +737,23 @@ pub const Node = struct {
     fn formatSizing(sizing: Sizing) [24]u8 {
         var buf: [24]u8 = undefined;
         @memset(&buf, 0);
-        var fbs = std.io.fixedBufferStream(&buf);
-        const w = fbs.writer();
-        switch (sizing) {
-            .fit => w.writeAll("fit") catch {},
-            .grow => w.writeAll("grow") catch {},
-            .fixed => |v| std.fmt.format(w, "fixed({d:.1})", .{v}) catch {},
-            .ratio => |v| std.fmt.format(w, "ratio({d:.2})", .{v}) catch {},
-        }
+        const result = switch (sizing) {
+            .fit => std.fmt.bufPrint(&buf, "fit", .{}),
+            .grow => std.fmt.bufPrint(&buf, "grow", .{}),
+            .fixed => |v| std.fmt.bufPrint(&buf, "fixed({d:.1})", .{v}),
+            .ratio => |v| std.fmt.bufPrint(&buf, "ratio({d:.2})", .{v}),
+        };
+        _ = result catch {};
         return buf;
     }
 
-    fn writeIndent(writer: *std.io.Writer, indent: usize) !void {
+    fn writeIndent(writer: *std.Io.Writer, indent: usize) !void {
         for (0..indent) |_| {
             try writer.writeAll("  ");
         }
     }
 
-    pub fn layoutDump(self: *const @This(), writer: *std.io.Writer, idx: usize, indent: usize) !void {
+    pub fn layoutDump(self: *const @This(), writer: *std.Io.Writer, idx: usize, indent: usize) !void {
         // Line 1: index, direction, overflow, placement
         try writeIndent(writer, indent);
         try writer.print("[{d}] dir={s}  overflow={s}  placement={s}\n", .{
@@ -828,10 +827,6 @@ pub const Node = struct {
             try child.layoutDump(writer, ci, indent + 1);
             childIdx = child.nextSibling;
         }
-    }
-
-    pub fn layoutDumpStderr(self: *const @This(), idx: usize, indent: usize) void {
-        self.layoutDump(std.io.getStdErr().writer().any(), idx, indent) catch {};
     }
 
     pub fn setMinSize(self: *@This(), direction: Direction, size: f32) void {

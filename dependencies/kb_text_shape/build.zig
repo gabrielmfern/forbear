@@ -14,8 +14,8 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
     });
 
-    lib.addIncludePath(b.path("."));
-    lib.addCSourceFile(.{
+    lib.root_module.addIncludePath(b.path("."));
+    lib.root_module.addCSourceFile(.{
         .file = b.path("kb_text_shape.c"),
         .flags = &.{
             "-fno-sanitize=alignment",

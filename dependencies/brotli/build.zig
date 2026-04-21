@@ -48,9 +48,8 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
     });
 
-    lib.linkLibC();
-    lib.addIncludePath(b.path("c/include"));
-    lib.addCSourceFiles(.{ .files = &sources, .flags = &.{} });
+    lib.root_module.addIncludePath(b.path("c/include"));
+    lib.root_module.addCSourceFiles(.{ .files = &sources, .flags = &.{} });
     lib.installHeadersDirectory(
         b.path("c/include/brotli"),
         "brotli",

@@ -49,8 +49,10 @@ const Dependencies = struct {
                 module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
             },
             .windows => {
-                module.addIncludePath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Include" });
-                module.addLibraryPath(.{ .cwd_relative = "C:/VulkanSDK/1.4.335.0/Lib" });
+                const vulkan_sdk = module.owner.graph.environ_map.get("VULKAN_SDK") orelse
+                    @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
+                module.addIncludePath(.{ .cwd_relative = module.owner.fmt("{s}/Include", .{vulkan_sdk}) });
+                module.addLibraryPath(.{ .cwd_relative = module.owner.fmt("{s}/Lib", .{vulkan_sdk}) });
             },
             else => {},
         }
@@ -70,6 +72,7 @@ const Dependencies = struct {
                 module.linkFramework("Cocoa", .{});
                 module.linkFramework("Metal", .{});
                 module.linkFramework("QuartzCore", .{});
+                module.linkFramework("CoreGraphics", .{});
             },
             .windows => {
                 module.linkSystemLibrary("user32", .{});
@@ -123,6 +126,57 @@ fn createForbearModule(
     var dependencies = Dependencies.init(b, target, optimize);
     dependencies.addToModule(forbear);
 
+    const c_header = switch (target.result.os.tag) {
+        .linux => b.path("src/c_linux.h"),
+        .macos => b.path("src/c_macos.h"),
+        .windows => b.path("src/c_windows.h"),
+        else => @panic("Unsupported OS"),
+    };
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = c_header,
+        .target = target,
+        .optimize = optimize,
+    });
+    switch (target.result.os.tag) {
+        .linux => {
+            translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
+            translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" });
+            translate_c.linkSystemLibrary("wayland-client", .{});
+            translate_c.linkSystemLibrary("wayland-cursor", .{});
+            translate_c.linkSystemLibrary("xkbcommon", .{});
+            translate_c.linkSystemLibrary("vulkan", .{});
+        },
+        .macos => translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
+        .windows => {
+            const vulkan_sdk = b.graph.environ_map.get("VULKAN_SDK") orelse
+                @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
+            translate_c.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/Include", .{vulkan_sdk}) });
+        },
+        else => {},
+    }
+    if (target.result.os.tag == .macos) {
+        const sdk_path_raw = b.run(&.{ "xcrun", "--show-sdk-path" });
+        const sdk_path = std.mem.trim(u8, sdk_path_raw, " \n\t");
+        translate_c.addSystemFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdk_path}) });
+    }
+
+    const font_translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/font_c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    font_translate_c.addIncludePath(dependencies.freetype.path("include"));
+    font_translate_c.addIncludePath(dependencies.kb_text_shape.path("."));
+    forbear.addImport("font_c", font_translate_c.createModule());
+
+    const stb_translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/stb_image_c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    stb_translate_c.addIncludePath(dependencies.stb_image.path("."));
+    forbear.addImport("stb_image_c", stb_translate_c.createModule());
+
     if (target.result.os.tag == .linux) {
         const Protocol = struct {
             name: []const u8,
@@ -167,7 +221,10 @@ fn createForbearModule(
             forbear.addCSourceFile(.{ .file = protocolCPath, .flags = &.{} });
         }
         forbear.addIncludePath(wf.getDirectory());
+        translate_c.addIncludePath(wf.getDirectory());
     }
+
+    forbear.addImport("c", translate_c.createModule());
 
     addShaderImport(b, forbear, "shaders/element/vertex.vert", "element_vertex_shader");
     addShaderImport(b, forbear, "shaders/element/fragment.frag", "element_fragment_shader");

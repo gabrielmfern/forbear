@@ -140,7 +140,7 @@ fn renderingMain(
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer {
         if (gpa.deinit() == .leak) {
             std.log.err("Memory was leaked", .{});
@@ -148,6 +148,10 @@ pub fn main() !void {
     }
 
     const allocator = gpa.allocator();
+
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
 
     var graphics = try forbear.Graphics.init(
         allocator,
@@ -167,7 +171,7 @@ pub fn main() !void {
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
 
-    try forbear.init(allocator, &renderer);
+    try forbear.init(allocator, io, &renderer);
     defer forbear.deinit();
     forbear.setWindowHandlers(window);
 

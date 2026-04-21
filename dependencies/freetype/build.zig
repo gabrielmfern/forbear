@@ -58,24 +58,25 @@ pub fn build(b: *std.Build) void {
         }),
         .linkage = .static,
     });
-    lib.linkLibC();
-    lib.addIncludePath(b.path("include"));
+    lib.root_module.addIncludePath(b.path("include"));
     lib.root_module.addCMacro("FT2_BUILD_LIBRARY", "1");
     lib.root_module.addCMacro("FT_CONFIG_OPTION_USE_BROTLI", "1");
     // Enable LCD/subpixel rendering support for high-quality text rendering
     // The Microsoft ClearType patents have expired (circa 2019-2020)
     lib.root_module.addCMacro("FT_CONFIG_OPTION_SUBPIXEL_RENDERING", "1");
-    lib.linkLibrary(b.dependency("brotli", .{
+    lib.root_module.linkLibrary(b.dependency("brotli", .{
         .target = target,
         .optimize = optimize,
     }).artifact("brotli"));
 
     lib.root_module.addCMacro("HAVE_UNISTD_H", "1");
-    lib.addCSourceFiles(.{ .files = &sources, .flags = &.{} });
-    if (target.result.os.tag == .macos) lib.addCSourceFile(.{
-        .file = b.path("src/base/ftmac.c"),
-        .flags = &.{},
-    });
+    lib.root_module.addCSourceFiles(.{ .files = &sources, .flags = &.{} });
+    if (target.result.os.tag == .macos) {
+        lib.root_module.addCSourceFile(.{
+            .file = b.path("src/base/ftmac.c"),
+            .flags = &.{},
+        });
+    }
     lib.installHeadersDirectory(
         b.path("include/freetype"),
         "freetype",
