@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-13, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: Checkout repository
@@ -38,7 +38,16 @@ jobs:
 
       - name: Install project dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install glslang spirv-tools vulkan-loader
+        run: |
+          brew install glslang spirv-tools vulkan-loader
+          BREW_PREFIX=$(brew --prefix)
+          if [ "$BREW_PREFIX" != "/usr/local" ]; then
+            sudo mkdir -p /usr/local/include /usr/local/lib
+            sudo ln -sf "$BREW_PREFIX/include/vulkan" /usr/local/include/vulkan
+            for f in "$BREW_PREFIX"/lib/libvulkan*; do
+              sudo ln -sf "$f" /usr/local/lib/
+            done
+          fi
 
       - name: Install Vulkan SDK (Windows)
         if: runner.os == 'Windows'

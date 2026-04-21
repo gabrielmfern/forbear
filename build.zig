@@ -81,7 +81,11 @@ const Dependencies = struct {
             },
             else => {},
         }
-        module.linkSystemLibrary("vulkan", .{});
+        // Windows SDK ships vulkan-1.lib, not vulkan.lib
+        switch (self.target.result.os.tag) {
+            .windows => module.linkSystemLibrary("vulkan-1", .{}),
+            else => module.linkSystemLibrary("vulkan", .{}),
+        }
     }
 };
 
