@@ -29,12 +29,29 @@ fn growChildren(
     direction: Direction,
     remaining: *f32,
 ) void {
+    // Collect grow children and reset them to 0, reclaiming their full space.
+    // This allows us to distribute the TOTAL available space proportionally
+    // (like CSS Grid fr units), rather than remaining space on top of content.
     var childIndexOption = node.firstChild;
     while (childIndexOption) |childIndex| {
         const child = nodeTree.at(childIndex);
         if (child.style.placement == .flow) {
-            if (child.style.getPreferredSize(direction) == .grow and child.getSize(direction) < child.getMaxSize(direction)) {
-                activelyModifying.appendAssumeCapacity(child);
+            const factor = child.style.getPreferredSize(direction).growFactor();
+            // Only include children with positive grow factors; grow: 0.0 means
+            // "don't grow" so we leave those at their current size.
+            if (factor > 0.0) {
+                const currentSize = child.getSize(direction);
+                // Reclaim the full size back into remaining
+                remaining.* += currentSize;
+                // Reset child to 0; the distribution loop handles minSize constraints
+                if (direction == .horizontal) {
+                    child.size[0] = 0;
+                } else {
+                    child.size[1] = 0;
+                }
+                if (child.getMaxSize(direction) > 0) {
+                    activelyModifying.appendAssumeCapacity(child);
+                }
             }
         }
         childIndexOption = child.nextSibling;
@@ -46,11 +63,13 @@ fn growChildren(
         }) catch {};
     }
 
-    var iteration: usize = 0;
     while (remaining.* > 0.001 and activelyModifying.items.len > 0) {
-        iteration += 1;
-        var smallest: f32 = std.math.inf(f32);
-        var secondSmallest = std.math.inf(f32);
+        // Sum factors and find the smallest capacity-per-unit across candidates.
+        // "capacity-per-unit" is how much a child can still grow divided by its
+        // factor; the minimum across all candidates caps how far we can advance
+        // in this pass before one of them hits maxSize.
+        var totalFactor: f32 = 0.0;
+        var smallestCapPerUnit: f32 = std.math.inf(f32);
 
         var index: usize = 0;
         while (index < activelyModifying.items.len) {
@@ -59,52 +78,45 @@ fn growChildren(
                 _ = activelyModifying.swapRemove(index);
                 continue;
             }
-            if (child.getSize(direction) < smallest and child.getSize(direction) < child.getMaxSize(direction)) {
-                smallest = child.getSize(direction);
-            } else if (child.getSize(direction) < secondSmallest and child.getSize(direction) < child.getMaxSize(direction)) {
-                secondSmallest = child.getSize(direction);
+            const factor = child.style.getPreferredSize(direction).growFactor();
+            totalFactor += factor;
+            const capPerUnit = (child.getMaxSize(direction) - child.getSize(direction)) / factor;
+            if (capPerUnit < smallestCapPerUnit) {
+                smallestCapPerUnit = capPerUnit;
             }
             index += 1;
         }
-        if (activelyModifying.items.len == 0) {
-            break;
-        }
+        if (activelyModifying.items.len == 0) break;
+        if (totalFactor <= 0.0) break;
 
-        // This ensures these two elements don't become so large that the remaining
-        // space ends up not being shared across all of the elements
-        var toAdd = @min(
-            secondSmallest - smallest,
-            remaining.* / @as(f32, @floatFromInt(activelyModifying.items.len)),
-        );
-        // This avoids an infinte loop. It means all the children are the same size and
-        // we can simply share the remaining space across all of them
-        if (toAdd == 0) {
-            toAdd = remaining.* / @as(f32, @floatFromInt(activelyModifying.items.len));
-        }
+        // Advance by at most smallestCapPerUnit units (so no child exceeds its
+        // max), and at most remaining/totalFactor (so we don't overshoot the
+        // available space).
+        const toAddPerUnit = @min(smallestCapPerUnit, remaining.* / totalFactor);
+        if (toAddPerUnit <= 0.0) break;
+
         const remainingBeforeLoop = remaining.*;
         for (activelyModifying.items) |child| {
-            if (approxEq(child.getSize(direction), smallest)) {
-                const oldSize = child.getSize(direction);
-                const allowedDifference = @min(
-                    @max(oldSize + toAdd, child.getMinSize(direction)),
-                    child.getMaxSize(direction),
-                ) - oldSize;
-                if (direction == .horizontal) {
-                    child.size[0] += allowedDifference;
-                } else {
-                    child.size[1] += allowedDifference;
-                }
-                remaining.* -= allowedDifference;
-                if (forbear.traceWriter) |w| {
-                    w.print("[grow]   child={d} {d:.1} -> {d:.1}\n", .{
-                        child.key, oldSize, child.getSize(direction),
-                    }) catch {};
-                }
+            const factor = child.style.getPreferredSize(direction).growFactor();
+            const oldSize = child.getSize(direction);
+            const allowedDifference = @min(
+                @max(oldSize + toAddPerUnit * factor, child.getMinSize(direction)),
+                child.getMaxSize(direction),
+            ) - oldSize;
+            if (direction == .horizontal) {
+                child.size[0] += allowedDifference;
+            } else {
+                child.size[1] += allowedDifference;
+            }
+            remaining.* -= allowedDifference;
+            if (forbear.traceWriter) |w| {
+                w.print("[grow]   child={d} factor={d:.1} {d:.1} -> {d:.1}\n", .{
+                    child.key, factor, oldSize, child.getSize(direction),
+                }) catch {};
             }
         }
         if (remaining.* == remainingBeforeLoop) {
-            // This means that some constraint is impeding the growth
-            // of the childen, so we do this to avoid an infinte loop
+            // Some constraint is impeding all children; avoid an infinite loop.
             break;
         }
     }
@@ -241,7 +253,7 @@ pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
             childIndexOpt = ancestor.firstChild;
             while (childIndexOpt) |childIndex| {
                 const child = nodeTree.at(childIndex);
-                if (child.style.placement == .flow and child.style.getPreferredSize(perpendicular) == .grow) {
+                if (child.style.placement == .flow and child.style.getPreferredSize(perpendicular).isGrow()) {
                     const marginVector = child.style.margin.get(perpendicular);
                     const available = availableBase - marginVector[0] - marginVector[1];
                     child.setSize(perpendicular, @max(@min(available, child.getMaxSize(perpendicular)), child.getMinSize(perpendicular)));
@@ -288,7 +300,7 @@ pub fn growAndShrink(
 
             if (direction.perpendicular() == .vertical) {
                 const available = node.size[1] - node.fittingBase(.vertical) - child.style.margin.y[0] - child.style.margin.y[1];
-                if (child.style.height == .grow or (child.size[1] > available and child.minSize[1] < child.size[1])) {
+                if (child.style.height.isGrow() or (child.size[1] > available and child.minSize[1] < child.size[1])) {
                     child.size[1] = @max(
                         @min(
                             available,
@@ -299,7 +311,7 @@ pub fn growAndShrink(
                 }
             } else if (direction.perpendicular() == .horizontal) {
                 const available = node.size[0] - node.fittingBase(.horizontal) - child.style.margin.x[0] - child.style.margin.x[1];
-                if (child.style.width == .grow or (child.size[0] > available and child.minSize[0] < child.size[0])) {
+                if (child.style.width.isGrow() or (child.size[0] > available and child.minSize[0] < child.size[0])) {
                     child.size[0] = @max(
                         @min(
                             available,
@@ -624,10 +636,10 @@ pub fn layout() !*NodeTree {
     if (context.nodeTree.list.items.len > 0) {
         const root = context.nodeTree.at(0);
 
-        if (root.style.width == .grow) {
+        if (root.style.width.isGrow()) {
             root.size[0] = @min(@max(viewportSize[0], root.minSize[0]), root.maxSize[0]);
         }
-        if (root.style.height == .grow) {
+        if (root.style.height.isGrow()) {
             root.size[1] = @min(@max(viewportSize[1], root.minSize[1]), root.maxSize[1]);
         }
 

@@ -6,8 +6,8 @@ const black: Vec4 = .{ 0.01, 0.019, 0.07, 1.0 };
 pub fn Testimonial(uniqueIndentifier: []const u8) *const fn (void) void {
     forbear.component("Testimonial")({
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .fontSize = 11.25,
             .lineHeight = 1.4,
             .padding = .all(13.5),

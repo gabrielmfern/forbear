@@ -28,7 +28,23 @@ pub const Sizing = union(enum) {
     fixed: f32,
     /// A ratio with respect to the opposite axis.
     ratio: f32,
-    grow,
+    /// Grows to fill available space, taking a proportional share based on
+    /// the factor. A factor of 2.0 claims twice the space of 1.0.
+    grow: f32,
+
+    pub fn isGrow(self: @This()) bool {
+        return switch (self) {
+            .grow => true,
+            else => false,
+        };
+    }
+
+    pub fn growFactor(self: @This()) f32 {
+        return switch (self) {
+            .grow => |f| f,
+            else => 0.0,
+        };
+    }
 };
 
 pub const Shadow = struct {
@@ -507,7 +523,7 @@ pub const NodeTree = struct {
 
     pub fn dump(self: *const @This(), writer: *std.Io.Writer) !void {
         if (self.list.items.len > 0) {
-            try self.list.items[0].layoutDump(writer, 0, 0);
+            try self.list.items[0].dump(writer, 0, 0);
             try writer.flush();
         }
     }
@@ -625,7 +641,10 @@ pub const Node = struct {
 
     pub fn shouldFitMin(self: @This(), direction: Direction) bool {
         const preferredSize = self.style.getPreferredSize(direction);
-        return preferredSize != .fixed and self.style.getMinSize(direction) == null;
+        return switch (preferredSize) {
+            .fixed => false,
+            else => self.style.getMinSize(direction) == null,
+        };
     }
 
     pub fn fitChild(self: *@This(), child: *const Node) void {
@@ -739,7 +758,10 @@ pub const Node = struct {
         @memset(&buf, 0);
         const result = switch (sizing) {
             .fit => std.fmt.bufPrint(&buf, "fit", .{}),
-            .grow => std.fmt.bufPrint(&buf, "grow", .{}),
+            .grow => |f| if (f == 1.0)
+                std.fmt.bufPrint(&buf, "grow", .{})
+            else
+                std.fmt.bufPrint(&buf, "grow({d:.1})", .{f}),
             .fixed => |v| std.fmt.bufPrint(&buf, "fixed({d:.1})", .{v}),
             .ratio => |v| std.fmt.bufPrint(&buf, "ratio({d:.2})", .{v}),
         };
@@ -753,11 +775,13 @@ pub const Node = struct {
         }
     }
 
-    pub fn layoutDump(self: *const @This(), writer: *std.Io.Writer, idx: usize, indent: usize) !void {
+    pub fn dump(self: *const @This(), writer: *std.Io.Writer, index: usize, indent: usize) !void {
         // Line 1: index, direction, overflow, placement
         try writeIndent(writer, indent);
-        try writer.print("[{d}] dir={s}  overflow={s}  placement={s}\n", .{
-            idx,
+        try writer.print("  [{d}]\n", .{index});
+
+        try writeIndent(writer, indent);
+        try writer.print("  dir={s}  overflow={s}  placement={s}\n", .{
             @tagName(self.style.direction),
             @tagName(self.style.overflow),
             @tagName(self.style.placement),
@@ -824,7 +848,7 @@ pub const Node = struct {
         var childIdx = self.firstChild;
         while (childIdx) |ci| {
             const child = self.tree.at(ci);
-            try child.layoutDump(writer, ci, indent + 1);
+            try child.dump(writer, ci, indent + 1);
             childIdx = child.nextSibling;
         }
     }

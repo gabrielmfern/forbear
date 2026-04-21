@@ -22,7 +22,7 @@ const rainbowBar = [_]forbear.GradientStop{
 fn App() !void {
     forbear.component("app")({
         forbear.element(.{
-            .width = .grow,
+            .width = .{ .grow = 1.0 },
             .direction = .vertical,
             .xJustification = .center,
             .yJustification = .start,
@@ -35,7 +35,7 @@ fn App() !void {
             forbear.FpsCounter();
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .background = .{ .gradient = &rainbowBar },
                 .padding = .block(15.0),
                 .xJustification = .center,
@@ -46,7 +46,7 @@ fn App() !void {
             });
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .minHeight = 72.0,
                 .padding = .inLine(15.0),
@@ -58,7 +58,7 @@ fn App() !void {
                     .margin = forbear.Margin.right(24.0),
                 }, try forbear.useImage("uhoh-logo"));
                 forbear.element(.{
-                    .width = .grow,
+                    .width = .{ .grow = 1.0 },
                     .background = .{ .color = .{ 1.0, 0.0, 0.0, 1.0 } },
                 })({});
                 forbear.element(.{
@@ -75,7 +75,7 @@ fn App() !void {
             });
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .margin = .block(36.0),
                 .direction = .horizontal,
@@ -84,7 +84,8 @@ fn App() !void {
             })({
                 forbear.element(.{
                     .direction = .vertical,
-                    .width = .grow,
+                    .width = .{ .grow = 2.0 },
+                    .padding = .right(30.0),
                 })({
                     forbear.element(.{
                         .fontWeight = 700,
@@ -114,8 +115,7 @@ fn App() !void {
                     });
                 });
                 forbear.image(.{
-                    .width = .grow,
-                    .padding = .left(30.0),
+                    .width = .{ .grow = 1.0 },
                     .blendMode = .multiply,
                 }, try forbear.useImage("uhoh-hero"));
             });
@@ -127,7 +127,7 @@ fn App() !void {
             };
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -141,7 +141,7 @@ fn App() !void {
                         .direction = .horizontal,
                         .xJustification = .start,
                         .yJustification = .center,
-                        .width = .grow,
+                        .width = .{ .grow = 1.0 },
                         .padding = if (i > 0) .left(20.0) else null,
                     })({
                         forbear.image(.{
@@ -162,21 +162,21 @@ fn App() !void {
             };
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
             })({
                 forbear.image(.{
-                    .width = .grow,
+                    .width = .{ .grow = 1.0 },
                     .maxWidth = 369,
                     .blendMode = .multiply,
                     .margin = forbear.Margin.inLine(0.0).withRight(24.0),
                 }, try forbear.useImage("uhoh-problem"));
                 forbear.element(.{
                     .direction = .vertical,
-                    .width = .grow,
+                    .width = .{ .grow = 1.0 },
                 })({
                     forbear.element(.{
                         .fontWeight = 600,
@@ -225,7 +225,7 @@ fn App() !void {
             });
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -240,11 +240,11 @@ fn App() !void {
                     forbear.text("Don't take our word for it.");
                 });
                 forbear.element(.{
-                    .width = .grow,
+                    .width = .{ .grow = 1.0 },
                     .direction = .vertical,
                 })({
                     forbear.element(.{
-                        .width = .grow,
+                        .width = .{ .grow = 1.0 },
                     })({
                         Testimonial("uhoh-testimonial-1")({
                             forbear.text("I'll be honest, we didn't know we needed help with the IT/Tech side of our business. After bringing on uhoh, I realized that I was very wrong. In the first month we built out systems and processes that will give us the capacity to scale well past where we were targeting for this year. Bonus is any time we have a problem and hit a wall, they just fix it. It really is like having a full IT team on standby. 10/10 recommend this.");
@@ -269,7 +269,7 @@ fn App() !void {
                     });
 
                     forbear.element(.{
-                        .width = .grow,
+                        .width = .{ .grow = 1.0 },
                     })({
                         Testimonial("uhoh-testimonial-alex")({
                             forbear.text("One of the best decisions I've made as a founder. So much time saved to focus on everything else. I didn't even realize how much time I was losing previously. Highly recommend.");
@@ -304,7 +304,7 @@ fn App() !void {
             };
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .padding = .all(15.0),
                 .borderWidth = .all(1.5),
@@ -314,7 +314,7 @@ fn App() !void {
             })({
                 forbear.element(.{
                     .fontWeight = 700,
-                    .width = .grow,
+                    .width = .{ .grow = 1.0 },
                     .xJustification = .center,
                     .yJustification = .center,
                     .fontSize = 18.0,
@@ -339,7 +339,7 @@ fn App() !void {
             });
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -347,7 +347,7 @@ fn App() !void {
                 .direction = .vertical,
             })({
                 forbear.image(.{
-                    .width = .grow,
+                    .width = .{ .grow = 1.0 },
                     .maxWidth = 600,
                     .blendMode = .multiply,
                 }, try forbear.useImage("uhoh-solution"));
@@ -479,7 +479,7 @@ fn App() !void {
             };
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -488,7 +488,7 @@ fn App() !void {
                 forbear.element(.{ .direction = .vertical })({
                     inline for (offerings) |offering| {
                         forbear.element(.{
-                            .width = .grow,
+                            .width = .{ .grow = 1.0 },
                             .background = .{ .color = Colors.card },
                             .borderRadius = 12.0,
                             .borderColor = Colors.border,
@@ -504,7 +504,7 @@ fn App() !void {
                                 .margin = forbear.Margin.block(0.0).withBottom(9.0),
                             })({
                                 forbear.image(.{
-                                    .width = .grow,
+                                    .width = .{ .grow = 1.0 },
                                     .maxWidth = 100.0,
                                     .blendMode = .multiply,
                                     .margin = forbear.Margin.right(9.0),
@@ -559,7 +559,7 @@ fn App() !void {
             });
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -602,7 +602,7 @@ fn App() !void {
             };
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -645,7 +645,7 @@ fn App() !void {
                         }
                     });
                     forbear.image(.{
-                        .width = .grow,
+                        .width = .{ .grow = 1.0 },
                         .maxWidth = 169,
                         .blendMode = .multiply,
                         .margin = forbear.Margin.left(24.0),
@@ -658,7 +658,7 @@ fn App() !void {
                     .margin = forbear.Margin.block(13.5).withBottom(0.0),
                 })({
                     forbear.image(.{
-                        .width = .grow,
+                        .width = .{ .grow = 1.0 },
                         .maxWidth = 169,
                         .blendMode = .multiply,
                         .margin = forbear.Margin.inLine(0.0).withRight(10.5),
@@ -695,7 +695,7 @@ fn App() !void {
             };
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -738,7 +738,7 @@ fn App() !void {
             });
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -779,7 +779,7 @@ fn App() !void {
                 });
             });
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 940.0,
                 .background = .{ .color = Colors.soft },
                 .xJustification = .center,

@@ -32,58 +32,58 @@ fn benchLayout(alloc: std.mem.Allocator) void {
 }
 
 fn buildTree() void {
-    forbear.element(.{ .width = .grow, .height = .grow, .direction = .vertical })({
-        forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 60 } })({});
+    forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 }, .direction = .vertical })({
+        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal })({
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 60 } })({});
             forbear.element(.{ .width = .{ .fixed = 200 }, .height = .{ .fixed = 60 } })({});
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 60 } })({});
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 60 } })({});
         });
-        forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 80 } })({});
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 80 } })({});
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 80 } })({});
+        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal })({
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 80 } })({});
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 80 } })({});
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 80 } })({});
         });
-        forbear.element(.{ .width = .grow, .height = .fit, .direction = .vertical })({
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 40 } })({});
+        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical })({
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 40 } })({});
             forbear.element(.{ .width = .{ .fixed = 600 }, .height = .{ .fixed = 40 } })({});
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 40 } })({});
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 40 } })({});
             forbear.element(.{ .width = .{ .fixed = 400 }, .height = .{ .fixed = 40 } })({});
         });
-        forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 100 } })({
-                forbear.element(.{ .width = .grow, .height = .grow })({});
-                forbear.element(.{ .width = .grow, .height = .grow })({});
+        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal })({
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 100 } })({
+                forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 } })({});
+                forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 } })({});
             });
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 100 } })({
-                forbear.element(.{ .width = .grow, .height = .{ .fixed = 30 } })({});
-                forbear.element(.{ .width = .grow, .height = .{ .fixed = 30 } })({});
-                forbear.element(.{ .width = .grow, .height = .{ .fixed = 30 } })({});
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 100 } })({
+                forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 30 } })({});
+                forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 30 } })({});
+                forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 30 } })({});
             });
         });
-        forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 50 } })({});
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 50 } })({});
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 50 } })({});
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 50 } })({});
+        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal })({
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 50 } })({});
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 50 } })({});
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 50 } })({});
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 50 } })({});
         });
     });
 }
 
 fn buildLargeTree() void {
-    forbear.element(.{ .width = .grow, .height = .grow, .direction = .vertical })({
+    forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 }, .direction = .vertical })({
         // Header section
-        forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
+        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal })({
             forbear.element(.{ .width = .{ .fixed = 150 }, .height = .{ .fixed = 60 } })({});
-            forbear.element(.{ .width = .grow, .height = .{ .fixed = 60 }, .direction = .horizontal })({
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 60 }, .direction = .horizontal })({
                 inline for (0..8) |_| {
-                    forbear.element(.{ .width = .grow, .height = .grow })({});
+                    forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 } })({});
                 }
             });
             forbear.element(.{ .width = .{ .fixed = 100 }, .height = .{ .fixed = 60 } })({});
         });
 
         // Hero section with ratio
-        forbear.element(.{ .width = .grow, .height = .{ .ratio = 0.4 } })({
+        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .ratio = 0.4 } })({
             forbear.element(.{ .width = .fit, .height = .fit, .direction = .vertical })({
                 forbear.element(.{ .width = .{ .fixed = 400 }, .height = .{ .fixed = 60 } })({});
                 forbear.element(.{ .width = .{ .fixed = 300 }, .height = .{ .fixed = 40 } })({});
@@ -93,12 +93,12 @@ fn buildLargeTree() void {
 
         // Grid of cards (simulates product listing)
         inline for (0..4) |_| {
-            forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal })({
                 inline for (0..4) |_| {
-                    forbear.element(.{ .width = .grow, .height = .fit, .direction = .vertical })({
-                        forbear.element(.{ .width = .grow, .height = .{ .ratio = 1.0 } })({});
-                        forbear.element(.{ .width = .grow, .height = .{ .fixed = 24 } })({});
-                        forbear.element(.{ .width = .grow, .height = .{ .fixed = 18 } })({});
+                    forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical })({
+                        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .ratio = 1.0 } })({});
+                        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 24 } })({});
+                        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 18 } })({});
                         forbear.element(.{ .width = .{ .fixed = 80 }, .height = .{ .fixed = 36 } })({});
                     });
                 }
@@ -106,12 +106,12 @@ fn buildLargeTree() void {
         }
 
         // Footer with nested columns
-        forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
+        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal })({
             inline for (0..4) |_| {
-                forbear.element(.{ .width = .grow, .height = .fit, .direction = .vertical })({
-                    forbear.element(.{ .width = .grow, .height = .{ .fixed = 24 } })({});
+                forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical })({
+                    forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 24 } })({});
                     inline for (0..6) |_| {
-                        forbear.element(.{ .width = .grow, .height = .{ .fixed = 20 } })({});
+                        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 20 } })({});
                     }
                 });
             }
@@ -120,23 +120,23 @@ fn buildLargeTree() void {
 }
 
 fn buildHugeTree() void {
-    forbear.element(.{ .width = .grow, .height = .grow, .direction = .vertical })({
+    forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 }, .direction = .vertical })({
         // 20 sections, each with nested grids
         inline for (0..20) |_| {
-            forbear.element(.{ .width = .grow, .height = .fit, .direction = .vertical })({
+            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical })({
                 // Header row
-                forbear.element(.{ .width = .grow, .height = .{ .fixed = 40 }, .direction = .horizontal })({
+                forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 40 }, .direction = .horizontal })({
                     inline for (0..5) |_| {
-                        forbear.element(.{ .width = .grow, .height = .grow })({});
+                        forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 } })({});
                     }
                 });
                 // Grid of cards: 5 rows x 6 cols = 30 cards per section
                 inline for (0..5) |_| {
-                    forbear.element(.{ .width = .grow, .height = .fit, .direction = .horizontal })({
+                    forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal })({
                         inline for (0..6) |_| {
-                            forbear.element(.{ .width = .grow, .height = .fit, .direction = .vertical })({
-                                forbear.element(.{ .width = .grow, .height = .{ .ratio = 0.75 } })({});
-                                forbear.element(.{ .width = .grow, .height = .{ .fixed = 20 } })({});
+                            forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical })({
+                                forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .ratio = 0.75 } })({});
+                                forbear.element(.{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 20 } })({});
                                 forbear.element(.{ .width = .{ .fixed = 60 }, .height = .{ .fixed = 30 } })({});
                             });
                         }
