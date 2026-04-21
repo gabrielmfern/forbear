@@ -2847,14 +2847,14 @@ const maxFramesInFlight = 2;
 pub const FrameRateCapper = struct {
     lastFrameEnd: ?std.Io.Clock.Timestamp = null,
 
-    pub fn cap(self: *@This(), io: std.Io, targetFrameTimeNs: u64) void {
+    pub fn cap(self: *@This(), io: std.Io, targetFrameTimeNs: u64) !void {
         if (self.lastFrameEnd) |lastFrameEnd| {
             const now = std.Io.Clock.Timestamp.now(io, .awake);
             const elapsed = lastFrameEnd.durationTo(now);
             const elapsedNs: u64 = @intCast(@max(0, elapsed.raw.toNanoseconds()));
             if (elapsedNs < targetFrameTimeNs) {
-                const sleepDuration = std.Io.Duration.fromNanoseconds(@intCast(targetFrameTimeNs - elapsedNs));
-                sleepDuration.sleep(io) catch {};
+                const sleepNs: i96 = @intCast(targetFrameTimeNs - elapsedNs);
+                try io.sleep(.{ .nanoseconds = sleepNs }, .awake);
             }
         }
         self.lastFrameEnd = std.Io.Clock.Timestamp.now(io, .awake);
@@ -3513,9 +3513,7 @@ pub const Renderer = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        const io = root.getContext().io;
-        self.mutex.lockUncancelable(io);
-        defer self.mutex.unlock(io);
+        // No mutex needed - rendering thread should have exited before deinit is called
         for (self.renderFinishedSemaphores) |semaphore| {
             c.vkDestroySemaphore(self.logicalDevice, semaphore, null);
         }
@@ -4084,7 +4082,7 @@ pub const Renderer = struct {
         // This is only done for the first 50 frames because after that FIFO
         // should kick in properly.
         if (builtin.os.tag == .linux and self.framesRenderedInSwapchain < 50) {
-            self.frameRateCapper.cap(root.getContext().io, targetFrameTimeNs);
+            try self.frameRateCapper.cap(root.getContext().io, targetFrameTimeNs);
         }
         if (self.framesRenderedInSwapchain == 50) {
             switch (builtin.os.tag) {

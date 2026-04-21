@@ -620,7 +620,7 @@ fn keyboardHandleKeymap(
     const mapSharedMemory = std.posix.mmap(
         null,
         @intCast(size),
-        std.os.linux.PROT.READ,
+        .{ .READ = true },
         std.os.linux.MAP{ .TYPE = .PRIVATE },
         fd,
         0,
@@ -629,7 +629,7 @@ fn keyboardHandleKeymap(
         @panic("Could not mmap keymap shared memory");
     };
     defer std.posix.munmap(mapSharedMemory);
-    defer std.posix.close(fd);
+    defer _ = std.os.linux.close(fd);
 
     if (window.xkbKeymap) |previousKeymap| {
         c.xkb_keymap_unref(previousKeymap);
@@ -865,10 +865,6 @@ pub fn init(
 
     c.wl_surface_commit(window.wlSurface);
     _ = c.wl_display_roundtrip(window.wlDisplay);
-
-    // gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    // gl.enable(gl.BLEND);
-    // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     try window.setupCursor();
 

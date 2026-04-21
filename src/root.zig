@@ -1275,7 +1275,7 @@ pub fn setWindowHandlers(window: *Window) void {
                 const offset = if (builtin.os.tag == .macos)
                     nativeOffset
                 else
-                    100.0 * std.math.sign(nativeOffset);
+                    100.0 * @as(f32, @floatFromInt(std.math.sign(nativeOffset)));
 
                 // Browser-like behavior: Shift + vertical scroll = horizontal scroll
                 const shiftAccordingAxis = if (wnd.isHoldingShift() and axis == .vertical)
