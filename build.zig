@@ -138,7 +138,11 @@ fn createForbearModule(
         .optimize = optimize,
     });
     switch (target.result.os.tag) {
-        .linux, .macos => translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
+        .linux => {
+            translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
+            translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" });
+        },
+        .macos => translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
         .windows => {
             const vulkan_sdk = b.graph.environ_map.get("VULKAN_SDK") orelse
                 @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
