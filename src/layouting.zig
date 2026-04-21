@@ -70,6 +70,7 @@ fn growChildren(
             index += 1;
         }
         if (activelyModifying.items.len == 0) break;
+        if (totalFactor <= 0.0) break;
 
         // Advance by at most smallestCapPerUnit units (so no child exceeds its
         // max), and at most remaining/totalFactor (so we don't overshoot the
