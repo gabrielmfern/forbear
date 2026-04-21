@@ -20,6 +20,30 @@ const builtin = @import("builtin");
 const native_os = builtin.os.tag;
 const windows = std.os.windows;
 
+// kernel32 exports removed from Zig 0.16 stdlib, declared here for Windows builds
+const Win32 = if (native_os == .windows) struct {
+    pub extern "kernel32" fn DuplicateHandle(
+        hSourceProcessHandle: windows.HANDLE,
+        hSourceHandle: windows.HANDLE,
+        hTargetProcessHandle: windows.HANDLE,
+        lpTargetHandle: *windows.HANDLE,
+        dwDesiredAccess: u32,
+        bInheritHandle: windows.BOOL,
+        dwOptions: u32,
+    ) callconv(.c) windows.BOOL;
+    pub extern "kernel32" fn AddVectoredExceptionHandler(
+        First: u32,
+        Handler: *const fn (*windows.EXCEPTION_POINTERS) callconv(.winapi) c_long,
+    ) callconv(.c) ?*anyopaque;
+    pub extern "kernel32" fn WriteFile(
+        hFile: windows.HANDLE,
+        lpBuffer: [*]const u8,
+        nNumberOfBytesToWrite: u32,
+        lpNumberOfBytesWritten: ?*u32,
+        lpOverlapped: ?*anyopaque,
+    ) callconv(.c) windows.BOOL;
+} else struct {};
+
 const Allocator = std.mem.Allocator;
 const File = std.Io.File;
 
@@ -381,7 +405,7 @@ const StderrCapture = struct {
             var duplicated: windows.HANDLE = undefined;
             const current_process = windows.GetCurrentProcess();
             const DUPLICATE_SAME_ACCESS = 0x00000002;
-            const rc = windows.kernel32.DuplicateHandle(
+            const rc = Win32.DuplicateHandle(
                 current_process,
                 stderr_handle,
                 current_process,
@@ -491,7 +515,7 @@ const CrashOutput = struct {
 
         switch (native_os) {
             .windows => {
-                _ = windows.kernel32.AddVectoredExceptionHandler(1, handleWindows);
+                _ = Win32.AddVectoredExceptionHandler(1, handleWindows);
             },
             .linux,
             .macos,
@@ -621,8 +645,13 @@ fn printToRealStderr(comptime format: []const u8, args: anytype) void {
 }
 
 fn writeToRealStderr(msg: []const u8) void {
-    const fd = if (realStderr) |file| file.handle else std.c.STDERR_FILENO;
-    _ = std.c.write(fd, msg.ptr, msg.len);
+    if (native_os == .windows) {
+        const handle = if (realStderr) |file| file.handle else windows.peb().ProcessParameters.hStdError;
+        _ = Win32.WriteFile(handle, msg.ptr, @intCast(msg.len), null, null);
+    } else {
+        const fd = if (realStderr) |file| file.handle else std.c.STDERR_FILENO;
+        _ = std.c.write(fd, msg.ptr, msg.len);
+    }
 }
 
 const Printer = struct {
@@ -677,6 +706,9 @@ const SlowTracker = struct {
     };
 
     fn getNs() u64 {
+        if (native_os == .windows) {
+            return @intCast(std.time.nanoTimestamp());
+        }
         var ts: std.c.timespec = undefined;
         _ = std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts);
         return @as(u64, @intCast(ts.sec)) * 1_000_000_000 + @as(u64, @intCast(ts.nsec));
