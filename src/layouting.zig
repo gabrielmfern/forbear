@@ -29,12 +29,26 @@ fn growChildren(
     direction: Direction,
     remaining: *f32,
 ) void {
+    // Collect grow children and reset them to 0, reclaiming their full space.
+    // This allows us to distribute the TOTAL available space proportionally
+    // (like CSS Grid fr units), rather than remaining space on top of content.
     var childIndexOption = node.firstChild;
     while (childIndexOption) |childIndex| {
         const child = nodeTree.at(childIndex);
         if (child.style.placement == .flow) {
-            if (child.style.getPreferredSize(direction).isGrow() and child.getSize(direction) < child.getMaxSize(direction)) {
-                activelyModifying.appendAssumeCapacity(child);
+            if (child.style.getPreferredSize(direction).isGrow()) {
+                const currentSize = child.getSize(direction);
+                // Reclaim the full size back into remaining
+                remaining.* += currentSize;
+                // Reset child to 0; the distribution loop handles minSize constraints
+                if (direction == .horizontal) {
+                    child.size[0] = 0;
+                } else {
+                    child.size[1] = 0;
+                }
+                if (child.getMaxSize(direction) > 0) {
+                    activelyModifying.appendAssumeCapacity(child);
+                }
             }
         }
         childIndexOption = child.nextSibling;
