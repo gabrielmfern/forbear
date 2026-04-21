@@ -6,6 +6,143 @@ const utilities = @import("utilities.zig");
 const forbear = @import("../root.zig");
 const Vec2 = @Vector(2, f32);
 
+test "2.0 grow factor against 1.0 grow factor on fixed height parent" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .horizontal,
+            .textWrapping = .word,
+        })({
+            forbear.element(.{
+                .width = .{ .grow = 2.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({});
+
+            forbear.element(.{
+                .width = .{ .grow = 1.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({});
+        });
+
+        const tree = try layout();
+
+        const root = tree.at(0);
+        const factorTwo = tree.at(root.firstChild.?);
+        const factorOne = tree.at(root.lastChild.?);
+
+        try std.testing.expectApproxEqAbs(factorTwo.size[0], root.size[0] / 3 * 2, 0.0001);
+        try std.testing.expectApproxEqAbs(factorOne.size[0], root.size[0] / 3, 0.0001);
+        try std.testing.expectApproxEqAbs(factorTwo.size[0], factorOne.size[0] * 2, 0.0001);
+    });
+}
+
+test "grow factor 0.0 does not participate in grow distribution" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300.0 },
+            .height = .fit,
+            .direction = .horizontal,
+        })({
+            // grow: 0.0 should keep its fitted size (50px from its child)
+            forbear.element(.{
+                .width = .{ .grow = 0.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                })({});
+            });
+
+            // grow: 1.0 should take all remaining space (300 - 50 = 250)
+            forbear.element(.{
+                .width = .{ .grow = 1.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({});
+        });
+
+        const tree = try layout();
+
+        const root = tree.at(0);
+        const zeroFactor = tree.at(root.firstChild.?);
+        const oneFactor = tree.at(root.lastChild.?);
+
+        // grow: 0.0 should keep fitted width of 50
+        try std.testing.expectApproxEqAbs(zeroFactor.size[0], 50.0, 0.0001);
+        // grow: 1.0 should take the remaining 250
+        try std.testing.expectApproxEqAbs(oneFactor.size[0], 250.0, 0.0001);
+    });
+}
+
+test "negative grow factor does not participate in grow distribution" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300.0 },
+            .height = .fit,
+            .direction = .horizontal,
+        })({
+            // grow: -1.0 should keep its fitted size (50px from its child)
+            forbear.element(.{
+                .width = .{ .grow = -1.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                })({});
+            });
+
+            // grow: 1.0 should take all remaining space (300 - 50 = 250)
+            forbear.element(.{
+                .width = .{ .grow = 1.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({});
+        });
+
+        const tree = try layout();
+
+        const root = tree.at(0);
+        const negativeFactor = tree.at(root.firstChild.?);
+        const oneFactor = tree.at(root.lastChild.?);
+
+        // grow: -1.0 should keep fitted width of 50
+        try std.testing.expectApproxEqAbs(negativeFactor.size[0], 50.0, 0.0001);
+        // grow: 1.0 should take the remaining 250
+        try std.testing.expectApproxEqAbs(oneFactor.size[0], 250.0, 0.0001);
+    });
+}
+
 test "fit height parent, with grow height child containing wrapping text" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -25,7 +162,7 @@ test "fit height parent, with grow height child containing wrapping text" {
     // then cards A and C (with height: .grow) should stretch to match.
     try forbear.frame(try utilities.frameMeta(arena))({
         forbear.element(.{
-            .width = .grow,
+            .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .horizontal,
             .textWrapping = .word,
@@ -34,7 +171,7 @@ test "fit height parent, with grow height child containing wrapping text" {
             // direction: .vertical is required so children get width constrained
             forbear.element(.{
                 .width = .{ .fixed = 100 },
-                .height = .grow,
+                .height = .{ .grow = 1.0 },
                 .direction = .vertical,
             })({
                 forbear.text("Short.");
@@ -43,7 +180,7 @@ test "fit height parent, with grow height child containing wrapping text" {
             // Card B: long text (will be tallest after wrapping)
             forbear.element(.{
                 .width = .{ .fixed = 100 },
-                .height = .grow,
+                .height = .{ .grow = 1.0 },
                 .direction = .vertical,
             })({
                 forbear.text("This testimonial will wrap to many lines when constrained to 100px width forcing this card to be taller.");
@@ -52,7 +189,7 @@ test "fit height parent, with grow height child containing wrapping text" {
             // Card C: medium text
             forbear.element(.{
                 .width = .{ .fixed = 100 },
-                .height = .grow,
+                .height = .{ .grow = 1.0 },
                 .direction = .vertical,
             })({
                 forbear.text("Medium.");
@@ -174,12 +311,12 @@ test "uhoh-shaped grow-width ratio hero does not overlap following sibling secti
     try forbear.frame(try utilities.frameMeta(arena))({
         // viewport 800px wide from utilities.frameMeta
         forbear.element(.{
-            .width = .grow,
+            .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .vertical,
         })({
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .maxWidth = 600,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -188,7 +325,7 @@ test "uhoh-shaped grow-width ratio hero does not overlap following sibling secti
             })({
                 // Stand-in for `forbear.image` (grow width + intrinsic aspect).
                 forbear.element(.{
-                    .width = .grow,
+                    .width = .{ .grow = 1.0 },
                     .height = .{ .ratio = 0.5 },
                 })({});
                 forbear.element(.{
@@ -204,7 +341,7 @@ test "uhoh-shaped grow-width ratio hero does not overlap following sibling secti
                 });
             });
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .height = .{ .fixed = 80 },
                 .background = .{ .color = .{ 1, 1, 1, 1 } },
             })({});
@@ -344,20 +481,20 @@ test "cross-axis fit row height reflects full column height after text wrapping"
     // The sibling must start below the row — not overlap it.
     try forbear.frame(try utilities.frameMeta(arena))({
         forbear.element(.{
-            .width = .grow,
+            .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .vertical,
             .textWrapping = .word,
         })({
             // Row (fit height, horizontal)
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .direction = .horizontal,
             })({
                 // Inner column stacking text + fixed child
                 forbear.element(.{
                     .direction = .vertical,
-                    .width = .grow,
+                    .width = .{ .grow = 1.0 },
                 })({
                     forbear.element(.{
                         .width = .{ .fixed = 200 },
@@ -412,8 +549,8 @@ test "ratio width tracks fit height after propagated text wrap" {
 
     try forbear.frame(try utilities.frameMeta(arena))({
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .vertical,
         })({
             forbear.element(.{
@@ -456,12 +593,12 @@ test "ratio height resolves after grow distributes width" {
         // viewport 800x600; horizontal root
         // child: width grows to fill 800, height = ratio(0.5) → 400
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .horizontal,
         })({
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .height = .{ .ratio = 0.5 },
             })({});
         });
@@ -488,13 +625,13 @@ test "ratio width resolves after grow distributes height" {
         // viewport 800x600; vertical root
         // child: height grows to fill 600, width = ratio(2.0) → 1200
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .vertical,
         })({
             forbear.element(.{
                 .width = .{ .ratio = 2.0 },
-                .height = .grow,
+                .height = .{ .grow = 1.0 },
             })({});
         });
 
@@ -669,12 +806,12 @@ test "overflow wrap with grow-width parent wraps against resolved size" {
         // Three 300x60 children: the first two fit on line 1 (600 < 800),
         // the third overflows and wraps to line 2.
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .vertical,
         })({
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .height = .fit,
                 .direction = .horizontal,
                 .overflow = .wrap,
@@ -732,8 +869,8 @@ test "grow children split remaining space and stretch cross-axis" {
 
     try forbear.frame(try utilities.frameMeta(arena))({
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .horizontal,
         })({
             forbear.element(.{
@@ -741,12 +878,12 @@ test "grow children split remaining space and stretch cross-axis" {
                 .height = .{ .fixed = 40 },
             })({});
             forbear.element(.{
-                .width = .grow,
-                .height = .grow,
+                .width = .{ .grow = 1.0 },
+                .height = .{ .grow = 1.0 },
             })({});
             forbear.element(.{
-                .width = .grow,
-                .height = .grow,
+                .width = .{ .grow = 1.0 },
+                .height = .{ .grow = 1.0 },
             })({});
         });
 
@@ -822,8 +959,8 @@ test "fixed-placed elements are not affected by scroll" {
 
     try forbear.frame(try utilities.frameMeta(arena))({
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .vertical,
         })({
             forbear.element(.{
@@ -866,8 +1003,8 @@ test "absolute-placed elements move with scroll" {
 
     try forbear.frame(try utilities.frameMeta(arena))({
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .vertical,
         })({
             forbear.element(.{
@@ -900,8 +1037,8 @@ test "relative-placed elements are positioned from parent origin" {
 
     try forbear.frame(try utilities.frameMeta(arena))({
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .vertical,
         })({
             // Sibling that pushes the parent's layout forward but should not
@@ -1276,7 +1413,7 @@ test "horizontal minSize uses child.minSize to avoid unwrapped text width bloat"
     try forbear.frame(try utilities.frameMeta(arena))({
         // Container with maxWidth constraint
         forbear.element(.{
-            .width = .grow,
+            .width = .{ .grow = 1.0 },
             .height = .fit,
             .maxWidth = 200,
             .direction = .vertical,
@@ -1315,7 +1452,7 @@ test "vertical minSize uses child.size to capture wrapped text height" {
     try forbear.frame(try utilities.frameMeta(arena))({
         // Horizontal row with fit height
         forbear.element(.{
-            .width = .grow,
+            .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .horizontal,
             .textWrapping = .word,
@@ -1323,7 +1460,7 @@ test "vertical minSize uses child.size to capture wrapped text height" {
             // Card A: grow height, short content
             forbear.element(.{
                 .width = .{ .fixed = 100 },
-                .height = .grow,
+                .height = .{ .grow = 1.0 },
                 .direction = .vertical,
             })({
                 forbear.text("Short");
@@ -1332,7 +1469,7 @@ test "vertical minSize uses child.size to capture wrapped text height" {
             // Card B: grow height, wrapped text that determines row height
             forbear.element(.{
                 .width = .{ .fixed = 100 },
-                .height = .grow,
+                .height = .{ .grow = 1.0 },
                 .direction = .vertical,
             })({
                 forbear.text("This text will wrap to multiple lines and should determine the row height which siblings then grow to match.");

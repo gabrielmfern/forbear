@@ -55,7 +55,7 @@ const chapters = [_]ChapterEntry{
 
 fn Topbar() void {
     forbear.element(.{
-        .width = .grow,
+        .width = .{ .grow = 1.0 },
         .direction = .horizontal,
         .yJustification = .center,
         .padding = forbear.Padding.all(15.0),
@@ -76,7 +76,7 @@ fn Topbar() void {
 
 fn TodoList() void {
     forbear.element(.{
-        .width = .grow,
+        .width = .{ .grow = 1.0 },
         .direction = .vertical,
         .margin = forbear.Margin.block(6.0).withBottom(18.0),
     })({
@@ -119,8 +119,8 @@ fn LicenseBadge() void {
 fn Content() void {
     forbear.component("content")({
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .vertical,
             .xJustification = .center,
             .yJustification = .start,
@@ -128,7 +128,7 @@ fn Content() void {
             Topbar();
 
             forbear.element(.{
-                .width = .grow,
+                .width = .{ .grow = 1.0 },
                 .direction = .vertical,
                 .xJustification = .center,
                 .yJustification = .start,
@@ -177,8 +177,8 @@ fn App() !void {
         const activeChapter = forbear.useState(usize, 0);
 
         forbear.element(.{
-            .width = .grow,
-            .height = .grow,
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
             .direction = .horizontal,
             .xJustification = .start,
             .yJustification = .start,

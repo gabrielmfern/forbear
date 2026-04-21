@@ -5,7 +5,7 @@ pub fn Sidebar() *const fn (void) void {
     forbear.component("sidebar")({
         forbear.element(.{
             .width = .{ .fixed = 300.0 },
-            .height = .grow,
+            .height = .{ .grow = 1.0 },
             .direction = .vertical,
             .xJustification = .start,
             .yJustification = .start,
@@ -23,7 +23,7 @@ pub fn Sidebar() *const fn (void) void {
 
 pub fn SidebarDivider() void {
     forbear.element(.{
-        .width = .grow,
+        .width = .{ .grow = 1.0 },
         .borderWidth = forbear.BorderWidth.top(0.75),
         .borderColor = Colors.border,
         .margin = forbear.Margin.bottom(6.0),
@@ -40,7 +40,7 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{
-            .width = .grow,
+            .width = .{ .grow = 1.0 },
             .direction = .horizontal,
             .textWrapping = .none,
             .xJustification = .start,
