@@ -84,7 +84,8 @@ fn App() !void {
             })({
                 forbear.element(.{
                     .direction = .vertical,
-                    .width = .{ .grow = 1.0 },
+                    .width = .{ .grow = 2.0 },
+                    .padding = .right(30.0),
                 })({
                     forbear.element(.{
                         .fontWeight = 700,
@@ -115,7 +116,6 @@ fn App() !void {
                 });
                 forbear.image(.{
                     .width = .{ .grow = 1.0 },
-                    .padding = .left(30.0),
                     .blendMode = .multiply,
                 }, try forbear.useImage("uhoh-hero"));
             });
