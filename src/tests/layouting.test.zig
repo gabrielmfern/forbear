@@ -47,6 +47,54 @@ test "2.0 grow factor against 1.0 grow factor on fixed height parent" {
     });
 }
 
+test "grow factor 0.0 does not participate in grow distribution" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300.0 },
+            .height = .fit,
+            .direction = .horizontal,
+        })({
+            // grow: 0.0 should keep its fitted size (50px from its child)
+            forbear.element(.{
+                .width = .{ .grow = 0.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                })({});
+            });
+
+            // grow: 1.0 should take all remaining space (300 - 50 = 250)
+            forbear.element(.{
+                .width = .{ .grow = 1.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({});
+        });
+
+        const tree = try layout();
+
+        const root = tree.at(0);
+        const zeroFactor = tree.at(root.firstChild.?);
+        const oneFactor = tree.at(root.lastChild.?);
+
+        // grow: 0.0 should keep fitted width of 50
+        try std.testing.expectApproxEqAbs(zeroFactor.size[0], 50.0, 0.0001);
+        // grow: 1.0 should take the remaining 250
+        try std.testing.expectApproxEqAbs(oneFactor.size[0], 250.0, 0.0001);
+    });
+}
+
 test "fit height parent, with grow height child containing wrapping text" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();

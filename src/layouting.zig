@@ -36,7 +36,10 @@ fn growChildren(
     while (childIndexOption) |childIndex| {
         const child = nodeTree.at(childIndex);
         if (child.style.placement == .flow) {
-            if (child.style.getPreferredSize(direction).isGrow()) {
+            const factor = child.style.getPreferredSize(direction).growFactor();
+            // Only include children with positive grow factors; grow: 0.0 means
+            // "don't grow" so we leave those at their current size.
+            if (factor > 0.0) {
                 const currentSize = child.getSize(direction);
                 // Reclaim the full size back into remaining
                 remaining.* += currentSize;
