@@ -141,6 +141,10 @@ fn createForbearModule(
         .linux => {
             translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
             translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" });
+            translate_c.linkSystemLibrary("wayland-client", .{});
+            translate_c.linkSystemLibrary("wayland-cursor", .{});
+            translate_c.linkSystemLibrary("xkbcommon", .{});
+            translate_c.linkSystemLibrary("vulkan", .{});
         },
         .macos => translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
         .windows => {
