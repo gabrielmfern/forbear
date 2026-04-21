@@ -38,11 +38,6 @@ test "2.0 grow factor against 1.0 grow factor on fixed height parent" {
         const tree = try layout();
 
         const root = tree.at(0);
-        const stderr = std.Io.File.stderr();
-        var buffer: [4096]u8 = undefined;
-        var stderrWriter = stderr.writer(std.testing.io, &buffer);
-        try root.layoutDump(&stderrWriter.interface, 0, 0);
-        try stderrWriter.flush();
         const factorTwo = tree.at(root.firstChild.?);
         const factorOne = tree.at(root.lastChild.?);
 
