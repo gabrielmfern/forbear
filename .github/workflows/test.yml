@@ -44,6 +44,7 @@ jobs:
           if [ "$BREW_PREFIX" != "/usr/local" ]; then
             sudo mkdir -p /usr/local/include /usr/local/lib
             sudo ln -sf "$BREW_PREFIX/include/vulkan" /usr/local/include/vulkan
+            sudo ln -sf "$BREW_PREFIX/include/vk_video" /usr/local/include/vk_video
             for f in "$BREW_PREFIX"/lib/libvulkan*; do
               sudo ln -sf "$f" /usr/local/lib/
             done
