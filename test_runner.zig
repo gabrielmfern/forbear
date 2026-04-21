@@ -293,7 +293,7 @@ fn runSingleTestProcess(selectedTestName: []const u8) !u8 {
 
 fn runTestInChildProcess(allocator: Allocator, testName: []const u8) !ChildOutcome {
     if (native_os == .windows) {
-        @compileError("Windows test runner not yet implemented for Zig 0.16.0");
+        return error.UnsupportedPlatform;
     }
     return runTestWithFork(allocator, testName);
 }
@@ -333,7 +333,7 @@ fn runTestWithFork(allocator: Allocator, testName: []const u8) !ChildOutcome {
     _ = std.c.close(readEnd);
 
     var status: c_int = 0;
-    _ = std.c.waitpid(pid, &status, 0);
+    if (std.c.waitpid(pid, &status, 0) < 0) return error.WaitpidFailed;
     const output = try outputList.toOwnedSlice(allocator);
     const s: u32 = @bitCast(status);
 
