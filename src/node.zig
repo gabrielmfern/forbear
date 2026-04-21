@@ -756,7 +756,7 @@ pub const Node = struct {
     fn formatSizing(sizing: Sizing) [24]u8 {
         var buf: [24]u8 = undefined;
         @memset(&buf, 0);
-const result = switch (sizing) {
+        const result = switch (sizing) {
             .fit => std.fmt.bufPrint(&buf, "fit", .{}),
             .grow => |f| if (f == 1.0)
                 std.fmt.bufPrint(&buf, "grow", .{})

@@ -26,13 +26,13 @@ test "2.0 grow factor against 1.0 grow factor on fixed height parent" {
                 .width = .{ .grow = 2.0 },
                 .height = .{ .fixed = 100.0 },
                 .direction = .vertical,
-            })({ });
+            })({});
 
             forbear.element(.{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .fixed = 100.0 },
                 .direction = .vertical,
-            })({ });
+            })({});
         });
 
         const tree = try layout();
