@@ -7,12 +7,14 @@ const BlendMode = @import("node.zig").BlendMode;
 const GradientStop = @import("node.zig").GradientStop;
 const Node = @import("node.zig").Node;
 const NodeTree = @import("node.zig").NodeTree;
-const c = @import("c.zig").c;
+const c = @import("c");
+const stb_image = @import("stb_image_c");
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const countTreeSize = layouting.countTreeSize;
 const Window = @import("window/root.zig").Window;
 const win32 = @import("windows/win32.zig");
+const root = @import("root.zig");
 
 const LayerInterval = struct {
     start: usize,
@@ -481,10 +483,6 @@ fn findMemoryType(
 }
 
 pub const Image = struct {
-    const stb_image = @cImport({
-        @cInclude("stb_image.h");
-    });
-
     pub const Format = enum {
         png,
     };
@@ -558,10 +556,11 @@ pub const Image = struct {
         var height: c_int = undefined;
         var channels: c_int = undefined;
         // stb_image doesn't allow to not pass in the width, hegith and channel pointers
-        var timer = std.time.Timer.start() catch null;
+        const io = root.getContext().io;
+        const timerStart = std.Io.Clock.Timestamp.now(io, .awake);
         const pixelsPtr = stb_image.stbi_load_from_memory(self.contents.ptr, @intCast(self.contents.len), &width, &height, &channels, 4);
         if (pixelsPtr == null) return error.ImageLoadFailed;
-        const decodeTime = if (timer) |*t| t.read() else 0;
+        const decodeTime: u64 = @intCast(@max(0, timerStart.untilNow(io).raw.toNanoseconds()));
         std.debug.assert(self.width == width);
         std.debug.assert(self.height == height);
 
@@ -580,7 +579,7 @@ pub const Image = struct {
         const pixels = pixelsPtr[0..imageSize];
         const w: usize = @intCast(width);
         const h: usize = @intCast(height);
-        var dilationTimer = std.time.Timer.start() catch null;
+        const dilationStart = std.Io.Clock.Timestamp.now(io, .awake);
         // top edge pixels and bottom edge pxiels
         for (0..w) |col| {
             const topX = col;
@@ -601,7 +600,7 @@ pub const Image = struct {
             dilatePixel(pixels, leftX, leftY, w, h);
             dilatePixel(pixels, rightX, rightY, w, h);
         }
-        const dilationTime = if (dilationTimer) |*t| t.read() else 0;
+        const dilationTime: u64 = @intCast(@max(0, dilationStart.untilNow(io).raw.toNanoseconds()));
 
         std.log.info("Image {d}x{d}: decode={d:.2}ms, dilation={d:.2}ms", .{
             width,
@@ -2846,23 +2845,26 @@ const TextPipeline = struct {
 const maxFramesInFlight = 2;
 
 pub const FrameRateCapper = struct {
-    lastFrameEnd: ?std.time.Instant = null,
+    lastFrameEnd: ?std.Io.Clock.Timestamp = null,
 
-    pub fn cap(self: *@This(), targetFrameTimeNs: u64) !void {
+    pub fn cap(self: *@This(), io: std.Io, targetFrameTimeNs: u64) !void {
         if (self.lastFrameEnd) |lastFrameEnd| {
-            const elapsedNs = (try std.time.Instant.now()).since(lastFrameEnd);
-            if (elapsedNs <= targetFrameTimeNs) {
-                std.Thread.sleep(targetFrameTimeNs - elapsedNs);
+            const now = std.Io.Clock.Timestamp.now(io, .awake);
+            const elapsed = lastFrameEnd.durationTo(now);
+            const elapsedNs: u64 = @intCast(@max(0, elapsed.raw.toNanoseconds()));
+            if (elapsedNs < targetFrameTimeNs) {
+                const sleepNs: i96 = @intCast(targetFrameTimeNs - elapsedNs);
+                try io.sleep(.{ .nanoseconds = sleepNs }, .awake);
             }
         }
-        self.lastFrameEnd = try std.time.Instant.now();
+        self.lastFrameEnd = std.Io.Clock.Timestamp.now(io, .awake);
     }
 };
 
 pub const Renderer = struct {
     const Self = @This();
 
-    mutex: std.Thread.Mutex,
+    mutex: std.Io.Mutex,
 
     allocator: std.mem.Allocator,
     graphics: *const Graphics,
@@ -2898,10 +2900,10 @@ pub const Renderer = struct {
 
     fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
         std.log.debug("swapchain recreation has began", .{});
-        const timestamp = std.time.milliTimestamp();
+        const timestamp = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms);
 
         const previousSwapchain = self.swapchain;
-        const recreateStart = std.time.milliTimestamp();
+        const recreateStart = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms);
         if (builtin.os.tag == .windows) {
             // On Windows, there is a stupid hell of a bug, probably because
             // we're using a rendering thread, that makes it so
@@ -2945,12 +2947,12 @@ pub const Renderer = struct {
             previousSwapchain.deinit(self.logicalDevice);
         }
         errdefer self.swapchain.deinit(self.logicalDevice);
-        std.log.debug("spent {d}ms just recreating swapchain", .{std.time.milliTimestamp() - recreateStart});
+        std.log.debug("spent {d}ms just recreating swapchain", .{@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms) - recreateStart});
 
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
 
         self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
-        std.log.debug("swapchain recreation took {d}ms", .{std.time.milliTimestamp() - timestamp});
+        std.log.debug("swapchain recreation took {d}ms", .{@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms) - timestamp});
 
         for (0..maxFramesInFlight) |i| {
             c.vkDestroyFence(self.logicalDevice, self.inFlightFences[i], null);
@@ -3005,8 +3007,9 @@ pub const Renderer = struct {
     }
 
     pub fn viewportSize(self: *Self) Vec2 {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        const io = root.getContext().io;
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
         return .{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
     }
 
@@ -3409,7 +3412,7 @@ pub const Renderer = struct {
             .allocator = graphics.allocator,
             .graphics = graphics,
             .window = window,
-            .mutex = std.Thread.Mutex{},
+            .mutex = std.Io.Mutex.init,
 
             .physicalDevice = physicalDevice,
             .logicalDevice = logicalDevice,
@@ -3442,8 +3445,9 @@ pub const Renderer = struct {
     }
 
     pub fn handleResize(self: *Self, width: u32, height: u32) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        const io = root.getContext().io;
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
         try self.stallForFrames();
         try self.flushFrame();
         try self.recreateSwapchain(width, height);
@@ -3500,16 +3504,16 @@ pub const Renderer = struct {
     }
 
     pub fn waitIdle(self: *Self) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        const io = root.getContext().io;
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
         try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
         try ensureNoError(c.vkQueueWaitIdle(self.graphicsQueue));
         try ensureNoError(c.vkQueueWaitIdle(self.presentationQueue));
     }
 
     pub fn deinit(self: *Self) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        // No mutex needed - rendering thread should have exited before deinit is called
         for (self.renderFinishedSemaphores) |semaphore| {
             c.vkDestroySemaphore(self.logicalDevice, semaphore, null);
         }
@@ -3561,8 +3565,9 @@ pub const Renderer = struct {
         clearColor: Vec4,
         targetFrameTimeNs: u64,
     ) !void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        const io = root.getContext().io;
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
         try ensureNoError(c.vkWaitForFences(
             self.logicalDevice,
             1,
@@ -3574,7 +3579,7 @@ pub const Renderer = struct {
 
         try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0));
 
-        var start = std.time.milliTimestamp();
+        var start = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms);
         var imageIndex: u32 = undefined;
         ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
@@ -3595,8 +3600,8 @@ pub const Renderer = struct {
                 else => return err,
             }
         };
-        if (std.time.milliTimestamp() - start > 100) {
-            std.log.err("image ({d}) acquiring took {d}ms!!!!!!!", .{ imageIndex, std.time.milliTimestamp() - start });
+        if (@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms) - start > 100) {
+            std.log.err("image ({d}) acquiring took {d}ms!!!!!!!", .{ imageIndex, @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms) - start });
         }
 
         const framebuffers = self.swapchainFramebuffers;
@@ -3633,7 +3638,7 @@ pub const Renderer = struct {
         const orderedNodes = nodesToRender.items;
         const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
 
-        start = std.time.microTimestamp();
+        start = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us);
         // --- Resize pass: single iteration to count shadows, elements,
         // glyphs and then allocate enough memory on the shader buffers ---
         var totalShadowCount: usize = 0;
@@ -3935,8 +3940,8 @@ pub const Renderer = struct {
         std.debug.assert(blendAddElementIndex == totalBlendAddElementCount);
         std.debug.assert(blendMultiplyElementIndex == totalElementCount);
 
-        if (std.time.microTimestamp() - start > 1000) {
-            std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, std.time.microTimestamp() - start });
+        if (@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start > 1000) {
+            std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start });
         }
 
         try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
@@ -4077,7 +4082,7 @@ pub const Renderer = struct {
         // This is only done for the first 50 frames because after that FIFO
         // should kick in properly.
         if (builtin.os.tag == .linux and self.framesRenderedInSwapchain < 50) {
-            try self.frameRateCapper.cap(targetFrameTimeNs);
+            try self.frameRateCapper.cap(root.getContext().io, targetFrameTimeNs);
         }
         if (self.framesRenderedInSwapchain == 50) {
             switch (builtin.os.tag) {

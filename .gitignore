@@ -1,4 +1,5 @@
 .zig-cache
 zig-out
+zig-pkg
 .DS_Store
 .cursor/hooks/state

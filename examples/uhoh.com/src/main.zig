@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const forbear = @import("forbear");
 
 const Vec4 = @Vector(4, f32);
@@ -827,6 +828,7 @@ fn App() !void {
 
 fn renderingMain(
     allocator: std.mem.Allocator,
+    io: std.Io,
     renderer: *forbear.Graphics.Renderer,
     window: *const forbear.Window,
 ) !void {
@@ -866,10 +868,10 @@ fn renderingMain(
     try forbear.registerImage("uhoh-failure", @embedFile("static/uhoh-failure.png"), .png);
     try forbear.registerImage("uhoh-bottom-cta", @embedFile("static/uhoh-bottom-cta.png"), .png);
 
-    var traceFile = try std.fs.cwd().createFile("layouting.log", .{});
-    defer traceFile.close();
+    var traceFile = try std.Io.Dir.cwd().createFile(io, "layouting.log", .{});
+    defer traceFile.close(io);
     var traceBuffer: [4096]u8 = undefined;
-    var traceWriter = traceFile.writer(&traceBuffer);
+    var traceWriter = traceFile.writer(io, &traceBuffer);
 
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
@@ -902,14 +904,20 @@ fn renderingMain(
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        if (gpa.deinit() == .leak) {
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const allocator, const is_debug = switch (builtin.mode) {
+        .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+        .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+    };
+    defer if (is_debug) {
+        if (debug_allocator.deinit() == .leak) {
             std.log.err("Memory was leaked", .{});
         }
-    }
+    };
 
-    const allocator = gpa.allocator();
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
 
     var graphics = try forbear.Graphics.init(
         allocator,
@@ -929,7 +937,7 @@ pub fn main() !void {
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
 
-    try forbear.init(allocator, &renderer);
+    try forbear.init(allocator, io, &renderer);
     defer forbear.deinit();
 
     forbear.setWindowHandlers(window);
@@ -939,6 +947,7 @@ pub fn main() !void {
         renderingMain,
         .{
             allocator,
+            io,
             &renderer,
             window,
         },
