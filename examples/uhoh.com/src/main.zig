@@ -98,6 +98,7 @@ fn App() !void {
                     forbear.element(.{
                         .fontSize = 20.0,
                         .margin = .bottom(25.0),
+                        .lineHeight = 1.2,
                     })({
                         forbear.text("It doesn't just annoy you. It slows you and your staff down. That's our job now.");
                     });
@@ -107,6 +108,7 @@ fn App() !void {
                     forbear.element(.{
                         .fontSize = 12.0,
                         .lineHeight = 1.3,
+                        .maxWidth = 420.0,
                         .margin = .top(20.0),
                     })({
                         forbear.text(
