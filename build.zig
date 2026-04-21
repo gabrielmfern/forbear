@@ -49,18 +49,10 @@ const Dependencies = struct {
                 module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
             },
             .windows => {
-                const vulkan_sdk = std.c.getenv("VULKAN_SDK") orelse
+                const vulkan_sdk = module.owner.graph.environ_map.get("VULKAN_SDK") orelse
                     @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
-                module.addIncludePath(.{ .cwd_relative = std.fmt.allocPrint(
-                    std.heap.page_allocator,
-                    "{s}/Include",
-                    .{vulkan_sdk},
-                ) catch @panic("OOM") });
-                module.addLibraryPath(.{ .cwd_relative = std.fmt.allocPrint(
-                    std.heap.page_allocator,
-                    "{s}/Lib",
-                    .{vulkan_sdk},
-                ) catch @panic("OOM") });
+                module.addIncludePath(.{ .cwd_relative = module.owner.fmt("{s}/Include", .{vulkan_sdk}) });
+                module.addLibraryPath(.{ .cwd_relative = module.owner.fmt("{s}/Lib", .{vulkan_sdk}) });
             },
             else => {},
         }
@@ -148,13 +140,9 @@ fn createForbearModule(
     switch (target.result.os.tag) {
         .linux, .macos => translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
         .windows => {
-            const vulkan_sdk = std.c.getenv("VULKAN_SDK") orelse
+            const vulkan_sdk = b.graph.environ_map.get("VULKAN_SDK") orelse
                 @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
-            translate_c.addSystemIncludePath(.{ .cwd_relative = std.fmt.allocPrint(
-                std.heap.page_allocator,
-                "{s}/Include",
-                .{vulkan_sdk},
-            ) catch @panic("OOM") });
+            translate_c.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/Include", .{vulkan_sdk}) });
         },
         else => {},
     }
