@@ -523,7 +523,7 @@ pub const NodeTree = struct {
 
     pub fn dump(self: *const @This(), writer: *std.Io.Writer) !void {
         if (self.list.items.len > 0) {
-            try self.list.items[0].layoutDump(writer, 0, 0);
+            try self.list.items[0].dump(writer, 0, 0);
             try writer.flush();
         }
     }
@@ -775,11 +775,13 @@ const result = switch (sizing) {
         }
     }
 
-    pub fn layoutDump(self: *const @This(), writer: *std.Io.Writer, idx: usize, indent: usize) !void {
+    pub fn dump(self: *const @This(), writer: *std.Io.Writer, index: usize, indent: usize) !void {
         // Line 1: index, direction, overflow, placement
         try writeIndent(writer, indent);
-        try writer.print("[{d}] dir={s}  overflow={s}  placement={s}\n", .{
-            idx,
+        try writer.print("  [{d}]\n", .{index});
+
+        try writeIndent(writer, indent);
+        try writer.print("  dir={s}  overflow={s}  placement={s}\n", .{
             @tagName(self.style.direction),
             @tagName(self.style.overflow),
             @tagName(self.style.placement),
@@ -846,7 +848,7 @@ const result = switch (sizing) {
         var childIdx = self.firstChild;
         while (childIdx) |ci| {
             const child = self.tree.at(ci);
-            try child.layoutDump(writer, ci, indent + 1);
+            try child.dump(writer, ci, indent + 1);
             childIdx = child.nextSibling;
         }
     }
