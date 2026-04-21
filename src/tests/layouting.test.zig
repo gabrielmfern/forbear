@@ -6,6 +6,52 @@ const utilities = @import("utilities.zig");
 const forbear = @import("../root.zig");
 const Vec2 = @Vector(2, f32);
 
+test "2.0 grow factor against 1.0 grow factor on fixed height parent" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .horizontal,
+            .textWrapping = .word,
+        })({
+            forbear.element(.{
+                .width = .{ .grow = 2.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({ });
+
+            forbear.element(.{
+                .width = .{ .grow = 1.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            })({ });
+        });
+
+        const tree = try layout();
+
+        const root = tree.at(0);
+        const stderr = std.Io.File.stderr();
+        var buffer: [4096]u8 = undefined;
+        var stderrWriter = stderr.writer(std.testing.io, &buffer);
+        try root.layoutDump(&stderrWriter.interface, 0, 0);
+        try stderrWriter.flush();
+        const factorTwo = tree.at(root.firstChild.?);
+        const factorOne = tree.at(root.lastChild.?);
+
+        try std.testing.expectApproxEqAbs(factorTwo.size[0], root.size[0] / 3 * 2, 0.0001);
+        try std.testing.expectApproxEqAbs(factorOne.size[0], root.size[0] / 3, 0.0001);
+        try std.testing.expectApproxEqAbs(factorTwo.size[0], factorOne.size[0] * 2, 0.0001);
+    });
+}
+
 test "fit height parent, with grow height child containing wrapping text" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
