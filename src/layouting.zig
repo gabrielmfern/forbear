@@ -212,23 +212,21 @@ fn shrinkChildren(
     }
 }
 
-/// Re-propagates fit sizes bottom-up after layout passes have modified sizes.
+/// Computes fit sizes bottom-up from the complete tree.
 ///
-/// During node creation, fitChild is called incrementally as each child is added,
-/// building up parent sizes in real-time. However, later layout passes (growAndShrink,
-/// wrapAndPlace) can change child sizes - text wrapping increases height, grow
-/// distribution changes dimensions. These changes invalidate the earlier fit
-/// calculations.
+/// This is called at the start of layout() to compute initial fit sizes, and
+/// again after layout passes that may change child sizes (text wrapping,
+/// grow distribution).
 ///
-/// This function recalculates fit sizes by:
-/// 1. Processing children first (post-order traversal)
-/// 2. Resetting container sizes to their base (padding + border)
-/// 3. Re-accumulating child sizes via fitChild
+/// Processing order:
+/// 1. Children first (post-order traversal)
+/// 2. Reset container sizes to base (padding + border)
+/// 3. Accumulate child sizes via fitChild
 ///
-/// Unlike creation-time fitting, this preserves:
+/// Preserves:
 /// - Leaf/text node sizes (content-derived, not from children)
 /// - Wrap container sizes (computed specially by wrapAndPlace)
-pub fn refit(node: *Node, nodeTree: *NodeTree) void {
+pub fn fit(node: *Node, nodeTree: *NodeTree) void {
     const shouldReset = node.firstChild != null and
         node.glyphs == null and
         node.style.overflow != .wrap;
@@ -246,7 +244,7 @@ pub fn refit(node: *Node, nodeTree: *NodeTree) void {
         var childIndexOption = node.firstChild;
         while (childIndexOption) |childIndex| {
             const child = nodeTree.at(childIndex);
-            refit(child, nodeTree);
+            fit(child, nodeTree);
             node.fitChild(child);
             childIndexOption = child.nextSibling;
         }
@@ -595,6 +593,8 @@ pub fn layout() !*NodeTree {
     if (context.nodeTree.list.items.len > 0) {
         const root = context.nodeTree.at(0);
 
+        fit(root, &context.nodeTree);
+
         if (root.style.width.isGrow()) {
             root.size[0] = @min(@max(viewportSize[0], root.minSize[0]), root.maxSize[0]);
         }
@@ -611,7 +611,7 @@ pub fn layout() !*NodeTree {
         // growth invalidates fitting, so we need to re-apply fitting after
         // growth to ensure things like text-wrapping containers get the
         // correct size for their content before placement
-        refit(root, &context.nodeTree);
+        fit(root, &context.nodeTree);
         // the fitting and growth invalidate the placement of elements, but not
         // necessarily the wrapping. we only call this because they're
         // inherently connected

@@ -610,6 +610,7 @@ fn elementEnd(block: void) void {
     const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
     const node = self.nodeTree.at(previousNodeIndex);
 
+    // Handle ratio sizing that depends on the opposite axis
     if (node.style.width == .ratio) {
         node.size[0] = node.style.width.ratio * node.size[1];
     }
@@ -619,11 +620,9 @@ fn elementEnd(block: void) void {
     node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
     node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
 
-    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parentIndex| {
-        const parent = self.nodeTree.at(parentIndex);
-
-        parent.fitChild(node);
-    }
+    // Note: fit sizes are computed by layout()'s fit pass after the tree
+    // is complete, not incrementally during tree building. This handles
+    // slotted children correctly.
 }
 
 pub fn element(incompleteStyle: Style) *const fn (void) void {
@@ -1026,8 +1025,6 @@ fn componentChildrenSlotEndFn(block: void) void {
         }
         parent.lastChild = slotState.afterChainEnd;
     }
-
-    layouting.refitAncestors(parent, &self.nodeTree);
 
     // Restore parent stack to pre-slotEnd state
     fm.nodeParentStack.clearRetainingCapacity();
