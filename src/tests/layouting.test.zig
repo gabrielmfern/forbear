@@ -1436,6 +1436,45 @@ test "horizontal minSize uses child.minSize to avoid unwrapped text width bloat"
     });
 }
 
+test "vertical spacing elements with grow height works properly" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .grow = 1.0 },
+            .height = .{ .fixed = 700 },
+            .direction = .vertical,
+        })({
+            forbear.element(.{
+                .height = .{ .fixed = 100 },
+            })({ });
+            forbear.element(.{
+                .height = .{ .fixed = 100 },
+            })({ });
+            forbear.element(.{
+                .height = .{ .fixed = 100 },
+            })({ });
+            forbear.element(.{
+                .height = .{ .grow = 1.0 },
+            })({ });
+            forbear.element(.{
+                .height = .{ .fixed = 100 },
+            })({ });
+        });
+
+        const nodeTree = try forbear.layout();
+        const spacingNode = nodeTree.at(4);
+
+        try std.testing.expectEqual(700 - 400, spacingNode.size[1]);
+    });
+}
+
 // Regression: fitChild must use child.size (not child.minSize) for vertical minSize
 // propagation during refitAncestors. After text wrapping, size[1] = wrapped height,
 // but minSize[1] is still single line height. Using size[1] ensures fit parents
