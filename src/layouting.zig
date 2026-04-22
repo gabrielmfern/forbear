@@ -213,69 +213,99 @@ fn shrinkChildren(
 }
 
 pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
-    var ancestorIndexOpt = node.parent;
-    while (ancestorIndexOpt) |ancestorIndex| {
-        const ancestor = nodeTree.at(ancestorIndex);
-        const oldSize = ancestor.size;
+    _ = node;
+    _ = nodeTree;
+    // var ancestorIndexOpt = node.parent;
+    // while (ancestorIndexOpt) |ancestorIndex| {
+    //     const ancestor = nodeTree.at(ancestorIndex);
+    //     // const oldSize = ancestor.size;
+    //
+    //     inline for (Direction.array) |dir| {
+    //         if (ancestor.style.getPreferredSize(dir) == .fit) {
+    //             ancestor.setSize(dir, ancestor.fittingBase(dir));
+    //         }
+    //         if (ancestor.shouldFitMin(dir)) {
+    //             ancestor.setMinSize(dir, ancestor.fittingBase(dir));
+    //         }
+    //     }
+    //     var childIndexOpt = ancestor.firstChild;
+    //     while (childIndexOpt) |childIndex| {
+    //         const child = nodeTree.at(childIndex);
+    //         ancestor.fitChild(child);
+    //         childIndexOpt = child.nextSibling;
+    //     }
+    //     if (ancestor.style.width == .ratio) {
+    //         ancestor.size[0] = ancestor.style.width.ratio * ancestor.size[1];
+    //     }
+    //     if (ancestor.style.height == .ratio) {
+    //         ancestor.size[1] = ancestor.style.height.ratio * ancestor.size[0];
+    //     }
+    //     // Ensure minSize doesn't exceed maxSize (can happen with accumulated text widths)
+    //     ancestor.minSize[0] = @min(ancestor.minSize[0], ancestor.maxSize[0]);
+    //     ancestor.minSize[1] = @min(ancestor.minSize[1], ancestor.maxSize[1]);
+    //     ancestor.size[0] = @min(@max(ancestor.size[0], ancestor.minSize[0]), ancestor.maxSize[0]);
+    //     ancestor.size[1] = @min(@max(ancestor.size[1], ancestor.minSize[1]), ancestor.maxSize[1]);
+    //
+    //     // Re-apply perpendicular grow to children only if ancestor size changed
+    //     // const perpendicular = ancestor.style.direction.perpendicular();
+    //     // const oldPerpSize = if (perpendicular == .horizontal) oldSize[0] else oldSize[1];
+    //     // if (ancestor.getSize(perpendicular) != oldPerpSize) {
+    //     //     const perpFittingBase = ancestor.fittingBase(perpendicular);
+    //     //     const availableBase = ancestor.getSize(perpendicular) - perpFittingBase;
+    //     //     childIndexOpt = ancestor.firstChild;
+    //     //     while (childIndexOpt) |childIndex| {
+    //     //         const child = nodeTree.at(childIndex);
+    //     //         if (child.style.placement == .flow and child.style.getPreferredSize(perpendicular).isGrow()) {
+    //     //             const marginVector = child.style.margin.get(perpendicular);
+    //     //             const available = availableBase - marginVector[0] - marginVector[1];
+    //     //             child.setSize(perpendicular, @max(@min(available, child.getMaxSize(perpendicular)), child.getMinSize(perpendicular)));
+    //     //
+    //     //             // Re-apply ratio sizing after perpendicular change
+    //     //             if (child.style.width == .ratio) {
+    //     //                 child.size[0] = child.size[1] * child.style.width.ratio;
+    //     //             }
+    //     //             if (child.style.height == .ratio) {
+    //     //                 child.size[1] = child.size[0] * child.style.height.ratio;
+    //     //             }
+    //     //             // Ensure minSize doesn't exceed maxSize, then clamp size
+    //     //             child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
+    //     //             child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
+    //     //             child.size[0] = @min(@max(child.size[0], child.minSize[0]), child.maxSize[0]);
+    //     //             child.size[1] = @min(@max(child.size[1], child.minSize[1]), child.maxSize[1]);
+    //     //         }
+    //     //         childIndexOpt = child.nextSibling;
+    //     //     }
+    //     // }
+    //
+    //     ancestorIndexOpt = ancestor.parent;
+    // }
+}
 
-        inline for (Direction.array) |dir| {
-            if (ancestor.style.getPreferredSize(dir) == .fit) {
-                ancestor.setSize(dir, ancestor.fittingBase(dir));
+pub fn refit(node: *Node, nodeTree: *NodeTree) void {
+    // Only reset container nodes (have children, no glyphs).
+    // Leaf nodes and text nodes keep their content-derived sizes.
+    // Wrap containers compute their size in wrapAndPlace, so don't reset them.
+    const shouldReset = node.firstChild != null and
+        node.glyphs == null and
+        node.style.overflow != .wrap;
+
+    if (shouldReset) {
+        inline for (Direction.array) |fitDirection| {
+            if (node.style.getPreferredSize(fitDirection) == .fit) {
+                node.setSize(fitDirection, node.fittingBase(fitDirection));
             }
-            if (ancestor.shouldFitMin(dir)) {
-                ancestor.setMinSize(dir, ancestor.fittingBase(dir));
+            if (node.shouldFitMin(fitDirection)) {
+                node.setMinSize(fitDirection, node.fittingBase(fitDirection));
             }
         }
-        var childIndexOpt = ancestor.firstChild;
-        while (childIndexOpt) |childIndex| {
+
+        var childIndexOption = node.firstChild;
+        while (childIndexOption) |childIndex| {
             const child = nodeTree.at(childIndex);
-            ancestor.fitChild(child);
-            childIndexOpt = child.nextSibling;
+            refit(child, nodeTree);
+            node.fitChild(child);
+            childIndexOption = child.nextSibling;
         }
-        if (ancestor.style.width == .ratio) {
-            ancestor.size[0] = ancestor.style.width.ratio * ancestor.size[1];
-        }
-        if (ancestor.style.height == .ratio) {
-            ancestor.size[1] = ancestor.style.height.ratio * ancestor.size[0];
-        }
-        // Ensure minSize doesn't exceed maxSize (can happen with accumulated text widths)
-        ancestor.minSize[0] = @min(ancestor.minSize[0], ancestor.maxSize[0]);
-        ancestor.minSize[1] = @min(ancestor.minSize[1], ancestor.maxSize[1]);
-        ancestor.size[0] = @min(@max(ancestor.size[0], ancestor.minSize[0]), ancestor.maxSize[0]);
-        ancestor.size[1] = @min(@max(ancestor.size[1], ancestor.minSize[1]), ancestor.maxSize[1]);
-
-        // Re-apply perpendicular grow to children only if ancestor size changed
-        const perpendicular = ancestor.style.direction.perpendicular();
-        const oldPerpSize = if (perpendicular == .horizontal) oldSize[0] else oldSize[1];
-        if (ancestor.getSize(perpendicular) != oldPerpSize) {
-            const perpFittingBase = ancestor.fittingBase(perpendicular);
-            const availableBase = ancestor.getSize(perpendicular) - perpFittingBase;
-            childIndexOpt = ancestor.firstChild;
-            while (childIndexOpt) |childIndex| {
-                const child = nodeTree.at(childIndex);
-                if (child.style.placement == .flow and child.style.getPreferredSize(perpendicular).isGrow()) {
-                    const marginVector = child.style.margin.get(perpendicular);
-                    const available = availableBase - marginVector[0] - marginVector[1];
-                    child.setSize(perpendicular, @max(@min(available, child.getMaxSize(perpendicular)), child.getMinSize(perpendicular)));
-
-                    // Re-apply ratio sizing after perpendicular change
-                    if (child.style.width == .ratio) {
-                        child.size[0] = child.size[1] * child.style.width.ratio;
-                    }
-                    if (child.style.height == .ratio) {
-                        child.size[1] = child.size[0] * child.style.height.ratio;
-                    }
-                    // Ensure minSize doesn't exceed maxSize, then clamp size
-                    child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
-                    child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
-                    child.size[0] = @min(@max(child.size[0], child.minSize[0]), child.maxSize[0]);
-                    child.size[1] = @min(@max(child.size[1], child.minSize[1]), child.maxSize[1]);
-                }
-                childIndexOpt = child.nextSibling;
-            }
-        }
-
-        ancestorIndexOpt = ancestor.parent;
     }
 }
 
@@ -471,7 +501,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
         node.style.borderWidth.y[0] + node.style.padding.y[0],
     };
 
-    // TODO: find a way to not have ambiguity between children and glyphs
+    // TODO: find a way to not have duplicate code between children and glyphs
     if (node.glyphs != null) {
         try wrapGlyphs(arena, node, nodeTree, base);
     } else {
@@ -551,8 +581,15 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                     if (totalChange > 0.001) {
                         refitAncestors(node, nodeTree);
                     }
-                } else if (wrapHeightAddition > 0.001) {
-                    refitAncestors(node, nodeTree);
+                } else {
+                    // Non-wrap horizontal: update height to fit tallest child
+                    if (node.style.height == .fit or node.style.height.isGrow()) {
+                        const newHeight = node.fittingBase(.vertical) + currentLine.height;
+                        node.size[1] = @max(node.size[1], newHeight);
+                    }
+                    if (wrapHeightAddition > 0.001) {
+                        refitAncestors(node, nodeTree);
+                    }
                 }
 
                 const availableWidth = node.size[0] - node.fittingBase(.horizontal);
@@ -601,6 +638,12 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
             }
 
             const contentHeight = cursor[1] - base[1];
+
+            // Update fit containers to match content (needed before parent positions siblings)
+            if (node.style.height == .fit or node.style.height.isGrow()) {
+                const newHeight = node.fittingBase(.vertical) + contentHeight;
+                node.size[1] = @max(node.size[1], newHeight);
+            }
             const availableWidth = node.size[0] - node.fittingBase(.horizontal);
             const availableHeight = node.size[1] - node.fittingBase(.vertical);
             const yOffset: f32 = switch (node.style.yJustification) {
@@ -644,6 +687,18 @@ pub fn layout() !*NodeTree {
         }
 
         try growAndShrink(arena, root, &context.nodeTree);
+        try wrapAndPlace(arena, root, &context.nodeTree);
+        // wrap and place invalidates growth, at least perpendicular growth we
+        // can change this to just do perpendicular growth and things would
+        // work as expected
+        try growAndShrink(arena, root, &context.nodeTree);
+        // growth invalidates fitting, so we need to re-apply fitting after
+        // growth to ensure things like text-wrapping containers get the
+        // correct size for their content before placement 
+        refit(root, &context.nodeTree);
+        // the fitting and growth invalidate the placement of elements, but not
+        // necessarily the wrapping. we only call this because they're
+        // inherently connected
         try wrapAndPlace(arena, root, &context.nodeTree);
 
         root.position -= context.scrollPosition;

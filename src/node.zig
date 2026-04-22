@@ -461,11 +461,11 @@ pub const Glyphs = struct {
 /// using indices, this way keeping stable references without using pointers.
 pub const NodeTree = struct {
     list: std.ArrayList(Node),
+    dfsComputed: bool = false,
 
-    pub const empty = @This(){ .list = .empty };
+    pub const empty = @This(){ .list = .empty, .dfsComputed = false };
 
     pub const Walker = struct {
-        start: usize,
         current: ?usize,
         tree: *const NodeTree,
 
@@ -473,29 +473,12 @@ pub const NodeTree = struct {
             self.current = null;
         }
 
-        fn nextOutside(self: *@This(), index: usize) ?usize {
-            const node = self.tree.at(index);
-            if (node.nextSibling) |nextSibling| {
-                return nextSibling;
-            } else if (node.parent) |parentIndex| {
-                return self.nextOutside(parentIndex);
-            } else {
-                return null;
-            }
-        }
-
         pub fn next(self: *@This()) ?*Node {
             if (self.current) |current| {
-                const node = self.tree.at(current);
-                if (node.firstChild) |firstChild| {
-                    self.current = firstChild;
-                } else {
-                    self.current = self.nextOutside(current);
-                }
+                self.current = self.tree.at(current).nextDFS;
             } else {
-                self.current = self.start;
+                self.current = if (self.tree.list.items.len > 0) 0 else null;
             }
-
             const idx = self.current orelse return null;
             return self.tree.at(idx);
         }
@@ -507,11 +490,34 @@ pub const NodeTree = struct {
 
     pub fn clearRetainingCapacity(self: *@This()) void {
         self.list.clearRetainingCapacity();
+        self.dfsComputed = false;
+    }
+
+    pub fn computeDFSOrder(self: *@This()) void {
+        if (self.dfsComputed or self.list.items.len == 0) return;
+        self.computeNextDFS(0, null);
+        self.dfsComputed = true;
+    }
+
+    fn computeNextDFS(self: *@This(), index: usize, afterSubtree: ?usize) void {
+        const node = self.at(index);
+
+        // Process children in reverse order (last to first) so we know what comes after each
+        var childIdx = node.lastChild;
+        var nextAfterChild = afterSubtree;
+        while (childIdx) |ci| {
+            const child = self.at(ci);
+            self.computeNextDFS(ci, nextAfterChild);
+            nextAfterChild = ci;
+            childIdx = child.previousSibling;
+        }
+
+        node.nextDFS = node.firstChild orelse afterSubtree;
     }
 
     pub fn walk(self: *@This()) Walker {
+        self.computeDFSOrder();
         return Walker{
-            .start = 0,
             .current = null,
             .tree = self,
         };
@@ -546,6 +552,7 @@ pub const NodeTree = struct {
             .lastChild = null,
             .previousSibling = null,
             .nextSibling = null,
+            .nextDFS = null,
 
             .key = undefined,
 
@@ -627,6 +634,7 @@ pub const Node = struct {
     lastChild: ?usize = null,
     nextSibling: ?usize = null,
     previousSibling: ?usize = null,
+    nextDFS: ?usize = null,
     glyphs: ?Glyphs = null,
 
     key: u64,
@@ -650,9 +658,11 @@ pub const Node = struct {
     pub fn fitChild(self: *@This(), child: *const Node) void {
         if (child.style.placement != .flow) return;
 
-        // Early exit if parent doesn't fit in either direction
-        const fitH = self.style.width == .fit or self.shouldFitMin(.horizontal);
-        const fitV = self.style.height == .fit or self.shouldFitMin(.vertical);
+        // Check if parent should accumulate child sizes.
+        // .fit nodes always accumulate. .grow nodes also accumulate because
+        // when their parent can't provide space, content determines size.
+        const fitH = self.style.width == .fit or self.style.width.isGrow() or self.shouldFitMin(.horizontal);
+        const fitV = self.style.height == .fit or self.style.height.isGrow() or self.shouldFitMin(.vertical);
         if (!fitH and !fitV) return;
 
         const wraps = self.style.overflow == .wrap and self.style.direction == .horizontal;
@@ -672,11 +682,14 @@ pub const Node = struct {
             else
                 child.getMinSize(fitDirection);
 
+            // For .fit, always accumulate. For .grow, use max to expand if content requires it.
+            const shouldAccumulate = preferredSize == .fit or preferredSize.isGrow();
+
             if (layoutDirection == fitDirection) {
                 if (wraps) {
                     // With wrapping, inline-axis min is the widest single
                     // child (any child could end up alone on a line).
-                    if (preferredSize == .fit) {
+                    if (shouldAccumulate) {
                         self.setSize(fitDirection, @max(
                             self.getSize(fitDirection),
                             contribution + self.fittingBase(fitDirection),
@@ -692,6 +705,12 @@ pub const Node = struct {
                     if (preferredSize == .fit) {
                         // TODO: ensure the max and min sizes here
                         self.addSize(fitDirection, contribution);
+                    } else if (preferredSize.isGrow()) {
+                        // For grow, expand to fit content if needed
+                        self.setSize(fitDirection, @max(
+                            self.getSize(fitDirection),
+                            contribution + self.fittingBase(fitDirection),
+                        ));
                     }
                     if (self.shouldFitMin(fitDirection)) {
                         // Main axis: use minSize to avoid unwrapped text bloat
@@ -700,7 +719,7 @@ pub const Node = struct {
                 }
             } else {
                 // cross axis fitting
-                if (preferredSize == .fit) {
+                if (shouldAccumulate) {
                     // TODO: ensure the max and min sizes here
                     self.setSize(fitDirection, @max(
                         contribution + self.fittingBase(fitDirection),
