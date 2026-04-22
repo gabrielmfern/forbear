@@ -212,70 +212,42 @@ fn shrinkChildren(
     }
 }
 
-pub fn refitAncestors(node: *Node, nodeTree: *const NodeTree) void {
-    var ancestorIndexOpt = node.parent;
-    while (ancestorIndexOpt) |ancestorIndex| {
-        const ancestor = nodeTree.at(ancestorIndex);
-        const oldSize = ancestor.size;
+/// Computes fit sizes bottom-up from the complete tree.
+///
+/// This is called at the start of layout() to compute initial fit sizes, and
+/// again after layout passes that may change child sizes (text wrapping,
+/// grow distribution).
+///
+/// Processing order:
+/// 1. Children first (post-order traversal)
+/// 2. Reset container sizes to base (padding + border)
+/// 3. Accumulate child sizes via fitChild
+///
+/// Preserves:
+/// - Leaf/text node sizes (content-derived, not from children)
+/// - Wrap container sizes (computed specially by wrapAndPlace)
+pub fn fit(node: *Node, nodeTree: *NodeTree) void {
+    const shouldReset = node.firstChild != null and
+        node.glyphs == null and
+        node.style.overflow != .wrap;
 
-        inline for (Direction.array) |dir| {
-            if (ancestor.style.getPreferredSize(dir) == .fit) {
-                ancestor.setSize(dir, ancestor.fittingBase(dir));
+    if (shouldReset) {
+        inline for (Direction.array) |fitDirection| {
+            if (node.style.getPreferredSize(fitDirection) == .fit) {
+                node.setSize(fitDirection, node.fittingBase(fitDirection));
             }
-            if (ancestor.shouldFitMin(dir)) {
-                ancestor.setMinSize(dir, ancestor.fittingBase(dir));
+            if (node.shouldFitMin(fitDirection)) {
+                node.setMinSize(fitDirection, node.fittingBase(fitDirection));
             }
         }
-        var childIndexOpt = ancestor.firstChild;
-        while (childIndexOpt) |childIndex| {
+
+        var childIndexOption = node.firstChild;
+        while (childIndexOption) |childIndex| {
             const child = nodeTree.at(childIndex);
-            ancestor.fitChild(child);
-            childIndexOpt = child.nextSibling;
+            fit(child, nodeTree);
+            node.fitChild(child);
+            childIndexOption = child.nextSibling;
         }
-        if (ancestor.style.width == .ratio) {
-            ancestor.size[0] = ancestor.style.width.ratio * ancestor.size[1];
-        }
-        if (ancestor.style.height == .ratio) {
-            ancestor.size[1] = ancestor.style.height.ratio * ancestor.size[0];
-        }
-        // Ensure minSize doesn't exceed maxSize (can happen with accumulated text widths)
-        ancestor.minSize[0] = @min(ancestor.minSize[0], ancestor.maxSize[0]);
-        ancestor.minSize[1] = @min(ancestor.minSize[1], ancestor.maxSize[1]);
-        ancestor.size[0] = @min(@max(ancestor.size[0], ancestor.minSize[0]), ancestor.maxSize[0]);
-        ancestor.size[1] = @min(@max(ancestor.size[1], ancestor.minSize[1]), ancestor.maxSize[1]);
-
-        // Re-apply perpendicular grow to children only if ancestor size changed
-        const perpendicular = ancestor.style.direction.perpendicular();
-        const oldPerpSize = if (perpendicular == .horizontal) oldSize[0] else oldSize[1];
-        if (ancestor.getSize(perpendicular) != oldPerpSize) {
-            const perpFittingBase = ancestor.fittingBase(perpendicular);
-            const availableBase = ancestor.getSize(perpendicular) - perpFittingBase;
-            childIndexOpt = ancestor.firstChild;
-            while (childIndexOpt) |childIndex| {
-                const child = nodeTree.at(childIndex);
-                if (child.style.placement == .flow and child.style.getPreferredSize(perpendicular).isGrow()) {
-                    const marginVector = child.style.margin.get(perpendicular);
-                    const available = availableBase - marginVector[0] - marginVector[1];
-                    child.setSize(perpendicular, @max(@min(available, child.getMaxSize(perpendicular)), child.getMinSize(perpendicular)));
-
-                    // Re-apply ratio sizing after perpendicular change
-                    if (child.style.width == .ratio) {
-                        child.size[0] = child.size[1] * child.style.width.ratio;
-                    }
-                    if (child.style.height == .ratio) {
-                        child.size[1] = child.size[0] * child.style.height.ratio;
-                    }
-                    // Ensure minSize doesn't exceed maxSize, then clamp size
-                    child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
-                    child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
-                    child.size[0] = @min(@max(child.size[0], child.minSize[0]), child.maxSize[0]);
-                    child.size[1] = @min(@max(child.size[1], child.minSize[1]), child.maxSize[1]);
-                }
-                childIndexOpt = child.nextSibling;
-            }
-        }
-
-        ancestorIndexOpt = ancestor.parent;
     }
 }
 
@@ -336,15 +308,11 @@ pub fn growAndShrink(
 
         // Ratio axes depend on the opposite axis which may have just been
         // resolved by grow/shrink or perpendicular clamping above.
-        const oldSize = child.size;
         if (child.style.width == .ratio) {
             child.size[0] = child.size[1] * child.style.width.ratio;
         }
         if (child.style.height == .ratio) {
             child.size[1] = child.size[0] * child.style.height.ratio;
-        }
-        if (child.size[0] != oldSize[0] or child.size[1] != oldSize[1]) {
-            refitAncestors(child, nodeTree);
         }
 
         try growAndShrink(arena, child, nodeTree);
@@ -353,7 +321,7 @@ pub fn growAndShrink(
     }
 }
 
-pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTree, base: Vec2) !void {
+fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
     std.debug.assert(node.glyphs != null);
     if (node.style.textWrapping == .none) {
         return;
@@ -453,27 +421,23 @@ pub fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTr
         }
     }
 
-    const previousHeight = node.size[1];
     node.size[1] = cursor[1] + glyphs.lineHeight;
-    if (previousHeight != node.size[1]) {
-        if (node.style.width == .ratio) {
-            node.size[0] = node.size[1] * node.style.width.ratio;
-        }
-
-        refitAncestors(node, nodeTree);
+    if (node.style.width == .ratio) {
+        node.size[0] = node.size[1] * node.style.width.ratio;
     }
 }
 
-/// does not change the size of children, but recursively updates the sizes of parents
+/// Wraps text and positions children. Also updates container heights to fit
+/// content so sibling positioning works correctly.
 pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const NodeTree) !void {
     const base = Vec2{
         node.style.borderWidth.x[0] + node.style.padding.x[0],
         node.style.borderWidth.y[0] + node.style.padding.y[0],
     };
 
-    // TODO: find a way to not have ambiguity between children and glyphs
+    // TODO: find a way to not have duplicate code between children and glyphs
     if (node.glyphs != null) {
-        try wrapGlyphs(arena, node, nodeTree, base);
+        try wrapGlyphs(arena, node, base);
     } else {
         if (node.style.direction == .horizontal) {
             const Line = struct {
@@ -484,16 +448,9 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
             };
 
             if (node.firstChild) |firstChildIndex| {
-                // Save height before processing children so we can compute
-                // the correct total change for wrapping containers.
-                const preWrapHeight = node.size[1];
                 var cursor = base;
                 var lines = std.ArrayList(Line).empty;
                 var currentLine = Line{ .start = firstChildIndex, .end = firstChildIndex, .width = 0.0, .height = 0.0 };
-                // Height additions from element wrapping (overflow: wrap) that
-                // have not yet been propagated to ancestors. Descendant text
-                // wrapping propagates its own height changes via wrapGlyphs →
-                // updateFittingForAncestors, so we must not re-propagate those.
                 var wrapHeightAddition: f32 = 0.0;
 
                 var childIndexOption = node.firstChild;
@@ -525,7 +482,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                         }
 
                         cursor[0] += child.style.margin.x[0];
-                        child.position = cursor;
+                        child.position = cursor + Vec2{ 0, child.style.margin.y[0] };
                         cursor[0] += child.size[0] + child.style.margin.x[1];
 
                         currentLine.width += childOuterWidth;
@@ -538,21 +495,15 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                 try lines.append(arena, currentLine);
 
                 if (node.style.overflow == .wrap) {
-                    // Compute authoritative height from actual line data.
-                    // Text wrapping propagation via updateFittingForAncestors
-                    // stops at the wrapping container, so we compute the correct
-                    // total here: fitting base + all wrap additions (previous
-                    // lines + inter-line margins) + last line's height.
+                    // Wrap containers: height = base + wrapped lines + last line
                     node.size[1] = node.fittingBase(.vertical) + wrapHeightAddition + currentLine.height;
                     if (node.style.width == .ratio) {
                         node.size[0] = node.size[1] * node.style.width.ratio;
                     }
-                    const totalChange = node.size[1] - preWrapHeight;
-                    if (totalChange > 0.001) {
-                        refitAncestors(node, nodeTree);
-                    }
-                } else if (wrapHeightAddition > 0.001) {
-                    refitAncestors(node, nodeTree);
+                } else if (node.style.height == .fit or node.style.height.isGrow()) {
+                    // Non-wrap: expand height to fit tallest child
+                    const newHeight = node.fittingBase(.vertical) + currentLine.height;
+                    node.size[1] = @max(node.size[1], newHeight);
                 }
 
                 const availableWidth = node.size[0] - node.fittingBase(.horizontal);
@@ -601,6 +552,12 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
             }
 
             const contentHeight = cursor[1] - base[1];
+
+            // Update fit containers to match content (needed before parent positions siblings)
+            if (node.style.height == .fit or node.style.height.isGrow()) {
+                const newHeight = node.fittingBase(.vertical) + contentHeight;
+                node.size[1] = @max(node.size[1], newHeight);
+            }
             const availableWidth = node.size[0] - node.fittingBase(.horizontal);
             const availableHeight = node.size[1] - node.fittingBase(.vertical);
             const yOffset: f32 = switch (node.style.yJustification) {
@@ -636,6 +593,8 @@ pub fn layout() !*NodeTree {
     if (context.nodeTree.list.items.len > 0) {
         const root = context.nodeTree.at(0);
 
+        fit(root, &context.nodeTree);
+
         if (root.style.width.isGrow()) {
             root.size[0] = @min(@max(viewportSize[0], root.minSize[0]), root.maxSize[0]);
         }
@@ -644,6 +603,18 @@ pub fn layout() !*NodeTree {
         }
 
         try growAndShrink(arena, root, &context.nodeTree);
+        try wrapAndPlace(arena, root, &context.nodeTree);
+        // wrap and place invalidates growth, at least perpendicular growth we
+        // can change this to just do perpendicular growth and things would
+        // work as expected
+        try growAndShrink(arena, root, &context.nodeTree);
+        // growth invalidates fitting, so we need to re-apply fitting after
+        // growth to ensure things like text-wrapping containers get the
+        // correct size for their content before placement
+        fit(root, &context.nodeTree);
+        // the fitting and growth invalidate the placement of elements, but not
+        // necessarily the wrapping. we only call this because they're
+        // inherently connected
         try wrapAndPlace(arena, root, &context.nodeTree);
 
         root.position -= context.scrollPosition;
