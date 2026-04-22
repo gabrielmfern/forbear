@@ -1214,7 +1214,7 @@ pub fn update() !void {
 
     const maxCappedDeltaTime: f64 = 1.0 / 30.0;
     const timestamp = timestampSeconds(self.io);
-    const rawDelta = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
+    const rawDelta = timestamp - (self.lastUpdateTime orelse self.startTime);
     self.deltaTime = rawDelta;
     self.cappedDeltaTime = @min(rawDelta, maxCappedDeltaTime);
     self.lastUpdateTime = timestamp;
