@@ -1,11 +1,9 @@
 const forbear = @import("forbear");
 const colors = @import("../colors.zig");
+const Section = @import("section.zig").Section;
 
 pub fn Footer() !void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
-        .xJustification = .center,
+    Section(.{
         .yJustification = .start,
         .padding = forbear.Padding.top(15.0).withBottom(19.5),
     })({

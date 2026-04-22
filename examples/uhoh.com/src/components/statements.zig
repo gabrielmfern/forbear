@@ -1,5 +1,6 @@
 const forbear = @import("forbear");
 const colors = @import("../colors.zig");
+const Section = @import("section.zig").Section;
 
 fn Statement(style: forbear.Style, text: []const u8) !void {
     forbear.element(style.overwrite(.{
@@ -19,10 +20,7 @@ fn Statement(style: forbear.Style, text: []const u8) !void {
 }
 
 pub fn Statements() !void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
-        .xJustification = .center,
+    Section(.{
         .yJustification = .start,
         .padding = .block(30.0),
         .margin = .block(48.0),

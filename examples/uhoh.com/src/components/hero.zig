@@ -1,10 +1,9 @@
 const forbear = @import("forbear");
 const Button = @import("button.zig").Button;
+const Section = @import("section.zig").Section;
 
 pub fn Hero() !void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
+    Section(.{
         .margin = .block(36.0),
         .direction = .horizontal,
         .xJustification = .start,

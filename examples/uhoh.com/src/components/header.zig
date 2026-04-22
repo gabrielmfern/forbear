@@ -1,13 +1,11 @@
 const forbear = @import("forbear");
 const Button = @import("button.zig").Button;
+const Section = @import("section.zig").Section;
 
 pub fn Header() !void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
+    Section(.{
         .minHeight = 72.0,
         .padding = .inLine(15.0),
-        .xJustification = .center,
         .yJustification = .center,
     })({
         forbear.image(.{

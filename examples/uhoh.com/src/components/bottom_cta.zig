@@ -1,12 +1,10 @@
 const forbear = @import("forbear");
 const colors = @import("../colors.zig");
 const Button = @import("button.zig").Button;
+const Section = @import("section.zig").Section;
 
 pub fn BottomCta() !void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
-        .xJustification = .center,
+    Section(.{
         .yJustification = .start,
         .padding = forbear.Padding.top(22.5).withBottom(37.5),
     })({

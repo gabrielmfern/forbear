@@ -1,5 +1,6 @@
 const forbear = @import("forbear");
 const colors = @import("../colors.zig");
+const Section = @import("section.zig").Section;
 
 const benefits = [_][]const u8{
     "Faster onboarding for new hires",
@@ -10,10 +11,7 @@ const benefits = [_][]const u8{
 };
 
 pub fn Benefits() !void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
-        .xJustification = .center,
+    Section(.{
         .yJustification = .start,
         .padding = forbear.Padding.top(22.5).withBottom(30.0),
     })({

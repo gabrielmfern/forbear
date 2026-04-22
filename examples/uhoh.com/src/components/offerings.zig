@@ -1,5 +1,6 @@
 const forbear = @import("forbear");
 const colors = @import("../colors.zig");
+const Section = @import("section.zig").Section;
 
 const Offering = struct {
     title: []const u8,
@@ -112,10 +113,7 @@ const offerings = [_]Offering{
 };
 
 pub fn Offerings() !void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
-        .xJustification = .center,
+    Section(.{
         .yJustification = .start,
         .padding = forbear.Padding.top(22.5).withBottom(37.5),
     })({

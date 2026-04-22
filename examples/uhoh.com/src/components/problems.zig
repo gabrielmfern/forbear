@@ -1,6 +1,7 @@
 const forbear = @import("forbear");
 const colors = @import("../colors.zig");
 const Button = @import("button.zig").Button;
+const Section = @import("section.zig").Section;
 
 const Vec4 = @Vector(4, f32);
 
@@ -21,10 +22,7 @@ fn Problem(style: forbear.Style, text: []const u8) !void {
 }
 
 pub fn Problems() !void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
-        .xJustification = .center,
+    Section(.{
         .padding = forbear.Padding.block(48.0).withInLine(15.0),
     })({
         forbear.image(.{

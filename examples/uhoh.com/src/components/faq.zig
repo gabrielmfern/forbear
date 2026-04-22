@@ -1,5 +1,6 @@
 const forbear = @import("forbear");
 const colors = @import("../colors.zig");
+const Section = @import("section.zig").Section;
 
 const faqs = [_]struct {
     question: []const u8,
@@ -24,10 +25,7 @@ const faqs = [_]struct {
 };
 
 pub fn Faq() void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
-        .xJustification = .center,
+    Section(.{
         .yJustification = .start,
         .padding = forbear.Padding.top(22.5).withBottom(30.0),
     })({

@@ -1,12 +1,11 @@
 const forbear = @import("forbear");
 const colors = @import("../colors.zig");
+const Section = @import("section.zig").Section;
 
 const Vec4 = @Vector(4, f32);
 
 pub fn Partners() !void {
-    forbear.element(.{
-        .width = .{ .grow = 1.0 },
-        .maxWidth = 940.0,
+    Section(.{
         .padding = .all(20.0),
         .margin = .block(96.0),
         .borderWidth = .all(2.0),
