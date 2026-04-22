@@ -1713,7 +1713,7 @@ test "mixed fit and grow siblings match height after text wrapping" {
     });
 }
 
-test "slotted children propagate size to fit ancestors before layout" {
+test "slotted children propagate size to fit ancestors" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
@@ -1722,21 +1722,33 @@ test "slotted children propagate size to fit ancestors before layout" {
 
     const arena = arenaAllocator.allocator();
 
-    // Simulates a component that has an internal fit element containing a slot.
-    // The component's internal element ends BEFORE slotted children are added,
-    // so ancestors must be refitted after slotting.
+    // Simulates a component with multiple nested fit elements containing a slot.
+    // All internal elements end BEFORE slotted children are added,
+    // so fit sizes are computed by layout() after tree construction.
     const SlottedComponent = struct {
         fn call() *const fn (void) void {
             forbear.component("slotted")({
-                // This fit element will contain the slotted children
+                // Multiple nested fit elements to stress the propagation
                 forbear.element(.{
                     .width = .fit,
                     .height = .fit,
                     .direction = .vertical,
                 })({
-                    forbear.componentChildrenSlot();
+                    forbear.element(.{
+                        .width = .fit,
+                        .height = .fit,
+                        .direction = .vertical,
+                    })({
+                        forbear.element(.{
+                            .width = .fit,
+                            .height = .fit,
+                            .direction = .vertical,
+                        })({
+                            forbear.componentChildrenSlot();
+                        });
+                    });
                 });
-                // The element above has ENDED here, but slotted children
+                // All elements above have ENDED here, but slotted children
                 // will be added after componentChildrenSlotEnd()
             });
             return forbear.componentChildrenSlotEnd();
@@ -1767,28 +1779,32 @@ test "slotted children propagate size to fit ancestors before layout" {
             });
         });
 
-        // Test sizes BEFORE layout() is called
-        const self = forbear.getContext();
-        const tree = &self.nodeTree;
+        const tree = try layout();
         const root = tree.at(0);
         const wrapper = tree.at(root.firstChild.?);
-        const slotParent = tree.at(wrapper.firstChild.?);
+        const compOuter = tree.at(wrapper.firstChild.?);
+        const compMiddle = tree.at(compOuter.firstChild.?);
+        const slotParent = tree.at(compMiddle.firstChild.?);
         const slottedChild = tree.at(slotParent.firstChild.?);
 
         // The slotted child has fixed size
         try std.testing.expectApproxEqAbs(@as(f32, 150), slottedChild.size[0], 0.0001);
         try std.testing.expectApproxEqAbs(@as(f32, 80), slottedChild.size[1], 0.0001);
 
-        // Slot parent should fit to slotted child
+        // All ancestors should fit to slotted child - this tests propagation
+        // through multiple levels that ended before slotting
         try std.testing.expectApproxEqAbs(@as(f32, 150), slotParent.size[0], 0.0001);
         try std.testing.expectApproxEqAbs(@as(f32, 80), slotParent.size[1], 0.0001);
 
-        // Wrapper (ancestor of slot parent) should ALSO fit to slotted child
-        // This is the key assertion - if ancestors aren't refitted, this fails
+        try std.testing.expectApproxEqAbs(@as(f32, 150), compMiddle.size[0], 0.0001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80), compMiddle.size[1], 0.0001);
+
+        try std.testing.expectApproxEqAbs(@as(f32, 150), compOuter.size[0], 0.0001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80), compOuter.size[1], 0.0001);
+
         try std.testing.expectApproxEqAbs(@as(f32, 150), wrapper.size[0], 0.0001);
         try std.testing.expectApproxEqAbs(@as(f32, 80), wrapper.size[1], 0.0001);
 
-        // Root ancestor should also fit
         try std.testing.expectApproxEqAbs(@as(f32, 150), root.size[0], 0.0001);
         try std.testing.expectApproxEqAbs(@as(f32, 80), root.size[1], 0.0001);
     });
