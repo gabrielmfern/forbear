@@ -1,5 +1,32 @@
 const forbear = @import("forbear");
-const Testimonial = @import("testimonial.zig").Testimonial;
+const colors = @import("../colors.zig");
+
+pub fn Testimonial(imageIdentifier: []const u8, style: forbear.Style) *const fn (void) void {
+    forbear.component("Testimonial")({
+        forbear.element(style.overwrite(.{
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
+            .padding = .all(20.0),
+            .borderRadius = 12.0,
+            .borderColor = colors.black,
+            .direction = .vertical,
+            .borderWidth = .all(2.0),
+        }))({
+            forbear.image(
+                .{
+                    .width = .{ .fixed = 80.0 },
+                    .height = .{ .fixed = 80.0 },
+                    .borderRadius = 12.0,
+                    .margin = .bottom(30.0),
+                },
+                forbear.useImage(imageIdentifier) catch unreachable,
+            );
+            forbear.componentChildrenSlot();
+        });
+    });
+
+    return forbear.componentChildrenSlotEnd();
+}
 
 pub fn TestimonialsSection() void {
     forbear.element(.{
