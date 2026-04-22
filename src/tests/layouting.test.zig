@@ -1809,3 +1809,140 @@ test "slotted children propagate size to fit ancestors" {
         try std.testing.expectApproxEqAbs(@as(f32, 80), root.size[1], 0.0001);
     });
 }
+
+test "element fitting - fit parent with padding accumulates fixed child inline" {
+    // A vertical fit parent with padding should grow its height by the
+    // child's height plus margins, plus its own padding/border.
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .direction = .vertical,
+            .height = .fit,
+            .width = .{ .fixed = 100.0 },
+            .padding = forbear.Padding.block(10.0),
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 20.0 },
+                .margin = forbear.Margin.block(5.0),
+            })({});
+        });
+        const tree = try layout();
+        const parent = tree.at(0);
+        // height = padding(10+10) + margin(5+5) + child(20) = 50
+        try std.testing.expectEqual(@as(f32, 50.0), parent.size[1]);
+        try std.testing.expectEqual(@as(f32, 50.0), parent.minSize[1]);
+    });
+}
+
+test "element fitting - fit parent cross-axis takes max child height" {
+    // A horizontal fit parent fitting height should use the tallest child
+    // contribution plus its own vertical padding.
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .direction = .horizontal,
+            .height = .fit,
+            .width = .{ .fixed = 200.0 },
+            .padding = forbear.Padding.block(8.0),
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 20.0 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 50.0 },
+            })({});
+        });
+        const tree = try layout();
+        const parent = tree.at(0);
+        // height = padding(8+8) + max child height(50) = 66
+        try std.testing.expectEqual(@as(f32, 66.0), parent.size[1]);
+        try std.testing.expectEqual(@as(f32, 66.0), parent.minSize[1]);
+    });
+}
+
+test "element fitting - fit parent with padding accumulates fixed child inline width" {
+    // A horizontal fit parent should sum child widths plus margins plus its
+    // own horizontal padding.
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .direction = .horizontal,
+            .width = .fit,
+            .height = .{ .fixed = 50.0 },
+            .padding = forbear.Padding.inLine(12.0),
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 50.0 },
+                .margin = forbear.Margin.inLine(4.0),
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 20.0 },
+                .height = .{ .fixed = 50.0 },
+                .margin = forbear.Margin.inLine(6.0),
+            })({});
+        });
+        const tree = try layout();
+        const parent = tree.at(0);
+        // width = padding(12+12) + child0(4+30+4) + child1(6+20+6) = 94
+        try std.testing.expectEqual(@as(f32, 94.0), parent.size[0]);
+        try std.testing.expectEqual(@as(f32, 94.0), parent.minSize[0]);
+    });
+}
+
+test "element fitting - nested fit parents propagate size upward" {
+    // Inner fit parent should size to its child, outer fit parent should size
+    // to the inner parent.
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .direction = .vertical,
+            .width = .fit,
+            .height = .fit,
+        })({
+            forbear.element(.{
+                .direction = .vertical,
+                .width = .fit,
+                .height = .fit,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 60.0 },
+                    .height = .{ .fixed = 30.0 },
+                })({});
+            });
+        });
+        const tree = try layout();
+        const outer = tree.at(0);
+        try std.testing.expectEqual(@as(f32, 60.0), outer.size[0]);
+        try std.testing.expectEqual(@as(f32, 30.0), outer.size[1]);
+        try std.testing.expectEqual(@as(f32, 60.0), outer.minSize[0]);
+        try std.testing.expectEqual(@as(f32, 30.0), outer.minSize[1]);
+    });
+}
