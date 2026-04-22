@@ -206,6 +206,8 @@ pub fn useImage(uniqueIdentifier: []const u8) !*Image {
     const self = getContext();
     return self.images.getPtr(uniqueIdentifier) orelse {
         std.log.err("Could not find image by the unique identifier {s}", .{uniqueIdentifier});
+        // TODO: return null, and then allow for null in forbear.image where it
+        // instead would render a placeholder background color
         return error.ImageNotFound;
     };
 }

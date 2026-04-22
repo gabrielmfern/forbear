@@ -1,188 +1,245 @@
 const forbear = @import("forbear");
 const colors = @import("../colors.zig");
 const Section = @import("section.zig").Section;
+const List = @import("list.zig").List;
+const ListItem = @import("list.zig").ListItem;
 
-const Offering = struct {
+pub const OfferingProps = struct {
     title: []const u8,
     imageId: []const u8,
-    bullets: []const []const u8,
     addonTitle: []const u8,
     addonBody: []const u8,
+
+    style: forbear.Style = .{},
 };
 
-const offerings = [_]Offering{
-    .{
-        .title = "Basic IT & Tech Support",
-        .imageId = "uhoh-offer-46",
-        .bullets = &[_][]const u8{
-            "Basic IT",
-            "Work space administration (Google & Microsoft)",
-            "User setup",
-            "User termination",
-            "VPN set up",
-            "Password Management & 2FA",
-            "Misfired Automations",
-            "Hardware problems",
-            "Software issues (Any tool not working correctly)",
-            "Access problems",
-            "Video meeting problems",
-            "User access",
-        },
-        .addonTitle = "+ Expanded IT & Tech Support",
-        .addonBody = "Assisting an in house team with: device provisioning & procurement, MDM setup, printer & peripheral configuration, network diagnostics & optimization, remote desktop troubleshooting, BYOD policy setup & support, backup systems.",
-    },
-    .{
-        .title = "Website & Domain",
-        .imageId = "uhoh-offer-47",
-        .bullets = &[_][]const u8{
-            "Website",
-            "Domain connection",
-            "Domain purchases",
-            "Domain monitoring",
-            "SSL Certifications",
-            "Website form integrations",
-            "Payment integrations",
-            "Website monitoring",
-            "Hosting reviews",
-            "Access problems",
-            "Video meeting problems",
-            "User access",
-        },
-        .addonTitle = "+ Expanded Web and Domain Support",
-        .addonBody = "DNS diagnostics & hardening, speed optimization audits, accessibility & compliance testing, CDN configuration, firewall or DDoS protection setup, uptime alerts.",
-    },
-    .{
-        .title = "Cold Email Setup & Consulting",
-        .imageId = "uhoh-offer-50",
-        .bullets = &[_][]const u8{
-            "Cold email consulting and setup (no production)",
-            "Set up & account management",
-            "Cold email best practices and sample copy",
-            "Cold email review",
-            "Domain management",
-            "Domain warming",
-            "How to set up lead scoring and consulting",
-        },
-        .addonTitle = "+ Expanded Cold Email",
-        .addonBody = "Inbox rotation strategy, custom lead scoring models, ROI tracking dashboards, deliverability monitoring, pre-send risk scoring.",
-    },
-    .{
-        .title = "CRM Management",
-        .imageId = "uhoh-offer-49",
-        .bullets = &[_][]const u8{
-            "CRM Management",
-            "Workflow review",
-            "Hubspot set up",
-            "Hubspot implementation",
-            "Creating booking calendars",
-            "Custom reporting",
-            "Lead scoring consulting",
-        },
-        .addonTitle = "+ Expanded Sales/CRM",
-        .addonBody = "Pipeline automation mapping, RevOps dashboards, lead routing logic setup, referral tracking, automated commission tracking, AI enrichment of contact/company data.",
-    },
-    .{
-        .title = "SaaS Spending, Tool Audits & Finance Ops",
-        .imageId = "uhoh-offer-51",
-        .bullets = &[_][]const u8{
-            "SaaS spending & tool audits",
-            "Spend audits",
-            "Tool review",
-            "Consolidation",
-            "Price negotiation",
-            "Activity logs & reporting",
-            "Float (online spending)",
-        },
-        .addonTitle = "+ Expanded Finance / SaaS",
-        .addonBody = "Subscription lifecycle management, shadow IT detection, SaaS access control by role, expense policy workflows.",
-    },
-    .{
-        .title = "Security Audits & Controls",
-        .imageId = "uhoh-offer-53",
-        .bullets = &[_][]const u8{
-            "Security audits",
-            "MFA (workspace & individual users)",
-            "Password sharing tools",
-            "SSO",
-            "Team training",
-            "Phishing training",
-        },
-        .addonTitle = "+ Expanded Team Training",
-        .addonBody = "Device encryption setup, compliance readiness consulting, Zero Trust access implementation, vulnerability testing coordination.",
-    },
-};
+pub fn Offering(props: OfferingProps) *const fn (void) void {
+    forbear.component("Offering")({
+        forbear.element(props.style.overwrite(.{
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
+            .borderRadius = 12.0,
+            .borderColor = colors.black,
+            .borderWidth = .all(2.0),
+            .padding = .all(20.0),
+            .margin = forbear.Margin.block(0.0).withBottom(12.0),
+            .direction = .vertical,
+        }))({
+            forbear.element(.{
+                .direction = .horizontal,
+                .xJustification = .start,
+                .yJustification = .center,
+                .margin = forbear.Margin.block(0.0).withBottom(9.0),
+            })({
+                forbear.image(.{
+                    .width = .{ .fixed = 100.0 },
+                    .height = .{ .fixed = 100.0 },
+                    .blendMode = .multiply,
+                    .margin = forbear.Margin.right(9.0),
+                }, forbear.useImage(props.imageId) catch unreachable);
+                forbear.element(.{
+                    .fontWeight = 700,
+                    .fontSize = 16.5,
+                })({
+                    forbear.text(props.title);
+                });
+            });
+            forbear.componentChildrenSlot();
+            forbear.element(.{
+                .borderRadius = 12.0,
+                // TODO: this should be a dashed border
+                .borderWidth = .all(2.0),
+                .borderColor = colors.black,
+                .fontSize = 12.0,
+                .padding = .all(9.0),
+                .margin = forbear.Margin.block(10.0).withInLine(20.0),
+            })({
+                forbear.element(.{
+                    .fontSize = 18.0,
+                    .margin = .top(10.0),
+                })({
+                    forbear.text(props.addonTitle);
+                });
+                forbear.text(props.addonBody);
+            });
+        });
+    });
+    return forbear.componentChildrenSlotEnd();
+}
 
 pub fn Offerings() !void {
     Section(.{
-        .yJustification = .start,
+        .maxWidth = 1269.0,
+        .xJustification = .center,
         .padding = forbear.Padding.top(22.5).withBottom(37.5),
     })({
-        forbear.element(.{ .direction = .vertical })({
-            inline for (offerings) |offering| {
-                forbear.element(.{
-                    .width = .{ .grow = 1.0 },
-                    .borderRadius = 12.0,
-                    .borderColor = colors.black,
-                    .borderWidth = .all(0.75),
-                    .padding = .all(15.0),
-                    .margin = forbear.Margin.block(0.0).withBottom(12.0),
-                    .direction = .vertical,
+        forbear.element(.{
+            .direction = .vertical,
+            .width = .{ .grow = 1.0 },
+        })({
+            forbear.element(.{
+                .width = .{ .grow = 1.0 },
+                .margin = .bottom(20.0),
+            })({
+                Offering(.{
+                    .title = "Basic IT & Tech Support",
+                    .imageId = "uhoh-offer-46",
+                    .addonTitle = "+ Expanded IT & Tech Support",
+                    .addonBody = "Assisting an in house team with: Device provisioning & procurement (laptops, phones, accessories) • Mobile Device Management (MDM) setup (e.g. Jamf, Intune) • Printer & peripheral configuration • Network diagnostics & optimization (e.g., Wi-Fi mapping, router config) • Remote desktop troubleshooting (e.g., AnyDesk, TeamViewer deployment) • BYOD policy setup & support • Business continuity planning / backup systems (Dropbox, Backblaze, Google Vault)",
+                    .style = .{
+                        .margin = .right(20.0),
+                    },
                 })({
-                    forbear.element(.{
-                        .direction = .horizontal,
-                        .xJustification = .start,
-                        .yJustification = .center,
-                        .margin = forbear.Margin.block(0.0).withBottom(9.0),
-                    })({
-                        forbear.image(.{
-                            .width = .{ .grow = 1.0 },
-                            .maxWidth = 100.0,
-                            .blendMode = .multiply,
-                            .margin = forbear.Margin.right(9.0),
-                        }, try forbear.useImage(offering.imageId));
-                        forbear.element(.{
-                            .fontWeight = 700,
-                            .fontSize = 16.5,
-                        })({
-                            forbear.text(offering.title);
+                    List()({
+                        ListItem()({
+                            forbear.text("Basic IT");
                         });
-                    });
-                    inline for (offering.bullets) |bullet| {
-                        forbear.element(.{
-                            .direction = .horizontal,
-                            .margin = forbear.Margin.block(0.0).withBottom(4.5),
-                        })({
-                            forbear.element(.{
-                                .width = .{ .fixed = 6.0 },
-                                .height = .{ .fixed = 6.0 },
-                                .borderRadius = 3.0,
-                                .margin = forbear.Margin.inLine(0.0).withRight(7.5),
-                            })({});
-                            forbear.element(.{ .fontSize = 11.25 })({
-                                forbear.text(bullet);
-                            });
+                        ListItem()({
+                            forbear.text("Work space administration (Google & Microsoft)");
                         });
-                    }
-                    forbear.element(.{
-                        .borderRadius = 9.0,
-                        .padding = .all(9.0),
-                        .margin = forbear.Margin.block(10.5).withBottom(0.0),
-                    })({
-                        forbear.element(.{
-                            .fontWeight = 600,
-                            .fontSize = 12.0,
-                            .margin = forbear.Margin.block(0.0).withBottom(4.5),
-                        })({
-                            forbear.text(offering.addonTitle);
+                        ListItem()({
+                            forbear.text("User setup");
                         });
-                        forbear.element(.{
-                            .fontSize = 10.5,
-                        })({
-                            forbear.text(offering.addonBody);
+                        ListItem()({
+                            forbear.text("User termination");
+                        });
+                        ListItem()({
+                            forbear.text("VPN set up");
+                        });
+                        ListItem()({
+                            forbear.text("Password Management & 2FA");
+                        });
+                        ListItem()({
+                            forbear.text("Misfired Automations");
+                        });
+                        ListItem()({
+                            forbear.text("Hardware problems");
+                        });
+                        ListItem()({
+                            forbear.text("Software issues (Any tool not working correctly)");
+                        });
+                        ListItem()({
+                            forbear.text("Access problems");
+                        });
+                        ListItem()({
+                            forbear.text("Video meeting problems");
+                        });
+                        ListItem()({
+                            forbear.text("User access");
                         });
                     });
                 });
-            }
+                Offering(.{
+                    .title = "Website & Domain",
+                    .imageId = "uhoh-offer-47",
+                    .addonTitle = "+ Expanded Web and Domain Support",
+                    .addonBody = "DNS diagnostics & hardening • Speed optimization audits (Core Web Vitals, GTmetrix, etc.) • Accessibility & compliance testing (WCAG/ADA tools) • CDN configuration (e.g., Cloudflare setup) • Firewall or DDoS protection setup (Cloudflare, Sucuri) • Uptime alerts routed to Slack/Email",
+                })({
+                    List()({
+                        ListItem()({
+                            forbear.text("Website");
+                        });
+                        ListItem()({
+                            forbear.text("Domain connection");
+                        });
+                        ListItem()({
+                            forbear.text("Domain purchases");
+                        });
+                        ListItem()({
+                            forbear.text("Domain monitoring");
+                        });
+                        ListItem()({
+                            forbear.text("SSL Certifications");
+                        });
+                        ListItem()({
+                            forbear.text("Website form integrations");
+                        });
+                        ListItem()({
+                            forbear.text("Payment integrations");
+                        });
+                        ListItem()({
+                            forbear.text("Website monitoring");
+                        });
+                        ListItem()({
+                            forbear.text("Hosting reviews");
+                        });
+                        ListItem()({
+                            forbear.text("Access problems");
+                        });
+                        ListItem()({
+                            forbear.text("Video meeting problems");
+                        });
+                        ListItem()({
+                            forbear.text("User access");
+                        });
+                    });
+                });
+            });
+            forbear.element(.{
+                .width = .{ .grow = 1.0 },
+                .margin = .bottom(20.0),
+            })({
+                Offering(.{
+                    .title = "SaaS Spending, Tool Audits & Finance Ops",
+                    .imageId = "uhoh-offer-50",
+                    .addonTitle = "+ Expanded Finance / SaaS",
+                    .addonBody = "Subscription lifecycle management • Shadow IT detection • SaaS access control by role / department • Expense policy enforcement workflows",
+                    .style = .{
+                        .margin = .right(20.0),
+                    },
+                })({
+                    List()({
+                        ListItem()({
+                            forbear.text("Saas Spending/Tool Audits/Software research ");
+                        });
+                        ListItem()({
+                            forbear.text("Spend Audits");
+                        });
+                        ListItem()({
+                            forbear.text("Tool Review");
+                        });
+                        ListItem()({
+                            forbear.text("Consolidation");
+                        });
+                        ListItem()({
+                            forbear.text("Price negotiation");
+                        });
+                        ListItem()({
+                            forbear.text("Activity logs & reporting");
+                        });
+                        ListItem()({
+                            forbear.text("Float (online spending)");
+                        });
+                    });
+                });
+                Offering(.{
+                    .title = "Security Audits & Controls",
+                    .imageId = "uhoh-offer-49",
+                    .addonTitle = "+ Expanded Team Training",
+                    .addonBody = "Device encryption setup (FileVault, BitLocker) • Compliance readiness consulting (SOC2-lite, ISO-lite for startups) • Zero Trust access implementation (per device/user/location rules) • Internal vulnerability testing / pen test coordination",
+                })({
+                    List()({
+                        ListItem()({
+                            forbear.text("Security Audits");
+                        });
+                        ListItem()({
+                            forbear.text("MFA (workspace & individual users)");
+                        });
+                        ListItem()({
+                            forbear.text("Password share tool (zoho, lastpass, Nordpass, Onepassword)");
+                        });
+                        ListItem()({
+                            forbear.text("SSO");
+                        });
+                        ListItem()({
+                            forbear.text("Team Training (InfoSec, Knowbe4)");
+                        });
+                        ListItem()({
+                            forbear.text("Phishing training");
+                        });
+                    });
+                });
+            });
         });
     });
 }
