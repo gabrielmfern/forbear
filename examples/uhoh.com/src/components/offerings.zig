@@ -45,6 +45,7 @@ pub fn Offering(props: OfferingProps) *const fn (void) void {
             });
             forbear.componentChildrenSlot();
             forbear.element(.{
+                .width = .{ .grow = 1.0 },
                 .height = .{ .grow = 1.0 },
             })({});
             forbear.element(.{
