@@ -6,7 +6,6 @@ const forbear = @import("forbear");
 const colors = @import("colors.zig");
 const Benefits = @import("components/benefits.zig").Benefits;
 const BottomCta = @import("components/bottom_cta.zig").BottomCta;
-const Faq = @import("components/faq.zig").Faq;
 const Footer = @import("components/footer.zig").Footer;
 const Header = @import("components/header.zig").Header;
 const Hero = @import("components/hero.zig").Hero;
@@ -58,7 +57,6 @@ fn App() !void {
             try Offerings();
             try JonQuote();
             try Benefits();
-            Faq();
             try BottomCta();
             try Footer();
         });
