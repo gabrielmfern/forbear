@@ -227,6 +227,7 @@ test "useSpringTransition - basic convergence" {
     const dt = 0.016; // ~60fps
 
     self.deltaTime = dt;
+    self.cappedDeltaTime = self.deltaTime;
 
     // First frame: value should start at target when initialized
     var value: f32 = undefined;
@@ -267,6 +268,7 @@ test "useSpringTransition - zero delta time" {
     const target = 50.0;
 
     self.deltaTime = 0.0;
+    self.cappedDeltaTime = self.deltaTime;
 
     // First frame with zero dt
     var value1: f32 = undefined;
@@ -297,6 +299,7 @@ test "useSpringTransition - null delta time" {
     const target = 75.0;
 
     self.deltaTime = null;
+    self.cappedDeltaTime = self.deltaTime;
 
     // With null delta time, should return current value
     var value: f32 = undefined;
@@ -323,6 +326,7 @@ test "useSpringTransition - small delta time" {
     const smallDt = 0.001; // 1ms - very small time step
 
     self.deltaTime = smallDt;
+    self.cappedDeltaTime = self.deltaTime;
 
     // Initialize
     var value: f32 = undefined;
@@ -359,6 +363,7 @@ test "useSpringTransition - large delta time" {
     const largeDt = 1.0; // 1 second - very large frame time
 
     self.deltaTime = largeDt;
+    self.cappedDeltaTime = self.deltaTime;
 
     // Initialize
     var value: f32 = undefined;
@@ -392,6 +397,7 @@ test "useSpringTransition - convergence threshold" {
     const dt = 0.016;
 
     self.deltaTime = dt;
+    self.cappedDeltaTime = self.deltaTime;
 
     // Initialize
     var value: f32 = undefined;
@@ -426,6 +432,7 @@ test "useSpringTransition - different spring configurations" {
 
     const dt = 0.016;
     self.deltaTime = dt;
+    self.cappedDeltaTime = self.deltaTime;
 
     // Test stiff spring (high stiffness, high damping)
     {
@@ -490,6 +497,7 @@ test "useSpringTransition - heavy mass" {
     const dt = 0.016;
 
     self.deltaTime = dt;
+    self.cappedDeltaTime = self.deltaTime;
 
     var value: f32 = undefined;
     try resolveSpringTransition(arenaAllocator, "spring-heavy-mass", 0.0, heavyConfig, &value);
@@ -520,6 +528,7 @@ test "useSpringTransition - target changes during animation" {
     const dt = 0.016;
 
     self.deltaTime = dt;
+    self.cappedDeltaTime = self.deltaTime;
 
     // Initialize at 0
     var value: f32 = undefined;
@@ -561,6 +570,7 @@ test "useSpringTransition - negative values" {
     const dt = 0.016;
 
     self.deltaTime = dt;
+    self.cappedDeltaTime = self.deltaTime;
 
     // Initialize at positive value
     var value: f32 = undefined;
@@ -594,6 +604,7 @@ test "useSpringTransition - state persistence across frames" {
     };
     const dt = 0.016;
     self.deltaTime = dt;
+    self.cappedDeltaTime = self.deltaTime;
 
     // Frame 1
     var value1: f32 = undefined;
