@@ -7,8 +7,12 @@ on:
 
 jobs:
   check:
-    name: check
-    runs-on: ubuntu-latest
+    name: check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: Checkout repository
@@ -19,7 +23,8 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Install project dependencies
+      - name: Install project dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -30,6 +35,28 @@ jobs:
             libxkbcommon-dev \
             spirv-tools \
             wayland-protocols
+
+      - name: Install project dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install glslang spirv-tools vulkan-loader
+          BREW_PREFIX=$(brew --prefix)
+          if [ "$BREW_PREFIX" != "/usr/local" ]; then
+            sudo mkdir -p /usr/local/include /usr/local/lib
+            sudo ln -sf "$BREW_PREFIX/include/vulkan" /usr/local/include/vulkan
+            sudo ln -sf "$BREW_PREFIX/include/vk_video" /usr/local/include/vk_video
+            for f in "$BREW_PREFIX"/lib/libvulkan*; do
+              sudo ln -sf "$f" /usr/local/lib/
+            done
+          fi
+
+      - name: Install Vulkan SDK (Windows)
+        if: runner.os == 'Windows'
+        uses: humbletim/setup-vulkan-sdk@c25f41106918cde0bf347e6f201277392b3a9e9d
+        with:
+          vulkan-query-version: latest
+          vulkan-components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools
+          vulkan-use-cache: true
 
       - name: Run build check
         run: zig build check
