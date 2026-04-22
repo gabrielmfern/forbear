@@ -4,13 +4,10 @@ const Button = @import("button.zig").Button;
 const Section = @import("section.zig").Section;
 
 pub fn BottomCta() !void {
-    Section(.{
-        .yJustification = .start,
-    })({
+    Section(.{})({
         forbear.element(.{
             .direction = .vertical,
             .xJustification = .center,
-            .yJustification = .start,
         })({
             forbear.image(.{
                 .height = .{ .fixed = 200.0 },
@@ -18,19 +15,27 @@ pub fn BottomCta() !void {
             }, try forbear.useImage("uhoh-bottom-cta"));
             forbear.element(.{
                 .fontWeight = 700,
-                .fontSize = 22.5,
-                .margin = forbear.Margin.block(13.5).withBottom(7.5),
+                .fontSize = 40.0,
+                .margin = forbear.Margin.top(20.0).withBottom(25.0),
+                .textWrapping = .none,
+                .xJustification = .center,
             })({
                 forbear.text("Dude, you're at the bottom of our landing page.");
             });
             forbear.element(.{
-                .fontSize = 12.0,
-                .margin = forbear.Margin.block(0.0).withBottom(20.0),
+                .direction = .vertical,
+                .xJustification = .center,
             })({
-                forbear.text("Just get the free trial already if you're that interested. You scrolled all the way here.");
+                forbear.text("Just get the free trial already if you're that interested.");
+                forbear.text("You scrolled all the way here.");
             });
 
-            Button(.{})({
+            Button(.{
+                .sizing = .large,
+                .style = .{
+                    .margin = .top(40.0),
+                },
+            })({
                 forbear.text("Come on, click on this");
                 forbear.element(.{
                     .fontSize = 14.0,
