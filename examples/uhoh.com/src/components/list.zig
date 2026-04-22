@@ -20,7 +20,7 @@ pub fn ListItem() *const fn (void) void {
         forbear.element(.{
             .width = .{ .grow = 1.0 },
             .direction = .horizontal,
-            .margin = .bottom(5.0),
+            .margin = .bottom(10.0),
         })({
             forbear.text("• ");
 
