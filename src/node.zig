@@ -650,9 +650,11 @@ pub const Node = struct {
     pub fn fitChild(self: *@This(), child: *const Node) void {
         if (child.style.placement != .flow) return;
 
-        // Early exit if parent doesn't fit in either direction
-        const fitH = self.style.width == .fit or self.shouldFitMin(.horizontal);
-        const fitV = self.style.height == .fit or self.shouldFitMin(.vertical);
+        // Check if parent should accumulate child sizes.
+        // .fit nodes always accumulate. .grow nodes also accumulate because
+        // when their parent can't provide space, content determines size.
+        const fitH = self.style.width == .fit or self.style.width.isGrow() or self.shouldFitMin(.horizontal);
+        const fitV = self.style.height == .fit or self.style.height.isGrow() or self.shouldFitMin(.vertical);
         if (!fitH and !fitV) return;
 
         const wraps = self.style.overflow == .wrap and self.style.direction == .horizontal;
@@ -672,11 +674,14 @@ pub const Node = struct {
             else
                 child.getMinSize(fitDirection);
 
+            // For .fit, always accumulate. For .grow, use max to expand if content requires it.
+            const shouldAccumulate = preferredSize == .fit or preferredSize.isGrow();
+
             if (layoutDirection == fitDirection) {
                 if (wraps) {
                     // With wrapping, inline-axis min is the widest single
                     // child (any child could end up alone on a line).
-                    if (preferredSize == .fit) {
+                    if (shouldAccumulate) {
                         self.setSize(fitDirection, @max(
                             self.getSize(fitDirection),
                             contribution + self.fittingBase(fitDirection),
@@ -692,6 +697,12 @@ pub const Node = struct {
                     if (preferredSize == .fit) {
                         // TODO: ensure the max and min sizes here
                         self.addSize(fitDirection, contribution);
+                    } else if (preferredSize.isGrow()) {
+                        // For grow, expand to fit content if needed
+                        self.setSize(fitDirection, @max(
+                            self.getSize(fitDirection),
+                            contribution + self.fittingBase(fitDirection),
+                        ));
                     }
                     if (self.shouldFitMin(fitDirection)) {
                         // Main axis: use minSize to avoid unwrapped text bloat
@@ -700,7 +711,7 @@ pub const Node = struct {
                 }
             } else {
                 // cross axis fitting
-                if (preferredSize == .fit) {
+                if (shouldAccumulate) {
                     // TODO: ensure the max and min sizes here
                     self.setSize(fitDirection, @max(
                         contribution + self.fittingBase(fitDirection),

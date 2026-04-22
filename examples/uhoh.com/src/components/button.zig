@@ -1,6 +1,8 @@
 const forbear = @import("forbear");
+const colors = @import("../colors.zig");
 
 pub const ButtonProps = struct {
+    style: forbear.Style = .{},
     sizing: enum { medium, large } = .medium,
 };
 
@@ -16,11 +18,11 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
                 isHovering.* = false;
             }
 
-            forbear.element(.{
+            forbear.element(props.style.overwrite(.{
                 .borderRadius = 8.0,
                 .borderWidth = .all(2.0),
-                .background = .{ .color = .{ 1.0, 1.0, 1.0, 1.0 } },
-                .borderColor = .{ 0.0, 0.0, 0.0, 1.0 },
+                .background = .{ .color = forbear.white },
+                .borderColor = colors.black,
                 .cursor = .pointer,
                 .textWrapping = .none,
                 .fontSize = switch (props.sizing) {
@@ -46,7 +48,7 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
                 .xJustification = .center,
                 .yJustification = .center,
                 .direction = .vertical,
-            })({
+            }))({
                 forbear.componentChildrenSlot();
             });
         });

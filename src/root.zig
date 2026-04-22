@@ -206,6 +206,8 @@ pub fn useImage(uniqueIdentifier: []const u8) !*Image {
     const self = getContext();
     return self.images.getPtr(uniqueIdentifier) orelse {
         std.log.err("Could not find image by the unique identifier {s}", .{uniqueIdentifier});
+        // TODO: return null, and then allow for null in forbear.image where it
+        // instead would render a placeholder background color
         return error.ImageNotFound;
     };
 }
@@ -400,6 +402,11 @@ pub fn easeInOut(progress: f32) f32 {
 pub fn ease(progress: f32) f32 {
     return cubicBezier(0.25, 0.1, 0.25, 1.0, progress);
 }
+
+pub const red = hex("#ff0000");
+pub const white = hex("#ffffff");
+pub const black = hex("#000000");
+// TODO: add all CSS named colors here
 
 pub fn hex(comptime value: []const u8) Vec4 {
     const digits = if (value.len > 0 and value[0] == '#') value[1..] else value;
@@ -603,6 +610,7 @@ fn elementEnd(block: void) void {
     const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
     const node = self.nodeTree.at(previousNodeIndex);
 
+    // Handle ratio sizing that depends on the opposite axis
     if (node.style.width == .ratio) {
         node.size[0] = node.style.width.ratio * node.size[1];
     }
@@ -612,11 +620,9 @@ fn elementEnd(block: void) void {
     node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
     node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
 
-    if (self.frameMeta.?.nodeParentStack.getLastOrNull()) |parentIndex| {
-        const parent = self.nodeTree.at(parentIndex);
-
-        parent.fitChild(node);
-    }
+    // Note: fit sizes are computed by layout()'s fit pass after the tree
+    // is complete, not incrementally during tree building. This handles
+    // slotted children correctly.
 }
 
 pub fn element(incompleteStyle: Style) *const fn (void) void {
@@ -1019,8 +1025,6 @@ fn componentChildrenSlotEndFn(block: void) void {
         }
         parent.lastChild = slotState.afterChainEnd;
     }
-
-    layouting.refitAncestors(parent, &self.nodeTree);
 
     // Restore parent stack to pre-slotEnd state
     fm.nodeParentStack.clearRetainingCapacity();
