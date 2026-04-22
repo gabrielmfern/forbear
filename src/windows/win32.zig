@@ -173,22 +173,22 @@ pub const VK_SHIFT: usize = 0x10;
 pub const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
 
 // Standard cursor IDs (these are resource IDs cast to pointers)
-pub const IDC_ARROW: LPCWSTR = @ptrFromInt(32512);
-pub const IDC_IBEAM: LPCWSTR = @ptrFromInt(32513);
-pub const IDC_WAIT: LPCWSTR = @ptrFromInt(32514);
-pub const IDC_CROSS: LPCWSTR = @ptrFromInt(32515);
-pub const IDC_UPARROW: LPCWSTR = @ptrFromInt(32516);
-pub const IDC_SIZE: LPCWSTR = @ptrFromInt(32640);
-pub const IDC_ICON: LPCWSTR = @ptrFromInt(32641);
-pub const IDC_SIZENWSE: LPCWSTR = @ptrFromInt(32642);
-pub const IDC_SIZENESW: LPCWSTR = @ptrFromInt(32643);
-pub const IDC_SIZEWE: LPCWSTR = @ptrFromInt(32644);
-pub const IDC_SIZENS: LPCWSTR = @ptrFromInt(32645);
-pub const IDC_SIZEALL: LPCWSTR = @ptrFromInt(32646);
-pub const IDC_NO: LPCWSTR = @ptrFromInt(32648);
-pub const IDC_HAND: LPCWSTR = @ptrFromInt(32649);
-pub const IDC_APPSTARTING: LPCWSTR = @ptrFromInt(32650);
-pub const IDC_HELP: LPCWSTR = @ptrFromInt(32651);
+pub const IDC_ARROW: ?*const anyopaque = @ptrFromInt(32512);
+pub const IDC_IBEAM: ?*const anyopaque = @ptrFromInt(32513);
+pub const IDC_WAIT: ?*const anyopaque = @ptrFromInt(32514);
+pub const IDC_CROSS: ?*const anyopaque = @ptrFromInt(32515);
+pub const IDC_UPARROW: ?*const anyopaque = @ptrFromInt(32516);
+pub const IDC_SIZE: ?*const anyopaque = @ptrFromInt(32640);
+pub const IDC_ICON: ?*const anyopaque = @ptrFromInt(32641);
+pub const IDC_SIZENWSE: ?*const anyopaque = @ptrFromInt(32642);
+pub const IDC_SIZENESW: ?*const anyopaque = @ptrFromInt(32643);
+pub const IDC_SIZEWE: ?*const anyopaque = @ptrFromInt(32644);
+pub const IDC_SIZENS: ?*const anyopaque = @ptrFromInt(32645);
+pub const IDC_SIZEALL: ?*const anyopaque = @ptrFromInt(32646);
+pub const IDC_NO: ?*const anyopaque = @ptrFromInt(32648);
+pub const IDC_HAND: ?*const anyopaque = @ptrFromInt(32649);
+pub const IDC_APPSTARTING: ?*const anyopaque = @ptrFromInt(32650);
+pub const IDC_HELP: ?*const anyopaque = @ptrFromInt(32651);
 
 // PeekMessage flags
 pub const PM_NOREMOVE: UINT = 0x0000;
@@ -278,7 +278,7 @@ pub extern "user32" fn TranslateMessage(lpMsg: *const MSG) callconv(.c) BOOL;
 pub extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(.c) LRESULT;
 pub extern "user32" fn PostQuitMessage(nExitCode: c_int) callconv(.c) void;
 
-pub extern "user32" fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: LPCWSTR) callconv(.c) HCURSOR;
+pub extern "user32" fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: ?*const anyopaque) callconv(.c) HCURSOR;
 pub extern "user32" fn SetCursor(hCursor: HCURSOR) callconv(.c) HCURSOR;
 
 pub extern "user32" fn AdjustWindowRectEx(lpRect: *RECT, dwStyle: DWORD, bMenu: BOOL, dwExStyle: DWORD) callconv(.c) BOOL;
