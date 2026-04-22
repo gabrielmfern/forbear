@@ -107,6 +107,9 @@ window: ?*Window,
 startTime: f64,
 /// Seconds
 deltaTime: ?f64,
+/// Seconds. Same as `deltaTime` but clamped to `maxCappedDeltaTime` so that
+/// spring integrators and animation progress stay stable during frame stutters.
+cappedDeltaTime: ?f64,
 /// Seconds
 lastUpdateTime: ?f64,
 viewportSize: Vec2,
@@ -143,6 +146,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
 
         .startTime = timestampSeconds(io),
         .deltaTime = null,
+        .cappedDeltaTime = null,
         .lastUpdateTime = null,
         .viewportSize = @splat(0.0),
 
@@ -292,7 +296,7 @@ pub fn useSpringTransition(target: f32, config: SpringConfig) f32 {
     const value = useState(f32, target);
     const velocity = useState(f32, 0.0);
 
-    const dt: f32 = @floatCast(self.deltaTime orelse 0.0);
+    const dt: f32 = @floatCast(self.cappedDeltaTime orelse 0.0);
     if (dt == 0.0) return value.*;
 
     const displacement = target - value.*;
@@ -315,7 +319,7 @@ pub fn useAnimation(duration: f32) Animation {
 
     if (state.* != null) {
         if (state.*.?.progress < 1.0) {
-            state.*.?.timeSinceStart += @floatCast(self.deltaTime orelse 0.0);
+            state.*.?.timeSinceStart += @floatCast(self.cappedDeltaTime orelse 0.0);
             state.*.?.progress = @min(
                 1.0,
                 state.*.?.timeSinceStart / state.*.?.estimatedEnd,
@@ -1208,8 +1212,11 @@ pub fn update() !void {
 
     self.viewportSize = viewportSize;
 
+    const maxCappedDeltaTime: f64 = 1.0 / 30.0;
     const timestamp = timestampSeconds(self.io);
-    self.deltaTime = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
+    const rawDelta = timestamp - (self.lastUpdateTime orelse (timestamp - self.startTime));
+    self.deltaTime = rawDelta;
+    self.cappedDeltaTime = @min(rawDelta, maxCappedDeltaTime);
     self.lastUpdateTime = timestamp;
 
     scroller(uiEdges);
