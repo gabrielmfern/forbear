@@ -215,6 +215,55 @@ test "fit height parent, with grow height child containing wrapping text" {
     });
 }
 
+test "cross-axis grow siblings match height after text wrapping" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Horizontal row with fit height containing two grow-height children.
+    // Left child has wrapped text (tall), right child is empty.
+    // After wrapping, both should have equal heights matching the tallest.
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300 },
+            .height = .fit,
+            .direction = .horizontal,
+            .textWrapping = .word,
+        })({
+            // Left: tall wrapped text
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .grow = 1.0 },
+                .direction = .vertical,
+            })({
+                forbear.text("This text will wrap to multiple lines when constrained to 100px width.");
+            });
+
+            // Right: empty but should stretch to match left
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .grow = 1.0 },
+            })({});
+        });
+
+        const tree = try layout();
+        const row = tree.at(0);
+        const left = tree.at(row.firstChild.?);
+        const right = tree.at(left.nextSibling.?);
+
+        // Both grow children should have equal heights
+        try std.testing.expectApproxEqAbs(left.size[1], right.size[1], 0.0001);
+        // Row should fit to the content height
+        try std.testing.expectApproxEqAbs(left.size[1], row.size[1], 0.0001);
+        // Height should be greater than one line (text wrapped)
+        try std.testing.expect(left.size[1] > 30.0);
+    });
+}
+
 test "wrapped text propagates height upward" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -1476,9 +1525,9 @@ test "vertical spacing elements with grow height works properly" {
 }
 
 // Regression: fitChild must use child.size (not child.minSize) for vertical minSize
-// propagation during refitAncestors. After text wrapping, size[1] = wrapped height,
-// but minSize[1] is still single line height. Using size[1] ensures fit parents
-// pick up the actual content height, allowing grow siblings to stretch correctly.
+// propagation. After text wrapping, size[1] = wrapped height, but minSize[1] is
+// still single line height. Using size[1] ensures fit parents pick up the actual
+// content height, allowing grow siblings to stretch correctly.
 test "vertical minSize uses child.size to capture wrapped text height" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -1529,5 +1578,218 @@ test "vertical minSize uses child.size to capture wrapped text height" {
         try std.testing.expectApproxEqAbs(row.size[1], cardA.size[1], 0.1);
         // Card B should also match
         try std.testing.expectApproxEqAbs(row.size[1], cardB.size[1], 0.1);
+    });
+}
+
+test "horizontal non-wrap container grows height to fit wrapped text child" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Horizontal container (non-wrap) with a single text child that wraps.
+    // The container's height should expand to fit the wrapped text.
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .fit,
+            .direction = .horizontal,
+            .textWrapping = .word,
+        })({
+            forbear.text("This text will wrap to multiple lines when constrained to 100px width.");
+        });
+
+        const tree = try layout();
+        const container = tree.at(0);
+        const text = tree.at(container.firstChild.?);
+
+        // Text should have wrapped (multiple lines)
+        try std.testing.expect(text.size[1] > 30.0);
+        // Container height should match text height
+        try std.testing.expectApproxEqAbs(text.size[1], container.size[1], 0.0001);
+    });
+}
+
+test "nested containers propagate wrapped text height through multiple levels" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Three levels: outer (horizontal) > middle (vertical) > inner (horizontal) > text
+    // Wrapped text height should propagate up through all fit containers.
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .fit,
+            .direction = .horizontal,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .fit,
+                .direction = .vertical,
+            })({
+                forbear.element(.{
+                    .width = .fit,
+                    .height = .fit,
+                    .direction = .horizontal,
+                    .textWrapping = .word,
+                })({
+                    forbear.text("This text will wrap when constrained to the parent width of 100px.");
+                });
+            });
+        });
+
+        const tree = try layout();
+        const outer = tree.at(0);
+        const middle = tree.at(outer.firstChild.?);
+        const inner = tree.at(middle.firstChild.?);
+        const text = tree.at(inner.firstChild.?);
+
+        // Text should have wrapped
+        try std.testing.expect(text.size[1] > 30.0);
+        // All containers should have matching heights
+        try std.testing.expectApproxEqAbs(text.size[1], inner.size[1], 0.0001);
+        try std.testing.expectApproxEqAbs(text.size[1], middle.size[1], 0.0001);
+        try std.testing.expectApproxEqAbs(text.size[1], outer.size[1], 0.0001);
+    });
+}
+
+test "mixed fit and grow siblings match height after text wrapping" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Horizontal row with:
+    // - Left child: fit height, contains wrapped text (determines row height)
+    // - Right child: grow height, empty (should stretch to match left)
+    try forbear.frame(try utilities.frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300 },
+            .height = .fit,
+            .direction = .horizontal,
+            .textWrapping = .word,
+        })({
+            // Fit child with wrapped text
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .fit,
+                .direction = .vertical,
+            })({
+                forbear.text("This text wraps to multiple lines and determines the row height.");
+            });
+
+            // Grow child should stretch to match
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .grow = 1.0 },
+            })({});
+        });
+
+        const tree = try layout();
+        const row = tree.at(0);
+        const fitChild = tree.at(row.firstChild.?);
+        const growChild = tree.at(fitChild.nextSibling.?);
+        const text = tree.at(fitChild.firstChild.?);
+
+        // Text should have wrapped
+        try std.testing.expect(text.size[1] > 30.0);
+        // Fit child contains the text
+        try std.testing.expectApproxEqAbs(text.size[1], fitChild.size[1], 0.0001);
+        // Row fits to the fit child
+        try std.testing.expectApproxEqAbs(fitChild.size[1], row.size[1], 0.0001);
+        // Grow child stretches to match row
+        try std.testing.expectApproxEqAbs(row.size[1], growChild.size[1], 0.0001);
+    });
+}
+
+test "slotted children propagate size to fit ancestors before layout" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    // Simulates a component that has an internal fit element containing a slot.
+    // The component's internal element ends BEFORE slotted children are added,
+    // so ancestors must be refitted after slotting.
+    const SlottedComponent = struct {
+        fn call() *const fn (void) void {
+            forbear.component("slotted")({
+                // This fit element will contain the slotted children
+                forbear.element(.{
+                    .width = .fit,
+                    .height = .fit,
+                    .direction = .vertical,
+                })({
+                    forbear.componentChildrenSlot();
+                });
+                // The element above has ENDED here, but slotted children
+                // will be added after componentChildrenSlotEnd()
+            });
+            return forbear.componentChildrenSlotEnd();
+        }
+    }.call;
+
+    try forbear.frame(try utilities.frameMeta(arena))({
+        // Fit ancestor that wraps the component
+        forbear.element(.{
+            .width = .fit,
+            .height = .fit,
+            .direction = .vertical,
+        })({
+            // Another fit wrapper
+            forbear.element(.{
+                .width = .fit,
+                .height = .fit,
+                .direction = .vertical,
+            })({
+                SlottedComponent()({
+                    // Slotted child with fixed size - added AFTER component's
+                    // internal elements have ended
+                    forbear.element(.{
+                        .width = .{ .fixed = 150 },
+                        .height = .{ .fixed = 80 },
+                    })({});
+                });
+            });
+        });
+
+        // Test sizes BEFORE layout() is called
+        const self = forbear.getContext();
+        const tree = &self.nodeTree;
+        const root = tree.at(0);
+        const wrapper = tree.at(root.firstChild.?);
+        const slotParent = tree.at(wrapper.firstChild.?);
+        const slottedChild = tree.at(slotParent.firstChild.?);
+
+        // The slotted child has fixed size
+        try std.testing.expectApproxEqAbs(@as(f32, 150), slottedChild.size[0], 0.0001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80), slottedChild.size[1], 0.0001);
+
+        // Slot parent should fit to slotted child
+        try std.testing.expectApproxEqAbs(@as(f32, 150), slotParent.size[0], 0.0001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80), slotParent.size[1], 0.0001);
+
+        // Wrapper (ancestor of slot parent) should ALSO fit to slotted child
+        // This is the key assertion - if ancestors aren't refitted, this fails
+        try std.testing.expectApproxEqAbs(@as(f32, 150), wrapper.size[0], 0.0001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80), wrapper.size[1], 0.0001);
+
+        // Root ancestor should also fit
+        try std.testing.expectApproxEqAbs(@as(f32, 150), root.size[0], 0.0001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80), root.size[1], 0.0001);
     });
 }
