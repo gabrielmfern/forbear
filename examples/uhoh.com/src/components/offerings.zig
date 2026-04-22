@@ -88,7 +88,7 @@ pub fn Offerings() !void {
                     .addonTitle = "+ Expanded IT & Tech Support",
                     .addonBody = "Assisting an in house team with: Device provisioning & procurement (laptops, phones, accessories) • Mobile Device Management (MDM) setup (e.g. Jamf, Intune) • Printer & peripheral configuration • Network diagnostics & optimization (e.g., Wi-Fi mapping, router config) • Remote desktop troubleshooting (e.g., AnyDesk, TeamViewer deployment) • BYOD policy setup & support • Business continuity planning / backup systems (Dropbox, Backblaze, Google Vault)",
                     .style = .{
-                        .margin = .right(20.0),
+                        .margin = forbear.Margin.right(20.0).withBottom(12.0),
                     },
                 })({
                     List()({
@@ -186,7 +186,7 @@ pub fn Offerings() !void {
                     .addonTitle = "+ Expanded Finance / SaaS",
                     .addonBody = "Subscription lifecycle management • Shadow IT detection • SaaS access control by role / department • Expense policy enforcement workflows",
                     .style = .{
-                        .margin = .right(20.0),
+                        .margin = forbear.Margin.right(20.0).withBottom(12.0),
                     },
                 })({
                     List()({
