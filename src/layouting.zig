@@ -482,7 +482,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, node: *Node, nodeTree: *const Node
                         }
 
                         cursor[0] += child.style.margin.x[0];
-                        child.position = cursor;
+                        child.position = cursor + Vec2{ 0, child.style.margin.y[0] };
                         cursor[0] += child.size[0] + child.style.margin.x[1];
 
                         currentLine.width += childOuterWidth;
