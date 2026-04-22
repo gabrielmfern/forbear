@@ -47,6 +47,7 @@
 - [x] feature equivalent to display: grid in css
 - [x] linear gradient support
 - [x] images look really bad
+- [ ] support for manual line breaks (`\n`/`\r` in text)
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?
 
