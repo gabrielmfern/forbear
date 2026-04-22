@@ -1453,19 +1453,19 @@ test "vertical spacing elements with grow height works properly" {
         })({
             forbear.element(.{
                 .height = .{ .fixed = 100 },
-            })({ });
+            })({});
             forbear.element(.{
                 .height = .{ .fixed = 100 },
-            })({ });
+            })({});
             forbear.element(.{
                 .height = .{ .fixed = 100 },
-            })({ });
+            })({});
             forbear.element(.{
                 .height = .{ .grow = 1.0 },
-            })({ });
+            })({});
             forbear.element(.{
                 .height = .{ .fixed = 100 },
-            })({ });
+            })({});
         });
 
         const nodeTree = try forbear.layout();

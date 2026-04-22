@@ -694,7 +694,7 @@ pub fn layout() !*NodeTree {
         try growAndShrink(arena, root, &context.nodeTree);
         // growth invalidates fitting, so we need to re-apply fitting after
         // growth to ensure things like text-wrapping containers get the
-        // correct size for their content before placement 
+        // correct size for their content before placement
         refit(root, &context.nodeTree);
         // the fitting and growth invalidate the placement of elements, but not
         // necessarily the wrapping. we only call this because they're
