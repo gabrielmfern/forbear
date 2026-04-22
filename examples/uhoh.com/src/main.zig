@@ -39,12 +39,12 @@ fn App() !void {
             forbear.element(.{
                 .width = .{ .grow = 1.0 },
                 .background = .{ .gradient = &rainbowBar },
-                .padding = .block(15.0),
+                .padding = .all(15.0),
                 .xJustification = .center,
                 .yJustification = .center,
                 .fontWeight = 500,
             })({
-                forbear.text("-> Book a 15 minute meeting today.");
+                forbear.text("→ Book a 15 minute meeting today.");
             });
 
             try Header();
