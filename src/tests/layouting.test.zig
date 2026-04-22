@@ -1946,3 +1946,75 @@ test "element fitting - nested fit parents propagate size upward" {
         try std.testing.expectEqual(@as(f32, 30.0), outer.minSize[1]);
     });
 }
+
+test "element fitting - first child margin contributes to fit parent size" {
+    // The leading margin of the first child must be included in the parent's
+    // fit size, not skipped. A vertical fit parent with a single child that
+    // has top+bottom margins should size to padding + margin_top + child +
+    // margin_bottom.
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .direction = .vertical,
+            .height = .fit,
+            .width = .fit,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 20.0 },
+                .margin = forbear.Margin.block(8.0),
+            })({});
+        });
+        const tree = try layout();
+        const parent = tree.at(0);
+        const child = tree.at(parent.firstChild.?);
+        // height = margin_top(8) + child(20) + margin_bottom(8) = 36
+        try std.testing.expectEqual(@as(f32, 36.0), parent.size[1]);
+        try std.testing.expectEqual(@as(f32, 36.0), parent.minSize[1]);
+        // width = child(40) with inline margins = 0 on each side
+        try std.testing.expectEqual(@as(f32, 40.0), parent.size[0]);
+        // child is placed at parent origin + margin_top
+        try std.testing.expectEqual(parent.position[0], child.position[0]);
+        try std.testing.expectEqual(parent.position[1] + 8.0, child.position[1]);
+    });
+}
+
+test "element fitting - first child top margin offsets position in horizontal parent" {
+    // In a horizontal container the y-axis is the cross axis. A child with a
+    // top margin must be placed at parent_y + margin_top, not at parent_y.
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try utilities.frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .direction = .horizontal,
+            .height = .fit,
+            .width = .fit,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 20.0 },
+                .margin = forbear.Margin.block(8.0),
+            })({});
+        });
+        const tree = try layout();
+        const parent = tree.at(0);
+        const child = tree.at(parent.firstChild.?);
+        // height = margin_top(8) + child(20) + margin_bottom(8) = 36
+        try std.testing.expectEqual(@as(f32, 36.0), parent.size[1]);
+        // child must be offset by margin_top on the cross axis
+        try std.testing.expectEqual(parent.position[1] + 8.0, child.position[1]);
+        // and by margin_left on the main axis
+        try std.testing.expectEqual(parent.position[0], child.position[0]);
+    });
+}
