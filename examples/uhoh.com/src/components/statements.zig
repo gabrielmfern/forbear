@@ -23,7 +23,6 @@ pub fn Statements() !void {
     Section(.{
         .yJustification = .start,
         .padding = .block(30.0),
-        .margin = .block(48.0),
         .borderWidth = .block(2.0),
         .borderColor = colors.black,
     })({

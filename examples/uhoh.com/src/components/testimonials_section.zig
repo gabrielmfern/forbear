@@ -33,7 +33,6 @@ pub fn TestimonialsSection() void {
     Section(.{
         .yJustification = .start,
         .direction = .vertical,
-        .padding = forbear.Padding.top(22.5).withBottom(30.0),
     })({
         forbear.element(.{
             .fontWeight = 700,

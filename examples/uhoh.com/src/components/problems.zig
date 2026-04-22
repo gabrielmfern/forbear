@@ -22,9 +22,7 @@ fn Problem(style: forbear.Style, text: []const u8) !void {
 }
 
 pub fn Problems() !void {
-    Section(.{
-        .padding = forbear.Padding.block(48.0).withInLine(15.0),
-    })({
+    Section(.{})({
         forbear.image(.{
             .width = .{ .grow = 0.75 },
             .maxWidth = 369,

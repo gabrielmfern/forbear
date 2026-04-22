@@ -6,8 +6,7 @@ const Vec4 = @Vector(4, f32);
 
 pub fn Partners() !void {
     Section(.{
-        .padding = .all(20.0),
-        .margin = .block(96.0),
+        .margin = .block(48.0),
         .borderWidth = .all(2.0),
         .borderColor = colors.black,
         .borderRadius = 9.0,

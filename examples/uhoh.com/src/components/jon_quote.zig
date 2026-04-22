@@ -5,7 +5,6 @@ const Section = @import("section.zig").Section;
 pub fn JonQuote() !void {
     Section(.{
         .yJustification = .start,
-        .padding = forbear.Padding.top(15.0).withBottom(30.0),
     })({
         forbear.element(.{
             .direction = .horizontal,

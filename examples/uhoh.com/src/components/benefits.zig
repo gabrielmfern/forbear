@@ -13,7 +13,6 @@ const benefits = [_][]const u8{
 pub fn Benefits() !void {
     Section(.{
         .yJustification = .start,
-        .padding = forbear.Padding.top(22.5).withBottom(30.0),
     })({
         forbear.element(.{
             .direction = .horizontal,

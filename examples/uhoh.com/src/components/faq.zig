@@ -27,7 +27,6 @@ const faqs = [_]struct {
 pub fn Faq() void {
     Section(.{
         .yJustification = .start,
-        .padding = forbear.Padding.top(22.5).withBottom(30.0),
     })({
         forbear.element(.{ .direction = .vertical })({
             forbear.element(.{

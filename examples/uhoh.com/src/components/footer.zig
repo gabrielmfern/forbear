@@ -5,7 +5,6 @@ const Section = @import("section.zig").Section;
 pub fn Footer() !void {
     Section(.{
         .yJustification = .start,
-        .padding = forbear.Padding.top(15.0).withBottom(19.5),
     })({
         forbear.element(.{
             .direction = .vertical,

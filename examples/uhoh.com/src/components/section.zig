@@ -6,6 +6,7 @@ pub fn Section(style: forbear.Style) *const fn (void) void {
             .width = .{ .grow = 1.0 },
             .maxWidth = 940.0,
             .xJustification = .center,
+            .padding = forbear.Padding.block(48.0).withInLine(15.0),
         }))({
             forbear.componentChildrenSlot();
         });

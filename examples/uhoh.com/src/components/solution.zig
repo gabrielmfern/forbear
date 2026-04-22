@@ -4,7 +4,6 @@ const Section = @import("section.zig").Section;
 
 pub fn Solution() !void {
     Section(.{
-        .margin = .block(48.0),
         .direction = .vertical,
     })({
         forbear.image(.{

@@ -33,7 +33,6 @@ pub fn Offering(props: OfferingProps) *const fn (void) void {
             })({
                 forbear.image(.{
                     .width = .{ .fixed = 100.0 },
-                    .height = .{ .fixed = 100.0 },
                     .blendMode = .multiply,
                     .margin = forbear.Margin.right(9.0),
                 }, forbear.useImage(props.imageId) catch unreachable);
@@ -46,17 +45,20 @@ pub fn Offering(props: OfferingProps) *const fn (void) void {
             });
             forbear.componentChildrenSlot();
             forbear.element(.{
+                .height = .{ .grow = 1.0 },
+            })({});
+            forbear.element(.{
                 .borderRadius = 12.0,
                 // TODO: this should be a dashed border
                 .borderWidth = .all(2.0),
                 .borderColor = colors.black,
                 .fontSize = 12.0,
-                .padding = .all(9.0),
-                .margin = forbear.Margin.block(10.0).withInLine(20.0),
+                .direction = .vertical,
+                .padding = forbear.Padding.block(10.0).withInLine(20.0),
             })({
                 forbear.element(.{
                     .fontSize = 18.0,
-                    .margin = .top(10.0),
+                    .margin = .block(10.0),
                 })({
                     forbear.text(props.addonTitle);
                 });
@@ -71,7 +73,6 @@ pub fn Offerings() !void {
     Section(.{
         .maxWidth = 1269.0,
         .xJustification = .center,
-        .padding = forbear.Padding.top(22.5).withBottom(37.5),
     })({
         forbear.element(.{
             .direction = .vertical,

@@ -5,7 +5,6 @@ const Section = @import("section.zig").Section;
 pub fn Header() !void {
     Section(.{
         .minHeight = 72.0,
-        .padding = .inLine(15.0),
         .yJustification = .center,
     })({
         forbear.image(.{

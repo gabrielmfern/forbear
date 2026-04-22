@@ -6,7 +6,6 @@ const Section = @import("section.zig").Section;
 pub fn BottomCta() !void {
     Section(.{
         .yJustification = .start,
-        .padding = forbear.Padding.top(22.5).withBottom(37.5),
     })({
         forbear.element(.{
             .direction = .vertical,
