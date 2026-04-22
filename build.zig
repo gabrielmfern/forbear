@@ -294,6 +294,29 @@ fn addUhohExecutable(
     });
 }
 
+fn addWaylandBookExecutable(
+    b: *std.Build,
+    module_name: []const u8,
+    executable_name: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    forbear: *std.Build.Module,
+) *std.Build.Step.Compile {
+    const wayland_book = b.addModule(module_name, .{
+        .root_source_file = b.path("examples/wayland-book.com/src/main.zig"),
+        .link_libc = true,
+        .target = target,
+        .optimize = optimize,
+    });
+    wayland_book.addImport("forbear", forbear);
+
+    return b.addExecutable(.{
+        .name = executable_name,
+        .root_module = wayland_book,
+        .use_llvm = true,
+    });
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -375,20 +398,26 @@ pub fn build(b: *std.Build) void {
         check_step.dependOn(&playground_exe.step);
 
         // Build uhoh.com example
-        const uhoh_build = b.addSystemCommand(&.{
-            "zig",
-            "build",
-        });
-        uhoh_build.setCwd(b.path("examples/uhoh.com"));
-        check_step.dependOn(&uhoh_build.step);
+        const uhoh_check = addUhohExecutable(
+            b,
+            "uhoh_check",
+            "uhoh_check",
+            target,
+            optimize,
+            forbear,
+        );
+        check_step.dependOn(&uhoh_check.step);
 
         // Build wayland-book.com example
-        const wayland_book_build = b.addSystemCommand(&.{
-            "zig",
-            "build",
-        });
-        wayland_book_build.setCwd(b.path("examples/wayland-book.com"));
-        check_step.dependOn(&wayland_book_build.step);
+        const wayland_book_check = addWaylandBookExecutable(
+            b,
+            "wayland_book_check",
+            "wayland_book_check",
+            target,
+            optimize,
+            forbear,
+        );
+        check_step.dependOn(&wayland_book_check.step);
     }
 
     // Package step - builds debug executables and copies them for CI upload
