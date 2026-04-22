@@ -461,11 +461,11 @@ pub const Glyphs = struct {
 /// using indices, this way keeping stable references without using pointers.
 pub const NodeTree = struct {
     list: std.ArrayList(Node),
-    dfsComputed: bool = false,
 
-    pub const empty = @This(){ .list = .empty, .dfsComputed = false };
+    pub const empty = @This(){ .list = .empty };
 
     pub const Walker = struct {
+        start: usize,
         current: ?usize,
         tree: *const NodeTree,
 
@@ -473,12 +473,29 @@ pub const NodeTree = struct {
             self.current = null;
         }
 
+        fn nextOutside(self: *@This(), index: usize) ?usize {
+            const node = self.tree.at(index);
+            if (node.nextSibling) |nextSibling| {
+                return nextSibling;
+            } else if (node.parent) |parentIndex| {
+                return self.nextOutside(parentIndex);
+            } else {
+                return null;
+            }
+        }
+
         pub fn next(self: *@This()) ?*Node {
             if (self.current) |current| {
-                self.current = self.tree.at(current).nextDFS;
+                const node = self.tree.at(current);
+                if (node.firstChild) |firstChild| {
+                    self.current = firstChild;
+                } else {
+                    self.current = self.nextOutside(current);
+                }
             } else {
-                self.current = if (self.tree.list.items.len > 0) 0 else null;
+                self.current = self.start;
             }
+
             const idx = self.current orelse return null;
             return self.tree.at(idx);
         }
@@ -490,34 +507,11 @@ pub const NodeTree = struct {
 
     pub fn clearRetainingCapacity(self: *@This()) void {
         self.list.clearRetainingCapacity();
-        self.dfsComputed = false;
-    }
-
-    pub fn computeDFSOrder(self: *@This()) void {
-        if (self.dfsComputed or self.list.items.len == 0) return;
-        self.computeNextDFS(0, null);
-        self.dfsComputed = true;
-    }
-
-    fn computeNextDFS(self: *@This(), index: usize, afterSubtree: ?usize) void {
-        const node = self.at(index);
-
-        // Process children in reverse order (last to first) so we know what comes after each
-        var childIdx = node.lastChild;
-        var nextAfterChild = afterSubtree;
-        while (childIdx) |ci| {
-            const child = self.at(ci);
-            self.computeNextDFS(ci, nextAfterChild);
-            nextAfterChild = ci;
-            childIdx = child.previousSibling;
-        }
-
-        node.nextDFS = node.firstChild orelse afterSubtree;
     }
 
     pub fn walk(self: *@This()) Walker {
-        self.computeDFSOrder();
         return Walker{
+            .start = 0,
             .current = null,
             .tree = self,
         };
@@ -552,7 +546,6 @@ pub const NodeTree = struct {
             .lastChild = null,
             .previousSibling = null,
             .nextSibling = null,
-            .nextDFS = null,
 
             .key = undefined,
 
@@ -634,7 +627,6 @@ pub const Node = struct {
     lastChild: ?usize = null,
     nextSibling: ?usize = null,
     previousSibling: ?usize = null,
-    nextDFS: ?usize = null,
     glyphs: ?Glyphs = null,
 
     key: u64,
