@@ -759,6 +759,10 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
     });
 }
 
+pub fn breakLine() void {
+    text("\n");
+}
+
 pub fn text(content: []const u8) void {
     if (content.len == 0) {
         return;
