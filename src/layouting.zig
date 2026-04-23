@@ -341,6 +341,19 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
     switch (node.style.textWrapping) {
         .character => {
             for (glyphs.slice, 0..) |*glyph, index| {
+                if (std.mem.eql(u8, glyph.text, "\n")) {
+                    if (index > lineStartIndex) {
+                        try lines.append(arena, .{
+                            .start = lineStartIndex,
+                            .end = index - 1,
+                        });
+                    }
+                    lineStartIndex = index + 1;
+                    cursor[0] = 0.0;
+                    cursor[1] += glyphs.lineHeight;
+                    glyph.position = base + cursor + glyph.offset;
+                    continue;
+                }
                 if (cursor[0] + glyph.advance[0] > lineEnd) {
                     try lines.append(arena, .{
                         .start = lineStartIndex,
@@ -361,6 +374,20 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
                 position: Vec2,
             } = null;
             for (glyphs.slice, 0..) |*glyph, index| {
+                if (std.mem.eql(u8, glyph.text, "\n")) {
+                    if (index > lineStartIndex) {
+                        try lines.append(arena, .{
+                            .start = lineStartIndex,
+                            .end = index - 1,
+                        });
+                    }
+                    lineStartIndex = index + 1;
+                    cursor[0] = 0.0;
+                    cursor[1] += glyphs.lineHeight;
+                    glyph.position = base + cursor + glyph.offset;
+                    lastSpaceInfoOpt = null;
+                    continue;
+                }
                 if (cursor[0] + glyph.advance[0] > lineEnd) {
                     if (lastSpaceInfoOpt) |lastSpaceInfo| {
                         const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];

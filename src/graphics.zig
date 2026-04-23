@@ -3875,6 +3875,7 @@ pub const Renderer = struct {
                 const glyphPage = glyphPageGetResult.value_ptr;
 
                 for (glyphs.slice) |glyph| {
+                    if (std.mem.eql(u8, glyph.text, "\n")) continue;
                     // Inner lookup: LRU per glyph index (no hashing of the full key)
                     const glyphRenderingData = blk: {
                         // TODO: render glyphs in the GPU using the font texture atlas as frame buffer
