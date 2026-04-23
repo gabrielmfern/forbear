@@ -3829,46 +3829,12 @@ pub const Renderer = struct {
         const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
         const atlasHeightInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height));
 
-        // Count blend modes to compute GPU buffer offsets
-        var totalBlendAddElementCount: usize = 0;
-        var totalBlendMultiplyElementCount: usize = 0;
-        for (nodesToRender.items) |nodeIndex| {
-            const node = nodeTree.at(nodeIndex);
-            switch (node.style.blendMode) {
-                .normal => totalBlendAddElementCount += 1,
-                .multiply => totalBlendMultiplyElementCount += 1,
-                .darken => {},
-            }
-        }
-
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
         var gradientStopIndex: usize = 0;
-        var blendAddElementIndex: usize = 0;
-        var blendMultiplyElementIndex: usize = totalBlendAddElementCount;
-        var blendDarkenElementIndex: usize = totalBlendAddElementCount + totalBlendMultiplyElementCount;
 
-        for (nodesToRender.items) |nodeIndex| {
+        for (nodesToRender.items, 0..) |nodeIndex, elementIndex| {
             const node = nodeTree.at(nodeIndex);
-
-            // Get element index based on blend mode (GPU buffer layout)
-            const elementIndex = switch (node.style.blendMode) {
-                .normal => blk: {
-                    const idx = blendAddElementIndex;
-                    blendAddElementIndex += 1;
-                    break :blk idx;
-                },
-                .multiply => blk: {
-                    const idx = blendMultiplyElementIndex;
-                    blendMultiplyElementIndex += 1;
-                    break :blk idx;
-                },
-                .darken => blk: {
-                    const idx = blendDarkenElementIndex;
-                    blendDarkenElementIndex += 1;
-                    break :blk idx;
-                },
-            };
 
             // Emit element draw command
             drawCommands[drawCommandCount] = .{
@@ -4067,9 +4033,6 @@ pub const Renderer = struct {
                 }
             }
         }
-        std.debug.assert(blendAddElementIndex == totalBlendAddElementCount);
-        std.debug.assert(blendMultiplyElementIndex == totalBlendAddElementCount + totalBlendMultiplyElementCount);
-        std.debug.assert(blendDarkenElementIndex == totalElementCount);
 
         if (@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start > 1000) {
             std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start });
