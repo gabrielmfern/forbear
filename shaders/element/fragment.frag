@@ -119,9 +119,11 @@ void main() {
             dashSize = borderRight * 3.0;
         }
 
-        float pattern = mod(edgePos, dashSize * 2.0);
-        if (pattern > dashSize) {
-            effectiveBorderColor.a = 0.0;
+        if (dashSize > 0.0) {
+            float pattern = mod(edgePos, dashSize * 2.0);
+            if (pattern > dashSize) {
+                effectiveBorderColor.a = 0.0;
+            }
         }
     }
 
