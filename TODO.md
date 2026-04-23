@@ -55,7 +55,10 @@
 ### [ ] wayland-book.com
 
 - [x] support for placing elements manually, but relative to their parent still
-- [ ] per element clipping
+- [x] per element clipping
+- [ ] per element scrolling
+    - I want to have a Scrolling component the user can just plop into their code and it just works 🤔
+    - Another option is a useScrolling (or something along those lines, maybe making it more clear it's imperative)
 - [ ] scroll bar 🤔
 
 ## problems

@@ -130,6 +130,24 @@ fn App() void {
             })({
                 forbear.text("Dashed");
             });
+
+            // Scissor clipping test: fixed height container with overflowing children
+            forbear.element(.{
+                .margin = forbear.Margin.top(24.0),
+                .width = .{ .fixed = 200 },
+                .height = .{ .fixed = 100 },
+                .direction = .vertical,
+                .background = .{ .color = .{ 0.1, 0.2, 0.3, 1.0 } },
+                .borderRadius = 8.0,
+                .borderWidth = .all(2.0),
+                .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
+            })({
+                forbear.text("Line 1");
+                forbear.text("Line 2");
+                forbear.text("Line 3 - should clip");
+                forbear.text("Line 4 - should clip");
+                forbear.text("Line 5 - should clip");
+            });
         });
     });
 }

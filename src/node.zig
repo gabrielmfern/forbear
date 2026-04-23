@@ -650,6 +650,9 @@ pub const Node = struct {
     size: Vec2,
     maxSize: Vec2,
     minSize: Vec2,
+    /// Clip rect inherited from ancestors that have constrained size with overflowing children.
+    /// Format: [x, y, width, height]. If null, no clipping is applied.
+    clipRect: ?Vec4 = null,
 
     style: CompleteStyle,
 

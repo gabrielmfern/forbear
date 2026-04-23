@@ -20,9 +20,106 @@ const LayerInterval = struct {
     start: usize,
     end: usize,
 };
+
+pub const DrawKind = enum(u8) {
+    shadow = 0,
+    element = 1,
+    text = 2,
+};
+
+pub const DrawCommand = struct {
+    kind: DrawKind,
+    blendMode: BlendMode,
+    start: usize,
+    end: usize,
+    clipRect: ?Vec4,
+    z: u16,
+
+    fn interval(self: DrawCommand) LayerInterval {
+        return .{ .start = self.start, .end = self.end };
+    }
+
+    fn lessThan(_: void, a: DrawCommand, b: DrawCommand) bool {
+        if (a.z != b.z) return a.z < b.z;
+        return @intFromEnum(a.kind) < @intFromEnum(b.kind);
+    }
+};
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
+
+/// Build the sorted list of draw commands for a given node tree and viewport.
+/// Culls nodes outside the viewport, emits element/shadow/text commands,
+/// and sorts by (z, kind) so shadows draw before elements before text.
+pub fn buildDrawCommands(
+    arena: std.mem.Allocator,
+    nodeTree: *const NodeTree,
+    viewport: Vec2,
+) ![]DrawCommand {
+    var nodesToRender = std.ArrayList(usize).empty;
+    for (nodeTree.list.items, 0..) |node, i| {
+        const insideView = node.position[0] + node.size[0] > 0.0 and
+            node.position[1] + node.size[1] > 0.0 and
+            viewport[0] > node.position[0] and
+            viewport[1] > node.position[1];
+        if (!insideView) continue;
+        try nodesToRender.append(arena, i);
+    }
+
+    // Max possible: each node can emit element + shadow + text = 3 commands
+    var commands = try arena.alloc(DrawCommand, nodesToRender.items.len * 3);
+    var count: usize = 0;
+
+    var shadowIndex: usize = 0;
+    var glyphIndex: usize = 0;
+
+    for (nodesToRender.items, 0..) |nodeIndex, elementIndex| {
+        const node = nodeTree.at(nodeIndex);
+
+        commands[count] = .{
+            .kind = .element,
+            .blendMode = node.style.blendMode,
+            .start = elementIndex,
+            .end = elementIndex,
+            .clipRect = node.clipRect,
+            .z = node.z,
+        };
+        count += 1;
+
+        if (node.style.shadow != null) {
+            commands[count] = .{
+                .kind = .shadow,
+                .blendMode = .normal,
+                .start = shadowIndex,
+                .end = shadowIndex,
+                .clipRect = node.clipRect,
+                .z = node.z,
+            };
+            count += 1;
+            shadowIndex += 1;
+        }
+
+        if (node.glyphs) |glyphs| {
+            const glyphCount = glyphs.slice.len;
+            if (glyphCount > 0) {
+                commands[count] = .{
+                    .kind = .text,
+                    .blendMode = .normal,
+                    .start = glyphIndex,
+                    .end = glyphIndex + glyphCount - 1,
+                    .clipRect = node.clipRect,
+                    .z = node.z,
+                };
+                count += 1;
+                glyphIndex += glyphCount;
+            }
+        }
+    }
+
+    const result = commands[0..count];
+    std.mem.sort(DrawCommand, result, {}, DrawCommand.lessThan);
+    return result;
+}
 
 /// Convert a single sRGB color component to linear RGB.
 /// sRGB values are gamma-encoded for display; linear values are needed for
@@ -3641,6 +3738,26 @@ pub const Renderer = struct {
         c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
     }
 
+    fn setScissor(self: *Self, clipRect: ?Vec4, fullViewport: c.VkRect2D) void {
+        const scissor = if (clipRect) |clip| blk: {
+            const x1: f32 = @max(0.0, clip[0]);
+            const y1: f32 = @max(0.0, clip[1]);
+            const x2: f32 = clip[0] + clip[2];
+            const y2: f32 = clip[1] + clip[3];
+            break :blk c.VkRect2D{
+                .offset = c.VkOffset2D{
+                    .x = @intFromFloat(x1),
+                    .y = @intFromFloat(y1),
+                },
+                .extent = c.VkExtent2D{
+                    .width = @intFromFloat(@max(0.0, x2 - x1)),
+                    .height = @intFromFloat(@max(0.0, y2 - y1)),
+                },
+            };
+        } else fullViewport;
+        c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{scissor});
+    }
+
     fn handleResizeMidFrame(self: *Self) !void {
         std.log.debug("image acquring errored with out of date, this means we need to recreate the swapchain", .{});
         try self.stallForFrames();
@@ -3732,15 +3849,6 @@ pub const Renderer = struct {
             try nodesToRender.append(arena, i);
         }
 
-        std.mem.sort(usize, nodesToRender.items, nodeTree, (struct {
-            fn lessThan(tree: *const NodeTree, lhs: usize, rhs: usize) bool {
-                const lhsNode = tree.at(lhs);
-                const rhsNode = tree.at(rhs);
-                return lhsNode.z < rhsNode.z;
-            }
-        }).lessThan);
-
-        const orderedNodes = nodesToRender.items;
         const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
 
         start = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us);
@@ -3749,8 +3857,8 @@ pub const Renderer = struct {
         var totalShadowCount: usize = 0;
         var totalGlyphCount: usize = 0;
         var totalGradientStopCount: usize = 0;
-        const totalElementCount: usize = orderedNodes.len;
-        for (orderedNodes) |nodeIndex| {
+        const totalElementCount: usize = nodesToRender.items.len;
+        for (nodesToRender.items) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
             if (node.style.shadow != null) {
                 totalShadowCount += 1;
@@ -3792,20 +3900,8 @@ pub const Renderer = struct {
             frameIndex,
         );
 
-        const maxZ = if (orderedNodes.len > 0)
-            nodeTree.at(orderedNodes[orderedNodes.len - 1]).z
-        else
-            0;
-        var shadowIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        var blendAddElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        var blendMultiplyElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        var blendDarkenElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        var textIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
-        for (shadowIntervals) |*interval| interval.* = null;
-        for (blendAddElementIntervals) |*interval| interval.* = null;
-        for (blendMultiplyElementIntervals) |*interval| interval.* = null;
-        for (blendDarkenElementIntervals) |*interval| interval.* = null;
-        for (textIntervals) |*interval| interval.* = null;
+        const viewportVec = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
+        const drawCommands = try buildDrawCommands(arena, nodeTree, viewportVec);
 
         const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
         const atlasHeightInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height));
@@ -3813,72 +3909,9 @@ pub const Renderer = struct {
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
         var gradientStopIndex: usize = 0;
-        var totalBlendAddElementCount: usize = 0;
-        var totalBlendMultiplyElementCount: usize = 0;
-        for (orderedNodes) |nodeIndex| {
+
+        for (nodesToRender.items, 0..) |nodeIndex, elementIndex| {
             const node = nodeTree.at(nodeIndex);
-            switch (node.style.blendMode) {
-                .normal => totalBlendAddElementCount += 1,
-                .multiply => totalBlendMultiplyElementCount += 1,
-                .darken => {},
-            }
-        }
-        var blendAddElementIndex: usize = 0;
-        var blendMultiplyElementIndex: usize = totalBlendAddElementCount;
-        var blendDarkenElementIndex: usize = totalBlendAddElementCount + totalBlendMultiplyElementCount;
-
-        for (orderedNodes) |nodeIndex| {
-            const node = nodeTree.at(nodeIndex);
-            const elementIndex = switch (node.style.blendMode) {
-                .normal => blk: {
-                    const idx = blendAddElementIndex;
-                    blendAddElementIndex += 1;
-
-                    if (blendAddElementIntervals[node.z - 1]) |*interval| {
-                        std.debug.assert(interval.end + 1 == idx);
-                        interval.end = idx;
-                    } else {
-                        blendAddElementIntervals[node.z - 1] = LayerInterval{
-                            .start = idx,
-                            .end = idx,
-                        };
-                    }
-
-                    break :blk idx;
-                },
-                .multiply => blk: {
-                    const idx = blendMultiplyElementIndex;
-                    blendMultiplyElementIndex += 1;
-
-                    if (blendMultiplyElementIntervals[node.z - 1]) |*interval| {
-                        std.debug.assert(interval.end + 1 == idx);
-                        interval.end = idx;
-                    } else {
-                        blendMultiplyElementIntervals[node.z - 1] = LayerInterval{
-                            .start = idx,
-                            .end = idx,
-                        };
-                    }
-
-                    break :blk idx;
-                },
-                .darken => blk: {
-                    const idx = blendDarkenElementIndex;
-                    blendDarkenElementIndex += 1;
-
-                    if (blendDarkenElementIntervals[node.z - 1]) |*interval| {
-                        std.debug.assert(interval.end + 1 == idx);
-                        interval.end = idx;
-                    } else {
-                        blendDarkenElementIntervals[node.z - 1] = LayerInterval{
-                            .start = idx,
-                            .end = idx,
-                        };
-                    }
-
-                    break :blk idx;
-                },
-            };
 
             const textureIndex: i32 = switch (node.style.background) {
                 .color, .gradient => -1,
@@ -3929,15 +3962,6 @@ pub const Renderer = struct {
             };
 
             if (node.style.shadow) |shadow| {
-                if (shadowIntervals[node.z - 1]) |*interval| {
-                    std.debug.assert(interval.end + 1 == shadowIndex);
-                    interval.end = shadowIndex;
-                } else {
-                    shadowIntervals[node.z - 1] = LayerInterval{
-                        .start = shadowIndex,
-                        .end = shadowIndex,
-                    };
-                }
                 const padding = Vec2{
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.x[1],
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.y[0] + shadow.offset.y[1],
@@ -3970,22 +3994,6 @@ pub const Renderer = struct {
             }
 
             if (node.glyphs) |glyphs| {
-                const glyphCount = glyphs.slice.len;
-
-                if (glyphCount > 0) {
-                    const startIdx = glyphIndex;
-                    const endIdx = glyphIndex + glyphCount - 1;
-                    if (textIntervals[node.z - 1]) |*interval| {
-                        std.debug.assert(interval.end + 1 == startIdx);
-                        interval.end = endIdx;
-                    } else {
-                        textIntervals[node.z - 1] = LayerInterval{
-                            .start = startIdx,
-                            .end = endIdx,
-                        };
-                    }
-                }
-
                 const linearColor = srgbToLinearColor(node.style.color);
                 const unitsPerEm: f32 = @floatFromInt(node.style.font.unitsPerEm());
                 const pixelAscent = (node.style.font.ascent() / unitsPerEm) * node.style.fontSize;
@@ -4065,9 +4073,6 @@ pub const Renderer = struct {
                 }
             }
         }
-        std.debug.assert(blendAddElementIndex == totalBlendAddElementCount);
-        std.debug.assert(blendMultiplyElementIndex == totalBlendAddElementCount + totalBlendMultiplyElementCount);
-        std.debug.assert(blendDarkenElementIndex == totalElementCount);
 
         if (@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start > 1000) {
             std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start });
@@ -4115,54 +4120,43 @@ pub const Renderer = struct {
             .maxDepth = 1.0,
         }});
 
-        c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{c.VkRect2D{
+        const fullViewportScissor = c.VkRect2D{
             .offset = c.VkOffset2D{ .x = 0, .y = 0 },
             .extent = self.swapchain.extent,
-        }});
+        };
+        c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{fullViewportScissor});
 
-        for (0..blendAddElementIntervals.len) |i| {
-            if (shadowIntervals[i]) |shadowInterval| {
-                self.shadowsPipeline.draw(
-                    shadowInterval,
-                    frameIndex,
-                    self.commandBuffers[frameIndex],
-                    &self.rectangleModel,
-                );
+        // Simple draw loop (commands already sorted by buildDrawCommands)
+        var lastClipRect: ?Vec4 = null;
+        for (drawCommands) |cmd| {
+            // Set scissor when clip rect changes
+            if (lastClipRect == null or cmd.clipRect == null or
+                !@reduce(.And, lastClipRect.? == cmd.clipRect.?))
+            {
+                self.setScissor(cmd.clipRect, fullViewportScissor);
+                lastClipRect = cmd.clipRect;
             }
-            if (blendAddElementIntervals[i]) |elementInterval| {
-                self.elementsPipeline.draw(
-                    elementInterval,
-                    .normal,
+
+            switch (cmd.kind) {
+                .shadow => self.shadowsPipeline.draw(
+                    cmd.interval(),
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,
-                );
-            }
-            if (blendMultiplyElementIntervals[i]) |elementInterval| {
-                self.elementsPipeline.draw(
-                    elementInterval,
-                    .multiply,
+                ),
+                .element => self.elementsPipeline.draw(
+                    cmd.interval(),
+                    cmd.blendMode,
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,
-                );
-            }
-            if (blendDarkenElementIntervals[i]) |elementInterval| {
-                self.elementsPipeline.draw(
-                    elementInterval,
-                    .darken,
+                ),
+                .text => self.textPipeline.draw(
+                    cmd.interval(),
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,
-                );
-            }
-            if (textIntervals[i]) |glyphInterval| {
-                self.textPipeline.draw(
-                    glyphInterval,
-                    frameIndex,
-                    self.commandBuffers[frameIndex],
-                    &self.rectangleModel,
-                );
+                ),
             }
         }
 
