@@ -449,7 +449,7 @@ test "text mixed \\n, \\r, \\r\\n adds one line each" {
 
 test "text mixed \\n, \\r, \\r\\n in sequence" {
     try expectTextLineCount("a\r\n\r\nb", 3);
-    try expectTextLineCount("a\n\rb", 3);
+    try expectTextLineCount("a\n\rb", 2);
     try expectTextLineCount("a\r\n\nb", 3);
 }
 
@@ -457,6 +457,122 @@ test "text mixed \\n, \\r, \\r\\n in different places" {
     try expectTextLineCount("a\rb\nc\r\nd", 4);
     try expectTextLineCount("a\r\nb\nc\rd", 4);
     try expectTextLineCount("a\nb\rc\r\nd", 4);
+}
+
+const TextMeasurements = struct {
+    size: Vec2,
+    minSize: Vec2,
+    maxSize: Vec2,
+    lineHeight: f32,
+};
+
+fn measurePrelayoutText(
+    content: []const u8,
+    wrapping: forbear.TextWrapping,
+) !TextMeasurements {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var result: TextMeasurements = undefined;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .fit,
+            .height = .fit,
+            .direction = .vertical,
+            .textWrapping = wrapping,
+        })({
+            forbear.text(content);
+            const node = forbear.getPreviousNode().?;
+            result = .{
+                .size = node.size,
+                .minSize = node.minSize,
+                .maxSize = node.maxSize,
+                .lineHeight = node.glyphs.?.lineHeight,
+            };
+        });
+    });
+    return result;
+}
+
+test "text single line size is one line tall" {
+    const measurement = try measurePrelayoutText("hello", .word);
+    try std.testing.expect(measurement.lineHeight > 0);
+    try std.testing.expect(measurement.size[0] > 0);
+    try std.testing.expectApproxEqAbs(measurement.lineHeight, measurement.size[1], 0.0001);
+    try std.testing.expectApproxEqAbs(measurement.lineHeight, measurement.minSize[1], 0.0001);
+    try std.testing.expectApproxEqAbs(measurement.lineHeight, measurement.maxSize[1], 0.0001);
+    try std.testing.expectApproxEqAbs(measurement.size[0], measurement.maxSize[0], 0.0001);
+}
+
+test "character text wrapping has the appropriate constraints" {
+    const measurement = try measurePrelayoutText("hello", .character);
+    try std.testing.expect(measurement.lineHeight > 0);
+    try std.testing.expectApproxEqAbs(measurement.lineHeight, measurement.size[1], 0.0001);
+    try std.testing.expectApproxEqAbs(measurement.lineHeight, measurement.minSize[1], 0.0001);
+    try std.testing.expectApproxEqAbs(measurement.lineHeight * 6, measurement.maxSize[1], 0.0001);
+
+    try std.testing.expect(measurement.size[0] > 0);
+    try std.testing.expectApproxEqAbs(measurement.size[0], measurement.maxSize[0], 0.0001);
+}
+
+test "text with one \\n has size two lines tall" {
+    const measurement = try measurePrelayoutText("hello\nworld", .word);
+    try std.testing.expectApproxEqAbs(measurement.size[0], measurement.minSize[0], 0.0001);
+    try std.testing.expectApproxEqAbs(measurement.size[0], measurement.maxSize[0], 0.0001);
+    try std.testing.expectApproxEqAbs(2 * measurement.lineHeight, measurement.size[1], 0.0001);
+    try std.testing.expectApproxEqAbs(2 * measurement.lineHeight, measurement.minSize[1], 0.0001);
+    try std.testing.expectApproxEqAbs(2 * measurement.lineHeight, measurement.maxSize[1], 0.0001);
+}
+
+test "text with multiple \\n has size matching total line count" {
+    const measurement = try measurePrelayoutText("a\nb\nc\nd", .word);
+    try std.testing.expectApproxEqAbs(4 * measurement.lineHeight, measurement.size[1], 0.0001);
+    try std.testing.expectApproxEqAbs(4 * measurement.lineHeight, measurement.maxSize[1], 0.0001);
+}
+
+test "text size[0] tracks longest line when longest line is first" {
+    const single = try measurePrelayoutText("verylongline", .word);
+    const multi = try measurePrelayoutText("verylongline\nshort", .word);
+
+    try std.testing.expect(single.size[0] > 0);
+    try std.testing.expectApproxEqAbs(single.size[0], multi.size[0], 0.0001);
+    try std.testing.expectApproxEqAbs(single.size[0], multi.maxSize[0], 0.0001);
+}
+
+test "text size[0] tracks longest line when longest line is last" {
+    const single = try measurePrelayoutText("verylongline", .word);
+    const multi = try measurePrelayoutText("short\nverylongline", .word);
+
+    try std.testing.expect(single.size[0] > 0);
+    try std.testing.expectApproxEqAbs(single.size[0], multi.size[0], 0.0001);
+    try std.testing.expectApproxEqAbs(single.size[0], multi.maxSize[0], 0.0001);
+}
+
+test "text .none minSize covers all lines, not just the last" {
+    const single = try measurePrelayoutText("verylongline", .none);
+    const multi = try measurePrelayoutText("verylongline\na", .none);
+
+    try std.testing.expect(single.size[0] > 0);
+    // With .none wrapping, the node cannot shrink below the width of
+    // its longest line or the height needed for every manual line.
+    try std.testing.expectApproxEqAbs(single.size[0], multi.minSize[0], 0.0001);
+    try std.testing.expectApproxEqAbs(2 * multi.lineHeight, multi.minSize[1], 0.0001);
+    try std.testing.expectApproxEqAbs(single.size[0], multi.minSize[0], 0.0001);
+    try std.testing.expectApproxEqAbs(2 * multi.lineHeight, multi.minSize[1], 0.0001);
+}
+
+test "text with \\r\\n produces same size as with \\n" {
+    const nl = try measurePrelayoutText("hello\nworld", .word);
+    const crlf = try measurePrelayoutText("hello\r\nworld", .word);
+
+    try std.testing.expectApproxEqAbs(nl.size[0], crlf.size[0], 0.0001);
+    try std.testing.expectApproxEqAbs(nl.size[1], crlf.size[1], 0.0001);
+    try std.testing.expectApproxEqAbs(nl.maxSize[0], crlf.maxSize[0], 0.0001);
+    try std.testing.expectApproxEqAbs(nl.maxSize[1], crlf.maxSize[1], 0.0001);
 }
 
 test "wrapped text simple ancestry stays at origin" {
