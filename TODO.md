@@ -48,7 +48,7 @@
 - [x] linear gradient support
 - [x] images look really bad
 - [x] support for manual line breaks (`\n`/`\r` in text)
-- [ ] blend mode darken
+- [x] blend mode darken
 - [ ] support for dashed borders
 - [ ] svg support
     - Some library for SVG rendering that we can then plop into a texture atlas?

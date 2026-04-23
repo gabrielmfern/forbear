@@ -26,7 +26,7 @@ pub fn Problems() !void {
         forbear.image(.{
             .width = .{ .grow = 0.75 },
             .maxWidth = 369,
-            .blendMode = .multiply,
+            .blendMode = .darken,
         }, try forbear.useImage("uhoh-problem"));
         forbear.element(.{
             .direction = .vertical,
