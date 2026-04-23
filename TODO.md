@@ -3,6 +3,7 @@
 - [x] I need a way to define the percentage width that an element would take 
   of its parent
 - [ ] text selection
+- [ ] svg support
 
 ## deal breakers
 
@@ -16,7 +17,7 @@
 
 ## example work
 
-### [ ] uhoh.com
+### [x] uhoh.com
 
 - [x] fix image anti aliasing to look more like the browser
 - [x] what do I need to have variant fonts?
@@ -50,13 +51,10 @@
 - [x] support for manual line breaks (`\n`/`\r` in text)
 - [x] blend mode darken
 - [x] support for dashed borders
-- [ ] svg support
-    - Some library for SVG rendering that we can then plop into a texture atlas?
 
 ### [ ] wayland-book.com
 
 - [x] support for placing elements manually, but relative to their parent still
-- [ ] svg support
 - [ ] per element clipping
 - [ ] scroll bar 🤔
 
