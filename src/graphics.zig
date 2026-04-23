@@ -21,13 +21,13 @@ const LayerInterval = struct {
     end: usize,
 };
 
-const DrawKind = enum(u8) {
+pub const DrawKind = enum(u8) {
     shadow = 0,
     element = 1,
     text = 2,
 };
 
-const DrawCommand = struct {
+pub const DrawCommand = struct {
     kind: DrawKind,
     blendMode: BlendMode,
     start: usize,
@@ -47,6 +47,79 @@ const DrawCommand = struct {
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
+
+/// Build the sorted list of draw commands for a given node tree and viewport.
+/// Culls nodes outside the viewport, emits element/shadow/text commands,
+/// and sorts by (z, kind) so shadows draw before elements before text.
+pub fn buildDrawCommands(
+    arena: std.mem.Allocator,
+    nodeTree: *const NodeTree,
+    viewport: Vec2,
+) ![]DrawCommand {
+    var nodesToRender = std.ArrayList(usize).empty;
+    for (nodeTree.list.items, 0..) |node, i| {
+        const insideView = node.position[0] + node.size[0] > 0.0 and
+            node.position[1] + node.size[1] > 0.0 and
+            viewport[0] > node.position[0] and
+            viewport[1] > node.position[1];
+        if (!insideView) continue;
+        try nodesToRender.append(arena, i);
+    }
+
+    // Max possible: each node can emit element + shadow + text = 3 commands
+    var commands = try arena.alloc(DrawCommand, nodesToRender.items.len * 3);
+    var count: usize = 0;
+
+    var shadowIndex: usize = 0;
+    var glyphIndex: usize = 0;
+
+    for (nodesToRender.items, 0..) |nodeIndex, elementIndex| {
+        const node = nodeTree.at(nodeIndex);
+
+        commands[count] = .{
+            .kind = .element,
+            .blendMode = node.style.blendMode,
+            .start = elementIndex,
+            .end = elementIndex,
+            .clipRect = node.clipRect,
+            .z = node.z,
+        };
+        count += 1;
+
+        if (node.style.shadow != null) {
+            commands[count] = .{
+                .kind = .shadow,
+                .blendMode = .normal,
+                .start = shadowIndex,
+                .end = shadowIndex,
+                .clipRect = node.clipRect,
+                .z = node.z,
+            };
+            count += 1;
+            shadowIndex += 1;
+        }
+
+        if (node.glyphs) |glyphs| {
+            const glyphCount = glyphs.slice.len;
+            if (glyphCount > 0) {
+                commands[count] = .{
+                    .kind = .text,
+                    .blendMode = .normal,
+                    .start = glyphIndex,
+                    .end = glyphIndex + glyphCount - 1,
+                    .clipRect = node.clipRect,
+                    .z = node.z,
+                };
+                count += 1;
+                glyphIndex += glyphCount;
+            }
+        }
+    }
+
+    const result = commands[0..count];
+    std.mem.sort(DrawCommand, result, {}, DrawCommand.lessThan);
+    return result;
+}
 
 /// Convert a single sRGB color component to linear RGB.
 /// sRGB values are gamma-encoded for display; linear values are needed for
@@ -3821,10 +3894,8 @@ pub const Renderer = struct {
             frameIndex,
         );
 
-        // Draw commands - one flat list, sorted by (z, kind) before drawing
-        // Max possible: each node can emit element + shadow + text = 3 commands
-        var drawCommands = try arena.alloc(DrawCommand, nodesToRender.items.len * 3);
-        var drawCommandCount: usize = 0;
+        const viewportVec = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
+        const drawCommands = try buildDrawCommands(arena, nodeTree, viewportVec);
 
         const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
         const atlasHeightInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height));
@@ -3835,17 +3906,6 @@ pub const Renderer = struct {
 
         for (nodesToRender.items, 0..) |nodeIndex, elementIndex| {
             const node = nodeTree.at(nodeIndex);
-
-            // Emit element draw command
-            drawCommands[drawCommandCount] = .{
-                .kind = .element,
-                .blendMode = node.style.blendMode,
-                .start = elementIndex,
-                .end = elementIndex,
-                .clipRect = node.clipRect,
-                .z = node.z,
-            };
-            drawCommandCount += 1;
 
             const textureIndex: i32 = switch (node.style.background) {
                 .color, .gradient => -1,
@@ -3896,17 +3956,6 @@ pub const Renderer = struct {
             };
 
             if (node.style.shadow) |shadow| {
-                // Emit shadow draw command
-                drawCommands[drawCommandCount] = .{
-                    .kind = .shadow,
-                    .blendMode = .normal,
-                    .start = shadowIndex,
-                    .end = shadowIndex,
-                    .clipRect = node.clipRect,
-                    .z = node.z,
-                };
-                drawCommandCount += 1;
-
                 const padding = Vec2{
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.x[1],
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.y[0] + shadow.offset.y[1],
@@ -3939,21 +3988,6 @@ pub const Renderer = struct {
             }
 
             if (node.glyphs) |glyphs| {
-                const glyphCount = glyphs.slice.len;
-
-                if (glyphCount > 0) {
-                    // Emit text draw command
-                    drawCommands[drawCommandCount] = .{
-                        .kind = .text,
-                        .blendMode = .normal,
-                        .start = glyphIndex,
-                        .end = glyphIndex + glyphCount - 1,
-                        .clipRect = node.clipRect,
-                        .z = node.z,
-                    };
-                    drawCommandCount += 1;
-                }
-
                 const linearColor = srgbToLinearColor(node.style.color);
                 const unitsPerEm: f32 = @floatFromInt(node.style.font.unitsPerEm());
                 const pixelAscent = (node.style.font.ascent() / unitsPerEm) * node.style.fontSize;
@@ -4086,12 +4120,9 @@ pub const Renderer = struct {
         };
         c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{fullViewportScissor});
 
-        // Sort draw commands by (z, kind) - shadows before elements before text
-        std.mem.sort(DrawCommand, drawCommands[0..drawCommandCount], {}, DrawCommand.lessThan);
-
-        // Simple draw loop
+        // Simple draw loop (commands already sorted by buildDrawCommands)
         var lastClipRect: ?Vec4 = null;
-        for (drawCommands[0..drawCommandCount]) |cmd| {
+        for (drawCommands) |cmd| {
             // Set scissor when clip rect changes
             if (lastClipRect == null or cmd.clipRect == null or
                 !@reduce(.And, lastClipRect.? == cmd.clipRect.?))
