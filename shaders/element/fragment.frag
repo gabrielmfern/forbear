@@ -94,7 +94,6 @@ void main() {
     float denom = max(max(outerFill, innerFill), 0.0001);
     float mixFactor = clamp(innerFill / denom, 0.0, 1.0);
 
-    vec4 effectiveBorderColor = borderColor;
     if (borderStyle == 1u && mixFactor < 1.0) {
         float edgePos;
         float dashSize;
@@ -122,12 +121,12 @@ void main() {
         if (dashSize > 0.0) {
             float pattern = mod(edgePos, dashSize * 2.0);
             if (pattern > dashSize) {
-                effectiveBorderColor.a = 0.0;
+                mixFactor = 1.0;
             }
         }
     }
 
-    outColor = mix(effectiveBorderColor, color, mixFactor);
+    outColor = mix(borderColor, color, mixFactor);
     outColor.a *= outerFill;
 
     // .grayscale is enum value 1 in node.zig.
