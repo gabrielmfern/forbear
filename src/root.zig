@@ -842,9 +842,8 @@ pub fn text(content: []const u8) void {
     var minSize: Vec2 = .{ 0.0, lineHeight };
     var maxSize: Vec2 = .{ 0.0, lineHeight };
 
-    // counted as to decrease the layoutGlyph slice size at the end to avoid
-    // rendering having to deal with placeholder linebreak glyphs
     var linebreakCount: usize = 0;
+    var preBreakIndices: std.ArrayList(usize) = .empty;
 
     var wordAdvance: Vec2 = @splat(0.0);
     var glyphIndex: usize = 0;
@@ -860,6 +859,10 @@ pub fn text(content: []const u8) void {
         if (std.mem.eql(u8, glyphText, "\n")) {
             advance[0] = -cursor[0];
             advance[1] += lineHeight;
+            preBreakIndices.append(arena, glyphIndex - linebreakCount) catch |err| {
+                handleFrameError(err);
+                return;
+            };
             linebreakCount += 1;
         } else {
             layoutGlyphs[glyphIndex - linebreakCount] = LayoutGlyph{
@@ -913,6 +916,7 @@ pub fn text(content: []const u8) void {
     result.ptr.glyphs = Glyphs{
         .slice = layoutGlyphs[0 .. layoutGlyphs.len - linebreakCount],
         .lineHeight = lineHeight,
+        .preBreakIndices = preBreakIndices.items,
     };
     result.ptr.style = style;
 
