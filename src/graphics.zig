@@ -19,15 +19,31 @@ const root = @import("root.zig");
 const LayerInterval = struct {
     start: usize,
     end: usize,
-    clipRect: ?Vec4 = null,
-    z: u16 = 0,
 };
 
-fn clipRectsEqual(a: ?Vec4, b: ?Vec4) bool {
-    if (a == null and b == null) return true;
-    if (a == null or b == null) return false;
-    return @reduce(.And, a.? == b.?);
-}
+const DrawKind = enum(u8) {
+    shadow = 0,
+    element = 1,
+    text = 2,
+};
+
+const DrawCommand = struct {
+    kind: DrawKind,
+    blendMode: BlendMode,
+    start: usize,
+    end: usize,
+    clipRect: ?Vec4,
+    z: u16,
+
+    fn interval(self: DrawCommand) LayerInterval {
+        return .{ .start = self.start, .end = self.end };
+    }
+
+    fn lessThan(_: void, a: DrawCommand, b: DrawCommand) bool {
+        if (a.z != b.z) return a.z < b.z;
+        return @intFromEnum(a.kind) < @intFromEnum(b.kind);
+    }
+};
 const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
@@ -3754,15 +3770,6 @@ pub const Renderer = struct {
             try nodesToRender.append(arena, i);
         }
 
-        std.mem.sort(usize, nodesToRender.items, nodeTree, (struct {
-            fn lessThan(tree: *const NodeTree, lhs: usize, rhs: usize) bool {
-                const lhsNode = tree.at(lhs);
-                const rhsNode = tree.at(rhs);
-                return lhsNode.z < rhsNode.z;
-            }
-        }).lessThan);
-
-        const orderedNodes = nodesToRender.items;
         const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
 
         start = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us);
@@ -3771,8 +3778,8 @@ pub const Renderer = struct {
         var totalShadowCount: usize = 0;
         var totalGlyphCount: usize = 0;
         var totalGradientStopCount: usize = 0;
-        const totalElementCount: usize = orderedNodes.len;
-        for (orderedNodes) |nodeIndex| {
+        const totalElementCount: usize = nodesToRender.items.len;
+        for (nodesToRender.items) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
             if (node.style.shadow != null) {
                 totalShadowCount += 1;
@@ -3814,32 +3821,18 @@ pub const Renderer = struct {
             frameIndex,
         );
 
-        // Allocate max possible intervals (worst case: each node has different z or clipRect)
-        const maxIntervals = orderedNodes.len;
-        var shadowIntervals = try arena.alloc(LayerInterval, maxIntervals);
-        var blendAddElementIntervals = try arena.alloc(LayerInterval, maxIntervals);
-        var blendMultiplyElementIntervals = try arena.alloc(LayerInterval, maxIntervals);
-        var blendDarkenElementIntervals = try arena.alloc(LayerInterval, maxIntervals);
-        var textIntervals = try arena.alloc(LayerInterval, maxIntervals);
-        var shadowIntervalCount: usize = 0;
-        var blendAddIntervalCount: usize = 0;
-        var blendMultiplyIntervalCount: usize = 0;
-        var blendDarkenIntervalCount: usize = 0;
-        var textIntervalCount: usize = 0;
-
-        // Track current interval state for building
-        var lastZ: u16 = 0;
-        var lastClipRect: ?Vec4 = null;
+        // Draw commands - one flat list, sorted by (z, kind) before drawing
+        // Max possible: each node can emit element + shadow + text = 3 commands
+        var drawCommands = try arena.alloc(DrawCommand, nodesToRender.items.len * 3);
+        var drawCommandCount: usize = 0;
 
         const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
         const atlasHeightInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height));
 
-        var shadowIndex: usize = 0;
-        var glyphIndex: usize = 0;
-        var gradientStopIndex: usize = 0;
+        // Count blend modes to compute GPU buffer offsets
         var totalBlendAddElementCount: usize = 0;
         var totalBlendMultiplyElementCount: usize = 0;
-        for (orderedNodes) |nodeIndex| {
+        for (nodesToRender.items) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
             switch (node.style.blendMode) {
                 .normal => totalBlendAddElementCount += 1,
@@ -3847,74 +3840,46 @@ pub const Renderer = struct {
                 .darken => {},
             }
         }
+
+        var shadowIndex: usize = 0;
+        var glyphIndex: usize = 0;
+        var gradientStopIndex: usize = 0;
         var blendAddElementIndex: usize = 0;
         var blendMultiplyElementIndex: usize = totalBlendAddElementCount;
         var blendDarkenElementIndex: usize = totalBlendAddElementCount + totalBlendMultiplyElementCount;
 
-        for (orderedNodes) |nodeIndex| {
+        for (nodesToRender.items) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
 
-            // Check if z or clipRect changed - start new intervals
-            const groupChanged = node.z != lastZ or !clipRectsEqual(node.clipRect, lastClipRect);
-            lastZ = node.z;
-            lastClipRect = node.clipRect;
-
+            // Get element index based on blend mode (GPU buffer layout)
             const elementIndex = switch (node.style.blendMode) {
                 .normal => blk: {
                     const idx = blendAddElementIndex;
                     blendAddElementIndex += 1;
-
-                    if (!groupChanged and blendAddIntervalCount > 0) {
-                        blendAddElementIntervals[blendAddIntervalCount - 1].end = idx;
-                    } else {
-                        blendAddElementIntervals[blendAddIntervalCount] = LayerInterval{
-                            .start = idx,
-                            .end = idx,
-                            .clipRect = node.clipRect,
-                            .z = node.z,
-                        };
-                        blendAddIntervalCount += 1;
-                    }
-
                     break :blk idx;
                 },
                 .multiply => blk: {
                     const idx = blendMultiplyElementIndex;
                     blendMultiplyElementIndex += 1;
-
-                    if (!groupChanged and blendMultiplyIntervalCount > 0) {
-                        blendMultiplyElementIntervals[blendMultiplyIntervalCount - 1].end = idx;
-                    } else {
-                        blendMultiplyElementIntervals[blendMultiplyIntervalCount] = LayerInterval{
-                            .start = idx,
-                            .end = idx,
-                            .clipRect = node.clipRect,
-                            .z = node.z,
-                        };
-                        blendMultiplyIntervalCount += 1;
-                    }
-
                     break :blk idx;
                 },
                 .darken => blk: {
                     const idx = blendDarkenElementIndex;
                     blendDarkenElementIndex += 1;
-
-                    if (!groupChanged and blendDarkenIntervalCount > 0) {
-                        blendDarkenElementIntervals[blendDarkenIntervalCount - 1].end = idx;
-                    } else {
-                        blendDarkenElementIntervals[blendDarkenIntervalCount] = LayerInterval{
-                            .start = idx,
-                            .end = idx,
-                            .clipRect = node.clipRect,
-                            .z = node.z,
-                        };
-                        blendDarkenIntervalCount += 1;
-                    }
-
                     break :blk idx;
                 },
             };
+
+            // Emit element draw command
+            drawCommands[drawCommandCount] = .{
+                .kind = .element,
+                .blendMode = node.style.blendMode,
+                .start = elementIndex,
+                .end = elementIndex,
+                .clipRect = node.clipRect,
+                .z = node.z,
+            };
+            drawCommandCount += 1;
 
             const textureIndex: i32 = switch (node.style.background) {
                 .color, .gradient => -1,
@@ -3965,17 +3930,17 @@ pub const Renderer = struct {
             };
 
             if (node.style.shadow) |shadow| {
-                if (!groupChanged and shadowIntervalCount > 0) {
-                    shadowIntervals[shadowIntervalCount - 1].end = shadowIndex;
-                } else {
-                    shadowIntervals[shadowIntervalCount] = LayerInterval{
-                        .start = shadowIndex,
-                        .end = shadowIndex,
-                        .clipRect = node.clipRect,
-                        .z = node.z,
-                    };
-                    shadowIntervalCount += 1;
-                }
+                // Emit shadow draw command
+                drawCommands[drawCommandCount] = .{
+                    .kind = .shadow,
+                    .blendMode = .normal,
+                    .start = shadowIndex,
+                    .end = shadowIndex,
+                    .clipRect = node.clipRect,
+                    .z = node.z,
+                };
+                drawCommandCount += 1;
+
                 const padding = Vec2{
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.x[0] + shadow.offset.x[1],
                     shadow.blurRadius + @abs(shadow.spread) + shadow.offset.y[0] + shadow.offset.y[1],
@@ -4011,19 +3976,16 @@ pub const Renderer = struct {
                 const glyphCount = glyphs.slice.len;
 
                 if (glyphCount > 0) {
-                    const startIdx = glyphIndex;
-                    const endIdx = glyphIndex + glyphCount - 1;
-                    if (!groupChanged and textIntervalCount > 0) {
-                        textIntervals[textIntervalCount - 1].end = endIdx;
-                    } else {
-                        textIntervals[textIntervalCount] = LayerInterval{
-                            .start = startIdx,
-                            .end = endIdx,
-                            .clipRect = node.clipRect,
-                            .z = node.z,
-                        };
-                        textIntervalCount += 1;
-                    }
+                    // Emit text draw command
+                    drawCommands[drawCommandCount] = .{
+                        .kind = .text,
+                        .blendMode = .normal,
+                        .start = glyphIndex,
+                        .end = glyphIndex + glyphCount - 1,
+                        .clipRect = node.clipRect,
+                        .z = node.z,
+                    };
+                    drawCommandCount += 1;
                 }
 
                 const linearColor = srgbToLinearColor(node.style.color);
@@ -4161,85 +4123,40 @@ pub const Renderer = struct {
         };
         c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{fullViewportScissor});
 
-        // Find max z across all intervals
-        var maxZ: u16 = 0;
-        for (shadowIntervals[0..shadowIntervalCount]) |interval| maxZ = @max(maxZ, interval.z);
-        for (blendAddElementIntervals[0..blendAddIntervalCount]) |interval| maxZ = @max(maxZ, interval.z);
-        for (blendMultiplyElementIntervals[0..blendMultiplyIntervalCount]) |interval| maxZ = @max(maxZ, interval.z);
-        for (blendDarkenElementIntervals[0..blendDarkenIntervalCount]) |interval| maxZ = @max(maxZ, interval.z);
-        for (textIntervals[0..textIntervalCount]) |interval| maxZ = @max(maxZ, interval.z);
+        // Sort draw commands by (z, kind) - shadows before elements before text
+        std.mem.sort(DrawCommand, drawCommands[0..drawCommandCount], {}, DrawCommand.lessThan);
 
-        // Track indices into each interval list
-        var shadowIdx: usize = 0;
-        var blendAddIdx: usize = 0;
-        var blendMultiplyIdx: usize = 0;
-        var blendDarkenIdx: usize = 0;
-        var textIdx: usize = 0;
+        // Simple draw loop
+        var lastClipRect: ?Vec4 = null;
+        for (drawCommands[0..drawCommandCount]) |cmd| {
+            // Set scissor when clip rect changes
+            if (lastClipRect == null or cmd.clipRect == null or
+                !@reduce(.And, lastClipRect.? == cmd.clipRect.?))
+            {
+                self.setScissor(cmd.clipRect, fullViewportScissor);
+                lastClipRect = cmd.clipRect;
+            }
 
-        // Iterate by z-level to maintain proper draw order
-        for (1..@as(usize, maxZ) + 1) |z| {
-            // Draw all shadow intervals at this z
-            while (shadowIdx < shadowIntervalCount and shadowIntervals[shadowIdx].z == z) {
-                const interval = shadowIntervals[shadowIdx];
-                self.setScissor(interval.clipRect, fullViewportScissor);
-                self.shadowsPipeline.draw(
-                    interval,
+            switch (cmd.kind) {
+                .shadow => self.shadowsPipeline.draw(
+                    cmd.interval(),
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,
-                );
-                shadowIdx += 1;
-            }
-            // Draw all blendAdd elements at this z
-            while (blendAddIdx < blendAddIntervalCount and blendAddElementIntervals[blendAddIdx].z == z) {
-                const interval = blendAddElementIntervals[blendAddIdx];
-                self.setScissor(interval.clipRect, fullViewportScissor);
-                self.elementsPipeline.draw(
-                    interval,
-                    .normal,
+                ),
+                .element => self.elementsPipeline.draw(
+                    cmd.interval(),
+                    cmd.blendMode,
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,
-                );
-                blendAddIdx += 1;
-            }
-            // Draw all blendMultiply elements at this z
-            while (blendMultiplyIdx < blendMultiplyIntervalCount and blendMultiplyElementIntervals[blendMultiplyIdx].z == z) {
-                const interval = blendMultiplyElementIntervals[blendMultiplyIdx];
-                self.setScissor(interval.clipRect, fullViewportScissor);
-                self.elementsPipeline.draw(
-                    interval,
-                    .multiply,
+                ),
+                .text => self.textPipeline.draw(
+                    cmd.interval(),
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,
-                );
-                blendMultiplyIdx += 1;
-            }
-            // Draw all blendDarken elements at this z
-            while (blendDarkenIdx < blendDarkenIntervalCount and blendDarkenElementIntervals[blendDarkenIdx].z == z) {
-                const interval = blendDarkenElementIntervals[blendDarkenIdx];
-                self.setScissor(interval.clipRect, fullViewportScissor);
-                self.elementsPipeline.draw(
-                    interval,
-                    .darken,
-                    frameIndex,
-                    self.commandBuffers[frameIndex],
-                    &self.rectangleModel,
-                );
-                blendDarkenIdx += 1;
-            }
-            // Draw all text at this z
-            while (textIdx < textIntervalCount and textIntervals[textIdx].z == z) {
-                const interval = textIntervals[textIdx];
-                self.setScissor(interval.clipRect, fullViewportScissor);
-                self.textPipeline.draw(
-                    interval,
-                    frameIndex,
-                    self.commandBuffers[frameIndex],
-                    &self.rectangleModel,
-                );
-                textIdx += 1;
+                ),
             }
         }
 
