@@ -4379,8 +4379,8 @@ test "buildDrawCommands propagates clipRect from layout" {
         try std.testing.expectEqual(@as(usize, 2), cmds.len);
 
         // Parent has no clipRect; overflowing child gets clipped to parent bounds
-        var parentClip: ?@Vector(4, f32) = undefined;
-        var childClip: ?@Vector(4, f32) = undefined;
+        var parentClip: ?@Vector(4, f32) = null;
+        var childClip: ?@Vector(4, f32) = null;
         for (cmds) |cmd| {
             if (cmd.z == 1) parentClip = cmd.clipRect;
             if (cmd.z == 2) childClip = cmd.clipRect;

@@ -3739,15 +3739,21 @@ pub const Renderer = struct {
     }
 
     fn setScissor(self: *Self, clipRect: ?Vec4, fullViewport: c.VkRect2D) void {
-        const scissor = if (clipRect) |clip| c.VkRect2D{
-            .offset = c.VkOffset2D{
-                .x = @intFromFloat(@max(0, clip[0])),
-                .y = @intFromFloat(@max(0, clip[1])),
-            },
-            .extent = c.VkExtent2D{
-                .width = @intFromFloat(@max(0, clip[2])),
-                .height = @intFromFloat(@max(0, clip[3])),
-            },
+        const scissor = if (clipRect) |clip| blk: {
+            const x1: f32 = @max(0.0, clip[0]);
+            const y1: f32 = @max(0.0, clip[1]);
+            const x2: f32 = clip[0] + clip[2];
+            const y2: f32 = clip[1] + clip[3];
+            break :blk c.VkRect2D{
+                .offset = c.VkOffset2D{
+                    .x = @intFromFloat(x1),
+                    .y = @intFromFloat(y1),
+                },
+                .extent = c.VkExtent2D{
+                    .width = @intFromFloat(@max(0.0, x2 - x1)),
+                    .height = @intFromFloat(@max(0.0, y2 - y1)),
+                },
+            };
         } else fullViewport;
         c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{scissor});
     }
