@@ -9,7 +9,7 @@ pub fn Solution() !void {
         forbear.image(.{
             .width = .{ .grow = 1.0 },
             .maxWidth = 600,
-            .blendMode = .multiply,
+            .blendMode = .darken,
         }, try forbear.useImage("uhoh-solution"));
         forbear.element(.{
             .fontWeight = 700,
