@@ -22,6 +22,7 @@ pub const Alignment = nodeImport.Alignment;
 pub const Padding = nodeImport.Padding;
 pub const Margin = nodeImport.Margin;
 pub const BorderWidth = nodeImport.BorderWidth;
+pub const Shadow = nodeImport.Shadow;
 pub const Offset = nodeImport.Shadow.Offset;
 pub const CompleteStyle = nodeImport.CompleteStyle;
 pub const Style = nodeImport.Style;
@@ -1214,7 +1215,18 @@ pub fn update() !void {
         }
         const isMouseAfter = node.position[0] <= self.mousePosition[0] and node.position[1] <= self.mousePosition[1];
         const isMouseBefore = node.position[0] + node.size[0] >= self.mousePosition[0] and node.position[1] + node.size[1] >= self.mousePosition[1];
-        const isMouseInside = isMouseAfter and isMouseBefore;
+        const isMouseInBounds = isMouseAfter and isMouseBefore;
+
+        // Also check clipRect - if element is clipped, mouse must be inside clip region
+        const isMouseInClip = if (node.clipRect) |clip|
+            self.mousePosition[0] >= clip[0] and
+                self.mousePosition[1] >= clip[1] and
+                self.mousePosition[0] <= clip[0] + clip[2] and
+                self.mousePosition[1] <= clip[1] + clip[3]
+        else
+            true;
+
+        const isMouseInside = isMouseInBounds and isMouseInClip;
 
         const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, node.key);
 

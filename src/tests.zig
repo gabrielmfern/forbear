@@ -4216,3 +4216,648 @@ test "LRU cache - eviction order with mixed access" {
     try std.testing.expect(lru.get(3) != null);
     try std.testing.expect(lru.get(4) != null);
 }
+
+// buildDrawCommands tests
+
+test "buildDrawCommands emits one element command per visible node" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // Two elements, two commands
+        try std.testing.expectEqual(@as(usize, 2), cmds.len);
+        try std.testing.expectEqual(forbear.Graphics.DrawKind.element, cmds[0].kind);
+        try std.testing.expectEqual(forbear.Graphics.DrawKind.element, cmds[1].kind);
+    });
+}
+
+test "buildDrawCommands emits element + text for a text node" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 50 },
+        })({
+            forbear.text("hi");
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // Parent element + text element + text glyphs = 3 commands
+        try std.testing.expectEqual(@as(usize, 3), cmds.len);
+
+        // Verify kinds present
+        var hasText = false;
+        var elementCount: usize = 0;
+        for (cmds) |cmd| {
+            switch (cmd.kind) {
+                .text => hasText = true,
+                .element => elementCount += 1,
+                .shadow => {},
+            }
+        }
+        try std.testing.expect(hasText);
+        try std.testing.expectEqual(@as(usize, 2), elementCount);
+    });
+}
+
+test "buildDrawCommands sorts by z with shadow before element before text" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        // Parent has text (so text command at some z)
+        // Parent has shadow (shadow command at same z as parent element)
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 50 },
+            .shadow = .{
+                .color = .{ 0, 0, 0, 1 },
+                .blurRadius = 5,
+                .spread = 0,
+                .offset = .{ .x = .{ 0, 0 }, .y = .{ 0, 0 } },
+            },
+        })({
+            forbear.text("x");
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // Commands must be monotonically non-decreasing in (z, kind)
+        for (cmds[1..], 0..) |cmd, i| {
+            const prev = cmds[i];
+            if (cmd.z == prev.z) {
+                try std.testing.expect(@intFromEnum(prev.kind) <= @intFromEnum(cmd.kind));
+            } else {
+                try std.testing.expect(prev.z < cmd.z);
+            }
+        }
+    });
+}
+
+test "buildDrawCommands culls nodes outside viewport" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        const tree = try forbear.layout();
+
+        // Tiny viewport at origin — node at (0,0) still overlaps
+        const cmdsInside = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 50, 50 });
+        try std.testing.expectEqual(@as(usize, 1), cmdsInside.len);
+
+        // Move root off-screen by scrolling, then check again
+        forbear.getContext().scrollPosition = .{ 0, 1000 };
+        const tree2 = try forbear.layout();
+        const cmdsOutside = try forbear.Graphics.buildDrawCommands(arena, tree2, .{ 800, 600 });
+        try std.testing.expectEqual(@as(usize, 0), cmdsOutside.len);
+    });
+}
+
+test "buildDrawCommands propagates clipRect from layout" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        // Fixed-height parent with children that overflow → children get clipRect
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 50 },
+            .direction = .vertical,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 80 },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        try std.testing.expectEqual(@as(usize, 2), cmds.len);
+
+        // Parent has no clipRect; overflowing child gets clipped to parent bounds
+        var parentClip: ?@Vector(4, f32) = null;
+        var childClip: ?@Vector(4, f32) = null;
+        for (cmds) |cmd| {
+            if (cmd.z == 1) parentClip = cmd.clipRect;
+            if (cmd.z == 2) childClip = cmd.clipRect;
+        }
+        try std.testing.expect(parentClip == null);
+        // Child (100x80) overflows parent (100x50) → clipped to parent's bounds
+        try std.testing.expectEqual(@Vector(4, f32){ 0, 0, 100, 50 }, childClip.?);
+    });
+}
+
+// --- Z-ordering tests ---
+
+test "buildDrawCommands respects explicit zIndex overrides" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        // Root → childA (default z=1), childB (explicit zIndex=100)
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 200 },
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+                .zIndex = 100,
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // The last command should be the one with zIndex=100
+        try std.testing.expectEqual(@as(u16, 100), cmds[cmds.len - 1].z);
+        // And it must be after commands with smaller z
+        for (cmds[0 .. cmds.len - 1]) |cmd| {
+            try std.testing.expect(cmd.z < 100);
+        }
+    });
+}
+
+test "buildDrawCommands: nested children have z greater than parent" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 200 },
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 50 },
+                    .height = .{ .fixed = 50 },
+                })({});
+            });
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        try std.testing.expectEqual(@as(usize, 3), cmds.len);
+        // Commands are sorted by z, so nesting order is preserved
+        try std.testing.expect(cmds[0].z < cmds[1].z);
+        try std.testing.expect(cmds[1].z < cmds[2].z);
+    });
+}
+
+test "buildDrawCommands: siblings at same z remain in document order" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        // Three sibling elements all get z = parentZ + 1 → same z
+        forbear.element(.{
+            .width = .{ .fixed = 300 },
+            .height = .{ .fixed = 300 },
+            .direction = .horizontal,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
+            forbear.element(.{ .width = .{ .fixed = 20 }, .height = .{ .fixed = 20 } })({});
+            forbear.element(.{ .width = .{ .fixed = 30 }, .height = .{ .fixed = 30 } })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        try std.testing.expectEqual(@as(usize, 4), cmds.len);
+        // Siblings share a z and, since std.mem.sort is stable, keep doc order
+        try std.testing.expectEqual(cmds[1].z, cmds[2].z);
+        try std.testing.expectEqual(cmds[2].z, cmds[3].z);
+        // elementIndex encodes document order (1, 2, 3 in visible-nodes list)
+        try std.testing.expectEqual(@as(usize, 1), cmds[1].start);
+        try std.testing.expectEqual(@as(usize, 2), cmds[2].start);
+        try std.testing.expectEqual(@as(usize, 3), cmds[3].start);
+    });
+}
+
+// --- Index correctness tests ---
+
+test "buildDrawCommands: elementIndex is unique and covers 0..N-1" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 200 },
+            .direction = .vertical,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
+            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
+            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // Collect element indices
+        var seen = [_]bool{false} ** 4;
+        var elementCount: usize = 0;
+        for (cmds) |cmd| {
+            if (cmd.kind == .element) {
+                try std.testing.expect(cmd.start == cmd.end); // elements are single-index
+                try std.testing.expect(cmd.start < seen.len);
+                try std.testing.expect(!seen[cmd.start]); // no duplicates
+                seen[cmd.start] = true;
+                elementCount += 1;
+            }
+        }
+        // 4 elements, indices 0..3 all used
+        try std.testing.expectEqual(@as(usize, 4), elementCount);
+        for (seen) |s| try std.testing.expect(s);
+    });
+}
+
+test "buildDrawCommands: shadowIndex is sequential starting at 0" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const shadow = forbear.Shadow{
+        .color = .{ 0, 0, 0, 1 },
+        .blurRadius = 5,
+        .spread = 0,
+        .offset = .{ .x = .{ 0, 0 }, .y = .{ 0, 0 } },
+    };
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300 },
+            .height = .{ .fixed = 300 },
+            .direction = .vertical,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+                .shadow = shadow,
+            })({});
+            // No shadow on this one
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+            })({});
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+                .shadow = shadow,
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // Gather shadow commands in order
+        var shadowStarts = std.ArrayList(usize).empty;
+        defer shadowStarts.deinit(arena);
+        for (cmds) |cmd| {
+            if (cmd.kind == .shadow) {
+                try shadowStarts.append(arena, cmd.start);
+                try std.testing.expect(cmd.start == cmd.end);
+            }
+        }
+
+        try std.testing.expectEqual(@as(usize, 2), shadowStarts.items.len);
+        // Two shadows, sequential indices 0 and 1
+        try std.testing.expectEqual(@as(usize, 0), shadowStarts.items[0]);
+        try std.testing.expectEqual(@as(usize, 1), shadowStarts.items[1]);
+    });
+}
+
+test "buildDrawCommands: text command range matches glyph count" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 500 },
+            .height = .{ .fixed = 100 },
+            .direction = .vertical,
+        })({
+            forbear.text("hello");
+            forbear.text("world!");
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // Gather text commands in order
+        var glyphStart: usize = 0;
+        var textCount: usize = 0;
+        for (cmds) |cmd| {
+            if (cmd.kind == .text) {
+                // First text command should start at 0, next picks up where previous ended
+                try std.testing.expectEqual(glyphStart, cmd.start);
+                // Each text command covers a contiguous range
+                try std.testing.expect(cmd.end >= cmd.start);
+                glyphStart = cmd.end + 1;
+                textCount += 1;
+            }
+        }
+        // Two text nodes → two text commands
+        try std.testing.expectEqual(@as(usize, 2), textCount);
+        // Total glyphs should be sum of "hello" (5) + "world!" (6) = 11
+        try std.testing.expectEqual(@as(usize, 11), glyphStart);
+    });
+}
+
+// --- Regression guards ---
+
+test "buildDrawCommands: total count equals elements + shadows + nonEmptyText" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const shadow = forbear.Shadow{
+        .color = .{ 0, 0, 0, 1 },
+        .blurRadius = 5,
+        .spread = 0,
+        .offset = .{ .x = .{ 0, 0 }, .y = .{ 0, 0 } },
+    };
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 500 },
+            .height = .{ .fixed = 200 },
+            .direction = .vertical,
+            .shadow = shadow,
+        })({
+            forbear.text("hi");
+            forbear.element(.{
+                .width = .{ .fixed = 50 },
+                .height = .{ .fixed = 50 },
+                .shadow = shadow,
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // Count kinds
+        var elementCount: usize = 0;
+        var shadowCount: usize = 0;
+        var textCount: usize = 0;
+        for (cmds) |cmd| {
+            switch (cmd.kind) {
+                .element => elementCount += 1,
+                .shadow => shadowCount += 1,
+                .text => textCount += 1,
+            }
+        }
+
+        // 3 visible nodes (root, text-element, child)
+        try std.testing.expectEqual(@as(usize, 3), elementCount);
+        // 2 shadows (root + child)
+        try std.testing.expectEqual(@as(usize, 2), shadowCount);
+        // 1 text node with glyphs
+        try std.testing.expectEqual(@as(usize, 1), textCount);
+        // And the total matches
+        try std.testing.expectEqual(elementCount + shadowCount + textCount, cmds.len);
+    });
+}
+
+test "buildDrawCommands: empty text does not emit a text command" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 100 },
+        })({
+            forbear.text(""); // empty — should not add a text node
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        for (cmds) |cmd| {
+            try std.testing.expect(cmd.kind != .text);
+        }
+    });
+}
+
+test "buildDrawCommands: each visible node produces exactly one element command" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 200 },
+            .direction = .vertical,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
+            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        var elementCount: usize = 0;
+        for (cmds) |cmd| {
+            if (cmd.kind == .element) elementCount += 1;
+        }
+        // 3 visible nodes → 3 element commands (no duplicates)
+        try std.testing.expectEqual(@as(usize, 3), elementCount);
+    });
+}
+
+// --- Deeply nested clips ---
+
+test "buildDrawCommands: nested clips intersect correctly" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    // Outer is 200x100. Middle is 300x150 (overflows outer → middle gets outer's clip).
+    // Deepest is 400x400 (overflows middle → deepest gets middle's clip ∩ outer's clip).
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 100 },
+            .direction = .vertical,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 300 },
+                .height = .{ .fixed = 150 },
+                .direction = .vertical,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 400 },
+                    .height = .{ .fixed = 400 },
+                })({});
+            });
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // Find commands by z-level
+        var outerClip: ?@Vector(4, f32) = null;
+        var middleClip: ?@Vector(4, f32) = null;
+        var deepestClip: ?@Vector(4, f32) = null;
+        for (cmds) |cmd| {
+            if (cmd.kind != .element) continue;
+            if (cmd.z == 1) outerClip = cmd.clipRect;
+            if (cmd.z == 2) middleClip = cmd.clipRect;
+            if (cmd.z == 3) deepestClip = cmd.clipRect;
+        }
+
+        // Outer (200x100) has no overflow → no clip
+        try std.testing.expect(outerClip == null);
+        // Middle (300x150) overflows outer → clipped to outer's bounds
+        try std.testing.expectEqual(@Vector(4, f32){ 0, 0, 200, 100 }, middleClip.?);
+        // Deepest (400x400) overflows middle → clipped to intersection (same as outer)
+        try std.testing.expectEqual(@Vector(4, f32){ 0, 0, 200, 100 }, deepestClip.?);
+    });
+}
+
+test "buildDrawCommands: three-level clip stack produces monotonically tighter bounds" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    // Each level clips via fixed-size + overflowing child.
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300 },
+            .height = .{ .fixed = 300 },
+            .direction = .vertical,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 200 },
+                .height = .{ .fixed = 200 },
+                .direction = .vertical,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 100 },
+                    .direction = .vertical,
+                })({
+                    forbear.element(.{
+                        .width = .{ .fixed = 500 },
+                        .height = .{ .fixed = 500 },
+                    })({});
+                });
+            });
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+
+        // 4 elements total
+        try std.testing.expectEqual(@as(usize, 4), cmds.len);
+
+        // Find clips by z-level
+        var clips: [4]?@Vector(4, f32) = .{ null, null, null, null };
+        for (cmds) |cmd| {
+            if (cmd.kind != .element) continue;
+            if (cmd.z >= 1 and cmd.z <= 4) clips[cmd.z - 1] = cmd.clipRect;
+        }
+
+        // Level 0 (300x300): no overflow → no clip
+        try std.testing.expect(clips[0] == null);
+        // Level 1 (200x200): fits in 300x300 → no clip
+        try std.testing.expect(clips[1] == null);
+        // Level 2 (100x100): fits in 200x200 → no clip
+        try std.testing.expect(clips[2] == null);
+        // Level 3 (500x500): overflows 100x100 → clipped to parent's bounds
+        try std.testing.expectEqual(@Vector(4, f32){ 0, 0, 100, 100 }, clips[3].?);
+    });
+}

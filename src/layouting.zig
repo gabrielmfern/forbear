@@ -690,7 +690,71 @@ pub fn layout() !*NodeTree {
                 childIndexOption = child.nextSibling;
             }
         }
+
+        // Compute clip rects for nodes with constrained size and overflowing children
+        var clipWalker = context.nodeTree.walk();
+        while (clipWalker.next()) |node| {
+            // A node is constrained if it has explicit sizing OR is limited by maxSize
+            const hasConstrainedWidth = node.style.width != .fit or node.size[0] >= node.maxSize[0];
+            const hasConstrainedHeight = node.style.height != .fit or node.size[1] >= node.maxSize[1];
+            if (!hasConstrainedWidth and !hasConstrainedHeight) continue;
+
+            var hasOverflow = false;
+            var childIndexOption = node.firstChild;
+            while (childIndexOption) |childIndex| {
+                const child = context.nodeTree.at(childIndex);
+                const childRight = child.position[0] + child.size[0];
+                const childBottom = child.position[1] + child.size[1];
+                const nodeRight = node.position[0] + node.size[0];
+                const nodeBottom = node.position[1] + node.size[1];
+
+                if ((hasConstrainedWidth and (child.position[0] < node.position[0] or childRight > nodeRight)) or
+                    (hasConstrainedHeight and (child.position[1] < node.position[1] or childBottom > nodeBottom)))
+                {
+                    hasOverflow = true;
+                    break;
+                }
+                childIndexOption = child.nextSibling;
+            }
+
+            if (!hasOverflow) continue;
+
+            const nodeClip = Vec4{
+                node.position[0],
+                node.position[1],
+                node.size[0],
+                node.size[1],
+            };
+
+            childIndexOption = node.firstChild;
+            while (childIndexOption) |childIndex| {
+                const child = context.nodeTree.at(childIndex);
+                applyClipRect(child, nodeClip, &context.nodeTree);
+                childIndexOption = child.nextSibling;
+            }
+        }
     }
 
     return &context.nodeTree;
+}
+
+fn applyClipRect(node: *Node, parentClip: Vec4, nodeTree: *const NodeTree) void {
+    // Intersect with existing clip rect if any
+    const clip = if (node.clipRect) |existing| blk: {
+        const x1 = @max(existing[0], parentClip[0]);
+        const y1 = @max(existing[1], parentClip[1]);
+        const x2 = @min(existing[0] + existing[2], parentClip[0] + parentClip[2]);
+        const y2 = @min(existing[1] + existing[3], parentClip[1] + parentClip[3]);
+        break :blk Vec4{ x1, y1, @max(0, x2 - x1), @max(0, y2 - y1) };
+    } else parentClip;
+
+    node.clipRect = clip;
+
+    // Propagate to children
+    var childIndexOption = node.firstChild;
+    while (childIndexOption) |childIndex| {
+        const child = nodeTree.at(childIndex);
+        applyClipRect(child, clip, nodeTree);
+        childIndexOption = child.nextSibling;
+    }
 }
