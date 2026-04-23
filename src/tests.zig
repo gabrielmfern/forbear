@@ -331,6 +331,134 @@ test "wrapped text propagates height upward" {
     });
 }
 
+fn expectTextLineCount(content: []const u8, expectedLines: usize) !void {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        var textNode: *forbear.Node = undefined;
+        forbear.element(.{
+            .width = .fit,
+            .height = .fit,
+            .direction = .vertical,
+        })({
+            forbear.text(content);
+            textNode = forbear.getPreviousNode().?;
+        });
+
+        _ = try forbear.layout();
+
+        const lineHeight = textNode.glyphs.?.lineHeight;
+        try std.testing.expect(lineHeight > 0);
+        try std.testing.expectApproxEqAbs(
+            @as(f32, @floatFromInt(expectedLines)) * lineHeight,
+            textNode.size[1],
+            0.0001,
+        );
+
+        // Compute which source-string line indices have at least one visible character.
+        const populated = try arena.alloc(bool, expectedLines);
+        defer arena.free(populated);
+        @memset(populated, false);
+        var sourceLine: usize = 0;
+        var i: usize = 0;
+        while (i < content.len) : (i += 1) {
+            const ch = content[i];
+            if (ch == '\r') {
+                sourceLine += 1;
+                if (i + 1 < content.len and content[i + 1] == '\n') i += 1;
+            } else if (ch == '\n') {
+                sourceLine += 1;
+            } else {
+                try std.testing.expect(sourceLine < expectedLines);
+                populated[sourceLine] = true;
+            }
+        }
+        try std.testing.expectEqual(expectedLines, sourceLine + 1);
+
+        // Every non-sentinel glyph must sit exactly on `k * lineHeight` for some
+        // populated line `k`.
+        const seen = try arena.alloc(bool, expectedLines);
+        defer arena.free(seen);
+        @memset(seen, false);
+        for (textNode.glyphs.?.slice) |glyph| {
+            if (std.mem.eql(u8, glyph.text, "\n")) continue;
+            const ratio = glyph.position[1] / lineHeight;
+            const rounded: usize = @intFromFloat(@round(ratio));
+            try std.testing.expect(rounded < expectedLines);
+            try std.testing.expectApproxEqAbs(
+                @as(f32, @floatFromInt(rounded)) * lineHeight,
+                glyph.position[1],
+                0.0001,
+            );
+            try std.testing.expect(populated[rounded]);
+            seen[rounded] = true;
+        }
+        // Each populated source line must produce at least one glyph at the matching y.
+        for (populated, seen) |pop, s| {
+            if (pop) try std.testing.expect(s);
+        }
+    });
+}
+
+test "text \\n adds one line" {
+    try expectTextLineCount("hello\nworld", 2);
+}
+
+test "text multiple \\n in sequence" {
+    try expectTextLineCount("a\n\nb", 3);
+}
+
+test "text multiple \\n in different places" {
+    try expectTextLineCount("a\nb\nc", 3);
+}
+
+test "text \\r adds one line" {
+    try expectTextLineCount("hello\rworld", 2);
+}
+
+test "text multiple \\r in sequence" {
+    try expectTextLineCount("a\r\rb", 3);
+}
+
+test "text multiple \\r in different places" {
+    try expectTextLineCount("a\rb\rc", 3);
+}
+
+test "text \\r\\n adds one line" {
+    try expectTextLineCount("hello\r\nworld", 2);
+}
+
+test "text multiple \\r\\n in sequence" {
+    try expectTextLineCount("a\r\n\r\nb", 3);
+}
+
+test "text multiple \\r\\n in different places" {
+    try expectTextLineCount("a\r\nb\r\nc", 3);
+}
+
+test "text mixed \\n, \\r, \\r\\n adds one line each" {
+    try expectTextLineCount("hello\rworld", 2);
+    try expectTextLineCount("hello\nworld", 2);
+    try expectTextLineCount("hello\r\nworld", 2);
+}
+
+test "text mixed \\n, \\r, \\r\\n in sequence" {
+    try expectTextLineCount("a\r\n\r\nb", 3);
+    try expectTextLineCount("a\n\rb", 3);
+    try expectTextLineCount("a\r\n\nb", 3);
+}
+
+test "text mixed \\n, \\r, \\r\\n in different places" {
+    try expectTextLineCount("a\rb\nc\r\nd", 4);
+    try expectTextLineCount("a\r\nb\nc\rd", 4);
+    try expectTextLineCount("a\nb\rc\r\nd", 4);
+}
+
 test "wrapped text simple ancestry stays at origin" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
