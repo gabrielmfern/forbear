@@ -454,6 +454,13 @@ test "text mixed \\n, \\r, \\r\\n in sequence" {
     try expectTextLineCount("a\r\n\nb", 3);
 }
 
+test "text \\r\\n\\r produces three lines" {
+    // regression: the CR/LF normalization loop iterated with a stale captured
+    // slice length, causing an out-of-bounds write on this mixed sequence
+    try expectTextLineCount("\r\n\r", 3);
+    try expectTextLineCount("a\r\n\rb", 3);
+}
+
 test "text mixed \\n, \\r, \\r\\n in different places" {
     try expectTextLineCount("a\rb\nc\r\nd", 4);
     try expectTextLineCount("a\r\nb\nc\rd", 4);
@@ -564,6 +571,17 @@ test "text .none minSize covers all lines, not just the last" {
     try std.testing.expectApproxEqAbs(2 * multi.lineHeight, multi.minSize[1], 0.0001);
     try std.testing.expectApproxEqAbs(single.size[0], multi.minSize[0], 0.0001);
     try std.testing.expectApproxEqAbs(2 * multi.lineHeight, multi.minSize[1], 0.0001);
+}
+
+test "text .none maxSize[0] tracks longest line when it is not the last" {
+    const single = try measurePrelayoutText("verylongline", .none);
+    const multi = try measurePrelayoutText("verylongline\na", .none);
+
+    try std.testing.expect(single.maxSize[0] > 0);
+    // With .none wrapping, the reported max width must reflect the widest
+    // line. A short trailing line must not shrink the overall width.
+    try std.testing.expectApproxEqAbs(single.maxSize[0], multi.maxSize[0], 0.0001);
+    try std.testing.expectApproxEqAbs(single.maxSize[0], multi.size[0], 0.0001);
 }
 
 test "text with \\r\\n produces same size as with \\n" {
