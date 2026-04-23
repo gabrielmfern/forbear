@@ -5,7 +5,6 @@ const Dependencies = struct {
     kb_text_shape: *std.Build.Dependency,
     zmath: *std.Build.Dependency,
     stb_image: *std.Build.Dependency,
-    nanosvg: *std.Build.Dependency,
 
     target: std.Build.ResolvedTarget,
 
@@ -30,16 +29,11 @@ const Dependencies = struct {
             .target = target,
             .optimize = optimize,
         });
-        const nanosvg = b.dependency("nanosvg", .{
-            .target = target,
-            .optimize = optimize,
-        });
 
         return @This(){
             .freetype = freetype,
             .kb_text_shape = kb_text_shape,
             .stb_image = stb_image,
-            .nanosvg = nanosvg,
             .zmath = zmath,
             .target = target,
         };
@@ -66,7 +60,6 @@ const Dependencies = struct {
         module.linkLibrary(self.freetype.artifact("freetype"));
         module.linkLibrary(self.kb_text_shape.artifact("kb_text_shape"));
         module.linkLibrary(self.stb_image.artifact("stb_image"));
-        module.linkLibrary(self.nanosvg.artifact("nanosvg"));
         module.addImport("zmath", self.zmath.module("root"));
 
         switch (self.target.result.os.tag) {
@@ -181,20 +174,12 @@ fn createForbearModule(
     forbear.addImport("font_c", font_translate_c.createModule());
 
     const stb_translate_c = b.addTranslateC(.{
-        .root_source_file = dependencies.stb_image.path("stb_image.h"),
+        .root_source_file = b.path("src/stb_image_c.h"),
         .target = target,
         .optimize = optimize,
     });
+    stb_translate_c.addIncludePath(dependencies.stb_image.path("."));
     forbear.addImport("stb_image_c", stb_translate_c.createModule());
-
-    // nanosvg needs a wrapper header since it has two files (parser + rasterizer)
-    const nanosvg_translate_c = b.addTranslateC(.{
-        .root_source_file = dependencies.nanosvg.path("nanosvg_c.h"),
-        .target = target,
-        .optimize = optimize,
-    });
-    nanosvg_translate_c.addIncludePath(dependencies.nanosvg.path("."));
-    forbear.addImport("nanosvg_c", nanosvg_translate_c.createModule());
 
     if (target.result.os.tag == .linux) {
         const Protocol = struct {
