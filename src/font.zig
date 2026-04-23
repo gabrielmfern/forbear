@@ -504,9 +504,15 @@ pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
     errdefer self.allocator.free(glyphs);
     var glyphCount: usize = 0;
 
-    var segments = std.mem.splitScalar(u8, text, '\n');
+    var segmentStart: usize = 0;
+    var i: usize = 0;
     var first = true;
-    while (segments.next()) |segment| {
+    while (i <= text.len) : (i += 1) {
+        const atEnd = i == text.len;
+        const isBreak = !atEnd and (text[i] == '\n' or text[i] == '\r');
+        if (!atEnd and !isBreak) continue;
+
+        const segment = text[segmentStart..i];
         if (!first) {
             glyphs[glyphCount] = ShapedGlyph{
                 .index = 0,
@@ -518,21 +524,29 @@ pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
         }
         first = false;
 
-        if (segment.len == 0) continue;
+        if (segment.len != 0) {
+            // TODO: pass the language and direction down as styles
+            c.kbts_ShapeBegin(self.kbtsContext, c.KBTS_DIRECTION_RTL, c.KBTS_LANGUAGE_DONT_KNOW);
+            c.kbts_ShapeUtf8(self.kbtsContext, segment.ptr, @intCast(segment.len), c.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX);
+            c.kbts_ShapeEnd(self.kbtsContext);
 
-        // TODO: pass the language and direction down as styles
-        c.kbts_ShapeBegin(self.kbtsContext, c.KBTS_DIRECTION_RTL, c.KBTS_LANGUAGE_DONT_KNOW);
-        c.kbts_ShapeUtf8(self.kbtsContext, segment.ptr, @intCast(segment.len), c.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX);
-        c.kbts_ShapeEnd(self.kbtsContext);
+            var iterator = ShapingIterator{
+                .run = null,
+                .glyph = undefined,
+                .kbtsContext = self.kbtsContext,
+            };
+            while (iterator.next()) |shapedGlyph| {
+                glyphs[glyphCount] = shapedGlyph;
+                glyphCount += 1;
+            }
+        }
 
-        var iterator = ShapingIterator{
-            .run = null,
-            .glyph = undefined,
-            .kbtsContext = self.kbtsContext,
-        };
-        while (iterator.next()) |shapedGlyph| {
-            glyphs[glyphCount] = shapedGlyph;
-            glyphCount += 1;
+        if (isBreak) {
+            // Collapse \r\n into a single break
+            if (text[i] == '\r' and i + 1 < text.len and text[i + 1] == '\n') {
+                i += 1;
+            }
+            segmentStart = i + 1;
         }
     }
 
