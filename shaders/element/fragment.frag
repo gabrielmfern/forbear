@@ -101,10 +101,14 @@ void main() {
         outColor.rgb = vec3(luminance);
     }
 
-    // .multiply is enum value 1 in node.zig.
-    // For multiply blending, RGB must be premultiplied by alpha to avoid
-    // transparent/antialiased pixels darkening the destination.
-    if (blendMode == 1) {
+    // blendMode 0 = normal, 1 = multiply, 2 = darken (see BlendMode in node.zig).
+    if (blendMode == 1u) {
+        // Multiply: premultiply so dst*src + dst*(1-α) works correctly.
         outColor.rgb *= outColor.a;
+    } else if (blendMode == 2u) {
+        // Darken approximation: output mix(1, Cs, α) so that
+        // min(mix(1, Cs, α), Cd) ≈ α·min(Cs, Cd) + (1-α)·Cd.
+        // Exact at α=0 (→Cd) and α=1 (→min(Cs,Cd)); approximation in between.
+        outColor.rgb = mix(vec3(1.0), outColor.rgb, outColor.a);
     }
 }

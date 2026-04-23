@@ -90,6 +90,30 @@ fn App() void {
                     forbear.text("NEW");
                 });
             });
+
+            // Demonstrates `.darken` blend mode: the dark overlay darkens
+            // the underlying gradient without affecting lighter areas.
+            forbear.element(.{
+                .margin = forbear.Margin.top(24.0),
+                .width = .{ .fixed = 200 },
+                .height = .{ .fixed = 100 },
+                .background = .{
+                    .gradient = &.{
+                        .{ .color = .{ 0.2, 0.6, 1.0, 1.0 }, .position = 0.0 },
+                        .{ .color = .{ 1.0, 0.4, 0.2, 1.0 }, .position = 1.0 },
+                    },
+                },
+                .borderRadius = 12.0,
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 80 },
+                    .margin = .all(10),
+                    .background = .{ .color = .{ 0.3, 0.3, 0.3, 0.8 } },
+                    .blendMode = .darken,
+                    .borderRadius = 8.0,
+                })({});
+            });
         });
     });
 }

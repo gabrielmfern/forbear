@@ -45,7 +45,7 @@ pub fn Hero() !void {
         });
         forbear.image(.{
             .width = .{ .grow = 1.0 },
-            .blendMode = .multiply,
+            .blendMode = .darken,
         }, try forbear.useImage("uhoh-hero"));
     });
 }

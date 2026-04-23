@@ -46,7 +46,7 @@ pub fn Benefits() !void {
             forbear.image(.{
                 .width = .{ .grow = 1.0 },
                 .maxWidth = 369,
-                .blendMode = .multiply,
+                .blendMode = .darken,
                 .margin = forbear.Margin.left(20.0),
             }, try forbear.useImage("uhoh-group-21"));
         });

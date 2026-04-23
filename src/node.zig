@@ -189,6 +189,7 @@ pub const BorderWidth = Padding;
 pub const BlendMode = enum(u32) {
     normal = 0,
     multiply = 1,
+    darken = 2,
 };
 
 pub const Filter = enum(u32) {

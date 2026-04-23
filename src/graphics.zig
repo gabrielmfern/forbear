@@ -1861,6 +1861,7 @@ const ElementsPipeline = struct {
     pipelineLayout: c.VkPipelineLayout,
     blendAddGraphicsPipeline: c.VkPipeline,
     blendMultiplyGraphicsPipeline: c.VkPipeline,
+    blendDarkenGraphicsPipeline: c.VkPipeline,
 
     shaderBufferDescriptorSetLayout: c.VkDescriptorSetLayout,
     descriptorPool: c.VkDescriptorPool,
@@ -2208,6 +2209,106 @@ const ElementsPipeline = struct {
         ));
         errdefer c.vkDestroyPipeline(logicalDevice, blendMultiplyGraphicsPipeline, null);
 
+        var blendDarkenGraphicsPipeline: c.VkPipeline = undefined;
+        try ensureNoError(c.vkCreateGraphicsPipelines(
+            logicalDevice,
+            null,
+            1,
+            &c.VkGraphicsPipelineCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .stageCount = @intCast(shaderStages.len),
+                .pStages = shaderStages.ptr,
+                .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .vertexBindingDescriptionCount = 1,
+                    .pVertexBindingDescriptions = &bindingDescription,
+                    .vertexAttributeDescriptionCount = attributeDescriptions.len,
+                    .pVertexAttributeDescriptions = &attributeDescriptions,
+                },
+                .pInputAssemblyState = &c.VkPipelineInputAssemblyStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                    .primitiveRestartEnable = c.VK_FALSE,
+                },
+                .pViewportState = &c.VkPipelineViewportStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .viewportCount = 1,
+                    .scissorCount = 1,
+                },
+                .pRasterizationState = &c.VkPipelineRasterizationStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .depthClampEnable = c.VK_FALSE,
+                    .rasterizerDiscardEnable = c.VK_FALSE,
+                    .polygonMode = c.VK_POLYGON_MODE_FILL,
+                    .cullMode = c.VK_CULL_MODE_BACK_BIT,
+                    .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
+                    .lineWidth = 1.0,
+                    .depthBiasEnable = c.VK_FALSE,
+                    .depthBiasConstantFactor = 0.0,
+                    .depthBiasClamp = 0.0,
+                    .depthBiasSlopeFactor = 0.0,
+                },
+                .pMultisampleState = &c.VkPipelineMultisampleStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                    .sampleShadingEnable = c.VK_FALSE,
+                    .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+                    .minSampleShading = 1.0,
+                    .pSampleMask = null,
+                    .alphaToCoverageEnable = c.VK_FALSE,
+                    .alphaToOneEnable = c.VK_FALSE,
+                    .pNext = null,
+                    .flags = 0,
+                },
+                .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .logicOpEnable = c.VK_FALSE,
+                    .logicOp = c.VK_LOGIC_OP_COPY,
+                    .attachmentCount = 1,
+                    // Darken approximation: shader outputs mix(1, Cs, α) so that
+                    // min(mix(1, Cs, α), Cd) → Cd when α=0, min(Cs, Cd) when α=1.
+                    // Alpha uses standard Porter-Duff source-over.
+                    .pAttachments = &c.VkPipelineColorBlendAttachmentState{
+                        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
+                        .blendEnable = c.VK_TRUE,
+                        .srcColorBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .colorBlendOp = c.VK_BLEND_OP_MIN,
+                        .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
+                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                        .alphaBlendOp = c.VK_BLEND_OP_ADD,
+                    },
+                    .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
+                },
+                .pDynamicState = &c.VkPipelineDynamicStateCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .dynamicStateCount = @intCast(dynamicStates.len),
+                    .pDynamicStates = dynamicStates.ptr,
+                },
+                .layout = pipelineLayout,
+                .renderPass = renderPass,
+                .subpass = 0,
+                .basePipelineHandle = null,
+                .basePipelineIndex = -1,
+                .pTessellationState = null,
+                .pDepthStencilState = null,
+            },
+            null,
+            &blendDarkenGraphicsPipeline,
+        ));
+        errdefer c.vkDestroyPipeline(logicalDevice, blendDarkenGraphicsPipeline, null);
+
         var elements = try ResizableStorageBuffer(ElementRenderingData).init(
             logicalDevice,
             physicalDevice,
@@ -2286,6 +2387,7 @@ const ElementsPipeline = struct {
             .pipelineLayout = pipelineLayout,
             .blendAddGraphicsPipeline = blendAddGraphicsPipeline,
             .blendMultiplyGraphicsPipeline = blendMultiplyGraphicsPipeline,
+            .blendDarkenGraphicsPipeline = blendDarkenGraphicsPipeline,
 
             .shaderBufferDescriptorSetLayout = shaderBufferDescriptorSetLayout,
             .elements = elements,
@@ -2346,6 +2448,7 @@ const ElementsPipeline = struct {
         rectangleModel: *Model,
     ) void {
         const graphicsPipeline = switch (blendMode) {
+            .darken => self.blendDarkenGraphicsPipeline,
             .multiply => self.blendMultiplyGraphicsPipeline,
             .normal => self.blendAddGraphicsPipeline,
         };
@@ -2392,6 +2495,7 @@ const ElementsPipeline = struct {
         c.vkDestroyDescriptorSetLayout(logicalDevice, self.shaderBufferDescriptorSetLayout, null);
         c.vkDestroyPipeline(logicalDevice, self.blendAddGraphicsPipeline, null);
         c.vkDestroyPipeline(logicalDevice, self.blendMultiplyGraphicsPipeline, null);
+        c.vkDestroyPipeline(logicalDevice, self.blendDarkenGraphicsPipeline, null);
         c.vkDestroyPipelineLayout(logicalDevice, self.pipelineLayout, null);
     }
 };
@@ -3694,10 +3798,12 @@ pub const Renderer = struct {
         var shadowIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
         var blendAddElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
         var blendMultiplyElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
+        var blendDarkenElementIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
         var textIntervals = try arena.alloc(?LayerInterval, @intCast(maxZ));
         for (shadowIntervals) |*interval| interval.* = null;
         for (blendAddElementIntervals) |*interval| interval.* = null;
         for (blendMultiplyElementIntervals) |*interval| interval.* = null;
+        for (blendDarkenElementIntervals) |*interval| interval.* = null;
         for (textIntervals) |*interval| interval.* = null;
 
         const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
@@ -3707,14 +3813,18 @@ pub const Renderer = struct {
         var glyphIndex: usize = 0;
         var gradientStopIndex: usize = 0;
         var totalBlendAddElementCount: usize = 0;
+        var totalBlendMultiplyElementCount: usize = 0;
         for (orderedNodes) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
-            if (node.style.blendMode == .normal) {
-                totalBlendAddElementCount += 1;
+            switch (node.style.blendMode) {
+                .normal => totalBlendAddElementCount += 1,
+                .multiply => totalBlendMultiplyElementCount += 1,
+                .darken => {},
             }
         }
         var blendAddElementIndex: usize = 0;
         var blendMultiplyElementIndex: usize = totalBlendAddElementCount;
+        var blendDarkenElementIndex: usize = totalBlendAddElementCount + totalBlendMultiplyElementCount;
 
         for (orderedNodes) |nodeIndex| {
             const node = nodeTree.at(nodeIndex);
@@ -3744,6 +3854,22 @@ pub const Renderer = struct {
                         interval.end = idx;
                     } else {
                         blendMultiplyElementIntervals[node.z - 1] = LayerInterval{
+                            .start = idx,
+                            .end = idx,
+                        };
+                    }
+
+                    break :blk idx;
+                },
+                .darken => blk: {
+                    const idx = blendDarkenElementIndex;
+                    blendDarkenElementIndex += 1;
+
+                    if (blendDarkenElementIntervals[node.z - 1]) |*interval| {
+                        std.debug.assert(interval.end + 1 == idx);
+                        interval.end = idx;
+                    } else {
+                        blendDarkenElementIntervals[node.z - 1] = LayerInterval{
                             .start = idx,
                             .end = idx,
                         };
@@ -3938,7 +4064,8 @@ pub const Renderer = struct {
             }
         }
         std.debug.assert(blendAddElementIndex == totalBlendAddElementCount);
-        std.debug.assert(blendMultiplyElementIndex == totalElementCount);
+        std.debug.assert(blendMultiplyElementIndex == totalBlendAddElementCount + totalBlendMultiplyElementCount);
+        std.debug.assert(blendDarkenElementIndex == totalElementCount);
 
         if (@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start > 1000) {
             std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start });
@@ -4013,6 +4140,15 @@ pub const Renderer = struct {
                 self.elementsPipeline.draw(
                     elementInterval,
                     .multiply,
+                    frameIndex,
+                    self.commandBuffers[frameIndex],
+                    &self.rectangleModel,
+                );
+            }
+            if (blendDarkenElementIntervals[i]) |elementInterval| {
+                self.elementsPipeline.draw(
+                    elementInterval,
+                    .darken,
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,
