@@ -86,11 +86,7 @@ forbear/
 │   ├── layouting.zig
 │   ├── node.zig
 │   ├── root.zig
-│   ├── tests/
-│   │   ├── font.test.zig
-│   │   ├── layouting.test.zig
-│   │   ├── root.test.zig
-│   │   └── utilities.zig
+│   ├── tests.zig
 │   ├── window/
 │   │   ├── linux.zig
 │   │   ├── macos.zig
