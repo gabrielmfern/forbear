@@ -2,17 +2,17 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const c = @import("c");
+
+const components = @import("components.zig");
+pub const FpsCounter = components.FpsCounter;
 pub const Font = @import("font.zig");
 pub const Graphics = @import("graphics.zig");
 pub const Image = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
-pub var traceWriter: ?*std.Io.Writer = null;
-pub fn setTraceWriter(writer: *std.Io.Writer) void {
-    traceWriter = writer;
-}
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
+pub const TextWrapping = nodeImport.TextWrapping;
 pub const NodeTree = nodeImport.NodeTree;
 pub const Direction = nodeImport.Direction;
 pub const LayoutGlyph = nodeImport.LayoutGlyph;
@@ -29,9 +29,11 @@ pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("window/root.zig").Window;
 pub const WindowCursor = @import("window/root.zig").Cursor;
-pub const components = @import("components.zig");
-pub const FpsCounter = components.FpsCounter;
 
+pub var traceWriter: ?*std.Io.Writer = null;
+pub fn setTraceWriter(writer: *std.Io.Writer) void {
+    traceWriter = writer;
+}
 const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
 
@@ -804,7 +806,29 @@ pub fn text(content: []const u8) void {
     const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
     const lineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * style.fontSize;
 
-    const shapedGlyphs = style.font.shape(content) catch |err| {
+    var effectiveContent = content;
+    // converts \r\n, and \n\r, or just \r to \n for simplicity later on
+    if (std.mem.containsAtLeast(u8, content, 1, "\r")) {
+        var ownedContent = std.ArrayList(u8).fromOwnedSlice(arena.dupe(u8, content) catch |err| {
+            handleFrameError(err);
+            return;
+        });
+        for (ownedContent.items, 0..) |character, i| {
+            if (character == '\r') {
+                if (i < ownedContent.items.len - 1 and ownedContent.items[i + 1] == '\n') {
+                    _ = ownedContent.orderedRemove(i);
+                } else {
+                    ownedContent.items[i] = '\n';
+                }
+            }
+            if (character == '\n' and i < ownedContent.items.len - 1 and ownedContent.items[i + 1] == '\r') {
+                _ = ownedContent.orderedRemove(i + 1);
+            }
+        }
+        effectiveContent = ownedContent.items;
+    }
+
+    const shapedGlyphs = style.font.shape(effectiveContent) catch |err| {
         handleFrameError(err);
         return;
     };
@@ -818,43 +842,56 @@ pub fn text(content: []const u8) void {
     var minSize: Vec2 = .{ 0.0, lineHeight };
     var maxSize: Vec2 = .{ 0.0, lineHeight };
 
-    var wordStart: usize = 0;
+    // counted as to decrease the layoutGlyph slice size at the end to avoid
+    // rendering having to deal with placeholder linebreak glyphs
+    var linebreakCount: usize = 0;
+
     var wordAdvance: Vec2 = @splat(0.0);
-    for (shapedGlyphs, 0..) |shapedGlyph, i| {
-        const advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
+    var glyphIndex: usize = 0;
+    while (glyphIndex < shapedGlyphs.len) {
+        defer glyphIndex += 1;
+        const shapedGlyph = shapedGlyphs[glyphIndex];
+        var advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
         const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
         const glyphText = arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]) catch |err| {
             handleFrameError(err);
             return;
         };
-        layoutGlyphs[i] = LayoutGlyph{
-            .index = @intCast(shapedGlyph.index),
-            .position = cursor + offset,
+        if (std.mem.eql(u8, glyphText, "\n")) {
+            advance[0] = -cursor[0];
+            advance[1] += lineHeight;
+            linebreakCount += 1;
+        } else {
+            layoutGlyphs[glyphIndex - linebreakCount] = LayoutGlyph{
+                .index = @intCast(shapedGlyph.index),
+                .position = cursor + offset,
 
-            .text = glyphText,
+                .text = glyphText,
 
-            .advance = advance,
-            .offset = offset,
-        };
+                .advance = advance,
+                .offset = offset,
+            };
+        }
 
         cursor += advance;
+        maxSize[0] = @max(maxSize[0], cursor[0]);
         if (style.textWrapping == .word) {
-            if (std.mem.eql(u8, glyphText, " ")) {
-                wordStart = i;
+            if (std.mem.eql(u8, glyphText, " ") or std.mem.eql(u8, glyphText, "\n")) {
                 wordAdvance = @splat(0.0);
+                maxSize[1] += lineHeight;
             } else {
                 wordAdvance += advance;
             }
-            minSize = @max(minSize, wordAdvance);
-            maxSize[1] += lineHeight;
+            minSize[0] = @max(minSize[0], wordAdvance[0]);
         } else if (style.textWrapping == .character) {
-            minSize = @max(minSize, advance);
+            minSize[0] = @max(minSize[0], advance[0]);
             maxSize[1] += lineHeight;
         } else if (style.textWrapping == .none) {
-            minSize = cursor;
+            maxSize[0] = cursor[0];
+            minSize[0] = @max(minSize[0], cursor[0]);
         }
     }
-    maxSize[0] = cursor[0];
+    minSize[1] = cursor[1] + lineHeight;
 
     const parentZ = if (parentOptional) |parent|
         parent.z
@@ -870,10 +907,13 @@ pub fn text(content: []const u8) void {
         parentZ + 1
     else
         parentZ;
-    result.ptr.size = .{ cursor[0], lineHeight };
+    result.ptr.size = .{ maxSize[0], minSize[1] };
     result.ptr.minSize = minSize;
     result.ptr.maxSize = maxSize;
-    result.ptr.glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = lineHeight };
+    result.ptr.glyphs = Glyphs{
+        .slice = layoutGlyphs[0 .. layoutGlyphs.len - linebreakCount],
+        .lineHeight = lineHeight,
+    };
     result.ptr.style = style;
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;
