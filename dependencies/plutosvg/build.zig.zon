@@ -1,0 +1,17 @@
+.{
+    .name = .plutosvg,
+    .version = "0.0.7",
+    .minimum_zig_version = "0.15.2",
+    .fingerprint = 0x4d98a9c2fe3e8703,
+    .dependencies = .{
+        .plutovg = .{
+            .path = "../plutovg",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "source",
+        "LICENSE",
+    },
+}

@@ -5,6 +5,8 @@ const Dependencies = struct {
     kb_text_shape: *std.Build.Dependency,
     zmath: *std.Build.Dependency,
     stb_image: *std.Build.Dependency,
+    plutovg: *std.Build.Dependency,
+    plutosvg: *std.Build.Dependency,
 
     target: std.Build.ResolvedTarget,
 
@@ -29,11 +31,21 @@ const Dependencies = struct {
             .target = target,
             .optimize = optimize,
         });
+        const plutovg = b.dependency("plutovg", .{
+            .target = target,
+            .optimize = optimize,
+        });
+        const plutosvg = b.dependency("plutosvg", .{
+            .target = target,
+            .optimize = optimize,
+        });
 
         return @This(){
             .freetype = freetype,
             .kb_text_shape = kb_text_shape,
             .stb_image = stb_image,
+            .plutovg = plutovg,
+            .plutosvg = plutosvg,
             .zmath = zmath,
             .target = target,
         };
@@ -60,6 +72,8 @@ const Dependencies = struct {
         module.linkLibrary(self.freetype.artifact("freetype"));
         module.linkLibrary(self.kb_text_shape.artifact("kb_text_shape"));
         module.linkLibrary(self.stb_image.artifact("stb_image"));
+        module.linkLibrary(self.plutovg.artifact("plutovg"));
+        module.linkLibrary(self.plutosvg.artifact("plutosvg"));
         module.addImport("zmath", self.zmath.module("root"));
 
         switch (self.target.result.os.tag) {
@@ -180,6 +194,15 @@ fn createForbearModule(
     });
     stb_translate_c.addIncludePath(dependencies.stb_image.path("."));
     forbear.addImport("stb_image_c", stb_translate_c.createModule());
+
+    const plutosvg_translate_c = b.addTranslateC(.{
+        .root_source_file = dependencies.plutosvg.path("source/plutosvg.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    plutosvg_translate_c.addIncludePath(dependencies.plutovg.path("include"));
+    plutosvg_translate_c.defineCMacro("PLUTOSVG_BUILD_STATIC", "1");
+    forbear.addImport("plutosvg_c", plutosvg_translate_c.createModule());
 
     if (target.result.os.tag == .linux) {
         const Protocol = struct {
