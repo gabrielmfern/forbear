@@ -576,6 +576,132 @@ test "text with \\r\\n produces same size as with \\n" {
     try std.testing.expectApproxEqAbs(nl.maxSize[1], crlf.maxSize[1], 0.0001);
 }
 
+const LaidOutText = struct {
+    size: Vec2,
+    lineHeight: f32,
+    maxGlyphLine: usize,
+};
+
+fn measureLaidOutText(
+    content: []const u8,
+    wrapping: forbear.TextWrapping,
+    width: f32,
+) !LaidOutText {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var result: LaidOutText = undefined;
+    try forbear.frame(try frameMeta(arena))({
+        var textNode: *forbear.Node = undefined;
+        forbear.element(.{
+            .width = .{ .fixed = width },
+            .height = .fit,
+            .direction = .vertical,
+            .textWrapping = wrapping,
+        })({
+            forbear.text(content);
+            textNode = forbear.getPreviousNode().?;
+        });
+
+        _ = try forbear.layout();
+
+        const glyphs = textNode.glyphs.?;
+        var maxLine: usize = 0;
+        for (glyphs.slice) |glyph| {
+            const rounded: usize = @intFromFloat(@round(glyph.position[1] / glyphs.lineHeight));
+            if (rounded > maxLine) maxLine = rounded;
+        }
+
+        result = .{
+            .size = textNode.size,
+            .lineHeight = glyphs.lineHeight,
+            .maxGlyphLine = maxLine,
+        };
+    });
+    return result;
+}
+
+test ".word wrap respects a single manual break" {
+    const m = try measureLaidOutText("hello\nworld", .word, 500.0);
+    try std.testing.expectApproxEqAbs(2 * m.lineHeight, m.size[1], 0.0001);
+    try std.testing.expectEqual(@as(usize, 1), m.maxGlyphLine);
+}
+
+test ".word wrap respects multiple manual breaks" {
+    const m = try measureLaidOutText("a\nb\nc\nd", .word, 500.0);
+    try std.testing.expectApproxEqAbs(4 * m.lineHeight, m.size[1], 0.0001);
+    try std.testing.expectEqual(@as(usize, 3), m.maxGlyphLine);
+}
+
+test ".word wrap preserves blank line between \\n\\n" {
+    const m = try measureLaidOutText("a\n\nb", .word, 500.0);
+    try std.testing.expectApproxEqAbs(3 * m.lineHeight, m.size[1], 0.0001);
+    try std.testing.expectEqual(@as(usize, 2), m.maxGlyphLine);
+}
+
+test ".word wrap with leading \\n pushes content to second line" {
+    const m = try measureLaidOutText("\nhello", .word, 500.0);
+    try std.testing.expectApproxEqAbs(2 * m.lineHeight, m.size[1], 0.0001);
+    try std.testing.expectEqual(@as(usize, 1), m.maxGlyphLine);
+}
+
+test ".word wrap with trailing \\n adds a blank last line" {
+    const m = try measureLaidOutText("hello\n", .word, 500.0);
+    try std.testing.expectApproxEqAbs(2 * m.lineHeight, m.size[1], 0.0001);
+}
+
+test ".word wrap with only \\n produces two blank lines" {
+    const m = try measureLaidOutText("\n", .word, 500.0);
+    try std.testing.expectApproxEqAbs(2 * m.lineHeight, m.size[1], 0.0001);
+}
+
+test ".character wrap respects a single manual break" {
+    const m = try measureLaidOutText("ab\ncd", .character, 500.0);
+    try std.testing.expectApproxEqAbs(2 * m.lineHeight, m.size[1], 0.0001);
+    try std.testing.expectEqual(@as(usize, 1), m.maxGlyphLine);
+}
+
+test ".character wrap respects multiple manual breaks" {
+    const m = try measureLaidOutText("a\nb\nc\nd", .character, 500.0);
+    try std.testing.expectApproxEqAbs(4 * m.lineHeight, m.size[1], 0.0001);
+    try std.testing.expectEqual(@as(usize, 3), m.maxGlyphLine);
+}
+
+test ".character wrap preserves blank line between \\n\\n" {
+    const m = try measureLaidOutText("a\n\nb", .character, 500.0);
+    try std.testing.expectApproxEqAbs(3 * m.lineHeight, m.size[1], 0.0001);
+    try std.testing.expectEqual(@as(usize, 2), m.maxGlyphLine);
+}
+
+test ".word wrap stacks wrap-induced breaks with manual breaks" {
+    // Constrain width to less than the full width of the first manual-break
+    // segment so at least one word-wrap must occur within it. Adding a
+    // manual break and another segment forces yet another line.
+    const unconstrained = try measurePrelayoutText("alpha bravo charlie", .word);
+    const m = try measureLaidOutText(
+        "alpha bravo charlie\ndelta",
+        .word,
+        unconstrained.size[0] / 2,
+    );
+    try std.testing.expect(m.size[1] >= 3 * m.lineHeight);
+    try std.testing.expect(m.maxGlyphLine >= 2);
+}
+
+test ".character wrap stacks wrap-induced breaks with manual breaks" {
+    const unconstrained = try measurePrelayoutText("abcdefgh", .character);
+    const m = try measureLaidOutText(
+        "abcdefgh\nij",
+        .character,
+        unconstrained.size[0] / 2,
+    );
+    try std.testing.expect(m.size[1] >= 3 * m.lineHeight);
+    try std.testing.expect(m.maxGlyphLine >= 2);
+}
+
 test "wrapped text simple ancestry stays at origin" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
