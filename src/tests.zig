@@ -373,6 +373,7 @@ fn expectTextLineCount(content: []const u8, expectedLines: usize) !void {
                 if (i + 1 < content.len and content[i + 1] == '\n') i += 1;
             } else if (ch == '\n') {
                 sourceLine += 1;
+                if (i + 1 < content.len and content[i + 1] == '\r') i += 1;
             } else {
                 try std.testing.expect(sourceLine < expectedLines);
                 populated[sourceLine] = true;
