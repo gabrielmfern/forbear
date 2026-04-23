@@ -114,6 +114,22 @@ fn App() void {
                     .borderRadius = 8.0,
                 })({});
             });
+
+            // Dashed border example
+            forbear.element(.{
+                .margin = forbear.Margin.top(24.0),
+                .width = .{ .fixed = 200 },
+                .height = .{ .fixed = 100 },
+                .background = .{ .color = .{ 0.1, 0.1, 0.1, 1.0 } },
+                .borderWidth = .all(3.0),
+                .borderColor = .{ 0.4, 0.8, 1.0, 1.0 },
+                .borderStyle = .dashed,
+                .borderRadius = 8.0,
+                .xJustification = .center,
+                .yJustification = .center,
+            })({
+                forbear.text("Dashed");
+            });
         });
     });
 }
