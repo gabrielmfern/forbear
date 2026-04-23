@@ -814,7 +814,6 @@ pub fn text(content: []const u8) void {
     };
     errdefer arena.free(layoutGlyphs);
     var cursor: Vec2 = @splat(0.0);
-    var maxLineWidth: f32 = 0.0;
 
     var minSize: Vec2 = .{ 0.0, lineHeight };
     var maxSize: Vec2 = .{ 0.0, lineHeight };
@@ -828,24 +827,6 @@ pub fn text(content: []const u8) void {
             handleFrameError(err);
             return;
         };
-        if (std.mem.eql(u8, glyphText, "\n")) {
-            layoutGlyphs[i] = LayoutGlyph{
-                .index = @intCast(shapedGlyph.index),
-                .position = cursor + offset,
-                .text = glyphText,
-                .advance = advance,
-                .offset = offset,
-            };
-            maxLineWidth = @max(maxLineWidth, cursor[0]);
-            cursor[0] = 0.0;
-            cursor[1] += lineHeight;
-            wordStart = i + 1;
-            wordAdvance = @splat(0.0);
-            if (style.textWrapping == .word or style.textWrapping == .character) {
-                maxSize[1] += lineHeight;
-            }
-            continue;
-        }
         layoutGlyphs[i] = LayoutGlyph{
             .index = @intCast(shapedGlyph.index),
             .position = cursor + offset,
@@ -870,14 +851,10 @@ pub fn text(content: []const u8) void {
             minSize = @max(minSize, advance);
             maxSize[1] += lineHeight;
         } else if (style.textWrapping == .none) {
-            minSize = @max(minSize, Vec2{ cursor[0], cursor[1] + lineHeight });
+            minSize = cursor;
         }
     }
-    maxLineWidth = @max(maxLineWidth, cursor[0]);
-    maxSize[0] = maxLineWidth;
-    if (style.textWrapping == .none) {
-        maxSize[1] = cursor[1] + lineHeight;
-    }
+    maxSize[0] = cursor[0];
 
     const parentZ = if (parentOptional) |parent|
         parent.z
@@ -893,7 +870,7 @@ pub fn text(content: []const u8) void {
         parentZ + 1
     else
         parentZ;
-    result.ptr.size = .{ maxLineWidth, cursor[1] + lineHeight };
+    result.ptr.size = .{ cursor[0], lineHeight };
     result.ptr.minSize = minSize;
     result.ptr.maxSize = maxSize;
     result.ptr.glyphs = Glyphs{ .slice = layoutGlyphs, .lineHeight = lineHeight };

@@ -500,40 +500,23 @@ pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
         return cache.value;
     }
 
+    // TODO: pass the language and direction down as styles
+    c.kbts_ShapeBegin(self.kbtsContext, c.KBTS_DIRECTION_RTL, c.KBTS_LANGUAGE_DONT_KNOW);
+    c.kbts_ShapeUtf8(self.kbtsContext, text.ptr, @intCast(text.len), c.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX);
+    c.kbts_ShapeEnd(self.kbtsContext);
+
     var glyphs = try self.allocator.alloc(ShapedGlyph, text.len); // worst case for all glyphs
     errdefer self.allocator.free(glyphs);
     var glyphCount: usize = 0;
 
-    var segments = std.mem.splitScalar(u8, text, '\n');
-    var first = true;
-    while (segments.next()) |segment| {
-        if (!first) {
-            glyphs[glyphCount] = ShapedGlyph{
-                .index = 0,
-                .utf8 = c.kbts_EncodeUtf8('\n'),
-                .advance = @splat(0.0),
-                .offset = @splat(0.0),
-            };
-            glyphCount += 1;
-        }
-        first = false;
-
-        if (segment.len == 0) continue;
-
-        // TODO: pass the language and direction down as styles
-        c.kbts_ShapeBegin(self.kbtsContext, c.KBTS_DIRECTION_RTL, c.KBTS_LANGUAGE_DONT_KNOW);
-        c.kbts_ShapeUtf8(self.kbtsContext, segment.ptr, @intCast(segment.len), c.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX);
-        c.kbts_ShapeEnd(self.kbtsContext);
-
-        var iterator = ShapingIterator{
-            .run = null,
-            .glyph = undefined,
-            .kbtsContext = self.kbtsContext,
-        };
-        while (iterator.next()) |shapedGlyph| {
-            glyphs[glyphCount] = shapedGlyph;
-            glyphCount += 1;
-        }
+    var iterator = ShapingIterator{
+        .run = null,
+        .glyph = undefined,
+        .kbtsContext = self.kbtsContext,
+    };
+    while (iterator.next()) |shapedGlyph| {
+        glyphs[glyphCount] = shapedGlyph;
+        glyphCount += 1;
     }
 
     glyphs = try self.allocator.realloc(glyphs, glyphCount);
