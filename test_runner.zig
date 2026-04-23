@@ -30,18 +30,73 @@ const Win32 = if (native_os == .windows) struct {
         dwDesiredAccess: u32,
         bInheritHandle: windows.BOOL,
         dwOptions: u32,
-    ) callconv(.c) windows.BOOL;
+    ) callconv(.winapi) windows.BOOL;
     pub extern "kernel32" fn AddVectoredExceptionHandler(
         First: u32,
         Handler: *const fn (*windows.EXCEPTION_POINTERS) callconv(.winapi) c_long,
-    ) callconv(.c) ?*anyopaque;
+    ) callconv(.winapi) ?*anyopaque;
     pub extern "kernel32" fn WriteFile(
         hFile: windows.HANDLE,
         lpBuffer: [*]const u8,
         nNumberOfBytesToWrite: u32,
         lpNumberOfBytesWritten: ?*u32,
         lpOverlapped: ?*anyopaque,
-    ) callconv(.c) windows.BOOL;
+    ) callconv(.winapi) windows.BOOL;
+    pub extern "kernel32" fn ReadFile(
+        hFile: windows.HANDLE,
+        lpBuffer: [*]u8,
+        nNumberOfBytesToRead: u32,
+        lpNumberOfBytesRead: ?*u32,
+        lpOverlapped: ?*anyopaque,
+    ) callconv(.winapi) windows.BOOL;
+    pub extern "kernel32" fn GetModuleFileNameW(
+        hModule: ?windows.HINSTANCE,
+        lpFilename: [*]u16,
+        nSize: u32,
+    ) callconv(.winapi) u32;
+    pub extern "kernel32" fn CreatePipe(
+        hReadPipe: *windows.HANDLE,
+        hWritePipe: *windows.HANDLE,
+        lpPipeAttributes: ?*windows.SECURITY_ATTRIBUTES,
+        nSize: u32,
+    ) callconv(.winapi) windows.BOOL;
+    pub extern "kernel32" fn SetHandleInformation(
+        hObject: windows.HANDLE,
+        dwMask: u32,
+        dwFlags: u32,
+    ) callconv(.winapi) windows.BOOL;
+    pub extern "kernel32" fn CreateProcessW(
+        lpApplicationName: ?[*:0]const u16,
+        lpCommandLine: ?[*:0]u16,
+        lpProcessAttributes: ?*windows.SECURITY_ATTRIBUTES,
+        lpThreadAttributes: ?*windows.SECURITY_ATTRIBUTES,
+        bInheritHandles: windows.BOOL,
+        dwCreationFlags: u32,
+        lpEnvironment: ?*anyopaque,
+        lpCurrentDirectory: ?[*:0]const u16,
+        lpStartupInfo: *windows.STARTUPINFOW,
+        lpProcessInformation: *PROCESS_INFORMATION,
+    ) callconv(.winapi) windows.BOOL;
+    pub extern "kernel32" fn WaitForSingleObject(
+        hHandle: windows.HANDLE,
+        dwMilliseconds: u32,
+    ) callconv(.winapi) u32;
+    pub extern "kernel32" fn GetExitCodeProcess(
+        hProcess: windows.HANDLE,
+        lpExitCode: *u32,
+    ) callconv(.winapi) windows.BOOL;
+
+    pub const PROCESS_INFORMATION = extern struct {
+        hProcess: windows.HANDLE,
+        hThread: windows.HANDLE,
+        dwProcessId: u32,
+        dwThreadId: u32,
+    };
+
+    pub const HANDLE_FLAG_INHERIT: u32 = 0x00000001;
+    pub const STARTF_USESTDHANDLES: u32 = 0x00000100;
+    pub const CREATE_UNICODE_ENVIRONMENT: u32 = 0x00000400;
+    pub const INFINITE: u32 = 0xFFFFFFFF;
 } else struct {};
 
 const Allocator = std.mem.Allocator;
@@ -317,9 +372,137 @@ fn runSingleTestProcess(selectedTestName: []const u8) !u8 {
 
 fn runTestInChildProcess(allocator: Allocator, testName: []const u8) !ChildOutcome {
     if (native_os == .windows) {
-        return error.UnsupportedPlatform;
+        return runTestWithCreateProcess(allocator, testName);
     }
     return runTestWithFork(allocator, testName);
+}
+
+fn runTestWithCreateProcess(allocator: Allocator, testName: []const u8) !ChildOutcome {
+    var exe_buf: [windows.PATH_MAX_WIDE + 1]u16 = undefined;
+    const exe_len = Win32.GetModuleFileNameW(null, &exe_buf, exe_buf.len);
+    if (exe_len == 0 or exe_len >= exe_buf.len) return error.GetModuleFileNameFailed;
+
+    const exe_path_z = try allocator.allocSentinel(u16, exe_len, 0);
+    defer allocator.free(exe_path_z);
+    @memcpy(exe_path_z[0..exe_len], exe_buf[0..exe_len]);
+
+    // CreateProcessW treats lpCommandLine as mutable. Wrap the path in quotes
+    // so any spaces in the path are preserved as part of argv[0].
+    const cmd_w = try allocator.allocSentinel(u16, exe_len + 2, 0);
+    defer allocator.free(cmd_w);
+    cmd_w[0] = '"';
+    @memcpy(cmd_w[1 .. 1 + exe_len], exe_buf[0..exe_len]);
+    cmd_w[1 + exe_len] = '"';
+
+    const env_block = try buildChildEnvBlock(allocator, testName);
+    defer allocator.free(env_block);
+
+    var sa: windows.SECURITY_ATTRIBUTES = .{
+        .nLength = @sizeOf(windows.SECURITY_ATTRIBUTES),
+        .bInheritHandle = windows.BOOL.TRUE,
+        .lpSecurityDescriptor = null,
+    };
+    var read_end: windows.HANDLE = undefined;
+    var write_end: windows.HANDLE = undefined;
+    if (Win32.CreatePipe(&read_end, &write_end, &sa, 0) == windows.BOOL.FALSE) {
+        return error.PipeCreationFailed;
+    }
+    // The parent's read end must not be inheritable; otherwise the child keeps
+    // the pipe open and ReadFile never returns EOF after the child exits.
+    _ = Win32.SetHandleInformation(read_end, Win32.HANDLE_FLAG_INHERIT, 0);
+
+    var si: windows.STARTUPINFOW = std.mem.zeroes(windows.STARTUPINFOW);
+    si.cb = @sizeOf(windows.STARTUPINFOW);
+    si.dwFlags = Win32.STARTF_USESTDHANDLES;
+    si.hStdInput = windows.peb().ProcessParameters.hStdInput;
+    si.hStdOutput = write_end;
+    si.hStdError = write_end;
+
+    var pi: Win32.PROCESS_INFORMATION = undefined;
+    const spawned = Win32.CreateProcessW(
+        exe_path_z.ptr,
+        cmd_w.ptr,
+        null,
+        null,
+        windows.BOOL.TRUE,
+        Win32.CREATE_UNICODE_ENVIRONMENT,
+        env_block.ptr,
+        null,
+        &si,
+        &pi,
+    );
+    if (spawned == windows.BOOL.FALSE) {
+        windows.CloseHandle(read_end);
+        windows.CloseHandle(write_end);
+        return error.CreateProcessFailed;
+    }
+    defer windows.CloseHandle(pi.hProcess);
+    defer windows.CloseHandle(pi.hThread);
+
+    // Close the parent's copy of the write end so ReadFile reaches EOF when
+    // the child exits.
+    windows.CloseHandle(write_end);
+
+    var outputList: std.ArrayListUnmanaged(u8) = .empty;
+    var chunk: [4096]u8 = undefined;
+    while (outputList.items.len < childMaxOutputBytes) {
+        var bytes_read: u32 = 0;
+        const read_ok = Win32.ReadFile(read_end, &chunk, chunk.len, &bytes_read, null);
+        if (read_ok == windows.BOOL.FALSE) break;
+        if (bytes_read == 0) break;
+        outputList.appendSlice(allocator, chunk[0..bytes_read]) catch {};
+    }
+    windows.CloseHandle(read_end);
+
+    _ = Win32.WaitForSingleObject(pi.hProcess, Win32.INFINITE);
+    var exit_code: u32 = 0;
+    _ = Win32.GetExitCodeProcess(pi.hProcess, &exit_code);
+
+    const output = try outputList.toOwnedSlice(allocator);
+
+    // Windows uses the exit code field to report unhandled exception NTSTATUS
+    // values (e.g. 0xC0000005 for access violation). Anything above u8 range
+    // is almost certainly a crash rather than a real process exit.
+    if (exit_code > 255) {
+        return .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = .{ .Unknown = exit_code } };
+    }
+    const code: u8 = @intCast(exit_code);
+    return switch (code) {
+        0 => .{ .status = .pass, .leaked = false, .output = output, .unexpectedTerm = null },
+        childExitSkip => .{ .status = .skip, .leaked = false, .output = output, .unexpectedTerm = null },
+        childExitFail => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = null },
+        childExitLeak => .{ .status = .fail, .leaked = true, .output = output, .unexpectedTerm = null },
+        childExitFailLeak => .{ .status = .fail, .leaked = true, .output = output, .unexpectedTerm = null },
+        else => .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = .{ .Exited = code } },
+    };
+}
+
+/// Builds a Windows environment block by copying the parent's block and
+/// appending `FORBEAR_TEST_RUNNER_CASE=<testName>`. The block is a sequence of
+/// NUL-terminated UTF-16 `name=value` entries, terminated by an extra NUL.
+fn buildChildEnvBlock(allocator: Allocator, testName: []const u8) ![:0]u16 {
+    const parent_env = windows.peb().ProcessParameters.Environment;
+
+    // Walk to the double-NUL terminator. `parent_end` indexes the first of
+    // those two NULs, so `parent_env[0..parent_end+1]` includes the single NUL
+    // that terminates the last existing entry.
+    var parent_end: usize = 0;
+    while (parent_env[parent_end] != 0 or parent_env[parent_end + 1] != 0) : (parent_end += 1) {}
+    const preserved_len = parent_end + 1;
+
+    const entry_utf8 = try std.fmt.allocPrint(allocator, "{s}={s}", .{ childTestEnv, testName });
+    defer allocator.free(entry_utf8);
+
+    const entry_w = try std.unicode.utf8ToUtf16LeAlloc(allocator, entry_utf8);
+    defer allocator.free(entry_w);
+
+    // Layout: <preserved parent (ends with NUL)><entry><NUL><NUL(sentinel)>
+    const logical_len = preserved_len + entry_w.len + 1;
+    const block = try allocator.allocSentinel(u16, logical_len, 0);
+    @memcpy(block[0..preserved_len], parent_env[0..preserved_len]);
+    @memcpy(block[preserved_len .. preserved_len + entry_w.len], entry_w);
+    block[preserved_len + entry_w.len] = 0;
+    return block;
 }
 
 fn runTestWithFork(allocator: Allocator, testName: []const u8) !ChildOutcome {
@@ -411,10 +594,10 @@ const StderrCapture = struct {
                 current_process,
                 &duplicated,
                 0,
-                windows.FALSE,
+                windows.BOOL.FALSE,
                 DUPLICATE_SAME_ACCESS,
             );
-            if (rc == windows.FALSE) return null;
+            if (rc == windows.BOOL.FALSE) return null;
             return .{ .handle = duplicated, .flags = .{ .nonblocking = false } };
         } else {
             const duped = std.c.dup(std.c.STDERR_FILENO);
@@ -707,7 +890,18 @@ const SlowTracker = struct {
 
     fn getNs() u64 {
         if (native_os == .windows) {
-            return @intCast(std.time.nanoTimestamp());
+            const F = struct {
+                var freq: u64 = 0;
+            };
+            if (F.freq == 0) {
+                var raw: windows.LARGE_INTEGER = undefined;
+                _ = windows.ntdll.RtlQueryPerformanceFrequency(&raw);
+                F.freq = @intCast(raw);
+            }
+            var counter: windows.LARGE_INTEGER = undefined;
+            _ = windows.ntdll.RtlQueryPerformanceCounter(&counter);
+            const ticks: u64 = @intCast(counter);
+            return @intCast(@divTrunc(@as(u128, ticks) * 1_000_000_000, @as(u128, F.freq)));
         }
         var ts: std.c.timespec = undefined;
         _ = std.c.clock_gettime(std.c.CLOCK.MONOTONIC, &ts);

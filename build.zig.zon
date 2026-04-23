@@ -18,7 +18,7 @@
             .path = "dependencies/stb_image",
         },
         .zbench = .{
-            .url = "git+https://github.com/hendriknielaender/zBench.git#7069bb9c3e2e4773ff93995a85238b8e08039ba0",
+            .url = "https://github.com/hendriknielaender/zBench/archive/7069bb9c3e2e4773ff93995a85238b8e08039ba0.tar.gz",
             .hash = "zbench-0.11.0-YTdc75klAQDX2m3fa_EHmQA_wJDgBIGiWXXX091e3qUQ",
         },
     },
