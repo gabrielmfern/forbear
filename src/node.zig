@@ -455,6 +455,10 @@ pub const LayoutGlyph = struct {
 pub const Glyphs = struct {
     lineHeight: f32,
     slice: []LayoutGlyph,
+    /// Indices into `slice` where a manual line break was requested before the
+    /// glyph at that index. Ascending; may contain duplicates for consecutive
+    /// breaks. A value equal to `slice.len` marks a trailing blank line.
+    preBreakIndices: []const usize,
 };
 
 /// Utilizies a flat tree structure where ndoes can reference one another by

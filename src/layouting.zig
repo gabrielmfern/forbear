@@ -338,9 +338,25 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
     const lineEnd = node.size[0] - node.fittingBase(.horizontal);
     var cursor: Vec2 = @splat(0.0);
     var lineStartIndex: usize = 0;
+
+    const breaks = glyphs.preBreakIndices;
+    var breakCursor: usize = 0;
+
     switch (node.style.textWrapping) {
         .character => {
             for (glyphs.slice, 0..) |*glyph, index| {
+                while (breakCursor < breaks.len and breaks[breakCursor] == index) : (breakCursor += 1) {
+                    if (index > lineStartIndex) {
+                        try lines.append(arena, .{
+                            .start = lineStartIndex,
+                            .end = index - 1,
+                        });
+                    }
+                    lineStartIndex = index;
+                    cursor[0] = 0.0;
+                    cursor[1] += glyphs.lineHeight;
+                }
+
                 if (cursor[0] + glyph.advance[0] > lineEnd) {
                     try lines.append(arena, .{
                         .start = lineStartIndex,
@@ -361,6 +377,19 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
                 position: Vec2,
             } = null;
             for (glyphs.slice, 0..) |*glyph, index| {
+                while (breakCursor < breaks.len and breaks[breakCursor] == index) : (breakCursor += 1) {
+                    if (index > lineStartIndex) {
+                        try lines.append(arena, .{
+                            .start = lineStartIndex,
+                            .end = index - 1,
+                        });
+                    }
+                    lineStartIndex = index;
+                    cursor[0] = 0.0;
+                    cursor[1] += glyphs.lineHeight;
+                    lastSpaceInfoOpt = null;
+                }
+
                 if (cursor[0] + glyph.advance[0] > lineEnd) {
                     if (lastSpaceInfoOpt) |lastSpaceInfo| {
                         const firstWordGlyph = glyphs.slice[lastSpaceInfo.index + 1];
@@ -395,18 +424,27 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
         },
         else => unreachable,
     }
-    if (lines.getLastOrNull()) |lastLine| {
-        if (lastLine.end != glyphs.slice.len - 1) {
+
+    // Flush any trailing manual breaks past the last glyph so node height
+    // accounts for empty lines at the end of the text.
+    while (breakCursor < breaks.len) : (breakCursor += 1) {
+        cursor[1] += glyphs.lineHeight;
+    }
+
+    if (glyphs.slice.len > 0) {
+        if (lines.getLastOrNull()) |lastLine| {
+            if (lastLine.end != glyphs.slice.len - 1) {
+                try lines.append(arena, .{
+                    .start = lastLine.end + 1,
+                    .end = glyphs.slice.len - 1,
+                });
+            }
+        } else {
             try lines.append(arena, .{
-                .start = lastLine.end + 1,
+                .start = 0,
                 .end = glyphs.slice.len - 1,
             });
         }
-    } else {
-        try lines.append(arena, .{
-            .start = 0,
-            .end = glyphs.slice.len - 1,
-        });
     }
     for (lines.items) |line| {
         const startX = glyphs.slice[line.start].position[0];

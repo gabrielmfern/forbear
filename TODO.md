@@ -47,7 +47,7 @@
 - [x] feature equivalent to display: grid in css
 - [x] linear gradient support
 - [x] images look really bad
-- [ ] support for manual line breaks (`\n`/`\r` in text)
+- [x] support for manual line breaks (`\n`/`\r` in text)
 - [ ] blend mode darken
 - [ ] support for dashed borders
 - [ ] svg support
