@@ -12,6 +12,7 @@ layout(location = 7) in flat uint blendMode;
 layout(location = 8) in flat uint filterType;
 layout(location = 9) in flat int gradientStart;
 layout(location = 10) in flat int gradientEnd;
+layout(location = 11) in flat uint borderStyle;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 1) uniform sampler2D textures[];
@@ -92,7 +93,39 @@ void main() {
 
     float denom = max(max(outerFill, innerFill), 0.0001);
     float mixFactor = clamp(innerFill / denom, 0.0, 1.0);
-    outColor = mix(borderColor, color, mixFactor);
+
+    vec4 effectiveBorderColor = borderColor;
+    if (borderStyle == 1u && mixFactor < 1.0) {
+        float edgePos;
+        float dashSize;
+
+        float distToTop = abs(p.y + halfSize.y);
+        float distToBottom = abs(p.y - halfSize.y);
+        float distToLeft = abs(p.x + halfSize.x);
+        float distToRight = abs(p.x - halfSize.x);
+        float minDist = min(min(distToTop, distToBottom), min(distToLeft, distToRight));
+
+        if (minDist == distToTop) {
+            edgePos = p.x + halfSize.x;
+            dashSize = borderTop * 3.0;
+        } else if (minDist == distToBottom) {
+            edgePos = p.x + halfSize.x;
+            dashSize = borderBottom * 3.0;
+        } else if (minDist == distToLeft) {
+            edgePos = p.y + halfSize.y;
+            dashSize = borderLeft * 3.0;
+        } else {
+            edgePos = p.y + halfSize.y;
+            dashSize = borderRight * 3.0;
+        }
+
+        float pattern = mod(edgePos, dashSize * 2.0);
+        if (pattern > dashSize) {
+            effectiveBorderColor.a = 0.0;
+        }
+    }
+
+    outColor = mix(effectiveBorderColor, color, mixFactor);
     outColor.a *= outerFill;
 
     // .grayscale is enum value 1 in node.zig.

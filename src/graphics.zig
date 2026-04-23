@@ -1851,6 +1851,7 @@ const ElementRenderingData = extern struct {
     gradientEnd: i32,
     blendMode: u32,
     filterType: u32,
+    borderStyle: u32,
     modelViewProjectionMatrix: zmath.Mat,
     size: [2]f32,
 };
@@ -3924,6 +3925,7 @@ pub const Renderer = struct {
                 .gradientEnd = gradientEnd,
                 .blendMode = @intCast(@intFromEnum(node.style.blendMode)),
                 .filterType = @intCast(@intFromEnum(node.style.filter)),
+                .borderStyle = @intCast(@intFromEnum(node.style.borderStyle)),
             };
 
             if (node.style.shadow) |shadow| {
