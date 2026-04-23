@@ -55,10 +55,11 @@ So everything culminates into this project.
 
 Most of everything is still incomplete, needs a lot of work, and looks ugly. That being said, right now we already have:
 - Basic windowing from scratch
-- Rendering pipeline with text, border radius, shadows, proper z-ordering, and other stuff
+- Rendering pipeline with text, border radius, solid/dashed borders, shadows, linear gradients, blend modes (multiply, darken), proper z-ordering, and other stuff
 - A flexbox-inspired layout system with grow/fit, alignment, padding heavily inspired by [Clay](https://github.com/nicbarker/clay)
-- A good starting point for element creation that I don't think is going to change much
-- A very archaic event system that doesn't support much of everything at this point
+- A good starting point for element creation, including component children slotting, that I don't think is going to change much
+- An event system with `mouseDown`/`mouseUp`/`click`, though still missing a lot
+- Page scrolling
 - Some starting points for animation through `useAnimation`, `useTransition` and `useSpringTransition`
 
 ## What still needs work
@@ -67,11 +68,11 @@ Being honest about where things stand:
 
 - Scrolling on a per element basis
 - Images cause stutters
+- Text selection
+- Keying is not stable for elements that can be added/removed
 - The setup work being so cumbersome
-- No component children yet
 - The MacOS windowing code is completely vibe coded and with lots of holes
 - Support for SVGs
-- Support for gradients
 - Plans on accessibility like screen readers and keyboard navigation
 
 See [TODO.md](./TODO.md) for most of everything, and [open questions](./notes/open-questions.md) for design decisions I'm still thinking through.
@@ -79,8 +80,8 @@ See [TODO.md](./TODO.md) for most of everything, and [open questions](./notes/op
 ## Roadmap
 
 1. Build 10 real-world UIs
-    - https://uhoh.com: In progress
-    - https://wayland-book.com: Planned
+    - https://uhoh.com: Done
+    - https://wayland-book.com: In progress
 2. Build real applications with it
 3. Multi-language bindings
     - JSX specially, so it can actually be a good substitute for how I'd use Electron
