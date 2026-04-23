@@ -13,6 +13,7 @@ layout(location = 7) out flat uint blendMode;
 layout(location = 8) out flat uint filterType;
 layout(location = 9) out flat int gradientStart;
 layout(location = 10) out flat int gradientEnd;
+layout(location = 11) out flat uint borderStyle;
 
 struct ElementRenderingData {
     vec4 backgroundColor;
@@ -24,6 +25,7 @@ struct ElementRenderingData {
     int gradientEnd;
     uint blendMode;
     uint filterType;
+    uint borderStyle;
     mat4 modelViewProjectionMatrix;
     vec2 size;
 };
@@ -47,4 +49,5 @@ void main() {
     filterType = d.filterType;
     gradientStart = d.gradientStart;
     gradientEnd = d.gradientEnd;
+    borderStyle = d.borderStyle;
 }

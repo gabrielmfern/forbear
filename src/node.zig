@@ -197,6 +197,11 @@ pub const Filter = enum(u32) {
     grayscale = 1,
 };
 
+pub const BorderStyle = enum(u32) {
+    solid = 0,
+    dashed = 1,
+};
+
 pub const CompleteStyle = struct {
     background: Background,
     blendMode: BlendMode,
@@ -206,6 +211,7 @@ pub const CompleteStyle = struct {
     borderRadius: f32,
     borderColor: Vec4,
     borderWidth: BorderWidth,
+    borderStyle: BorderStyle,
 
     shadow: ?Shadow = null,
 
@@ -321,6 +327,7 @@ pub const Style = struct {
     borderRadius: ?f32 = null,
     borderColor: ?Vec4 = null,
     borderWidth: ?BorderWidth = null,
+    borderStyle: ?BorderStyle = null,
 
     shadow: ?Shadow = null,
 
@@ -362,6 +369,7 @@ pub const Style = struct {
             .borderRadius = self.borderRadius orelse other.borderRadius,
             .borderColor = self.borderColor orelse other.borderColor,
             .borderWidth = self.borderWidth orelse other.borderWidth,
+            .borderStyle = self.borderStyle orelse other.borderStyle,
 
             .shadow = if (self.shadow) |s| s else other.shadow,
 
@@ -405,6 +413,7 @@ pub const Style = struct {
             .borderRadius = self.borderRadius orelse 0.0,
             .borderColor = self.borderColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 },
             .borderWidth = self.borderWidth orelse .all(0.0),
+            .borderStyle = self.borderStyle orelse .solid,
 
             .shadow = self.shadow,
 

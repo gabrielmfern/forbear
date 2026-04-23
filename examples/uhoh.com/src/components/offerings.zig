@@ -50,9 +50,9 @@ pub fn Offering(props: OfferingProps) *const fn (void) void {
             })({});
             forbear.element(.{
                 .borderRadius = 12.0,
-                // TODO: this should be a dashed border
                 .borderWidth = .all(2.0),
                 .borderColor = colors.black,
+                .borderStyle = .dashed,
                 .fontSize = 12.0,
                 .direction = .vertical,
                 .padding = forbear.Padding.block(10.0).withInLine(20.0),
