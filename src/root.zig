@@ -813,16 +813,22 @@ pub fn text(content: []const u8) void {
             handleFrameError(err);
             return;
         });
-        for (ownedContent.items, 0..) |character, i| {
+        var i: usize = 0;
+        while (i < ownedContent.items.len) {
+            const character = ownedContent.items[i];
             if (character == '\r') {
-                if (i < ownedContent.items.len - 1 and ownedContent.items[i + 1] == '\n') {
+                if (i + 1 < ownedContent.items.len and ownedContent.items[i + 1] == '\n') {
                     _ = ownedContent.orderedRemove(i);
+                    i += 1; // skip past the \n now at index i
                 } else {
                     ownedContent.items[i] = '\n';
+                    i += 1;
                 }
-            }
-            if (character == '\n' and i < ownedContent.items.len - 1 and ownedContent.items[i + 1] == '\r') {
+            } else if (character == '\n' and i + 1 < ownedContent.items.len and ownedContent.items[i + 1] == '\r') {
                 _ = ownedContent.orderedRemove(i + 1);
+                i += 1;
+            } else {
+                i += 1;
             }
         }
         effectiveContent = ownedContent.items;
@@ -890,7 +896,6 @@ pub fn text(content: []const u8) void {
             minSize[0] = @max(minSize[0], advance[0]);
             maxSize[1] += lineHeight;
         } else if (style.textWrapping == .none) {
-            maxSize[0] = cursor[0];
             minSize[0] = @max(minSize[0], cursor[0]);
         }
     }
