@@ -42,27 +42,33 @@ pub fn FpsCounter() void {
     });
 }
 
-pub fn useScrolling() f32 {
+pub fn useScrolling() Vec2 {
     const node = forbear.getParentNode() orelse {
         std.log.err("useScrolling must be used within a node, that's within component", .{});
-        return;
+        forbear.handleFrameError(error.NoParentForScrollingHook);
+        return @splat(0.0);
     };
     const measurementOption = forbear.useNodeMeasurement();
     const identity: Vec2 = @splat(0.0);
     const scrollOffset = forbear.useState(Vec2, identity);
+
+    if (forbear.on(.scroll)) |delta| {
+        scrollOffset.* += delta;
+    }
+
     scrollOffset.* = @min(
         @max(scrollOffset.*, identity),
         @max(
-            if (measurementOption) |measurement| 
-                measurement.contentSize - measurement.size 
-            else 
+            if (measurementOption) |measurement|
+                measurement.contentSize - measurement.size
+            else
                 identity,
             identity,
         ),
     );
 
     if (builtin.os.tag == .macos) {
-        node.childrenOffset = scrollOffset.*;
+        node.childrenOffset = -scrollOffset.*;
         return scrollOffset;
     } else {
         const spring = forbear.SpringConfig{
@@ -74,7 +80,7 @@ pub fn useScrolling() f32 {
             forbear.useSpringTransition(scrollOffset.*[0], spring),
             forbear.useSpringTransition(scrollOffset.*[1], spring),
         };
-        node.childrenOffset = aniamtedOffset;
+        node.childrenOffset = -aniamtedOffset;
         return aniamtedOffset;
     }
 }

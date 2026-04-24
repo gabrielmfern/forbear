@@ -5,6 +5,7 @@ pub const c = @import("c");
 
 const forbearBuiltin = @import("builtin.zig");
 pub const FpsCounter = forbearBuiltin.FpsCounter;
+pub const useScrolling = forbearBuiltin.useScrolling;
 pub const Font = @import("font.zig");
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
@@ -62,6 +63,10 @@ pub const Event = union(enum) {
     mouseDown,
     mouseUp,
     click,
+    /// Wheel / trackpad scroll delta in pixels. Delivered to every hovered
+    /// element at the time of the scroll, so consumers can bubble/handle it
+    /// at any level (typically via `useScrolling`).
+    scroll: Vec2,
 };
 
 const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
@@ -91,6 +96,9 @@ mousePosition: Vec2,
 mouseButtonPressed: bool,
 mouseButtonJustPressed: bool,
 mouseButtonJustReleased: bool,
+/// Accumulated wheel/trackpad delta since the last `update()`. Dispatched as
+/// `.scroll` events to hovered elements and then reset inside `update()`.
+pendingScrollDelta: Vec2,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 hoveredElementKeys: std.ArrayList(u64),
 mouseDownElementKeys: std.ArrayList(u64),
@@ -136,6 +144,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .mouseButtonPressed = false,
         .mouseButtonJustPressed = false,
         .mouseButtonJustReleased = false,
+        .pendingScrollDelta = @splat(0.0),
         .previousFrameNodeMeasurements = std.AutoHashMap(u64, Node.Measurement).init(allocator),
         .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .mouseDownElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
@@ -1223,25 +1232,38 @@ pub fn useNextEvent() ?Event {
     return eventQueue.pop();
 }
 
+/// For void variants returns `bool` (was-it-there); for variants with a
+/// payload returns `?PayloadType` (the payload, or `null` when absent).
+pub fn OnResult(comptime eventTag: std.meta.Tag(Event)) type {
+    const PayloadType = @FieldType(Event, @tagName(eventTag));
+    return if (PayloadType == void) bool else ?PayloadType;
+}
+
 /// Returns and consumes a matching event from the current element's pending
 /// event queue. Must be called inside an element body block.
-pub fn on(comptime eventTag: Event) bool {
+pub fn on(comptime eventTag: std.meta.Tag(Event)) OnResult(eventTag) {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 
-    const currentNode = getParentNode() orelse return false;
-    const key = currentNode.key;
+    const PayloadType = @FieldType(Event, @tagName(eventTag));
 
-    const eventQueue = self.pendingEventQueue.getPtr(key) orelse return false;
-
-    for (eventQueue.items, 0..) |event, i| {
-        if (std.meta.activeTag(event) == eventTag) {
-            _ = eventQueue.orderedRemove(i);
-            return true;
+    if (getParentNode()) |currentNode| {
+        if (self.pendingEventQueue.getPtr(currentNode.key)) |eventQueue| {
+            for (eventQueue.items, 0..) |event, i| {
+                if (std.meta.activeTag(event) == eventTag) {
+                    _ = eventQueue.orderedRemove(i);
+                    if (comptime PayloadType == void) {
+                        return true;
+                    } else {
+                        return @field(event, @tagName(eventTag));
+                    }
+                }
+            }
         }
     }
 
-    return false;
+    if (comptime PayloadType == void) return false;
+    return null;
 }
 
 pub fn update() !void {
@@ -1317,6 +1339,9 @@ pub fn update() !void {
                     try pushEvent(node.key, .click);
                 }
             }
+            if (self.pendingScrollDelta[0] != 0.0 or self.pendingScrollDelta[1] != 0.0) {
+                try pushEvent(node.key, .{ .scroll = self.pendingScrollDelta });
+            }
         } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
             try pushEvent(node.key, .mouseOut);
 
@@ -1327,6 +1352,8 @@ pub fn update() !void {
     if (justReleased) {
         self.mouseDownElementKeys.clearRetainingCapacity();
     }
+
+    self.pendingScrollDelta = @splat(0.0);
 
     for (missingHoveredKeys.items) |key| {
         if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
@@ -1448,8 +1475,12 @@ pub fn setWindowHandlers(window: *Window) void {
                     axis;
 
                 switch (shiftAccordingAxis) {
-                    .horizontal => ctx.effectiveScrollPosition[0] += offset,
-                    .vertical => ctx.effectiveScrollPosition[1] += offset,
+                    .horizontal => {
+                        ctx.pendingScrollDelta[0] += offset;
+                    },
+                    .vertical => {
+                        ctx.pendingScrollDelta[1] += offset;
+                    },
                 }
             }
         }).handler,
