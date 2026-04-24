@@ -4077,7 +4077,6 @@ pub const Renderer = struct {
                 const pixelAscent = (node.style.font.ascent() / unitsPerEm) * node.style.fontSize;
 
                 const renderMode = pickRenderMode(self.currentDpi);
-                const supersample = Font.supersampleFor(renderMode);
 
                 // Outer lookup: once per layout box (per font/size/weight/mode combo).
                 const glyphPageKey = TextPipeline.GlyphPageKey{
@@ -4085,7 +4084,7 @@ pub const Renderer = struct {
                     .fontSize = node.style.fontSize,
                     .fontWeight = node.style.fontWeight,
                     .mode = renderMode,
-                    .supersample = supersample,
+                    .supersample = Font.SUPERSAMPLE,
                 };
                 const glyphPageGetResult = try self.textPipeline.glyphPageCache.getOrPut(glyphPageKey);
                 if (!glyphPageGetResult.found_existing) {
@@ -4137,7 +4136,7 @@ pub const Renderer = struct {
                     // every glyph in a line — otherwise an odd supersampled
                     // bitmap_top yields a 0.5 logical offset that round() can
                     // bump up or down per glyph, breaking the baseline.
-                    const supersampleF: f32 = @floatFromInt(supersample);
+                    const supersampleF: f32 = @floatFromInt(Font.SUPERSAMPLE);
                     const left: f32 = @round(@as(f32, @floatFromInt(glyphRenderingData.bitmapLeft)) / supersampleF);
                     const top: f32 = @round(@as(f32, @floatFromInt(glyphRenderingData.bitmapTop)) / supersampleF);
                     const width: f32 = @as(f32, @floatFromInt(glyphRenderingData.bitmapWidth)) / supersampleF;

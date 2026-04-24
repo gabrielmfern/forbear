@@ -397,16 +397,10 @@ pub fn LRU(
 
 pub const RenderMode = enum { lcd, grayscale };
 
-/// Per-mode supersample factor. LCD subpixel rendering is destroyed by the
-/// box-filter downsample (the linear sampler averages adjacent atlas texels
-/// and the per-channel coverages collapse toward grayscale), so we only
-/// supersample the grayscale path that actually benefits from the smoothing.
-pub fn supersampleFor(mode: RenderMode) u32 {
-    return switch (mode) {
-        .lcd => 1,
-        .grayscale => 2,
-    };
-}
+/// Rasterize at 2× the target size and let the linear sampler box-filter the
+/// downsample. On LCD this yields oversampled subpixel with reduced color
+/// fringing; on grayscale it mimics Retina supersampling.
+pub const SUPERSAMPLE: u32 = 2;
 
 pub fn init(allocator: std.mem.Allocator, name: []const u8, memory: []const u8) FreetypeError!@This() {
     if (freetypeLibrary == null) {
@@ -606,8 +600,8 @@ pub fn rasterize(
     size: f32,
     mode: RenderMode,
 ) FreetypeError!RasterizedGlyph {
-    const supersample = supersampleFor(mode);
-    const pixelSize: c_uint = @intFromFloat(@round(size * @as(f32, @floatFromInt(supersample))));
+    const supersampleF: f32 = @floatFromInt(SUPERSAMPLE);
+    const pixelSize: c_uint = @intFromFloat(@round(size * supersampleF));
     try ensureNoError(c.FT_Set_Pixel_Sizes(self.handle, pixelSize, pixelSize));
 
     const loadFlags: c_int = switch (mode) {
