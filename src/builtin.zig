@@ -1,6 +1,8 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const forbear = @import("root.zig");
 
+const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
 
 pub fn FpsCounter() void {
@@ -40,8 +42,39 @@ pub fn FpsCounter() void {
     });
 }
 
-pub fn useScrolling() void {
-    const parentNode = forbear.getParentNode();
-    _ = parentNode;
-}
+pub fn useScrolling() f32 {
+    const node = forbear.getParentNode() orelse {
+        std.log.err("useScrolling must be used within a node, that's within component", .{});
+        return;
+    };
+    const measurementOption = forbear.useNodeMeasurement();
+    const identity: Vec2 = @splat(0.0);
+    const scrollOffset = forbear.useState(Vec2, identity);
+    scrollOffset.* = @min(
+        @max(scrollOffset.*, identity),
+        @max(
+            if (measurementOption) |measurement| 
+                measurement.contentSize - measurement.size 
+            else 
+                identity,
+            identity,
+        ),
+    );
 
+    if (builtin.os.tag == .macos) {
+        node.childrenOffset = scrollOffset.*;
+        return scrollOffset;
+    } else {
+        const spring = forbear.SpringConfig{
+            .stiffness = 320.0,
+            .damping = 32.0,
+            .mass = 1.0,
+        };
+        const aniamtedOffset = Vec2{
+            forbear.useSpringTransition(scrollOffset.*[0], spring),
+            forbear.useSpringTransition(scrollOffset.*[1], spring),
+        };
+        node.childrenOffset = aniamtedOffset;
+        return aniamtedOffset;
+    }
+}
