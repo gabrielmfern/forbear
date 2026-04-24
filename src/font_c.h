@@ -4,6 +4,7 @@
 #include <freetype/ftbitmap.h>
 #include <freetype/ftcolor.h>
 #include <freetype/ftlcdfil.h>
+#include <freetype/ftmodapi.h>
 #include <freetype/ftsizes.h>
 #include <freetype/ftstroke.h>
 #include <freetype/fttrigon.h>

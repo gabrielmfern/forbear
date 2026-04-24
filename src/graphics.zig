@@ -48,6 +48,13 @@ const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
 
+/// Pick the font render mode from monitor DPI. HiDPI panels (>=140 DPI on both
+/// axes) get macOS-style grayscale AA; everything else keeps the LCD subpixel
+/// path.
+fn pickRenderMode(dpi: [2]u32) Font.RenderMode {
+    return if (@min(dpi[0], dpi[1]) >= 140) .grayscale else .lcd;
+}
+
 /// Build the sorted list of draw commands for a given node tree and viewport.
 /// Culls nodes outside the viewport, emits element/shadow/text commands,
 /// and sorts by (z, kind) so shadows draw before elements before text.
@@ -1205,16 +1212,23 @@ const FontTextureAtlas = struct {
         h: f32,
     };
 
-    /// Upload LCD/subpixel glyph data to the texture atlas.
-    /// The input data is in FreeType LCD format (3 bytes per pixel: R, G, B).
-    /// uploadWidth is the width in bytes from FreeType (= pixel_width * 3 for LCD mode).
-    /// The texture atlas uses RGBA format (4 bytes per pixel) for dual-source blending.
+    /// Upload a rasterized glyph bitmap into the atlas. The input layout
+    /// depends on `mode`:
+    /// - `.lcd`: FreeType LCD format — 3 bytes per pixel (R, G, B subpixel
+    ///   coverage). `uploadWidth` is `pixel_width * 3`.
+    /// - `.grayscale`: 1 byte per pixel (coverage). `uploadWidth` is the
+    ///   pixel width directly.
+    /// The atlas is RGBA8; LCD stores per-subpixel coverage in RGB with A =
+    /// max(R,G,B), grayscale replicates the single coverage byte into RGB and
+    /// uses it as A as well, so the shader can always sample `.rgb` and get
+    /// the right thing.
     fn upload(
         self: *@This(),
         data: ?[]u8,
         uploadWidth: usize,
         uploadHeight: usize,
         pitch: usize,
+        mode: Font.RenderMode,
     ) !TextureCoordinates {
         if (data != null) {
             std.debug.assert(pitch * uploadHeight <= data.?.len);
@@ -1222,9 +1236,10 @@ const FontTextureAtlas = struct {
         // No free rectangles available in the texture atlas
         std.debug.assert(self.freeRectangles.items.len > 0);
 
-        // FreeType LCD mode: uploadWidth is 3x the actual pixel width (RGB bytes)
-        // Convert to actual pixel width for texture storage
-        const pixelWidth = uploadWidth / 3;
+        const pixelWidth = switch (mode) {
+            .lcd => uploadWidth / 3,
+            .grayscale => uploadWidth,
+        };
 
         const freeRectangleIndex = self.getBestFreeRectangle(
             @intCast(pixelWidth),
@@ -1262,21 +1277,31 @@ const FontTextureAtlas = struct {
             );
         }
 
-        // Convert RGB (3 bytes per pixel from FreeType LCD) to RGBA (4 bytes per pixel)
-        // rowPitch is in bytes, and we have 4 bytes per pixel (RGBA)
         for (0..uploadHeight) |y| {
             const dest_row_start = (freeRectangle.v + y) * self.rowPitch + freeRectangle.u * 4;
             if (data != null) {
                 const src_row_start = y * pitch;
-                for (0..pixelWidth) |x| {
-                    const src_offset = src_row_start + x * 3;
-                    const dest_offset = dest_row_start + x * 4;
-                    // Copy RGB from FreeType LCD bitmap
-                    self.mapped[dest_offset + 0] = data.?[src_offset + 0]; // R
-                    self.mapped[dest_offset + 1] = data.?[src_offset + 1]; // G
-                    self.mapped[dest_offset + 2] = data.?[src_offset + 2]; // B
-                    // Alpha = max of RGB coverages (for discard test and general alpha)
-                    self.mapped[dest_offset + 3] = @max(@max(data.?[src_offset + 0], data.?[src_offset + 1]), data.?[src_offset + 2]);
+                switch (mode) {
+                    .lcd => {
+                        for (0..pixelWidth) |x| {
+                            const src_offset = src_row_start + x * 3;
+                            const dest_offset = dest_row_start + x * 4;
+                            self.mapped[dest_offset + 0] = data.?[src_offset + 0];
+                            self.mapped[dest_offset + 1] = data.?[src_offset + 1];
+                            self.mapped[dest_offset + 2] = data.?[src_offset + 2];
+                            self.mapped[dest_offset + 3] = @max(@max(data.?[src_offset + 0], data.?[src_offset + 1]), data.?[src_offset + 2]);
+                        }
+                    },
+                    .grayscale => {
+                        for (0..pixelWidth) |x| {
+                            const coverage = data.?[src_row_start + x];
+                            const dest_offset = dest_row_start + x * 4;
+                            self.mapped[dest_offset + 0] = coverage;
+                            self.mapped[dest_offset + 1] = coverage;
+                            self.mapped[dest_offset + 2] = coverage;
+                            self.mapped[dest_offset + 3] = coverage;
+                        }
+                    },
                 }
             } else {
                 for (0..pixelWidth) |x| {
@@ -2645,6 +2670,10 @@ const TextPipeline = struct {
         fontSize: f32,
         fontWeight: u32,
         fontKey: u64,
+        mode: Font.RenderMode,
+        // Keyed even though it's constant today, so switching to a dynamic
+        // value later doesn't silently reuse bitmaps at the wrong sample rate.
+        supersample: u32,
     };
 
     const GlyphPage = Font.LRU(c_uint, GlyphRenderingData, 256, std.hash_map.AutoContext(c_uint));
@@ -2654,6 +2683,10 @@ const TextPipeline = struct {
         color: Vec4,
         uvOffset: [2]f32,
         uvSize: [2]f32,
+    };
+
+    const TextPushConstants = extern struct {
+        gamma: f32,
     };
 
     const textVertexShader: []const u32 = @ptrCast(@alignCast(@embedFile("text_vertex_shader")));
@@ -2754,6 +2787,12 @@ const TextPipeline = struct {
             &descriptorSetLayout,
         ));
 
+        const pushConstantRange = c.VkPushConstantRange{
+            .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .offset = 0,
+            .size = @sizeOf(TextPushConstants),
+        };
+
         var pipelineLayout: c.VkPipelineLayout = undefined;
         try ensureNoError(c.vkCreatePipelineLayout(
             logicalDevice,
@@ -2763,8 +2802,8 @@ const TextPipeline = struct {
                 .flags = 0,
                 .setLayoutCount = 1,
                 .pSetLayouts = &descriptorSetLayout,
-                .pushConstantRangeCount = 0,
-                .pPushConstantRanges = null,
+                .pushConstantRangeCount = 1,
+                .pPushConstantRanges = &pushConstantRange,
             },
             null,
             &pipelineLayout,
@@ -2832,11 +2871,8 @@ const TextPipeline = struct {
                     .pNext = null,
                     .flags = 0,
                 },
-                // Dual-source blending for subpixel text rendering:
-                // Fragment shader outputs two colors at location 0 (index 0 and index 1)
-                // - index 0: pre-multiplied text color (text_color.rgb * coverage.rgb)
-                // - index 1: blend weights (text_color.a * coverage.rgb for per-channel blending)
-                // Blend equation: result = src * ONE + dst * (1 - src1_color)
+                // Premultiplied alpha blending. The fragment shader outputs
+                // color * coverage and scalar coverage * alpha in `a`.
                 .pColorBlendState = &c.VkPipelineColorBlendStateCreateInfo{
                     .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
                     .pNext = null,
@@ -2847,12 +2883,11 @@ const TextPipeline = struct {
                     .pAttachments = &c.VkPipelineColorBlendAttachmentState{
                         .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
                         .blendEnable = c.VK_TRUE,
-                        // Dual-source blending: use SRC1_COLOR from fragment shader's second output
                         .srcColorBlendFactor = c.VK_BLEND_FACTOR_ONE,
-                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
+                        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                         .colorBlendOp = c.VK_BLEND_OP_ADD,
                         .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
-                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
+                        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                         .alphaBlendOp = c.VK_BLEND_OP_ADD,
                     },
                     .blendConstants = .{ 0.0, 0.0, 0.0, 0.0 },
@@ -2924,8 +2959,10 @@ const TextPipeline = struct {
         var sampler: c.VkSampler = undefined;
         try ensureNoError(c.vkCreateSampler(logicalDevice, &c.VkSamplerCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .magFilter = c.VK_FILTER_NEAREST,
-            .minFilter = c.VK_FILTER_NEAREST,
+            // Linear filtering is what turns the 2x supersampled atlas region
+            // into a proper box-filtered downsample at sample time.
+            .magFilter = c.VK_FILTER_LINEAR,
+            .minFilter = c.VK_FILTER_LINEAR,
             .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -2992,6 +3029,7 @@ const TextPipeline = struct {
         frameIndex: usize,
         commandBuffer: c.VkCommandBuffer,
         rectangleModel: *Model,
+        mode: Font.RenderMode,
     ) void {
         c.vkCmdBindPipeline(
             commandBuffer,
@@ -3008,6 +3046,21 @@ const TextPipeline = struct {
             &self.descriptorSets[frameIndex],
             0,
             null,
+        );
+
+        const pushConstants = TextPushConstants{
+            .gamma = switch (mode) {
+                .lcd => 1.0 / 1.8,
+                .grayscale => 1.0 / 1.43,
+            },
+        };
+        c.vkCmdPushConstants(
+            commandBuffer,
+            self.pipelineLayout,
+            c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            0,
+            @sizeOf(TextPushConstants),
+            &pushConstants,
         );
 
         c.vkCmdBindVertexBuffers(
@@ -3099,6 +3152,10 @@ pub const Renderer = struct {
     frameRateCapper: FrameRateCapper,
     executingFrame: bool,
     framesRenderedInSwapchain: usize,
+
+    /// Used to pick the font rendering mode. Updated via `handleResize` so the
+    /// renderer always has a current value before a frame is built.
+    currentDpi: [2]u32,
 
     fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
         std.log.debug("swapchain recreation has began", .{});
@@ -3643,15 +3700,22 @@ pub const Renderer = struct {
             .framesRenderedInSwapchain = 0,
             .executingFrame = false,
             .frameRateCapper = FrameRateCapper{},
+            .currentDpi = window.dpi,
         };
     }
 
-    pub fn handleResize(self: *Self, width: u32, height: u32) !void {
+    pub fn handleResize(self: *Self, width: u32, height: u32, dpi: [2]u32) !void {
         const io = root.getContext().io;
         self.mutex.lockUncancelable(io);
         defer self.mutex.unlock(io);
         try self.stallForFrames();
         try self.flushFrame();
+        self.currentDpi = dpi;
+        std.log.debug("renderer DPI is now {d}x{d}, picking {s} text mode", .{
+            dpi[0],
+            dpi[1],
+            @tagName(pickRenderMode(dpi)),
+        });
         try self.recreateSwapchain(width, height);
     }
 
@@ -3998,11 +4062,15 @@ pub const Renderer = struct {
                 const unitsPerEm: f32 = @floatFromInt(node.style.font.unitsPerEm());
                 const pixelAscent = (node.style.font.ascent() / unitsPerEm) * node.style.fontSize;
 
-                // Outer lookup: once per layout box (per font/size/weight/dpi combo)
+                const renderMode = pickRenderMode(self.currentDpi);
+
+                // Outer lookup: once per layout box (per font/size/weight/mode combo).
                 const glyphPageKey = TextPipeline.GlyphPageKey{
                     .fontKey = node.style.font.key,
                     .fontSize = node.style.fontSize,
                     .fontWeight = node.style.fontWeight,
+                    .mode = renderMode,
+                    .supersample = Font.SUPERSAMPLE,
                 };
                 const glyphPageGetResult = try self.textPipeline.glyphPageCache.getOrPut(glyphPageKey);
                 if (!glyphPageGetResult.found_existing) {
@@ -4021,6 +4089,7 @@ pub const Renderer = struct {
                             const rasterizedGlyph = try node.style.font.rasterize(
                                 glyph.index,
                                 node.style.fontSize,
+                                renderMode,
                             );
 
                             const textureCoordinates = try self.textPipeline.fontTextureAtlas.upload(
@@ -4028,8 +4097,12 @@ pub const Renderer = struct {
                                 @intCast(rasterizedGlyph.width),
                                 @intCast(rasterizedGlyph.height),
                                 @intCast(@abs(rasterizedGlyph.pitch)),
+                                renderMode,
                             );
-                            const pixelWidth = rasterizedGlyph.width / 3;
+                            const pixelWidth = switch (renderMode) {
+                                .lcd => rasterizedGlyph.width / 3,
+                                .grayscale => rasterizedGlyph.width,
+                            };
                             const data = TextPipeline.GlyphRenderingData{
                                 .bitmapTop = @intCast(rasterizedGlyph.top),
                                 .bitmapLeft = @intCast(rasterizedGlyph.left),
@@ -4042,10 +4115,14 @@ pub const Renderer = struct {
                         }
                     };
 
-                    const left: f32 = @floatFromInt(glyphRenderingData.bitmapLeft);
-                    const top: f32 = @floatFromInt(glyphRenderingData.bitmapTop);
-                    const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
-                    const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
+                    // Everything coming out of FreeType is in supersampled
+                    // pixel space. The quad on screen is at logical pixel
+                    // size, the UVs still point at the full 2x atlas region.
+                    const supersampleF: f32 = @floatFromInt(Font.SUPERSAMPLE);
+                    const left: f32 = @as(f32, @floatFromInt(glyphRenderingData.bitmapLeft)) / supersampleF;
+                    const top: f32 = @as(f32, @floatFromInt(glyphRenderingData.bitmapTop)) / supersampleF;
+                    const width: f32 = @as(f32, @floatFromInt(glyphRenderingData.bitmapWidth)) / supersampleF;
+                    const height: f32 = @as(f32, @floatFromInt(glyphRenderingData.bitmapHeight)) / supersampleF;
 
                     self.textPipeline.glyphs.mapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
                         .modelViewProjectionMatrix = zmath.mul(
@@ -4156,6 +4233,7 @@ pub const Renderer = struct {
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,
+                    pickRenderMode(self.currentDpi),
                 ),
             }
         }

@@ -395,12 +395,22 @@ pub fn LRU(
     };
 }
 
+pub const RenderMode = enum { lcd, grayscale };
+
+pub const SUPERSAMPLE: u32 = 2;
+
 pub fn init(allocator: std.mem.Allocator, name: []const u8, memory: []const u8) FreetypeError!@This() {
     if (freetypeLibrary == null) {
         try ensureNoError(c.FT_Init_FreeType(&freetypeLibrary));
         // Enable LCD filtering for subpixel rendering to reduce color fringes.
         // FreeType must be built with FT_CONFIG_OPTION_SUBPIXEL_RENDERING enabled.
         try ensureNoError(c.FT_Library_SetLcdFilter(freetypeLibrary, c.FT_LCD_FILTER_DEFAULT));
+        // Turn stem darkening on for all hinting backends. The property is a
+        // double negative: `no-stem-darkening = 0` means darkening is enabled.
+        const no_darkening: c.FT_Bool = 0;
+        _ = c.FT_Property_Set(freetypeLibrary, "cff", "no-stem-darkening", &no_darkening);
+        _ = c.FT_Property_Set(freetypeLibrary, "autofitter", "no-stem-darkening", &no_darkening);
+        _ = c.FT_Property_Set(freetypeLibrary, "truetype", "no-stem-darkening", &no_darkening);
     }
     const kbtsContext = c.kbts_CreateShapeContext(null, null);
     var face: c.FT_Face = undefined;
@@ -585,21 +595,26 @@ pub fn rasterize(
     self: @This(),
     glyphIndex: c_uint,
     size: f32,
+    mode: RenderMode,
 ) FreetypeError!RasterizedGlyph {
-    try ensureNoError(c.FT_Set_Pixel_Sizes(
-        self.handle,
-        @intFromFloat(@round(size)),
-        @intFromFloat(@round(size)),
-        // @intCast(dpi[0]),
-        // @intCast(dpi[1]),
-    ));
+    const supersampleF: f32 = @floatFromInt(SUPERSAMPLE);
+    const pixelSize: c_uint = @intFromFloat(@round(size * supersampleF));
+    try ensureNoError(c.FT_Set_Pixel_Sizes(self.handle, pixelSize, pixelSize));
 
-    try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, c.FT_LOAD_TARGET_LCD));
+    const loadFlags: c_int = switch (mode) {
+        .lcd => c.FT_LOAD_TARGET_LCD,
+        // Light hinting preserves glyph shape on HiDPI — matches the
+        // macOS-style grayscale path.
+        .grayscale => c.FT_LOAD_TARGET_LIGHT,
+    };
+    try ensureNoError(c.FT_Load_Glyph(self.handle, glyphIndex, loadFlags));
     const glyph = self.handle.*.glyph;
     std.debug.assert(glyph != null);
-    // Use LCD rendering mode for subpixel anti-aliasing
-    // This produces a bitmap with 3x horizontal resolution (one byte per R, G, B subpixel)
-    try ensureNoError(c.FT_Render_Glyph(glyph, c.FT_RENDER_MODE_LCD));
+    const renderMode: c_uint = switch (mode) {
+        .lcd => c.FT_RENDER_MODE_LCD,
+        .grayscale => c.FT_RENDER_MODE_NORMAL,
+    };
+    try ensureNoError(c.FT_Render_Glyph(glyph, renderMode));
 
     return RasterizedGlyph{
         .bitmap = if (glyph.*.bitmap.buffer != null)

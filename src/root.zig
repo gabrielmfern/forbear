@@ -1331,9 +1331,8 @@ pub fn setWindowHandlers(window: *Window) void {
     window.handlers.resize = .{
         .function = &(struct {
             fn handler(_: *Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
-                _ = dpi;
                 const ctx: *Context = @ptrCast(@alignCast(data));
-                ctx.renderer.handleResize(width, height) catch |err| {
+                ctx.renderer.handleResize(width, height, dpi) catch |err| {
                     std.log.err("Renderer failed to handle resize: {}", .{err});
                 };
             }
