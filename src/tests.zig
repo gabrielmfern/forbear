@@ -5642,7 +5642,9 @@ test "useNodeMeasurement reflects most recent completed frame across three frame
         forbear.element(.{
             .width = .{ .fixed = 100.0 },
             .height = .{ .fixed = 50.0 },
-        })({ _ = forbear.useNodeMeasurement(); });
+        })({
+            _ = forbear.useNodeMeasurement();
+        });
         _ = try forbear.layout();
     });
 
@@ -5650,7 +5652,9 @@ test "useNodeMeasurement reflects most recent completed frame across three frame
         forbear.element(.{
             .width = .{ .fixed = 200.0 },
             .height = .{ .fixed = 80.0 },
-        })({ _ = forbear.useNodeMeasurement(); });
+        })({
+            _ = forbear.useNodeMeasurement();
+        });
         _ = try forbear.layout();
     });
 
@@ -6171,4 +6175,3 @@ test "contentSize for a leaf element is zero" {
         try std.testing.expectApproxEqAbs(@as(f32, 0.0), root.contentSize[1], 0.001);
     });
 }
-
