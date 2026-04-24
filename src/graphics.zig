@@ -1222,6 +1222,12 @@ const FontTextureAtlas = struct {
     /// max(R,G,B), grayscale replicates the single coverage byte into RGB and
     /// uses it as A as well, so the shader can always sample `.rgb` and get
     /// the right thing.
+    ///
+    /// Every glyph gets a one-texel transparent border. The linear sampler
+    /// reads neighboring texels at quad edges, so without padding it would
+    /// bleed in coverage from the adjacent glyph. The border is zero (the
+    /// atlas is memset at init and each allocation reserves its own padded
+    /// rect), so the filter fades cleanly to nothing at the glyph edge.
     fn upload(
         self: *@This(),
         data: ?[]u8,
@@ -1241,44 +1247,52 @@ const FontTextureAtlas = struct {
             .grayscale => uploadWidth,
         };
 
+        const padding: usize = 1;
+        const allocWidth = pixelWidth + 2 * padding;
+        const allocHeight = uploadHeight + 2 * padding;
+
         const freeRectangleIndex = self.getBestFreeRectangle(
-            @intCast(pixelWidth),
-            @intCast(uploadHeight),
+            @intCast(allocWidth),
+            @intCast(allocHeight),
         ) orelse return error.MaximumTextureAtlasSizeReached;
         const freeRectangle = self.freeRectangles.orderedRemove(freeRectangleIndex);
-        std.log.debug("Uploading glyph to texture atlas at ({d}, {d}) size ({d}x{d})", .{
+        std.log.debug("Uploading glyph to texture atlas at ({d}, {d}) size ({d}x{d}) + {d}px padding", .{
             freeRectangle.u,
             freeRectangle.v,
             pixelWidth,
             uploadHeight,
+            padding,
         });
         // we share the remaining space in the free rectangle in a way that this first one has the
         // most area
-        if (freeRectangle.width > pixelWidth) {
+        if (freeRectangle.width > allocWidth) {
             try self.freeRectangles.append(
                 self.allocator,
                 FreeRectangle{
-                    .u = freeRectangle.u + pixelWidth,
+                    .u = freeRectangle.u + allocWidth,
                     .v = freeRectangle.v,
-                    .width = freeRectangle.width - pixelWidth,
+                    .width = freeRectangle.width - allocWidth,
                     .height = freeRectangle.height,
                 },
             );
         }
-        if (freeRectangle.height > uploadHeight) {
+        if (freeRectangle.height > allocHeight) {
             try self.freeRectangles.append(
                 self.allocator,
                 FreeRectangle{
                     .u = freeRectangle.u,
-                    .v = freeRectangle.v + uploadHeight,
-                    .width = pixelWidth,
-                    .height = freeRectangle.height - uploadHeight,
+                    .v = freeRectangle.v + allocHeight,
+                    .width = allocWidth,
+                    .height = freeRectangle.height - allocHeight,
                 },
             );
         }
 
+        const glyphU = freeRectangle.u + padding;
+        const glyphV = freeRectangle.v + padding;
+
         for (0..uploadHeight) |y| {
-            const dest_row_start = (freeRectangle.v + y) * self.rowPitch + freeRectangle.u * 4;
+            const dest_row_start = (glyphV + y) * self.rowPitch + glyphU * 4;
             if (data != null) {
                 const src_row_start = y * pitch;
                 switch (mode) {
@@ -1315,8 +1329,8 @@ const FontTextureAtlas = struct {
         }
 
         return .{
-            .u = @as(f32, @floatFromInt(freeRectangle.u)),
-            .v = @as(f32, @floatFromInt(freeRectangle.v)),
+            .u = @as(f32, @floatFromInt(glyphU)),
+            .v = @as(f32, @floatFromInt(glyphV)),
             .w = @as(f32, @floatFromInt(pixelWidth)),
             .h = @as(f32, @floatFromInt(uploadHeight)),
         };
