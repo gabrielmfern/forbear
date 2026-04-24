@@ -5606,3 +5606,208 @@ test "useNodeMeasurement does not crash when tracked element disappears in next 
     });
 }
 
+test "contentSize equals size when children fit" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300.0 },
+            .height = .{ .fixed = 200.0 },
+            .direction = .horizontal,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({});
+            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+
+        try std.testing.expectApproxEqAbs(@as(f32, 200.0), root.contentSize[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 50.0), root.contentSize[1], 0.001);
+    });
+}
+
+test "contentSize exceeds size when children overflow horizontally" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 100.0 },
+            .direction = .horizontal,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 300.0 }, .height = .{ .fixed = 50.0 } })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+
+        try std.testing.expectApproxEqAbs(@as(f32, 300.0), root.contentSize[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 50.0), root.contentSize[1], 0.001);
+    });
+}
+
+test "contentSize exceeds size when children overflow vertically" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 100.0 },
+            .direction = .vertical,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 80.0 } })({});
+            forbear.element(.{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 80.0 } })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+
+        try std.testing.expectApproxEqAbs(@as(f32, 50.0), root.contentSize[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 160.0), root.contentSize[1], 0.001);
+    });
+}
+
+test "contentSize ignores fixed-placement children" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 100.0 },
+            .direction = .horizontal,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 50.0 },
+                .height = .{ .fixed = 50.0 },
+            })({});
+            // Viewport-pinned: should not stretch the parent's contentSize.
+            forbear.element(.{
+                .width = .{ .fixed = 9999.0 },
+                .height = .{ .fixed = 9999.0 },
+                .placement = .{ .fixed = .{ 0, 0 } },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+
+        try std.testing.expectApproxEqAbs(@as(f32, 50.0), root.contentSize[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 50.0), root.contentSize[1], 0.001);
+    });
+}
+
+test "contentSize is exposed through useNodeMeasurement" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 100.0 },
+            .direction = .horizontal,
+        })({
+            _ = forbear.useNodeMeasurement();
+            forbear.element(.{ .width = .{ .fixed = 400.0 }, .height = .{ .fixed = 40.0 } })({});
+        });
+        _ = try forbear.layout();
+    });
+
+    var observed: Vec2 = @splat(-1.0);
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 100.0 },
+            .direction = .horizontal,
+        })({
+            if (forbear.useNodeMeasurement()) |m| observed = m.contentSize;
+            forbear.element(.{ .width = .{ .fixed = 400.0 }, .height = .{ .fixed = 40.0 } })({});
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectApproxEqAbs(@as(f32, 400.0), observed[0], 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 40.0), observed[1], 0.001);
+}
+
+test "contentSize ignores relative-placement children" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 100.0 },
+            .direction = .horizontal,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 50.0 },
+                .height = .{ .fixed = 50.0 },
+            })({});
+            // Parent-anchored overlay (e.g. tooltip): should not stretch the
+            // parent's contentSize even though it sits at a huge offset.
+            forbear.element(.{
+                .width = .{ .fixed = 500.0 },
+                .height = .{ .fixed = 500.0 },
+                .placement = .{ .relative = .{ 400, 400 } },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+
+        try std.testing.expectApproxEqAbs(@as(f32, 50.0), root.contentSize[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 50.0), root.contentSize[1], 0.001);
+    });
+}
+
+test "contentSize for a leaf element is zero" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 50.0 },
+        })({});
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+
+        try std.testing.expectApproxEqAbs(@as(f32, 0.0), root.contentSize[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.0), root.contentSize[1], 0.001);
+    });
+}
+

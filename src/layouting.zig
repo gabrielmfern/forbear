@@ -691,6 +691,27 @@ pub fn layout() !*NodeTree {
             }
         }
 
+        // Content-size pass: the bounding extent of each node's flowing
+        // descendants, in the node's local coordinate space (i.e. relative to
+        // `node.position`). Computed once positions are final so callers can
+        // use it to clamp scroll offsets.
+        var contentWalker = context.nodeTree.walk();
+        while (contentWalker.next()) |node| {
+            var contentSize: Vec2 = @splat(0.0);
+            var childIndexOption = node.firstChild;
+            while (childIndexOption) |childIndex| {
+                const child = context.nodeTree.at(childIndex);
+                if (child.style.placement == .flow) {
+                    const right = child.position[0] + child.size[0] - node.position[0];
+                    const bottom = child.position[1] + child.size[1] - node.position[1];
+                    contentSize[0] = @max(contentSize[0], right);
+                    contentSize[1] = @max(contentSize[1], bottom);
+                }
+                childIndexOption = child.nextSibling;
+            }
+            node.contentSize = contentSize;
+        }
+
         // Compute clip rects for nodes with constrained size and overflowing children
         var clipWalker = context.nodeTree.walk();
         while (clipWalker.next()) |node| {
