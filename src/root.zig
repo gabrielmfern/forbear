@@ -601,8 +601,19 @@ fn frameEnd(block: void) anyerror!void {
 
     var iterator = self.previousFrameNodeMeasurements.iterator();
     while (iterator.next()) |entry| {
+        if (self.nodeTree.list.items.len - 1 < entry.value_ptr.index) {
+            // Node was removed, so we should remove the measurement as well
+            _ = self.previousFrameNodeMeasurements.remove(entry.key_ptr.*);
+            continue;
+        }
         const node = self.nodeTree.at(entry.value_ptr.index);
+        if (node.key != entry.key_ptr.*) {
+            // Node was removed, so we should remove the measurement as well
+            _ = self.previousFrameNodeMeasurements.remove(entry.key_ptr.*);
+            continue;
+        }
         entry.value_ptr.size = node.size;
+        entry.value_ptr.position = node.position;
         entry.value_ptr.maxSize = node.maxSize;
         entry.value_ptr.minSize = node.minSize;
         entry.value_ptr.size = node.size;
