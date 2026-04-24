@@ -5364,3 +5364,245 @@ test "buildDrawCommands: three-level clip stack produces monotonically tighter b
         try std.testing.expectEqual(@Vector(4, f32){ 0, 0, 100, 100 }, clips[3].?);
     });
 }
+
+// useNodeMeasurement tests
+
+test "useNodeMeasurement returns null on first frame" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var sawMeasurement = false;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 50.0 },
+        })({
+            if (forbear.useNodeMeasurement()) |_| {
+                sawMeasurement = true;
+            }
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expect(!sawMeasurement);
+}
+
+test "useNodeMeasurement returns previous frame's resolved size" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 50.0 },
+        })({
+            _ = forbear.useNodeMeasurement();
+        });
+        _ = try forbear.layout();
+    });
+
+    var observedSize: Vec2 = @splat(-1.0);
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 50.0 },
+        })({
+            if (forbear.useNodeMeasurement()) |m| observedSize = m.size;
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectApproxEqAbs(@as(f32, 100.0), observedSize[0], 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 50.0), observedSize[1], 0.001);
+}
+
+test "useNodeMeasurement returns previous frame's resolved position" {
+    // EXPOSES BUG: frameEnd's update loop never copies `position` (the `size`
+    // assignment is duplicated instead), and the fresh-entry path in
+    // useNodeMeasurement only sets `index`. `position` is therefore permanently
+    // uninitialized. This test expects the correct behavior.
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 200.0 },
+            .padding = .all(30.0),
+            .direction = .horizontal,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 40.0 },
+            })({
+                _ = forbear.useNodeMeasurement();
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    var observedPosition: Vec2 = @splat(-1.0);
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 200.0 },
+            .padding = .all(30.0),
+            .direction = .horizontal,
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 40.0 },
+                .height = .{ .fixed = 40.0 },
+            })({
+                if (forbear.useNodeMeasurement()) |m| observedPosition = m.position;
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    // Root sits at (0, 0) with padding 30 on all sides, child inherits that offset.
+    try std.testing.expectApproxEqAbs(@as(f32, 30.0), observedPosition[0], 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 30.0), observedPosition[1], 0.001);
+}
+
+test "useNodeMeasurement reflects most recent completed frame across three frames" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 50.0 },
+        })({ _ = forbear.useNodeMeasurement(); });
+        _ = try forbear.layout();
+    });
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 80.0 },
+        })({ _ = forbear.useNodeMeasurement(); });
+        _ = try forbear.layout();
+    });
+
+    var observedSize: Vec2 = @splat(-1.0);
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 80.0 },
+        })({
+            if (forbear.useNodeMeasurement()) |m| observedSize = m.size;
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectApproxEqAbs(@as(f32, 200.0), observedSize[0], 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 80.0), observedSize[1], 0.001);
+}
+
+test "useNodeMeasurement tracks sibling elements independently" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 500.0 },
+            .height = .{ .fixed = 200.0 },
+            .direction = .horizontal,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({
+                _ = forbear.useNodeMeasurement();
+            });
+            forbear.element(.{ .width = .{ .fixed = 200.0 }, .height = .{ .fixed = 80.0 } })({
+                _ = forbear.useNodeMeasurement();
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    var firstSize: Vec2 = @splat(-1.0);
+    var secondSize: Vec2 = @splat(-1.0);
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 500.0 },
+            .height = .{ .fixed = 200.0 },
+            .direction = .horizontal,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({
+                if (forbear.useNodeMeasurement()) |m| firstSize = m.size;
+            });
+            forbear.element(.{ .width = .{ .fixed = 200.0 }, .height = .{ .fixed = 80.0 } })({
+                if (forbear.useNodeMeasurement()) |m| secondSize = m.size;
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectApproxEqAbs(@as(f32, 100.0), firstSize[0], 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 50.0), firstSize[1], 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 200.0), secondSize[0], 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 80.0), secondSize[1], 0.001);
+}
+
+test "useNodeMeasurement does not crash when tracked element disappears in next frame" {
+    // EXPOSES BUG: the frameEnd loop iterates every map entry and dereferences
+    // entry.value_ptr.index into the current tree. If a tracked node is not
+    // remounted this frame, that index may be out of bounds (or point at an
+    // unrelated node). This test asserts the API survives the removal.
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 500.0 },
+            .height = .{ .fixed = 200.0 },
+            .direction = .horizontal,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({
+                _ = forbear.useNodeMeasurement();
+            });
+            forbear.element(.{ .width = .{ .fixed = 200.0 }, .height = .{ .fixed = 80.0 } })({
+                _ = forbear.useNodeMeasurement();
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    // Frame 2: drop the second sibling entirely.
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 500.0 },
+            .height = .{ .fixed = 200.0 },
+            .direction = .horizontal,
+        })({
+            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({
+                _ = forbear.useNodeMeasurement();
+            });
+        });
+        _ = try forbear.layout();
+    });
+}
+
