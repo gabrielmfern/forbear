@@ -616,7 +616,7 @@ fn frameEnd(block: void) anyerror!void {
         entry.value_ptr.position = node.position;
         entry.value_ptr.maxSize = node.maxSize;
         entry.value_ptr.minSize = node.minSize;
-        entry.value_ptr.size = node.size;
+        entry.value_ptr.contentSize = node.contentSize;
         entry.value_ptr.z = node.z;
     }
 
