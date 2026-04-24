@@ -1207,9 +1207,9 @@ pub fn useNextEvent() ?Event {
     std.debug.assert(self.frameMeta != null);
     const currentNode = getParentNode() orelse return null;
     const key = currentNode.key;
-    if (self.pendingEventQueue.getPtr(key)) |eventQueue| {
-        return eventQueue.pop();
-    }
+    const eventQueue = self.pendingEventQueue.getPtr(key) orelse return null;
+
+    return eventQueue.pop();
 }
 
 /// Returns and consumes a matching event from the current element's pending
