@@ -450,6 +450,13 @@ pub fn useLastUpdateTime() f64 {
     return self.lastUpdateTime orelse self.startTime;
 }
 
+pub fn getParentNode() ?*Node {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    const index = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return null;
+    return self.nodeTree.at(index);
+}
+
 pub fn getPreviousNode() ?*Node {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
@@ -1182,19 +1189,15 @@ pub fn pushEvent(key: u64, event: Event) !void {
     try result.value_ptr.*.append(self.allocator, event);
 }
 
-/// Returns the next event in the queue to handle for the current element key.
+/// Returns the next event in the queue to handle for the node at the end of the parent stack
 pub fn useNextEvent() ?Event {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
-    if (self.frameMeta.?.previousPushedNodeIndex) |previousPushedNodeIndex| {
-        const previousPushedNode = self.nodeTree.at(previousPushedNodeIndex);
-        const key = previousPushedNode.key;
-        // std.log.debug("handling events for {}", .{key});
-        if (self.pendingEventQueue.getPtr(key)) |eventQueue| {
-            return eventQueue.pop();
-        }
+    const currentNode = getParentNode() orelse return null;
+    const key = currentNode.key;
+    if (self.pendingEventQueue.getPtr(key)) |eventQueue| {
+        return eventQueue.pop();
     }
-    return null;
 }
 
 /// Returns and consumes a matching event from the current element's pending
@@ -1203,8 +1206,7 @@ pub fn on(comptime eventTag: Event) bool {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 
-    const currentNodeIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return false;
-    const currentNode = self.nodeTree.at(currentNodeIndex);
+    const currentNode = getParentNode() orelse return false;
     const key = currentNode.key;
 
     const eventQueue = self.pendingEventQueue.getPtr(key) orelse return false;
