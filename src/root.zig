@@ -1353,7 +1353,7 @@ pub fn update() !void {
 }
 
 /// Returns some layouting values of the current node from the last frame
-pub fn useNodeMeasurement() ?*const Node.Measurement {
+pub fn useNodeMeasurement() ?Node.Measurement {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
     const parentNodeIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return null;
@@ -1369,7 +1369,7 @@ pub fn useNodeMeasurement() ?*const Node.Measurement {
     // without having to look up the node by the key through the entire tree
     measurement.value_ptr.index = parentNodeIndex;
     if (measurement.found_existing) {
-        return measurement.value_ptr;
+        return measurement.value_ptr.*;
     }
 
     return null;
