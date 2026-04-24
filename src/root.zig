@@ -91,6 +91,7 @@ mousePosition: Vec2,
 mouseButtonPressed: bool,
 mouseButtonJustPressed: bool,
 mouseButtonJustReleased: bool,
+previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 hoveredElementKeys: std.ArrayList(u64),
 mouseDownElementKeys: std.ArrayList(u64),
 /// The eased in value of `effectiveScrollPosition`
@@ -135,6 +136,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .mouseButtonPressed = false,
         .mouseButtonJustPressed = false,
         .mouseButtonJustReleased = false,
+        .previousFrameNodeMeasurements = std.AutoHashMap(u64, Node.Measurement).init(allocator),
         .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .mouseDownElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .scrollPosition = @splat(0.0),
@@ -596,6 +598,16 @@ fn frameEnd(block: void) anyerror!void {
     const frameMeta = self.frameMeta.?;
     self.frameMeta = null;
     if (frameMeta.err) |err| return err;
+
+    var iterator = self.previousFrameNodeMeasurements.iterator();
+    while (iterator.next()) |entry| {
+        const node = self.nodeTree.at(entry.value_ptr.index);
+        entry.value_ptr.size = node.size;
+        entry.value_ptr.maxSize = node.maxSize;
+        entry.value_ptr.minSize = node.minSize;
+        entry.value_ptr.size = node.size;
+        entry.value_ptr.z = node.z;
+    }
 
     self.nodeTree.clearRetainingCapacity();
 }
@@ -1327,6 +1339,29 @@ pub fn update() !void {
     self.lastUpdateTime = timestamp;
 
     scroller(uiEdges);
+}
+
+/// Returns some layouting values of the current node from the last frame
+fn useNodeMeasurement() ?*const Node.Measurement {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    const parentNodeIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return null;
+    const parentNode = self.nodeTree.at(parentNodeIndex);
+    const measurement = self.previousFrameNodeMeasurements.getOrPut(parentNode.key) catch |err| {
+        std.log.err("Failed to get or put previous frame node measurement: {}", .{err});
+        handleFrameError(err);
+        return null;
+    };
+
+    // the index in the tree might've changed, and it's important this stays
+    // updated so that, at the frame end, we can update the measurements
+    // without having to look up the node by the key through the entire tree
+    measurement.value_ptr.index = parentNodeIndex;
+    if (measurement.found_existing) {
+        return measurement.value_ptr;
+    }
+
+    return null;
 }
 
 fn scroller(uiEdges: Vec2) void {
