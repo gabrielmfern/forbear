@@ -1342,7 +1342,7 @@ pub fn update() !void {
 }
 
 /// Returns some layouting values of the current node from the last frame
-fn useNodeMeasurement() ?*const Node.Measurement {
+pub fn useNodeMeasurement() ?*const Node.Measurement {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
     const parentNodeIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return null;
@@ -1478,6 +1478,7 @@ pub fn deinit() void {
 
     self.hoveredElementKeys.deinit(self.allocator);
     self.mouseDownElementKeys.deinit(self.allocator);
+    self.previousFrameNodeMeasurements.deinit();
 
     var componentStatesIterator = self.componentStates.valueIterator();
     while (componentStatesIterator.next()) |states| {
