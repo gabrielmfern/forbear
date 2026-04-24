@@ -3674,20 +3674,24 @@ test "Event queue dispatches events to correct elements" {
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         helpers.root()({
-            helpers.firstChild();
-            const firstChildKey = forbear.getPreviousNode().?.key;
+            var firstChildKey: u64 = 0;
+            forbear.element(.{})({
+                firstChildKey = forbear.getParentNode().?.key;
 
-            try std.testing.expectEqual(forbear.Event.mouseOut, forbear.useNextEvent().?);
-            try std.testing.expectEqual(forbear.Event.mouseOver, forbear.useNextEvent().?);
-            try std.testing.expectEqual(null, forbear.useNextEvent());
+                try std.testing.expectEqual(forbear.Event.mouseOut, forbear.useNextEvent().?);
+                try std.testing.expectEqual(forbear.Event.mouseOver, forbear.useNextEvent().?);
+                try std.testing.expectEqual(null, forbear.useNextEvent());
+            });
 
-            helpers.secondChild();
-            const secondChildKey = forbear.getPreviousNode().?.key;
+            var secondChildKey: u64 = 0;
+            forbear.element(.{})({
+                secondChildKey = forbear.getParentNode().?.key;
+
+                try std.testing.expectEqual(forbear.Event.mouseOver, forbear.useNextEvent().?);
+                try std.testing.expectEqual(null, forbear.useNextEvent());
+            });
 
             try std.testing.expect(firstChildKey != secondChildKey);
-
-            try std.testing.expectEqual(forbear.Event.mouseOver, forbear.useNextEvent().?);
-            try std.testing.expectEqual(null, forbear.useNextEvent());
         });
     });
 }
