@@ -656,6 +656,16 @@ pub const Node = struct {
 
     style: CompleteStyle,
 
+    pub const Measurement = struct {
+        index: usize,
+
+        position: Vec2,
+        size: Vec2,
+        maxSize: Vec2,
+        minSize: Vec2,
+        z: u16,
+    };
+
     pub fn shouldFitMin(self: @This(), direction: Direction) bool {
         const preferredSize = self.style.getPreferredSize(direction);
         return switch (preferredSize) {
