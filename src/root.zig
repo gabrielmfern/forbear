@@ -3,8 +3,8 @@ const builtin = @import("builtin");
 
 pub const c = @import("c");
 
-const components = @import("components.zig");
-pub const FpsCounter = components.FpsCounter;
+const forbearBuiltin = @import("builtin.zig");
+pub const FpsCounter = forbearBuiltin.FpsCounter;
 pub const Font = @import("font.zig");
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
