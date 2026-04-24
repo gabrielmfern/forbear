@@ -146,6 +146,8 @@ fn App() void {
                 .borderWidth = .all(2.0),
                 .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
             } })({
+                _ = forbear.useScrolling();
+
                 forbear.text("Line 1");
                 forbear.text("Line 2");
                 forbear.text("Line 3 - should clip");

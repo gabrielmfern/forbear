@@ -3924,6 +3924,160 @@ test "mouseDown dispatches on button press" {
     });
 }
 
+test "scroll dispatches to hovered element with accumulated delta" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        _ = try forbear.layout();
+
+        self.mousePosition = .{ 50.0, 50.0 };
+        self.pendingScrollDelta = .{ 0.0, 30.0 };
+        try forbear.update();
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({
+            const delta = forbear.on(.scroll);
+            try std.testing.expect(delta != null);
+            try std.testing.expectApproxEqAbs(@as(f32, 0.0), delta.?[0], 0.001);
+            try std.testing.expectApproxEqAbs(@as(f32, 30.0), delta.?[1], 0.001);
+        });
+    });
+}
+
+test "scroll is not dispatched to unhovered elements" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        _ = try forbear.layout();
+
+        // Mouse is outside the 100x100 element.
+        self.mousePosition = .{ 500.0, 500.0 };
+        self.pendingScrollDelta = .{ 0.0, 30.0 };
+        try forbear.update();
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({
+            try std.testing.expectEqual(@as(?@Vector(2, f32), null), forbear.on(.scroll));
+        });
+    });
+}
+
+test "scroll reaches every hovered ancestor" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 200 },
+        })({
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            })({});
+        });
+
+        _ = try forbear.layout();
+
+        self.mousePosition = .{ 50.0, 50.0 };
+        self.pendingScrollDelta = .{ -5.0, 12.0 };
+        try forbear.update();
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 200 },
+            .height = .{ .fixed = 200 },
+        })({
+            const outer = forbear.on(.scroll);
+            try std.testing.expect(outer != null);
+            try std.testing.expectApproxEqAbs(@as(f32, -5.0), outer.?[0], 0.001);
+            try std.testing.expectApproxEqAbs(@as(f32, 12.0), outer.?[1], 0.001);
+
+            forbear.element(.{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            })({
+                const inner = forbear.on(.scroll);
+                try std.testing.expect(inner != null);
+                try std.testing.expectApproxEqAbs(@as(f32, -5.0), inner.?[0], 0.001);
+                try std.testing.expectApproxEqAbs(@as(f32, 12.0), inner.?[1], 0.001);
+            });
+        });
+    });
+}
+
+test "pendingScrollDelta resets after update dispatches" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        })({});
+
+        _ = try forbear.layout();
+
+        self.mousePosition = .{ 50.0, 50.0 };
+        self.pendingScrollDelta = .{ 7.0, -3.0 };
+        try forbear.update();
+
+        try std.testing.expectApproxEqAbs(@as(f32, 0.0), self.pendingScrollDelta[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.0), self.pendingScrollDelta[1], 0.001);
+    });
+}
+
 test "mouseUp dispatches on button release" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
