@@ -39,3 +39,8 @@ pub fn FpsCounter() void {
         });
     });
 }
+
+pub fn useScrolling() void {
+    const parentNode = forbear.getParentNode();
+}
+
