@@ -5789,6 +5789,213 @@ test "contentSize ignores relative-placement children" {
     });
 }
 
+test "childrenOffset shifts flow children by the offset" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300.0 },
+            .height = .{ .fixed = 200.0 },
+            .direction = .horizontal,
+        })({
+            if (forbear.getParentNode()) |parent| {
+                parent.childrenOffset = .{ -40, -15 };
+            }
+            forbear.element(.{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 50.0 } })({});
+            forbear.element(.{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 50.0 } })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+        const firstChild = tree.at(root.firstChild.?);
+        const secondChild = tree.at(firstChild.nextSibling.?);
+
+        // Natural positions (no offset) would be (0,0) and (50,0).
+        // With offset (-40, -15): (-40, -15) and (10, -15).
+        try std.testing.expectApproxEqAbs(@as(f32, -40.0), firstChild.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, -15.0), firstChild.position[1], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 10.0), secondChild.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, -15.0), secondChild.position[1], 0.001);
+    });
+}
+
+test "childrenOffset shifts relative children" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300.0 },
+            .height = .{ .fixed = 200.0 },
+        })({
+            if (forbear.getParentNode()) |parent| {
+                parent.childrenOffset = .{ 25, 10 };
+            }
+            forbear.element(.{
+                .width = .{ .fixed = 50.0 },
+                .height = .{ .fixed = 50.0 },
+                .placement = .{ .relative = .{ 100, 80 } },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+        const child = tree.at(root.firstChild.?);
+
+        // Relative anchor (100, 80) + parent offset (25, 10) = (125, 90).
+        try std.testing.expectApproxEqAbs(@as(f32, 125.0), child.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 90.0), child.position[1], 0.001);
+    });
+}
+
+test "childrenOffset does not shift fixed children" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300.0 },
+            .height = .{ .fixed = 200.0 },
+        })({
+            if (forbear.getParentNode()) |parent| {
+                parent.childrenOffset = .{ 500, 500 };
+            }
+            forbear.element(.{
+                .width = .{ .fixed = 50.0 },
+                .height = .{ .fixed = 50.0 },
+                .placement = .{ .fixed = .{ 70, 80 } },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+        const child = tree.at(root.firstChild.?);
+
+        // Viewport-pinned: ignores parent's childrenOffset entirely.
+        try std.testing.expectApproxEqAbs(@as(f32, 70.0), child.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80.0), child.position[1], 0.001);
+    });
+}
+
+test "childrenOffset does not shift absolute children" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300.0 },
+            .height = .{ .fixed = 200.0 },
+        })({
+            if (forbear.getParentNode()) |parent| {
+                parent.childrenOffset = .{ 500, 500 };
+            }
+            forbear.element(.{
+                .width = .{ .fixed = 50.0 },
+                .height = .{ .fixed = 50.0 },
+                .placement = .{ .absolute = .{ 70, 80 } },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+        const child = tree.at(root.firstChild.?);
+
+        // Absolute: document-space via root.position (0,0 here), independent
+        // of the parent's childrenOffset.
+        try std.testing.expectApproxEqAbs(@as(f32, 70.0), child.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80.0), child.position[1], 0.001);
+    });
+}
+
+test "childrenOffset does not change contentSize" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 100.0 },
+            .direction = .horizontal,
+        })({
+            if (forbear.getParentNode()) |parent| {
+                parent.childrenOffset = .{ -123, 456 };
+            }
+            forbear.element(.{ .width = .{ .fixed = 400.0 }, .height = .{ .fixed = 40.0 } })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+
+        // Same numbers as the "exceeds size when children overflow
+        // horizontally" test: the offset must not leak into contentSize.
+        try std.testing.expectApproxEqAbs(@as(f32, 400.0), root.contentSize[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 40.0), root.contentSize[1], 0.001);
+    });
+}
+
+test "childrenOffset propagates through descendants via ancestor positions" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .width = .{ .fixed = 300.0 },
+            .height = .{ .fixed = 300.0 },
+        })({
+            if (forbear.getParentNode()) |parent| {
+                parent.childrenOffset = .{ -10, -20 };
+            }
+            forbear.element(.{
+                .width = .{ .fixed = 200.0 },
+                .height = .{ .fixed = 200.0 },
+            })({
+                forbear.element(.{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                })({});
+            });
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+        const middle = tree.at(root.firstChild.?);
+        const leaf = tree.at(middle.firstChild.?);
+
+        // middle shifted by root.childrenOffset -> (-10, -20)
+        try std.testing.expectApproxEqAbs(@as(f32, -10.0), middle.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, -20.0), middle.position[1], 0.001);
+        // leaf adopts middle's shifted position (middle has no offset of its
+        // own) -> (-10, -20)
+        try std.testing.expectApproxEqAbs(@as(f32, -10.0), leaf.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, -20.0), leaf.position[1], 0.001);
+    });
+}
+
 test "contentSize for a leaf element is zero" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();

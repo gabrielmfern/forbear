@@ -645,6 +645,8 @@ pub const Node = struct {
 
     key: u64,
 
+    /// Generally used for scrolling. This is added to the position of the children of this node
+    childrenOffset: Vec2 = @splat(0.0),
     position: Vec2,
     z: u16,
     size: Vec2,
