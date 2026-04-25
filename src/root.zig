@@ -667,10 +667,9 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         hasher.update(std.mem.asBytes(&crs.key));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
+    hasher.update(std.mem.asBytes(&@returnAddress()));
     if (props.key) |key| {
         hasher.update(key);
-    } else {
-        hasher.update(std.mem.asBytes(&@returnAddress()));
     }
 
     result.ptr.key = hasher.final();
@@ -1039,10 +1038,9 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
         hasher.update(std.mem.asBytes(&componentResolutionState.key));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
+    hasher.update(std.mem.asBytes(&@returnAddress()));
     if (props.key) |key| {
         hasher.update(key);
-    } else {
-        hasher.update(std.mem.asBytes(&@returnAddress()));
     }
 
     self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
