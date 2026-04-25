@@ -1040,9 +1040,10 @@ pub fn component(props: ComponentProps) *const fn (void) void {
         hasher.update(std.mem.asBytes(&componentResolutionState.key));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
-    hasher.update(std.mem.asBytes(&props.sourceLocation));
     if (props.key) |key| {
-        hasher.update(std.mem.asBytes(key));
+        hasher.update(key);
+    } else {
+        hasher.update(std.mem.asBytes(&props.sourceLocation));
     }
 
     self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
