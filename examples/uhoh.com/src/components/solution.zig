@@ -3,7 +3,9 @@ const colors = @import("../colors.zig");
 const Section = @import("section.zig").Section;
 
 pub fn Solution() !void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         Section(.{
             .direction = .vertical,
         })({

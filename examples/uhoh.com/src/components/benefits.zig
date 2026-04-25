@@ -5,7 +5,9 @@ const List = @import("./list.zig").List;
 const ListItem = @import("./list.zig").ListItem;
 
 pub fn Benefits() !void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         Section(.{
             .direction = .vertical,
             .borderWidth = .bottom(2.0),

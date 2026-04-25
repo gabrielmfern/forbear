@@ -7,7 +7,9 @@ pub const HeadingProps = struct {
 };
 
 pub fn Heading(props: HeadingProps) *const fn (void) void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         const size: f32 = switch (props.level) {
             1 => 32.0,
             2 => 24.0,

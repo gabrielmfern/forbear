@@ -5,7 +5,9 @@ const Section = @import("section.zig").Section;
 const Vec4 = @Vector(4, f32);
 
 pub fn Partners() !void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         Section(.{
             .margin = .block(48.0),
             .borderWidth = .all(2.0),

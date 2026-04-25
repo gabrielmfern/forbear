@@ -1696,7 +1696,9 @@ test "slotted component children propagate size to fit ancestors" {
 
     const SlottedComponent = struct {
         fn render() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
@@ -1747,7 +1749,9 @@ test "slotted component with before/after content sizes correctly" {
 
     const SlottedComponent = struct {
         fn render() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
@@ -1806,7 +1810,9 @@ test "nested slotted components propagate sizes correctly" {
 
     const Inner = struct {
         fn render() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
@@ -1821,7 +1827,9 @@ test "nested slotted components propagate sizes correctly" {
 
     const Outer = struct {
         fn render() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
@@ -2142,7 +2150,9 @@ test "slotted children propagate size to fit ancestors" {
     // so fit sizes are computed by forbear.layout() after tree construction.
     const SlottedComponent = struct {
         fn call() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 // Multiple nested fit elements to stress the propagation
                 forbear.element(.{ .style = .{
                     .width = .fit,
@@ -2581,7 +2591,10 @@ test "Component state preserved when sibling is added" {
 
     const ComponentA = struct {
         fn render(initialValue: u32, out: *u32) void {
-            forbear.component(.{ .key = "A" })({
+            forbear.component(.{
+                .key = "A",
+                .sourceLocation = @src(),
+            })({
                 const state = forbear.useState(u32, initialValue);
                 out.* = state.*;
             });
@@ -2590,7 +2603,10 @@ test "Component state preserved when sibling is added" {
 
     const ComponentB = struct {
         fn render() void {
-            forbear.component(.{ .key = "B" })({});
+            forbear.component(.{
+                .key = "B",
+                .sourceLocation = @src(),
+            })({});
         }
     }.render;
 
@@ -2626,13 +2642,19 @@ test "Component state preserved when sibling is removed" {
 
     const ComponentA = struct {
         fn render() void {
-            forbear.component(.{ .key = "A" })({});
+            forbear.component(.{
+                .key = "A",
+                .sourceLocation = @src(),
+            })({});
         }
     }.render;
 
     const ComponentB = struct {
         fn render(initialValue: u32, out: *u32) void {
-            forbear.component(.{ .key = "B" })({
+            forbear.component(.{
+                .key = "B",
+                .sourceLocation = @src(),
+            })({
                 const state = forbear.useState(u32, initialValue);
                 out.* = state.*;
             });
@@ -2675,7 +2697,10 @@ test "Component state in a loop with manual keys" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{})({
             for (items, 0..) |item, i| {
-                forbear.component(.{ .key = item })({
+                forbear.component(.{
+                    .key = item,
+                    .sourceLocation = @src(),
+                })({
                     const state = forbear.useState(u32, @intCast(i));
                     _ = state;
                 });
@@ -2691,7 +2716,10 @@ test "Component state in a loop with manual keys" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{})({
             for (items_without_beta) |item| {
-                forbear.component(.{ .key = item })({
+                forbear.component(.{
+                    .key = item,
+                    .sourceLocation = @src(),
+                })({
                     const state = forbear.useState(u32, 999);
                     if (std.mem.eql(u8, item, "alpha")) {
                         try std.testing.expectEqual(0, state.*);
@@ -2892,7 +2920,9 @@ test "Component state preserved through if statement toggling" {
     const ConditionalComponent = struct {
         fn render(condition: bool, out: *u32) void {
             if (condition) {
-                forbear.component(.{})({
+                forbear.component(.{
+                    .sourceLocation = @src(),
+                })({
                     const state = forbear.useState(u32, 42);
                     out.* = state.*;
                 });
@@ -2942,7 +2972,9 @@ test "Wrapper components produce unique keys from different parent components" {
 
     const ComponentA = struct {
         fn render(out: *u64) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.BreakLine();
                 });
@@ -2954,7 +2986,9 @@ test "Wrapper components produce unique keys from different parent components" {
 
     const ComponentB = struct {
         fn render(out: *u64) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.BreakLine();
                 });
@@ -2992,7 +3026,10 @@ test "Component resolution" {
 
     const MyComponent = (struct {
         fn myComponent(props: MyComponentProps) !void {
-            forbear.component(.{ .key = "component-resolution-test" })({
+            forbear.component(.{
+                .key = "component-resolution-test",
+                .sourceLocation = @src(),
+            })({
                 props.callCount.* += 1;
                 const counter = forbear.useState(u32, props.value);
                 const innerArena = forbear.useArena();
@@ -3037,7 +3074,10 @@ fn resolveSpringTransition(
     result: *f32,
 ) !void {
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.component(.{ .key = componentKey })({
+        forbear.component(.{
+            .key = componentKey,
+            .sourceLocation = @src(),
+        })({
             result.* = forbear.useSpringTransition(target, config);
         });
     });
@@ -3471,7 +3511,10 @@ test "State creation with manual handling" {
     {
         // First run that should allocate RAM, and still allow reading and writing the values
         try forbear.frame(try frameMeta(arenaAllocator))({
-            forbear.component(.{ .key = "random" })({
+            forbear.component(.{
+                .key = "random",
+                .sourceLocation = @src(),
+            })({
                 componentKey = self.frameMeta.?.componentResolutionState.getLast().key;
                 const state1 = forbear.useState(i32, 42);
                 try std.testing.expectEqual(1, self.componentStates.get(componentKey).?.items.len);
@@ -3494,7 +3537,10 @@ test "State creation with manual handling" {
     {
         _ = arena.reset(.retain_capacity);
         try forbear.frame(try frameMeta(arenaAllocator))({
-            forbear.component(.{ .key = "random" })({
+            forbear.component(.{
+                .key = "random",
+                .sourceLocation = @src(),
+            })({
                 const state1 = forbear.useState(i32, 42);
                 try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
                 try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(componentKey).?.items[0].len);
@@ -3533,7 +3579,10 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
     {
         // First frame: all three useState calls allocate/grow the buffer
         try forbear.frame(try frameMeta(arenaAllocator))({
-            forbear.component(.{ .key = "use-transition-realloc-test" })({
+            forbear.component(.{
+                .key = "use-transition-realloc-test",
+                .sourceLocation = @src(),
+            })({
                 // Mimics useTransition's calls:
                 //   const valueToTransitionFrom = useState(f32, value);
                 //   const valueToTransitionTo = useState(f32, value);
@@ -3568,7 +3617,10 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
         // Second frame: buffer already exists at full size, no realloc needed
         _ = arena.reset(.retain_capacity);
         try forbear.frame(try frameMeta(arenaAllocator))({
-            forbear.component(.{ .key = "use-transition-realloc-test" })({
+            forbear.component(.{
+                .key = "use-transition-realloc-test",
+                .sourceLocation = @src(),
+            })({
                 const valueToTransitionFrom = forbear.useState(f32, 1.0);
                 const valueToTransitionTo = forbear.useState(f32, 1.0);
                 const animationState = forbear.useState(?forbear.AnimationState, null);
@@ -4048,7 +4100,9 @@ test "Component children slotting: basic before + children + after" {
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.text("Before");
                     forbear.componentChildrenSlot();
@@ -4096,7 +4150,9 @@ test "Component children slotting: empty slot (no children passed)" {
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.text("Before");
                     forbear.componentChildrenSlot();
@@ -4133,7 +4189,9 @@ test "Component children slotting: slot at beginning (no before-content)" {
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.componentChildrenSlot();
                     forbear.text("After");
@@ -4171,7 +4229,9 @@ test "Component children slotting: slot at end (no after-content)" {
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.text("Before");
                     forbear.componentChildrenSlot();
@@ -4209,7 +4269,9 @@ test "Component children slotting: multiple instances with different children" {
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.text("Before");
                     forbear.componentChildrenSlot();
@@ -4267,7 +4329,9 @@ test "Component children slotting: nested slotted components" {
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.text("before");
                     forbear.componentChildrenSlot();
@@ -4324,7 +4388,9 @@ test "Component children slotting: parent stack stability" {
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.text("Before");
                     forbear.componentChildrenSlot();
@@ -4373,7 +4439,9 @@ test "Component children slotting: element children in slot" {
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
-            forbear.component(.{})({
+            forbear.component(.{
+                .sourceLocation = @src(),
+            })({
                 forbear.element(.{})({
                     forbear.text("Before");
                     forbear.componentChildrenSlot();

@@ -3,7 +3,9 @@ const Button = @import("button.zig").Button;
 const Section = @import("section.zig").Section;
 
 pub fn Header() !void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         forbear.element(.{ .style = .{
             .minHeight = 72.0,
             .width = .{ .grow = 1.0 },

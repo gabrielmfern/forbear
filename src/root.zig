@@ -531,7 +531,9 @@ fn endNoop(block: void) void {
 /// A thin wrapper around `element` that includes some aspect ratio handling
 /// definition logic in a way that feels more intuitve
 pub fn Image(style: Style, img: *ImageType) void {
-    component(.{})({
+    component(.{
+        .sourceLocation = @src(),
+    })({
         var complementedStyle = style;
         const imageWidth: f32 = @floatFromInt(img.width);
         const imageHeight: f32 = @floatFromInt(img.height);
@@ -765,7 +767,9 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 
     const arena = self.frameMeta.?.arena;
 
-    component(.{})({
+    component(.{
+        .sourceLocation = @src(),
+    })({
         text(std.fmt.allocPrint(arena, fmt, args) catch |err| blk: {
             handleFrameError(err);
             break :blk "N/A";
@@ -774,7 +778,9 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn BreakLine() void {
-    component(.{})({
+    component(.{
+        .sourceLocation = @src(),
+    })({
         text("\n");
     });
 }
@@ -1326,7 +1332,9 @@ fn scroller(uiEdges: Vec2) void {
     // This is fine since we're not really inserting any node, so it won't clash
     // with the current root node. The only purpose of this is to use the same
     // logic here as is already implmented for actual UI code.
-    component(.{ .sourceLocation = @src() })({
+    component(.{
+        .sourceLocation = @src(),
+    })({
         const viewportSize = useViewportSize();
 
         const identity: Vec2 = @splat(0.0);

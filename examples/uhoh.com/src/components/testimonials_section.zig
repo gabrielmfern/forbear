@@ -3,7 +3,9 @@ const colors = @import("../colors.zig");
 const Section = @import("section.zig").Section;
 
 pub fn Testimonial(imageIdentifier: []const u8, style: forbear.Style) *const fn (void) void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         forbear.element(.{ .style = style.overwrite(.{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
@@ -30,7 +32,9 @@ pub fn Testimonial(imageIdentifier: []const u8, style: forbear.Style) *const fn 
 }
 
 pub fn TestimonialsSection() void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         Section(.{
             .yJustification = .start,
             .direction = .vertical,

@@ -2,7 +2,9 @@ const forbear = @import("forbear");
 const Colors = @import("../colors.zig");
 
 pub fn Paragraph() *const fn (void) void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },

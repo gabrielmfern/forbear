@@ -4,7 +4,9 @@ const forbear = @import("root.zig");
 const Vec4 = @Vector(4, f32);
 
 pub fn FpsCounter() void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         const deltaTime = forbear.useDeltaTime();
         const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
 
