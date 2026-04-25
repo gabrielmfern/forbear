@@ -69,7 +69,7 @@ pub fn useScrolling() Vec2 {
 
     if (builtin.os.tag == .macos) {
         node.childrenOffset = -scrollOffset.*;
-        return scrollOffset;
+        return scrollOffset.*;
     } else {
         const spring = forbear.SpringConfig{
             .stiffness = 320.0,
