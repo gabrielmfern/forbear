@@ -3,7 +3,7 @@ const colors = @import("../colors.zig");
 const Section = @import("section.zig").Section;
 
 pub fn JonQuote() !void {
-    forbear.component(null)({
+    forbear.component(@src())({
         Section(.{
             .yJustification = .start,
             .margin = .top(40),

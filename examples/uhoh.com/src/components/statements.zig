@@ -3,24 +3,28 @@ const colors = @import("../colors.zig");
 const Section = @import("section.zig").Section;
 
 fn Statement(style: forbear.Style, text: []const u8) !void {
-    forbear.element(.{ .style = style.overwrite(.{
-        .direction = .horizontal,
-        .xJustification = .start,
-        .yJustification = .center,
-        .width = .{ .grow = 1.0 },
-    }) })({
-        forbear.Image(.{
-            .width = .{ .fixed = 30.0 },
-            .height = .{ .fixed = 30.0 },
-            .blendMode = .multiply,
-            .margin = .right(15.0),
-        }, try forbear.useImage("uhoh-check"));
-        forbear.text(text);
+    forbear.component(.{})({
+        forbear.element(.{
+            .style = style.overwrite(.{
+                .direction = .horizontal,
+                .xJustification = .start,
+                .yJustification = .center,
+                .width = .{ .grow = 1.0 },
+            }),
+        })({
+            forbear.Image(.{
+                .width = .{ .fixed = 30.0 },
+                .height = .{ .fixed = 30.0 },
+                .blendMode = .multiply,
+                .margin = .right(15.0),
+            }, try forbear.useImage("uhoh-check"));
+            forbear.text(text);
+        });
     });
 }
 
 pub fn Statements() !void {
-    forbear.component(null)({
+    forbear.component(.{})({
         Section(.{
             .yJustification = .start,
             .padding = .block(30.0),

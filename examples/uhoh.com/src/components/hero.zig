@@ -3,7 +3,7 @@ const Button = @import("button.zig").Button;
 const Section = @import("section.zig").Section;
 
 pub fn Hero() !void {
-    forbear.component(null)({
+    forbear.component(@src)({
         Section(.{
             .margin = .block(36.0),
             .direction = .horizontal,

@@ -1,7 +1,7 @@
 const forbear = @import("forbear");
 
 pub fn List() *const fn (void) void {
-    forbear.component("list")({
+    forbear.component(@src())({
         forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .direction = .vertical,
@@ -16,7 +16,7 @@ pub fn List() *const fn (void) void {
 }
 
 pub fn ListItem() *const fn (void) void {
-    forbear.component("list-item")({
+    forbear.component(@src())({
         forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .direction = .horizontal,

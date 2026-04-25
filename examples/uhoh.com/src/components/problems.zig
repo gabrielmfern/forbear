@@ -22,7 +22,7 @@ fn Problem(style: forbear.Style, text: []const u8) !void {
 }
 
 pub fn Problems() !void {
-    forbear.component(null)({
+    forbear.component(@src())({
         Section(.{})({
             forbear.Image(.{
                 .width = .{ .grow = 0.75 },

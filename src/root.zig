@@ -531,7 +531,7 @@ fn endNoop(block: void) void {
 /// A thin wrapper around `element` that includes some aspect ratio handling
 /// definition logic in a way that feels more intuitve
 pub fn Image(style: Style, img: *ImageType) void {
-    component("native-image")({
+    component(.{})({
         var complementedStyle = style;
         const imageWidth: f32 = @floatFromInt(img.width);
         const imageHeight: f32 = @floatFromInt(img.height);
@@ -1020,7 +1020,7 @@ fn componentEnd(block: void) void {
 }
 
 pub const ComponentProps = struct {
-    key: ?[]const u8 = null;
+    key: ?[]const u8 = null,
 };
 
 pub inline fn component(props: ComponentProps) *const fn (void) void {
