@@ -43,9 +43,12 @@ const Context = @This();
 
 var context: ?@This() = null;
 
-const ComponentResolutionState = struct {
-    useStateCursor: usize,
+const ScopeKind = enum { component, element };
+
+const ScopeFrame = struct {
+    kind: ScopeKind,
     key: u64,
+    useStateCursor: usize,
 };
 
 const ComponentChildrenSlotState = struct {
@@ -77,7 +80,16 @@ pub const FrameMeta = struct {
     // that user actually has to fill out.
     err: ?anyerror = null,
 
-    componentResolutionState: std.ArrayList(ComponentResolutionState) = .empty,
+    /// Unified scope stack tracking both component and element scopes in
+    /// lexical order. `useState` binds to the topmost frame regardless of
+    /// kind; element-key hashing walks back to the nearest `.component`
+    /// frame to keep per-component element-key namespacing stable.
+    scopeStack: std.ArrayList(ScopeFrame) = .empty,
+
+    /// Set of scope keys that were entered during this frame. At frame end,
+    /// any entry in `scopeStates` whose key is missing here is pruned —
+    /// matching React-style unmount semantics.
+    touchedScopeKeys: std.AutoHashMapUnmanaged(u64, void) = .empty,
 
     previousPushedNodeIndex: ?usize = null,
     nodeParentStack: std.ArrayList(usize) = .empty,
@@ -112,7 +124,10 @@ cappedDeltaTime: ?f64,
 lastUpdateTime: ?f64,
 viewportSize: Vec2,
 
-componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
+/// Persistent state storage keyed by scope key. A scope is either a
+/// component or an element — `useState` resolves to the nearest enclosing
+/// scope, so an entry here may belong to either kind.
+scopeStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
 
 nodeTree: NodeTree,
 frameMeta: ?FrameMeta,
@@ -144,7 +159,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .lastUpdateTime = null,
         .viewportSize = @splat(0.0),
 
-        .componentStates = .init(allocator),
+        .scopeStates = .init(allocator),
 
         .frameMeta = null,
         .nodeTree = .empty,
@@ -466,13 +481,29 @@ pub fn useArena() std.mem.Allocator {
 
 const stateAlignment: std.mem.Alignment = .@"8";
 
-fn currentComponentResolutionState() ?*ComponentResolutionState {
+fn currentScope() ?*ScopeFrame {
     const self = getContext();
-    if (self.frameMeta.?.componentResolutionState.items.len > 0) {
-        return &self.frameMeta.?.componentResolutionState.items[self.frameMeta.?.componentResolutionState.items.len - 1];
+    if (self.frameMeta.?.scopeStack.items.len > 0) {
+        return &self.frameMeta.?.scopeStack.items[self.frameMeta.?.scopeStack.items.len - 1];
     } else {
         return null;
     }
+}
+
+/// Walks the scope stack from the top down to find the nearest enclosing
+/// component scope. Used by element-key and component-key hashing to keep
+/// element identities namespaced per-component; intervening element
+/// scopes intentionally do not contribute to that hashing because
+/// `nodeParentStack.items.len` already differentiates by depth.
+fn nearestComponentScopeKey() ?u64 {
+    const self = getContext();
+    const items = self.frameMeta.?.scopeStack.items;
+    var i = items.len;
+    while (i > 0) {
+        i -= 1;
+        if (items[i].kind == .component) return items[i].key;
+    }
+    return null;
 }
 
 /// TODO: in debug mode, we should be adding some guard rail here to make sure
@@ -491,10 +522,13 @@ pub fn useState(T: type, initialValue: T) *T {
         return &Static.dummy;
     }
 
-    if (currentComponentResolutionState()) |state| {
-        const stateResult = self.componentStates.getOrPut(state.key) catch |err| {
-            std.log.err("Failed to get or put a new component state {}", .{err});
-            @panic("Failed to get or put a new component state");
+    if (currentScope()) |state| {
+        const stateResult = self.scopeStates.getOrPut(state.key) catch |err| {
+            std.log.err("Failed to get or put a new scope state {}", .{err});
+            @panic("Failed to get or put a new scope state");
+        };
+        self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, state.key, {}) catch |err| {
+            handleFrameError(err);
         };
         defer state.useStateCursor += 1;
         if (stateResult.found_existing) {
@@ -519,9 +553,9 @@ pub fn useState(T: type, initialValue: T) *T {
         return @ptrCast(@alignCast(stateResult.value_ptr.*.items[state.useStateCursor]));
     } else {
         if (!builtin.is_test) {
-            std.log.err("You might be calling a hook (useState) outside of a component, and forbear cannot track things outside of one.", .{});
+            std.log.err("You might be calling a hook (useState) outside of a component or element scope, and forbear cannot track things outside of one.", .{});
         }
-        @panic("No component resolution state found, you must be calling useState outside of a component, otherwise this is a bug.");
+        @panic("No scope found, you must be calling useState outside of a component or element, otherwise this is a bug.");
     }
 }
 
@@ -591,6 +625,30 @@ fn frameEnd(block: void) anyerror!void {
     self.frameMeta = null;
     if (frameMeta.err) |err| return err;
 
+    // Drop state for scopes that weren't entered this frame. Mirrors React
+    // unmount semantics: omit a component or element this frame and its
+    // state goes away. Element identities churn far more than component
+    // identities, so without this every transient element would leak its
+    // useState storage.
+    var staleScopeKeys: std.ArrayList(u64) = .empty;
+    defer staleScopeKeys.deinit(frameMeta.arena);
+    var scopeStateKeysIterator = self.scopeStates.keyIterator();
+    while (scopeStateKeysIterator.next()) |keyPtr| {
+        if (!frameMeta.touchedScopeKeys.contains(keyPtr.*)) {
+            staleScopeKeys.append(frameMeta.arena, keyPtr.*) catch |err| {
+                std.log.err("Failed to record stale scope key for cleanup: {}", .{err});
+                break;
+            };
+        }
+    }
+    for (staleScopeKeys.items) |staleKey| {
+        if (self.scopeStates.fetchRemove(staleKey)) |entry| {
+            var states = entry.value;
+            for (states.items) |buffer| self.allocator.free(buffer);
+            states.deinit(self.allocator);
+        }
+    }
+
     var iterator = self.previousFrameNodeMeasurements.iterator();
     while (iterator.next()) |entry| {
         if (self.nodeTree.list.items.len - 1 < entry.value_ptr.index) {
@@ -630,6 +688,17 @@ fn elementEnd(block: void) void {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
     std.debug.assert(self.frameMeta.?.nodeParentStack.items.len > 0);
+
+    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
+        std.debug.assert(endedScope.kind == .element);
+        if (self.scopeStates.get(endedScope.key)) |scopeState| {
+            if (endedScope.useStateCursor != scopeState.items.len) {
+                handleFrameError(error.RulesOfHooksViolated);
+            }
+        }
+    } else {
+        std.debug.assert(false);
+    }
 
     self.frameMeta.?.previousPushedNodeIndex = self.frameMeta.?.nodeParentStack.pop();
 
@@ -688,8 +757,8 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         0;
 
     var hasher = std.hash.Wyhash.init(0);
-    if (self.frameMeta.?.componentResolutionState.getLastOrNull()) |crs| {
-        hasher.update(std.mem.asBytes(&crs.key));
+    if (nearestComponentScopeKey()) |componentKey| {
+        hasher.update(std.mem.asBytes(&componentKey));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
     if (props.key) |key| {
@@ -768,6 +837,18 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, result.index) catch |err| {
         handleFrameError(err);
         return &endNoop;
+    };
+
+    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
+        .kind = .element,
+        .key = result.ptr.key,
+        .useStateCursor = 0,
+    }) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, result.ptr.key, {}) catch |err| {
+        handleFrameError(err);
     };
 
     inline for (Direction.array) |fitDirection| {
@@ -950,8 +1031,8 @@ pub noinline fn text(content: []const u8) void {
         0;
 
     var hasher = std.hash.Wyhash.init(0);
-    if (self.frameMeta.?.componentResolutionState.getLastOrNull()) |crs| {
-        hasher.update(std.mem.asBytes(&crs.key));
+    if (nearestComponentScopeKey()) |componentKey| {
+        hasher.update(std.mem.asBytes(&componentKey));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
     // We don't hash the text content here because text selection would be nice
@@ -1038,10 +1119,10 @@ fn componentEnd(block: void) void {
         return;
     }
 
-    if (self.frameMeta.?.componentResolutionState.pop()) |endedResolutionState| {
-        const componentKey = endedResolutionState.key;
-        if (self.componentStates.get(componentKey)) |componentStates| {
-            if (endedResolutionState.useStateCursor != componentStates.items.len) {
+    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
+        std.debug.assert(endedScope.kind == .component);
+        if (self.scopeStates.get(endedScope.key)) |scopeState| {
+            if (endedScope.useStateCursor != scopeState.items.len) {
                 handleFrameError(error.RulesOfHooksViolated);
             }
         }
@@ -1065,8 +1146,8 @@ pub fn component(key: ComponentKey) *const fn (void) void {
     // the component keys wrapping this component and the amount of parents in
     // the node tree up to this point are what differentiate this instance from
     // other instances of the same component
-    if (self.frameMeta.?.componentResolutionState.getLastOrNull()) |componentResolutionState| {
-        hasher.update(std.mem.asBytes(&componentResolutionState.key));
+    if (nearestComponentScopeKey()) |parentComponentKey| {
+        hasher.update(std.mem.asBytes(&parentComponentKey));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
     switch (key) {
@@ -1074,12 +1155,17 @@ pub fn component(key: ComponentKey) *const fn (void) void {
         .sourceLocation => hasher.update(std.mem.asBytes(&key.sourceLocation)),
     }
 
-    self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
-        .key = hasher.final(),
+    const componentKey = hasher.final();
+    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
+        .kind = .component,
+        .key = componentKey,
         .useStateCursor = 0,
     }) catch |err| {
         handleFrameError(err);
         return endNoop;
+    };
+    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, componentKey, {}) catch |err| {
+        handleFrameError(err);
     };
 
     return &componentEnd;
@@ -1390,14 +1476,14 @@ pub fn deinit() void {
 
     self.previousFrameNodeMeasurements.deinit();
 
-    var componentStatesIterator = self.componentStates.valueIterator();
-    while (componentStatesIterator.next()) |states| {
+    var scopeStatesIterator = self.scopeStates.valueIterator();
+    while (scopeStatesIterator.next()) |states| {
         for (states.items) |state| {
             self.allocator.free(state);
         }
         states.deinit(self.allocator);
     }
-    self.componentStates.deinit();
+    self.scopeStates.deinit();
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
