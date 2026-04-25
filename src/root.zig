@@ -528,22 +528,6 @@ fn endNoop(block: void) void {
     _ = block;
 }
 
-fn computeKey(returnAddress: usize, manualKey: ?[]const u8) u64 {
-    const self = getContext();
-    var hasher = std.hash.Wyhash.init(0);
-    if (self.frameMeta) |fm| {
-        if (fm.componentResolutionState.getLastOrNull()) |crs| {
-            hasher.update(std.mem.asBytes(&crs.key));
-        }
-    }
-    if (manualKey) |mk| {
-        hasher.update(mk);
-    } else {
-        hasher.update(std.mem.asBytes(&returnAddress));
-    }
-    return hasher.final();
-}
-
 /// A thin wrapper around `element` that includes some aspect ratio handling
 /// definition logic in a way that feels more intuitve
 pub fn Image(style: Style, img: *ImageType) void {
@@ -678,7 +662,18 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     else
         0;
 
-    result.ptr.key = computeKey(@returnAddress(), props.key);
+    var hasher = std.hash.Wyhash.init(0);
+    if (self.frameMeta.?.componentResolutionState.getLastOrNull()) |crs| {
+        hasher.update(std.mem.asBytes(&crs.key));
+    }
+    hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
+    if (props.key) |key| {
+        hasher.update(key);
+    } else {
+        hasher.update(std.mem.asBytes(&@returnAddress()));
+    }
+
+    result.ptr.key = hasher.final();
     result.ptr.style = style;
     result.ptr.z = if (incompleteStyle.zIndex) |zIndex|
         zIndex
@@ -925,7 +920,18 @@ pub noinline fn text(content: []const u8) void {
     else
         0;
 
-    result.ptr.key = computeKey(@returnAddress(), null);
+    var hasher = std.hash.Wyhash.init(0);
+    if (self.frameMeta.?.componentResolutionState.getLastOrNull()) |crs| {
+        hasher.update(std.mem.asBytes(&crs.key));
+    }
+    hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
+    // We don't hash the text content here because text selection would be nice
+    // to work even with text changing
+    //
+    // hasher.update(effectiveContent);
+    hasher.update(std.mem.asBytes(&@returnAddress()));
+
+    result.ptr.key = hasher.final();
     result.ptr.position = @splat(0.0);
     result.ptr.z = if (parentZ < std.math.maxInt(u16))
         parentZ + 1
@@ -1013,7 +1019,11 @@ fn componentEnd(block: void) void {
     }
 }
 
-pub noinline fn component(key: ?[]const u8) *const fn (void) void {
+pub const ComponentProps = struct {
+    key: ?[]const u8 = null;
+};
+
+pub inline fn component(props: ComponentProps) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -1021,10 +1031,22 @@ pub noinline fn component(key: ?[]const u8) *const fn (void) void {
         return &endNoop;
     }
 
-    const componentKey = computeKey(@returnAddress(), key);
+    var hasher = std.hash.Wyhash.init(0);
+    // the component keys wrapping this component and the amount of parents in
+    // the node tree up to this point are what differentiate this instance from
+    // other instances of the same component
+    if (self.frameMeta.?.componentResolutionState.getLastOrNull()) |componentResolutionState| {
+        hasher.update(std.mem.asBytes(&componentResolutionState.key));
+    }
+    hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
+    if (props.key) |key| {
+        hasher.update(key);
+    } else {
+        hasher.update(std.mem.asBytes(&@returnAddress()));
+    }
 
     self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
-        .key = componentKey,
+        .key = hasher.final(),
         .useStateCursor = 0,
     }) catch |err| {
         handleFrameError(err);
