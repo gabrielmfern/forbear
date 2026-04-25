@@ -1019,11 +1019,12 @@ fn componentEnd(block: void) void {
     }
 }
 
-pub const ComponentProps = struct {
+const ComponentProps = struct {
     key: ?[]const u8 = null,
+    sourceLocation: std.builtin.SourceLocation,
 };
 
-pub inline fn component(props: ComponentProps) *const fn (void) void {
+pub fn component(props: ComponentProps) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -1039,10 +1040,9 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
         hasher.update(std.mem.asBytes(&componentResolutionState.key));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
+    hasher.update(std.mem.asBytes(&props.sourceLocation));
     if (props.key) |key| {
-        hasher.update(key);
-    } else {
-        hasher.update(std.mem.asBytes(&@returnAddress()));
+        hasher.update(std.mem.asBytes(key));
     }
 
     self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
@@ -1325,7 +1325,7 @@ fn scroller(uiEdges: Vec2) void {
     // This is fine since we're not really inserting any node, so it won't clash
     // with the current root node. The only purpose of this is to use the same
     // logic here as is already implmented for actual UI code.
-    component(.{ .key = "forbear-native-scroller" })({
+    component(.{ .sourceLocation = @src() })({
         const viewportSize = useViewportSize();
 
         const identity: Vec2 = @splat(0.0);

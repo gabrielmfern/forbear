@@ -11,4 +11,4 @@ To avoid the user having to do noinline on their components, we can enforce that
 
 Actually going back to this, the same problem remains for `component` because the src is as unqiue as the returnAddres when component is inline. We can differentiate between component instances with the component keys wrapping the instance, and the amount of node ancestors.
 
-
+I'm dumb, @returnAddress won't be stable for the components because they're functions, and the compiler might decide to inline the user's function. Meaning that, it can be unstable breaking silently for the user unless they're always using noinline. Since we're going to force the user to do something either way (since @src has to be called from the user's side), I think we can go for doing @src as it's only required for components, not all elements.
