@@ -89,13 +89,10 @@ io: std.Io,
 
 mousePosition: Vec2,
 mouseButtonPressed: bool,
-mouseButtonJustPressed: bool,
-mouseButtonJustReleased: bool,
 /// Accumulated wheel/trackpad delta since the last frame. Reset at the
 /// end of `update()` so the next frame sees fresh input.
 pendingScrollDelta: Vec2,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
-mouseDownElementKeys: std.ArrayList(u64),
 // scrollPosition: Vec2,
 // effectiveScrollPosition: Vec2,
 
@@ -132,11 +129,8 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
 
         .mousePosition = @splat(0.0),
         .mouseButtonPressed = false,
-        .mouseButtonJustPressed = false,
-        .mouseButtonJustReleased = false,
         .pendingScrollDelta = @splat(0.0),
         .previousFrameNodeMeasurements = std.AutoHashMap(u64, Node.Measurement).init(allocator),
-        .mouseDownElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
 
         .renderer = renderer,
         .window = null,
@@ -1217,10 +1211,22 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 
-    const currentNode = getParentNode() orelse {
-        if (comptime eventTag == .scroll) return null;
+    if (comptime eventTag == .click) {
+        const wasPressed = useState(bool, false);
+        if (on(.mouseDown)) {
+            wasPressed.* = true;
+        }
+        if (on(.mouseOut)) {
+            wasPressed.* = false;
+        }
+        if (on(.mouseUp)) {
+            if (wasPressed.*) {
+                wasPressed.* = false;
+                return true;
+            }
+        }
         return false;
-    };
+    }
 
     const measurement = useNodeMeasurement() orelse {
         if (comptime eventTag == .scroll) return null;
@@ -1228,23 +1234,21 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     };
 
     const inside = self.isMouseInsideMeasurement(measurement);
-    std.log.debug("mouse inside {}", .{inside});
 
     switch (eventTag) {
         .mouseOver => return inside,
         .mouseOut => return !inside,
         .mouseDown => {
-            if (self.mouseButtonJustPressed and inside) {
-                self.mouseDownElementKeys.append(self.allocator, currentNode.key) catch {};
-                return true;
-            }
-            return false;
+            const wasPressedLastFrame = useState(bool, false);
+            defer wasPressedLastFrame.* = self.mouseButtonPressed;
+            return self.mouseButtonPressed and !wasPressedLastFrame.* and inside;
         },
-        .mouseUp => return self.mouseButtonJustReleased and inside,
-        .click => {
-            if (!self.mouseButtonJustReleased or !inside) return false;
-            return std.mem.indexOfScalar(u64, self.mouseDownElementKeys.items, currentNode.key) != null;
+        .mouseUp => {
+            const wasPressedLastFrame = useState(bool, false);
+            defer wasPressedLastFrame.* = self.mouseButtonPressed;
+            return !self.mouseButtonPressed and wasPressedLastFrame.* and inside;
         },
+        .click => unreachable,
         .scroll => {
             if (!inside) return null;
             if (self.pendingScrollDelta[0] != 0.0 or self.pendingScrollDelta[1] != 0.0)
@@ -1261,11 +1265,6 @@ pub fn update() !void {
 
     const viewportSize = self.frameMeta.?.viewportSize;
 
-    if (self.mouseButtonJustReleased) {
-        self.mouseDownElementKeys.clearRetainingCapacity();
-    }
-    self.mouseButtonJustPressed = false;
-    self.mouseButtonJustReleased = false;
     self.pendingScrollDelta = @splat(0.0);
 
     self.viewportSize = viewportSize;
@@ -1374,10 +1373,8 @@ pub fn setWindowHandlers(window: *Window) void {
                 // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
                 if (button == 272) {
                     if (state == 1) {
-                        ctx.mouseButtonJustPressed = true;
                         ctx.mouseButtonPressed = true;
                     } else {
-                        ctx.mouseButtonJustReleased = true;
                         ctx.mouseButtonPressed = false;
                     }
                 }
@@ -1390,7 +1387,6 @@ pub fn setWindowHandlers(window: *Window) void {
 pub fn deinit() void {
     const self = getContext();
 
-    self.mouseDownElementKeys.deinit(self.allocator);
     self.previousFrameNodeMeasurements.deinit();
 
     var componentStatesIterator = self.componentStates.valueIterator();
