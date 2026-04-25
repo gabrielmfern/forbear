@@ -5532,8 +5532,10 @@ test "useNodeMeasurement returns null on first frame" {
     var sawMeasurement = false;
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 50.0 },
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 50.0 },
+            },
         })({
             if (forbear.useNodeMeasurement()) |_| {
                 sawMeasurement = true;
@@ -5555,8 +5557,10 @@ test "useNodeMeasurement returns previous frame's resolved size" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 50.0 },
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 50.0 },
+            },
         })({
             _ = forbear.useNodeMeasurement();
         });
@@ -5566,8 +5570,10 @@ test "useNodeMeasurement returns previous frame's resolved size" {
     var observedSize: Vec2 = @splat(-1.0);
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 50.0 },
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 50.0 },
+            },
         })({
             if (forbear.useNodeMeasurement()) |m| observedSize = m.size;
         });
@@ -5592,14 +5598,18 @@ test "useNodeMeasurement returns previous frame's resolved position" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 200.0 },
-            .padding = .all(30.0),
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 200.0 },
+                .height = .{ .fixed = 200.0 },
+                .padding = .all(30.0),
+                .direction = .horizontal,
+            },
         })({
             forbear.element(.{
-                .width = .{ .fixed = 40.0 },
-                .height = .{ .fixed = 40.0 },
+                .style = .{
+                    .width = .{ .fixed = 40.0 },
+                    .height = .{ .fixed = 40.0 },
+                },
             })({
                 _ = forbear.useNodeMeasurement();
             });
@@ -5610,14 +5620,18 @@ test "useNodeMeasurement returns previous frame's resolved position" {
     var observedPosition: Vec2 = @splat(-1.0);
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 200.0 },
-            .padding = .all(30.0),
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 200.0 },
+                .height = .{ .fixed = 200.0 },
+                .padding = .all(30.0),
+                .direction = .horizontal,
+            },
         })({
             forbear.element(.{
-                .width = .{ .fixed = 40.0 },
-                .height = .{ .fixed = 40.0 },
+                .style = .{
+                    .width = .{ .fixed = 40.0 },
+                    .height = .{ .fixed = 40.0 },
+                },
             })({
                 if (forbear.useNodeMeasurement()) |m| observedPosition = m.position;
             });
@@ -5640,8 +5654,10 @@ test "useNodeMeasurement reflects most recent completed frame across three frame
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 50.0 },
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 50.0 },
+            },
         })({
             _ = forbear.useNodeMeasurement();
         });
@@ -5650,8 +5666,10 @@ test "useNodeMeasurement reflects most recent completed frame across three frame
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 80.0 },
+            .style = .{
+                .width = .{ .fixed = 200.0 },
+                .height = .{ .fixed = 80.0 },
+            },
         })({
             _ = forbear.useNodeMeasurement();
         });
@@ -5661,8 +5679,10 @@ test "useNodeMeasurement reflects most recent completed frame across three frame
     var observedSize: Vec2 = @splat(-1.0);
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 80.0 },
+            .style = .{
+                .width = .{ .fixed = 200.0 },
+                .height = .{ .fixed = 80.0 },
+            },
         })({
             if (forbear.useNodeMeasurement()) |m| observedSize = m.size;
         });
@@ -5683,14 +5703,26 @@ test "useNodeMeasurement tracks sibling elements independently" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 500.0 },
-            .height = .{ .fixed = 200.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 500.0 },
+                .height = .{ .fixed = 200.0 },
+                .direction = .horizontal,
+            },
         })({
-            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 100.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
+            })({
                 _ = forbear.useNodeMeasurement();
             });
-            forbear.element(.{ .width = .{ .fixed = 200.0 }, .height = .{ .fixed = 80.0 } })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 200.0 },
+                    .height = .{ .fixed = 80.0 },
+                },
+            })({
                 _ = forbear.useNodeMeasurement();
             });
         });
@@ -5701,14 +5733,26 @@ test "useNodeMeasurement tracks sibling elements independently" {
     var secondSize: Vec2 = @splat(-1.0);
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 500.0 },
-            .height = .{ .fixed = 200.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 500.0 },
+                .height = .{ .fixed = 200.0 },
+                .direction = .horizontal,
+            },
         })({
-            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 100.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
+            })({
                 if (forbear.useNodeMeasurement()) |m| firstSize = m.size;
             });
-            forbear.element(.{ .width = .{ .fixed = 200.0 }, .height = .{ .fixed = 80.0 } })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 200.0 },
+                    .height = .{ .fixed = 80.0 },
+                },
+            })({
                 if (forbear.useNodeMeasurement()) |m| secondSize = m.size;
             });
         });
@@ -5735,14 +5779,26 @@ test "useNodeMeasurement does not crash when tracked element disappears in next 
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 500.0 },
-            .height = .{ .fixed = 200.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 500.0 },
+                .height = .{ .fixed = 200.0 },
+                .direction = .horizontal,
+            },
         })({
-            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 100.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
+            })({
                 _ = forbear.useNodeMeasurement();
             });
-            forbear.element(.{ .width = .{ .fixed = 200.0 }, .height = .{ .fixed = 80.0 } })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 200.0 },
+                    .height = .{ .fixed = 80.0 },
+                },
+            })({
                 _ = forbear.useNodeMeasurement();
             });
         });
@@ -5752,11 +5808,18 @@ test "useNodeMeasurement does not crash when tracked element disappears in next 
     // Frame 2: drop the second sibling entirely.
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 500.0 },
-            .height = .{ .fixed = 200.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 500.0 },
+                .height = .{ .fixed = 200.0 },
+                .direction = .horizontal,
+            },
         })({
-            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 100.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
+            })({
                 _ = forbear.useNodeMeasurement();
             });
         });
@@ -5774,12 +5837,24 @@ test "contentSize equals size when children fit" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 300.0 },
-            .height = .{ .fixed = 200.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 300.0 },
+                .height = .{ .fixed = 200.0 },
+                .direction = .horizontal,
+            },
         })({
-            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({});
-            forbear.element(.{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 50.0 } })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 100.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
+            })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 100.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
+            })({});
         });
 
         const tree = try forbear.layout();
@@ -5800,11 +5875,18 @@ test "contentSize exceeds size when children overflow horizontally" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 100.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .horizontal,
+            },
         })({
-            forbear.element(.{ .width = .{ .fixed = 300.0 }, .height = .{ .fixed = 50.0 } })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 300.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
+            })({});
         });
 
         const tree = try forbear.layout();
@@ -5825,12 +5907,24 @@ test "contentSize exceeds size when children overflow vertically" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 200.0 },
-            .height = .{ .fixed = 100.0 },
-            .direction = .vertical,
+            .style = .{
+                .width = .{ .fixed = 200.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .vertical,
+            },
         })({
-            forbear.element(.{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 80.0 } })({});
-            forbear.element(.{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 80.0 } })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 80.0 },
+                },
+            })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 80.0 },
+                },
+            })({});
         });
 
         const tree = try forbear.layout();
@@ -5851,19 +5945,25 @@ test "contentSize ignores fixed-placement children" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 100.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .horizontal,
+            },
         })({
             forbear.element(.{
-                .width = .{ .fixed = 50.0 },
-                .height = .{ .fixed = 50.0 },
+                .style = .{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
             })({});
             // Viewport-pinned: should not stretch the parent's contentSize.
             forbear.element(.{
-                .width = .{ .fixed = 9999.0 },
-                .height = .{ .fixed = 9999.0 },
-                .placement = .{ .fixed = .{ 0, 0 } },
+                .style = .{
+                    .width = .{ .fixed = 9999.0 },
+                    .height = .{ .fixed = 9999.0 },
+                    .placement = .{ .fixed = .{ 0, 0 } },
+                },
             })({});
         });
 
@@ -5885,12 +5985,19 @@ test "contentSize is exposed through useNodeMeasurement" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 100.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .horizontal,
+            },
         })({
             _ = forbear.useNodeMeasurement();
-            forbear.element(.{ .width = .{ .fixed = 400.0 }, .height = .{ .fixed = 40.0 } })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 400.0 },
+                    .height = .{ .fixed = 40.0 },
+                },
+            })({});
         });
         _ = try forbear.layout();
     });
@@ -5898,12 +6005,19 @@ test "contentSize is exposed through useNodeMeasurement" {
     var observed: Vec2 = @splat(-1.0);
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 100.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .horizontal,
+            },
         })({
             if (forbear.useNodeMeasurement()) |m| observed = m.contentSize;
-            forbear.element(.{ .width = .{ .fixed = 400.0 }, .height = .{ .fixed = 40.0 } })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 400.0 },
+                    .height = .{ .fixed = 40.0 },
+                },
+            })({});
         });
         _ = try forbear.layout();
     });
@@ -5922,20 +6036,26 @@ test "contentSize ignores relative-placement children" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 100.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .horizontal,
+            },
         })({
             forbear.element(.{
-                .width = .{ .fixed = 50.0 },
-                .height = .{ .fixed = 50.0 },
+                .style = .{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
             })({});
             // Parent-anchored overlay (e.g. tooltip): should not stretch the
             // parent's contentSize even though it sits at a huge offset.
             forbear.element(.{
-                .width = .{ .fixed = 500.0 },
-                .height = .{ .fixed = 500.0 },
-                .placement = .{ .relative = .{ 400, 400 } },
+                .style = .{
+                    .width = .{ .fixed = 500.0 },
+                    .height = .{ .fixed = 500.0 },
+                    .placement = .{ .relative = .{ 400, 400 } },
+                },
             })({});
         });
 
@@ -5957,15 +6077,27 @@ test "childrenOffset shifts flow children by the offset" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 300.0 },
-            .height = .{ .fixed = 200.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 300.0 },
+                .height = .{ .fixed = 200.0 },
+                .direction = .horizontal,
+            },
         })({
             if (forbear.getParentNode()) |parent| {
                 parent.childrenOffset = .{ -40, -15 };
             }
-            forbear.element(.{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 50.0 } })({});
-            forbear.element(.{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 50.0 } })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
+            })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                },
+            })({});
         });
 
         const tree = try forbear.layout();
@@ -5992,16 +6124,20 @@ test "childrenOffset shifts relative children" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 300.0 },
-            .height = .{ .fixed = 200.0 },
+            .style = .{
+                .width = .{ .fixed = 300.0 },
+                .height = .{ .fixed = 200.0 },
+            },
         })({
             if (forbear.getParentNode()) |parent| {
                 parent.childrenOffset = .{ 25, 10 };
             }
             forbear.element(.{
-                .width = .{ .fixed = 50.0 },
-                .height = .{ .fixed = 50.0 },
-                .placement = .{ .relative = .{ 100, 80 } },
+                .style = .{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                    .placement = .{ .relative = .{ 100, 80 } },
+                },
             })({});
         });
 
@@ -6025,16 +6161,20 @@ test "childrenOffset does not shift fixed children" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 300.0 },
-            .height = .{ .fixed = 200.0 },
+            .style = .{
+                .width = .{ .fixed = 300.0 },
+                .height = .{ .fixed = 200.0 },
+            },
         })({
             if (forbear.getParentNode()) |parent| {
                 parent.childrenOffset = .{ 500, 500 };
             }
             forbear.element(.{
-                .width = .{ .fixed = 50.0 },
-                .height = .{ .fixed = 50.0 },
-                .placement = .{ .fixed = .{ 70, 80 } },
+                .style = .{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                    .placement = .{ .fixed = .{ 70, 80 } },
+                },
             })({});
         });
 
@@ -6058,16 +6198,20 @@ test "childrenOffset does not shift absolute children" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 300.0 },
-            .height = .{ .fixed = 200.0 },
+            .style = .{
+                .width = .{ .fixed = 300.0 },
+                .height = .{ .fixed = 200.0 },
+            },
         })({
             if (forbear.getParentNode()) |parent| {
                 parent.childrenOffset = .{ 500, 500 };
             }
             forbear.element(.{
-                .width = .{ .fixed = 50.0 },
-                .height = .{ .fixed = 50.0 },
-                .placement = .{ .absolute = .{ 70, 80 } },
+                .style = .{
+                    .width = .{ .fixed = 50.0 },
+                    .height = .{ .fixed = 50.0 },
+                    .placement = .{ .absolute = .{ 70, 80 } },
+                },
             })({});
         });
 
@@ -6092,14 +6236,21 @@ test "childrenOffset does not change contentSize" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 100.0 },
-            .direction = .horizontal,
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 100.0 },
+                .direction = .horizontal,
+            },
         })({
             if (forbear.getParentNode()) |parent| {
                 parent.childrenOffset = .{ -123, 456 };
             }
-            forbear.element(.{ .width = .{ .fixed = 400.0 }, .height = .{ .fixed = 40.0 } })({});
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 400.0 },
+                    .height = .{ .fixed = 40.0 },
+                },
+            })({});
         });
 
         const tree = try forbear.layout();
@@ -6122,19 +6273,25 @@ test "childrenOffset propagates through descendants via ancestor positions" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 300.0 },
-            .height = .{ .fixed = 300.0 },
+            .style = .{
+                .width = .{ .fixed = 300.0 },
+                .height = .{ .fixed = 300.0 },
+            },
         })({
             if (forbear.getParentNode()) |parent| {
                 parent.childrenOffset = .{ -10, -20 };
             }
             forbear.element(.{
-                .width = .{ .fixed = 200.0 },
-                .height = .{ .fixed = 200.0 },
+                .style = .{
+                    .width = .{ .fixed = 200.0 },
+                    .height = .{ .fixed = 200.0 },
+                },
             })({
                 forbear.element(.{
-                    .width = .{ .fixed = 50.0 },
-                    .height = .{ .fixed = 50.0 },
+                    .style = .{
+                        .width = .{ .fixed = 50.0 },
+                        .height = .{ .fixed = 50.0 },
+                    },
                 })({});
             });
         });
@@ -6164,8 +6321,10 @@ test "contentSize for a leaf element is zero" {
 
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
-            .width = .{ .fixed = 100.0 },
-            .height = .{ .fixed = 50.0 },
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 50.0 },
+            },
         })({});
 
         const tree = try forbear.layout();
