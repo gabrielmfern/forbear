@@ -7,7 +7,9 @@ pub const HeadingProps = struct {
 };
 
 pub fn Heading(props: HeadingProps) *const fn (void) void {
-    forbear.component("heading")({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         const size: f32 = switch (props.level) {
             1 => 32.0,
             2 => 24.0,
@@ -18,13 +20,15 @@ pub fn Heading(props: HeadingProps) *const fn (void) void {
             2, 3 => 40.0,
             else => 32.0,
         };
-        forbear.element(props.style.overwrite(.{
-            .width = .{ .grow = 1.0 },
-            .fontWeight = 700,
-            .fontSize = size,
-            .margin = forbear.Margin.top(topMargin).withBottom(16.0),
-            .lineHeight = 1.2,
-        }))({
+        forbear.element(.{
+            .style = props.style.overwrite(.{
+                .width = .{ .grow = 1.0 },
+                .fontWeight = 700,
+                .fontSize = size,
+                .margin = forbear.Margin.top(topMargin).withBottom(16.0),
+                .lineHeight = 1.2,
+            }),
+        })({
             forbear.componentChildrenSlot();
         });
     });

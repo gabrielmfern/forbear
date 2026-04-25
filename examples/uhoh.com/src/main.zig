@@ -27,23 +27,25 @@ const rainbowBar = [_]forbear.GradientStop{
 };
 
 fn App() !void {
-    forbear.component("app")({
-        forbear.element(.{
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .direction = .vertical,
             .xJustification = .center,
             .yJustification = .start,
-        })({
+        } })({
             forbear.FpsCounter();
 
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .background = .{ .gradient = &rainbowBar },
                 .padding = .all(15.0),
                 .xJustification = .center,
                 .yJustification = .center,
                 .fontWeight = 500,
-            })({
+            } })({
                 forbear.text("→ Book a 15 minute meeting today.");
             });
 
