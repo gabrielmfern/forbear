@@ -57,19 +57,14 @@ const ComponentChildrenSlotState = struct {
     slotParentIndex: usize,
 };
 
-pub const Event = union(enum) {
+pub const Event = enum {
     mouseOver,
     mouseOut,
     mouseDown,
     mouseUp,
     click,
-    /// Wheel / trackpad scroll delta in pixels. Delivered to every hovered
-    /// element at the time of the scroll, so consumers can bubble/handle it
-    /// at any level (typically via `useScrolling`).
-    scroll: Vec2,
+    scroll,
 };
-
-const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
 
 pub const FrameMeta = struct {
     arena: std.mem.Allocator,
@@ -96,17 +91,13 @@ mousePosition: Vec2,
 mouseButtonPressed: bool,
 mouseButtonJustPressed: bool,
 mouseButtonJustReleased: bool,
-/// Accumulated wheel/trackpad delta since the last `update()`. Dispatched as
-/// `.scroll` events to hovered elements and then reset inside `update()`.
+/// Accumulated wheel/trackpad delta since the last frame. Reset at the
+/// end of `update()` so the next frame sees fresh input.
 pendingScrollDelta: Vec2,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
-hoveredElementKeys: std.ArrayList(u64),
 mouseDownElementKeys: std.ArrayList(u64),
-/// The eased in value of `effectiveScrollPosition`
-scrollPosition: Vec2,
-/// The final value of the scrolling, without considering any animations, snaps
-/// exactly into place.
-effectiveScrollPosition: Vec2,
+// scrollPosition: Vec2,
+// effectiveScrollPosition: Vec2,
 
 renderer: *Graphics.Renderer,
 window: ?*Window,
@@ -126,7 +117,6 @@ componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)
 
 nodeTree: NodeTree,
 frameMeta: ?FrameMeta,
-pendingEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
@@ -146,10 +136,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .mouseButtonJustReleased = false,
         .pendingScrollDelta = @splat(0.0),
         .previousFrameNodeMeasurements = std.AutoHashMap(u64, Node.Measurement).init(allocator),
-        .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
         .mouseDownElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
-        .scrollPosition = @splat(0.0),
-        .effectiveScrollPosition = @splat(0.0),
 
         .renderer = renderer,
         .window = null,
@@ -164,7 +151,6 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
 
         .frameMeta = null,
         .nodeTree = .empty,
-        .pendingEventQueue = .init(allocator),
 
         .images = std.StringHashMap(ImageType).init(allocator),
         .fonts = std.StringHashMap(Font).init(allocator),
@@ -1212,58 +1198,60 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
     return &componentChildrenSlotEndFn;
 }
 
-pub fn pushEvent(key: u64, event: Event) !void {
-    const self = getContext();
-    const result = try self.pendingEventQueue.getOrPut(key);
-    if (!result.found_existing) {
-        result.value_ptr.* = try std.ArrayList(Event).initCapacity(self.allocator, 1);
-    }
-    try result.value_ptr.*.append(self.allocator, event);
+fn isMouseInsideMeasurement(self: *@This(), measurement: Node.Measurement) bool {
+    const pos = measurement.position;
+    const size = measurement.size;
+    return self.mousePosition[0] >= pos[0] and
+        self.mousePosition[1] >= pos[1] and
+        self.mousePosition[0] <= pos[0] + size[0] and
+        self.mousePosition[1] <= pos[1] + size[1];
 }
 
-/// Returns the next event in the queue to handle for the node at the end of the parent stack
-pub fn useNextEvent() ?Event {
-    const self = getContext();
-    std.debug.assert(self.frameMeta != null);
-    const currentNode = getParentNode() orelse return null;
-    const key = currentNode.key;
-    const eventQueue = self.pendingEventQueue.getPtr(key) orelse return null;
-
-    return eventQueue.pop();
+pub fn OnResult(comptime eventTag: Event) type {
+    return if (eventTag == .scroll) ?Vec2 else bool;
 }
 
-/// For void variants returns `bool` (was-it-there); for variants with a
-/// payload returns `?PayloadType` (the payload, or `null` when absent).
-pub fn OnResult(comptime eventTag: std.meta.Tag(Event)) type {
-    const PayloadType = @FieldType(Event, @tagName(eventTag));
-    return if (PayloadType == void) bool else ?PayloadType;
-}
-
-/// Returns and consumes a matching event from the current element's pending
-/// event queue. Must be called inside an element body block.
-pub fn on(comptime eventTag: std.meta.Tag(Event)) OnResult(eventTag) {
+/// Inline hit test against previous-frame measurement. No event queue —
+/// every caller sees the same raw input state each frame.
+pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 
-    const PayloadType = @FieldType(Event, @tagName(eventTag));
+    const currentNode = getParentNode() orelse {
+        if (comptime eventTag == .scroll) return null;
+        return false;
+    };
 
-    if (getParentNode()) |currentNode| {
-        if (self.pendingEventQueue.getPtr(currentNode.key)) |eventQueue| {
-            for (eventQueue.items, 0..) |event, i| {
-                if (std.meta.activeTag(event) == eventTag) {
-                    _ = eventQueue.orderedRemove(i);
-                    if (comptime PayloadType == void) {
-                        return true;
-                    } else {
-                        return @field(event, @tagName(eventTag));
-                    }
-                }
+    const measurement = useNodeMeasurement() orelse {
+        if (comptime eventTag == .scroll) return null;
+        return false;
+    };
+
+    const inside = self.isMouseInsideMeasurement(measurement);
+    std.log.debug("mouse inside {}", .{inside});
+
+    switch (eventTag) {
+        .mouseOver => return inside,
+        .mouseOut => return !inside,
+        .mouseDown => {
+            if (self.mouseButtonJustPressed and inside) {
+                self.mouseDownElementKeys.append(self.allocator, currentNode.key) catch {};
+                return true;
             }
-        }
+            return false;
+        },
+        .mouseUp => return self.mouseButtonJustReleased and inside,
+        .click => {
+            if (!self.mouseButtonJustReleased or !inside) return false;
+            return std.mem.indexOfScalar(u64, self.mouseDownElementKeys.items, currentNode.key) != null;
+        },
+        .scroll => {
+            if (!inside) return null;
+            if (self.pendingScrollDelta[0] != 0.0 or self.pendingScrollDelta[1] != 0.0)
+                return self.pendingScrollDelta;
+            return null;
+        },
     }
-
-    if (comptime PayloadType == void) return false;
-    return null;
 }
 
 pub fn update() !void {
@@ -1272,100 +1260,13 @@ pub fn update() !void {
     if (self.frameMeta.?.err) |err| return err;
 
     const viewportSize = self.frameMeta.?.viewportSize;
-    const arena = self.frameMeta.?.arena;
 
-    var queueIterator = self.pendingEventQueue.valueIterator();
-    while (queueIterator.next()) |events| {
-        events.clearRetainingCapacity();
-    }
-
-    const justPressed = self.mouseButtonJustPressed;
-    const justReleased = self.mouseButtonJustReleased;
-    self.mouseButtonJustPressed = false;
-    self.mouseButtonJustReleased = false;
-
-    var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
-    missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
-
-    var uiEdges: Vec2 = @splat(0.0);
-    var hoveredCursor: WindowCursor = .default;
-    var topHoveredZ: ?u16 = null;
-
-    var iterator = self.nodeTree.walk();
-    while (iterator.next()) |node| {
-        if (node.style.placement != .fixed) {
-            uiEdges = @max(uiEdges, node.position + self.scrollPosition + node.size);
-        }
-        const isMouseAfter = node.position[0] <= self.mousePosition[0] and node.position[1] <= self.mousePosition[1];
-        const isMouseBefore = node.position[0] + node.size[0] >= self.mousePosition[0] and node.position[1] + node.size[1] >= self.mousePosition[1];
-        const isMouseInBounds = isMouseAfter and isMouseBefore;
-
-        // Also check clipRect - if element is clipped, mouse must be inside clip region
-        const isMouseInClip = if (node.clipRect) |clip|
-            self.mousePosition[0] >= clip[0] and
-                self.mousePosition[1] >= clip[1] and
-                self.mousePosition[0] <= clip[0] + clip[2] and
-                self.mousePosition[1] <= clip[1] + clip[3]
-        else
-            true;
-
-        const isMouseInside = isMouseInBounds and isMouseInClip;
-
-        const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, node.key);
-
-        if (std.mem.indexOfScalar(u64, missingHoveredKeys.items, node.key)) |i| {
-            _ = missingHoveredKeys.swapRemove(i);
-        }
-
-        if (isMouseInside) {
-            if (topHoveredZ == null or node.z > topHoveredZ.?) {
-                topHoveredZ = node.z;
-                hoveredCursor = node.style.cursor;
-            }
-
-            if (hoveredElementKeysIndexOpt == null) {
-                try pushEvent(node.key, .mouseOver);
-
-                try self.hoveredElementKeys.append(self.allocator, node.key);
-            }
-
-            if (justPressed) {
-                try pushEvent(node.key, .mouseDown);
-                try self.mouseDownElementKeys.append(self.allocator, node.key);
-            }
-            if (justReleased) {
-                try pushEvent(node.key, .mouseUp);
-                if (std.mem.indexOfScalar(u64, self.mouseDownElementKeys.items, node.key) != null) {
-                    try pushEvent(node.key, .click);
-                }
-            }
-            if (self.pendingScrollDelta[0] != 0.0 or self.pendingScrollDelta[1] != 0.0) {
-                try pushEvent(node.key, .{ .scroll = self.pendingScrollDelta });
-            }
-        } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
-            try pushEvent(node.key, .mouseOut);
-
-            _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
-        }
-    }
-
-    if (justReleased) {
+    if (self.mouseButtonJustReleased) {
         self.mouseDownElementKeys.clearRetainingCapacity();
     }
-
+    self.mouseButtonJustPressed = false;
+    self.mouseButtonJustReleased = false;
     self.pendingScrollDelta = @splat(0.0);
-
-    for (missingHoveredKeys.items) |key| {
-        if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
-            _ = self.hoveredElementKeys.swapRemove(i);
-        }
-    }
-
-    if (self.window) |window| {
-        window.setCursor(hoveredCursor, 0) catch |err| {
-            std.log.err("Failed to set cursor: {}", .{err});
-        };
-    }
 
     self.viewportSize = viewportSize;
 
@@ -1375,8 +1276,6 @@ pub fn update() !void {
     self.deltaTime = rawDelta;
     self.cappedDeltaTime = @min(rawDelta, maxCappedDeltaTime);
     self.lastUpdateTime = timestamp;
-
-    scroller(uiEdges);
 }
 
 /// Returns some layouting values of the current node from the last frame
@@ -1402,35 +1301,8 @@ pub fn useNodeMeasurement() ?Node.Measurement {
     return null;
 }
 
-fn scroller(uiEdges: Vec2) void {
-    const self = getContext();
-    // This is fine since we're not really inserting any node, so it won't clash
-    // with the current root node. The only purpose of this is to use the same
-    // logic here as is already implmented for actual UI code.
-    component(.{
-        .sourceLocation = @src(),
-    })({
-        const viewportSize = useViewportSize();
-
-        const identity: Vec2 = @splat(0.0);
-        self.effectiveScrollPosition = @min(
-            @max(self.effectiveScrollPosition, identity),
-            @max(uiEdges - viewportSize, identity),
-        );
-
-        if (builtin.os.tag == .macos) {
-            self.scrollPosition = self.effectiveScrollPosition;
-        } else {
-            const spring = SpringConfig{
-                .stiffness = 320.0,
-                .damping = 32.0,
-                .mass = 1.0,
-            };
-            self.scrollPosition[0] = useSpringTransition(self.effectiveScrollPosition[0], spring);
-            self.scrollPosition[1] = useSpringTransition(self.effectiveScrollPosition[1], spring);
-        }
-    });
-}
+// TODO: scroller was removed during event system refactor — viewport-level
+// scrolling will be reimplemented as a user-space component.
 
 fn timestampSeconds(io: std.Io) f64 {
     const ts = std.Io.Clock.awake.now(io);
@@ -1518,7 +1390,6 @@ pub fn setWindowHandlers(window: *Window) void {
 pub fn deinit() void {
     const self = getContext();
 
-    self.hoveredElementKeys.deinit(self.allocator);
     self.mouseDownElementKeys.deinit(self.allocator);
     self.previousFrameNodeMeasurements.deinit();
 
@@ -1530,12 +1401,6 @@ pub fn deinit() void {
         states.deinit(self.allocator);
     }
     self.componentStates.deinit();
-
-    var eventQueueIterator = self.pendingEventQueue.valueIterator();
-    while (eventQueueIterator.next()) |events| {
-        events.deinit(self.allocator);
-    }
-    self.pendingEventQueue.deinit();
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
