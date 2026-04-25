@@ -18,13 +18,13 @@ pub fn Heading(props: HeadingProps) *const fn (void) void {
             2, 3 => 40.0,
             else => 32.0,
         };
-        forbear.element(props.style.overwrite(.{
+        forbear.element(.{ .style = props.style.overwrite(.{
             .width = .{ .grow = 1.0 },
             .fontWeight = 700,
             .fontSize = size,
             .margin = forbear.Margin.top(topMargin).withBottom(16.0),
             .lineHeight = 1.2,
-        }))({
+        }) })({
             forbear.componentChildrenSlot();
         });
     });

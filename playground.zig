@@ -5,21 +5,21 @@ fn CounterExample() void {
     forbear.component("counter-example")({
         const count = forbear.useState(u32, 0);
 
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .vertical,
             .padding = .all(16.0),
             .background = .{ .color = .{ 0.12, 0.12, 0.12, 1.0 } },
             .borderRadius = 12.0,
-        })({
+        } })({
             forbear.printText("Count: {d}", .{count.*});
 
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .margin = .top(12.0),
                 .padding = forbear.Padding.block(10.0).withInLine(16.0),
                 .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
                 .borderRadius = 8.0,
                 .cursor = .pointer,
-            })({
+            } })({
                 if (forbear.on(.click)) {
                     count.* += 1;
                 }
@@ -34,16 +34,16 @@ fn App() void {
     forbear.component("app")({
         const isHovering = forbear.useState(bool, false);
 
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .direction = .vertical,
             .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
             .padding = .all(10),
-        })({
+        } })({
             forbear.FpsCounter();
 
             forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .margin = forbear.Margin.top(12.0),
                 .width = .{ .fixed = 100 },
                 .height = .{ .fixed = 100 },
@@ -56,7 +56,7 @@ fn App() void {
                     },
                 },
                 .borderRadius = 20,
-            })({
+            } })({
                 if (forbear.on(.mouseOver)) {
                     isHovering.* = true;
                 }
@@ -70,30 +70,30 @@ fn App() void {
             // Demonstrates `.relative` placement: the badge is offset from
             // the card's top-left corner and does not participate in the
             // card's layout flow, so the card content below is unaffected.
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .margin = forbear.Margin.top(24.0),
                 .padding = .all(16.0),
                 .fontSize = 16.0,
                 .background = .{ .color = .{ 0.15, 0.15, 0.25, 1.0 } },
                 .borderRadius = 12.0,
-            })({
+            } })({
                 forbear.text("Card with a relative badge");
 
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .placement = .{ .relative = .{ 200.0, -10.0 } },
                     .background = .{ .color = .{ 0.9, 0.2, 0.3, 1.0 } },
                     .borderRadius = 12.0,
                     .xJustification = .center,
                     .padding = forbear.Padding.block(2.0).withInLine(4.0),
                     .fontSize = 14,
-                })({
+                } })({
                     forbear.text("NEW");
                 });
             });
 
             // Demonstrates `.darken` blend mode: the dark overlay darkens
             // the underlying gradient without affecting lighter areas.
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .margin = forbear.Margin.top(24.0),
                 .width = .{ .fixed = 200 },
                 .height = .{ .fixed = 100 },
@@ -104,19 +104,19 @@ fn App() void {
                     },
                 },
                 .borderRadius = 12.0,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 100 },
                     .height = .{ .fixed = 80 },
                     .margin = .all(10),
                     .background = .{ .color = .{ 0.3, 0.3, 0.3, 0.8 } },
                     .blendMode = .darken,
                     .borderRadius = 8.0,
-                })({});
+                } })({});
             });
 
             // Dashed border example
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .margin = forbear.Margin.top(24.0),
                 .width = .{ .fixed = 200 },
                 .height = .{ .fixed = 100 },
@@ -127,12 +127,12 @@ fn App() void {
                 .borderRadius = 8.0,
                 .xJustification = .center,
                 .yJustification = .center,
-            })({
+            } })({
                 forbear.text("Dashed");
             });
 
             // Scissor clipping test: fixed height container with overflowing children
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .margin = forbear.Margin.top(24.0),
                 .width = .{ .fixed = 200 },
                 .height = .{ .fixed = 100 },
@@ -141,7 +141,7 @@ fn App() void {
                 .borderRadius = 8.0,
                 .borderWidth = .all(2.0),
                 .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
-            })({
+            } })({
                 forbear.text("Line 1");
                 forbear.text("Line 2");
                 forbear.text("Line 3 - should clip");

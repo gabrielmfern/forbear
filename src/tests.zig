@@ -42,23 +42,23 @@ test "2.0 grow factor against 1.0 grow factor on fixed height parent" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .horizontal,
             .textWrapping = .word,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 2.0 },
                 .height = .{ .fixed = 100.0 },
                 .direction = .vertical,
-            })({});
+            } })({});
 
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .fixed = 100.0 },
                 .direction = .vertical,
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -83,29 +83,29 @@ test "grow factor 0.0 does not participate in grow distribution" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300.0 },
             .height = .fit,
             .direction = .horizontal,
-        })({
+        } })({
             // grow: 0.0 should keep its fitted size (50px from its child)
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 0.0 },
                 .height = .{ .fixed = 100.0 },
                 .direction = .vertical,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 50.0 },
                     .height = .{ .fixed = 50.0 },
-                })({});
+                } })({});
             });
 
             // grow: 1.0 should take all remaining space (300 - 50 = 250)
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .fixed = 100.0 },
                 .direction = .vertical,
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -131,29 +131,29 @@ test "negative grow factor does not participate in grow distribution" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300.0 },
             .height = .fit,
             .direction = .horizontal,
-        })({
+        } })({
             // grow: -1.0 should keep its fitted size (50px from its child)
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = -1.0 },
                 .height = .{ .fixed = 100.0 },
                 .direction = .vertical,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 50.0 },
                     .height = .{ .fixed = 50.0 },
-                })({});
+                } })({});
             });
 
             // grow: 1.0 should take all remaining space (300 - 50 = 250)
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .fixed = 100.0 },
                 .direction = .vertical,
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -187,37 +187,37 @@ test "fit height parent, with grow height child containing wrapping text" {
     // After text wrapping, card B is tallest. The row should fit to B's height,
     // then cards A and C (with height: .grow) should stretch to match.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .horizontal,
             .textWrapping = .word,
-        })({
+        } })({
             // Card A: short text (single line)
             // direction: .vertical is required so children get width constrained
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .grow = 1.0 },
                 .direction = .vertical,
-            })({
+            } })({
                 forbear.text("Short.");
             });
 
             // Card B: long text (will be tallest after wrapping)
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .grow = 1.0 },
                 .direction = .vertical,
-            })({
+            } })({
                 forbear.text("This testimonial will wrap to many lines when constrained to 100px width forcing this card to be taller.");
             });
 
             // Card C: medium text
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .grow = 1.0 },
                 .direction = .vertical,
-            })({
+            } })({
                 forbear.text("Medium.");
             });
         });
@@ -254,26 +254,26 @@ test "cross-axis grow siblings match height after text wrapping" {
     // Left child has wrapped text (tall), right child is empty.
     // After wrapping, both should have equal heights matching the tallest.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300 },
             .height = .fit,
             .direction = .horizontal,
             .textWrapping = .word,
-        })({
+        } })({
             // Left: tall wrapped text
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .grow = 1.0 },
                 .direction = .vertical,
-            })({
+            } })({
                 forbear.text("This text will wrap to multiple lines when constrained to 100px width.");
             });
 
             // Right: empty but should stretch to match left
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .grow = 1.0 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -302,16 +302,16 @@ test "wrapped text propagates height upward" {
     try forbear.frame(try frameMeta(arena))({
         var textNode: *forbear.Node = undefined;
 
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .textWrapping = .word,
             .width = .fit,
             .height = .fit,
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .fit,
-            })({
+            } })({
                 forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
                 textNode = forbear.getPreviousNode().?;
             });
@@ -341,11 +341,11 @@ fn expectTextLineCount(content: []const u8, expectedLines: usize) !void {
 
     try forbear.frame(try frameMeta(arena))({
         var textNode: *forbear.Node = undefined;
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .fit,
             .height = .fit,
             .direction = .vertical,
-        })({
+        } })({
             forbear.text(content);
             textNode = forbear.getPreviousNode().?;
         });
@@ -487,12 +487,12 @@ fn measurePrelayoutText(
 
     var result: TextMeasurements = undefined;
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .fit,
             .height = .fit,
             .direction = .vertical,
             .textWrapping = wrapping,
-        })({
+        } })({
             forbear.text(content);
             const node = forbear.getPreviousNode().?;
             result = .{
@@ -615,12 +615,12 @@ fn measureLaidOutText(
     var result: LaidOutText = undefined;
     try forbear.frame(try frameMeta(arena))({
         var textNode: *forbear.Node = undefined;
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = width },
             .height = .fit,
             .direction = .vertical,
             .textWrapping = wrapping,
-        })({
+        } })({
             forbear.text(content);
             textNode = forbear.getPreviousNode().?;
         });
@@ -732,16 +732,16 @@ test "wrapped text simple ancestry stays at origin" {
     try forbear.frame(try frameMeta(arena))({
         var textNode: *forbear.Node = undefined;
 
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .textWrapping = .word,
             .width = .fit,
             .height = .fit,
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .fit,
-            })({
+            } })({
                 forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
                 textNode = forbear.getPreviousNode().?;
             });
@@ -757,7 +757,7 @@ test "wrapped text simple ancestry stays at origin" {
     });
 }
 
-// Regression: `forbear.image()` uses `width: grow` + `height: ratio`. Build-time
+// Regression: `forbear.Image()` uses `width: grow` + `height: ratio`. Build-time
 // `fitChild` saw height 0, so a `height: fit` hero column stayed short and the
 // next root sibling (e.g. offerings card) overlapped the headline. `growAndShrink`
 // applies ratio sizing then incrementally propagates the main-axis delta with
@@ -774,41 +774,41 @@ test "uhoh-shaped grow-width ratio hero does not overlap following sibling secti
 
     try forbear.frame(try frameMeta(arena))({
         // viewport 800px wide from frameMeta
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .maxWidth = 600,
                 .xJustification = .center,
                 .yJustification = .start,
                 .padding = forbear.Padding.top(22.5).withBottom(30.0),
                 .direction = .vertical,
-            })({
+            } })({
                 // Stand-in for `forbear.image` (grow width + intrinsic aspect).
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .{ .grow = 1.0 },
                     .height = .{ .ratio = 0.5 },
-                })({});
-                forbear.element(.{
+                } })({});
+                forbear.element(.{ .style = .{
                     .fontSize = 18,
                     .margin = forbear.Margin.block(13.5).withBottom(7.5),
-                })({
+                } })({
                     forbear.text("We're here to reinvent how tech gets done.");
                 });
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .fontSize = 12,
-                })({
+                } })({
                     forbear.text("We're replacing clunky IT with clean, fast, and flexible support.");
                 });
             });
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .fixed = 80 },
                 .background = .{ .color = .{ 1, 1, 1, 1 } },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -848,22 +848,22 @@ test "wrapped text propagates height upward with siblings" {
     try forbear.frame(try frameMeta(arena))({
         var textNode: *forbear.Node = undefined;
 
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .textWrapping = .word,
             .width = .fit,
             .height = .fit,
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .fit,
-            })({
+            } })({
                 forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
                 textNode = forbear.getPreviousNode().?;
             });
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .height = .{ .fixed = 100 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -892,22 +892,22 @@ test "wrapped text stacks siblings after wrapping" {
     try forbear.frame(try frameMeta(arena))({
         var textNode: *forbear.Node = undefined;
 
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .textWrapping = .word,
             .width = .fit,
             .height = .fit,
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .fit,
-            })({
+            } })({
                 forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
                 textNode = forbear.getPreviousNode().?;
             });
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .height = .{ .fixed = 100 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -944,39 +944,39 @@ test "cross-axis fit row height reflects full column height after text wrapping"
     // The row's height must match the column's total, not just the text's height.
     // The sibling must start below the row — not overlap it.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .vertical,
             .textWrapping = .word,
-        })({
+        } })({
             // Row (fit height, horizontal)
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .direction = .horizontal,
-            })({
+            } })({
                 // Inner column stacking text + fixed child
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .direction = .vertical,
                     .width = .{ .grow = 1.0 },
-                })({
-                    forbear.element(.{
+                } })({
+                    forbear.element(.{ .style = .{
                         .width = .{ .fixed = 200 },
                         .height = .fit,
-                    })({
+                    } })({
                         forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt");
                     });
-                    forbear.element(.{
+                    forbear.element(.{ .style = .{
                         .width = .{ .fixed = 100 },
                         .height = .{ .fixed = 50 },
-                    })({});
+                    } })({});
                 });
             });
             // Sibling that must appear below the row
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .fixed = 30 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -1012,22 +1012,22 @@ test "ratio width tracks fit height after propagated text wrap" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .ratio = 2.0 },
                 .height = .fit,
                 .direction = .horizontal,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 120 },
                     .height = .fit,
                     .direction = .vertical,
                     .textWrapping = .word,
-                })({
+                } })({
                     forbear.text("One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.");
                 });
             });
@@ -1056,15 +1056,15 @@ test "ratio height resolves after grow distributes width" {
     try forbear.frame(try frameMeta(arena))({
         // viewport 800x600; horizontal root
         // child: width grows to fill 800, height = ratio(0.5) → 400
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
             .direction = .horizontal,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .ratio = 0.5 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -1088,15 +1088,15 @@ test "ratio width resolves after grow distributes height" {
     try forbear.frame(try frameMeta(arena))({
         // viewport 800x600; vertical root
         // child: height grows to fill 600, width = ratio(2.0) → 1200
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .ratio = 2.0 },
                 .height = .{ .grow = 1.0 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -1118,17 +1118,17 @@ test "wrapAndPlace offsets standard children by border plus padding" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 80 },
             .direction = .horizontal,
             .borderWidth = .left(8),
             .padding = .left(7),
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 40 },
                 .height = .{ .fixed = 24 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -1153,24 +1153,24 @@ test "overflow wrap places children on new lines and grows parent height" {
         // A 300px-wide horizontal container with overflow: wrap.
         // Three 120x50 children: the first two fit on line 1 (240px < 300px),
         // the third overflows and wraps to line 2.
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300 },
             .height = .fit,
             .direction = .horizontal,
             .overflow = .wrap,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 120 },
                 .height = .{ .fixed = 50 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 120 },
                 .height = .{ .fixed = 50 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 120 },
                 .height = .{ .fixed = 50 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -1212,26 +1212,26 @@ test "overflow wrap line ranges start at the wrapping child for cross-axis justi
         // wraps must still align every child on that row (including the wrapped
         // one); buggy line .start would attach the previous row's last child to
         // the new row and skip applying x justification to the real wrapped child.
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300 },
             .height = .fit,
             .direction = .horizontal,
             .overflow = .wrap,
             .xJustification = .center,
             .yJustification = .start,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 120 },
                 .height = .{ .fixed = 50 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 120 },
                 .height = .{ .fixed = 50 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 120 },
                 .height = .{ .fixed = 50 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -1269,29 +1269,29 @@ test "overflow wrap with grow-width parent wraps against resolved size" {
         // grow resolves to 800 rather than being floored at 900.
         // Three 300x60 children: the first two fit on line 1 (600 < 800),
         // the third overflows and wraps to line 2.
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .fit,
                 .direction = .horizontal,
                 .overflow = .wrap,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 300 },
                     .height = .{ .fixed = 60 },
-                })({});
-                forbear.element(.{
+                } })({});
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 300 },
                     .height = .{ .fixed = 60 },
-                })({});
-                forbear.element(.{
+                } })({});
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 300 },
                     .height = .{ .fixed = 60 },
-                })({});
+                } })({});
             });
         });
 
@@ -1332,23 +1332,23 @@ test "grow children split remaining space and stretch cross-axis" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
             .direction = .horizontal,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .fixed = 40 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .grow = 1.0 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .grow = 1.0 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -1390,13 +1390,13 @@ test "perpendicular clamping respects parent padding" {
     try forbear.frame(try frameMeta(arena))({
         // A vertical parent with fixed width and padding,
         // containing a long text that should be clamped to the content area.
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .fit,
             .direction = .vertical,
             .padding = .all(20),
             .textWrapping = .word,
-        })({
+        } })({
             forbear.text("This is a long piece of text that should definitely wrap within the parent's content area and not overflow beyond its padding boundaries");
         });
 
@@ -1422,21 +1422,21 @@ test "fixed-placed elements are not affected by scroll" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
                 .placement = .{ .fixed = .{ 10.0, 20.0 } },
-            })({});
+            } })({});
 
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
-            })({});
+            } })({});
         });
 
         // Simulate a scroll offset
@@ -1466,16 +1466,16 @@ test "absolute-placed elements move with scroll" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
                 .placement = .{ .absolute = .{ 10.0, 200.0 } },
-            })({});
+            } })({});
         });
 
         forbear.getContext().scrollPosition = .{ 0.0, 100.0 };
@@ -1500,28 +1500,28 @@ test "relative-placed elements are positioned from parent origin" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
             .direction = .vertical,
-        })({
+        } })({
             // Sibling that pushes the parent's forbear.layout forward but should not
             // affect the relative child's position.
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
-            })({});
+            } })({});
 
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 200 },
                 .height = .{ .fixed = 100 },
                 .padding = .all(10),
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 20 },
                     .height = .{ .fixed = 20 },
                     .placement = .{ .relative = .{ 5.0, 15.0 } },
-                })({});
+                } })({});
             });
         });
 
@@ -1548,16 +1548,16 @@ test "relative-placed child does not contribute to parent's fit" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .vertical,
             .width = .fit,
             .height = .fit,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .placement = .{ .relative = .{ 0.0, 0.0 } },
                 .width = .{ .fixed = 999.0 },
                 .height = .{ .fixed = 999.0 },
-            })({});
+            } })({});
         });
         const parent = forbear.getPreviousNode().?;
         try std.testing.expectEqual(@as(f32, 0.0), parent.size[0]);
@@ -1577,32 +1577,32 @@ test "fixed-width ratio-height children with maxSize don't inflate parent cross-
     // Simulates the image() pattern: fixed width, ratio height, maxWidth/maxHeight constraints.
     // Without clamping, the parent sees the unclamped size and inflates its cross-axis height.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 800 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .direction = .horizontal,
-            })({
+            } })({
                 // Mimics an image: fixed width 400, ratio height 0.75, maxWidth 128, maxHeight 112.
                 // Unclamped size would be (400, 300); clamped should be (128, 96).
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 400 },
                     .height = .{ .ratio = 0.75 },
                     .minWidth = 0,
                     .minHeight = 0,
                     .maxWidth = 128,
                     .maxHeight = 112,
-                })({});
+                } })({});
 
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 300 },
                     .height = .{ .ratio = 0.5 },
                     .minWidth = 0,
                     .minHeight = 0,
                     .maxWidth = 128,
                     .maxHeight = 112,
-                })({});
+                } })({});
             });
         });
 
@@ -1637,35 +1637,35 @@ test "ltr row with fixed height centers children vertically" {
         // A 400x200 horizontal row with a 50px tall child.
         // With .center justification the child should be at y = (200-50)/2 = 75.
         // With .end justification the child should be at y = 200-50 = 150.
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 400 },
             .height = .fit,
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 400 },
                 .height = .{ .fixed = 200 },
                 .direction = .horizontal,
                 .xJustification = .start,
                 .yJustification = .center,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 100 },
                     .height = .{ .fixed = 50 },
-                })({});
+                } })({});
             });
 
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 400 },
                 .height = .{ .fixed = 200 },
                 .direction = .horizontal,
                 .xJustification = .start,
                 .yJustification = .end,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 100 },
                     .height = .{ .fixed = 50 },
-                })({});
+                } })({});
             });
         });
 
@@ -1697,11 +1697,11 @@ test "slotted component children propagate size to fit ancestors" {
     const SlottedComponent = struct {
         fn render() *const fn (void) void {
             forbear.component("slotted")({
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
                     .padding = forbear.Padding.all(10),
-                })({
+                } })({
                     forbear.componentChildrenSlot();
                 });
             });
@@ -1710,15 +1710,15 @@ test "slotted component children propagate size to fit ancestors" {
     };
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .fit,
             .height = .fit,
-        })({
+        } })({
             SlottedComponent.render()({
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 100 },
                     .height = .{ .fixed = 50 },
-                })({});
+                } })({});
             });
         });
 
@@ -1748,20 +1748,20 @@ test "slotted component with before/after content sizes correctly" {
     const SlottedComponent = struct {
         fn render() *const fn (void) void {
             forbear.component("slotted")({
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
                     .direction = .horizontal,
-                })({
-                    forbear.element(.{
+                } })({
+                    forbear.element(.{ .style = .{
                         .width = .{ .fixed = 20 },
                         .height = .{ .fixed = 30 },
-                    })({});
+                    } })({});
                     forbear.componentChildrenSlot();
-                    forbear.element(.{
+                    forbear.element(.{ .style = .{
                         .width = .{ .fixed = 20 },
                         .height = .{ .fixed = 30 },
-                    })({});
+                    } })({});
                 });
             });
             return forbear.componentChildrenSlotEnd();
@@ -1769,15 +1769,15 @@ test "slotted component with before/after content sizes correctly" {
     };
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .fit,
             .height = .fit,
-        })({
+        } })({
             SlottedComponent.render()({
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 60 },
                     .height = .{ .fixed = 40 },
-                })({});
+                } })({});
             });
         });
 
@@ -1807,11 +1807,11 @@ test "nested slotted components propagate sizes correctly" {
     const Inner = struct {
         fn render() *const fn (void) void {
             forbear.component("inner")({
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
                     .padding = forbear.Padding.all(5),
-                })({
+                } })({
                     forbear.componentChildrenSlot();
                 });
             });
@@ -1822,11 +1822,11 @@ test "nested slotted components propagate sizes correctly" {
     const Outer = struct {
         fn render() *const fn (void) void {
             forbear.component("outer")({
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
                     .padding = forbear.Padding.all(10),
-                })({
+                } })({
                     forbear.componentChildrenSlot();
                 });
             });
@@ -1835,16 +1835,16 @@ test "nested slotted components propagate sizes correctly" {
     };
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .fit,
             .height = .fit,
-        })({
+        } })({
             Outer.render()({
                 Inner.render()({
-                    forbear.element(.{
+                    forbear.element(.{ .style = .{
                         .width = .{ .fixed = 50 },
                         .height = .{ .fixed = 30 },
-                    })({});
+                    } })({});
                 });
             });
         });
@@ -1876,13 +1876,13 @@ test "horizontal minSize uses child.minSize to avoid unwrapped text width bloat"
 
     try forbear.frame(try frameMeta(arena))({
         // Container with maxWidth constraint
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .fit,
             .maxWidth = 200,
             .direction = .vertical,
             .textWrapping = .word,
-        })({
+        } })({
             // Long text that would be ~500px unwrapped but wraps to fit 200px
             forbear.text("This is a long sentence that will definitely wrap when constrained to two hundred pixels width.");
         });
@@ -1910,26 +1910,26 @@ test "vertical spacing elements with grow height works properly" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .fixed = 700 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .height = .{ .fixed = 100 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .height = .{ .fixed = 100 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .height = .{ .fixed = 100 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .height = .{ .grow = 1.0 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .height = .{ .fixed = 100 },
-            })({});
+            } })({});
         });
 
         const nodeTree = try forbear.layout();
@@ -1954,27 +1954,27 @@ test "vertical minSize uses child.size to capture wrapped text height" {
 
     try forbear.frame(try frameMeta(arena))({
         // Horizontal row with fit height
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .horizontal,
             .textWrapping = .word,
-        })({
+        } })({
             // Card A: grow height, short content
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .grow = 1.0 },
                 .direction = .vertical,
-            })({
+            } })({
                 forbear.text("Short");
             });
 
             // Card B: grow height, wrapped text that determines row height
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .grow = 1.0 },
                 .direction = .vertical,
-            })({
+            } })({
                 forbear.text("This text will wrap to multiple lines and should determine the row height which siblings then grow to match.");
             });
         });
@@ -2008,12 +2008,12 @@ test "horizontal non-wrap container grows height to fit wrapped text child" {
     // Horizontal container (non-wrap) with a single text child that wraps.
     // The container's height should expand to fit the wrapped text.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 100 },
             .height = .fit,
             .direction = .horizontal,
             .textWrapping = .word,
-        })({
+        } })({
             forbear.text("This text will wrap to multiple lines when constrained to 100px width.");
         });
 
@@ -2040,22 +2040,22 @@ test "nested containers propagate wrapped text height through multiple levels" {
     // Three levels: outer (horizontal) > middle (vertical) > inner (horizontal) > text
     // Wrapped text height should propagate up through all fit containers.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .fit,
             .direction = .horizontal,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .fit,
                 .direction = .vertical,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
                     .direction = .horizontal,
                     .textWrapping = .word,
-                })({
+                } })({
                     forbear.text("This text will wrap when constrained to the parent width of 100px.");
                 });
             });
@@ -2089,26 +2089,26 @@ test "mixed fit and grow siblings match height after text wrapping" {
     // - Left child: fit height, contains wrapped text (determines row height)
     // - Right child: grow height, empty (should stretch to match left)
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300 },
             .height = .fit,
             .direction = .horizontal,
             .textWrapping = .word,
-        })({
+        } })({
             // Fit child with wrapped text
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .fit,
                 .direction = .vertical,
-            })({
+            } })({
                 forbear.text("This text wraps to multiple lines and determines the row height.");
             });
 
             // Grow child should stretch to match
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .grow = 1.0 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -2144,21 +2144,21 @@ test "slotted children propagate size to fit ancestors" {
         fn call() *const fn (void) void {
             forbear.component("slotted")({
                 // Multiple nested fit elements to stress the propagation
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .width = .fit,
                     .height = .fit,
                     .direction = .vertical,
-                })({
-                    forbear.element(.{
+                } })({
+                    forbear.element(.{ .style = .{
                         .width = .fit,
                         .height = .fit,
                         .direction = .vertical,
-                    })({
-                        forbear.element(.{
+                    } })({
+                        forbear.element(.{ .style = .{
                             .width = .fit,
                             .height = .fit,
                             .direction = .vertical,
-                        })({
+                        } })({
                             forbear.componentChildrenSlot();
                         });
                     });
@@ -2172,24 +2172,24 @@ test "slotted children propagate size to fit ancestors" {
 
     try forbear.frame(try frameMeta(arena))({
         // Fit ancestor that wraps the component
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .fit,
             .height = .fit,
             .direction = .vertical,
-        })({
+        } })({
             // Another fit wrapper
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .fit,
                 .height = .fit,
                 .direction = .vertical,
-            })({
+            } })({
                 SlottedComponent()({
                     // Slotted child with fixed size - added AFTER component's
                     // internal elements have ended
-                    forbear.element(.{
+                    forbear.element(.{ .style = .{
                         .width = .{ .fixed = 150 },
                         .height = .{ .fixed = 80 },
-                    })({});
+                    } })({});
                 });
             });
         });
@@ -2236,17 +2236,17 @@ test "element fitting - fit parent with padding accumulates fixed child inline" 
     const arenaAllocator = arena.allocator();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .vertical,
             .height = .fit,
             .width = .{ .fixed = 100.0 },
             .padding = forbear.Padding.block(10.0),
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 40.0 },
                 .height = .{ .fixed = 20.0 },
                 .margin = forbear.Margin.block(5.0),
-            })({});
+            } })({});
         });
         const tree = try forbear.layout();
         const parent = tree.at(0);
@@ -2267,20 +2267,20 @@ test "element fitting - fit parent cross-axis takes max child height" {
     const arenaAllocator = arena.allocator();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .horizontal,
             .height = .fit,
             .width = .{ .fixed = 200.0 },
             .padding = forbear.Padding.block(8.0),
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 30.0 },
                 .height = .{ .fixed = 20.0 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 30.0 },
                 .height = .{ .fixed = 50.0 },
-            })({});
+            } })({});
         });
         const tree = try forbear.layout();
         const parent = tree.at(0);
@@ -2301,22 +2301,22 @@ test "element fitting - fit parent with padding accumulates fixed child inline w
     const arenaAllocator = arena.allocator();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .horizontal,
             .width = .fit,
             .height = .{ .fixed = 50.0 },
             .padding = forbear.Padding.inLine(12.0),
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 30.0 },
                 .height = .{ .fixed = 50.0 },
                 .margin = forbear.Margin.inLine(4.0),
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 20.0 },
                 .height = .{ .fixed = 50.0 },
                 .margin = forbear.Margin.inLine(6.0),
-            })({});
+            } })({});
         });
         const tree = try forbear.layout();
         const parent = tree.at(0);
@@ -2337,20 +2337,20 @@ test "element fitting - nested fit parents propagate size upward" {
     const arenaAllocator = arena.allocator();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .vertical,
             .width = .fit,
             .height = .fit,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .direction = .vertical,
                 .width = .fit,
                 .height = .fit,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 60.0 },
                     .height = .{ .fixed = 30.0 },
-                })({});
+                } })({});
             });
         });
         const tree = try forbear.layout();
@@ -2375,16 +2375,16 @@ test "element fitting - first child margin contributes to fit parent size" {
     const arenaAllocator = arena.allocator();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .vertical,
             .height = .fit,
             .width = .fit,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 40.0 },
                 .height = .{ .fixed = 20.0 },
                 .margin = forbear.Margin.block(8.0),
-            })({});
+            } })({});
         });
         const tree = try forbear.layout();
         const parent = tree.at(0);
@@ -2411,16 +2411,16 @@ test "element fitting - first child top margin offsets position in horizontal pa
     const arenaAllocator = arena.allocator();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .horizontal,
             .height = .fit,
             .width = .fit,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 40.0 },
                 .height = .{ .fixed = 20.0 },
                 .margin = forbear.Margin.block(8.0),
-            })({});
+            } })({});
         });
         const tree = try forbear.layout();
         const parent = tree.at(0);
@@ -2533,26 +2533,26 @@ test "Element key stability across frames" {
     defer firstFrameKeys.deinit(std.testing.allocator);
     var secondFrameKeys = try std.ArrayList(u64).initCapacity(std.testing.allocator, 8);
     defer secondFrameKeys.deinit(std.testing.allocator);
-    try forbear.frame(try frameMeta(arenaAllocator))({
-        // Build tree: root > [child1, child2 > [nested1, nested2]]
-        forbear.element(.{})({
-            forbear.element(.{})({});
+    // Build tree from the same call sites so @returnAddress() is stable
+    const buildTree = struct {
+        fn build() void {
             forbear.element(.{})({
                 forbear.element(.{})({});
-                forbear.element(.{})({});
+                forbear.element(.{})({
+                    forbear.element(.{})({});
+                    forbear.element(.{})({});
+                });
             });
-        });
+        }
+    }.build;
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        buildTree();
         try collectKeys(std.testing.allocator, &self.nodeTree, 0, &firstFrameKeys);
     });
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            forbear.element(.{})({});
-            forbear.element(.{})({
-                forbear.element(.{})({});
-                forbear.element(.{})({});
-            });
-        });
+        buildTree();
         try collectKeys(std.testing.allocator, &self.nodeTree, 0, &secondFrameKeys);
     });
 
@@ -2569,6 +2569,302 @@ test "Element key stability across frames" {
             try std.testing.expect(key != otherKey);
         }
     }
+}
+
+test "Component state preserved when sibling is added" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const ComponentA = struct {
+        fn render(initialValue: u32, out: *u32) void {
+            forbear.component(null)({
+                const state = forbear.useState(u32, initialValue);
+                out.* = state.*;
+            });
+        }
+    }.render;
+
+    const ComponentB = struct {
+        fn render() void {
+            forbear.component(null)({});
+        }
+    }.render;
+
+    var stateOut: u32 = 0;
+
+    // Frame 1: render only ComponentA, initializing state to 42
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            ComponentA(42, &stateOut);
+        });
+    });
+    try std.testing.expectEqual(42, stateOut);
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: add ComponentB before ComponentA — A's state should still be 42
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            ComponentB();
+            ComponentA(99, &stateOut);
+        });
+    });
+    try std.testing.expectEqual(42, stateOut);
+}
+
+test "Component state preserved when sibling is removed" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const ComponentA = struct {
+        fn render() void {
+            forbear.component(null)({});
+        }
+    }.render;
+
+    const ComponentB = struct {
+        fn render(initialValue: u32, out: *u32) void {
+            forbear.component(null)({
+                const state = forbear.useState(u32, initialValue);
+                out.* = state.*;
+            });
+        }
+    }.render;
+
+    var stateOut: u32 = 0;
+
+    // Frame 1: render A then B, B gets state=42
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            ComponentA();
+            ComponentB(42, &stateOut);
+        });
+    });
+    try std.testing.expectEqual(42, stateOut);
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: remove A, render only B — B's state should still be 42
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            ComponentB(99, &stateOut);
+        });
+    });
+    try std.testing.expectEqual(42, stateOut);
+}
+
+test "Component state in a loop with manual keys" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const items = [_][]const u8{ "alpha", "beta", "gamma" };
+
+    // Frame 1: render 3 components with manual keys, each storing its index
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            for (items, 0..) |item, i| {
+                forbear.component(item)({
+                    const state = forbear.useState(u32, @intCast(i));
+                    _ = state;
+                });
+            }
+        });
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: remove "beta" from the middle — alpha and gamma should keep state
+    const items_without_beta = [_][]const u8{ "alpha", "gamma" };
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            for (items_without_beta) |item| {
+                forbear.component(item)({
+                    const state = forbear.useState(u32, 999);
+                    if (std.mem.eql(u8, item, "alpha")) {
+                        try std.testing.expectEqual(0, state.*);
+                    } else if (std.mem.eql(u8, item, "gamma")) {
+                        try std.testing.expectEqual(2, state.*);
+                    }
+                });
+            }
+        });
+    });
+}
+
+test "Element keys stable inside if statements" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const self = forbear.getContext();
+
+    const conditionalElement = struct {
+        fn render(condition: bool) void {
+            if (condition) {
+                forbear.element(.{ .style = .{
+                    .width = .{ .fixed = 50 },
+                    .height = .{ .fixed = 50 },
+                } })({});
+            }
+        }
+    }.render;
+
+    var key1: u64 = 0;
+    var key2: u64 = 0;
+    var key3: u64 = 0;
+
+    // Frame 1: condition true
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            conditionalElement(true);
+            key1 = self.nodeTree.at(1).key;
+        });
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: condition true again — key should match
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            conditionalElement(true);
+            key2 = self.nodeTree.at(1).key;
+        });
+    });
+
+    try std.testing.expectEqual(key1, key2);
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 3: condition false — element not rendered
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            conditionalElement(false);
+        });
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 4: condition true again — key should still match frame 1
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            conditionalElement(true);
+            key3 = self.nodeTree.at(1).key;
+        });
+    });
+
+    try std.testing.expectEqual(key1, key3);
+}
+
+test "Component state preserved through if statement toggling" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var stateOut: u32 = 0;
+
+    const ConditionalComponent = struct {
+        fn render(condition: bool, out: *u32) void {
+            if (condition) {
+                forbear.component(null)({
+                    const state = forbear.useState(u32, 42);
+                    out.* = state.*;
+                });
+            }
+        }
+    }.render;
+
+    // Frame 1: condition true, state initialized to 42
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            ConditionalComponent(true, &stateOut);
+        });
+    });
+    try std.testing.expectEqual(42, stateOut);
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: condition false — component not rendered
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            ConditionalComponent(false, &stateOut);
+        });
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 3: condition true again — state should be preserved as 42
+    stateOut = 0;
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            ConditionalComponent(true, &stateOut);
+        });
+    });
+    try std.testing.expectEqual(42, stateOut);
+}
+
+test "Wrapper components produce unique keys from different parent components" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var keyFromA: u64 = 0;
+    var keyFromB: u64 = 0;
+
+    const ComponentA = struct {
+        fn render(out: *u64) void {
+            forbear.component(null)({
+                forbear.element(.{})({
+                    forbear.BreakLine();
+                });
+                const ctx = forbear.getContext();
+                out.* = ctx.nodeTree.at(ctx.nodeTree.list.items.len - 1).key;
+            });
+        }
+    }.render;
+
+    const ComponentB = struct {
+        fn render(out: *u64) void {
+            forbear.component(null)({
+                forbear.element(.{})({
+                    forbear.BreakLine();
+                });
+                const ctx = forbear.getContext();
+                out.* = ctx.nodeTree.at(ctx.nodeTree.list.items.len - 1).key;
+            });
+        }
+    }.render;
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            ComponentA(&keyFromA);
+            ComponentB(&keyFromB);
+        });
+
+        // BreakLine from different parent components should have different keys
+        try std.testing.expect(keyFromA != keyFromB);
+    });
 }
 
 test "Component resolution" {
@@ -3186,12 +3482,24 @@ test "Event queue dispatches events to correct elements" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
+    const helpers = struct {
+        fn firstChild() void {
             forbear.element(.{})({});
+        }
+        fn secondChild() void {
+            forbear.element(.{})({});
+        }
+        fn root() *const fn (void) void {
+            return forbear.element(.{});
+        }
+    };
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        helpers.root()({
+            helpers.firstChild();
             const firstChildKey = forbear.getPreviousNode().?.key;
 
-            forbear.element(.{})({});
+            helpers.secondChild();
             const secondChildKey = forbear.getPreviousNode().?.key;
 
             try std.testing.expect(firstChildKey != secondChildKey);
@@ -3205,15 +3513,15 @@ test "Event queue dispatches events to correct elements" {
     _ = arena.reset(.retain_capacity);
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            forbear.element(.{})({});
+        helpers.root()({
+            helpers.firstChild();
             const firstChildKey = forbear.getPreviousNode().?.key;
 
             try std.testing.expectEqual(forbear.Event.mouseOut, forbear.useNextEvent().?);
             try std.testing.expectEqual(forbear.Event.mouseOver, forbear.useNextEvent().?);
             try std.testing.expectEqual(null, forbear.useNextEvent());
 
-            forbear.element(.{})({});
+            helpers.secondChild();
             const secondChildKey = forbear.getPreviousNode().?.key;
 
             try std.testing.expect(firstChildKey != secondChildKey);
@@ -3232,10 +3540,19 @@ test "on() returns matching events inside element body" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
+    const helpers = struct {
+        fn root() *const fn (void) void {
+            return forbear.element(.{});
+        }
+        fn child() *const fn (void) void {
+            return forbear.element(.{});
+        }
+    };
+
     // Frame 1: build elements and push events
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            forbear.element(.{})({});
+        helpers.root()({
+            helpers.child()({});
             const childKey = forbear.getPreviousNode().?.key;
 
             try forbear.pushEvent(childKey, .mouseOver);
@@ -3247,8 +3564,8 @@ test "on() returns matching events inside element body" {
 
     // Frame 2: use on() inside element body to consume specific events
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            forbear.element(.{})({
+        helpers.root()({
+            helpers.child()({
                 // on(.mouseOut) should find and return the mouseOut event,
                 // even though mouseOver was pushed first
                 try std.testing.expect(forbear.on(.mouseOut));
@@ -3275,7 +3592,7 @@ fn testCreateElementConfiguration(configuration: struct {
     const arenaAllocator = arena.allocator();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(configuration.style)({});
+        forbear.element(.{ .style = configuration.style })({});
         if (forbear.getPreviousNode()) |previousNode| {
             try std.testing.expectEqualDeep(configuration.expectedSize, previousNode.size);
         }
@@ -3323,16 +3640,16 @@ test "element fitting - fixed child does not contribute to fit parent" {
     const arenaAllocator = arena.allocator();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .vertical,
             .width = .fit,
             .height = .fit,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .placement = .{ .fixed = .{ 0.0, 0.0 } },
                 .width = .{ .fixed = 999.0 },
                 .height = .{ .fixed = 999.0 },
-            })({});
+            } })({});
         });
         const parent = forbear.getPreviousNode().?;
         // Fixed child must not inflate the fit parent
@@ -3354,11 +3671,11 @@ test "element fitting - text child inflates fit parent inline" {
     const self = forbear.getContext();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .horizontal,
             .width = .fit,
             .height = .fit,
-        })({
+        } })({
             forbear.text("hello");
         });
         const parent = forbear.getPreviousNode().?;
@@ -3385,12 +3702,12 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
     const self = forbear.getContext();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .horizontal,
             .width = .fit,
             .height = .fit,
             .textWrapping = .word,
-        })({
+        } })({
             forbear.text("hello world");
         });
         const parent = forbear.getPreviousNode().?;
@@ -3412,12 +3729,18 @@ test "mouseDown dispatches on button press" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
+    const box = struct {
+        fn create() *const fn (void) void {
+            return forbear.element(.{ .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            } });
+        }
+    }.create;
+
     // Frame 1: create an element and run forbear.layout + update with mouse press
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .width = .{ .fixed = 100 },
-            .height = .{ .fixed = 100 },
-        })({});
+        box()({});
 
         _ = try forbear.layout();
 
@@ -3431,10 +3754,7 @@ test "mouseDown dispatches on button press" {
 
     // Frame 2: consume events
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .width = .{ .fixed = 100 },
-            .height = .{ .fixed = 100 },
-        })({
+        box()({
             try std.testing.expect(forbear.on(.mouseDown));
         });
     });
@@ -3450,11 +3770,17 @@ test "mouseUp dispatches on button release" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
+    const box = struct {
+        fn create() *const fn (void) void {
+            return forbear.element(.{ .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            } });
+        }
+    }.create;
+
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .width = .{ .fixed = 100 },
-            .height = .{ .fixed = 100 },
-        })({});
+        box()({});
 
         _ = try forbear.layout();
 
@@ -3467,10 +3793,7 @@ test "mouseUp dispatches on button release" {
     _ = arena.reset(.retain_capacity);
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .width = .{ .fixed = 100 },
-            .height = .{ .fixed = 100 },
-        })({
+        box()({
             try std.testing.expect(forbear.on(.mouseUp));
         });
     });
@@ -3486,12 +3809,18 @@ test "click fires when mouseDown and mouseUp on same element" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
+    const box = struct {
+        fn create() *const fn (void) void {
+            return forbear.element(.{ .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            } });
+        }
+    }.create;
+
     // Frame 1: mouseDown
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .width = .{ .fixed = 100 },
-            .height = .{ .fixed = 100 },
-        })({});
+        box()({});
 
         _ = try forbear.layout();
 
@@ -3505,10 +3834,7 @@ test "click fires when mouseDown and mouseUp on same element" {
 
     // Frame 2: mouseUp on same element
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .width = .{ .fixed = 100 },
-            .height = .{ .fixed = 100 },
-        })({});
+        box()({});
 
         _ = try forbear.layout();
 
@@ -3523,10 +3849,7 @@ test "click fires when mouseDown and mouseUp on same element" {
 
     // Frame 3: consume events
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .width = .{ .fixed = 100 },
-            .height = .{ .fixed = 100 },
-        })({
+        box()({
             try std.testing.expect(forbear.on(.click));
             try std.testing.expect(forbear.on(.mouseUp));
         });
@@ -3545,10 +3868,10 @@ test "no click when mouse moves away between mouseDown and mouseUp" {
 
     // Frame 1: mouseDown on element
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
-        })({});
+        } })({});
 
         _ = try forbear.layout();
 
@@ -3562,10 +3885,10 @@ test "no click when mouse moves away between mouseDown and mouseUp" {
 
     // Frame 2: move mouse outside and release
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
-        })({});
+        } })({});
 
         _ = try forbear.layout();
 
@@ -3580,10 +3903,10 @@ test "no click when mouse moves away between mouseDown and mouseUp" {
 
     // Frame 3: consume events -- should have mouseOut but no click or mouseUp on this element
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
-        })({
+        } })({
             try std.testing.expect(!forbear.on(.click));
             try std.testing.expect(!forbear.on(.mouseUp));
         });
@@ -4228,14 +4551,14 @@ test "buildDrawCommands emits one element command per visible node" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -4257,10 +4580,10 @@ test "buildDrawCommands emits element + text for a text node" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 50 },
-        })({
+        } })({
             forbear.text("hi");
         });
 
@@ -4296,7 +4619,7 @@ test "buildDrawCommands sorts by z with shadow before element before text" {
     try forbear.frame(try frameMeta(arena))({
         // Parent has text (so text command at some z)
         // Parent has shadow (shadow command at same z as parent element)
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 50 },
             .shadow = .{
@@ -4305,7 +4628,7 @@ test "buildDrawCommands sorts by z with shadow before element before text" {
                 .spread = 0,
                 .offset = .{ .x = .{ 0, 0 }, .y = .{ 0, 0 } },
             },
-        })({
+        } })({
             forbear.text("x");
         });
 
@@ -4333,10 +4656,10 @@ test "buildDrawCommands culls nodes outside viewport" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
-        })({});
+        } })({});
 
         const tree = try forbear.layout();
 
@@ -4362,15 +4685,15 @@ test "buildDrawCommands propagates clipRect from layout" {
 
     try forbear.frame(try frameMeta(arena))({
         // Fixed-height parent with children that overflow → children get clipRect
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 50 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .fixed = 80 },
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -4403,19 +4726,19 @@ test "buildDrawCommands respects explicit zIndex overrides" {
 
     try forbear.frame(try frameMeta(arena))({
         // Root → childA (default z=1), childB (explicit zIndex=100)
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 200 },
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
                 .zIndex = 100,
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -4439,18 +4762,18 @@ test "buildDrawCommands: nested children have z greater than parent" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 200 },
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .fixed = 100 },
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 50 },
                     .height = .{ .fixed = 50 },
-                })({});
+                } })({});
             });
         });
 
@@ -4474,14 +4797,14 @@ test "buildDrawCommands: siblings at same z remain in document order" {
 
     try forbear.frame(try frameMeta(arena))({
         // Three sibling elements all get z = parentZ + 1 → same z
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300 },
             .height = .{ .fixed = 300 },
             .direction = .horizontal,
-        })({
-            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
-            forbear.element(.{ .width = .{ .fixed = 20 }, .height = .{ .fixed = 20 } })({});
-            forbear.element(.{ .width = .{ .fixed = 30 }, .height = .{ .fixed = 30 } })({});
+        } })({
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } } })({});
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 20 }, .height = .{ .fixed = 20 } } })({});
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 30 }, .height = .{ .fixed = 30 } } })({});
         });
 
         const tree = try forbear.layout();
@@ -4509,14 +4832,14 @@ test "buildDrawCommands: elementIndex is unique and covers 0..N-1" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 200 },
             .direction = .vertical,
-        })({
-            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
-            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
-            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
+        } })({
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } } })({});
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } } })({});
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } } })({});
         });
 
         const tree = try forbear.layout();
@@ -4556,26 +4879,26 @@ test "buildDrawCommands: shadowIndex is sequential starting at 0" {
     };
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300 },
             .height = .{ .fixed = 300 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
                 .shadow = shadow,
-            })({});
+            } })({});
             // No shadow on this one
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
                 .shadow = shadow,
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -4607,11 +4930,11 @@ test "buildDrawCommands: text command range matches glyph count" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 500 },
             .height = .{ .fixed = 100 },
             .direction = .vertical,
-        })({
+        } })({
             forbear.text("hello");
             forbear.text("world!");
         });
@@ -4657,18 +4980,18 @@ test "buildDrawCommands: total count equals elements + shadows + nonEmptyText" {
     };
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 500 },
             .height = .{ .fixed = 200 },
             .direction = .vertical,
             .shadow = shadow,
-        })({
+        } })({
             forbear.text("hi");
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 50 },
                 .height = .{ .fixed = 50 },
                 .shadow = shadow,
-            })({});
+            } })({});
         });
 
         const tree = try forbear.layout();
@@ -4706,10 +5029,10 @@ test "buildDrawCommands: empty text does not emit a text command" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 100 },
-        })({
+        } })({
             forbear.text(""); // empty — should not add a text node
         });
 
@@ -4731,13 +5054,13 @@ test "buildDrawCommands: each visible node produces exactly one element command"
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 200 },
             .direction = .vertical,
-        })({
-            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
-            forbear.element(.{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } })({});
+        } })({
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } } })({});
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } } })({});
         });
 
         const tree = try forbear.layout();
@@ -4765,20 +5088,20 @@ test "buildDrawCommands: nested clips intersect correctly" {
     // Outer is 200x100. Middle is 300x150 (overflows outer → middle gets outer's clip).
     // Deepest is 400x400 (overflows middle → deepest gets middle's clip ∩ outer's clip).
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 200 },
             .height = .{ .fixed = 100 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 300 },
                 .height = .{ .fixed = 150 },
                 .direction = .vertical,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 400 },
                     .height = .{ .fixed = 400 },
-                })({});
+                } })({});
             });
         });
 
@@ -4815,25 +5138,25 @@ test "buildDrawCommands: three-level clip stack produces monotonically tighter b
 
     // Each level clips via fixed-size + overflowing child.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300 },
             .height = .{ .fixed = 300 },
             .direction = .vertical,
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .fixed = 200 },
                 .height = .{ .fixed = 200 },
                 .direction = .vertical,
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .width = .{ .fixed = 100 },
                     .height = .{ .fixed = 100 },
                     .direction = .vertical,
-                })({
-                    forbear.element(.{
+                } })({
+                    forbear.element(.{ .style = .{
                         .width = .{ .fixed = 500 },
                         .height = .{ .fixed = 500 },
-                    })({});
+                    } })({});
                 });
             });
         });

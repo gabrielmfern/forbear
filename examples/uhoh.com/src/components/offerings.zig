@@ -15,7 +15,7 @@ pub const OfferingProps = struct {
 
 pub fn Offering(props: OfferingProps) *const fn (void) void {
     forbear.component("Offering")({
-        forbear.element(props.style.overwrite(.{
+        forbear.element(.{ .style = props.style.overwrite(.{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
             .borderRadius = 12.0,
@@ -24,31 +24,31 @@ pub fn Offering(props: OfferingProps) *const fn (void) void {
             .padding = .all(20.0),
             .margin = forbear.Margin.block(0.0).withBottom(12.0),
             .direction = .vertical,
-        }))({
-            forbear.element(.{
+        }) })({
+            forbear.element(.{ .style = .{
                 .direction = .horizontal,
                 .xJustification = .start,
                 .yJustification = .center,
                 .margin = forbear.Margin.block(0.0).withBottom(9.0),
-            })({
-                forbear.image(.{
+            } })({
+                forbear.Image(.{
                     .width = .{ .fixed = 100.0 },
                     .blendMode = .multiply,
                     .margin = forbear.Margin.right(9.0),
                 }, forbear.useImage(props.imageId) catch unreachable);
-                forbear.element(.{
+                forbear.element(.{ .style = .{
                     .fontWeight = 700,
                     .fontSize = 16.5,
-                })({
+                } })({
                     forbear.text(props.title);
                 });
             });
             forbear.componentChildrenSlot();
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .grow = 1.0 },
-            })({});
-            forbear.element(.{
+            } })({});
+            forbear.element(.{ .style = .{
                 .borderRadius = 12.0,
                 .borderWidth = .all(2.0),
                 .borderColor = colors.black,
@@ -56,11 +56,11 @@ pub fn Offering(props: OfferingProps) *const fn (void) void {
                 .fontSize = 12.0,
                 .direction = .vertical,
                 .padding = forbear.Padding.block(10.0).withInLine(20.0),
-            })({
-                forbear.element(.{
+            } })({
+                forbear.element(.{ .style = .{
                     .fontSize = 18.0,
                     .margin = .block(10.0),
-                })({
+                } })({
                     forbear.text(props.addonTitle);
                 });
                 forbear.text(props.addonBody);
@@ -75,14 +75,14 @@ pub fn Offerings() !void {
         .maxWidth = 1269.0,
         .xJustification = .center,
     })({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .direction = .vertical,
             .width = .{ .grow = 1.0 },
-        })({
-            forbear.element(.{
+        } })({
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .margin = .bottom(20.0),
-            })({
+            } })({
                 Offering(.{
                     .title = "Basic IT & Tech Support",
                     .imageId = "uhoh-offer-46",
@@ -177,10 +177,10 @@ pub fn Offerings() !void {
                     });
                 });
             });
-            forbear.element(.{
+            forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
                 .margin = .bottom(20.0),
-            })({
+            } })({
                 Offering(.{
                     .title = "SaaS Spending, Tool Audits & Finance Ops",
                     .imageId = "uhoh-offer-50",

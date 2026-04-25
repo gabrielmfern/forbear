@@ -18,7 +18,7 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
                 isHovering.* = false;
             }
 
-            forbear.element(props.style.overwrite(.{
+            forbear.element(.{ .style = props.style.overwrite(.{
                 .borderRadius = 8.0,
                 .borderWidth = .all(2.0),
                 .background = .{ .color = forbear.white },
@@ -48,7 +48,7 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
                 .xJustification = .center,
                 .yJustification = .center,
                 .direction = .vertical,
-            }))({
+            }) })({
                 forbear.componentChildrenSlot();
             });
         });

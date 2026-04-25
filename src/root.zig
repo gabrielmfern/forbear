@@ -7,7 +7,7 @@ const components = @import("components.zig");
 pub const FpsCounter = components.FpsCounter;
 pub const Font = @import("font.zig");
 pub const Graphics = @import("graphics.zig");
-pub const Image = @import("graphics.zig").Image;
+const ImageType = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
 const nodeImport = @import("node.zig");
@@ -78,10 +78,6 @@ pub const FrameMeta = struct {
     err: ?anyerror = null,
 
     componentResolutionState: std.ArrayList(ComponentResolutionState) = .empty,
-    /// An index counting the amount of components behind the current one. This
-    /// helps differentiate the same components being used sequentially, since
-    /// they're not included in the node tree at all
-    componentIndex: usize = 0,
 
     previousPushedNodeIndex: ?usize = null,
     nodeParentStack: std.ArrayList(usize) = .empty,
@@ -123,7 +119,7 @@ nodeTree: NodeTree,
 frameMeta: ?FrameMeta,
 pendingEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 
-images: std.StringHashMap(Image),
+images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Renderer) !void {
@@ -159,7 +155,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .nodeTree = .empty,
         .pendingEventQueue = .init(allocator),
 
-        .images = std.StringHashMap(Image).init(allocator),
+        .images = std.StringHashMap(ImageType).init(allocator),
         .fonts = std.StringHashMap(Font).init(allocator),
     };
 }
@@ -205,7 +201,7 @@ pub fn registerImage(uniqueIdentifier: []const u8, comptime contents: []const u8
 ///
 /// Before using this, call `registerImage` with the same unique identifier to
 /// ensure the image is loaded and available.
-pub fn useImage(uniqueIdentifier: []const u8) !*Image {
+pub fn useImage(uniqueIdentifier: []const u8) !*ImageType {
     const self = getContext();
     return self.images.getPtr(uniqueIdentifier) orelse {
         std.log.err("Could not find image by the unique identifier {s}", .{uniqueIdentifier});
@@ -532,53 +528,71 @@ fn endNoop(block: void) void {
     _ = block;
 }
 
+fn computeKey(returnAddress: usize, manualKey: ?[]const u8) u64 {
+    const self = getContext();
+    var hasher = std.hash.Wyhash.init(0);
+    if (self.frameMeta) |fm| {
+        if (fm.componentResolutionState.getLastOrNull()) |crs| {
+            hasher.update(std.mem.asBytes(&crs.key));
+        }
+    }
+    if (manualKey) |mk| {
+        hasher.update(mk);
+    } else {
+        hasher.update(std.mem.asBytes(&returnAddress));
+    }
+    return hasher.final();
+}
+
 /// A thin wrapper around `element` that includes some aspect ratio handling
 /// definition logic in a way that feels more intuitve
-pub fn image(style: Style, img: *Image) void {
-    var complementedStyle = style;
-    const imageWidth: f32 = @floatFromInt(img.width);
-    const imageHeight: f32 = @floatFromInt(img.height);
-    const width = complementedStyle.width orelse .fit;
-    const height = complementedStyle.height orelse .fit;
-    switch (width) {
-        .fit => {
-            switch (height) {
-                .fit => {
-                    complementedStyle.width = .{ .fixed = imageWidth };
-                    complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
-                    complementedStyle.minWidth = 0;
-                    complementedStyle.minHeight = 0;
-                },
-                .grow, .fixed => {
-                    complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
-                },
-                .ratio => {},
-            }
-        },
-        .fixed => {
-            switch (height) {
-                .fit, .grow => {
-                    complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
-                },
-                .fixed, .ratio => {},
-            }
-        },
-        .grow => {
-            switch (height) {
-                .grow, .fit => {
-                    complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
-                },
-                .fixed => {
-                    complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
-                },
-                .ratio => {},
-            }
-        },
-        .ratio => {},
-    }
-    complementedStyle.background = .{ .image = img };
+pub fn Image(style: Style, img: *ImageType) void {
+    component("native-image")({
+        var complementedStyle = style;
+        const imageWidth: f32 = @floatFromInt(img.width);
+        const imageHeight: f32 = @floatFromInt(img.height);
+        const width = complementedStyle.width orelse .fit;
+        const height = complementedStyle.height orelse .fit;
+        switch (width) {
+            .fit => {
+                switch (height) {
+                    .fit => {
+                        complementedStyle.width = .{ .fixed = imageWidth };
+                        complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
+                        complementedStyle.minWidth = 0;
+                        complementedStyle.minHeight = 0;
+                    },
+                    .grow, .fixed => {
+                        complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
+                    },
+                    .ratio => {},
+                }
+            },
+            .fixed => {
+                switch (height) {
+                    .fit, .grow => {
+                        complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
+                    },
+                    .fixed, .ratio => {},
+                }
+            },
+            .grow => {
+                switch (height) {
+                    .grow, .fit => {
+                        complementedStyle.height = .{ .ratio = imageHeight / imageWidth };
+                    },
+                    .fixed => {
+                        complementedStyle.width = .{ .ratio = imageWidth / imageHeight };
+                    },
+                    .ratio => {},
+                }
+            },
+            .ratio => {},
+        }
+        complementedStyle.background = .{ .image = img };
 
-    element(complementedStyle)({});
+        element(.{ .style = complementedStyle })({});
+    });
 }
 
 fn frameEnd(block: void) anyerror!void {
@@ -628,7 +642,12 @@ fn elementEnd(block: void) void {
     // slotted children correctly.
 }
 
-pub fn element(incompleteStyle: Style) *const fn (void) void {
+pub const ElementProps = struct {
+    style: Style = .{},
+    key: ?[]const u8 = null,
+};
+
+pub noinline fn element(props: ElementProps) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -647,6 +666,7 @@ pub fn element(incompleteStyle: Style) *const fn (void) void {
     else
         null;
 
+    const incompleteStyle = props.style;
     const baseStyle = if (parentOptional) |parent|
         BaseStyle.from(parent.style)
     else
@@ -658,13 +678,7 @@ pub fn element(incompleteStyle: Style) *const fn (void) void {
     else
         0;
 
-    var hasher = std.hash.Wyhash.init(0);
-    hasher.update(std.mem.asBytes(&result.index));
-    // TODO: as is, it doesn't really work making a list of elements that might
-    // lose one or gain one in the midst of other ones, becasue it will
-    // invalidate the keys for all subsequent nodes, therefore also freeing
-    // state that it shouldn't
-    result.ptr.key = hasher.final();
+    result.ptr.key = computeKey(@returnAddress(), props.key);
     result.ptr.style = style;
     result.ptr.z = if (incompleteStyle.zIndex) |zIndex|
         zIndex
@@ -756,17 +770,21 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 
     const arena = self.frameMeta.?.arena;
 
-    text(std.fmt.allocPrint(arena, fmt, args) catch |err| blk: {
-        handleFrameError(err);
-        break :blk "N/A";
+    component("native-print-text")({
+        text(std.fmt.allocPrint(arena, fmt, args) catch |err| blk: {
+            handleFrameError(err);
+            break :blk "N/A";
+        });
     });
 }
 
-pub fn breakLine() void {
-    text("\n");
+pub fn BreakLine() void {
+    component("native-break-line")({
+        text("\n");
+    });
 }
 
-pub fn text(content: []const u8) void {
+pub noinline fn text(content: []const u8) void {
     if (content.len == 0) {
         return;
     }
@@ -907,10 +925,7 @@ pub fn text(content: []const u8) void {
     else
         0;
 
-    var hasher = std.hash.Wyhash.init(0);
-    hasher.update(content);
-    hasher.update(std.mem.asBytes(&result.index));
-    result.ptr.key = hasher.final();
+    result.ptr.key = computeKey(@returnAddress(), null);
     result.ptr.position = @splat(0.0);
     result.ptr.z = if (parentZ < std.math.maxInt(u16))
         parentZ + 1
@@ -998,7 +1013,7 @@ fn componentEnd(block: void) void {
     }
 }
 
-pub fn component(key: []const u8) *const fn (void) void {
+pub noinline fn component(key: ?[]const u8) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -1006,15 +1021,7 @@ pub fn component(key: []const u8) *const fn (void) void {
         return &endNoop;
     }
 
-    var hasher = std.hash.Wyhash.init(0);
-    hasher.update(key);
-    if (self.frameMeta.?.previousPushedNodeIndex) |previousPushedNodeIndex| {
-        hasher.update(std.mem.asBytes(&previousPushedNodeIndex));
-    }
-    hasher.update(std.mem.asBytes(&self.frameMeta.?.componentIndex));
-    const componentKey = hasher.final();
-
-    self.frameMeta.?.componentIndex += 1;
+    const componentKey = computeKey(@returnAddress(), key);
 
     self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
         .key = componentKey,

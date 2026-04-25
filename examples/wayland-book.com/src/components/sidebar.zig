@@ -3,7 +3,7 @@ const Colors = @import("../colors.zig");
 
 pub fn Sidebar() *const fn (void) void {
     forbear.component("sidebar")({
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .fixed = 300.0 },
             .height = .{ .grow = 1.0 },
             .direction = .vertical,
@@ -13,7 +13,7 @@ pub fn Sidebar() *const fn (void) void {
             .padding = forbear.Padding.all(10.0),
             .fontSize = 14.0,
             .color = Colors.sidebarText,
-        })({
+        } })({
             forbear.componentChildrenSlot();
         });
     });
@@ -22,12 +22,12 @@ pub fn Sidebar() *const fn (void) void {
 }
 
 pub fn SidebarDivider() void {
-    forbear.element(.{
+    forbear.element(.{ .style = .{
         .width = .{ .grow = 1.0 },
         .borderWidth = forbear.BorderWidth.top(0.75),
         .borderColor = Colors.border,
         .margin = forbear.Margin.bottom(6.0),
-    })({});
+    } })({});
 }
 
 pub const SidebarItemProps = struct {
@@ -39,7 +39,7 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
     forbear.component("sidebar-item")({
         const isHovering = forbear.useState(bool, false);
 
-        forbear.element(.{
+        forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .direction = .horizontal,
             .textWrapping = .none,
@@ -50,7 +50,7 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
             .cursor = .pointer,
             .color = if (props.active or isHovering.*) Colors.sidebarActive else null,
             .fontWeight = if (props.active) 600 else 400,
-        })({
+        } })({
             if (forbear.on(.mouseOver)) isHovering.* = true;
             if (forbear.on(.mouseOut)) isHovering.* = false;
 
