@@ -2771,6 +2771,114 @@ test "Element keys stable inside if statements" {
     try std.testing.expectEqual(key1, key3);
 }
 
+test "Element keys stable in for-loop with manual keys" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const items = [_][]const u8{ "alpha", "beta", "gamma" };
+    var keys = std.StringHashMap(u64).init(std.testing.allocator);
+    defer keys.deinit();
+
+    // Frame 1: render 3 elements with manual keys, capture each one's key
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            for (items) |item| {
+                forbear.element(.{ .key = item })({});
+                try keys.put(item, forbear.getPreviousNode().?.key);
+            }
+        });
+    });
+
+    // All three keys must be distinct (manual key disambiguates same call site)
+    try std.testing.expect(keys.get("alpha").? != keys.get("beta").?);
+    try std.testing.expect(keys.get("beta").? != keys.get("gamma").?);
+    try std.testing.expect(keys.get("alpha").? != keys.get("gamma").?);
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: same loop again — every element's key must match frame 1
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            for (items) |item| {
+                forbear.element(.{ .key = item })({});
+                try std.testing.expectEqual(keys.get(item).?, forbear.getPreviousNode().?.key);
+            }
+        });
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 3: remove "beta" — alpha and gamma's keys should still match frame 1
+    const items_without_beta = [_][]const u8{ "alpha", "gamma" };
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{})({
+            for (items_without_beta) |item| {
+                forbear.element(.{ .key = item })({});
+                try std.testing.expectEqual(keys.get(item).?, forbear.getPreviousNode().?.key);
+            }
+        });
+    });
+}
+
+test "Element keys stable for siblings around a conditional element" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const renderRow = struct {
+        fn render(showMiddle: bool, beforeKey: *u64, afterKey: *u64) void {
+            forbear.element(.{})({
+                forbear.element(.{})({});
+                beforeKey.* = forbear.getPreviousNode().?.key;
+
+                if (showMiddle) {
+                    forbear.element(.{})({});
+                }
+
+                forbear.element(.{})({});
+                afterKey.* = forbear.getPreviousNode().?.key;
+            });
+        }
+    }.render;
+
+    var before1: u64 = 0;
+    var after1: u64 = 0;
+    var before2: u64 = 0;
+    var after2: u64 = 0;
+    var before3: u64 = 0;
+    var after3: u64 = 0;
+
+    // Frame 1: middle present
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        renderRow(true, &before1, &after1);
+    });
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: middle removed — before/after keys must not change
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        renderRow(false, &before2, &after2);
+    });
+    try std.testing.expectEqual(before1, before2);
+    try std.testing.expectEqual(after1, after2);
+
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 3: middle re-added — before/after keys still match frame 1
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        renderRow(true, &before3, &after3);
+    });
+    try std.testing.expectEqual(before1, before3);
+    try std.testing.expectEqual(after1, after3);
+}
+
 test "Component state preserved through if statement toggling" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
