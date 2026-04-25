@@ -192,6 +192,7 @@ fn App() !void {
                 for (chapters, 0..) |chapter, i| {
                     SidebarItem(.{
                         .active = i == activeChapter.*,
+                        .key = chapter.chapter,
                         .depth = chapter.depth,
                     })({
                         Strong()({

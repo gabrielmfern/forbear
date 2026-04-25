@@ -1,3 +1,4 @@
+const std = @import("std");
 const forbear = @import("forbear");
 const Colors = @import("../colors.zig");
 
@@ -39,10 +40,13 @@ pub fn SidebarDivider() void {
 pub const SidebarItemProps = struct {
     active: bool = false,
     depth: f32 = 0,
+    key: ?[]const u8 = null,
 };
 
 pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
-    forbear.component(.{})({
+    forbear.component(.{
+        .key = props.key,
+    })({
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{
