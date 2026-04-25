@@ -765,7 +765,7 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 
     const arena = self.frameMeta.?.arena;
 
-    component("native-print-text")({
+    component(.{})({
         text(std.fmt.allocPrint(arena, fmt, args) catch |err| blk: {
             handleFrameError(err);
             break :blk "N/A";
@@ -774,7 +774,7 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn BreakLine() void {
-    component("native-break-line")({
+    component(.{})({
         text("\n");
     });
 }
@@ -1325,7 +1325,7 @@ fn scroller(uiEdges: Vec2) void {
     // This is fine since we're not really inserting any node, so it won't clash
     // with the current root node. The only purpose of this is to use the same
     // logic here as is already implmented for actual UI code.
-    component("forbear-native-scroller")({
+    component(.{ .key = "forbear-native-scroller" })({
         const viewportSize = useViewportSize();
 
         const identity: Vec2 = @splat(0.0);

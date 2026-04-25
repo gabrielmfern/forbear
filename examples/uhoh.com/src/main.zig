@@ -27,7 +27,7 @@ const rainbowBar = [_]forbear.GradientStop{
 };
 
 fn App() !void {
-    forbear.component("app")({
+    forbear.component(.{})({
         forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .direction = .vertical,

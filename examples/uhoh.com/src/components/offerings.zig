@@ -14,7 +14,7 @@ pub const OfferingProps = struct {
 };
 
 pub fn Offering(props: OfferingProps) *const fn (void) void {
-    forbear.component(@src())({
+    forbear.component(.{})({
         forbear.element(.{ .style = props.style.overwrite(.{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },

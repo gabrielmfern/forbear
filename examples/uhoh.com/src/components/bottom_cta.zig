@@ -4,7 +4,7 @@ const Button = @import("button.zig").Button;
 const Section = @import("section.zig").Section;
 
 pub fn BottomCta() !void {
-    forbear.component(@src())({
+    forbear.component(.{})({
         Section(.{})({
             forbear.element(.{ .style = .{
                 .direction = .vertical,

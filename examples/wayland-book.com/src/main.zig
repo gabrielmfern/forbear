@@ -117,7 +117,7 @@ fn LicenseBadge() void {
 }
 
 fn Content() void {
-    forbear.component("content")({
+    forbear.component(.{})({
         forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
@@ -173,7 +173,7 @@ fn Content() void {
 }
 
 fn App() !void {
-    forbear.component("app")({
+    forbear.component(.{})({
         const activeChapter = forbear.useState(usize, 0);
 
         forbear.element(.{ .style = .{

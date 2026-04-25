@@ -2,7 +2,7 @@ const std = @import("std");
 const forbear = @import("forbear");
 
 fn CounterExample() void {
-    forbear.component("counter-example")({
+    forbear.component(.{})({
         const count = forbear.useState(u32, 0);
 
         forbear.element(.{ .style = .{
@@ -31,7 +31,7 @@ fn CounterExample() void {
 }
 
 fn App() void {
-    forbear.component("app")({
+    forbear.component(.{})({
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{ .style = .{
