@@ -89,9 +89,11 @@ io: std.Io,
 
 mousePosition: Vec2,
 mouseButtonPressed: bool,
-/// Accumulated wheel/trackpad delta since the last frame. Reset at the
-/// end of `update()` so the next frame sees fresh input.
-pendingScrollDelta: Vec2,
+/// Accumulated wheel/trackpad delta from window events. Snapshotted
+/// into `scrollDelta` at frame start, then reset.
+scrollDeltaAccumulator: Vec2,
+/// Stable snapshot of scroll delta for the current frame.
+scrollDelta: Vec2,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 // scrollPosition: Vec2,
 // effectiveScrollPosition: Vec2,
@@ -129,7 +131,8 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
 
         .mousePosition = @splat(0.0),
         .mouseButtonPressed = false,
-        .pendingScrollDelta = @splat(0.0),
+        .scrollDeltaAccumulator = @splat(0.0),
+        .scrollDelta = @splat(0.0),
         .previousFrameNodeMeasurements = std.AutoHashMap(u64, Node.Measurement).init(allocator),
 
         .renderer = renderer,
@@ -614,6 +617,9 @@ fn frameEnd(block: void) anyerror!void {
 
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
+
+    self.scrollDelta = self.scrollDeltaAccumulator;
+    self.scrollDeltaAccumulator = @splat(0.0);
 
     self.frameMeta = meta;
     return &frameEnd;
@@ -1251,8 +1257,8 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
         .click => unreachable,
         .scroll => {
             if (!inside) return null;
-            if (self.pendingScrollDelta[0] != 0.0 or self.pendingScrollDelta[1] != 0.0)
-                return self.pendingScrollDelta;
+            if (self.scrollDelta[0] != 0.0 or self.scrollDelta[1] != 0.0)
+                return self.scrollDelta;
             return null;
         },
     }
@@ -1264,8 +1270,6 @@ pub fn update() !void {
     if (self.frameMeta.?.err) |err| return err;
 
     const viewportSize = self.frameMeta.?.viewportSize;
-
-    self.pendingScrollDelta = @splat(0.0);
 
     self.viewportSize = viewportSize;
 
@@ -1347,10 +1351,10 @@ pub fn setWindowHandlers(window: *Window) void {
 
                 switch (shiftAccordingAxis) {
                     .horizontal => {
-                        ctx.pendingScrollDelta[0] += offset;
+                        ctx.scrollDeltaAccumulator[0] += offset;
                     },
                     .vertical => {
-                        ctx.pendingScrollDelta[1] += offset;
+                        ctx.scrollDeltaAccumulator[1] += offset;
                     },
                 }
             }
