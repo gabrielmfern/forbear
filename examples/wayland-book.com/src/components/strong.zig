@@ -1,9 +1,13 @@
 const forbear = @import("forbear");
 
 pub fn Strong() *const fn (void) void {
-    forbear.component("strong")({
+    forbear.component(.{
+        .sourceLocation = @src(),
+    })({
         forbear.element(.{
-            .fontWeight = 700,
+            .style = .{
+                .fontWeight = 700,
+            },
         })({
             forbear.componentChildrenSlot();
         });
