@@ -3828,7 +3828,7 @@ test "useState in element scope isolates state per element" {
     // distinct values and assert the values are independent.
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "host", .sourceLocation = @src() })({
+            forbear.component(.{ .text = "host" })({
                 forbear.element(.{ .key = "left" })({
                     const v = forbear.useState(i32, 0);
                     try std.testing.expectEqual(0, v.*);
@@ -3847,7 +3847,7 @@ test "useState in element scope isolates state per element" {
     _ = arena.reset(.retain_capacity);
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "host", .sourceLocation = @src() })({
+            forbear.component(.{ .text = "host" })({
                 forbear.element(.{ .key = "left" })({
                     const v = forbear.useState(i32, 0);
                     try std.testing.expectEqual(11, v.*);
@@ -3876,7 +3876,7 @@ test "useState binds to nearest scope: element preferred, component inside eleme
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "outer", .sourceLocation = @src() })({
+            forbear.component(.{ .text = "outer" })({
                 componentKey = self.frameMeta.?.scopeStack.getLast().key;
 
                 // useState here binds to the outer component.
@@ -3891,7 +3891,7 @@ test "useState binds to nearest scope: element preferred, component inside eleme
                     const elementState = forbear.useState(i32, 0);
                     elementState.* = 2;
 
-                    forbear.component(.{ .key = "inner", .sourceLocation = @src() })({
+                    forbear.component(.{ .text = "inner" })({
                         innerComponentKey = self.frameMeta.?.scopeStack.getLast().key;
                         // useState here binds to the inner component (closer than
                         // the wrapping element).
@@ -3921,7 +3921,7 @@ test "useState in element scope persists multiple slots across realloc" {
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "realloc-host", .sourceLocation = @src() })({
+            forbear.component(.{ .text = "realloc-host" })({
                 forbear.element(.{ .key = "scope" })({
                     const a = forbear.useState(f32, 1.0);
                     try std.testing.expectEqual(1.0, a.*);
@@ -3944,7 +3944,7 @@ test "useState in element scope persists multiple slots across realloc" {
     _ = arena.reset(.retain_capacity);
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "realloc-host", .sourceLocation = @src() })({
+            forbear.component(.{ .text = "realloc-host" })({
                 forbear.element(.{ .key = "scope" })({
                     const a = forbear.useState(f32, 1.0);
                     const b = forbear.useState(f32, 1.0);
@@ -3972,7 +3972,7 @@ test "stale scope state is pruned at frame end (element)" {
     // Frame 1: mount the transient element, capture its scope key.
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "host", .sourceLocation = @src() })({
+            forbear.component(.{ .text = "host" })({
                 forbear.element(.{ .key = "transient" })({
                     transientKey = self.frameMeta.?.scopeStack.getLast().key;
                     _ = forbear.useState(i32, 7);
@@ -3986,7 +3986,7 @@ test "stale scope state is pruned at frame end (element)" {
     _ = arena.reset(.retain_capacity);
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "host", .sourceLocation = @src() })({});
+            forbear.component(.{ .text = "host" })({});
         });
     });
     try std.testing.expect(!self.scopeStates.contains(transientKey));
@@ -4005,8 +4005,8 @@ test "stale scope state is pruned at frame end (component)" {
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "host", .sourceLocation = @src() })({
-                forbear.component(.{ .key = "transient", .sourceLocation = @src() })({
+            forbear.component(.{ .text = "host" })({
+                forbear.component(.{ .text = "transient" })({
                     transientKey = self.frameMeta.?.scopeStack.getLast().key;
                     _ = forbear.useState(i32, 7);
                 });
@@ -4018,7 +4018,7 @@ test "stale scope state is pruned at frame end (component)" {
     _ = arena.reset(.retain_capacity);
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "host", .sourceLocation = @src() })({});
+            forbear.component(.{ .text = "host" })({});
         });
     });
     try std.testing.expect(!self.scopeStates.contains(transientKey));
