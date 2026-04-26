@@ -48,10 +48,12 @@ pub const SidebarItemProps = struct {
 };
 
 pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
-    forbear.component(.{
-        .key = props.key,
-        .sourceLocation = @src(),
-    })({
+    forbear.component(
+        if (props.key) |key|
+            .{ .text = key }
+        else
+            .{ .sourceLocation = @src() },
+    )({
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{

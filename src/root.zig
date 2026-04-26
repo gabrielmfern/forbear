@@ -594,13 +594,11 @@ fn frameEnd(block: void) anyerror!void {
     var iterator = self.previousFrameNodeMeasurements.iterator();
     while (iterator.next()) |entry| {
         if (self.nodeTree.list.items.len - 1 < entry.value_ptr.index) {
-            // Node was removed, so we should remove the measurement as well
             _ = self.previousFrameNodeMeasurements.remove(entry.key_ptr.*);
             continue;
         }
         const node = self.nodeTree.at(entry.value_ptr.index);
         if (node.key != entry.key_ptr.*) {
-            // Node was removed, so we should remove the measurement as well
             _ = self.previousFrameNodeMeasurements.remove(entry.key_ptr.*);
             continue;
         }
@@ -1050,12 +1048,12 @@ fn componentEnd(block: void) void {
     }
 }
 
-const ComponentProps = struct {
-    key: ?[]const u8 = null,
+const ComponentKey = union(enum) {
+    text: []const u8,
     sourceLocation: std.builtin.SourceLocation,
 };
 
-pub fn component(props: ComponentProps) *const fn (void) void {
+pub fn component(key: ComponentKey) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -1071,10 +1069,9 @@ pub fn component(props: ComponentProps) *const fn (void) void {
         hasher.update(std.mem.asBytes(&componentResolutionState.key));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
-    if (props.key) |key| {
-        hasher.update(key);
-    } else {
-        hasher.update(std.mem.asBytes(&props.sourceLocation));
+    switch (key) {
+        .text => hasher.update(key.text),
+        .sourceLocation => hasher.update(std.mem.asBytes(&key.sourceLocation)),
     }
 
     self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
@@ -1218,16 +1215,19 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     std.debug.assert(self.frameMeta != null);
 
     if (comptime eventTag == .click) {
-        const wasPressed = useState(bool, false);
+        // This is not exactly the same as mouseUp, since mouseUp doesn't
+        // require that the mouse was down inside of the element before, while
+        // click does.
+        const wasMouseDown = useState(bool, false);
         if (on(.mouseDown)) {
-            wasPressed.* = true;
+            wasMouseDown.* = true;
         }
         if (on(.mouseOut)) {
-            wasPressed.* = false;
+            wasMouseDown.* = false;
         }
         if (on(.mouseUp)) {
-            if (wasPressed.*) {
-                wasPressed.* = false;
+            if (wasMouseDown.*) {
+                wasMouseDown.* = false;
                 return true;
             }
         }
@@ -1303,9 +1303,6 @@ pub fn useNodeMeasurement() ?Node.Measurement {
 
     return null;
 }
-
-// TODO: scroller was removed during event system refactor — viewport-level
-// scrolling will be reimplemented as a user-space component.
 
 fn timestampSeconds(io: std.Io) f64 {
     const ts = std.Io.Clock.awake.now(io);
