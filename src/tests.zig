@@ -3700,15 +3700,15 @@ test "State creation with manual handling" {
             forbear.component(.{
                 .text = "random",
             })({
-                componentKey = self.frameMeta.?.componentResolutionState.getLast().key;
+                componentKey = self.frameMeta.?.scopeStack.getLast().key;
                 const state1 = forbear.useState(i32, 42);
-                try std.testing.expectEqual(1, self.componentStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(componentKey).?.items[0].len);
+                try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.items.len);
+                try std.testing.expectEqual(@sizeOf(i32), self.scopeStates.get(componentKey).?.items[0].len);
                 try std.testing.expectEqual(42, state1.*);
 
                 const state2 = forbear.useState(f32, 3.14);
-                try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(componentKey).?.items[1].len);
+                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.items.len);
+                try std.testing.expectEqual(@sizeOf(f32), self.scopeStates.get(componentKey).?.items[1].len);
                 try std.testing.expectEqual(42, state1.*);
                 try std.testing.expectEqual(3.14, state2.*);
 
@@ -3726,11 +3726,11 @@ test "State creation with manual handling" {
                 .text = "random",
             })({
                 const state1 = forbear.useState(i32, 42);
-                try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(i32), self.componentStates.get(componentKey).?.items[0].len);
+                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.items.len);
+                try std.testing.expectEqual(@sizeOf(i32), self.scopeStates.get(componentKey).?.items[0].len);
                 const state2 = forbear.useState(f32, 3.14);
-                try std.testing.expectEqual(2, self.componentStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(f32), self.componentStates.get(componentKey).?.items[1].len);
+                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.items.len);
+                try std.testing.expectEqual(@sizeOf(f32), self.scopeStates.get(componentKey).?.items[1].len);
 
                 try std.testing.expectEqual(100, state1.*);
                 try std.testing.expectEqual(6.28, state2.*);
@@ -3816,7 +3816,215 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
     }
 }
 
-test "on() dispatches mouseOver only to element the mouse is inside" {
+test "useState in element scope isolates state per element" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    defer forbear.deinit();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Frame 1: two sibling elements each take a useState. Mutate them to
+    // distinct values and assert the values are independent.
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{ .key = "root" })({
+            forbear.component(.{ .text = "host" })({
+                forbear.element(.{ .key = "left" })({
+                    const v = forbear.useState(i32, 0);
+                    try std.testing.expectEqual(0, v.*);
+                    v.* = 11;
+                });
+                forbear.element(.{ .key = "right" })({
+                    const v = forbear.useState(i32, 0);
+                    try std.testing.expectEqual(0, v.*);
+                    v.* = 22;
+                });
+            });
+        });
+    });
+
+    // Frame 2: state should persist independently for each element.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{ .key = "root" })({
+            forbear.component(.{ .text = "host" })({
+                forbear.element(.{ .key = "left" })({
+                    const v = forbear.useState(i32, 0);
+                    try std.testing.expectEqual(11, v.*);
+                });
+                forbear.element(.{ .key = "right" })({
+                    const v = forbear.useState(i32, 0);
+                    try std.testing.expectEqual(22, v.*);
+                });
+            });
+        });
+    });
+}
+
+test "useState binds to nearest scope: element preferred, component inside element wins" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    defer forbear.deinit();
+    const self = forbear.getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var componentKey: u64 = undefined;
+    var elementKey: u64 = undefined;
+    var innerComponentKey: u64 = undefined;
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{ .key = "root" })({
+            forbear.component(.{ .text = "outer" })({
+                componentKey = self.frameMeta.?.scopeStack.getLast().key;
+
+                // useState here binds to the outer component.
+                const componentState = forbear.useState(i32, 0);
+                componentState.* = 1;
+
+                forbear.element(.{ .key = "host" })({
+                    elementKey = self.frameMeta.?.scopeStack.getLast().key;
+
+                    // useState inside the element binds to the element, not the
+                    // surrounding component.
+                    const elementState = forbear.useState(i32, 0);
+                    elementState.* = 2;
+
+                    forbear.component(.{ .text = "inner" })({
+                        innerComponentKey = self.frameMeta.?.scopeStack.getLast().key;
+                        // useState here binds to the inner component (closer than
+                        // the wrapping element).
+                        const innerState = forbear.useState(i32, 0);
+                        innerState.* = 3;
+                    });
+                });
+            });
+        });
+    });
+
+    // Each scope should have exactly one slot of state, in its own bucket.
+    try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.items.len);
+    try std.testing.expectEqual(1, self.scopeStates.get(elementKey).?.items.len);
+    try std.testing.expectEqual(1, self.scopeStates.get(innerComponentKey).?.items.len);
+    try std.testing.expect(componentKey != elementKey);
+    try std.testing.expect(elementKey != innerComponentKey);
+}
+
+test "useState in element scope persists multiple slots across realloc" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    defer forbear.deinit();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{ .key = "root" })({
+            forbear.component(.{ .text = "realloc-host" })({
+                forbear.element(.{ .key = "scope" })({
+                    const a = forbear.useState(f32, 1.0);
+                    try std.testing.expectEqual(1.0, a.*);
+                    const b = forbear.useState(f32, 1.0);
+                    try std.testing.expectEqual(1.0, b.*);
+                    const c = forbear.useState(?forbear.AnimationState, null);
+                    try std.testing.expectEqual(null, c.*);
+
+                    // Earlier pointers must remain valid after subsequent allocs.
+                    try std.testing.expectEqual(1.0, a.*);
+                    try std.testing.expectEqual(1.0, b.*);
+                    b.* = 2.0;
+                    try std.testing.expectEqual(1.0, a.*);
+                    try std.testing.expectEqual(2.0, b.*);
+                });
+            });
+        });
+    });
+
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{ .key = "root" })({
+            forbear.component(.{ .text = "realloc-host" })({
+                forbear.element(.{ .key = "scope" })({
+                    const a = forbear.useState(f32, 1.0);
+                    const b = forbear.useState(f32, 1.0);
+                    const c = forbear.useState(?forbear.AnimationState, null);
+                    try std.testing.expectEqual(1.0, a.*);
+                    try std.testing.expectEqual(2.0, b.*);
+                    try std.testing.expectEqual(null, c.*);
+                });
+            });
+        });
+    });
+}
+
+test "stale scope state is pruned at frame end (element)" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    defer forbear.deinit();
+    const self = forbear.getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var transientKey: u64 = undefined;
+
+    // Frame 1: mount the transient element, capture its scope key.
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{ .key = "root" })({
+            forbear.component(.{ .text = "host" })({
+                forbear.element(.{ .key = "transient" })({
+                    transientKey = self.frameMeta.?.scopeStack.getLast().key;
+                    _ = forbear.useState(i32, 7);
+                });
+            });
+        });
+    });
+    try std.testing.expect(self.scopeStates.contains(transientKey));
+
+    // Frame 2: omit the element. Its state should be dropped.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{ .key = "root" })({
+            forbear.component(.{ .text = "host" })({});
+        });
+    });
+    try std.testing.expect(!self.scopeStates.contains(transientKey));
+}
+
+test "stale scope state is pruned at frame end (component)" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    defer forbear.deinit();
+    const self = forbear.getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    var transientKey: u64 = undefined;
+
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{ .key = "root" })({
+            forbear.component(.{ .text = "host" })({
+                forbear.component(.{ .text = "transient" })({
+                    transientKey = self.frameMeta.?.scopeStack.getLast().key;
+                    _ = forbear.useState(i32, 7);
+                });
+            });
+        });
+    });
+    try std.testing.expect(self.scopeStates.contains(transientKey));
+
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{ .key = "root" })({
+            forbear.component(.{ .text = "host" })({});
+        });
+    });
+    try std.testing.expect(!self.scopeStates.contains(transientKey));
+}
+
+test "Event queue dispatches events to correct elements" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 

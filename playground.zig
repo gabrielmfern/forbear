@@ -161,6 +161,48 @@ fn App() void {
                     forbear.text("Line 4 - should clip");
                     forbear.text("Line 5 - should clip");
                 });
+
+                // Two scrollable regions in the same component. Each
+                // `useScrolling` call binds its offset and spring state to
+                // its enclosing element, so the regions scroll independently
+                // without needing wrapping components.
+                forbear.element(.{ .style = .{
+                    .margin = forbear.Margin.top(24.0),
+                    .direction = .horizontal,
+                } })({
+                    forbear.element(.{ .style = .{
+                        .width = .{ .fixed = 200 },
+                        .height = .{ .fixed = 120 },
+                        .direction = .vertical,
+                        .background = .{ .color = .{ 0.15, 0.10, 0.20, 1.0 } },
+                        .borderRadius = 8.0,
+                        .padding = .all(8),
+                    } })({
+                        _ = forbear.useScrolling();
+                        forbear.text("Left A");
+                        forbear.text("Left B");
+                        forbear.text("Left C");
+                        forbear.text("Left D");
+                        forbear.text("Left E");
+                    });
+
+                    forbear.element(.{ .style = .{
+                        .margin = forbear.Margin.left(12.0),
+                        .width = .{ .fixed = 200 },
+                        .height = .{ .fixed = 120 },
+                        .direction = .vertical,
+                        .background = .{ .color = .{ 0.10, 0.20, 0.15, 1.0 } },
+                        .borderRadius = 8.0,
+                        .padding = .all(8),
+                    } })({
+                        _ = forbear.useScrolling();
+                        forbear.text("Right 1");
+                        forbear.text("Right 2");
+                        forbear.text("Right 3");
+                        forbear.text("Right 4");
+                        forbear.text("Right 5");
+                    });
+                });
             });
         });
     });
