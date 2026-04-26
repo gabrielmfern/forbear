@@ -58,7 +58,6 @@ pub fn useScrolling() Vec2 {
         forbear.handleFrameError(error.NoParentForScrollingHook);
         return @splat(0.0);
     };
-    const measurementOption = forbear.useNodeMeasurement();
     const identity: Vec2 = @splat(0.0);
     const scrollOffset = forbear.useState(Vec2, identity);
 
@@ -69,7 +68,7 @@ pub fn useScrolling() Vec2 {
     scrollOffset.* = @min(
         @max(scrollOffset.*, identity),
         @max(
-            if (measurementOption) |measurement|
+            if (forbear.useNodeMeasurement()) |measurement|
                 measurement.contentSize - measurement.size
             else
                 identity,

@@ -696,8 +696,6 @@ fn elementEnd(block: void) void {
                 handleFrameError(error.RulesOfHooksViolated);
             }
         }
-    } else {
-        std.debug.assert(false);
     }
 
     self.frameMeta.?.previousPushedNodeIndex = self.frameMeta.?.nodeParentStack.pop();
@@ -705,7 +703,6 @@ fn elementEnd(block: void) void {
     const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
     const node = self.nodeTree.at(previousNodeIndex);
 
-    // Handle ratio sizing that depends on the opposite axis
     if (node.style.width == .ratio) {
         node.size[0] = node.style.width.ratio * node.size[1];
     }
@@ -714,10 +711,6 @@ fn elementEnd(block: void) void {
     }
     node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
     node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
-
-    // Note: fit sizes are computed by layout()'s fit pass after the tree
-    // is complete, not incrementally during tree building. This handles
-    // slotted children correctly.
 }
 
 pub const ElementProps = struct {
