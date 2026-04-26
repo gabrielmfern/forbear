@@ -31,21 +31,27 @@ pub fn Problems() !void {
                 .maxWidth = 369,
                 .blendMode = .darken,
             }, try forbear.useImage("uhoh-problem"));
-            forbear.element(.{ .style = .{
-                .direction = .vertical,
-                .width = .{ .grow = 1.0 },
-                .padding = .left(60.0),
-            } })({
-                forbear.element(.{ .style = .{
-                    .fontSize = 24.0,
-                } })({
+            forbear.element(.{
+                .style = .{
+                    .direction = .vertical,
+                    .width = .{ .grow = 1.0 },
+                    .padding = .left(60.0),
+                },
+            })({
+                forbear.element(.{
+                    .style = .{
+                        .fontSize = 24.0,
+                    },
+                })({
                     forbear.text("You're a growing business.");
                 });
-                forbear.element(.{ .style = .{
-                    .fontWeight = 700,
-                    .fontSize = 40.0,
-                    .margin = forbear.Margin.top(20.0).withBottom(25.0),
-                } })({
+                forbear.element(.{
+                    .style = .{
+                        .fontWeight = 700,
+                        .fontSize = 40.0,
+                        .margin = forbear.Margin.top(20.0).withBottom(25.0),
+                    },
+                })({
                     forbear.text("But your day-to-day has some of this BS in it:");
                 });
 
@@ -53,9 +59,11 @@ pub fn Problems() !void {
                 try Problem(.{ .borderWidth = .top(2.0) }, "Your Google ads literally just got disabled and you're not sure why. Now you have to submit a ticket.");
                 try Problem(.{ .borderWidth = .top(2.0) }, "Someone on your team lost access to a shared account. Now you have to submit a ticket.");
 
-                forbear.element(.{ .style = .{
-                    .margin = .bottom(40.0),
-                } })({
+                forbear.element(.{
+                    .style = .{
+                        .margin = .bottom(40.0),
+                    },
+                })({
                     forbear.text("Imagine if you could delegate all these issues to a genie?");
                 });
                 Button(.{})({

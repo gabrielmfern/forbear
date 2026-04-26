@@ -15,23 +15,27 @@ pub fn Partners() !void {
             .borderRadius = 9.0,
             .direction = .vertical,
         })({
-            forbear.element(.{ .style = .{
-                .fontWeight = 700,
-                .width = .{ .grow = 1.0 },
-                .xJustification = .center,
-                .yJustification = .center,
-                .fontSize = 24.0,
-                .margin = forbear.Margin.top(20.0).withBottom(42.0),
-            } })({
+            forbear.element(.{
+                .style = .{
+                    .fontWeight = 700,
+                    .width = .{ .grow = 1.0 },
+                    .xJustification = .center,
+                    .yJustification = .center,
+                    .fontSize = 24.0,
+                    .margin = forbear.Margin.top(20.0).withBottom(42.0),
+                },
+            })({
                 forbear.text("Our partners");
             });
-            forbear.element(.{ .style = .{
-                .direction = .horizontal,
-                .width = .{ .grow = 1.0 },
-                .margin = .block(8.0),
-                .xJustification = .center,
-                .yJustification = .center,
-            } })({
+            forbear.element(.{
+                .style = .{
+                    .direction = .horizontal,
+                    .width = .{ .grow = 1.0 },
+                    .margin = .block(8.0),
+                    .xJustification = .center,
+                    .yJustification = .center,
+                },
+            })({
                 const logos = [_][]const u8{
                     "uhoh-partner-badge",
                     "uhoh-google-logo",
