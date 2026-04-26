@@ -137,6 +137,7 @@ fn renderingMain(
             try renderer.drawFrame(arena, rootTree, colors.background, window.targetFrameTimeNs());
             try forbear.update();
         });
+        arenaAllocator.reset(.retain_capacity);
     }
     try renderer.waitIdle();
 }
