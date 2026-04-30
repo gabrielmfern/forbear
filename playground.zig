@@ -22,11 +22,11 @@ fn CounterExample() void {
                 .borderRadius = 8.0,
                 .cursor = .pointer,
             } })({
+                forbear.text("Increment");
+
                 if (forbear.on(.click)) {
                     count.* += 1;
                 }
-
-                forbear.text("Increment");
             });
         });
     });
@@ -43,7 +43,7 @@ fn App() void {
             .width = .{ .fixed = viewportSize[0] },
             .height = .{ .fixed = viewportSize[1] },
         } })({
-            _ = forbear.useScrolling();
+            const scrollOffset = forbear.useState(@Vector(2, f32), @splat(0.0));
 
             forbear.element(.{ .style = .{
                 .width = .{ .grow = 1.0 },
@@ -153,19 +153,21 @@ fn App() void {
                     .borderWidth = .all(2.0),
                     .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
                 } })({
-                    _ = forbear.useScrolling();
+                    const scissorScroll = forbear.useState(@Vector(2, f32), @splat(0.0));
 
                     forbear.text("Line 1");
                     forbear.text("Line 2");
                     forbear.text("Line 3 - should clip");
                     forbear.text("Line 4 - should clip");
                     forbear.text("Line 5 - should clip");
+
+                    forbear.useScrolling(scissorScroll);
                 });
 
-                // Two scrollable regions in the same component. Each
-                // `useScrolling` call binds its offset and spring state to
-                // its enclosing element, so the regions scroll independently
-                // without needing wrapping components.
+                // Two scrollable regions in the same component. Each useState
+                // call declares the scroll offset for the enclosing element;
+                // useScrolling reads and clamps it — so the regions scroll
+                // independently without needing wrapping components.
                 forbear.element(.{ .style = .{
                     .margin = forbear.Margin.top(24.0),
                     .direction = .horizontal,
@@ -178,12 +180,15 @@ fn App() void {
                         .borderRadius = 8.0,
                         .padding = .all(8),
                     } })({
-                        _ = forbear.useScrolling();
+                        const leftScroll = forbear.useState(@Vector(2, f32), @splat(0.0));
+
                         forbear.text("Left A");
                         forbear.text("Left B");
                         forbear.text("Left C");
                         forbear.text("Left D");
                         forbear.text("Left E");
+
+                        forbear.useScrolling(leftScroll);
                     });
 
                     forbear.element(.{ .style = .{
@@ -195,15 +200,20 @@ fn App() void {
                         .borderRadius = 8.0,
                         .padding = .all(8),
                     } })({
-                        _ = forbear.useScrolling();
+                        const rightScroll = forbear.useState(@Vector(2, f32), @splat(0.0));
+
                         forbear.text("Right 1");
                         forbear.text("Right 2");
                         forbear.text("Right 3");
                         forbear.text("Right 4");
                         forbear.text("Right 5");
+
+                        forbear.useScrolling(rightScroll);
                     });
                 });
             });
+
+            forbear.useScrolling(scrollOffset);
         });
     });
 }

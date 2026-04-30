@@ -4461,10 +4461,10 @@ test "scroll reaches every hovered ancestor" {
     // Frame 1: prime measurements
     try forbear.frame(try frameMeta(arenaAllocator))({
         outer()({
-            _ = forbear.on(.scroll);
             inner()({
                 _ = forbear.on(.scroll);
             });
+            _ = forbear.on(.scroll);
         });
         _ = try forbear.layout();
         self.mousePosition = .{ 50.0, 50.0 };
@@ -4473,20 +4473,19 @@ test "scroll reaches every hovered ancestor" {
     });
     _ = arena.reset(.retain_capacity);
 
-    // Frame 2: scroll reaches both ancestor and inner
+    // Frame 2: scroll reaches both ancestor and inner; inner handler runs first (bottom-up order)
     try forbear.frame(try frameMeta(arenaAllocator))({
         outer()({
-            const outerDelta = forbear.on(.scroll);
-            try std.testing.expect(outerDelta != null);
-            try std.testing.expectApproxEqAbs(@as(f32, -5.0), outerDelta.?[0], 0.001);
-            try std.testing.expectApproxEqAbs(@as(f32, 12.0), outerDelta.?[1], 0.001);
-
             inner()({
                 const innerDelta = forbear.on(.scroll);
                 try std.testing.expect(innerDelta != null);
                 try std.testing.expectApproxEqAbs(@as(f32, -5.0), innerDelta.?[0], 0.001);
                 try std.testing.expectApproxEqAbs(@as(f32, 12.0), innerDelta.?[1], 0.001);
             });
+            const outerDelta = forbear.on(.scroll);
+            try std.testing.expect(outerDelta != null);
+            try std.testing.expectApproxEqAbs(@as(f32, -5.0), outerDelta.?[0], 0.001);
+            try std.testing.expectApproxEqAbs(@as(f32, 12.0), outerDelta.?[1], 0.001);
         });
     });
 }

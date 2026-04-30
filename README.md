@@ -27,11 +27,11 @@ fn App() void {
       .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
       .borderRadius = 8.0,
     })({
+      forbear.text("Increment");
+
       if (forbear.on(.click)) {
         count.value.* += 1;
       }
-
-      forbear.text("Increment");
     });
   });
 }

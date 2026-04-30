@@ -52,14 +52,13 @@ pub fn FpsCounter() void {
     });
 }
 
-pub fn useScrolling() Vec2 {
+pub fn useScrolling(scrollOffset: *Vec2) void {
     const node = forbear.getParentNode() orelse {
         std.log.err("useScrolling must be used within a node, that's within component", .{});
         forbear.handleFrameError(error.NoParentForScrollingHook);
-        return @splat(0.0);
+        return;
     };
     const identity: Vec2 = @splat(0.0);
-    const scrollOffset = forbear.useState(Vec2, identity);
 
     if (forbear.on(.scroll)) |delta| {
         scrollOffset.* += delta;
@@ -78,18 +77,16 @@ pub fn useScrolling() Vec2 {
 
     if (builtin.os.tag == .macos) {
         node.childrenOffset = -scrollOffset.*;
-        return scrollOffset.*;
     } else {
         const spring = forbear.SpringConfig{
             .stiffness = 320.0,
             .damping = 32.0,
             .mass = 1.0,
         };
-        const aniamtedOffset = Vec2{
+        const animatedOffset = Vec2{
             forbear.useSpringTransition(scrollOffset.*[0], spring),
             forbear.useSpringTransition(scrollOffset.*[1], spring),
         };
-        node.childrenOffset = -aniamtedOffset;
-        return aniamtedOffset;
+        node.childrenOffset = -animatedOffset;
     }
 }
