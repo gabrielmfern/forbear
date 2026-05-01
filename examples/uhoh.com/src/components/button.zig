@@ -13,6 +13,13 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{})({
+            if (forbear.on(.mouseOver)) {
+                isHovering.* = true;
+            }
+            if (forbear.on(.mouseOut)) {
+                isHovering.* = false;
+            }
+
             forbear.element(.{ .style = props.style.overwrite(.{
                 .borderRadius = 8.0,
                 .borderWidth = .all(2.0),
@@ -46,13 +53,6 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
             }) })({
                 forbear.componentChildrenSlot();
             });
-
-            if (forbear.on(.mouseOver)) {
-                isHovering.* = true;
-            }
-            if (forbear.on(.mouseOut)) {
-                isHovering.* = false;
-            }
         });
     });
     return forbear.componentChildrenSlotEnd();
