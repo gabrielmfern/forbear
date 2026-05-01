@@ -664,12 +664,6 @@ pub const Node = struct {
         minSize: Vec2,
         contentSize: Vec2,
         z: u16,
-
-        /// Whether the mouse was inside this measurement at the end of the
-        /// previous frame. Snapshotted in `frameEnd` so that edge-triggered
-        /// `mouseEnter`/`mouseLeave` events can detect transitions without
-        /// needing per-element `useState`.
-        wasMouseInside: bool = false,
     };
 
     pub fn shouldFitMin(self: @This(), direction: Direction) bool {

@@ -61,12 +61,7 @@ const ComponentChildrenSlotState = struct {
 };
 
 pub const Event = enum {
-    /// Edge-triggered: fires on the first frame the mouse moves into the
-    /// element from outside. Compares against the previous frame's
-    /// `wasMouseInside` snapshot taken at frame end.
     mouseEnter,
-    /// Edge-triggered: fires on the first frame the mouse moves out of the
-    /// element after being inside.
     mouseLeave,
     mouseDown,
     mouseUp,
@@ -674,9 +669,6 @@ fn frameEnd(block: void) anyerror!void {
         entry.value_ptr.minSize = node.minSize;
         entry.value_ptr.contentSize = node.contentSize;
         entry.value_ptr.z = node.z;
-        // Snapshot now so next frame's `mouseEnter`/`mouseLeave` can detect
-        // the inside-vs-outside transition.
-        entry.value_ptr.wasMouseInside = self.isMouseInsideMeasurement(entry.value_ptr.*);
     }
     for (staleFrameNodeMeasurements.items) |staleKey| {
         _ = self.previousFrameNodeMeasurements.remove(staleKey);
@@ -1358,8 +1350,17 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     const inside = self.isMouseInsideMeasurement(measurement);
 
     switch (eventTag) {
-        .mouseEnter => return inside and !measurement.wasMouseInside,
-        .mouseLeave => return !inside and measurement.wasMouseInside,
+        .mouseEnter, .mouseLeave => {
+            const wasMouseInside = useState(bool, false);
+            defer wasMouseInside.* = inside;
+
+            switch (eventTag) {
+                .mouseEnter => return inside and !wasMouseInside.*,
+                .mouseLeave => return !inside and wasMouseInside.*,
+                else => unreachable,
+            }
+            unreachable;
+        },
         .mouseDown => {
             const wasPressedLastFrame = useState(bool, false);
             defer wasPressedLastFrame.* = self.mouseButtonPressed;
