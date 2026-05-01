@@ -84,10 +84,20 @@ pub fn useScrolling() Vec2 {
             .damping = 32.0,
             .mass = 1.0,
         };
-        const aniamtedOffset = Vec2{
+        var aniamtedOffset = Vec2{
             forbear.useSpringTransition(scrollOffset.*[0], spring),
             forbear.useSpringTransition(scrollOffset.*[1], spring),
         };
+        aniamtedOffset = @min(
+            @max(aniamtedOffset, identity),
+            @max(
+                if (forbear.useNodeMeasurement()) |measurement|
+                    measurement.contentSize - measurement.size
+                else
+                    identity,
+                identity,
+            ),
+        );
         node.childrenOffset = -aniamtedOffset;
         return aniamtedOffset;
     }
