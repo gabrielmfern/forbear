@@ -52,7 +52,7 @@ pub fn SeatExampleCode() void {
             // TODO: insert code block here
 
             Paragraph(.{})({
-                forbear.text("If you compile (cc -o client client.c xdg-shell-protocol.c) and run this now, you should seat the name of the seat printed to stderr.");
+                forbear.text("If you compile (cc -o client client.c xdg-shell-protocol.c) and run this now, you should see the name of the seat printed to stderr.");
             });
 
             Heading(.{ .level = 2 })({
