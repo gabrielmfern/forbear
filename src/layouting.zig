@@ -655,7 +655,6 @@ pub fn layout() !*NodeTree {
         // inherently connected
         try wrapAndPlace(arena, root, &context.nodeTree);
 
-        root.position -= context.scrollPosition;
         root.position += root.style.translate;
 
         var walker = context.nodeTree.walk();
@@ -678,8 +677,10 @@ pub fn layout() !*NodeTree {
                     // `.relative` children use the Vec2 stashed at element
                     // creation time. Both paths then adopt the parent's
                     // resolved position, so they inherit ancestor offsets
-                    // and scroll naturally.
-                    .flow, .relative => child.position += node.position + child.style.translate,
+                    // and scroll naturally. `childrenOffset` is the parent's
+                    // per-container scroll offset, which shifts all of its
+                    // flowing children together.
+                    .flow, .relative => child.position += node.position + node.childrenOffset + child.style.translate,
                 }
                 if (child.glyphs) |glyphs| {
                     for (glyphs.slice) |*glyph| {
@@ -689,6 +690,30 @@ pub fn layout() !*NodeTree {
 
                 childIndexOption = child.nextSibling;
             }
+        }
+
+        // Content-size pass: the bounding extent of each node's flowing
+        // descendants, in the node's local coordinate space (i.e. relative to
+        // `node.position`). Computed once positions are final so callers can
+        // use it to clamp scroll offsets.
+        var contentWalker = context.nodeTree.walk();
+        while (contentWalker.next()) |node| {
+            var contentSize: Vec2 = @splat(0.0);
+            var childIndexOption = node.firstChild;
+            while (childIndexOption) |childIndex| {
+                const child = context.nodeTree.at(childIndex);
+                if (child.style.placement == .flow) {
+                    // Subtract `childrenOffset` so contentSize reflects the
+                    // natural (pre-scroll) extent. That keeps scroll bounds
+                    // stable regardless of the current offset.
+                    const right = child.position[0] + child.size[0] - node.position[0] - node.childrenOffset[0];
+                    const bottom = child.position[1] + child.size[1] - node.position[1] - node.childrenOffset[1];
+                    contentSize[0] = @max(contentSize[0], right);
+                    contentSize[1] = @max(contentSize[1], bottom);
+                }
+                childIndexOption = child.nextSibling;
+            }
+            node.contentSize = contentSize;
         }
 
         // Compute clip rects for nodes with constrained size and overflowing children

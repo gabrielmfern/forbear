@@ -54,14 +54,16 @@ const chapters = [_]ChapterEntry{
 };
 
 fn Topbar() void {
-    forbear.element(.{ .style = .{
-        .width = .{ .grow = 1.0 },
-        .direction = .horizontal,
-        .yJustification = .center,
-        .padding = forbear.Padding.all(15.0),
-        .fontSize = 20.0,
-        .fontWeight = 200,
-    } })({
+    forbear.element(.{
+        .style = .{
+            .width = .{ .grow = 1.0 },
+            .direction = .horizontal,
+            .yJustification = .center,
+            .padding = forbear.Padding.all(15.0),
+            .fontSize = 20.0,
+            .fontWeight = 200,
+        },
+    })({
         Heading(.{
             .level = 1,
             .style = .{
@@ -75,11 +77,13 @@ fn Topbar() void {
 }
 
 fn TodoList() void {
-    forbear.element(.{ .style = .{
-        .width = .{ .grow = 1.0 },
-        .direction = .vertical,
-        .margin = forbear.Margin.block(6.0).withBottom(18.0),
-    } })({
+    forbear.element(.{
+        .style = .{
+            .width = .{ .grow = 1.0 },
+            .direction = .vertical,
+            .margin = forbear.Margin.block(6.0).withBottom(18.0),
+        },
+    })({
         Heading(.{ .level = 1 })({
             forbear.text("TODO");
         });
@@ -104,14 +108,16 @@ fn TodoList() void {
 }
 
 fn LicenseBadge() void {
-    forbear.element(.{ .style = .{
-        .padding = forbear.Padding.block(4.5).withInLine(10.5),
-        .background = .{ .color = .{ 0.93, 0.93, 0.94, 1.0 } },
-        .borderRadius = 3.0,
-        .fontSize = 10.0,
-        .fontWeight = 600,
-        .margin = forbear.Margin.top(6.0).withBottom(0.0),
-    } })({
+    forbear.element(.{
+        .style = .{
+            .padding = forbear.Padding.block(4.5).withInLine(10.5),
+            .background = .{ .color = .{ 0.93, 0.93, 0.94, 1.0 } },
+            .borderRadius = 3.0,
+            .fontSize = 10.0,
+            .fontWeight = 600,
+            .margin = forbear.Margin.top(6.0).withBottom(0.0),
+        },
+    })({
         // TODO: insert license badge image here
     });
 }
@@ -120,23 +126,30 @@ fn Content() void {
     forbear.component(.{
         .sourceLocation = @src(),
     })({
-        forbear.element(.{ .style = .{
-            .width = .{ .grow = 1.0 },
-            .height = .{ .grow = 1.0 },
-            .direction = .vertical,
-            .xJustification = .center,
-            .yJustification = .start,
-        } })({
-            Topbar();
-
-            forbear.element(.{ .style = .{
+        const viewport = forbear.useViewportSize();
+        forbear.element(.{
+            .style = .{
                 .width = .{ .grow = 1.0 },
+                .height = .{ .fixed = viewport[1] },
                 .direction = .vertical,
                 .xJustification = .center,
                 .yJustification = .start,
-                .padding = forbear.Padding.all(15.0),
-                .maxWidth = 750.0,
-            } })({
+            },
+        })({
+            _ = forbear.useScrolling();
+
+            Topbar();
+
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .grow = 1.0 },
+                    .direction = .vertical,
+                    .xJustification = .center,
+                    .yJustification = .start,
+                    .padding = forbear.Padding.all(15.0),
+                    .maxWidth = 750.0,
+                },
+            })({
                 Heading(.{ .level = 1 })({
                     forbear.text("Introduction");
                 });
@@ -180,17 +193,19 @@ fn App() !void {
     })({
         const activeChapter = forbear.useState(usize, 0);
 
-        forbear.element(.{ .style = .{
-            .width = .{ .grow = 1.0 },
-            .height = .{ .grow = 1.0 },
-            .direction = .horizontal,
-            .xJustification = .start,
-            .yJustification = .start,
-            .font = try forbear.useFont("Inter"),
-            .fontWeight = 400,
-            .fontSize = 16.0,
-            .color = Colors.text,
-        } })({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .grow = 1.0 },
+                .height = .{ .grow = 1.0 },
+                .direction = .horizontal,
+                .xJustification = .start,
+                .yJustification = .start,
+                .font = try forbear.useFont("Inter"),
+                .fontWeight = 400,
+                .fontSize = 16.0,
+                .color = Colors.text,
+            },
+        })({
             forbear.FpsCounter();
             Sidebar()({
                 for (chapters, 0..) |chapter, i| {

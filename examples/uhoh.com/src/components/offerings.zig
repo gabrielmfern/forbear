@@ -27,42 +27,52 @@ pub fn Offering(props: OfferingProps) *const fn (void) void {
             .margin = forbear.Margin.block(0.0).withBottom(12.0),
             .direction = .vertical,
         }) })({
-            forbear.element(.{ .style = .{
-                .direction = .horizontal,
-                .xJustification = .start,
-                .yJustification = .center,
-                .margin = forbear.Margin.block(0.0).withBottom(9.0),
-            } })({
+            forbear.element(.{
+                .style = .{
+                    .direction = .horizontal,
+                    .xJustification = .start,
+                    .yJustification = .center,
+                    .margin = forbear.Margin.block(0.0).withBottom(9.0),
+                },
+            })({
                 forbear.Image(.{
                     .width = .{ .fixed = 100.0 },
                     .blendMode = .multiply,
                     .margin = forbear.Margin.right(9.0),
                 }, forbear.useImage(props.imageId) catch unreachable);
-                forbear.element(.{ .style = .{
-                    .fontWeight = 700,
-                    .fontSize = 16.5,
-                } })({
+                forbear.element(.{
+                    .style = .{
+                        .fontWeight = 700,
+                        .fontSize = 16.5,
+                    },
+                })({
                     forbear.text(props.title);
                 });
             });
             forbear.componentChildrenSlot();
-            forbear.element(.{ .style = .{
-                .width = .{ .grow = 1.0 },
-                .height = .{ .grow = 1.0 },
-            } })({});
-            forbear.element(.{ .style = .{
-                .borderRadius = 12.0,
-                .borderWidth = .all(2.0),
-                .borderColor = colors.black,
-                .borderStyle = .dashed,
-                .fontSize = 12.0,
-                .direction = .vertical,
-                .padding = forbear.Padding.block(10.0).withInLine(20.0),
-            } })({
-                forbear.element(.{ .style = .{
-                    .fontSize = 18.0,
-                    .margin = .block(10.0),
-                } })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .grow = 1.0 },
+                    .height = .{ .grow = 1.0 },
+                },
+            })({});
+            forbear.element(.{
+                .style = .{
+                    .borderRadius = 12.0,
+                    .borderWidth = .all(2.0),
+                    .borderColor = colors.black,
+                    .borderStyle = .dashed,
+                    .fontSize = 12.0,
+                    .direction = .vertical,
+                    .padding = forbear.Padding.block(10.0).withInLine(20.0),
+                },
+            })({
+                forbear.element(.{
+                    .style = .{
+                        .fontSize = 18.0,
+                        .margin = .block(10.0),
+                    },
+                })({
                     forbear.text(props.addonTitle);
                 });
                 forbear.text(props.addonBody);
@@ -77,14 +87,18 @@ pub fn Offerings() !void {
         .maxWidth = 1269.0,
         .xJustification = .center,
     })({
-        forbear.element(.{ .style = .{
-            .direction = .vertical,
-            .width = .{ .grow = 1.0 },
-        } })({
-            forbear.element(.{ .style = .{
+        forbear.element(.{
+            .style = .{
+                .direction = .vertical,
                 .width = .{ .grow = 1.0 },
-                .margin = .bottom(20.0),
-            } })({
+            },
+        })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .grow = 1.0 },
+                    .margin = .bottom(20.0),
+                },
+            })({
                 Offering(.{
                     .title = "Basic IT & Tech Support",
                     .imageId = "uhoh-offer-46",
@@ -179,10 +193,12 @@ pub fn Offerings() !void {
                     });
                 });
             });
-            forbear.element(.{ .style = .{
-                .width = .{ .grow = 1.0 },
-                .margin = .bottom(20.0),
-            } })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .grow = 1.0 },
+                    .margin = .bottom(20.0),
+                },
+            })({
                 Offering(.{
                     .title = "SaaS Spending, Tool Audits & Finance Ops",
                     .imageId = "uhoh-offer-50",

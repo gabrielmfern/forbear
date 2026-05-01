@@ -4,12 +4,14 @@ pub fn List() *const fn (void) void {
     forbear.component(.{
         .sourceLocation = @src(),
     })({
-        forbear.element(.{ .style = .{
-            .width = .{ .grow = 1.0 },
-            .direction = .vertical,
-            .padding = .left(40.0),
-            .margin = .block(16.0),
-        } })({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .grow = 1.0 },
+                .direction = .vertical,
+                .padding = .left(40.0),
+                .margin = .block(16.0),
+            },
+        })({
             forbear.componentChildrenSlot();
         });
     });
@@ -21,11 +23,13 @@ pub fn ListItem() *const fn (void) void {
     forbear.component(.{
         .sourceLocation = @src(),
     })({
-        forbear.element(.{ .style = .{
-            .width = .{ .grow = 1.0 },
-            .direction = .horizontal,
-            .margin = .bottom(10.0),
-        } })({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .grow = 1.0 },
+                .direction = .horizontal,
+                .margin = .bottom(10.0),
+            },
+        })({
             forbear.text("• ");
 
             forbear.componentChildrenSlot();

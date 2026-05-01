@@ -22,7 +22,7 @@ Forbear's runtime flow is:
 6. Render the laid out node tree with `renderer.drawFrame(...)`.
 7. Advance events, hover state, scrolling, and animations with `forbear.update()`.
 
-The core mental model is "build a node tree each frame, but keep component state across frames by key." `component("key")` creates a stable hook scope for `useState`, `useTransition`, `useAnimation`, and related helpers. `element`, `text`, and `image` append `Node` values into the current frame tree stored in `FrameMeta`. The layout stage resolves sizes and positions, then the renderer iterates that resolved tree to issue Vulkan draw calls.
+The core mental model is "build a node tree each frame, but keep state across frames by key." Both `component(...)` and `element(...)` create stable hook scopes for `useState`, `useTransition`, `useAnimation`, and related helpers; `useState` binds to the **nearest enclosing scope**, whichever is closer. So `useState` (and any hook layered on it, like `useScrolling`) called directly inside an `element({...})({...})` block attaches state to that element — no need to wrap the element in a dedicated component. State for a scope persists as long as that scope is rendered each frame; if it's omitted for a frame, its state is dropped (React-style unmount). `element`, `text`, and `image` append `Node` values into the current frame tree stored in `FrameMeta`. The layout stage resolves sizes and positions, then the renderer iterates that resolved tree to issue Vulkan draw calls.
 
 ## How The Core Files Connect
 
