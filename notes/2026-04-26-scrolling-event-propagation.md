@@ -10,3 +10,5 @@ No, this misses component slots. Beacuse, even if I call the children slotting b
 
 Since we need some way to run code after the slotted children are done, we need the user to define some sort of closure to be called after, which I don't think there is a way to get done with a good DX. the end function of the component is there already, so maybe we could use it somehow so that the user can define things there, but then state and other stuff wouldn't be reachable form there
 
+Alright one more idea. I think we can revert the code that does events after elements are created here, because we can previously know what are the elements from the context, and understand what are the elements and their depths before to then check at those specific points and know whether or not we should apply scrolling based on the context's decision that would be done in a single place imperatively instead of declaratively.
+
