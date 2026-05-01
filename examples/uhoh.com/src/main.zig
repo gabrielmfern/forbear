@@ -38,6 +38,8 @@ fn App() !void {
                 .yJustification = .start,
             },
         })({
+            _ = forbear.useScrolling();
+
             forbear.FpsCounter();
 
             forbear.element(.{

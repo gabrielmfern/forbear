@@ -126,15 +126,18 @@ fn Content() void {
     forbear.component(.{
         .sourceLocation = @src(),
     })({
+        const viewport = forbear.useViewportSize();
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },
-                .height = .{ .grow = 1.0 },
+                .height = .{ .fixed = viewport[1] },
                 .direction = .vertical,
                 .xJustification = .center,
                 .yJustification = .start,
             },
         })({
+            _ = forbear.useScrolling();
+
             Topbar();
 
             forbear.element(.{
