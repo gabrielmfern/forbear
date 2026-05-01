@@ -107,8 +107,6 @@ scrollDeltaAccumulator: Vec2,
 /// Stable snapshot of scroll delta for the current frame.
 scrollDelta: Vec2,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
-// scrollPosition: Vec2,
-// effectiveScrollPosition: Vec2,
 
 renderer: *Graphics.Renderer,
 window: ?*Window,
@@ -685,13 +683,17 @@ fn frameEnd(block: void) anyerror!void {
             try staleFrameNodeMeasurements.append(frameMeta.arena, entry.key_ptr.*);
             continue;
         }
-        entry.value_ptr.size = node.size;
-        entry.value_ptr.position = node.position;
-        entry.value_ptr.maxSize = node.maxSize;
-        entry.value_ptr.minSize = node.minSize;
-        entry.value_ptr.contentSize = node.contentSize;
-        entry.value_ptr.z = node.z;
-        entry.value_ptr.valid = true;
+        entry.value_ptr.* = .{
+            .index = entry.value_ptr.index,
+            .done = true,
+
+            .size = node.size,
+            .position = node.position,
+            .maxSize = node.maxSize,
+            .minSize = node.minSize,
+            .contentSize = node.contentSize,
+            .z = node.z,
+        };
     }
     for (staleFrameNodeMeasurements.items) |staleKey| {
         _ = self.previousFrameNodeMeasurements.remove(staleKey);
@@ -1427,21 +1429,31 @@ pub fn useNodeMeasurement() ?Node.Measurement {
     std.debug.assert(self.frameMeta != null);
     const parentNodeIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return null;
     const parentNode = self.nodeTree.at(parentNodeIndex);
-    const measurement = self.previousFrameNodeMeasurements.getOrPut(parentNode.key) catch |err| {
+    const entry = self.previousFrameNodeMeasurements.getOrPut(parentNode.key) catch |err| {
         std.log.err("Failed to get or put previous frame node measurement: {}", .{err});
         handleFrameError(err);
         return null;
     };
-
-    // the index in the tree might've changed, and it's important this stays
-    // updated so that, at the frame end, we can update the measurements
-    // without having to look up the node by the key through the entire tree
-    measurement.value_ptr.index = parentNodeIndex;
-    if (measurement.found_existing and measurement.value_ptr.valid) {
-        return measurement.value_ptr.*;
+    if (!entry.found_existing) {
+        entry.value_ptr.* = .{
+            .index = parentNodeIndex,
+            .done = false,
+            .size = parentNode.size,
+            .position = parentNode.position,
+            .maxSize = parentNode.maxSize,
+            .minSize = parentNode.minSize,
+            .contentSize = parentNode.contentSize,
+            .z = parentNode.z,
+        };
+    } else {
+        // Index can shift between frames as the tree is rebuilt, so refresh it.
+        entry.value_ptr.index = parentNodeIndex;
     }
-
-    return null;
+    if (entry.value_ptr.done == false) {
+        return null;
+    } else {
+        return entry.value_ptr.*;
+    }
 }
 
 fn timestampSeconds(io: std.Io) f64 {

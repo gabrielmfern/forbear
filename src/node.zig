@@ -665,6 +665,7 @@ pub const Node = struct {
 
     pub const Measurement = struct {
         index: usize,
+        done: bool,
 
         position: Vec2,
         size: Vec2,
@@ -672,12 +673,6 @@ pub const Node = struct {
         minSize: Vec2,
         contentSize: Vec2,
         z: u16,
-
-        /// False until the first frameEnd populates this entry. `useNodeMeasurement`
-        /// may seed an entry mid-frame (so `frameEnd` knows which node to write to)
-        /// before any real measurement exists; without this guard a second caller
-        /// in the same frame would read uninitialized fields.
-        valid: bool = false,
     };
 
     pub fn shouldFitMin(self: @This(), direction: Direction) bool {
