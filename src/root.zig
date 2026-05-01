@@ -649,15 +649,18 @@ fn frameEnd(block: void) anyerror!void {
         }
     }
 
+    var staleFrameNodeMeasurements: std.ArrayList(u64) = .empty;
+    defer staleFrameNodeMeasurements.deinit(frameMeta.arena);
+
     var iterator = self.previousFrameNodeMeasurements.iterator();
     while (iterator.next()) |entry| {
         if (self.nodeTree.list.items.len - 1 < entry.value_ptr.index) {
-            _ = self.previousFrameNodeMeasurements.remove(entry.key_ptr.*);
+            try staleFrameNodeMeasurements.append(frameMeta.arena, entry.key_ptr.*);
             continue;
         }
         const node = self.nodeTree.at(entry.value_ptr.index);
         if (node.key != entry.key_ptr.*) {
-            _ = self.previousFrameNodeMeasurements.remove(entry.key_ptr.*);
+            try staleFrameNodeMeasurements.append(frameMeta.arena, entry.key_ptr.*);
             continue;
         }
         entry.value_ptr.size = node.size;
@@ -666,6 +669,9 @@ fn frameEnd(block: void) anyerror!void {
         entry.value_ptr.minSize = node.minSize;
         entry.value_ptr.contentSize = node.contentSize;
         entry.value_ptr.z = node.z;
+    }
+    for (staleFrameNodeMeasurements.items) |staleKey| {
+        _ = self.previousFrameNodeMeasurements.remove(staleKey);
     }
 
     self.nodeTree.clearRetainingCapacity();
