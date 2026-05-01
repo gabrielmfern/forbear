@@ -875,7 +875,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     if (style.cursor != baseStyle.cursor) {
         if (on(.mouseEnter)) {
             setCursor(style.cursor);
-        } 
+        }
         if (on(.mouseLeave)) {
             setCursor(baseStyle.cursor);
         }
