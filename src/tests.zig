@@ -3903,9 +3903,11 @@ test "useState binds to nearest scope: element preferred, component inside eleme
         });
     });
 
-    // Each scope should have exactly one slot of state, in its own bucket.
+    // Each scope should have exactly one user-allocated slot in its own bucket.
+    // The element scope additionally reserves two internal slots inside `element()`
+    // for the cursor's mouseEnter/mouseLeave bookkeeping (see `on()`).
     try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.items.len);
-    try std.testing.expectEqual(1, self.scopeStates.get(elementKey).?.items.len);
+    try std.testing.expectEqual(3, self.scopeStates.get(elementKey).?.items.len);
     try std.testing.expectEqual(1, self.scopeStates.get(innerComponentKey).?.items.len);
     try std.testing.expect(componentKey != elementKey);
     try std.testing.expect(elementKey != innerComponentKey);

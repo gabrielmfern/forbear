@@ -490,6 +490,28 @@ fn currentScope() ?*ScopeFrame {
     }
 }
 
+fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
+    const self = getContext();
+    try self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
+        .kind = kind,
+        .key = key,
+        .useStateCursor = 0,
+    });
+    try self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, key, {});
+}
+
+fn popScope(expectedKind: ScopeKind) void {
+    const self = getContext();
+    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
+        std.debug.assert(endedScope.kind == expectedKind);
+        if (self.scopeStates.get(endedScope.key)) |scopeState| {
+            if (endedScope.useStateCursor != scopeState.items.len) {
+                handleFrameError(error.RulesOfHooksViolated);
+            }
+        }
+    }
+}
+
 /// Walks the scope stack from the top down to find the nearest enclosing
 /// component scope. Used by element-key and component-key hashing to keep
 /// element identities namespaced per-component; intervening element
@@ -669,6 +691,7 @@ fn frameEnd(block: void) anyerror!void {
         entry.value_ptr.minSize = node.minSize;
         entry.value_ptr.contentSize = node.contentSize;
         entry.value_ptr.z = node.z;
+        entry.value_ptr.valid = true;
     }
     for (staleFrameNodeMeasurements.items) |staleKey| {
         _ = self.previousFrameNodeMeasurements.remove(staleKey);
@@ -695,14 +718,7 @@ fn elementEnd(block: void) void {
     std.debug.assert(self.frameMeta != null);
     std.debug.assert(self.frameMeta.?.nodeParentStack.items.len > 0);
 
-    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
-        std.debug.assert(endedScope.kind == .element);
-        if (self.scopeStates.get(endedScope.key)) |scopeState| {
-            if (endedScope.useStateCursor != scopeState.items.len) {
-                handleFrameError(error.RulesOfHooksViolated);
-            }
-        }
-    }
+    popScope(.element);
 
     self.frameMeta.?.previousPushedNodeIndex = self.frameMeta.?.nodeParentStack.pop();
 
@@ -838,16 +854,9 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         return &endNoop;
     };
 
-    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
-        .kind = .element,
-        .key = result.ptr.key,
-        .useStateCursor = 0,
-    }) catch |err| {
+    pushScope(.element, result.ptr.key) catch |err| {
         handleFrameError(err);
         return &endNoop;
-    };
-    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, result.ptr.key, {}) catch |err| {
-        handleFrameError(err);
     };
 
     inline for (Direction.array) |fitDirection| {
@@ -1078,26 +1087,11 @@ pub noinline fn text(content: []const u8) void {
     };
     defer _ = self.frameMeta.?.nodeParentStack.pop();
 
-    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
-        .kind = .element,
-        .key = result.ptr.key,
-        .useStateCursor = 0,
-    }) catch |err| {
+    pushScope(.element, result.ptr.key) catch |err| {
         handleFrameError(err);
         return;
     };
-    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, result.ptr.key, {}) catch |err| {
-        handleFrameError(err);
-        return;
-    };
-    defer if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
-        std.debug.assert(endedScope.kind == .element);
-        if (self.scopeStates.get(endedScope.key)) |scopeState| {
-            if (endedScope.useStateCursor != scopeState.items.len) {
-                handleFrameError(error.RulesOfHooksViolated);
-            }
-        }
-    };
+    defer popScope(.element);
 
     if (on(.mouseEnter)) {
         setCursor(style.cursor);
@@ -1174,14 +1168,7 @@ fn componentEnd(block: void) void {
         return;
     }
 
-    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
-        std.debug.assert(endedScope.kind == .component);
-        if (self.scopeStates.get(endedScope.key)) |scopeState| {
-            if (endedScope.useStateCursor != scopeState.items.len) {
-                handleFrameError(error.RulesOfHooksViolated);
-            }
-        }
-    }
+    popScope(.component);
 }
 
 const ComponentKey = union(enum) {
@@ -1211,16 +1198,9 @@ pub fn component(key: ComponentKey) *const fn (void) void {
     }
 
     const componentKey = hasher.final();
-    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
-        .kind = .component,
-        .key = componentKey,
-        .useStateCursor = 0,
-    }) catch |err| {
+    pushScope(.component, componentKey) catch |err| {
         handleFrameError(err);
         return endNoop;
-    };
-    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, componentKey, {}) catch |err| {
-        handleFrameError(err);
     };
 
     return &componentEnd;
@@ -1375,6 +1355,16 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
         return false;
     }
 
+    // Reserve hook slots before the measurement guard so that slot indices
+    // are stable across frames — on the first frame there's no measurement,
+    // and a conditional useState would shift every later slot once the
+    // measurement starts existing.
+    const slot: ?*bool = switch (eventTag) {
+        .mouseEnter, .mouseLeave, .mouseDown, .mouseUp => useState(bool, false),
+        .scroll => null,
+        .click => unreachable,
+    };
+
     const measurement = useNodeMeasurement() orelse {
         if (comptime eventTag == .scroll) return null;
         return false;
@@ -1384,7 +1374,7 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
 
     switch (eventTag) {
         .mouseEnter, .mouseLeave => {
-            const wasMouseInside = useState(bool, false);
+            const wasMouseInside = slot.?;
             defer wasMouseInside.* = inside;
 
             switch (eventTag) {
@@ -1395,12 +1385,12 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
             unreachable;
         },
         .mouseDown => {
-            const wasPressedLastFrame = useState(bool, false);
+            const wasPressedLastFrame = slot.?;
             defer wasPressedLastFrame.* = self.mouseButtonPressed;
             return self.mouseButtonPressed and !wasPressedLastFrame.* and inside;
         },
         .mouseUp => {
-            const wasPressedLastFrame = useState(bool, false);
+            const wasPressedLastFrame = slot.?;
             defer wasPressedLastFrame.* = self.mouseButtonPressed;
             return !self.mouseButtonPressed and wasPressedLastFrame.* and inside;
         },
@@ -1447,7 +1437,7 @@ pub fn useNodeMeasurement() ?Node.Measurement {
     // updated so that, at the frame end, we can update the measurements
     // without having to look up the node by the key through the entire tree
     measurement.value_ptr.index = parentNodeIndex;
-    if (measurement.found_existing) {
+    if (measurement.found_existing and measurement.value_ptr.valid) {
         return measurement.value_ptr.*;
     }
 
