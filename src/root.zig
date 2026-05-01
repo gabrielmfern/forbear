@@ -917,6 +917,10 @@ pub noinline fn text(content: []const u8) void {
         self.frameMeta.?.baseStyle;
 
     const style = (Style{
+        .cursor = if (baseStyle.cursor == .default)
+            .text
+        else
+            baseStyle.cursor,
         .xJustification = if (parentOptional) |parent| parent.style.xJustification else null,
         .yJustification = .start,
     }).completeWith(baseStyle);
@@ -1058,24 +1062,21 @@ pub noinline fn text(content: []const u8) void {
         parent.fitChild(result.ptr);
     }
 
-    // Push self onto the parent stack so `on(.mouseEnter)` / `on(.mouseLeave)`
-    // resolve the text node's own measurement, then pop. The text node itself
-    // is not a scope and has no children, so this is purely for hit-testing.
+    // Push self onto the parent stack so `on(.mouseOver)` resolves the
+    // text node's own measurement, then pop. The text node itself is not
+    // a scope and has no children, so this is purely for hit-testing.
     self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, result.index) catch |err| {
         handleFrameError(err);
         return;
     };
     defer _ = self.frameMeta.?.nodeParentStack.pop();
-    if (on(.mouseEnter)) {
+    if (on(.mouseOver)) {
         setCursor(.text);
-    }
-    if (on(.mouseLeave)) {
-        setCursor(.default);
     }
 }
 
 /// Sets the OS-level mouse cursor for the current frame. Called per-frame
-/// (typically from a `forbear.on(.mouseEnter)` branch) — the last call wins,
+/// (typically from a `forbear.on(.mouseOver)` branch) — the last call wins,
 /// so deeper/later mounted elements take precedence.
 pub fn setCursor(cursor: WindowCursor) void {
     const self = getContext();

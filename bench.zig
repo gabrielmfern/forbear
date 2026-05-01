@@ -21,6 +21,7 @@ fn benchLayout(alloc: std.mem.Allocator) void {
             .lineHeight = 1.0,
             .textWrapping = .none,
             .blendMode = .normal,
+            .cursor = .default,
         },
     };
 
@@ -162,6 +163,7 @@ fn benchHugeLayout(alloc: std.mem.Allocator) void {
             .lineHeight = 1.0,
             .textWrapping = .none,
             .blendMode = .normal,
+            .cursor = .default,
         },
     };
 
@@ -187,6 +189,7 @@ fn benchLargeLayout(alloc: std.mem.Allocator) void {
             .lineHeight = 1.0,
             .textWrapping = .none,
             .blendMode = .normal,
+            .cursor = .default,
         },
     };
 

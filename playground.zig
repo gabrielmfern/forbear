@@ -20,6 +20,7 @@ fn CounterExample() void {
                 .padding = forbear.Padding.block(10.0).withInLine(16.0),
                 .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
                 .borderRadius = 8.0,
+                .cursor = .pointer,
             } })({
                 if (forbear.on(.mouseEnter)) {
                     forbear.setCursor(.pointer);
@@ -236,6 +237,7 @@ fn renderingMain(
                 .fontSize = 32,
                 .fontWeight = 400,
                 .lineHeight = 1.0,
+                .cursor = .default,
             },
         })({
             App();

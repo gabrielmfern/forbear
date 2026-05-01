@@ -69,6 +69,7 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
                 .yJustification = .center,
                 .padding = forbear.Padding.left(props.depth * 20.0),
                 .lineHeight = if (props.depth > 0) 1.9 else 2.2,
+                .cursor = .pointer,
                 .color = if (props.active or isHovering.*) Colors.sidebarActive else null,
                 .fontWeight = if (props.active) 600 else 400,
             },

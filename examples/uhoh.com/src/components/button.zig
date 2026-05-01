@@ -15,7 +15,6 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
         forbear.element(.{})({
             if (forbear.on(.mouseEnter)) {
                 isHovering.* = true;
-                forbear.setCursor(.pointer);
             }
             if (forbear.on(.mouseLeave)) {
                 isHovering.* = false;
@@ -26,6 +25,7 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
                 .borderWidth = .all(2.0),
                 .background = .{ .color = forbear.white },
                 .borderColor = colors.black,
+                .cursor = .pointer,
                 .textWrapping = .none,
                 .fontSize = switch (props.sizing) {
                     .medium => 16.0,

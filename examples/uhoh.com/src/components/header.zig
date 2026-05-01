@@ -30,6 +30,7 @@ pub fn Header() !void {
                     .fontWeight = 500,
                     .margin = .right(16.0),
                     .padding = .all(20.0),
+                    .cursor = .pointer,
                 },
             })({
                 if (forbear.on(.mouseEnter)) {
