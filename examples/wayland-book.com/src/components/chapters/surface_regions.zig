@@ -23,19 +23,19 @@ pub fn SurfaceRegions() void {
                 forbear.text("Surface regions");
             });
 
-            Paragraph()({
+            Paragraph(.{})({
                 forbear.text("We've already used the wl_compositor interface to create wl_surfaces via wl_compositor.create_surface. Note, however, that it has a second request: create_region.");
             });
 
             // TODO: insert code block here
 
-            Paragraph()({
+            Paragraph(.{})({
                 forbear.text("The wl_region interface defines a group of rectangles, which collectively make up an arbitrarily shaped region of geometry. Its requests allow you to do bitwise operations against the geometry it defines by adding or subtracting rectangles from it.");
             });
 
             // TODO: insert code block here
 
-            Paragraph()({
+            Paragraph(.{})({
                 forbear.text("To make, for example, a rectangle with a hole in it, you could:");
             });
 
@@ -51,21 +51,21 @@ pub fn SurfaceRegions() void {
                 });
             });
 
-            Paragraph()({
+            Paragraph(.{})({
                 forbear.text("These areas can be disjoint as well; it needn't be a single continuous polygon. Once you've created one of these regions, you can pass it into the wl_surface interface, namely with the set_opaque_region and set_input_region requests.");
             });
 
             // TODO: insert code block here
 
-            Paragraph()({
+            Paragraph(.{})({
                 forbear.text("The opaque region is a hint to the compositor as to which parts of your surface are considered opaque. Based on this information, they can optimize their rendering process. For example, if your surface is completely opaque and occludes another window beneath it, then the compositor won't waste any time on redrawing the window beneath yours. By default, this is empty, which assumes that any part of your surface might be transparent. This makes the default case the least efficient but the most correct.");
             });
 
-            Paragraph()({
+            Paragraph(.{})({
                 forbear.text("The input region indicates which parts of your surface accept pointer and touch input events. You might, for example, draw a drop-shadow underneath your surface, but input events which happen in this region should be passed to the client beneath you. Or, if your window is an unusual shape, you could create an input region in that shape. For most surface types by default, your entire surface accepts input.");
             });
 
-            Paragraph()({
+            Paragraph(.{})({
                 forbear.text("Both of these requests can be used to set an empty region by passing in null instead of a wl_region object. They're also both double-buffered \u{2014} so send a wl_surface.commit to make your changes effective. You can destroy the wl_region object to free up its resources as soon as you've sent the set_opaque_region or set_input_region requests with it. Updating the region after you send these requests will not update the state of the surface.");
             });
         });

@@ -21,13 +21,13 @@ pub fn XdgShellExampleCode() void {
                 forbear.text("Example code");
             });
 
-            Paragraph()({
+            Paragraph(.{})({
                 forbear.text("Using the sum of what we've learned so far, we can now write a Wayland client which displays something on the screen. The following code is a complete Wayland application which opens an XDG toplevel window and shows a 640x480 grid of squares on it. Compile it like so:");
             });
 
             // TODO: insert code block here
 
-            Paragraph()({
+            Paragraph(.{})({
                 forbear.text("Then run ./client to see it in action, or WAYLAND_DEBUG=1 ./client to include a bunch of useful debugging information. Tada! In future chapters we will be building upon this client, so stow this code away somewhere safe.");
             });
 
