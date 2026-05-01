@@ -30,9 +30,11 @@ fn App() !void {
     forbear.component(.{
         .sourceLocation = @src(),
     })({
+        const viewportSize = forbear.useViewportSize();
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },
+                .height = .{ .fixed = viewportSize[1] },
                 .direction = .vertical,
                 .xJustification = .center,
                 .yJustification = .start,

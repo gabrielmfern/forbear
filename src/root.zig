@@ -30,7 +30,7 @@ pub const Style = nodeImport.Style;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("window/root.zig").Window;
-pub const WindowCursor = @import("window/root.zig").Cursor;
+pub const Cursor = @import("window/root.zig").Cursor;
 
 pub var traceWriter: ?*std.Io.Writer = null;
 pub fn setTraceWriter(writer: *std.Io.Writer) void {
@@ -61,8 +61,8 @@ const ComponentChildrenSlotState = struct {
 };
 
 pub const Event = enum {
-    mouseOver,
-    mouseOut,
+    mouseEnter,
+    mouseLeave,
     mouseDown,
     mouseUp,
     click,
@@ -107,8 +107,6 @@ scrollDeltaAccumulator: Vec2,
 /// Stable snapshot of scroll delta for the current frame.
 scrollDelta: Vec2,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
-// scrollPosition: Vec2,
-// effectiveScrollPosition: Vec2,
 
 renderer: *Graphics.Renderer,
 window: ?*Window,
@@ -490,6 +488,28 @@ fn currentScope() ?*ScopeFrame {
     }
 }
 
+fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
+    const self = getContext();
+    try self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
+        .kind = kind,
+        .key = key,
+        .useStateCursor = 0,
+    });
+    try self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, key, {});
+}
+
+fn popScope(expectedKind: ScopeKind) void {
+    const self = getContext();
+    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
+        std.debug.assert(endedScope.kind == expectedKind);
+        if (self.scopeStates.get(endedScope.key)) |scopeState| {
+            if (endedScope.useStateCursor != scopeState.items.len) {
+                handleFrameError(error.RulesOfHooksViolated);
+            }
+        }
+    }
+}
+
 /// Walks the scope stack from the top down to find the nearest enclosing
 /// component scope. Used by element-key and component-key hashing to keep
 /// element identities namespaced per-component; intervening element
@@ -663,12 +683,17 @@ fn frameEnd(block: void) anyerror!void {
             try staleFrameNodeMeasurements.append(frameMeta.arena, entry.key_ptr.*);
             continue;
         }
-        entry.value_ptr.size = node.size;
-        entry.value_ptr.position = node.position;
-        entry.value_ptr.maxSize = node.maxSize;
-        entry.value_ptr.minSize = node.minSize;
-        entry.value_ptr.contentSize = node.contentSize;
-        entry.value_ptr.z = node.z;
+        entry.value_ptr.* = .{
+            .index = entry.value_ptr.index,
+            .done = true,
+
+            .size = node.size,
+            .position = node.position,
+            .maxSize = node.maxSize,
+            .minSize = node.minSize,
+            .contentSize = node.contentSize,
+            .z = node.z,
+        };
     }
     for (staleFrameNodeMeasurements.items) |staleKey| {
         _ = self.previousFrameNodeMeasurements.remove(staleKey);
@@ -695,14 +720,7 @@ fn elementEnd(block: void) void {
     std.debug.assert(self.frameMeta != null);
     std.debug.assert(self.frameMeta.?.nodeParentStack.items.len > 0);
 
-    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
-        std.debug.assert(endedScope.kind == .element);
-        if (self.scopeStates.get(endedScope.key)) |scopeState| {
-            if (endedScope.useStateCursor != scopeState.items.len) {
-                handleFrameError(error.RulesOfHooksViolated);
-            }
-        }
-    }
+    popScope(.element);
 
     self.frameMeta.?.previousPushedNodeIndex = self.frameMeta.?.nodeParentStack.pop();
 
@@ -838,16 +856,9 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         return &endNoop;
     };
 
-    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
-        .kind = .element,
-        .key = result.ptr.key,
-        .useStateCursor = 0,
-    }) catch |err| {
+    pushScope(.element, result.ptr.key) catch |err| {
         handleFrameError(err);
         return &endNoop;
-    };
-    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, result.ptr.key, {}) catch |err| {
-        handleFrameError(err);
     };
 
     inline for (Direction.array) |fitDirection| {
@@ -860,6 +871,13 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     }
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;
+
+    if (on(.mouseEnter)) {
+        setCursor(style.cursor);
+    }
+    if (on(.mouseLeave)) {
+        setCursor(baseStyle.cursor);
+    }
 
     return &elementEnd;
 }
@@ -1061,6 +1079,40 @@ pub noinline fn text(content: []const u8) void {
     if (parentOptional) |parent| {
         parent.fitChild(result.ptr);
     }
+
+    // Push self onto the parent stack so `on(.mouseOver)` resolves the
+    // text node's own measurement, then pop. The text node itself is not
+    // a scope and has no children, so this is purely for hit-testing.
+    self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, result.index) catch |err| {
+        handleFrameError(err);
+        return;
+    };
+    defer _ = self.frameMeta.?.nodeParentStack.pop();
+
+    pushScope(.element, result.ptr.key) catch |err| {
+        handleFrameError(err);
+        return;
+    };
+    defer popScope(.element);
+
+    if (on(.mouseEnter)) {
+        setCursor(style.cursor);
+    }
+    if (on(.mouseLeave)) {
+        setCursor(baseStyle.cursor);
+    }
+}
+
+/// Sets the OS-level mouse cursor for the current frame. Called per-frame
+/// (typically from a `forbear.on(.mouseOver)` branch) — the last call wins,
+/// so deeper/later mounted elements take precedence.
+pub fn setCursor(cursor: Cursor) void {
+    const self = getContext();
+    if (self.window) |window| {
+        window.setCursor(cursor, 0) catch |err| {
+            std.log.err("Failed to set cursor: {}", .{err});
+        };
+    }
 }
 
 inline fn ReturnType(comptime function: anytype) type {
@@ -1118,14 +1170,7 @@ fn componentEnd(block: void) void {
         return;
     }
 
-    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
-        std.debug.assert(endedScope.kind == .component);
-        if (self.scopeStates.get(endedScope.key)) |scopeState| {
-            if (endedScope.useStateCursor != scopeState.items.len) {
-                handleFrameError(error.RulesOfHooksViolated);
-            }
-        }
-    }
+    popScope(.component);
 }
 
 const ComponentKey = union(enum) {
@@ -1155,16 +1200,9 @@ pub fn component(key: ComponentKey) *const fn (void) void {
     }
 
     const componentKey = hasher.final();
-    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
-        .kind = .component,
-        .key = componentKey,
-        .useStateCursor = 0,
-    }) catch |err| {
+    pushScope(.component, componentKey) catch |err| {
         handleFrameError(err);
         return endNoop;
-    };
-    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, componentKey, {}) catch |err| {
-        handleFrameError(err);
     };
 
     return &componentEnd;
@@ -1307,7 +1345,7 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
         if (on(.mouseDown)) {
             wasMouseDown.* = true;
         }
-        if (on(.mouseOut)) {
+        if (on(.mouseLeave)) {
             wasMouseDown.* = false;
         }
         if (on(.mouseUp)) {
@@ -1319,6 +1357,16 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
         return false;
     }
 
+    // Reserve hook slots before the measurement guard so that slot indices
+    // are stable across frames — on the first frame there's no measurement,
+    // and a conditional useState would shift every later slot once the
+    // measurement starts existing.
+    const slot: ?*bool = switch (eventTag) {
+        .mouseEnter, .mouseLeave, .mouseDown, .mouseUp => useState(bool, false),
+        .scroll => null,
+        .click => unreachable,
+    };
+
     const measurement = useNodeMeasurement() orelse {
         if (comptime eventTag == .scroll) return null;
         return false;
@@ -1327,15 +1375,24 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     const inside = self.isMouseInsideMeasurement(measurement);
 
     switch (eventTag) {
-        .mouseOver => return inside,
-        .mouseOut => return !inside,
+        .mouseEnter, .mouseLeave => {
+            const wasMouseInside = slot.?;
+            defer wasMouseInside.* = inside;
+
+            switch (eventTag) {
+                .mouseEnter => return inside and !wasMouseInside.*,
+                .mouseLeave => return !inside and wasMouseInside.*,
+                else => unreachable,
+            }
+            unreachable;
+        },
         .mouseDown => {
-            const wasPressedLastFrame = useState(bool, false);
+            const wasPressedLastFrame = slot.?;
             defer wasPressedLastFrame.* = self.mouseButtonPressed;
             return self.mouseButtonPressed and !wasPressedLastFrame.* and inside;
         },
         .mouseUp => {
-            const wasPressedLastFrame = useState(bool, false);
+            const wasPressedLastFrame = slot.?;
             defer wasPressedLastFrame.* = self.mouseButtonPressed;
             return !self.mouseButtonPressed and wasPressedLastFrame.* and inside;
         },
@@ -1372,21 +1429,31 @@ pub fn useNodeMeasurement() ?Node.Measurement {
     std.debug.assert(self.frameMeta != null);
     const parentNodeIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return null;
     const parentNode = self.nodeTree.at(parentNodeIndex);
-    const measurement = self.previousFrameNodeMeasurements.getOrPut(parentNode.key) catch |err| {
+    const entry = self.previousFrameNodeMeasurements.getOrPut(parentNode.key) catch |err| {
         std.log.err("Failed to get or put previous frame node measurement: {}", .{err});
         handleFrameError(err);
         return null;
     };
-
-    // the index in the tree might've changed, and it's important this stays
-    // updated so that, at the frame end, we can update the measurements
-    // without having to look up the node by the key through the entire tree
-    measurement.value_ptr.index = parentNodeIndex;
-    if (measurement.found_existing) {
-        return measurement.value_ptr.*;
+    if (!entry.found_existing) {
+        entry.value_ptr.* = .{
+            .index = parentNodeIndex,
+            .done = false,
+            .size = parentNode.size,
+            .position = parentNode.position,
+            .maxSize = parentNode.maxSize,
+            .minSize = parentNode.minSize,
+            .contentSize = parentNode.contentSize,
+            .z = parentNode.z,
+        };
+    } else {
+        // Index can shift between frames as the tree is rebuilt, so refresh it.
+        entry.value_ptr.index = parentNodeIndex;
     }
-
-    return null;
+    if (entry.value_ptr.done == false) {
+        return null;
+    } else {
+        return entry.value_ptr.*;
+    }
 }
 
 fn timestampSeconds(io: std.Io) f64 {
