@@ -32,7 +32,7 @@ pub fn Header() !void {
                     .padding = .all(20.0),
                 },
             })({
-                if (forbear.on(.mouseOver)) {
+                if (forbear.on(.mouseEnter)) {
                     forbear.setCursor(.pointer);
                 }
                 forbear.text("Pricing");

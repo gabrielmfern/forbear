@@ -21,7 +21,7 @@ fn CounterExample() void {
                 .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
                 .borderRadius = 8.0,
             } })({
-                if (forbear.on(.mouseOver)) {
+                if (forbear.on(.mouseEnter)) {
                     forbear.setCursor(.pointer);
                 }
                 if (forbear.on(.click)) {
@@ -70,10 +70,10 @@ fn App() void {
                     },
                     .borderRadius = 20,
                 } })({
-                    if (forbear.on(.mouseOver)) {
+                    if (forbear.on(.mouseEnter)) {
                         isHovering.* = true;
                     }
-                    if (forbear.on(.mouseOut)) {
+                    if (forbear.on(.mouseLeave)) {
                         isHovering.* = false;
                     }
                 });

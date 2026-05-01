@@ -4022,7 +4022,7 @@ test "stale scope state is pruned at frame end (component)" {
     try std.testing.expect(!self.scopeStates.contains(transientKey));
 }
 
-test "Event queue dispatches events to correct elements" {
+test "on() mouseEnter and mouseLeave fire on the correct element" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
@@ -4062,37 +4062,55 @@ test "Event queue dispatches events to correct elements" {
         }
     };
 
-    // Frame 1: build elements, prime measurement, set mouse inside first
+    // Frame 1: mouse outside both — prime measurements with wasMouseInside = false
+    self.mousePosition = .{ 500.0, 500.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
         helpers.root()({
             helpers.first()({
-                _ = forbear.on(.mouseOver);
+                _ = forbear.on(.mouseEnter);
             });
             helpers.second()({
-                _ = forbear.on(.mouseOver);
+                _ = forbear.on(.mouseEnter);
             });
         });
         _ = try forbear.layout();
-        self.mousePosition = .{ 50.0, 50.0 };
     });
     _ = arena.reset(.retain_capacity);
 
-    // Frame 2: first element → mouseOver; second → mouseOut
+    // Frame 2: mouse moves into first → first.mouseEnter fires; second sees nothing
+    self.mousePosition = .{ 50.0, 50.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
         helpers.root()({
             helpers.first()({
-                try std.testing.expect(forbear.on(.mouseOver));
-                try std.testing.expect(!forbear.on(.mouseOut));
+                try std.testing.expect(forbear.on(.mouseEnter));
+                try std.testing.expect(!forbear.on(.mouseLeave));
             });
             helpers.second()({
-                try std.testing.expect(!forbear.on(.mouseOver));
-                try std.testing.expect(forbear.on(.mouseOut));
+                try std.testing.expect(!forbear.on(.mouseEnter));
+                try std.testing.expect(!forbear.on(.mouseLeave));
+            });
+        });
+        _ = try forbear.layout();
+    });
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 3: mouse moves from first into second → first.mouseLeave + second.mouseEnter
+    self.mousePosition = .{ 250.0, 50.0 };
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        helpers.root()({
+            helpers.first()({
+                try std.testing.expect(!forbear.on(.mouseEnter));
+                try std.testing.expect(forbear.on(.mouseLeave));
+            });
+            helpers.second()({
+                try std.testing.expect(forbear.on(.mouseEnter));
+                try std.testing.expect(!forbear.on(.mouseLeave));
             });
         });
     });
 }
 
-test "on() mouseOver and mouseOut reflect current mouse position" {
+test "on() mouseEnter and mouseLeave are edge-triggered" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
@@ -4113,33 +4131,45 @@ test "on() mouseOver and mouseOut reflect current mouse position" {
         }
     }.make;
 
-    // Frame 1: prime measurement; mouse inside
+    // Frame 1: mouse outside — prime measurement with wasMouseInside = false
+    self.mousePosition = .{ 500.0, 500.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
         el()({
-            _ = forbear.on(.mouseOver);
+            _ = forbear.on(.mouseEnter);
         });
         _ = try forbear.layout();
-        self.mousePosition = .{ 50.0, 50.0 };
     });
     _ = arena.reset(.retain_capacity);
 
-    // Frame 2: mouse is inside — mouseOver true, mouseOut false; calling twice same result
+    // Frame 2: mouse moves inside — mouseEnter fires, mouseLeave does not.
+    // Calling either query multiple times yields the same result (idempotent).
+    self.mousePosition = .{ 50.0, 50.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
         el()({
-            try std.testing.expect(forbear.on(.mouseOver));
-            try std.testing.expect(!forbear.on(.mouseOut));
-            try std.testing.expect(forbear.on(.mouseOver));
+            try std.testing.expect(forbear.on(.mouseEnter));
+            try std.testing.expect(!forbear.on(.mouseLeave));
+            try std.testing.expect(forbear.on(.mouseEnter));
         });
         _ = try forbear.layout();
-        self.mousePosition = .{ 500.0, 500.0 };
     });
     _ = arena.reset(.retain_capacity);
 
-    // Frame 3: mouse is outside — mouseOut true, mouseOver false
+    // Frame 3: mouse stays inside — neither edge fires
     try forbear.frame(try frameMeta(arenaAllocator))({
         el()({
-            try std.testing.expect(!forbear.on(.mouseOver));
-            try std.testing.expect(forbear.on(.mouseOut));
+            try std.testing.expect(!forbear.on(.mouseEnter));
+            try std.testing.expect(!forbear.on(.mouseLeave));
+        });
+        _ = try forbear.layout();
+    });
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 4: mouse moves outside — mouseLeave fires, mouseEnter does not
+    self.mousePosition = .{ 500.0, 500.0 };
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        el()({
+            try std.testing.expect(!forbear.on(.mouseEnter));
+            try std.testing.expect(forbear.on(.mouseLeave));
         });
     });
 }
@@ -4701,7 +4731,7 @@ test "no click when mouse moves away between mouseDown and mouseUp" {
     });
     _ = arena.reset(.retain_capacity);
 
-    // Frame 3: mouse is outside — on(.mouseOut) fires, clearing wasPressed; no click or mouseUp
+    // Frame 3: mouse is outside — on(.mouseLeave) fires, clearing wasPressed; no click or mouseUp
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.component(.{ .sourceLocation = @src() })({
             box()({

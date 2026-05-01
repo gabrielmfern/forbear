@@ -61,8 +61,13 @@ const ComponentChildrenSlotState = struct {
 };
 
 pub const Event = enum {
-    mouseOver,
-    mouseOut,
+    /// Edge-triggered: fires on the first frame the mouse moves into the
+    /// element from outside. Compares against the previous frame's
+    /// `wasMouseInside` snapshot taken at frame end.
+    mouseEnter,
+    /// Edge-triggered: fires on the first frame the mouse moves out of the
+    /// element after being inside.
+    mouseLeave,
     mouseDown,
     mouseUp,
     click,
@@ -669,6 +674,9 @@ fn frameEnd(block: void) anyerror!void {
         entry.value_ptr.minSize = node.minSize;
         entry.value_ptr.contentSize = node.contentSize;
         entry.value_ptr.z = node.z;
+        // Snapshot now so next frame's `mouseEnter`/`mouseLeave` can detect
+        // the inside-vs-outside transition.
+        entry.value_ptr.wasMouseInside = self.isMouseInsideMeasurement(entry.value_ptr.*);
     }
     for (staleFrameNodeMeasurements.items) |staleKey| {
         _ = self.previousFrameNodeMeasurements.remove(staleKey);
@@ -1058,24 +1066,24 @@ pub noinline fn text(content: []const u8) void {
         parent.fitChild(result.ptr);
     }
 
-    // Push self onto the parent stack so `on(.mouseOver)` resolves the
-    // text node's own measurement, then pop. The text node itself is not
-    // a scope and has no children, so this is purely for hit-testing.
+    // Push self onto the parent stack so `on(.mouseEnter)` / `on(.mouseLeave)`
+    // resolve the text node's own measurement, then pop. The text node itself
+    // is not a scope and has no children, so this is purely for hit-testing.
     self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, result.index) catch |err| {
         handleFrameError(err);
         return;
     };
     defer _ = self.frameMeta.?.nodeParentStack.pop();
-    if (on(.mouseOver)) {
+    if (on(.mouseEnter)) {
         setCursor(.text);
     }
-    if (on(.mouseOut)) {
+    if (on(.mouseLeave)) {
         setCursor(.default);
     }
 }
 
 /// Sets the OS-level mouse cursor for the current frame. Called per-frame
-/// (typically from a `forbear.on(.mouseOver)` branch) — the last call wins,
+/// (typically from a `forbear.on(.mouseEnter)` branch) — the last call wins,
 /// so deeper/later mounted elements take precedence.
 pub fn setCursor(cursor: WindowCursor) void {
     const self = getContext();
@@ -1330,7 +1338,7 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
         if (on(.mouseDown)) {
             wasMouseDown.* = true;
         }
-        if (on(.mouseOut)) {
+        if (on(.mouseLeave)) {
             wasMouseDown.* = false;
         }
         if (on(.mouseUp)) {
@@ -1350,8 +1358,8 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     const inside = self.isMouseInsideMeasurement(measurement);
 
     switch (eventTag) {
-        .mouseOver => return inside,
-        .mouseOut => return !inside,
+        .mouseEnter => return inside and !measurement.wasMouseInside,
+        .mouseLeave => return !inside and measurement.wasMouseInside,
         .mouseDown => {
             const wasPressedLastFrame = useState(bool, false);
             defer wasPressedLastFrame.* = self.mouseButtonPressed;

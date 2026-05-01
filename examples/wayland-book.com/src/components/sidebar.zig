@@ -73,11 +73,11 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
                 .fontWeight = if (props.active) 600 else 400,
             },
         })({
-            if (forbear.on(.mouseOver)) {
+            if (forbear.on(.mouseEnter)) {
                 isHovering.* = true;
                 forbear.setCursor(.pointer);
             }
-            if (forbear.on(.mouseOut)) isHovering.* = false;
+            if (forbear.on(.mouseLeave)) isHovering.* = false;
 
             forbear.componentChildrenSlot();
         });
