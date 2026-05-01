@@ -3,7 +3,6 @@ const builtin = @import("builtin");
 const forbear = @import("root.zig");
 
 const Vec2 = @Vector(2, f32);
-const Vec4 = @Vector(4, f32);
 
 pub fn FpsCounter() void {
     forbear.component(.{
