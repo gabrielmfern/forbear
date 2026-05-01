@@ -22,6 +22,9 @@ fn CounterExample() void {
                 .borderRadius = 8.0,
                 .cursor = .pointer,
             } })({
+                if (forbear.on(.mouseEnter)) {
+                    forbear.setCursor(.pointer);
+                }
                 if (forbear.on(.click)) {
                     count.* += 1;
                 }
@@ -68,10 +71,10 @@ fn App() void {
                     },
                     .borderRadius = 20,
                 } })({
-                    if (forbear.on(.mouseOver)) {
+                    if (forbear.on(.mouseEnter)) {
                         isHovering.* = true;
                     }
-                    if (forbear.on(.mouseOut)) {
+                    if (forbear.on(.mouseLeave)) {
                         isHovering.* = false;
                     }
                 });

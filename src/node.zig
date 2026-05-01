@@ -665,6 +665,7 @@ pub const Node = struct {
 
     pub const Measurement = struct {
         index: usize,
+        done: bool,
 
         position: Vec2,
         size: Vec2,
