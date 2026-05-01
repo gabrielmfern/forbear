@@ -59,17 +59,16 @@ Most of everything is still incomplete, needs a lot of work, and looks ugly. Tha
 - A flexbox-inspired layout system with grow/fit, alignment, padding heavily inspired by [Clay](https://github.com/nicbarker/clay)
 - A good starting point for element creation, including component children slotting, that I don't think is going to change much
 - An event system with `mouseDown`/`mouseUp`/`click`, though still missing a lot
-- Page scrolling
+- Per-element scrolling and clipping
+- Stable keying for elements that get added/removed across frames
 - Some starting points for animation through `useAnimation`, `useTransition` and `useSpringTransition`
 
 ## What still needs work
 
 Being honest about where things stand:
 
-- Scrolling on a per element basis
 - Images cause stutters
 - Text selection
-- Keying is not stable for elements that can be added/removed
 - The setup work being so cumbersome
 - The MacOS windowing code is completely vibe coded and with lots of holes
 - Support for SVGs
@@ -116,7 +115,7 @@ Building forbear has taken over a year of my life at this point where I've been 
 
 ## Contributing
 
-forbear is early and the API will certainly change. That said, if you're interested in GUI frameworks, Vulkan rendering, or Zig — I'd love to talk. The [open questions](./notes/open-questions.md) document is a good starting point to understand the design decisions being made, and the [TODOs](./TODO.md) also have some problems I'm thinking about.
+forbear is early and the API will certainly change. That said, if you're interested in GUI frameworks, Vulkan rendering, or Zig — I'd love to talk. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution process and CLA. The [open questions](./notes/open-questions.md) document is a good starting point to understand the design decisions being made, and the [TODOs](./TODO.md) also have some problems I'm thinking about.
 
 ---
 
