@@ -56,13 +56,14 @@
 
 - [x] support for placing elements manually, but relative to their parent still
 - [x] per element clipping
-- [ ] per element scrolling
+- [x] per element scrolling
     - I want to have a Scrolling component the user can just plop into their code and it just works 🤔
-    - Another option is a useScrolling (or something along those lines, maybe making it more clear it's imperative)
+    - Another option is a useScrolling
 - [ ] scroll bar 🤔
 
 ## problems
 
+- nested scrolling is not supported (i.e., nested elements all with scrolling)
 - when there's scaling in linux, the scale only drops in after some frames
 - new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
     - is having lots of them bad? I understand having no type-safety though
