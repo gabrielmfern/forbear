@@ -30,7 +30,7 @@ pub const Style = nodeImport.Style;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("window/root.zig").Window;
-pub const WindowCursor = @import("window/root.zig").Cursor;
+pub const Cursor = @import("window/root.zig").Cursor;
 
 pub var traceWriter: ?*std.Io.Writer = null;
 pub fn setTraceWriter(writer: *std.Io.Writer) void {
@@ -861,6 +861,13 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;
 
+    if (on(.mouseEnter)) {
+        setCursor(style.cursor);
+    }
+    if (on(.mouseLeave)) {
+        setCursor(baseStyle.cursor);
+    }
+
     return &elementEnd;
 }
 
@@ -1070,15 +1077,40 @@ pub noinline fn text(content: []const u8) void {
         return;
     };
     defer _ = self.frameMeta.?.nodeParentStack.pop();
-    if (on(.mouseOver)) {
-        setCursor(.text);
+
+    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
+        .kind = .element,
+        .key = result.ptr.key,
+        .useStateCursor = 0,
+    }) catch |err| {
+        handleFrameError(err);
+        return;
+    };
+    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, result.ptr.key, {}) catch |err| {
+        handleFrameError(err);
+        return;
+    };
+    defer if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
+        std.debug.assert(endedScope.kind == .element);
+        if (self.scopeStates.get(endedScope.key)) |scopeState| {
+            if (endedScope.useStateCursor != scopeState.items.len) {
+                handleFrameError(error.RulesOfHooksViolated);
+            }
+        }
+    };
+
+    if (on(.mouseEnter)) {
+        setCursor(style.cursor);
+    }
+    if (on(.mouseLeave)) {
+        setCursor(baseStyle.cursor);
     }
 }
 
 /// Sets the OS-level mouse cursor for the current frame. Called per-frame
 /// (typically from a `forbear.on(.mouseOver)` branch) — the last call wins,
 /// so deeper/later mounted elements take precedence.
-pub fn setCursor(cursor: WindowCursor) void {
+pub fn setCursor(cursor: Cursor) void {
     const self = getContext();
     if (self.window) |window| {
         window.setCursor(cursor, 0) catch |err| {
