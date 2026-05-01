@@ -2,4 +2,5 @@
 zig-out
 zig-pkg
 .DS_Store
+perf.data
 .cursor/hooks/state
