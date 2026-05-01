@@ -102,11 +102,17 @@ This is a multi-year project, so my planning might change and that's actually ve
 
 [Tauri](https://github.com/tauri-apps/tauri): It's the closest one to something I'd use, but unfortunately, webviews are not very good. The one on Linux, for example, catches on fire if you have anything serious going on-screen.
 
-## No license (yet)
+## License
 
-Building forbear has taken over a year of my life at this point where I've been turning down other ideas to focus on it. I haven't decided on the final licensing model yet. The most likely direction is **free for individuals, paid for companies** — similar to how some creative tools are licensed, exactly because it has been so hard on me to build.
+forbear is **free for non-commercial use**. Hobbyists, learners, small bootstrapped teams without revenue, and non-profits can all use forbear without paying anything.
 
-For now, the code is source-available. If this concerns you or blocks you from contributing, I understand — I'm actively thinking through this and welcome the conversation. Open an issue or reach out through anywhere.
+If you generate revenue from a product that uses forbear, **or** your organization has taken external funding (venture capital, angel investment, institutional capital), you're using forbear commercially. Commercial use is permitted, with a small royalty on products that cross a revenue threshold. **The exact threshold and rate are still being calibrated** and I'll update everything once I'm sure about it — they will be reasonable, in line with how other application frameworks license commercial use.
+
+If your forbear-using product crosses **USD $100,000** in trailing 12-month revenue, please reach out!
+
+The full terms are in [LICENSE](./LICENSE).
+
+Building forbear has taken over a year of my life at this point where I've been turning down other ideas to focus on it. The structure above exists exactly because it has been so hard on me to build, but I want anyone who isn't already extracting value from it to use it freely.
 
 ## Contributing
 
