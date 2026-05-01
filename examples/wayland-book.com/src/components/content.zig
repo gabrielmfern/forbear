@@ -57,7 +57,7 @@ fn Topbar() void {
     });
 }
 
-pub fn Content(activeChatper: *usize) void {
+pub fn Content(activeChatper: *usize) !void {
     forbear.component(.{
         .sourceLocation = @src(),
     })({
@@ -76,7 +76,7 @@ pub fn Content(activeChatper: *usize) void {
             Topbar();
 
             switch (activeChatper.*) {
-                0 => Introduction(),
+                0 => try Introduction(),
                 1 => ProtocolDesign(),
                 2 => WireProtocolBasics(),
                 3 => InterfacesRequestsAndEvents(),

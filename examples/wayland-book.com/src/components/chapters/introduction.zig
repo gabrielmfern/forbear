@@ -14,9 +14,7 @@ fn TodoList() void {
             .margin = forbear.Margin.block(6.0).withBottom(18.0),
         },
     })({
-        Heading(.{ .level = 1 })({
-            forbear.text("TODO");
-        });
+        forbear.text("TODO");
         List()({
             ListItem()({
                 forbear.text("Expand on resource lifetimes and avoiding race conditions in chapter 2.4");
@@ -37,23 +35,26 @@ fn TodoList() void {
     });
 }
 
-fn LicenseBadge() void {
+fn LicenseBadge() !void {
     forbear.element(.{
         .style = .{
-            .padding = forbear.Padding.block(4.5).withInLine(10.5),
-            .background = .{ .color = .{ 0.93, 0.93, 0.94, 1.0 } },
-            .borderRadius = 3.0,
-            .fontSize = 10.0,
-            .fontWeight = 600,
+            .width = .{ .grow = 1.0 },
             .margin = forbear.Margin.top(6.0).withBottom(0.0),
         },
     })({
-        // TODO: insert license badge image here
+        forbear.element(.{
+            .style = .{
+                .background = .{ .color = .{ 0.93, 0.93, 0.94, 1.0 } },
+            },
+        })({
+            forbear.Image(.{
+                .borderRadius = 3.0,
+            }, try forbear.useImage("license-badge"));
+        });
     });
 }
 
-
-pub fn Introduction() void {
+pub fn Introduction() !void {
     forbear.component(.{
         .sourceLocation = @src(),
     })({
@@ -87,7 +88,7 @@ pub fn Introduction() void {
             Paragraph()({
                 forbear.text("This work is licensed under a Creative Commons Attribution-ShareAlike 4.0 International License. The source code is available at git.sr.ht/~sircmpwn/wayland-book.");
             });
-            LicenseBadge();
+            try LicenseBadge();
 
             Heading(.{ .level = 2 })({
                 forbear.text("About the author");

@@ -95,7 +95,7 @@ fn App() !void {
                 // TODO: add an Acknowledgments section
             });
 
-            Content(activeChapter);
+            try Content(activeChapter);
         });
     });
 }
@@ -112,6 +112,8 @@ fn renderingMain(
     const arena = arenaAllocator.allocator();
 
     try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
+    try forbear.registerFont("Source Code Pro", @embedFile("SourceCodeProt.ttf"));
+    try forbear.registerImage("license-badge", @embedFile("./static/license-badge.png"), .png);
 
     var traceFile = try std.Io.Dir.cwd().createFile(io, "layouting.log", .{});
     defer traceFile.close(io);
