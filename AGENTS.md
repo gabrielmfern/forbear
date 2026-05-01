@@ -30,7 +30,7 @@ The core mental model is "build a node tree each frame, but keep state across fr
 - `src/node.zig`: the UI data model: `Node`, `Style`, `IncompleteStyle`, sizing enums, alignment, padding, text wrapping, shadows.
 - `src/layouting.zig`: layout resolution, grow/shrink distribution, wrapping, absolute positioning, tree iteration, and `layout()`.
 - `src/graphics.zig`: Vulkan initialization plus turning the laid out tree into render passes and draw calls.
-- `src/components.zig`: reusable built-in components such as `FpsCounter`.
+- `src/builtin.zig`: reusable built-in components and hooks such as `FpsCounter` and `useScrolling`.
 - `src/font.zig`: font loading, shaping, and glyph data.
 - `src/window/*.zig`: platform-specific window/event backends.
 - `src/windows/win32.zig`: lower-level Windows helpers used by the windowing/graphics code.
@@ -79,8 +79,8 @@ forbear/
 │   ├── shadow/
 │   └── text/
 ├── src/
+│   ├── builtin.zig
 │   ├── c.zig
-│   ├── components.zig
 │   ├── font.zig
 │   ├── graphics.zig
 │   ├── layouting.zig
