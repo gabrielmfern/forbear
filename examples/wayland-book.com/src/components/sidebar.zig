@@ -6,10 +6,11 @@ pub fn Sidebar() *const fn (void) void {
     forbear.component(.{
         .sourceLocation = @src(),
     })({
+        const viewport = forbear.useViewportSize();
         forbear.element(.{
             .style = .{
                 .width = .{ .fixed = 300.0 },
-                .height = .{ .grow = 1.0 },
+                .height = .{ .fixed = viewport[1] },
                 .direction = .vertical,
                 .xJustification = .start,
                 .yJustification = .start,
@@ -19,6 +20,8 @@ pub fn Sidebar() *const fn (void) void {
                 .color = Colors.sidebarText,
             },
         })({
+            _ = forbear.useScrolling();
+
             forbear.componentChildrenSlot();
         });
     });
@@ -48,10 +51,12 @@ pub const SidebarItemProps = struct {
 };
 
 pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
-    forbear.component(.{
-        .key = props.key,
-        .sourceLocation = @src(),
-    })({
+    forbear.component(
+        if (props.key) |key|
+            .{ .text = key }
+        else
+            .{ .sourceLocation = @src() },
+    )({
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{

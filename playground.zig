@@ -36,121 +36,173 @@ fn App() void {
     forbear.component(.{
         .sourceLocation = @src(),
     })({
+        const viewportSize = forbear.useViewportSize();
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{ .style = .{
-            .width = .{ .grow = 1.0 },
-            .direction = .vertical,
-            .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
-            .padding = .all(10),
+            .width = .{ .fixed = viewportSize[0] },
+            .height = .{ .fixed = viewportSize[1] },
         } })({
-            forbear.FpsCounter();
+            _ = forbear.useScrolling();
 
-            forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
             forbear.element(.{ .style = .{
-                .margin = forbear.Margin.top(12.0),
-                .width = .{ .fixed = 100 },
-                .height = .{ .fixed = 100 },
-                .background = .{
-                    .color = .{
-                        1.0,
-                        forbear.useTransition(if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
-                        0.0,
-                        1.0,
-                    },
-                },
-                .borderRadius = 20,
-            } })({
-                if (forbear.on(.mouseOver)) {
-                    isHovering.* = true;
-                }
-                if (forbear.on(.mouseOut)) {
-                    isHovering.* = false;
-                }
-            });
-
-            CounterExample();
-
-            // Demonstrates `.relative` placement: the badge is offset from
-            // the card's top-left corner and does not participate in the
-            // card's layout flow, so the card content below is unaffected.
-            forbear.element(.{ .style = .{
-                .margin = forbear.Margin.top(24.0),
-                .padding = .all(16.0),
-                .fontSize = 16.0,
-                .background = .{ .color = .{ 0.15, 0.15, 0.25, 1.0 } },
-                .borderRadius = 12.0,
-            } })({
-                forbear.text("Card with a relative badge");
-
-                forbear.element(.{ .style = .{
-                    .placement = .{ .relative = .{ 200.0, -10.0 } },
-                    .background = .{ .color = .{ 0.9, 0.2, 0.3, 1.0 } },
-                    .borderRadius = 12.0,
-                    .xJustification = .center,
-                    .padding = forbear.Padding.block(2.0).withInLine(4.0),
-                    .fontSize = 14,
-                } })({
-                    forbear.text("NEW");
-                });
-            });
-
-            // Demonstrates `.darken` blend mode: the dark overlay darkens
-            // the underlying gradient without affecting lighter areas.
-            forbear.element(.{ .style = .{
-                .margin = forbear.Margin.top(24.0),
-                .width = .{ .fixed = 200 },
-                .height = .{ .fixed = 100 },
-                .background = .{
-                    .gradient = &.{
-                        .{ .color = .{ 0.2, 0.6, 1.0, 1.0 }, .position = 0.0 },
-                        .{ .color = .{ 1.0, 0.4, 0.2, 1.0 }, .position = 1.0 },
-                    },
-                },
-                .borderRadius = 12.0,
-            } })({
-                forbear.element(.{ .style = .{
-                    .width = .{ .fixed = 100 },
-                    .height = .{ .fixed = 80 },
-                    .margin = .all(10),
-                    .background = .{ .color = .{ 0.3, 0.3, 0.3, 0.8 } },
-                    .blendMode = .darken,
-                    .borderRadius = 8.0,
-                } })({});
-            });
-
-            // Dashed border example
-            forbear.element(.{ .style = .{
-                .margin = forbear.Margin.top(24.0),
-                .width = .{ .fixed = 200 },
-                .height = .{ .fixed = 100 },
-                .background = .{ .color = .{ 0.1, 0.1, 0.1, 1.0 } },
-                .borderWidth = .all(3.0),
-                .borderColor = .{ 0.4, 0.8, 1.0, 1.0 },
-                .borderStyle = .dashed,
-                .borderRadius = 8.0,
-                .xJustification = .center,
-                .yJustification = .center,
-            } })({
-                forbear.text("Dashed");
-            });
-
-            // Scissor clipping test: fixed height container with overflowing children
-            forbear.element(.{ .style = .{
-                .margin = forbear.Margin.top(24.0),
-                .width = .{ .fixed = 200 },
-                .height = .{ .fixed = 100 },
+                .width = .{ .grow = 1.0 },
                 .direction = .vertical,
-                .background = .{ .color = .{ 0.1, 0.2, 0.3, 1.0 } },
-                .borderRadius = 8.0,
-                .borderWidth = .all(2.0),
-                .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
+                .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
+                .padding = .all(10),
             } })({
-                forbear.text("Line 1");
-                forbear.text("Line 2");
-                forbear.text("Line 3 - should clip");
-                forbear.text("Line 4 - should clip");
-                forbear.text("Line 5 - should clip");
+                forbear.FpsCounter();
+
+                forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
+                forbear.element(.{ .style = .{
+                    .margin = forbear.Margin.top(12.0),
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 100 },
+                    .background = .{
+                        .color = .{
+                            1.0,
+                            forbear.useTransition(if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
+                            0.0,
+                            1.0,
+                        },
+                    },
+                    .borderRadius = 20,
+                } })({
+                    if (forbear.on(.mouseOver)) {
+                        isHovering.* = true;
+                    }
+                    if (forbear.on(.mouseOut)) {
+                        isHovering.* = false;
+                    }
+                });
+
+                CounterExample();
+
+                // Demonstrates `.relative` placement: the badge is offset from
+                // the card's top-left corner and does not participate in the
+                // card's layout flow, so the card content below is unaffected.
+                forbear.element(.{ .style = .{
+                    .margin = forbear.Margin.top(24.0),
+                    .padding = .all(16.0),
+                    .fontSize = 16.0,
+                    .background = .{ .color = .{ 0.15, 0.15, 0.25, 1.0 } },
+                    .borderRadius = 12.0,
+                } })({
+                    forbear.text("Card with a relative badge");
+
+                    forbear.element(.{ .style = .{
+                        .placement = .{ .relative = .{ 200.0, -10.0 } },
+                        .background = .{ .color = .{ 0.9, 0.2, 0.3, 1.0 } },
+                        .borderRadius = 12.0,
+                        .xJustification = .center,
+                        .padding = forbear.Padding.block(2.0).withInLine(4.0),
+                        .fontSize = 14,
+                    } })({
+                        forbear.text("NEW");
+                    });
+                });
+
+                // Demonstrates `.darken` blend mode: the dark overlay darkens
+                // the underlying gradient without affecting lighter areas.
+                forbear.element(.{ .style = .{
+                    .margin = forbear.Margin.top(24.0),
+                    .width = .{ .fixed = 200 },
+                    .height = .{ .fixed = 100 },
+                    .background = .{
+                        .gradient = &.{
+                            .{ .color = .{ 0.2, 0.6, 1.0, 1.0 }, .position = 0.0 },
+                            .{ .color = .{ 1.0, 0.4, 0.2, 1.0 }, .position = 1.0 },
+                        },
+                    },
+                    .borderRadius = 12.0,
+                } })({
+                    forbear.element(.{ .style = .{
+                        .width = .{ .fixed = 100 },
+                        .height = .{ .fixed = 80 },
+                        .margin = .all(10),
+                        .background = .{ .color = .{ 0.3, 0.3, 0.3, 0.8 } },
+                        .blendMode = .darken,
+                        .borderRadius = 8.0,
+                    } })({});
+                });
+
+                // Dashed border example
+                forbear.element(.{ .style = .{
+                    .margin = forbear.Margin.top(24.0),
+                    .width = .{ .fixed = 200 },
+                    .height = .{ .fixed = 100 },
+                    .background = .{ .color = .{ 0.1, 0.1, 0.1, 1.0 } },
+                    .borderWidth = .all(3.0),
+                    .borderColor = .{ 0.4, 0.8, 1.0, 1.0 },
+                    .borderStyle = .dashed,
+                    .borderRadius = 8.0,
+                    .xJustification = .center,
+                    .yJustification = .center,
+                } })({
+                    forbear.text("Dashed");
+                });
+
+                // Scissor clipping test: fixed height container with overflowing children
+                forbear.element(.{ .style = .{
+                    .margin = forbear.Margin.top(24.0),
+                    .width = .{ .fixed = 200 },
+                    .height = .{ .fixed = 100 },
+                    .direction = .vertical,
+                    .background = .{ .color = .{ 0.1, 0.2, 0.3, 1.0 } },
+                    .borderRadius = 8.0,
+                    .borderWidth = .all(2.0),
+                    .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
+                } })({
+                    _ = forbear.useScrolling();
+
+                    forbear.text("Line 1");
+                    forbear.text("Line 2");
+                    forbear.text("Line 3 - should clip");
+                    forbear.text("Line 4 - should clip");
+                    forbear.text("Line 5 - should clip");
+                });
+
+                // Two scrollable regions in the same component. Each
+                // `useScrolling` call binds its offset and spring state to
+                // its enclosing element, so the regions scroll independently
+                // without needing wrapping components.
+                forbear.element(.{ .style = .{
+                    .margin = forbear.Margin.top(24.0),
+                    .direction = .horizontal,
+                } })({
+                    forbear.element(.{ .style = .{
+                        .width = .{ .fixed = 200 },
+                        .height = .{ .fixed = 120 },
+                        .direction = .vertical,
+                        .background = .{ .color = .{ 0.15, 0.10, 0.20, 1.0 } },
+                        .borderRadius = 8.0,
+                        .padding = .all(8),
+                    } })({
+                        _ = forbear.useScrolling();
+                        forbear.text("Left A");
+                        forbear.text("Left B");
+                        forbear.text("Left C");
+                        forbear.text("Left D");
+                        forbear.text("Left E");
+                    });
+
+                    forbear.element(.{ .style = .{
+                        .margin = forbear.Margin.left(12.0),
+                        .width = .{ .fixed = 200 },
+                        .height = .{ .fixed = 120 },
+                        .direction = .vertical,
+                        .background = .{ .color = .{ 0.10, 0.20, 0.15, 1.0 } },
+                        .borderRadius = 8.0,
+                        .padding = .all(8),
+                    } })({
+                        _ = forbear.useScrolling();
+                        forbear.text("Right 1");
+                        forbear.text("Right 2");
+                        forbear.text("Right 3");
+                        forbear.text("Right 4");
+                        forbear.text("Right 5");
+                    });
+                });
             });
         });
     });

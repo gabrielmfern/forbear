@@ -3,8 +3,9 @@ const builtin = @import("builtin");
 
 pub const c = @import("c");
 
-const components = @import("components.zig");
-pub const FpsCounter = components.FpsCounter;
+const forbearBuiltin = @import("builtin.zig");
+pub const FpsCounter = forbearBuiltin.FpsCounter;
+pub const useScrolling = forbearBuiltin.useScrolling;
 pub const Font = @import("font.zig");
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
@@ -42,9 +43,12 @@ const Context = @This();
 
 var context: ?@This() = null;
 
-const ComponentResolutionState = struct {
-    useStateCursor: usize,
+const ScopeKind = enum { component, element };
+
+const ScopeFrame = struct {
+    kind: ScopeKind,
     key: u64,
+    useStateCursor: usize,
 };
 
 const ComponentChildrenSlotState = struct {
@@ -56,15 +60,14 @@ const ComponentChildrenSlotState = struct {
     slotParentIndex: usize,
 };
 
-pub const Event = union(enum) {
+pub const Event = enum {
     mouseOver,
     mouseOut,
     mouseDown,
     mouseUp,
     click,
+    scroll,
 };
-
-const ElementEventQueue = std.AutoHashMap(u64, std.ArrayList(Event));
 
 pub const FrameMeta = struct {
     arena: std.mem.Allocator,
@@ -77,7 +80,16 @@ pub const FrameMeta = struct {
     // that user actually has to fill out.
     err: ?anyerror = null,
 
-    componentResolutionState: std.ArrayList(ComponentResolutionState) = .empty,
+    /// Unified scope stack tracking both component and element scopes in
+    /// lexical order. `useState` binds to the topmost frame regardless of
+    /// kind; element-key hashing walks back to the nearest `.component`
+    /// frame to keep per-component element-key namespacing stable.
+    scopeStack: std.ArrayList(ScopeFrame) = .empty,
+
+    /// Set of scope keys that were entered during this frame. At frame end,
+    /// any entry in `scopeStates` whose key is missing here is pruned —
+    /// matching React-style unmount semantics.
+    touchedScopeKeys: std.AutoHashMapUnmanaged(u64, void) = .empty,
 
     previousPushedNodeIndex: ?usize = null,
     nodeParentStack: std.ArrayList(usize) = .empty,
@@ -89,15 +101,14 @@ io: std.Io,
 
 mousePosition: Vec2,
 mouseButtonPressed: bool,
-mouseButtonJustPressed: bool,
-mouseButtonJustReleased: bool,
-hoveredElementKeys: std.ArrayList(u64),
-mouseDownElementKeys: std.ArrayList(u64),
-/// The eased in value of `effectiveScrollPosition`
-scrollPosition: Vec2,
-/// The final value of the scrolling, without considering any animations, snaps
-/// exactly into place.
-effectiveScrollPosition: Vec2,
+/// Accumulated wheel/trackpad delta from window events. Snapshotted
+/// into `scrollDelta` at frame start, then reset.
+scrollDeltaAccumulator: Vec2,
+/// Stable snapshot of scroll delta for the current frame.
+scrollDelta: Vec2,
+previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
+// scrollPosition: Vec2,
+// effectiveScrollPosition: Vec2,
 
 renderer: *Graphics.Renderer,
 window: ?*Window,
@@ -113,11 +124,13 @@ cappedDeltaTime: ?f64,
 lastUpdateTime: ?f64,
 viewportSize: Vec2,
 
-componentStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
+/// Persistent state storage keyed by scope key. A scope is either a
+/// component or an element — `useState` resolves to the nearest enclosing
+/// scope, so an entry here may belong to either kind.
+scopeStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
 
 nodeTree: NodeTree,
 frameMeta: ?FrameMeta,
-pendingEventQueue: std.AutoHashMap(u64, std.ArrayList(Event)),
 
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
@@ -133,12 +146,9 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
 
         .mousePosition = @splat(0.0),
         .mouseButtonPressed = false,
-        .mouseButtonJustPressed = false,
-        .mouseButtonJustReleased = false,
-        .hoveredElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
-        .mouseDownElementKeys = try std.ArrayList(u64).initCapacity(allocator, 1),
-        .scrollPosition = @splat(0.0),
-        .effectiveScrollPosition = @splat(0.0),
+        .scrollDeltaAccumulator = @splat(0.0),
+        .scrollDelta = @splat(0.0),
+        .previousFrameNodeMeasurements = std.AutoHashMap(u64, Node.Measurement).init(allocator),
 
         .renderer = renderer,
         .window = null,
@@ -149,11 +159,10 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .lastUpdateTime = null,
         .viewportSize = @splat(0.0),
 
-        .componentStates = .init(allocator),
+        .scopeStates = .init(allocator),
 
         .frameMeta = null,
         .nodeTree = .empty,
-        .pendingEventQueue = .init(allocator),
 
         .images = std.StringHashMap(ImageType).init(allocator),
         .fonts = std.StringHashMap(Font).init(allocator),
@@ -450,6 +459,13 @@ pub fn useLastUpdateTime() f64 {
     return self.lastUpdateTime orelse self.startTime;
 }
 
+pub fn getParentNode() ?*Node {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    const index = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return null;
+    return self.nodeTree.at(index);
+}
+
 pub fn getPreviousNode() ?*Node {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
@@ -465,13 +481,29 @@ pub fn useArena() std.mem.Allocator {
 
 const stateAlignment: std.mem.Alignment = .@"8";
 
-fn currentComponentResolutionState() ?*ComponentResolutionState {
+fn currentScope() ?*ScopeFrame {
     const self = getContext();
-    if (self.frameMeta.?.componentResolutionState.items.len > 0) {
-        return &self.frameMeta.?.componentResolutionState.items[self.frameMeta.?.componentResolutionState.items.len - 1];
+    if (self.frameMeta.?.scopeStack.items.len > 0) {
+        return &self.frameMeta.?.scopeStack.items[self.frameMeta.?.scopeStack.items.len - 1];
     } else {
         return null;
     }
+}
+
+/// Walks the scope stack from the top down to find the nearest enclosing
+/// component scope. Used by element-key and component-key hashing to keep
+/// element identities namespaced per-component; intervening element
+/// scopes intentionally do not contribute to that hashing because
+/// `nodeParentStack.items.len` already differentiates by depth.
+fn nearestComponentScopeKey() ?u64 {
+    const self = getContext();
+    const items = self.frameMeta.?.scopeStack.items;
+    var i = items.len;
+    while (i > 0) {
+        i -= 1;
+        if (items[i].kind == .component) return items[i].key;
+    }
+    return null;
 }
 
 /// TODO: in debug mode, we should be adding some guard rail here to make sure
@@ -490,10 +522,13 @@ pub fn useState(T: type, initialValue: T) *T {
         return &Static.dummy;
     }
 
-    if (currentComponentResolutionState()) |state| {
-        const stateResult = self.componentStates.getOrPut(state.key) catch |err| {
-            std.log.err("Failed to get or put a new component state {}", .{err});
-            @panic("Failed to get or put a new component state");
+    if (currentScope()) |state| {
+        const stateResult = self.scopeStates.getOrPut(state.key) catch |err| {
+            std.log.err("Failed to get or put a new scope state {}", .{err});
+            @panic("Failed to get or put a new scope state");
+        };
+        self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, state.key, {}) catch |err| {
+            handleFrameError(err);
         };
         defer state.useStateCursor += 1;
         if (stateResult.found_existing) {
@@ -518,9 +553,9 @@ pub fn useState(T: type, initialValue: T) *T {
         return @ptrCast(@alignCast(stateResult.value_ptr.*.items[state.useStateCursor]));
     } else {
         if (!builtin.is_test) {
-            std.log.err("You might be calling a hook (useState) outside of a component, and forbear cannot track things outside of one.", .{});
+            std.log.err("You might be calling a hook (useState) outside of a component or element scope, and forbear cannot track things outside of one.", .{});
         }
-        @panic("No component resolution state found, you must be calling useState outside of a component, otherwise this is a bug.");
+        @panic("No scope found, you must be calling useState outside of a component or element, otherwise this is a bug.");
     }
 }
 
@@ -590,11 +625,63 @@ fn frameEnd(block: void) anyerror!void {
     self.frameMeta = null;
     if (frameMeta.err) |err| return err;
 
+    // Drop state for scopes that weren't entered this frame. Mirrors React
+    // unmount semantics: omit a component or element this frame and its
+    // state goes away. Element identities churn far more than component
+    // identities, so without this every transient element would leak its
+    // useState storage.
+    var staleScopeKeys: std.ArrayList(u64) = .empty;
+    defer staleScopeKeys.deinit(frameMeta.arena);
+    var scopeStateKeysIterator = self.scopeStates.keyIterator();
+    while (scopeStateKeysIterator.next()) |keyPtr| {
+        if (!frameMeta.touchedScopeKeys.contains(keyPtr.*)) {
+            staleScopeKeys.append(frameMeta.arena, keyPtr.*) catch |err| {
+                std.log.err("Failed to record stale scope key for cleanup: {}", .{err});
+                break;
+            };
+        }
+    }
+    for (staleScopeKeys.items) |staleKey| {
+        if (self.scopeStates.fetchRemove(staleKey)) |entry| {
+            var states = entry.value;
+            for (states.items) |buffer| self.allocator.free(buffer);
+            states.deinit(self.allocator);
+        }
+    }
+
+    var staleFrameNodeMeasurements: std.ArrayList(u64) = .empty;
+    defer staleFrameNodeMeasurements.deinit(frameMeta.arena);
+
+    var iterator = self.previousFrameNodeMeasurements.iterator();
+    while (iterator.next()) |entry| {
+        if (self.nodeTree.list.items.len < entry.value_ptr.index + 1) {
+            try staleFrameNodeMeasurements.append(frameMeta.arena, entry.key_ptr.*);
+            continue;
+        }
+        const node = self.nodeTree.at(entry.value_ptr.index);
+        if (node.key != entry.key_ptr.*) {
+            try staleFrameNodeMeasurements.append(frameMeta.arena, entry.key_ptr.*);
+            continue;
+        }
+        entry.value_ptr.size = node.size;
+        entry.value_ptr.position = node.position;
+        entry.value_ptr.maxSize = node.maxSize;
+        entry.value_ptr.minSize = node.minSize;
+        entry.value_ptr.contentSize = node.contentSize;
+        entry.value_ptr.z = node.z;
+    }
+    for (staleFrameNodeMeasurements.items) |staleKey| {
+        _ = self.previousFrameNodeMeasurements.remove(staleKey);
+    }
+
     self.nodeTree.clearRetainingCapacity();
 }
 
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     const self = getContext();
+
+    self.scrollDelta = self.scrollDeltaAccumulator;
+    self.scrollDeltaAccumulator = @splat(0.0);
 
     self.frameMeta = meta;
     return &frameEnd;
@@ -608,12 +695,20 @@ fn elementEnd(block: void) void {
     std.debug.assert(self.frameMeta != null);
     std.debug.assert(self.frameMeta.?.nodeParentStack.items.len > 0);
 
+    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
+        std.debug.assert(endedScope.kind == .element);
+        if (self.scopeStates.get(endedScope.key)) |scopeState| {
+            if (endedScope.useStateCursor != scopeState.items.len) {
+                handleFrameError(error.RulesOfHooksViolated);
+            }
+        }
+    }
+
     self.frameMeta.?.previousPushedNodeIndex = self.frameMeta.?.nodeParentStack.pop();
 
     const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
     const node = self.nodeTree.at(previousNodeIndex);
 
-    // Handle ratio sizing that depends on the opposite axis
     if (node.style.width == .ratio) {
         node.size[0] = node.style.width.ratio * node.size[1];
     }
@@ -622,10 +717,6 @@ fn elementEnd(block: void) void {
     }
     node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
     node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
-
-    // Note: fit sizes are computed by layout()'s fit pass after the tree
-    // is complete, not incrementally during tree building. This handles
-    // slotted children correctly.
 }
 
 pub const ElementProps = struct {
@@ -665,8 +756,8 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         0;
 
     var hasher = std.hash.Wyhash.init(0);
-    if (self.frameMeta.?.componentResolutionState.getLastOrNull()) |crs| {
-        hasher.update(std.mem.asBytes(&crs.key));
+    if (nearestComponentScopeKey()) |componentKey| {
+        hasher.update(std.mem.asBytes(&componentKey));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
     if (props.key) |key| {
@@ -745,6 +836,18 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     self.frameMeta.?.nodeParentStack.append(self.frameMeta.?.arena, result.index) catch |err| {
         handleFrameError(err);
         return &endNoop;
+    };
+
+    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
+        .kind = .element,
+        .key = result.ptr.key,
+        .useStateCursor = 0,
+    }) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, result.ptr.key, {}) catch |err| {
+        handleFrameError(err);
     };
 
     inline for (Direction.array) |fitDirection| {
@@ -927,8 +1030,8 @@ pub noinline fn text(content: []const u8) void {
         0;
 
     var hasher = std.hash.Wyhash.init(0);
-    if (self.frameMeta.?.componentResolutionState.getLastOrNull()) |crs| {
-        hasher.update(std.mem.asBytes(&crs.key));
+    if (nearestComponentScopeKey()) |componentKey| {
+        hasher.update(std.mem.asBytes(&componentKey));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
     // We don't hash the text content here because text selection would be nice
@@ -1015,22 +1118,22 @@ fn componentEnd(block: void) void {
         return;
     }
 
-    if (self.frameMeta.?.componentResolutionState.pop()) |endedResolutionState| {
-        const componentKey = endedResolutionState.key;
-        if (self.componentStates.get(componentKey)) |componentStates| {
-            if (endedResolutionState.useStateCursor != componentStates.items.len) {
+    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
+        std.debug.assert(endedScope.kind == .component);
+        if (self.scopeStates.get(endedScope.key)) |scopeState| {
+            if (endedScope.useStateCursor != scopeState.items.len) {
                 handleFrameError(error.RulesOfHooksViolated);
             }
         }
     }
 }
 
-const ComponentProps = struct {
-    key: ?[]const u8 = null,
+const ComponentKey = union(enum) {
+    text: []const u8,
     sourceLocation: std.builtin.SourceLocation,
 };
 
-pub fn component(props: ComponentProps) *const fn (void) void {
+pub fn component(key: ComponentKey) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -1042,22 +1145,26 @@ pub fn component(props: ComponentProps) *const fn (void) void {
     // the component keys wrapping this component and the amount of parents in
     // the node tree up to this point are what differentiate this instance from
     // other instances of the same component
-    if (self.frameMeta.?.componentResolutionState.getLastOrNull()) |componentResolutionState| {
-        hasher.update(std.mem.asBytes(&componentResolutionState.key));
+    if (nearestComponentScopeKey()) |parentComponentKey| {
+        hasher.update(std.mem.asBytes(&parentComponentKey));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
-    if (props.key) |key| {
-        hasher.update(key);
-    } else {
-        hasher.update(std.mem.asBytes(&props.sourceLocation));
+    switch (key) {
+        .text => hasher.update(key.text),
+        .sourceLocation => hasher.update(std.mem.asBytes(&key.sourceLocation)),
     }
 
-    self.frameMeta.?.componentResolutionState.append(self.frameMeta.?.arena, .{
-        .key = hasher.final(),
+    const componentKey = hasher.final();
+    self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
+        .kind = .component,
+        .key = componentKey,
         .useStateCursor = 0,
     }) catch |err| {
         handleFrameError(err);
         return endNoop;
+    };
+    self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, componentKey, {}) catch |err| {
+        handleFrameError(err);
     };
 
     return &componentEnd;
@@ -1173,50 +1280,73 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
     return &componentChildrenSlotEndFn;
 }
 
-pub fn pushEvent(key: u64, event: Event) !void {
-    const self = getContext();
-    const result = try self.pendingEventQueue.getOrPut(key);
-    if (!result.found_existing) {
-        result.value_ptr.* = try std.ArrayList(Event).initCapacity(self.allocator, 1);
-    }
-    try result.value_ptr.*.append(self.allocator, event);
+fn isMouseInsideMeasurement(self: *@This(), measurement: Node.Measurement) bool {
+    const pos = measurement.position;
+    const size = measurement.size;
+    return self.mousePosition[0] >= pos[0] and
+        self.mousePosition[1] >= pos[1] and
+        self.mousePosition[0] <= pos[0] + size[0] and
+        self.mousePosition[1] <= pos[1] + size[1];
 }
 
-/// Returns the next event in the queue to handle for the current element key.
-pub fn useNextEvent() ?Event {
-    const self = getContext();
-    std.debug.assert(self.frameMeta != null);
-    if (self.frameMeta.?.previousPushedNodeIndex) |previousPushedNodeIndex| {
-        const previousPushedNode = self.nodeTree.at(previousPushedNodeIndex);
-        const key = previousPushedNode.key;
-        // std.log.debug("handling events for {}", .{key});
-        if (self.pendingEventQueue.getPtr(key)) |eventQueue| {
-            return eventQueue.pop();
-        }
-    }
-    return null;
+pub fn OnResult(comptime eventTag: Event) type {
+    return if (eventTag == .scroll) ?Vec2 else bool;
 }
 
-/// Returns and consumes a matching event from the current element's pending
-/// event queue. Must be called inside an element body block.
-pub fn on(comptime eventTag: Event) bool {
+/// Inline hit test against previous-frame measurement. No event queue —
+/// every caller sees the same raw input state each frame.
+pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 
-    const currentNodeIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return false;
-    const currentNode = self.nodeTree.at(currentNodeIndex);
-    const key = currentNode.key;
-
-    const eventQueue = self.pendingEventQueue.getPtr(key) orelse return false;
-
-    for (eventQueue.items, 0..) |event, i| {
-        if (std.meta.activeTag(event) == eventTag) {
-            _ = eventQueue.orderedRemove(i);
-            return true;
+    if (comptime eventTag == .click) {
+        // This is not exactly the same as mouseUp, since mouseUp doesn't
+        // require that the mouse was down inside of the element before, while
+        // click does.
+        const wasMouseDown = useState(bool, false);
+        if (on(.mouseDown)) {
+            wasMouseDown.* = true;
         }
+        if (on(.mouseOut)) {
+            wasMouseDown.* = false;
+        }
+        if (on(.mouseUp)) {
+            if (wasMouseDown.*) {
+                wasMouseDown.* = false;
+                return true;
+            }
+        }
+        return false;
     }
 
-    return false;
+    const measurement = useNodeMeasurement() orelse {
+        if (comptime eventTag == .scroll) return null;
+        return false;
+    };
+
+    const inside = self.isMouseInsideMeasurement(measurement);
+
+    switch (eventTag) {
+        .mouseOver => return inside,
+        .mouseOut => return !inside,
+        .mouseDown => {
+            const wasPressedLastFrame = useState(bool, false);
+            defer wasPressedLastFrame.* = self.mouseButtonPressed;
+            return self.mouseButtonPressed and !wasPressedLastFrame.* and inside;
+        },
+        .mouseUp => {
+            const wasPressedLastFrame = useState(bool, false);
+            defer wasPressedLastFrame.* = self.mouseButtonPressed;
+            return !self.mouseButtonPressed and wasPressedLastFrame.* and inside;
+        },
+        .click => unreachable,
+        .scroll => {
+            if (!inside) return null;
+            if (self.scrollDelta[0] != 0.0 or self.scrollDelta[1] != 0.0)
+                return self.scrollDelta;
+            return null;
+        },
+    }
 }
 
 pub fn update() !void {
@@ -1225,95 +1355,6 @@ pub fn update() !void {
     if (self.frameMeta.?.err) |err| return err;
 
     const viewportSize = self.frameMeta.?.viewportSize;
-    const arena = self.frameMeta.?.arena;
-
-    var queueIterator = self.pendingEventQueue.valueIterator();
-    while (queueIterator.next()) |events| {
-        events.clearRetainingCapacity();
-    }
-
-    const justPressed = self.mouseButtonJustPressed;
-    const justReleased = self.mouseButtonJustReleased;
-    self.mouseButtonJustPressed = false;
-    self.mouseButtonJustReleased = false;
-
-    var missingHoveredKeys = try std.ArrayList(u64).initCapacity(arena, self.hoveredElementKeys.items.len);
-    missingHoveredKeys.appendSliceAssumeCapacity(self.hoveredElementKeys.items);
-
-    var uiEdges: Vec2 = @splat(0.0);
-    var hoveredCursor: WindowCursor = .default;
-    var topHoveredZ: ?u16 = null;
-
-    var iterator = self.nodeTree.walk();
-    while (iterator.next()) |node| {
-        if (node.style.placement != .fixed) {
-            uiEdges = @max(uiEdges, node.position + self.scrollPosition + node.size);
-        }
-        const isMouseAfter = node.position[0] <= self.mousePosition[0] and node.position[1] <= self.mousePosition[1];
-        const isMouseBefore = node.position[0] + node.size[0] >= self.mousePosition[0] and node.position[1] + node.size[1] >= self.mousePosition[1];
-        const isMouseInBounds = isMouseAfter and isMouseBefore;
-
-        // Also check clipRect - if element is clipped, mouse must be inside clip region
-        const isMouseInClip = if (node.clipRect) |clip|
-            self.mousePosition[0] >= clip[0] and
-                self.mousePosition[1] >= clip[1] and
-                self.mousePosition[0] <= clip[0] + clip[2] and
-                self.mousePosition[1] <= clip[1] + clip[3]
-        else
-            true;
-
-        const isMouseInside = isMouseInBounds and isMouseInClip;
-
-        const hoveredElementKeysIndexOpt = std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, node.key);
-
-        if (std.mem.indexOfScalar(u64, missingHoveredKeys.items, node.key)) |i| {
-            _ = missingHoveredKeys.swapRemove(i);
-        }
-
-        if (isMouseInside) {
-            if (topHoveredZ == null or node.z > topHoveredZ.?) {
-                topHoveredZ = node.z;
-                hoveredCursor = node.style.cursor;
-            }
-
-            if (hoveredElementKeysIndexOpt == null) {
-                try pushEvent(node.key, .mouseOver);
-
-                try self.hoveredElementKeys.append(self.allocator, node.key);
-            }
-
-            if (justPressed) {
-                try pushEvent(node.key, .mouseDown);
-                try self.mouseDownElementKeys.append(self.allocator, node.key);
-            }
-            if (justReleased) {
-                try pushEvent(node.key, .mouseUp);
-                if (std.mem.indexOfScalar(u64, self.mouseDownElementKeys.items, node.key) != null) {
-                    try pushEvent(node.key, .click);
-                }
-            }
-        } else if (hoveredElementKeysIndexOpt) |hoveredElementKeysIndex| {
-            try pushEvent(node.key, .mouseOut);
-
-            _ = self.hoveredElementKeys.swapRemove(hoveredElementKeysIndex);
-        }
-    }
-
-    if (justReleased) {
-        self.mouseDownElementKeys.clearRetainingCapacity();
-    }
-
-    for (missingHoveredKeys.items) |key| {
-        if (std.mem.indexOfScalar(u64, self.hoveredElementKeys.items, key)) |i| {
-            _ = self.hoveredElementKeys.swapRemove(i);
-        }
-    }
-
-    if (self.window) |window| {
-        window.setCursor(hoveredCursor, 0) catch |err| {
-            std.log.err("Failed to set cursor: {}", .{err});
-        };
-    }
 
     self.viewportSize = viewportSize;
 
@@ -1323,38 +1364,29 @@ pub fn update() !void {
     self.deltaTime = rawDelta;
     self.cappedDeltaTime = @min(rawDelta, maxCappedDeltaTime);
     self.lastUpdateTime = timestamp;
-
-    scroller(uiEdges);
 }
 
-fn scroller(uiEdges: Vec2) void {
+/// Returns some layouting values of the current node from the last frame
+pub fn useNodeMeasurement() ?Node.Measurement {
     const self = getContext();
-    // This is fine since we're not really inserting any node, so it won't clash
-    // with the current root node. The only purpose of this is to use the same
-    // logic here as is already implmented for actual UI code.
-    component(.{
-        .sourceLocation = @src(),
-    })({
-        const viewportSize = useViewportSize();
+    std.debug.assert(self.frameMeta != null);
+    const parentNodeIndex = self.frameMeta.?.nodeParentStack.getLastOrNull() orelse return null;
+    const parentNode = self.nodeTree.at(parentNodeIndex);
+    const measurement = self.previousFrameNodeMeasurements.getOrPut(parentNode.key) catch |err| {
+        std.log.err("Failed to get or put previous frame node measurement: {}", .{err});
+        handleFrameError(err);
+        return null;
+    };
 
-        const identity: Vec2 = @splat(0.0);
-        self.effectiveScrollPosition = @min(
-            @max(self.effectiveScrollPosition, identity),
-            @max(uiEdges - viewportSize, identity),
-        );
+    // the index in the tree might've changed, and it's important this stays
+    // updated so that, at the frame end, we can update the measurements
+    // without having to look up the node by the key through the entire tree
+    measurement.value_ptr.index = parentNodeIndex;
+    if (measurement.found_existing) {
+        return measurement.value_ptr.*;
+    }
 
-        if (builtin.os.tag == .macos) {
-            self.scrollPosition = self.effectiveScrollPosition;
-        } else {
-            const spring = SpringConfig{
-                .stiffness = 320.0,
-                .damping = 32.0,
-                .mass = 1.0,
-            };
-            self.scrollPosition[0] = useSpringTransition(self.effectiveScrollPosition[0], spring);
-            self.scrollPosition[1] = useSpringTransition(self.effectiveScrollPosition[1], spring);
-        }
-    });
+    return null;
 }
 
 fn timestampSeconds(io: std.Io) f64 {
@@ -1400,8 +1432,12 @@ pub fn setWindowHandlers(window: *Window) void {
                     axis;
 
                 switch (shiftAccordingAxis) {
-                    .horizontal => ctx.effectiveScrollPosition[0] += offset,
-                    .vertical => ctx.effectiveScrollPosition[1] += offset,
+                    .horizontal => {
+                        ctx.scrollDeltaAccumulator[0] += offset;
+                    },
+                    .vertical => {
+                        ctx.scrollDeltaAccumulator[1] += offset;
+                    },
                 }
             }
         }).handler,
@@ -1423,10 +1459,8 @@ pub fn setWindowHandlers(window: *Window) void {
                 // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
                 if (button == 272) {
                     if (state == 1) {
-                        ctx.mouseButtonJustPressed = true;
                         ctx.mouseButtonPressed = true;
                     } else {
-                        ctx.mouseButtonJustReleased = true;
                         ctx.mouseButtonPressed = false;
                     }
                 }
@@ -1439,23 +1473,16 @@ pub fn setWindowHandlers(window: *Window) void {
 pub fn deinit() void {
     const self = getContext();
 
-    self.hoveredElementKeys.deinit(self.allocator);
-    self.mouseDownElementKeys.deinit(self.allocator);
+    self.previousFrameNodeMeasurements.deinit();
 
-    var componentStatesIterator = self.componentStates.valueIterator();
-    while (componentStatesIterator.next()) |states| {
+    var scopeStatesIterator = self.scopeStates.valueIterator();
+    while (scopeStatesIterator.next()) |states| {
         for (states.items) |state| {
             self.allocator.free(state);
         }
         states.deinit(self.allocator);
     }
-    self.componentStates.deinit();
-
-    var eventQueueIterator = self.pendingEventQueue.valueIterator();
-    while (eventQueueIterator.next()) |events| {
-        events.deinit(self.allocator);
-    }
-    self.pendingEventQueue.deinit();
+    self.scopeStates.deinit();
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
