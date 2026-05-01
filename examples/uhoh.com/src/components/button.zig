@@ -19,7 +19,6 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
             }
             if (forbear.on(.mouseLeave)) {
                 isHovering.* = false;
-                forbear.setCursor(.default);
             }
 
             forbear.element(.{ .style = props.style.overwrite(.{
