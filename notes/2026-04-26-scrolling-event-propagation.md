@@ -7,3 +7,6 @@ I think we can still have a context to fix this, but we have to change how we do
 We can just handle events after, the entire UI is defined. This means the useScrolling needs to receive a scrollOffset state pointer to set, instead of just returning it, which is quite fine.  Then the provider can just have a flag to know whether or not the scroll of this frame has been handled or not, and the following useScrolling calls can just not handle it anymore.
 
 No, this misses component slots. Beacuse, even if I call the children slotting before the event handling on a component, the children slotting event handling will still happen AFTER the one that happens on the parent component, which means the children will still be affected by the parent component's scroll handling.
+
+Since we need some way to run code after the slotted children are done, we need the user to define some sort of closure to be called after, which I don't think there is a way to get done with a good DX. the end function of the component is there already, so maybe we could use it somehow so that the user can define things there, but then state and other stuff wouldn't be reachable form there
+
