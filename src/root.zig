@@ -872,11 +872,13 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;
 
-    if (on(.mouseEnter)) {
-        setCursor(style.cursor);
-    }
-    if (on(.mouseLeave)) {
-        setCursor(baseStyle.cursor);
+    if (style.cursor != baseStyle.cursor) {
+        if (on(.mouseEnter)) {
+            setCursor(style.cursor);
+        } 
+        if (on(.mouseLeave)) {
+            setCursor(baseStyle.cursor);
+        }
     }
 
     return &elementEnd;
@@ -1095,11 +1097,13 @@ pub noinline fn text(content: []const u8) void {
     };
     defer popScope(.element);
 
-    if (on(.mouseEnter)) {
-        setCursor(style.cursor);
-    }
-    if (on(.mouseLeave)) {
-        setCursor(baseStyle.cursor);
+    if (style.cursor != baseStyle.cursor) {
+        if (on(.mouseEnter)) {
+            setCursor(style.cursor);
+        }
+        if (on(.mouseLeave)) {
+            setCursor(baseStyle.cursor);
+        }
     }
 }
 
