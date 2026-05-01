@@ -26,7 +26,6 @@ pub fn Heading(props: HeadingProps) *const fn (void) void {
                 .fontWeight = 700,
                 .fontSize = size,
                 .margin = forbear.Margin.top(topMargin).withBottom(16.0),
-                .lineHeight = 1.2,
             }),
         })({
             forbear.componentChildrenSlot();
