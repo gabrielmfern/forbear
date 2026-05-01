@@ -102,7 +102,7 @@ pub fn Introduction() !void {
             });
             Paragraph(.{
                 .style = .{
-                    .fontSize = 13 + 1/3,
+                    .fontSize = 13.0 + 1.0 / 3.0,
                 },
             })({
                 forbear.text("In the words of Preston Carpenter, a close collaborator of Drew's:");

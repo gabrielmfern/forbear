@@ -23,9 +23,9 @@ const ChapterEntry = struct {
 
 const chapters = [_]ChapterEntry{
     .{ .chapter = "1.", .title = "Introduction" },
-    .{ .chapter = "1.1.", .title = "High-level Wayland design" },
-    .{ .chapter = "1.2.", .title = "Goals & target audience" },
-    .{ .chapter = "1.3.", .title = "What's in the package" },
+    .{ .chapter = "1.1.", .title = "High-level Wayland design", .depth = 1 },
+    .{ .chapter = "1.2.", .title = "Goals & target audience", .depth = 1 },
+    .{ .chapter = "1.3.", .title = "What's in the package", .depth = 1 },
     .{ .chapter = "2.", .title = "Protocol Design" },
     .{ .chapter = "2.1.", .title = "Wire protocol basics", .depth = 1 },
     .{ .chapter = "2.2.", .title = "Interfaces, requests, events", .depth = 1 },
