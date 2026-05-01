@@ -136,10 +136,11 @@ fn renderingMain(
     try forbear.registerFont("Source Code Pro", @embedFile("SourceCodePro.ttf"));
     try forbear.registerImage("license-badge", @embedFile("./static/license-badge.png"), .png);
 
-    var traceFile = try std.Io.Dir.cwd().createFile(io, "layouting.log", .{});
-    defer traceFile.close(io);
-    var traceBuffer: [4096]u8 = undefined;
-    var traceWriter = traceFile.writer(io, &traceBuffer);
+    _ = io;
+    // var traceFile = try std.Io.Dir.cwd().createFile(io, "layouting.log", .{});
+    // defer traceFile.close(io);
+    // var traceBuffer: [4096]u8 = undefined;
+    // var traceWriter = traceFile.writer(io, &traceBuffer);
 
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
@@ -161,7 +162,7 @@ fn renderingMain(
             try App();
 
             const rootTree = try forbear.layout();
-            try rootTree.dump(&traceWriter.interface);
+            // try rootTree.dump(&traceWriter.interface);
 
             try renderer.drawFrame(arena, rootTree, Colors.page, window.targetFrameTimeNs());
             try forbear.update();
