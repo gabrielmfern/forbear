@@ -655,8 +655,6 @@ pub fn layout() !*NodeTree {
         // inherently connected
         try wrapAndPlace(arena, root, &context.nodeTree);
 
-        // TODO: viewport-level scrolling removed during event refactor
-        // root.position -= context.scrollPosition;
         root.position += root.style.translate;
 
         var walker = context.nodeTree.walk();
