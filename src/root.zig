@@ -654,7 +654,7 @@ fn frameEnd(block: void) anyerror!void {
 
     var iterator = self.previousFrameNodeMeasurements.iterator();
     while (iterator.next()) |entry| {
-        if (self.nodeTree.list.items.len - 1 < entry.value_ptr.index) {
+        if (self.nodeTree.list.items.len < entry.value_ptr.index + 1) {
             try staleFrameNodeMeasurements.append(frameMeta.arena, entry.key_ptr.*);
             continue;
         }
