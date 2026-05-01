@@ -1069,6 +1069,9 @@ pub noinline fn text(content: []const u8) void {
     if (on(.mouseOver)) {
         setCursor(.text);
     }
+    if (on(.mouseOut)) {
+        setCursor(.default);
+    }
 }
 
 /// Sets the OS-level mouse cursor for the current frame. Called per-frame
