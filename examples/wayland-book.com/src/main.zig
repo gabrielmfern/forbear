@@ -67,7 +67,7 @@ fn App() !void {
                 .direction = .horizontal,
                 .xJustification = .start,
                 .yJustification = .start,
-                .font = try forbear.useFont("Inter"),
+                .font = try forbear.useFont("Open Sans"),
                 .fontWeight = 400,
                 .fontSize = 16.0,
                 .color = Colors.text,
@@ -111,8 +111,8 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
-    try forbear.registerFont("Source Code Pro", @embedFile("SourceCodeProt.ttf"));
+    try forbear.registerFont("Open Sans", @embedFile("OpenSans.ttf"));
+    try forbear.registerFont("Source Code Pro", @embedFile("SourceCodePro.ttf"));
     try forbear.registerImage("license-badge", @embedFile("./static/license-badge.png"), .png);
 
     var traceFile = try std.Io.Dir.cwd().createFile(io, "layouting.log", .{});
@@ -127,7 +127,7 @@ fn renderingMain(
             .arena = arena,
             .viewportSize = renderer.viewportSize(),
             .baseStyle = .{
-                .font = try forbear.useFont("Inter"),
+                .font = try forbear.useFont("Open Sans"),
                 .color = Colors.text,
                 .fontSize = 16.0,
                 .textWrapping = .word,

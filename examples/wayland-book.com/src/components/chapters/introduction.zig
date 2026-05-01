@@ -2,6 +2,7 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const list = @import("../list.zig");
+const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 const Paragraph = @import("../paragraph.zig").Paragraph;
@@ -78,6 +79,13 @@ pub fn Introduction() !void {
 
             Paragraph()({
                 forbear.text("This book will help you establish a firm understanding of the concepts, design, and implementation of Wayland, and equip you with the tools to build your own Wayland client and server applications. Over the course of your reading, we'll build a mental model of Wayland and establish the rationale that went into its design. Within these pages you should find many \"aha!\" moments as the intuitive design choices of Wayland become clear, which should help to keep the pages turning. Welcome to the future of open source graphics!");
+            });
+
+            Paragraph()({
+                Strong()({
+                    forbear.text("Notice: ");
+                });
+                forbear.text("this is a draft. Chapters 1-10 are more or less complete, but may be updated later. Chapters 11 forward in large part remain to be written.");
             });
 
             TodoList();
