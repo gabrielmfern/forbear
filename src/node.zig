@@ -654,7 +654,8 @@ pub const Node = struct {
     minSize: Vec2,
     /// Bounding extent of this node's flowing descendants relative to
     /// `position`. Useful for clamping scroll offsets: scrollable range is
-    /// `max(0, contentSize - size)`. Equal to `size` when no children overflow.
+    /// `max(0, contentSize - size)`. For leaf nodes (or nodes without flow
+    /// children), this remains zero.
     contentSize: Vec2 = @splat(0.0),
     /// Clip rect inherited from ancestors that have constrained size with overflowing children.
     /// Format: [x, y, width, height]. If null, no clipping is applied.
