@@ -4120,22 +4120,18 @@ test "on() mouseEnter and mouseLeave are edge-triggered" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const el = struct {
-        fn make() *const fn (void) void {
-            return forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 100 },
-                    .height = .{ .fixed = 100 },
-                },
-            });
-        }
-    }.make;
-
     // Frame 1: mouse outside — prime measurement with wasMouseInside = false
     self.mousePosition = .{ 500.0, 500.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        el()({
-            _ = forbear.on(.mouseEnter);
+        forbear.element(.{
+            .key = "test-element",
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            },
+        })({
+            try std.testing.expect(!forbear.on(.mouseEnter));
+            try std.testing.expect(!forbear.on(.mouseLeave));
         });
         _ = try forbear.layout();
     });
@@ -4145,10 +4141,15 @@ test "on() mouseEnter and mouseLeave are edge-triggered" {
     // Calling either query multiple times yields the same result (idempotent).
     self.mousePosition = .{ 50.0, 50.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        el()({
+        forbear.element(.{
+            .key = "test-element",
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            },
+        })({
             try std.testing.expect(forbear.on(.mouseEnter));
             try std.testing.expect(!forbear.on(.mouseLeave));
-            try std.testing.expect(forbear.on(.mouseEnter));
         });
         _ = try forbear.layout();
     });
@@ -4156,7 +4157,13 @@ test "on() mouseEnter and mouseLeave are edge-triggered" {
 
     // Frame 3: mouse stays inside — neither edge fires
     try forbear.frame(try frameMeta(arenaAllocator))({
-        el()({
+        forbear.element(.{
+            .key = "test-element",
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            },
+        })({
             try std.testing.expect(!forbear.on(.mouseEnter));
             try std.testing.expect(!forbear.on(.mouseLeave));
         });
@@ -4167,9 +4174,30 @@ test "on() mouseEnter and mouseLeave are edge-triggered" {
     // Frame 4: mouse moves outside — mouseLeave fires, mouseEnter does not
     self.mousePosition = .{ 500.0, 500.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        el()({
+        forbear.element(.{
+            .key = "test-element",
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            },
+        })({
             try std.testing.expect(!forbear.on(.mouseEnter));
             try std.testing.expect(forbear.on(.mouseLeave));
+        });
+    });
+
+    // Frame 5: mouse moves outside — neither edge fires
+    self.mousePosition = .{ 500.0, 500.0 };
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        forbear.element(.{
+            .key = "test-element",
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            },
+        })({
+            try std.testing.expect(!forbear.on(.mouseEnter));
+            try std.testing.expect(!forbear.on(.mouseLeave));
         });
     });
 }
