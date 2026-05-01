@@ -1,7 +1,7 @@
 .{
     .name = .kb_text_shape,
-    .version = "2.0.7",
-    .minimum_zig_version = "0.15.2",
+    .version = "2.17.0",
+    .minimum_zig_version = "0.16.0",
     .fingerprint = 0xa16fd5f99e5849fc,
     .paths = .{
         "build.zig",

@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const forbear = @import("forbear");
 
 const Colors = @import("colors.zig");
+const Content = @import("components/content.zig").Content;
 const sidebar = @import("components/sidebar.zig");
 const Sidebar = sidebar.Sidebar;
 const SidebarItem = sidebar.SidebarItem;
@@ -21,171 +22,65 @@ const ChapterEntry = struct {
 };
 
 const chapters = [_]ChapterEntry{
-    .{ .chapter = "", .title = "Introduction" },
-    .{ .chapter = "1.", .title = "Protocol Design" },
-    .{ .chapter = "1.1.", .title = "Wire protocol basics", .depth = 1 },
-    .{ .chapter = "1.2.", .title = "Interfaces, requests, and events", .depth = 1 },
-    .{ .chapter = "1.3.", .title = "High-level protocol overview", .depth = 1 },
-    .{ .chapter = "1.4.", .title = "Wayland object lifetime", .depth = 1 },
-    .{ .chapter = "2.", .title = "Libwayland basics" },
-    .{ .chapter = "2.1.", .title = "Wayland protocol & libwayland", .depth = 1 },
-    .{ .chapter = "2.2.", .title = "Displays and wl_display", .depth = 1 },
-    .{ .chapter = "2.3.", .title = "Globals & the registry", .depth = 1 },
-    .{ .chapter = "3.", .title = "Surfaces in depth" },
-    .{ .chapter = "3.1.", .title = "Surface basics", .depth = 1 },
-    .{ .chapter = "3.2.", .title = "Surface regions", .depth = 1 },
-    .{ .chapter = "3.3.", .title = "Compositing and subsurfaces", .depth = 1 },
-    .{ .chapter = "4.", .title = "Buffers & surfaces" },
-    .{ .chapter = "4.1.", .title = "Shared memory buffers", .depth = 1 },
-    .{ .chapter = "4.2.", .title = "DMA-BUF", .depth = 1 },
-    .{ .chapter = "5.", .title = "XDG shell basics" },
-    .{ .chapter = "5.1.", .title = "XDG surfaces", .depth = 1 },
-    .{ .chapter = "5.2.", .title = "Application windows", .depth = 1 },
-    .{ .chapter = "5.3.", .title = "Example code", .depth = 1 },
-    .{ .chapter = "6.", .title = "Seat: Handling input" },
-    .{ .chapter = "6.1.", .title = "Pointer input", .depth = 1 },
-    .{ .chapter = "6.2.", .title = "Keyboard input", .depth = 1 },
-    .{ .chapter = "6.3.", .title = "Touch input", .depth = 1 },
-    .{ .chapter = "6.4.", .title = "Example code", .depth = 1 },
-    .{ .chapter = "7.", .title = "Beyond the basics" },
-    .{ .chapter = "8.", .title = "XDG shell, in depth" },
-    .{ .chapter = "9.", .title = "Clipboard & DnD" },
-    .{ .chapter = "10.", .title = "High-DPI support" },
+    .{ .chapter = "1.", .title = "Introduction" },
+    .{ .chapter = "1.1.", .title = "High-level Wayland design", .depth = 1 },
+    .{ .chapter = "1.2.", .title = "Goals & target audience", .depth = 1 },
+    .{ .chapter = "1.3.", .title = "What's in the package", .depth = 1 },
+    .{ .chapter = "2.", .title = "Protocol Design" },
+    .{ .chapter = "2.1.", .title = "Wire protocol basics", .depth = 1 },
+    .{ .chapter = "2.2.", .title = "Interfaces, requests, events", .depth = 1 },
+    .{ .chapter = "2.3.", .title = "The high-level protocol", .depth = 1 },
+    .{ .chapter = "2.4.", .title = "Protocol design patterns", .depth = 1 },
+    .{ .chapter = "3.", .title = "libwayland in depth" },
+    .{ .chapter = "3.1.", .title = "wayland-util primitives", .depth = 1 },
+    .{ .chapter = "3.2.", .title = "wayland-scanner", .depth = 1 },
+    .{ .chapter = "3.3.", .title = "Proxies & resources", .depth = 1 },
+    .{ .chapter = "3.4.", .title = "Interfaces & listeners", .depth = 1 },
+    .{ .chapter = "4.", .title = "The Wayland display" },
+    .{ .chapter = "4.1.", .title = "Creating a display", .depth = 1 },
+    .{ .chapter = "4.2.", .title = "Incorporating an event loop", .depth = 1 },
+    .{ .chapter = "5.", .title = "Globals & the registry" },
+    .{ .chapter = "5.1.", .title = "Binding in globals", .depth = 1 },
+    .{ .chapter = "5.2.", .title = "Registering globals", .depth = 1 },
+    .{ .chapter = "6.", .title = "Buffers & surfaces" },
+    .{ .chapter = "6.1.", .title = "Using wl_compositor", .depth = 1 },
+    .{ .chapter = "6.2.", .title = "Shared memory buffers", .depth = 1 },
+    .{ .chapter = "6.3.", .title = "Linux dmabuf", .depth = 1 },
+    .{ .chapter = "6.4.", .title = "Surface roles", .depth = 1 },
+    .{ .chapter = "7.", .title = "XDG shell basics" },
+    .{ .chapter = "7.1.", .title = "XDG surfaces", .depth = 1 },
+    .{ .chapter = "7.2.", .title = "Application window", .depth = 1 },
+    .{ .chapter = "7.3.", .title = "Extended example code", .depth = 1 },
+    .{ .chapter = "8.", .title = "Surfaces in depth" },
+    .{ .chapter = "8.1.", .title = "Surface lifecycle", .depth = 1 },
+    .{ .chapter = "8.2.", .title = "Frame callbacks", .depth = 1 },
+    .{ .chapter = "8.3.", .title = "Damaging surfaces", .depth = 1 },
+    .{ .chapter = "8.4.", .title = "Surface regions", .depth = 1 },
+    .{ .chapter = "8.5.", .title = "Subsurfaces", .depth = 1 },
+    .{ .chapter = "8.6.", .title = "High density surfaces (HiDPI)", .depth = 1 },
+    .{ .chapter = "9.", .title = "Seats: Handling input" },
+    .{ .chapter = "9.1.", .title = "Pointer input", .depth = 1 },
+    .{ .chapter = "9.2.", .title = "XKB, briefly", .depth = 1 },
+    .{ .chapter = "9.3.", .title = "Keyboard input", .depth = 1 },
+    .{ .chapter = "9.4.", .title = "Touch input", .depth = 1 },
+    .{ .chapter = "9.5.", .title = "Expanding our example code", .depth = 1 },
+    .{ .chapter = "10.", .title = "XDG shell in depth" },
+    .{ .chapter = "10.1.", .title = "Configuration & lifecycle", .depth = 1 },
+    .{ .chapter = "10.2.", .title = "Popus & parent windows", .depth = 1 },
+    .{ .chapter = "10.3.", .title = "Interactive move and resize", .depth = 1 },
+    .{ .chapter = "10.4.", .title = "Positioners", .depth = 1 },
+    .{ .chapter = "11.", .title = "Clipboard access" },
+    .{ .chapter = "11.1.", .title = "Data offers", .depth = 1 },
+    .{ .chapter = "11.2.", .title = "Drag & drop", .depth = 1 },
+    .{ .chapter = "12.", .title = "Protocol extensions" },
+    .{ .chapter = "12.1.", .title = "Accurate timing", .depth = 1 },
+    .{ .chapter = "12.2.", .title = "Pointer constraints", .depth = 1 },
+    .{ .chapter = "12.3.", .title = "Extended clipboard support", .depth = 1 },
+    .{ .chapter = "12.4.", .title = "Desktop shell components", .depth = 1 },
+    .{ .chapter = "12.5.", .title = "Miscellaneous extensions", .depth = 1 },
+    .{ .chapter = "12.6.", .title = "Writing new extensions", .depth = 1 },
+    .{ .chapter = "", .title = "Acknowledgements" },
 };
-
-fn Topbar() void {
-    forbear.element(.{
-        .style = .{
-            .width = .{ .grow = 1.0 },
-            .direction = .horizontal,
-            .yJustification = .center,
-            .padding = forbear.Padding.all(15.0),
-            .fontSize = 20.0,
-            .fontWeight = 200,
-        },
-    })({
-        Heading(.{
-            .level = 1,
-            .style = .{
-                .xJustification = .center,
-            },
-        })({
-            forbear.text("The Wayland Protocol");
-        });
-        // TODO: add a printer icon SVG
-    });
-}
-
-fn TodoList() void {
-    forbear.element(.{
-        .style = .{
-            .width = .{ .grow = 1.0 },
-            .direction = .vertical,
-            .margin = forbear.Margin.block(6.0).withBottom(18.0),
-        },
-    })({
-        Heading(.{ .level = 1 })({
-            forbear.text("TODO");
-        });
-        List()({
-            ListItem()({
-                forbear.text("Expand on resource lifetimes and avoiding race conditions in chapter 2.4");
-            });
-            ListItem()({
-                forbear.text("Move linux-dmabuf details to the appendix, add note about wl_drm & Mesa");
-            });
-            ListItem()({
-                forbear.text("Rewrite the introduction text");
-            });
-            ListItem()({
-                forbear.text("Add example code for interactive move, to demonstrate the use of serials");
-            });
-            ListItem()({
-                forbear.text("Prepare PDFs and EPUBs");
-            });
-        });
-    });
-}
-
-fn LicenseBadge() void {
-    forbear.element(.{
-        .style = .{
-            .padding = forbear.Padding.block(4.5).withInLine(10.5),
-            .background = .{ .color = .{ 0.93, 0.93, 0.94, 1.0 } },
-            .borderRadius = 3.0,
-            .fontSize = 10.0,
-            .fontWeight = 600,
-            .margin = forbear.Margin.top(6.0).withBottom(0.0),
-        },
-    })({
-        // TODO: insert license badge image here
-    });
-}
-
-fn Content() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
-        const viewport = forbear.useViewportSize();
-        forbear.element(.{
-            .style = .{
-                .width = .{ .grow = 1.0 },
-                .height = .{ .fixed = viewport[1] },
-                .direction = .vertical,
-                .xJustification = .center,
-                .yJustification = .start,
-            },
-        })({
-            _ = forbear.useScrolling();
-
-            Topbar();
-
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .grow = 1.0 },
-                    .direction = .vertical,
-                    .xJustification = .center,
-                    .yJustification = .start,
-                    .padding = forbear.Padding.all(15.0),
-                    .maxWidth = 750.0,
-                },
-            })({
-                Heading(.{ .level = 1 })({
-                    forbear.text("Introduction");
-                });
-
-                Paragraph()({
-                    forbear.text("Wayland is the next-generation display server for Unix-like systems, designed and built by the alumni of the venerable Xorg server, and is the best way to get your application windows onto your user's screens. Readers who have worked with X11 in the past will be pleasantly surprised by Wayland's improvements, and those who are new to graphics on Unix will find it a flexible and powerful system for building graphical applications and desktops.");
-                });
-
-                Paragraph()({
-                    forbear.text("This book will help you establish a firm understanding of the concepts, design, and implementation of Wayland, and equip you with the tools to build your own Wayland client and server applications. Over the course of your reading, we'll build a mental model of Wayland and establish the rationale that went into its design. Within these pages you should find many \"aha!\" moments as the intuitive design choices of Wayland become clear, which should help to keep the pages turning. Welcome to the future of open source graphics!");
-                });
-
-                TodoList();
-
-                Heading(.{ .level = 2 })({
-                    forbear.text("About the book");
-                });
-                Paragraph()({
-                    forbear.text("This work is licensed under a Creative Commons Attribution-ShareAlike 4.0 International License. The source code is available at git.sr.ht/~sircmpwn/wayland-book.");
-                });
-                LicenseBadge();
-
-                Heading(.{ .level = 2 })({
-                    forbear.text("About the author");
-                });
-                Paragraph()({
-                    forbear.text("In the words of Preston Carpenter, a close collaborator of Drew's:");
-                });
-
-                Paragraph()({
-                    forbear.text("Drew DeVault got his start in the Wayland world by building sway, a clone of the popular tiling window manager i3. It is now the most popular tiling Wayland compositor by any measure: users, commit count, and influence. Following its success, Drew gave back to the Wayland community by starting wlroots: unopinionated, composable modules for building a Wayland compositor. Today it is the foundation for dozens of independent compositors, and Drew is one of the foremost experts in Wayland.");
-                });
-            });
-        });
-    });
-}
 
 fn App() !void {
     forbear.component(.{
@@ -197,13 +92,6 @@ fn App() !void {
             .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .grow = 1.0 },
-                .direction = .horizontal,
-                .xJustification = .start,
-                .yJustification = .start,
-                .font = try forbear.useFont("Inter"),
-                .fontWeight = 400,
-                .fontSize = 16.0,
-                .color = Colors.text,
             },
         })({
             forbear.FpsCounter();
@@ -214,6 +102,10 @@ fn App() !void {
                         .key = chapter.chapter,
                         .depth = chapter.depth,
                     })({
+                        if (forbear.on(.click)) {
+                            activeChapter.* = i;
+                        }
+
                         Strong()({
                             forbear.text(chapter.chapter);
                             forbear.text(" ");
@@ -224,7 +116,7 @@ fn App() !void {
                 // TODO: add an Acknowledgments section
             });
 
-            Content();
+            try Content(activeChapter);
         });
     });
 }
@@ -240,12 +132,15 @@ fn renderingMain(
 
     const arena = arenaAllocator.allocator();
 
-    try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
+    try forbear.registerFont("Open Sans", @embedFile("OpenSans.ttf"));
+    try forbear.registerFont("Source Code Pro", @embedFile("SourceCodePro.ttf"));
+    try forbear.registerImage("license-badge", @embedFile("./static/license-badge.png"), .png);
 
-    var traceFile = try std.Io.Dir.cwd().createFile(io, "layouting.log", .{});
-    defer traceFile.close(io);
-    var traceBuffer: [4096]u8 = undefined;
-    var traceWriter = traceFile.writer(io, &traceBuffer);
+    _ = io;
+    // var traceFile = try std.Io.Dir.cwd().createFile(io, "layouting.log", .{});
+    // defer traceFile.close(io);
+    // var traceBuffer: [4096]u8 = undefined;
+    // var traceWriter = traceFile.writer(io, &traceBuffer);
 
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
@@ -254,20 +149,20 @@ fn renderingMain(
             .arena = arena,
             .viewportSize = renderer.viewportSize(),
             .baseStyle = .{
-                .font = try forbear.useFont("Inter"),
+                .font = try forbear.useFont("Open Sans"),
                 .color = Colors.text,
                 .fontSize = 16.0,
                 .textWrapping = .word,
                 .fontWeight = 400,
                 .cursor = .default,
-                .lineHeight = 1.5,
+                .lineHeight = 1.0,
                 .blendMode = .normal,
             },
         })({
             try App();
 
             const rootTree = try forbear.layout();
-            try rootTree.dump(&traceWriter.interface);
+            // try rootTree.dump(&traceWriter.interface);
 
             try renderer.drawFrame(arena, rootTree, Colors.page, window.targetFrameTimeNs());
             try forbear.update();

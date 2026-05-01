@@ -17,6 +17,7 @@ pub fn Sidebar() *const fn (void) void {
                 .background = .{ .color = Colors.sidebarBackground },
                 .padding = forbear.Padding.all(10.0),
                 .fontSize = 14.0,
+                .lineHeight = 1.9,
                 .color = Colors.sidebarText,
             },
         })({
