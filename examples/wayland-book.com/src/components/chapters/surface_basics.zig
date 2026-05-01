@@ -22,7 +22,11 @@ pub fn SurfaceBasics() void {
             });
 
             Paragraph()({
-                forbear.text("TODO: write this chapter.");
+                forbear.text("The point of a windowing system is to put information in front of users and to take their input back for further processing. This chapter focuses on the first half of that exchange: getting pixels onto the screen.");
+            });
+
+            Paragraph()({
+                forbear.text("Wayland uses two primitives to accomplish this, governed by the wl_buffer and wl_surface interfaces. A buffer is an opaque handle to some underlying pixel storage that the client provides; shared memory buffers and GPU handles are the two most common kinds.");
             });
         });
     });

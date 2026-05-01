@@ -22,7 +22,7 @@ pub fn BeyondTheBasics() void {
             });
 
             Paragraph()({
-                forbear.text("TODO: write this chapter.");
+                forbear.text("This chapter is not yet authored upstream. The Wayland Book at wayland-book.com does not contain a standalone \"Beyond the basics\" chapter. The phrase appears only as a transitional aside in the seat example chapter's \"What's next?\" section, which previews the remaining material covered by the chapters that follow: XDG shell in depth, clipboard and drag-and-drop, and high-DPI support.");
             });
         });
     });

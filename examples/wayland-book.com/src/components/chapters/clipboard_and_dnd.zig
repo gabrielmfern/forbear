@@ -1,7 +1,6 @@
 const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
-const Paragraph = @import("../paragraph.zig").Paragraph;
 
 pub fn ClipboardAndDnd() void {
     forbear.component(.{
@@ -19,10 +18,6 @@ pub fn ClipboardAndDnd() void {
         })({
             Heading(.{ .level = 1 })({
                 forbear.text("Clipboard & DnD");
-            });
-
-            Paragraph()({
-                forbear.text("TODO: write this chapter.");
             });
         });
     });
