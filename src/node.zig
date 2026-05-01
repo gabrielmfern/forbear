@@ -3,7 +3,6 @@ const std = @import("std");
 const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
-const Cursor = @import("window/root.zig").Cursor;
 const layouting = @import("layouting.zig");
 
 const Vec4 = @Vector(4, f32);
@@ -222,7 +221,6 @@ pub const CompleteStyle = struct {
     fontSize: f32,
     lineHeight: f32,
     textWrapping: TextWrapping,
-    cursor: Cursor,
 
     overflow: Overflow,
     placement: Placement,
@@ -268,7 +266,6 @@ pub const BaseStyle = struct {
     textWrapping: TextWrapping,
     blendMode: BlendMode,
     filter: Filter = .default,
-    cursor: Cursor,
 
     pub fn from(style: CompleteStyle) @This() {
         return @This(){
@@ -280,7 +277,6 @@ pub const BaseStyle = struct {
             .textWrapping = style.textWrapping,
             .blendMode = style.blendMode,
             .filter = style.filter,
-            .cursor = style.cursor,
         };
     }
 };
@@ -337,8 +333,6 @@ pub const Style = struct {
     lineHeight: ?f32 = null,
     textWrapping: ?TextWrapping = null,
 
-    cursor: ?Cursor = null,
-
     overflow: ?Overflow = null,
     placement: ?Placement = null,
     zIndex: ?u16 = null,
@@ -378,7 +372,6 @@ pub const Style = struct {
             .fontSize = self.fontSize orelse other.fontSize,
             .lineHeight = self.lineHeight orelse other.lineHeight,
             .textWrapping = self.textWrapping orelse other.textWrapping,
-            .cursor = self.cursor orelse other.cursor,
 
             .overflow = self.overflow orelse other.overflow,
             .placement = self.placement orelse other.placement,
@@ -422,7 +415,6 @@ pub const Style = struct {
             .fontSize = self.fontSize orelse base.fontSize,
             .lineHeight = self.lineHeight orelse base.lineHeight,
             .textWrapping = self.textWrapping orelse base.textWrapping,
-            .cursor = self.cursor orelse base.cursor,
 
             .overflow = self.overflow orelse .visible,
             .placement = self.placement orelse .flow,

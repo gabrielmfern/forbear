@@ -154,7 +154,6 @@ fn renderingMain(
                 .fontSize = 16.0,
                 .textWrapping = .word,
                 .fontWeight = 400,
-                .cursor = .default,
                 .lineHeight = 1.0,
                 .blendMode = .normal,
             },

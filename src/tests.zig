@@ -10,7 +10,6 @@ pub const shallowBaseStyle = forbear.BaseStyle{
     .lineHeight = 1.0,
     .textWrapping = .none,
     .blendMode = .normal,
-    .cursor = .default,
 };
 
 pub fn frameMeta(arena: std.mem.Allocator) !forbear.FrameMeta {
@@ -26,7 +25,6 @@ pub fn frameMeta(arena: std.mem.Allocator) !forbear.FrameMeta {
             .lineHeight = 1.0,
             .textWrapping = .none,
             .blendMode = .normal,
-            .cursor = .default,
         },
     };
 }

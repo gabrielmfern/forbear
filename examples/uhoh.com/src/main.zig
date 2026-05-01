@@ -130,7 +130,6 @@ fn renderingMain(
                 .fontSize = 16,
                 .textWrapping = .word,
                 .fontWeight = 400,
-                .cursor = .default,
                 .lineHeight = 1.0,
                 .blendMode = .normal,
             },
