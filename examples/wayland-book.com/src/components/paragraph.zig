@@ -9,7 +9,6 @@ pub fn Paragraph() *const fn (void) void {
             .style = .{
                 .width = .{ .grow = 1.0 },
                 .fontSize = 16.0,
-                .lineHeight = 1.5,
                 .margin = .bottom(16.0),
             },
         })({

@@ -64,13 +64,6 @@ fn App() !void {
             .style = .{
                 .width = .{ .grow = 1.0 },
                 .height = .{ .grow = 1.0 },
-                .direction = .horizontal,
-                .xJustification = .start,
-                .yJustification = .start,
-                .font = try forbear.useFont("Open Sans"),
-                .fontWeight = 400,
-                .fontSize = 16.0,
-                .color = Colors.text,
             },
         })({
             forbear.FpsCounter();
@@ -133,7 +126,7 @@ fn renderingMain(
                 .textWrapping = .word,
                 .fontWeight = 400,
                 .cursor = .default,
-                .lineHeight = 1.5,
+                .lineHeight = 1.0,
                 .blendMode = .normal,
             },
         })({
