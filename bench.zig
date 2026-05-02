@@ -345,7 +345,7 @@ test "bench layout" {
     try bench.run(std.testing.io, std.Io.File.stdout());
 }
 
-fn buildUseStateTreeForCount(comptime stateCount: usize) void {
+fn buildUseStateTree(comptime stateCount: usize) void {
     @setEvalBranchQuota(1_000_000);
     forbear.component(.{
         .text = "UseStateBenchApp_" ++ std.fmt.comptimePrint("{d}", .{stateCount}),
@@ -404,7 +404,7 @@ fn buildUseStateTreeForCount(comptime stateCount: usize) void {
     });
 }
 
-fn benchUseStateGeneric(comptime stateCount: usize) fn (std.mem.Allocator) void {
+fn UseStateBenchmark(comptime stateCount: usize) fn (std.mem.Allocator) void {
     return struct {
         fn run(alloc: std.mem.Allocator) void {
             _ = alloc;
@@ -427,8 +427,7 @@ fn benchUseStateGeneric(comptime stateCount: usize) fn (std.mem.Allocator) void 
             };
 
             (forbear.frame(meta)({
-                buildUseStateTreeForCount(stateCount);
-                _ = forbear.layout() catch unreachable;
+                buildUseStateTree(stateCount);
             })) catch unreachable;
         }
     }.run;
@@ -448,14 +447,14 @@ test "bench useState" {
     var bench = zbench.Benchmark.init(std.testing.allocator, .{});
     defer bench.deinit();
 
-    try bench.add("useState() 10 states", benchUseStateGeneric(10), .{});
-    try bench.add("useState() 50 states", benchUseStateGeneric(50), .{});
-    try bench.add("useState() 100 states", benchUseStateGeneric(100), .{});
-    try bench.add("useState() 250 states", benchUseStateGeneric(250), .{});
-    try bench.add("useState() 500 states", benchUseStateGeneric(500), .{});
-    try bench.add("useState() 1000 states", benchUseStateGeneric(1000), .{});
-    try bench.add("useState() 2000 states", benchUseStateGeneric(2000), .{});
-    try bench.add("useState() 5000 states", benchUseStateGeneric(5000), .{});
+    try bench.add("useState() 10 states", UseStateBenchmark(10), .{});
+    try bench.add("useState() 50 states", UseStateBenchmark(50), .{});
+    try bench.add("useState() 100 states", UseStateBenchmark(100), .{});
+    try bench.add("useState() 250 states", UseStateBenchmark(250), .{});
+    try bench.add("useState() 500 states", UseStateBenchmark(500), .{});
+    try bench.add("useState() 1000 states", UseStateBenchmark(1000), .{});
+    try bench.add("useState() 2000 states", UseStateBenchmark(2000), .{});
+    try bench.add("useState() 5000 states", UseStateBenchmark(5000), .{});
 
     try bench.run(std.testing.io, std.Io.File.stdout());
 }
