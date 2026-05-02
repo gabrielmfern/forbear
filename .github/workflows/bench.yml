@@ -1,0 +1,130 @@
+name: Benchmarks
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    name: bench (before vs after)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with:
+          version: 0.16.0
+
+      - name: Install project dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            glslang-tools \
+            libvulkan-dev \
+            libwayland-bin \
+            libwayland-dev \
+            libxkbcommon-dev \
+            spirv-tools \
+            wayland-protocols
+
+      - name: Run benchmarks (before — PR base)
+        id: bench-before
+        run: |
+          git checkout ${{ github.event.pull_request.base.sha }}
+          set -o pipefail
+          zig build bench 2>&1 | tee bench-before.txt
+
+      - name: Run benchmarks (after — PR head)
+        id: bench-after
+        run: |
+          git checkout ${{ github.event.pull_request.head.sha }}
+          set -o pipefail
+          zig build bench 2>&1 | tee bench-after.txt
+
+      - name: Upload bench outputs
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: bench-output-${{ github.event.pull_request.head.sha }}
+          path: |
+            bench-before.txt
+            bench-after.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Comment benchmark results on PR
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const fs = require("fs");
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+            const marker = "<!-- bench-results -->";
+
+            const before = fs.readFileSync("bench-before.txt", "utf8");
+            const after = fs.readFileSync("bench-after.txt", "utf8");
+
+            const baseShort = process.env.BASE_SHA.slice(0, 7);
+            const headShort = process.env.HEAD_SHA.slice(0, 7);
+
+            const body = [
+              marker,
+              "## Benchmark results",
+              "",
+              `### Before (\`${baseShort}\`)`,
+              "```",
+              before.trim(),
+              "```",
+              "",
+              `### After (\`${headShort}\`)`,
+              "```",
+              after.trim(),
+              "```",
+            ].join("\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: pullNumber,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => (c.body ?? "").includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pullNumber,
+                body,
+              });
+            }
