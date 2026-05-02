@@ -3,11 +3,11 @@ const builtin = @import("builtin");
 
 pub const c = @import("c");
 
+pub const Font = @import("font.zig");
 const forbearBuiltin = @import("builtin.zig");
 pub const FpsCounter = forbearBuiltin.FpsCounter;
 pub const useScrolling = forbearBuiltin.useScrolling;
 pub const ScrollBar = forbearBuiltin.ScrollBar;
-pub const Font = @import("font.zig");
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
@@ -38,6 +38,7 @@ pub fn setTraceWriter(writer: *std.Io.Writer) void {
     traceWriter = writer;
 }
 const Vec2 = @Vector(2, f32);
+const Vec3 = @Vector(3, f32);
 const Vec4 = @Vector(4, f32);
 
 const Context = @This();
@@ -268,17 +269,30 @@ pub const Animation = struct {
     }
 };
 
-pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) f32 {
-    const startValue = useState(f32, value);
-    const currentValue = useState(f32, value);
-    const targetValue = useState(f32, value);
+pub fn useTransition(comptime T: type, value: T, duration: f32, easing: fn (f32) f32) T {
+    if (T != f32 and T != Vec2 and T != Vec3 and T != Vec4) {
+        @compileError("useTransition only supports f32, @Vector(2, f32), @Vector(3, f32), and @Vector(4, f32) types for now. If you want to see support for more types please open an issue.");
+    }
+    const isVector = T == Vec2 or T == Vec3 or T == Vec4;
+
+    const startValue = useState(T, value);
+    const currentValue = useState(T, value);
+    const targetValue = useState(T, value);
     const animation = useAnimation(duration);
     const epsilon: f32 = 0.0001;
 
-    if (targetValue.* != currentValue.*) {
+    const targetDiffersFromCurrent = if (isVector)
+        @reduce(.Or, targetValue.* != currentValue.*)
+    else
+        targetValue.* != currentValue.*;
+
+    if (targetDiffersFromCurrent) {
         if (animation.progress()) |progress| {
             if (progress < 1.0) {
-                currentValue.* = startValue.* + (targetValue.* - startValue.*) * easing(progress);
+                currentValue.* = startValue.* + (targetValue.* - startValue.*) * if (isVector)
+                    @as(T, @splat(easing(progress)))
+                else
+                    easing(progress);
             } else {
                 currentValue.* = targetValue.*;
                 startValue.* = targetValue.*;
@@ -287,7 +301,12 @@ pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) f32 {
         }
     }
 
-    if (@abs(value - targetValue.*) > epsilon) {
+    const valueDiffersFromTarget = if (isVector)
+        @reduce(.Or, @abs(value - targetValue.*) > @as(T, @splat(epsilon)))
+    else
+        @abs(value - targetValue.*) > epsilon;
+
+    if (valueDiffersFromTarget) {
         targetValue.* = value;
         startValue.* = currentValue.*;
         animation.start();
