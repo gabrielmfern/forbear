@@ -452,7 +452,7 @@ pub const LayoutGlyph = struct {
     index: c_uint,
     position: Vec2,
 
-    text: []const u8,
+    textBuf: [4]u8,
 
     /// Meant for the recalculation of the glyphs position if that's required
     /// at some other layouting step
@@ -789,7 +789,7 @@ pub const Node = struct {
                 for (0..indent + 1) |_| {
                     std.debug.print("  ", .{});
                 }
-                std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.text });
+                std.debug.print("Glyph (index: {}, pos: {}, text: \"{s}\")\n", .{ glyph.index, glyph.position, glyph.textBuf });
             }
         }
         var childIndex = self.firstChild;
