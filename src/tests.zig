@@ -3702,13 +3702,11 @@ test "State creation with manual handling" {
             })({
                 componentKey = self.frameMeta.?.scopeStack.getLast().key;
                 const state1 = forbear.useState(i32, 42);
-                try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(i32), self.scopeStates.get(componentKey).?.items[0].len);
+                try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.slots.items.len);
                 try std.testing.expectEqual(42, state1.*);
 
                 const state2 = forbear.useState(f32, 3.14);
-                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(f32), self.scopeStates.get(componentKey).?.items[1].len);
+                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.slots.items.len);
                 try std.testing.expectEqual(42, state1.*);
                 try std.testing.expectEqual(3.14, state2.*);
 
@@ -3726,11 +3724,9 @@ test "State creation with manual handling" {
                 .text = "random",
             })({
                 const state1 = forbear.useState(i32, 42);
-                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(i32), self.scopeStates.get(componentKey).?.items[0].len);
+                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.slots.items.len);
                 const state2 = forbear.useState(f32, 3.14);
-                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(f32), self.scopeStates.get(componentKey).?.items[1].len);
+                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.slots.items.len);
 
                 try std.testing.expectEqual(100, state1.*);
                 try std.testing.expectEqual(6.28, state2.*);
@@ -3906,9 +3902,9 @@ test "useState binds to nearest scope: element preferred, component inside eleme
     // Each scope should have exactly one user-allocated slot in its own bucket.
     // The element scope additionally reserves two internal slots inside `element()`
     // for the cursor's mouseEnter/mouseLeave bookkeeping (see `on()`).
-    try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.items.len);
-    try std.testing.expectEqual(3, self.scopeStates.get(elementKey).?.items.len);
-    try std.testing.expectEqual(1, self.scopeStates.get(innerComponentKey).?.items.len);
+    try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.slots.items.len);
+    try std.testing.expectEqual(3, self.scopeStates.get(elementKey).?.slots.items.len);
+    try std.testing.expectEqual(1, self.scopeStates.get(innerComponentKey).?.slots.items.len);
     try std.testing.expect(componentKey != elementKey);
     try std.testing.expect(elementKey != innerComponentKey);
 }

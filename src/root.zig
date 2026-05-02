@@ -49,7 +49,7 @@ const ScopeFrame = struct {
     kind: ScopeKind,
     key: u64,
     useStateCursor: usize,
-    states: *std.ArrayList([]align(@alignOf(usize)) u8),
+    states: *ScopeState,
 };
 
 const ComponentChildrenSlotState = struct {
@@ -121,7 +121,9 @@ viewportSize: Vec2,
 /// Persistent state storage keyed by scope key. A scope is either a
 /// component or an element — `useState` resolves to the nearest enclosing
 /// scope, so an entry here may belong to either kind.
-scopeStates: std.AutoHashMap(u64, *StateBuffer),
+scopeStates: std.AutoHashMap(u64, *ScopeState),
+scopeStatesPool: std.heap.MemoryPool(ScopeState),
+scopeStateArena: std.heap.ArenaAllocator,
 /// Set of scope keys that were entered during this frame. At frame end,
 /// any entry in `scopeStates` whose key is missing here is pruned —
 /// matching React-style unmount semantics.
@@ -133,7 +135,9 @@ frameMeta: ?FrameMeta,
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
 
-const StateBuffer = std.ArrayList([]align(@alignOf(usize)) u8);
+const ScopeState = struct {
+    slots: std.ArrayListUnmanaged(*anyopaque) = .empty,
+};
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Renderer) !void {
     if (context != null) {
@@ -160,6 +164,8 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .viewportSize = @splat(0.0),
 
         .scopeStates = .init(allocator),
+        .scopeStatesPool = .empty,
+        .scopeStateArena = std.heap.ArenaAllocator.init(allocator),
 
         .frameMeta = null,
         .nodeTree = .empty,
@@ -479,8 +485,6 @@ pub fn useArena() std.mem.Allocator {
     return self.frameMeta.?.arena;
 }
 
-const stateAlignment: std.mem.Alignment = .@"8";
-
 fn currentScope() ?*ScopeFrame {
     const self = getContext();
     if (self.frameMeta.?.scopeStack.items.len > 0) {
@@ -494,9 +498,9 @@ fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
     const self = getContext();
     const statesResult = try self.scopeStates.getOrPut(key);
     if (!statesResult.found_existing) {
-        const list = try self.allocator.create(StateBuffer);
-        list.* = .empty;
-        statesResult.value_ptr.* = list;
+        const state = try self.scopeStatesPool.create(self.allocator);
+        state.* = .{};
+        statesResult.value_ptr.* = state;
     }
     try self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
         .kind = kind,
@@ -512,7 +516,7 @@ fn popScope(expectedKind: ScopeKind) void {
     if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
         std.debug.assert(endedScope.kind == expectedKind);
         if (self.scopeStates.get(endedScope.key)) |scopeState| {
-            if (endedScope.useStateCursor != scopeState.items.len) {
+            if (endedScope.useStateCursor != scopeState.slots.items.len) {
                 handleFrameError(error.RulesOfHooksViolated);
             }
         }
@@ -552,28 +556,28 @@ pub fn useState(T: type, initialValue: T) *T {
     }
 
     if (currentScope()) |scope| {
-        const states = scope.states;
+        const state = scope.states;
 
         self.touchedScopeKeys.append(self.allocator, scope.key) catch |err| {
             handleFrameError(err);
         };
         defer scope.useStateCursor += 1;
-        if (states.items.len > scope.useStateCursor) {
-            return @ptrCast(@alignCast(scope.states.items[scope.useStateCursor]));
+        if (state.slots.items.len > scope.useStateCursor) {
+            return @ptrCast(@alignCast(state.slots.items[scope.useStateCursor]));
         }
-        const buffer = self.allocator.alignedAlloc(u8, stateAlignment, @sizeOf(T)) catch |err| {
+        const ptr = self.scopeStateArena.allocator().create(T) catch |err| {
             std.log.err("Failed to allocate new state {}", .{err});
             @panic("Failed to allocate new state");
         };
-        scope.states.append(self.allocator, buffer) catch |err| {
+        ptr.* = initialValue;
+        // TODO: if `slots.append` OOMs after `arena.create` succeeds, the slot
+        // index isn't recorded — next frame the cursor lands on a fresh
+        // create at the same logical position, silently dropping this value.
+        state.slots.append(self.allocator, @ptrCast(ptr)) catch |err| {
             handleFrameError(err);
-            return @ptrCast(@alignCast(buffer));
+            return ptr;
         };
-        @memcpy(
-            scope.states.items[scope.useStateCursor],
-            std.mem.asBytes(&initialValue),
-        );
-        return @ptrCast(@alignCast(scope.states.items[scope.useStateCursor]));
+        return ptr;
     } else {
         if (!builtin.is_test) {
             std.log.err("You might be calling a hook (useState) outside of a component or element scope, and forbear cannot track things outside of one.", .{});
@@ -667,10 +671,11 @@ fn frameEnd(block: void) anyerror!void {
     self.touchedScopeKeys.clearRetainingCapacity();
     for (staleScopeKeys.items) |staleKey| {
         if (self.scopeStates.fetchRemove(staleKey)) |entry| {
-            var states = entry.value;
-            for (states.items) |buffer| self.allocator.free(buffer);
-            states.deinit(self.allocator);
-            self.allocator.destroy(states);
+            const state = entry.value;
+            state.slots.deinit(self.allocator);
+            self.scopeStatesPool.destroy(state);
+            // Note: per-slot values stay in `scopeStateArena` until context
+            // deinit. Pruning churn-heavy scopes leaks until then.
         }
     }
 
@@ -1549,14 +1554,12 @@ pub fn deinit() void {
     self.previousFrameNodeMeasurements.deinit();
 
     var scopeStatesIterator = self.scopeStates.valueIterator();
-    while (scopeStatesIterator.next()) |states| {
-        for (states.*.items) |state| {
-            self.allocator.free(state);
-        }
-        states.*.deinit(self.allocator);
-        self.allocator.destroy(states.*);
+    while (scopeStatesIterator.next()) |statePtr| {
+        statePtr.*.slots.deinit(self.allocator);
     }
     self.scopeStates.deinit();
+    self.scopeStatesPool.deinit(self.allocator);
+    self.scopeStateArena.deinit();
     self.touchedScopeKeys.deinit(self.allocator);
 
     var fontsIterator = self.fonts.valueIterator();
