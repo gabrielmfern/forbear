@@ -52,21 +52,32 @@ pub fn FpsCounter() void {
     });
 }
 
-pub fn useScrolling() Vec2 {
+const ScrollingState = struct {
+    offset: Vec2,
+    effectiveOffset: Vec2,
+    animate: bool,
+};
+
+pub fn useScrolling() *ScrollingState {
     const node = forbear.getParentNode() orelse {
         std.log.err("useScrolling must be used within a node, that's within component", .{});
         forbear.handleFrameError(error.NoParentForScrollingHook);
-        return @splat(0.0);
+        return @constCast(&std.mem.zeroes(ScrollingState));
     };
     const identity: Vec2 = @splat(0.0);
-    const scrollOffset = forbear.useState(Vec2, identity);
+
+    const state = forbear.useState(ScrollingState, .{
+        .offset = identity,
+        .effectiveOffset = identity,
+        .animate = if (builtin.os.tag == .macos) false else true,
+    });
 
     if (forbear.on(.scroll)) |delta| {
-        scrollOffset.* += delta;
+        state.offset += delta;
     }
 
-    scrollOffset.* = @min(
-        @max(scrollOffset.*, identity),
+    state.offset = @min(
+        @max(state.offset, identity),
         @max(
             if (forbear.useNodeMeasurement()) |measurement|
                 measurement.contentSize - measurement.size
@@ -76,35 +87,36 @@ pub fn useScrolling() Vec2 {
         ),
     );
 
-    if (builtin.os.tag == .macos) {
-        node.childrenOffset = -scrollOffset.*;
-        return scrollOffset.*;
-    } else {
-        const spring = forbear.SpringConfig{
-            .stiffness = 320.0,
-            .damping = 32.0,
-            .mass = 1.0,
-        };
-        var aniamtedOffset = Vec2{
-            forbear.useSpringTransition(scrollOffset.*[0], spring),
-            forbear.useSpringTransition(scrollOffset.*[1], spring),
-        };
-        aniamtedOffset = @min(
-            @max(aniamtedOffset, identity),
-            @max(
-                if (forbear.useNodeMeasurement()) |measurement|
-                    measurement.contentSize - measurement.size
-                else
-                    identity,
+    const spring = forbear.SpringConfig{
+        .stiffness = 320.0,
+        .damping = 32.0,
+        .mass = 1.0,
+    };
+    var animated = Vec2{
+        forbear.useSpringTransition(state.offset[0], spring),
+        forbear.useSpringTransition(state.offset[1], spring),
+    };
+    animated = @min(
+        @max(state.effectiveOffset, identity),
+        @max(
+            if (forbear.useNodeMeasurement()) |measurement|
+                measurement.contentSize - measurement.size
+            else
                 identity,
-            ),
-        );
-        node.childrenOffset = -aniamtedOffset;
-        return aniamtedOffset;
+            identity,
+        ),
+    );
+    if (state.animate) {
+        state.effectiveOffset = animated;
+    } else {
+        state.effectiveOffset = state.offset;
     }
+
+    node.childrenOffset = -state.effectiveOffset;
+    return state;
 }
 
-pub fn ScrollBar(scrollingOffset: Vec2) void {
+pub fn ScrollBar(state: *ScrollingState) void {
     if (forbear.useNodeMeasurement()) |parentMeasurement| {
         if (parentMeasurement.contentSize[1] > parentMeasurement.size[1]) {
             forbear.component(.{ .sourceLocation = @src() })({
@@ -156,7 +168,11 @@ pub fn ScrollBar(scrollingOffset: Vec2) void {
                                 ),
                             },
                         },
-                    })({});
+                    })({
+                        if (forbear.on(.mouseMove)) |delta| {
+                            scrollingOffset[1] += delta[1] * parentMeasurement.contentSize[1] / parentMeasurement.size[1];
+                        }
+                    });
                 });
             });
         }

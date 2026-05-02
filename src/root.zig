@@ -68,6 +68,7 @@ pub const Event = enum {
     mouseLeave,
     mouseDown,
     mouseUp,
+    mouseMove,
     click,
     scroll,
 };
@@ -1371,7 +1372,7 @@ fn isMouseInsideMeasurement(self: *@This(), measurement: Node.Measurement) bool 
 }
 
 pub fn OnResult(comptime eventTag: Event) type {
-    return if (eventTag == .scroll) ?Vec2 else bool;
+    return if (eventTag == .scroll or eventTag == .mouseMove) ?Vec2 else bool;
 }
 
 /// Inline hit test against previous-frame measurement. No event queue —
@@ -1406,12 +1407,16 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     // measurement starts existing.
     const slot: ?*bool = switch (eventTag) {
         .mouseEnter, .mouseLeave, .mouseDown, .mouseUp => useState(bool, false),
-        .scroll => null,
+        .scroll, .mouseMove => null,
         .click => unreachable,
     };
+    const lastMousePositionSlot: ?*Vec2 = if (eventTag == .mouseMove)
+        useState(Vec2, self.mousePosition)
+    else
+        null;
 
     const measurement = useNodeMeasurement() orelse {
-        if (comptime eventTag == .scroll) return null;
+        if (comptime eventTag == .scroll or eventTag == .mouseMove) return null;
         return false;
     };
 
@@ -1444,6 +1449,14 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
             if (!inside) return null;
             if (self.scrollDelta[0] != 0.0 or self.scrollDelta[1] != 0.0)
                 return self.scrollDelta;
+            return null;
+        },
+        .mouseMove => {
+            const lastMousePosition = lastMousePositionSlot.?;
+            defer lastMousePosition.* = self.mousePosition;
+            if (!inside) return null;
+            const delta = self.mousePosition - lastMousePosition.*;
+            if (delta[0] != 0.0 or delta[1] != 0.0) return delta;
             return null;
         },
     }
