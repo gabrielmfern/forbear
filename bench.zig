@@ -5,146 +5,135 @@ const forbear = @import("forbear");
 var gArena: *std.heap.ArenaAllocator = undefined;
 var gFont: *forbear.Font = undefined;
 
-fn benchLayout(alloc: std.mem.Allocator) void {
-    _ = alloc;
-    _ = gArena.reset(.retain_capacity);
-    const arena = gArena.allocator();
+// Builds a layout-only tree of exactly `nodeCount` element nodes (root
+// counts) by packing into uniformly shaped sections / rows / leaves and
+// distributing any remainder as a partial section + partial row.
+//
+// Per-section: 1 wrapper + R rows × (1 + L leaves) = 1 + R*(1+L)
+// With R=5, L=6: row = 7 nodes, section = 36 nodes.
+fn buildLayoutTree(comptime nodeCount: usize) void {
+    @setEvalBranchQuota(1_000_000);
 
-    const meta = forbear.FrameMeta{
-        .arena = arena,
-        .viewportSize = .{ 800, 600 },
-        .baseStyle = .{
-            .font = gFont,
-            .color = .{ 0, 0, 0, 1 },
-            .fontSize = 16,
-            .fontWeight = 400,
-            .lineHeight = 1.0,
-            .textWrapping = .none,
-            .blendMode = .normal,
-            .cursor = .default,
-        },
-    };
+    const R: usize = 5;
+    const L: usize = 6;
+    const rowSize: usize = 1 + L;
+    const sectionSize: usize = 1 + R * rowSize;
 
-    (forbear.frame(meta)({
-        buildTree();
-        _ = forbear.layout() catch unreachable;
-    })) catch unreachable;
-}
+    const budgetAfterRoot: usize = if (nodeCount == 0) 0 else nodeCount - 1;
 
-fn buildTree() void {
-    forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 }, .direction = .vertical } })({
-        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal } })({
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 60 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .fixed = 200 }, .height = .{ .fixed = 60 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 60 } } })({});
-        });
-        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal } })({
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 80 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 80 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 80 } } })({});
-        });
-        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical } })({
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 40 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .fixed = 600 }, .height = .{ .fixed = 40 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 40 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .fixed = 400 }, .height = .{ .fixed = 40 } } })({});
-        });
-        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal } })({
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 100 } } })({
-                forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 } } })({});
-                forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 } } })({});
-            });
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 100 } } })({
-                forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 30 } } })({});
-                forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 30 } } })({});
-                forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 30 } } })({});
-            });
-        });
-        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal } })({
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 50 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 50 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 50 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 50 } } })({});
-        });
-    });
-}
+    const fullSections = budgetAfterRoot / sectionSize;
+    const afterSections = budgetAfterRoot - fullSections * sectionSize;
 
-fn buildLargeTree() void {
-    forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 }, .direction = .vertical } })({
-        // Header section
-        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal } })({
-            forbear.element(.{ .style = .{ .width = .{ .fixed = 150 }, .height = .{ .fixed = 60 } } })({});
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 60 }, .direction = .horizontal } })({
-                inline for (0..8) |_| {
-                    forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 } } })({});
-                }
-            });
-            forbear.element(.{ .style = .{ .width = .{ .fixed = 100 }, .height = .{ .fixed = 60 } } })({});
-        });
+    const hasPartialSection = afterSections >= 1 + rowSize;
+    const partialBudget = if (hasPartialSection) afterSections - 1 else 0;
+    const partialRows = partialBudget / rowSize;
+    const afterRows = partialBudget - partialRows * rowSize;
+    const hasPartialRow = hasPartialSection and afterRows >= 1;
+    const tailLeavesInRow = if (hasPartialRow) afterRows - 1 else 0;
+    const strayLeaves = if (hasPartialSection) 0 else afterSections;
 
-        // Hero section with ratio
-        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .ratio = 0.4 } } })({
-            forbear.element(.{ .style = .{ .width = .fit, .height = .fit, .direction = .vertical } })({
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 400 }, .height = .{ .fixed = 60 } } })({});
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 300 }, .height = .{ .fixed = 40 } } })({});
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 150 }, .height = .{ .fixed = 50 } } })({});
-            });
-        });
-
-        // Grid of cards (simulates product listing)
-        inline for (0..4) |_| {
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal } })({
-                inline for (0..4) |_| {
-                    forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical } })({
-                        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .ratio = 1.0 } } })({});
-                        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 24 } } })({});
-                        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 18 } } })({});
-                        forbear.element(.{ .style = .{ .width = .{ .fixed = 80 }, .height = .{ .fixed = 36 } } })({});
-                    });
-                }
-            });
-        }
-
-        // Footer with nested columns
-        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal } })({
-            inline for (0..4) |_| {
-                forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical } })({
-                    forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 24 } } })({});
-                    inline for (0..6) |_| {
-                        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 20 } } })({});
-                    }
-                });
-            }
-        });
-    });
-}
-
-fn buildHugeTree() void {
-    forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 }, .direction = .vertical } })({
-        // 20 sections, each with nested grids
-        inline for (0..20) |_| {
-            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical } })({
-                // Header row
-                forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 40 }, .direction = .horizontal } })({
-                    inline for (0..5) |_| {
-                        forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .grow = 1.0 } } })({});
-                    }
-                });
-                // Grid of cards: 5 rows x 6 cols = 30 cards per section
-                inline for (0..5) |_| {
-                    forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .horizontal } })({
-                        inline for (0..6) |_| {
-                            forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .fit, .direction = .vertical } })({
-                                forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .ratio = 0.75 } } })({});
-                                forbear.element(.{ .style = .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 20 } } })({});
-                                forbear.element(.{ .style = .{ .width = .{ .fixed = 60 }, .height = .{ .fixed = 30 } } })({});
-                            });
+    forbear.element(.{ .style = .{
+        .width = .{ .grow = 1.0 },
+        .height = .{ .grow = 1.0 },
+        .direction = .vertical,
+    } })({
+        inline for (0..fullSections) |_| {
+            forbear.element(.{ .style = .{
+                .width = .{ .grow = 1.0 },
+                .height = .fit,
+                .direction = .vertical,
+            } })({
+                inline for (0..R) |_| {
+                    forbear.element(.{ .style = .{
+                        .width = .{ .grow = 1.0 },
+                        .height = .fit,
+                        .direction = .horizontal,
+                    } })({
+                        inline for (0..L) |_| {
+                            forbear.element(.{ .style = .{
+                                .width = .{ .grow = 1.0 },
+                                .height = .{ .fixed = 30 },
+                            } })({});
                         }
                     });
                 }
             });
         }
+
+        if (hasPartialSection) {
+            forbear.element(.{ .style = .{
+                .width = .{ .grow = 1.0 },
+                .height = .fit,
+                .direction = .vertical,
+            } })({
+                inline for (0..partialRows) |_| {
+                    forbear.element(.{ .style = .{
+                        .width = .{ .grow = 1.0 },
+                        .height = .fit,
+                        .direction = .horizontal,
+                    } })({
+                        inline for (0..L) |_| {
+                            forbear.element(.{ .style = .{
+                                .width = .{ .grow = 1.0 },
+                                .height = .{ .fixed = 30 },
+                            } })({});
+                        }
+                    });
+                }
+                if (hasPartialRow) {
+                    forbear.element(.{ .style = .{
+                        .width = .{ .grow = 1.0 },
+                        .height = .fit,
+                        .direction = .horizontal,
+                    } })({
+                        inline for (0..tailLeavesInRow) |_| {
+                            forbear.element(.{ .style = .{
+                                .width = .{ .grow = 1.0 },
+                                .height = .{ .fixed = 30 },
+                            } })({});
+                        }
+                    });
+                }
+            });
+        }
+
+        inline for (0..strayLeaves) |_| {
+            forbear.element(.{ .style = .{
+                .width = .{ .grow = 1.0 },
+                .height = .{ .fixed = 30 },
+            } })({});
+        }
     });
+}
+
+fn benchLayoutGeneric(comptime nodeCount: usize) fn (std.mem.Allocator) void {
+    return struct {
+        fn run(alloc: std.mem.Allocator) void {
+            _ = alloc;
+            _ = gArena.reset(.retain_capacity);
+            const arena = gArena.allocator();
+
+            const meta = forbear.FrameMeta{
+                .arena = arena,
+                .viewportSize = .{ 1920, 1080 },
+                .baseStyle = .{
+                    .font = gFont,
+                    .color = .{ 0, 0, 0, 1 },
+                    .fontSize = 16,
+                    .fontWeight = 400,
+                    .lineHeight = 1.0,
+                    .textWrapping = .none,
+                    .blendMode = .normal,
+                    .cursor = .default,
+                },
+            };
+
+            (forbear.frame(meta)({
+                buildLayoutTree(nodeCount);
+                _ = forbear.layout() catch unreachable;
+            })) catch unreachable;
+        }
+    }.run;
 }
 
 // ~1000 useState calls spread across mixed component+element scopes at
@@ -248,84 +237,6 @@ fn buildStateTree() void {
     });
 }
 
-fn benchStateLayout(alloc: std.mem.Allocator) void {
-    _ = alloc;
-    _ = gArena.reset(.retain_capacity);
-    const arena = gArena.allocator();
-
-    const meta = forbear.FrameMeta{
-        .arena = arena,
-        .viewportSize = .{ 1920, 1080 },
-        .baseStyle = .{
-            .font = gFont,
-            .color = .{ 0, 0, 0, 1 },
-            .fontSize = 16,
-            .fontWeight = 400,
-            .lineHeight = 1.0,
-            .textWrapping = .none,
-            .blendMode = .normal,
-            .cursor = .default,
-        },
-    };
-
-    (forbear.frame(meta)({
-        buildStateTree();
-        _ = forbear.layout() catch unreachable;
-    })) catch unreachable;
-}
-
-fn benchHugeLayout(alloc: std.mem.Allocator) void {
-    _ = alloc;
-    _ = gArena.reset(.retain_capacity);
-    const arena = gArena.allocator();
-
-    const meta = forbear.FrameMeta{
-        .arena = arena,
-        .viewportSize = .{ 1920, 1080 },
-        .baseStyle = .{
-            .font = gFont,
-            .color = .{ 0, 0, 0, 1 },
-            .fontSize = 16,
-            .fontWeight = 400,
-            .lineHeight = 1.0,
-            .textWrapping = .none,
-            .blendMode = .normal,
-            .cursor = .default,
-        },
-    };
-
-    (forbear.frame(meta)({
-        buildHugeTree();
-        _ = forbear.layout() catch unreachable;
-    })) catch unreachable;
-}
-
-fn benchLargeLayout(alloc: std.mem.Allocator) void {
-    _ = alloc;
-    _ = gArena.reset(.retain_capacity);
-    const arena = gArena.allocator();
-
-    const meta = forbear.FrameMeta{
-        .arena = arena,
-        .viewportSize = .{ 1920, 1080 },
-        .baseStyle = .{
-            .font = gFont,
-            .color = .{ 0, 0, 0, 1 },
-            .fontSize = 16,
-            .fontWeight = 400,
-            .lineHeight = 1.0,
-            .textWrapping = .none,
-            .blendMode = .normal,
-            .cursor = .default,
-        },
-    };
-
-    (forbear.frame(meta)({
-        buildLargeTree();
-        _ = forbear.layout() catch unreachable;
-    })) catch unreachable;
-}
-
 test "bench layout" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -339,9 +250,15 @@ test "bench layout" {
 
     var bench = zbench.Benchmark.init(std.testing.allocator, .{});
     defer bench.deinit();
-    try bench.add("layout() 27 nodes", benchLayout, .{});
-    try bench.add("layout() 135 nodes", benchLargeLayout, .{});
-    try bench.add("layout() 2641 nodes", benchHugeLayout, .{});
+
+    try bench.add("layout() 27 nodes", benchLayoutGeneric(27), .{});
+    try bench.add("layout() 135 nodes", benchLayoutGeneric(135), .{});
+    try bench.add("layout() 500 nodes", benchLayoutGeneric(500), .{});
+    try bench.add("layout() 1000 nodes", benchLayoutGeneric(1000), .{});
+    try bench.add("layout() 2641 nodes", benchLayoutGeneric(2641), .{});
+    try bench.add("layout() 5000 nodes", benchLayoutGeneric(5000), .{});
+    try bench.add("layout() 10000 nodes", benchLayoutGeneric(10000), .{});
+
     try bench.run(std.testing.io, std.Io.File.stdout());
 }
 
@@ -447,14 +364,14 @@ test "bench useState" {
     var bench = zbench.Benchmark.init(std.testing.allocator, .{});
     defer bench.deinit();
 
-    try bench.add("useState() 10 states", UseStateBenchmark(10), .{});
-    try bench.add("useState() 50 states", UseStateBenchmark(50), .{});
-    try bench.add("useState() 100 states", UseStateBenchmark(100), .{});
-    try bench.add("useState() 250 states", UseStateBenchmark(250), .{});
-    try bench.add("useState() 500 states", UseStateBenchmark(500), .{});
-    try bench.add("useState() 1000 states", UseStateBenchmark(1000), .{});
-    try bench.add("useState() 2000 states", UseStateBenchmark(2000), .{});
-    try bench.add("useState() 5000 states", UseStateBenchmark(5000), .{});
+    try bench.add("useState() 10 states", UseStateBenchmark(10), .{ .track_allocations = true });
+    try bench.add("useState() 50 states", UseStateBenchmark(50), .{ .track_allocations = true });
+    try bench.add("useState() 100 states", UseStateBenchmark(100), .{ .track_allocations = true });
+    try bench.add("useState() 250 states", UseStateBenchmark(250), .{ .track_allocations = true });
+    try bench.add("useState() 500 states", UseStateBenchmark(500), .{ .track_allocations = true });
+    try bench.add("useState() 1000 states", UseStateBenchmark(1000), .{ .track_allocations = true });
+    try bench.add("useState() 2000 states", UseStateBenchmark(2000), .{ .track_allocations = true });
+    try bench.add("useState() 5000 states", UseStateBenchmark(5000), .{ .track_allocations = true });
 
     try bench.run(std.testing.io, std.Io.File.stdout());
 }
