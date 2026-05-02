@@ -479,6 +479,10 @@ pub fn useArena() std.mem.Allocator {
     return self.frameMeta.?.arena;
 }
 
+// TODO: find a better way to store state that doesn't require for all of them to have the same alignment.
+// eight is not enough of an alignment for complex types like Zig's Vector, for exmaple.
+//
+// See https://github.com/gabrielmfern/forbear/pull/83#discussion_r3177038640
 const stateAlignment: std.mem.Alignment = .@"8";
 
 fn currentScope() ?*ScopeFrame {
@@ -565,14 +569,11 @@ pub fn useState(T: type, initialValue: T) *T {
             std.log.err("Failed to allocate new state {}", .{err});
             @panic("Failed to allocate new state");
         };
+        @memcpy(buffer, std.mem.asBytes(&initialValue));
         scope.states.append(self.allocator, buffer) catch |err| {
             handleFrameError(err);
             return @ptrCast(@alignCast(buffer));
         };
-        @memcpy(
-            scope.states.items[scope.useStateCursor],
-            std.mem.asBytes(&initialValue),
-        );
         return @ptrCast(@alignCast(scope.states.items[scope.useStateCursor]));
     } else {
         if (!builtin.is_test) {
