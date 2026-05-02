@@ -57,10 +57,15 @@ jobs:
         id: bench-before
         continue-on-error: true
         run: |
-          git checkout ${{ github.event.pull_request.base.sha }} -- .
+          # `--force` makes the worktree match the target tree exactly,
+          # removing files that only exist on head. Path-limited checkout
+          # leaves a mixed workspace, so don't use it.
+          git -c advice.detachedHead=false checkout --force ${{ github.event.pull_request.base.sha }}
           # Restore the bench harness from head so the bench step exists and
           # the harness matches the API expected by `after`. Source under
           # src/ stays at base — that's what we're actually measuring.
+          # `.bench-harness/` is untracked, so the force-checkout above
+          # preserved it.
           cp .bench-harness/bench.zig bench.zig
           cp .bench-harness/build.zig build.zig
           cp .bench-harness/build.zig.zon build.zig.zon
@@ -70,7 +75,7 @@ jobs:
       - name: Run benchmarks (after — PR head)
         id: bench-after
         run: |
-          git checkout ${{ github.event.pull_request.head.sha }} -- .
+          git -c advice.detachedHead=false checkout --force ${{ github.event.pull_request.head.sha }}
           set -o pipefail
           zig build bench 2>&1 | tee bench-after.txt
 
