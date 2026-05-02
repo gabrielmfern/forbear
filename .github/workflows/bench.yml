@@ -46,17 +46,31 @@ jobs:
             spirv-tools \
             wayland-protocols
 
+      - name: Stash bench harness from PR head
+        run: |
+          mkdir -p .bench-harness
+          cp bench.zig .bench-harness/bench.zig
+          cp build.zig .bench-harness/build.zig
+          cp build.zig.zon .bench-harness/build.zig.zon
+
       - name: Run benchmarks (before — PR base)
         id: bench-before
+        continue-on-error: true
         run: |
-          git checkout ${{ github.event.pull_request.base.sha }}
+          git checkout ${{ github.event.pull_request.base.sha }} -- .
+          # Restore the bench harness from head so the bench step exists and
+          # the harness matches the API expected by `after`. Source under
+          # src/ stays at base — that's what we're actually measuring.
+          cp .bench-harness/bench.zig bench.zig
+          cp .bench-harness/build.zig build.zig
+          cp .bench-harness/build.zig.zon build.zig.zon
           set -o pipefail
           zig build bench 2>&1 | tee bench-before.txt
 
       - name: Run benchmarks (after — PR head)
         id: bench-after
         run: |
-          git checkout ${{ github.event.pull_request.head.sha }}
+          git checkout ${{ github.event.pull_request.head.sha }} -- .
           set -o pipefail
           zig build bench 2>&1 | tee bench-after.txt
 
@@ -84,26 +98,31 @@ jobs:
             const pullNumber = context.payload.pull_request.number;
             const marker = "<!-- bench-results -->";
 
-            const before = fs.readFileSync("bench-before.txt", "utf8");
-            const after = fs.readFileSync("bench-after.txt", "utf8");
+            const readOrNull = (p) => {
+              try { return fs.readFileSync(p, "utf8"); } catch { return null; }
+            };
+            const before = readOrNull("bench-before.txt");
+            const after = readOrNull("bench-after.txt");
 
             const baseShort = process.env.BASE_SHA.slice(0, 7);
             const headShort = process.env.HEAD_SHA.slice(0, 7);
 
-            const body = [
-              marker,
-              "## Benchmark results",
-              "",
-              `### Before (\`${baseShort}\`)`,
-              "```",
-              before.trim(),
-              "```",
-              "",
-              `### After (\`${headShort}\`)`,
-              "```",
-              after.trim(),
-              "```",
-            ].join("\n");
+            const beforeOk = "${{ steps.bench-before.outcome }}" === "success";
+
+            const lines = [marker, "## Benchmark results", ""];
+            lines.push(`### Before (\`${baseShort}\`)`);
+            if (beforeOk && before) {
+              lines.push("```", before.trim(), "```");
+            } else {
+              lines.push(
+                "_Could not run benchmarks against the base commit (likely API drift or missing bench harness on base)._",
+              );
+              if (before) lines.push("<details><summary>build output</summary>", "", "```", before.trim(), "```", "</details>");
+            }
+            lines.push("", `### After (\`${headShort}\`)`);
+            lines.push("```", (after ?? "(no output)").trim(), "```");
+
+            const body = lines.join("\n");
 
             const { data: comments } = await github.rest.issues.listComments({
               owner,
