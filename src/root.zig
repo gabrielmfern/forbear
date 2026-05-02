@@ -427,31 +427,33 @@ pub fn rgb(r: u8, g: u8, b: u8) Vec4 {
 }
 
 pub fn hex(comptime value: []const u8) Vec4 {
-    const digits = if (value.len > 0 and value[0] == '#') value[1..] else value;
-    const r = @as(f32, std.fmt.parseInt(
-        u8,
-        digits[0..2],
-        16,
-    ) catch @compileError("can't parse red channel")) / 255.0;
-    const g = @as(f32, std.fmt.parseInt(
-        u8,
-        digits[2..4],
-        16,
-    ) catch @compileError("can't parse green channel")) / 255.0;
-    const b = @as(f32, std.fmt.parseInt(
-        u8,
-        digits[4..6],
-        16,
-    ) catch @compileError("can't parse blue channel")) / 255.0;
-    const a = if (digits.len >= 8)
-        @as(f32, std.fmt.parseInt(
+    return comptime blk: {
+        const digits = if (value.len > 0 and value[0] == '#') value[1..] else value;
+        const r = @as(f32, std.fmt.parseInt(
             u8,
-            digits[6..8],
+            digits[0..2],
             16,
-        ) catch @compileError("can't parse alpha channel")) / 255.0
-    else
-        1.0;
-    return .{ r, g, b, a };
+        ) catch @compileError("can't parse red channel")) / 255.0;
+        const g = @as(f32, std.fmt.parseInt(
+            u8,
+            digits[2..4],
+            16,
+        ) catch @compileError("can't parse green channel")) / 255.0;
+        const b = @as(f32, std.fmt.parseInt(
+            u8,
+            digits[4..6],
+            16,
+        ) catch @compileError("can't parse blue channel")) / 255.0;
+        const a = if (digits.len >= 8)
+            @as(f32, std.fmt.parseInt(
+                u8,
+                digits[6..8],
+                16,
+            ) catch @compileError("can't parse alpha channel")) / 255.0
+        else
+            1.0;
+        break :blk Vec4{ r, g, b, a };
+    };
 }
 
 pub fn useViewportSize() Vec2 {
