@@ -70,14 +70,14 @@ jobs:
           cp .bench-harness/build.zig build.zig
           cp .bench-harness/build.zig.zon build.zig.zon
           set -o pipefail
-          zig build bench 2>&1 | tee bench-before.txt
+          zig build bench --release=fast 2>&1 | tee bench-before.txt
 
       - name: Run benchmarks (after — PR head)
         id: bench-after
         run: |
           git -c advice.detachedHead=false checkout --force ${{ github.event.pull_request.head.sha }}
           set -o pipefail
-          zig build bench 2>&1 | tee bench-after.txt
+          zig build bench --release=fast 2>&1 | tee bench-after.txt
 
       - name: Upload bench outputs
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
