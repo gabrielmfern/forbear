@@ -1639,6 +1639,87 @@ test "relative-placed child does not contribute to parent's fit" {
     });
 }
 
+test "grow child inside relative-placed fixed-size parent fills the parent" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 400 },
+                .height = .{ .fixed = 300 },
+                .direction = .vertical,
+            },
+        })({
+            forbear.element(.{
+                .style = .{
+                    .placement = .{ .relative = .{ 0.0, 0.0 } },
+                    .width = .{ .fixed = 200 },
+                    .height = .{ .fixed = 150 },
+                    .direction = .vertical,
+                },
+            })({
+                forbear.element(.{
+                    .style = .{
+                        .width = .{ .grow = 1.0 },
+                        .height = .{ .grow = 1.0 },
+                    },
+                })({});
+            });
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+        const relParent = tree.at(root.firstChild.?);
+        const growChild = tree.at(relParent.firstChild.?);
+
+        try std.testing.expectEqual(@as(f32, 200), relParent.size[0]);
+        try std.testing.expectEqual(@as(f32, 150), relParent.size[1]);
+        try std.testing.expectEqual(@as(f32, 200), growChild.size[0]);
+        try std.testing.expectEqual(@as(f32, 150), growChild.size[1]);
+    });
+}
+
+test "grow on a relative-placed child fills the parent on both axes" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 400 },
+                .height = .{ .fixed = 300 },
+                .direction = .vertical,
+            },
+        })({
+            forbear.element(.{
+                .style = .{
+                    .placement = .{ .relative = .{ 0.0, 0.0 } },
+                    .width = .{ .grow = 1.0 },
+                    .height = .{ .grow = 1.0 },
+                },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+        const relChild = tree.at(root.firstChild.?);
+
+        try std.testing.expectEqual(@as(f32, 400), relChild.size[0]);
+        try std.testing.expectEqual(@as(f32, 300), relChild.size[1]);
+    });
+}
+
 test "fixed-width ratio-height children with maxSize don't inflate parent cross-axis" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();

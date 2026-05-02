@@ -265,35 +265,45 @@ pub fn growAndShrink(
         const child = nodeTree.at(childIndex);
         childCount += 1;
 
-        if (child.style.placement == .flow) {
-            // Ensure minSize doesn't exceed maxSize before using it
-            child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
-            child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
+        // Ensure minSize doesn't exceed maxSize before using it
+        child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
+        child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
 
-            if (direction.perpendicular() == .vertical) {
-                const available = node.size[1] - node.fittingBase(.vertical) - child.style.margin.y[0] - child.style.margin.y[1];
-                if (child.style.height.isGrow() or (child.size[1] > available and child.minSize[1] < child.size[1])) {
-                    child.size[1] = @max(
-                        @min(
-                            available,
-                            child.maxSize[1],
-                        ),
-                        child.minSize[1],
-                    );
-                }
-            } else if (direction.perpendicular() == .horizontal) {
-                const available = node.size[0] - node.fittingBase(.horizontal) - child.style.margin.x[0] - child.style.margin.x[1];
-                if (child.style.width.isGrow() or (child.size[0] > available and child.minSize[0] < child.size[0])) {
-                    child.size[0] = @max(
-                        @min(
-                            available,
-                            child.maxSize[0],
-                        ),
-                        child.minSize[0],
-                    );
-                }
+        if (direction.perpendicular() == .vertical) {
+            const available = node.size[1] - node.fittingBase(.vertical) - child.style.margin.y[0] - child.style.margin.y[1];
+            if (child.style.height.isGrow() or (child.style.placement == .flow and child.size[1] > available and child.minSize[1] < child.size[1])) {
+                child.size[1] = @max(
+                    @min(
+                        available,
+                        child.maxSize[1],
+                    ),
+                    child.minSize[1],
+                );
             }
+        } else if (direction.perpendicular() == .horizontal) {
+            const available = node.size[0] - node.fittingBase(.horizontal) - child.style.margin.x[0] - child.style.margin.x[1];
+            if (child.style.width.isGrow() or (child.style.placement == .flow and child.size[0] > available and child.minSize[0] < child.size[0])) {
+                child.size[0] = @max(
+                    @min(
+                        available,
+                        child.maxSize[0],
+                    ),
+                    child.minSize[0],
+                );
+            }
+        }
+
+        if (child.style.placement == .flow) {
             remaining -= child.getOuterSize(direction);
+        } else if (child.style.getPreferredSize(direction).isGrow()) {
+            // Out-of-flow grow children size to the parent's content area on
+            // the main axis. They don't share space with siblings, so grow
+            // simply means "fill the parent on this axis".
+            const available = node.getSize(direction) - node.fittingBase(direction) - child.style.margin.get(direction)[0] - child.style.margin.get(direction)[1];
+            child.setSize(direction, @max(
+                @min(available, child.getMaxSize(direction)),
+                child.getMinSize(direction),
+            ));
         }
         childIndexOption = child.nextSibling;
     }
