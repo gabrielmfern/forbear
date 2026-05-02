@@ -56,6 +56,11 @@ jobs:
       - name: Run benchmarks (before — PR base)
         id: bench-before
         continue-on-error: true
+        env:
+          NO_COLOR: "1"
+          TERM: dumb
+          CLICOLOR: "0"
+          CLICOLOR_FORCE: "0"
         run: |
           # `--force` makes the worktree match the target tree exactly,
           # removing files that only exist on head. Path-limited checkout
@@ -74,6 +79,11 @@ jobs:
 
       - name: Run benchmarks (after — PR head)
         id: bench-after
+        env:
+          NO_COLOR: "1"
+          TERM: dumb
+          CLICOLOR: "0"
+          CLICOLOR_FORCE: "0"
         run: |
           git -c advice.detachedHead=false checkout --force ${{ github.event.pull_request.head.sha }}
           set -o pipefail
@@ -103,8 +113,15 @@ jobs:
             const pullNumber = context.payload.pull_request.number;
             const marker = "<!-- bench-results -->";
 
+            // Strip ANSI escape sequences (CSI + OSC) and other C1 control
+            // bytes; zbench colorizes its output even when stdout isn't a tty
+            // on some versions, and GitHub renders the raw bytes as `�[0m`.
+            const stripAnsi = (s) => s
+              .replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, "")
+              .replace(/\x1B\[[0-?]*[ -\/]*[@-~]/g, "")
+              .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
             const readOrNull = (p) => {
-              try { return fs.readFileSync(p, "utf8"); } catch { return null; }
+              try { return stripAnsi(fs.readFileSync(p, "utf8")); } catch { return null; }
             };
             const before = readOrNull("bench-before.txt");
             const after = readOrNull("bench-after.txt");
