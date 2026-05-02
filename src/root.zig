@@ -86,11 +86,6 @@ pub const FrameMeta = struct {
     /// frame to keep per-component element-key namespacing stable.
     scopeStack: std.ArrayList(ScopeFrame) = .empty,
 
-    /// Set of scope keys that were entered during this frame. At frame end,
-    /// any entry in `scopeStates` whose key is missing here is pruned —
-    /// matching React-style unmount semantics.
-    touchedScopeKeys: std.ArrayList(u64) = .empty,
-
     previousPushedNodeIndex: ?usize = null,
     nodeParentStack: std.ArrayList(usize) = .empty,
     componentChildrenSlotStates: std.ArrayList(ComponentChildrenSlotState) = .empty,
@@ -126,6 +121,10 @@ viewportSize: Vec2,
 /// component or an element — `useState` resolves to the nearest enclosing
 /// scope, so an entry here may belong to either kind.
 scopeStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
+/// Set of scope keys that were entered during this frame. At frame end,
+/// any entry in `scopeStates` whose key is missing here is pruned —
+/// matching React-style unmount semantics.
+touchedScopeKeys: std.ArrayList(u64) = .empty,
 
 nodeTree: NodeTree,
 frameMeta: ?FrameMeta,
@@ -495,7 +494,7 @@ fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
         .key = key,
         .useStateCursor = 0,
     });
-    try self.frameMeta.?.touchedScopeKeys.append(self.frameMeta.?.arena, key);
+    try self.touchedScopeKeys.append(self.allocator, key);
 }
 
 fn popScope(expectedKind: ScopeKind) void {
@@ -542,18 +541,18 @@ pub fn useState(T: type, initialValue: T) *T {
         return &Static.dummy;
     }
 
-    if (currentScope()) |state| {
-        const stateResult = self.scopeStates.getOrPut(state.key) catch |err| {
+    if (currentScope()) |scope| {
+        const stateResult = self.scopeStates.getOrPut(scope.key) catch |err| {
             std.log.err("Failed to get or put a new scope state {}", .{err});
             @panic("Failed to get or put a new scope state");
         };
-        self.frameMeta.?.touchedScopeKeys.append(self.frameMeta.?.arena, state.key) catch |err| {
+        self.touchedScopeKeys.append(self.allocator, scope.key) catch |err| {
             handleFrameError(err);
         };
-        defer state.useStateCursor += 1;
+        defer scope.useStateCursor += 1;
         if (stateResult.found_existing) {
-            if (stateResult.value_ptr.items.len > state.useStateCursor) {
-                return @ptrCast(@alignCast(stateResult.value_ptr.*.items[state.useStateCursor]));
+            if (stateResult.value_ptr.items.len > scope.useStateCursor) {
+                return @ptrCast(@alignCast(stateResult.value_ptr.*.items[scope.useStateCursor]));
             }
         } else {
             stateResult.value_ptr.* = .empty;
@@ -567,10 +566,10 @@ pub fn useState(T: type, initialValue: T) *T {
             return @ptrCast(@alignCast(buffer));
         };
         @memcpy(
-            stateResult.value_ptr.*.items[state.useStateCursor],
+            stateResult.value_ptr.*.items[scope.useStateCursor],
             std.mem.asBytes(&initialValue),
         );
-        return @ptrCast(@alignCast(stateResult.value_ptr.*.items[state.useStateCursor]));
+        return @ptrCast(@alignCast(stateResult.value_ptr.*.items[scope.useStateCursor]));
     } else {
         if (!builtin.is_test) {
             std.log.err("You might be calling a hook (useState) outside of a component or element scope, and forbear cannot track things outside of one.", .{});
@@ -654,13 +653,14 @@ fn frameEnd(block: void) anyerror!void {
     defer staleScopeKeys.deinit(frameMeta.arena);
     var scopeStateKeysIterator = self.scopeStates.keyIterator();
     while (scopeStateKeysIterator.next()) |keyPtr| {
-        if (!std.mem.containsAtLeastScalar(u64, frameMeta.touchedScopeKeys.items, 1, keyPtr.*)) {
+        if (!std.mem.containsAtLeastScalar(u64, self.touchedScopeKeys.items, 1, keyPtr.*)) {
             staleScopeKeys.append(frameMeta.arena, keyPtr.*) catch |err| {
                 std.log.err("Failed to record stale scope key for cleanup: {}", .{err});
                 break;
             };
         }
     }
+    self.touchedScopeKeys.clearRetainingCapacity();
     for (staleScopeKeys.items) |staleKey| {
         if (self.scopeStates.fetchRemove(staleKey)) |entry| {
             var states = entry.value;
@@ -1551,6 +1551,7 @@ pub fn deinit() void {
         states.deinit(self.allocator);
     }
     self.scopeStates.deinit();
+    self.touchedScopeKeys.deinit(self.allocator);
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
