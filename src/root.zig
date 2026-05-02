@@ -402,9 +402,14 @@ fn bezierXDerivative(x1: f32, x2: f32, t: f32) f32 {
         3.0 * t * t * (1.0 - x2);
 }
 
-/// Equivalent to CSS's ease timing function
+/// Equivalent to CSS's ease-in-out timing function
 pub fn easeInOut(progress: f32) f32 {
     return cubicBezier(0.42, 0.0, 0.58, 1.0, progress);
+}
+
+/// Equivalent to CSS's ease-out timing function
+pub fn easeOut(progress: f32) f32 {
+    return cubicBezier(0.0, 0.0, 0.58, 1.0, progress);
 }
 
 /// Equivalent to CSS's ease timing function
