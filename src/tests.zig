@@ -6825,7 +6825,7 @@ test "childrenOffset shifts flow children by the offset" {
     });
 }
 
-test "childrenOffset shifts relative children" {
+test "childrenOffset does not shift relative children" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
@@ -6856,9 +6856,10 @@ test "childrenOffset shifts relative children" {
         const root = tree.at(0);
         const child = tree.at(root.firstChild.?);
 
-        // Relative anchor (100, 80) + parent offset (25, 10) = (125, 90).
-        try std.testing.expectApproxEqAbs(@as(f32, 125.0), child.position[0], 0.001);
-        try std.testing.expectApproxEqAbs(@as(f32, 90.0), child.position[1], 0.001);
+        // Relative anchor (100, 80); parent's childrenOffset must not shift
+        // it, so the position stays at the anchor.
+        try std.testing.expectApproxEqAbs(@as(f32, 100.0), child.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80.0), child.position[1], 0.001);
     });
 }
 

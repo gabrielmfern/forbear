@@ -682,15 +682,17 @@ pub fn layout() !*NodeTree {
                     // placement that scrolls with the page.
                     .absolute => child.position += root.position + child.style.translate,
                     // Parent-relative: the user-supplied Vec2 is an offset
-                    // from the parent's top-left corner. `.flow` children
-                    // have their `child.position` computed by wrapAndPlace;
-                    // `.relative` children use the Vec2 stashed at element
-                    // creation time. Both paths then adopt the parent's
-                    // resolved position, so they inherit ancestor offsets
-                    // and scroll naturally. `childrenOffset` is the parent's
-                    // per-container scroll offset, which shifts all of its
-                    // flowing children together.
-                    .flow, .relative => child.position += node.position + node.childrenOffset + child.style.translate,
+                    // from the parent's top-left corner. The child adopts
+                    // the parent's resolved position so it inherits ancestor
+                    // offsets and scroll naturally, but is not shifted by
+                    // the parent's `childrenOffset` (which is the parent's
+                    // per-container scroll offset for its flowing children).
+                    .relative => child.position += node.position + child.style.translate,
+                    // Flow children: positions were computed by wrapAndPlace
+                    // relative to the parent. Add the parent's resolved
+                    // position and its `childrenOffset` to scroll them
+                    // together.
+                    .flow => child.position += node.position + node.childrenOffset + child.style.translate,
                 }
                 if (child.glyphs) |glyphs| {
                     for (glyphs.slice) |*glyph| {
