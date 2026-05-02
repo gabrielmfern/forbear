@@ -6,6 +6,7 @@ pub const c = @import("c");
 const forbearBuiltin = @import("builtin.zig");
 pub const FpsCounter = forbearBuiltin.FpsCounter;
 pub const useScrolling = forbearBuiltin.useScrolling;
+pub const ScrollBar = forbearBuiltin.ScrollBar;
 pub const Font = @import("font.zig");
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
@@ -415,6 +416,15 @@ pub const red = hex("#ff0000");
 pub const white = hex("#ffffff");
 pub const black = hex("#000000");
 // TODO: add all CSS named colors here
+
+pub fn rgb(r: u8, g: u8, b: u8) Vec4 {
+    return .{
+        @as(f32, r) / 255.0,
+        @as(f32, g) / 255.0,
+        @as(f32, b) / 255.0,
+        1.0,
+    };
+}
 
 pub fn hex(comptime value: []const u8) Vec4 {
     const digits = if (value.len > 0 and value[0] == '#') value[1..] else value;
