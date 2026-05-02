@@ -71,7 +71,9 @@ pub fn Content(activeChatper: *usize) !void {
                 .yJustification = .start,
             },
         })({
-            _ = forbear.useScrolling();
+            const scrollingOffset = forbear.useScrolling();
+
+            forbear.ScrollBar(scrollingOffset);
 
             Topbar();
 

@@ -33,14 +33,14 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
                 },
                 .translate = .{
                     0.0,
-                    forbear.useTransition(if (isHovering.*) -6.0 else 0.0, 0.1, forbear.easeInOut),
+                    forbear.useTransition(f32, if (isHovering.*) -6.0 else 0.0, 0.1, forbear.easeInOut),
                 },
                 .shadow = .{
                     .blurRadius = 0.0,
                     .spread = 0.0,
                     .color = .{ 0.0, 0.0, 0.0, 1.0 },
                     .offset = forbear.Offset.bottom(
-                        forbear.useTransition(if (isHovering.*) 6.0 else 0.0, 0.1, forbear.easeInOut),
+                        forbear.useTransition(f32, if (isHovering.*) 6.0 else 0.0, 0.1, forbear.easeInOut),
                     ),
                 },
                 .padding = switch (props.sizing) {

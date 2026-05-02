@@ -21,7 +21,9 @@ pub fn Sidebar() *const fn (void) void {
                 .color = Colors.sidebarText,
             },
         })({
-            _ = forbear.useScrolling();
+            const scrollingOffset = forbear.useScrolling();
+
+            forbear.ScrollBar(scrollingOffset);
 
             forbear.componentChildrenSlot();
         });

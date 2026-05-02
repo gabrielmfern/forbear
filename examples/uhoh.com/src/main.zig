@@ -40,7 +40,7 @@ fn App() !void {
                 .yJustification = .start,
             },
         })({
-            _ = forbear.useScrolling();
+            forbear.ScrollBar(forbear.useScrolling());
 
             forbear.FpsCounter();
 
