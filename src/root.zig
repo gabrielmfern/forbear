@@ -89,7 +89,7 @@ pub const FrameMeta = struct {
     /// Set of scope keys that were entered during this frame. At frame end,
     /// any entry in `scopeStates` whose key is missing here is pruned —
     /// matching React-style unmount semantics.
-    touchedScopeKeys: std.AutoHashMapUnmanaged(u64, void) = .empty,
+    touchedScopeKeys: std.ArrayList(u64) = .empty,
 
     previousPushedNodeIndex: ?usize = null,
     nodeParentStack: std.ArrayList(usize) = .empty,
@@ -495,7 +495,7 @@ fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
         .key = key,
         .useStateCursor = 0,
     });
-    try self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, key, {});
+    try self.frameMeta.?.touchedScopeKeys.append(self.frameMeta.?.arena, key);
 }
 
 fn popScope(expectedKind: ScopeKind) void {
@@ -547,7 +547,7 @@ pub fn useState(T: type, initialValue: T) *T {
             std.log.err("Failed to get or put a new scope state {}", .{err});
             @panic("Failed to get or put a new scope state");
         };
-        self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, state.key, {}) catch |err| {
+        self.frameMeta.?.touchedScopeKeys.append(self.frameMeta.?.arena, state.key) catch |err| {
             handleFrameError(err);
         };
         defer state.useStateCursor += 1;
@@ -654,7 +654,7 @@ fn frameEnd(block: void) anyerror!void {
     defer staleScopeKeys.deinit(frameMeta.arena);
     var scopeStateKeysIterator = self.scopeStates.keyIterator();
     while (scopeStateKeysIterator.next()) |keyPtr| {
-        if (!frameMeta.touchedScopeKeys.contains(keyPtr.*)) {
+        if (!std.mem.containsAtLeastScalar(u64, frameMeta.touchedScopeKeys.items, 1, keyPtr.*)) {
             staleScopeKeys.append(frameMeta.arena, keyPtr.*) catch |err| {
                 std.log.err("Failed to record stale scope key for cleanup: {}", .{err});
                 break;
@@ -950,29 +950,33 @@ pub noinline fn text(content: []const u8) void {
     var effectiveContent = content;
     // converts \r\n, and \n\r, or just \r to \n for simplicity later on
     if (std.mem.containsAtLeast(u8, content, 1, "\r")) {
-        var ownedContent = std.ArrayList(u8).fromOwnedSlice(arena.dupe(u8, content) catch |err| {
+        var ownedContent = arena.alloc(u8, content.len) catch |err| {
             handleFrameError(err);
             return;
-        });
+        };
         var i: usize = 0;
-        while (i < ownedContent.items.len) {
-            const character = ownedContent.items[i];
+        while (i < content.len) {
+            const character = content[i];
             if (character == '\r') {
-                if (i + 1 < ownedContent.items.len and ownedContent.items[i + 1] == '\n') {
-                    _ = ownedContent.orderedRemove(i);
-                    i += 1; // skip past the \n now at index i
-                } else {
-                    ownedContent.items[i] = '\n';
+                if (i + 1 < content.len and content[i + 1] == '\n') {
+                    ownedContent[i] = '\n';
                     i += 1;
+                } else {
+                    ownedContent[i] = '\n';
                 }
-            } else if (character == '\n' and i + 1 < ownedContent.items.len and ownedContent.items[i + 1] == '\r') {
-                _ = ownedContent.orderedRemove(i + 1);
-                i += 1;
+            } else if (character == '\n') {
+                if (i + 1 < content.len and content[i + 1] == '\r') {
+                    ownedContent[i] = '\n';
+                    i += 1;
+                } else {
+                    ownedContent[i] = '\n';
+                }
             } else {
-                i += 1;
+                ownedContent[i] = character;
             }
+            i += 1;
         }
-        effectiveContent = ownedContent.items;
+        effectiveContent = ownedContent;
     }
 
     const shapedGlyphs = style.font.shape(effectiveContent) catch |err| {
