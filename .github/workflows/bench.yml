@@ -1,0 +1,171 @@
+name: Benchmarks
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    name: benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with:
+          version: 0.16.0
+
+      - name: Install project dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            glslang-tools \
+            libvulkan-dev \
+            libwayland-bin \
+            libwayland-dev \
+            libxkbcommon-dev \
+            spirv-tools \
+            wayland-protocols
+
+      - name: Stash bench harness from PR head
+        run: |
+          mkdir -p .bench-harness
+          cp bench.zig .bench-harness/bench.zig
+          cp build.zig .bench-harness/build.zig
+          cp build.zig.zon .bench-harness/build.zig.zon
+
+      - name: Run benchmarks (before — PR base)
+        id: bench-before
+        continue-on-error: true
+        env:
+          NO_COLOR: "1"
+          TERM: dumb
+          CLICOLOR: "0"
+          CLICOLOR_FORCE: "0"
+        run: |
+          # `--force` makes the worktree match the target tree exactly,
+          # removing files that only exist on head. Path-limited checkout
+          # leaves a mixed workspace, so don't use it.
+          git -c advice.detachedHead=false checkout --force ${{ github.event.pull_request.base.sha }}
+          # Restore the bench harness from head so the bench step exists and
+          # the harness matches the API expected by `after`. Source under
+          # src/ stays at base — that's what we're actually measuring.
+          # `.bench-harness/` is untracked, so the force-checkout above
+          # preserved it.
+          cp .bench-harness/bench.zig bench.zig
+          cp .bench-harness/build.zig build.zig
+          cp .bench-harness/build.zig.zon build.zig.zon
+          set -o pipefail
+          zig build bench --release=fast 2>&1 | tee bench-before.txt
+
+      - name: Run benchmarks (after — PR head)
+        id: bench-after
+        env:
+          NO_COLOR: "1"
+          TERM: dumb
+          CLICOLOR: "0"
+          CLICOLOR_FORCE: "0"
+        run: |
+          git -c advice.detachedHead=false checkout --force ${{ github.event.pull_request.head.sha }}
+          set -o pipefail
+          zig build bench --release=fast 2>&1 | tee bench-after.txt
+
+      - name: Upload bench outputs
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: bench-output-${{ github.event.pull_request.head.sha }}
+          path: |
+            bench-before.txt
+            bench-after.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Comment benchmark results on PR
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const fs = require("fs");
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+            const marker = "<!-- bench-results -->";
+
+            // Strip ANSI escape sequences (CSI + OSC) and other C1 control
+            // bytes; zbench colorizes its output even when stdout isn't a tty
+            // on some versions, and GitHub renders the raw bytes as `�[0m`.
+            const stripAnsi = (s) => s
+              .replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, "")
+              .replace(/\x1B\[[0-?]*[ -\/]*[@-~]/g, "")
+              .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+            const readOrNull = (p) => {
+              try { return stripAnsi(fs.readFileSync(p, "utf8")); } catch { return null; }
+            };
+            const before = readOrNull("bench-before.txt");
+            const after = readOrNull("bench-after.txt");
+
+            const baseShort = process.env.BASE_SHA.slice(0, 7);
+            const headShort = process.env.HEAD_SHA.slice(0, 7);
+
+            const beforeOk = "${{ steps.bench-before.outcome }}" === "success";
+
+            const lines = [marker, "## Benchmark results", ""];
+            lines.push(`### Before (\`${baseShort}\`)`);
+            if (beforeOk && before) {
+              lines.push("```", before.trim(), "```");
+            } else {
+              lines.push(
+                "_Could not run benchmarks against the base commit (likely API drift or missing bench harness on base)._",
+              );
+              if (before) lines.push("<details><summary>build output</summary>", "", "```", before.trim(), "```", "</details>");
+            }
+            lines.push("", `### After (\`${headShort}\`)`);
+            lines.push("```", (after ?? "(no output)").trim(), "```");
+
+            const body = lines.join("\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: pullNumber,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => (c.body ?? "").includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pullNumber,
+                body,
+              });
+            }

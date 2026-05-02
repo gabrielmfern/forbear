@@ -49,6 +49,7 @@ const ScopeFrame = struct {
     kind: ScopeKind,
     key: u64,
     useStateCursor: usize,
+    states: *std.ArrayList([]align(@alignOf(usize)) u8),
 };
 
 const ComponentChildrenSlotState = struct {
@@ -86,11 +87,6 @@ pub const FrameMeta = struct {
     /// frame to keep per-component element-key namespacing stable.
     scopeStack: std.ArrayList(ScopeFrame) = .empty,
 
-    /// Set of scope keys that were entered during this frame. At frame end,
-    /// any entry in `scopeStates` whose key is missing here is pruned —
-    /// matching React-style unmount semantics.
-    touchedScopeKeys: std.AutoHashMapUnmanaged(u64, void) = .empty,
-
     previousPushedNodeIndex: ?usize = null,
     nodeParentStack: std.ArrayList(usize) = .empty,
     componentChildrenSlotStates: std.ArrayList(ComponentChildrenSlotState) = .empty,
@@ -125,13 +121,19 @@ viewportSize: Vec2,
 /// Persistent state storage keyed by scope key. A scope is either a
 /// component or an element — `useState` resolves to the nearest enclosing
 /// scope, so an entry here may belong to either kind.
-scopeStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
+scopeStates: std.AutoHashMap(u64, *StateBuffer),
+/// Set of scope keys that were entered during this frame. At frame end,
+/// any entry in `scopeStates` whose key is missing here is pruned —
+/// matching React-style unmount semantics.
+touchedScopeKeys: std.ArrayList(u64) = .empty,
 
 nodeTree: NodeTree,
 frameMeta: ?FrameMeta,
 
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
+
+const StateBuffer = std.ArrayList([]align(@alignOf(usize)) u8);
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Renderer) !void {
     if (context != null) {
@@ -477,6 +479,10 @@ pub fn useArena() std.mem.Allocator {
     return self.frameMeta.?.arena;
 }
 
+// TODO: find a better way to store state that doesn't require for all of them to have the same alignment.
+// eight is not enough of an alignment for complex types like Zig's Vector, for exmaple.
+//
+// See https://github.com/gabrielmfern/forbear/pull/83#discussion_r3177038640
 const stateAlignment: std.mem.Alignment = .@"8";
 
 fn currentScope() ?*ScopeFrame {
@@ -490,12 +496,19 @@ fn currentScope() ?*ScopeFrame {
 
 fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
     const self = getContext();
+    const statesResult = try self.scopeStates.getOrPut(key);
+    if (!statesResult.found_existing) {
+        const list = try self.allocator.create(StateBuffer);
+        list.* = .empty;
+        statesResult.value_ptr.* = list;
+    }
     try self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
         .kind = kind,
         .key = key,
         .useStateCursor = 0,
+        .states = statesResult.value_ptr.*,
     });
-    try self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, key, {});
+    try self.touchedScopeKeys.append(self.allocator, key);
 }
 
 fn popScope(expectedKind: ScopeKind) void {
@@ -542,35 +555,26 @@ pub fn useState(T: type, initialValue: T) *T {
         return &Static.dummy;
     }
 
-    if (currentScope()) |state| {
-        const stateResult = self.scopeStates.getOrPut(state.key) catch |err| {
-            std.log.err("Failed to get or put a new scope state {}", .{err});
-            @panic("Failed to get or put a new scope state");
-        };
-        self.frameMeta.?.touchedScopeKeys.put(self.frameMeta.?.arena, state.key, {}) catch |err| {
+    if (currentScope()) |scope| {
+        const states = scope.states;
+
+        self.touchedScopeKeys.append(self.allocator, scope.key) catch |err| {
             handleFrameError(err);
         };
-        defer state.useStateCursor += 1;
-        if (stateResult.found_existing) {
-            if (stateResult.value_ptr.items.len > state.useStateCursor) {
-                return @ptrCast(@alignCast(stateResult.value_ptr.*.items[state.useStateCursor]));
-            }
-        } else {
-            stateResult.value_ptr.* = .empty;
+        defer scope.useStateCursor += 1;
+        if (states.items.len > scope.useStateCursor) {
+            return @ptrCast(@alignCast(scope.states.items[scope.useStateCursor]));
         }
         const buffer = self.allocator.alignedAlloc(u8, stateAlignment, @sizeOf(T)) catch |err| {
             std.log.err("Failed to allocate new state {}", .{err});
             @panic("Failed to allocate new state");
         };
-        stateResult.value_ptr.*.append(self.allocator, buffer) catch |err| {
+        @memcpy(buffer, std.mem.asBytes(&initialValue));
+        scope.states.append(self.allocator, buffer) catch |err| {
             handleFrameError(err);
             return @ptrCast(@alignCast(buffer));
         };
-        @memcpy(
-            stateResult.value_ptr.*.items[state.useStateCursor],
-            std.mem.asBytes(&initialValue),
-        );
-        return @ptrCast(@alignCast(stateResult.value_ptr.*.items[state.useStateCursor]));
+        return @ptrCast(@alignCast(scope.states.items[scope.useStateCursor]));
     } else {
         if (!builtin.is_test) {
             std.log.err("You might be calling a hook (useState) outside of a component or element scope, and forbear cannot track things outside of one.", .{});
@@ -654,18 +658,20 @@ fn frameEnd(block: void) anyerror!void {
     defer staleScopeKeys.deinit(frameMeta.arena);
     var scopeStateKeysIterator = self.scopeStates.keyIterator();
     while (scopeStateKeysIterator.next()) |keyPtr| {
-        if (!frameMeta.touchedScopeKeys.contains(keyPtr.*)) {
+        if (!std.mem.containsAtLeastScalar(u64, self.touchedScopeKeys.items, 1, keyPtr.*)) {
             staleScopeKeys.append(frameMeta.arena, keyPtr.*) catch |err| {
                 std.log.err("Failed to record stale scope key for cleanup: {}", .{err});
                 break;
             };
         }
     }
+    self.touchedScopeKeys.clearRetainingCapacity();
     for (staleScopeKeys.items) |staleKey| {
         if (self.scopeStates.fetchRemove(staleKey)) |entry| {
             var states = entry.value;
             for (states.items) |buffer| self.allocator.free(buffer);
             states.deinit(self.allocator);
+            self.allocator.destroy(states);
         }
     }
 
@@ -950,29 +956,33 @@ pub noinline fn text(content: []const u8) void {
     var effectiveContent = content;
     // converts \r\n, and \n\r, or just \r to \n for simplicity later on
     if (std.mem.containsAtLeast(u8, content, 1, "\r")) {
-        var ownedContent = std.ArrayList(u8).fromOwnedSlice(arena.dupe(u8, content) catch |err| {
+        var ownedContent = arena.alloc(u8, content.len) catch |err| {
             handleFrameError(err);
             return;
-        });
+        };
         var i: usize = 0;
-        while (i < ownedContent.items.len) {
-            const character = ownedContent.items[i];
+        while (i < content.len) {
+            const character = content[i];
             if (character == '\r') {
-                if (i + 1 < ownedContent.items.len and ownedContent.items[i + 1] == '\n') {
-                    _ = ownedContent.orderedRemove(i);
-                    i += 1; // skip past the \n now at index i
-                } else {
-                    ownedContent.items[i] = '\n';
+                if (i + 1 < content.len and content[i + 1] == '\n') {
+                    ownedContent[i] = '\n';
                     i += 1;
+                } else {
+                    ownedContent[i] = '\n';
                 }
-            } else if (character == '\n' and i + 1 < ownedContent.items.len and ownedContent.items[i + 1] == '\r') {
-                _ = ownedContent.orderedRemove(i + 1);
-                i += 1;
+            } else if (character == '\n') {
+                if (i + 1 < content.len and content[i + 1] == '\r') {
+                    ownedContent[i] = '\n';
+                    i += 1;
+                } else {
+                    ownedContent[i] = '\n';
+                }
             } else {
-                i += 1;
+                ownedContent[i] = character;
             }
+            i += 1;
         }
-        effectiveContent = ownedContent.items;
+        effectiveContent = ownedContent;
     }
 
     const shapedGlyphs = style.font.shape(effectiveContent) catch |err| {
@@ -999,11 +1009,8 @@ pub noinline fn text(content: []const u8) void {
         const shapedGlyph = shapedGlyphs[glyphIndex];
         var advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
         const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
-        const glyphText = arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]) catch |err| {
-            handleFrameError(err);
-            return;
-        };
-        if (std.mem.eql(u8, glyphText, "\n")) {
+        const isLinebreak = std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, "\n");
+        if (isLinebreak) {
             advance[0] = -cursor[0];
             advance[1] += lineHeight;
             preBreakIndices.append(arena, glyphIndex - linebreakCount) catch |err| {
@@ -1016,7 +1023,7 @@ pub noinline fn text(content: []const u8) void {
                 .index = @intCast(shapedGlyph.index),
                 .position = cursor + offset,
 
-                .text = glyphText,
+                .textBuf = shapedGlyph.utf8.Encoded,
 
                 .advance = advance,
                 .offset = offset,
@@ -1026,7 +1033,7 @@ pub noinline fn text(content: []const u8) void {
         cursor += advance;
         maxSize[0] = @max(maxSize[0], cursor[0]);
         if (style.textWrapping == .word) {
-            if (std.mem.eql(u8, glyphText, " ") or std.mem.eql(u8, glyphText, "\n")) {
+            if (std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, " ") or isLinebreak) {
                 wordAdvance = @splat(0.0);
                 maxSize[1] += lineHeight;
             } else {
@@ -1544,12 +1551,14 @@ pub fn deinit() void {
 
     var scopeStatesIterator = self.scopeStates.valueIterator();
     while (scopeStatesIterator.next()) |states| {
-        for (states.items) |state| {
+        for (states.*.items) |state| {
             self.allocator.free(state);
         }
-        states.deinit(self.allocator);
+        states.*.deinit(self.allocator);
+        self.allocator.destroy(states.*);
     }
     self.scopeStates.deinit();
+    self.touchedScopeKeys.deinit(self.allocator);
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {

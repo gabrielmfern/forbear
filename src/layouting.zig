@@ -414,7 +414,7 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
 
                 glyph.position = base + cursor + glyph.offset;
                 cursor += glyph.advance;
-                if (std.mem.eql(u8, glyph.text, " ")) {
+                if (std.mem.startsWith(u8, &glyph.textBuf, " ")) {
                     lastSpaceInfoOpt = .{
                         .index = index,
                         .position = glyph.position,

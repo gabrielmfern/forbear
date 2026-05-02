@@ -429,7 +429,7 @@ fn expectTextLineCount(content: []const u8, expectedLines: usize) !void {
         defer arena.free(seen);
         @memset(seen, false);
         for (textNode.glyphs.?.slice) |glyph| {
-            if (std.mem.eql(u8, glyph.text, "\n")) continue;
+            if (std.mem.startsWith(u8, &glyph.textBuf, "\n")) continue;
             const ratio = glyph.position[1] / lineHeight;
             const rounded: usize = @intFromFloat(@round(ratio));
             try std.testing.expect(rounded < expectedLines);
