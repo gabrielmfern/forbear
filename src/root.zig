@@ -49,6 +49,7 @@ const ScopeFrame = struct {
     kind: ScopeKind,
     key: u64,
     useStateCursor: usize,
+    states: *std.ArrayList([]align(@alignOf(usize)) u8),
 };
 
 const ComponentChildrenSlotState = struct {
@@ -120,7 +121,7 @@ viewportSize: Vec2,
 /// Persistent state storage keyed by scope key. A scope is either a
 /// component or an element — `useState` resolves to the nearest enclosing
 /// scope, so an entry here may belong to either kind.
-scopeStates: std.AutoHashMap(u64, std.ArrayList([]align(@alignOf(usize)) u8)),
+scopeStates: std.AutoHashMap(u64, *StateBuffer),
 /// Set of scope keys that were entered during this frame. At frame end,
 /// any entry in `scopeStates` whose key is missing here is pruned —
 /// matching React-style unmount semantics.
@@ -131,6 +132,8 @@ frameMeta: ?FrameMeta,
 
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
+
+const StateBuffer = std.ArrayList([]align(@alignOf(usize)) u8);
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Renderer) !void {
     if (context != null) {
@@ -416,29 +419,29 @@ pub const black = hex("#000000");
 pub fn hex(comptime value: []const u8) Vec4 {
     const digits = if (value.len > 0 and value[0] == '#') value[1..] else value;
     const r = @as(f32, std.fmt.parseInt(
-        u8,
-        digits[0..2],
-        16,
+            u8,
+            digits[0..2],
+            16,
     ) catch @compileError("can't parse red channel")) / 255.0;
     const g = @as(f32, std.fmt.parseInt(
-        u8,
-        digits[2..4],
-        16,
+            u8,
+            digits[2..4],
+            16,
     ) catch @compileError("can't parse green channel")) / 255.0;
     const b = @as(f32, std.fmt.parseInt(
-        u8,
-        digits[4..6],
-        16,
+            u8,
+            digits[4..6],
+            16,
     ) catch @compileError("can't parse blue channel")) / 255.0;
     const a = if (digits.len >= 8)
         @as(f32, std.fmt.parseInt(
-            u8,
-            digits[6..8],
-            16,
+                u8,
+                digits[6..8],
+                16,
         ) catch @compileError("can't parse alpha channel")) / 255.0
-    else
-        1.0;
-    return .{ r, g, b, a };
+        else
+            1.0;
+        return .{ r, g, b, a };
 }
 
 pub fn useViewportSize() Vec2 {
@@ -489,10 +492,17 @@ fn currentScope() ?*ScopeFrame {
 
 fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
     const self = getContext();
+    const statesResult = try self.scopeStates.getOrPut(key);
+    if (!statesResult.found_existing) {
+        const list = try self.allocator.create(StateBuffer);
+        list.* = .empty;
+        statesResult.value_ptr.* = list;
+    }
     try self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
         .kind = kind,
         .key = key,
         .useStateCursor = 0,
+        .states = statesResult.value_ptr.*,
     });
     try self.touchedScopeKeys.append(self.allocator, key);
 }
@@ -542,34 +552,28 @@ pub fn useState(T: type, initialValue: T) *T {
     }
 
     if (currentScope()) |scope| {
-        const stateResult = self.scopeStates.getOrPut(scope.key) catch |err| {
-            std.log.err("Failed to get or put a new scope state {}", .{err});
-            @panic("Failed to get or put a new scope state");
-        };
+        const states = scope.states;
+
         self.touchedScopeKeys.append(self.allocator, scope.key) catch |err| {
             handleFrameError(err);
         };
         defer scope.useStateCursor += 1;
-        if (stateResult.found_existing) {
-            if (stateResult.value_ptr.items.len > scope.useStateCursor) {
-                return @ptrCast(@alignCast(stateResult.value_ptr.*.items[scope.useStateCursor]));
-            }
-        } else {
-            stateResult.value_ptr.* = .empty;
+        if (states.items.len > scope.useStateCursor) {
+            return @ptrCast(@alignCast(scope.states.items[scope.useStateCursor]));
         }
         const buffer = self.allocator.alignedAlloc(u8, stateAlignment, @sizeOf(T)) catch |err| {
             std.log.err("Failed to allocate new state {}", .{err});
             @panic("Failed to allocate new state");
         };
-        stateResult.value_ptr.*.append(self.allocator, buffer) catch |err| {
+        scope.states.append(self.allocator, buffer) catch |err| {
             handleFrameError(err);
             return @ptrCast(@alignCast(buffer));
         };
         @memcpy(
-            stateResult.value_ptr.*.items[scope.useStateCursor],
+            scope.states.items[scope.useStateCursor],
             std.mem.asBytes(&initialValue),
         );
-        return @ptrCast(@alignCast(stateResult.value_ptr.*.items[scope.useStateCursor]));
+        return @ptrCast(@alignCast(scope.states.items[scope.useStateCursor]));
     } else {
         if (!builtin.is_test) {
             std.log.err("You might be calling a hook (useState) outside of a component or element scope, and forbear cannot track things outside of one.", .{});
@@ -666,6 +670,7 @@ fn frameEnd(block: void) anyerror!void {
             var states = entry.value;
             for (states.items) |buffer| self.allocator.free(buffer);
             states.deinit(self.allocator);
+            self.allocator.destroy(states);
         }
     }
 
@@ -1545,10 +1550,11 @@ pub fn deinit() void {
 
     var scopeStatesIterator = self.scopeStates.valueIterator();
     while (scopeStatesIterator.next()) |states| {
-        for (states.items) |state| {
+        for (states.*.items) |state| {
             self.allocator.free(state);
         }
-        states.deinit(self.allocator);
+        states.*.deinit(self.allocator);
+        self.allocator.destroy(states.*);
     }
     self.scopeStates.deinit();
     self.touchedScopeKeys.deinit(self.allocator);
