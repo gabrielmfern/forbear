@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    name: build debug executables
+    name: pr debug executables
     runs-on: ubuntu-latest
 
     steps:
