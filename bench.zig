@@ -117,7 +117,7 @@ fn LayoutBenchmark(comptime nodeCount: usize) fn (std.mem.Allocator) void {
             forbear.registerFont("Inter", @embedFile("Inter.ttf")) catch unreachable;
 
             const meta = forbear.FrameMeta{
-                .arena = arena,
+                .arena = arena.allocator(),
                 .viewportSize = .{ 1920, 1080 },
                 .baseStyle = .{
                     .font = forbear.useFont("Inter") catch unreachable,
