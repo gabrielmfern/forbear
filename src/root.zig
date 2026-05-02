@@ -999,11 +999,8 @@ pub noinline fn text(content: []const u8) void {
         const shapedGlyph = shapedGlyphs[glyphIndex];
         var advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
         const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
-        const glyphText = arena.dupe(u8, shapedGlyph.utf8.Encoded[0..@intCast(shapedGlyph.utf8.EncodedLength)]) catch |err| {
-            handleFrameError(err);
-            return;
-        };
-        if (std.mem.eql(u8, glyphText, "\n")) {
+        const isLinebreak = std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, "\n");
+        if (isLinebreak) {
             advance[0] = -cursor[0];
             advance[1] += lineHeight;
             preBreakIndices.append(arena, glyphIndex - linebreakCount) catch |err| {
@@ -1016,7 +1013,7 @@ pub noinline fn text(content: []const u8) void {
                 .index = @intCast(shapedGlyph.index),
                 .position = cursor + offset,
 
-                .text = glyphText,
+                .textBuf = shapedGlyph.utf8.Encoded,
 
                 .advance = advance,
                 .offset = offset,
@@ -1026,7 +1023,7 @@ pub noinline fn text(content: []const u8) void {
         cursor += advance;
         maxSize[0] = @max(maxSize[0], cursor[0]);
         if (style.textWrapping == .word) {
-            if (std.mem.eql(u8, glyphText, " ") or std.mem.eql(u8, glyphText, "\n")) {
+            if (std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, " ") or isLinebreak) {
                 wordAdvance = @splat(0.0);
                 maxSize[1] += lineHeight;
             } else {
