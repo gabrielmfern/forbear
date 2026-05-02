@@ -106,18 +106,21 @@ fn buildLayoutTree(comptime nodeCount: usize) void {
     });
 }
 
-fn benchLayoutGeneric(comptime nodeCount: usize) fn (std.mem.Allocator) void {
+fn LayoutBenchmark(comptime nodeCount: usize) fn (std.mem.Allocator) void {
     return struct {
-        fn run(alloc: std.mem.Allocator) void {
-            _ = alloc;
-            _ = gArena.reset(.retain_capacity);
-            const arena = gArena.allocator();
+        fn run(allocator: std.mem.Allocator) void {
+            var arena = std.heap.ArenaAllocator.init(allocator);
+            defer arena.deinit();
+            forbear.init(allocator, std.testing.io, undefined) catch unreachable;
+            defer forbear.deinit();
+
+            forbear.registerFont("Inter", @embedFile("Inter.ttf")) catch unreachable;
 
             const meta = forbear.FrameMeta{
                 .arena = arena,
                 .viewportSize = .{ 1920, 1080 },
                 .baseStyle = .{
-                    .font = gFont,
+                    .font = forbear.useFont("Inter") catch unreachable,
                     .color = .{ 0, 0, 0, 1 },
                     .fontSize = 16,
                     .fontWeight = 400,
@@ -134,6 +137,21 @@ fn benchLayoutGeneric(comptime nodeCount: usize) fn (std.mem.Allocator) void {
             })) catch unreachable;
         }
     }.run;
+}
+
+test "bench layout" {
+    var bench = zbench.Benchmark.init(std.testing.allocator, .{});
+    defer bench.deinit();
+
+    try bench.add("layout() 27 nodes", LayoutBenchmark(27), .{});
+    try bench.add("layout() 135 nodes", LayoutBenchmark(135), .{});
+    try bench.add("layout() 500 nodes", LayoutBenchmark(500), .{});
+    try bench.add("layout() 1000 nodes", LayoutBenchmark(1000), .{});
+    try bench.add("layout() 2641 nodes", LayoutBenchmark(2641), .{});
+    try bench.add("layout() 5000 nodes", LayoutBenchmark(5000), .{});
+    try bench.add("layout() 10000 nodes", LayoutBenchmark(10000), .{});
+
+    try bench.run(std.testing.io, std.Io.File.stdout());
 }
 
 // ~1000 useState calls spread across mixed component+element scopes at
@@ -213,55 +231,6 @@ fn StateSection(comptime tag: []const u8) void {
     });
 }
 
-fn buildStateTree() void {
-    forbear.component(.{ .text = "StateBenchApp" })({
-        _ = forbear.useState(u32, 0);
-        _ = forbear.useState(f32, 0.0);
-        _ = forbear.useState(bool, false);
-        _ = forbear.useState(u64, 0);
-
-        forbear.element(.{ .style = .{
-            .width = .{ .grow = 1.0 },
-            .height = .{ .grow = 1.0 },
-            .direction = .vertical,
-        } })({
-            _ = forbear.useState(u32, 0);
-            _ = forbear.useState(f32, 0.0);
-            _ = forbear.useState(bool, false);
-            _ = forbear.useState(u64, 0);
-
-            inline for (0..5) |i| {
-                StateSection("s" ++ std.fmt.comptimePrint("{d}", .{i}));
-            }
-        });
-    });
-}
-
-test "bench layout" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
-    defer forbear.deinit();
-
-    try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
-    gFont = try forbear.useFont("Inter");
-
-    var arenaAlloc = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arenaAlloc.deinit();
-    gArena = &arenaAlloc;
-
-    var bench = zbench.Benchmark.init(std.testing.allocator, .{});
-    defer bench.deinit();
-
-    try bench.add("layout() 27 nodes", benchLayoutGeneric(27), .{});
-    try bench.add("layout() 135 nodes", benchLayoutGeneric(135), .{});
-    try bench.add("layout() 500 nodes", benchLayoutGeneric(500), .{});
-    try bench.add("layout() 1000 nodes", benchLayoutGeneric(1000), .{});
-    try bench.add("layout() 2641 nodes", benchLayoutGeneric(2641), .{});
-    try bench.add("layout() 5000 nodes", benchLayoutGeneric(5000), .{});
-    try bench.add("layout() 10000 nodes", benchLayoutGeneric(10000), .{});
-
-    try bench.run(std.testing.io, std.Io.File.stdout());
-}
-
 fn buildUseStateTree(comptime stateCount: usize) void {
     @setEvalBranchQuota(1_000_000);
     forbear.component(.{
@@ -323,16 +292,19 @@ fn buildUseStateTree(comptime stateCount: usize) void {
 
 fn UseStateBenchmark(comptime stateCount: usize) fn (std.mem.Allocator) void {
     return struct {
-        fn run(alloc: std.mem.Allocator) void {
-            _ = alloc;
-            _ = gArena.reset(.retain_capacity);
-            const arena = gArena.allocator();
+        fn run(allocator: std.mem.Allocator) void {
+            var arena = std.heap.ArenaAllocator.init(allocator);
+            defer arena.deinit();
+            forbear.init(allocator, std.testing.io, undefined) catch unreachable;
+            defer forbear.deinit();
+
+            forbear.registerFont("Inter", @embedFile("Inter.ttf")) catch unreachable;
 
             const meta = forbear.FrameMeta{
-                .arena = arena,
+                .arena = arena.allocator(),
                 .viewportSize = .{ 1920, 1080 },
                 .baseStyle = .{
-                    .font = gFont,
+                    .font = forbear.useFont("Inter") catch unreachable,
                     .color = .{ 0, 0, 0, 1 },
                     .fontSize = 16,
                     .fontWeight = 400,
@@ -351,16 +323,6 @@ fn UseStateBenchmark(comptime stateCount: usize) fn (std.mem.Allocator) void {
 }
 
 test "bench useState" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
-    defer forbear.deinit();
-
-    try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
-    gFont = try forbear.useFont("Inter");
-
-    var arenaAlloc = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arenaAlloc.deinit();
-    gArena = &arenaAlloc;
-
     var bench = zbench.Benchmark.init(std.testing.allocator, .{});
     defer bench.deinit();
 
