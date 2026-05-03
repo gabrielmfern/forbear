@@ -126,6 +126,9 @@ pub fn ScrollBar(state: *ScrollingState) void {
             parentMeasurement.size[0] - padding.x[0] - padding.x[1] - border.x[0] - border.x[1],
             parentMeasurement.size[1] - padding.y[0] - padding.y[1] - border.y[0] - border.y[1],
         };
+        // Track spans the parent's full height between its borders, so it
+        // doesn't visually shrink with vertical padding.
+        const trackHeight = parentMeasurement.size[1] - border.y[0] - border.y[1];
         if (parentMeasurement.contentSize[1] > innerSize[1]) {
             forbear.component(.{})({
                 const isHovered = forbear.useState(bool, false);
@@ -166,9 +169,9 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         // of padding/border. `.relative` is measured from the
                         // content box, so we step back out by the right
                         // padding+border and then inward by `scrollbarWidth`.
-                        .placement = .{ .relative = .{ innerSize[0] + padding.x[1] + border.x[1] - scrollbarWidth, 0.0 } },
+                        .placement = .{ .relative = .{ innerSize[0] + padding.x[1] + border.x[1] - scrollbarWidth, -padding.y[0] } },
                         .width = .{ .fixed = scrollbarWidth },
-                        .height = .{ .fixed = innerSize[1] },
+                        .height = .{ .fixed = trackHeight },
                         .cursor = .default,
                         .zIndex = 10,
                     },
@@ -179,7 +182,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         .style = .{
                             .width = .{ .grow = 1.0 },
                             .height = .{
-                                .fixed = innerSize[1] * innerSize[1] / parentMeasurement.contentSize[1],
+                                .fixed = trackHeight * innerSize[1] / parentMeasurement.contentSize[1],
                             },
                             .placement = .{
                                 .relative = Vec2{
@@ -187,7 +190,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                                     if (state.effectiveOffset[1] == 0)
                                         0.0
                                     else
-                                        innerSize[1] * (state.effectiveOffset[1] / parentMeasurement.contentSize[1]),
+                                        trackHeight * (state.effectiveOffset[1] / parentMeasurement.contentSize[1]),
                                 },
                             },
                             .borderRadius = 6.0,
@@ -216,10 +219,10 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         isDragging.* = false;
                     }
                     if (isDragging.*) {
-                        const trackTop = parentMeasurement.position[1] + border.y[0] + padding.y[0];
+                        const trackTop = parentMeasurement.position[1] + border.y[0];
                         const localY = forbear.useMousePosition()[1] - trackTop;
-                        const thumbHeight = innerSize[1] * innerSize[1] / parentMeasurement.contentSize[1];
-                        const target = (localY - thumbHeight / 2.0) * parentMeasurement.contentSize[1] / innerSize[1];
+                        const thumbHeight = trackHeight * innerSize[1] / parentMeasurement.contentSize[1];
+                        const target = (localY - thumbHeight / 2.0) * parentMeasurement.contentSize[1] / trackHeight;
                         state.offset[1] = target;
                         state.effectiveOffset[1] = target;
                     }
