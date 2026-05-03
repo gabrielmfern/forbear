@@ -59,7 +59,9 @@
 - [x] per element scrolling
     - I want to have a Scrolling component the user can just plop into their code and it just works 🤔
     - Another option is a useScrolling
-- [ ] scroll bar 🤔
+- [x] scroll bar 🤔
+- [ ] add code blocks
+- [ ] finishg bringing over all of the content into the app
 
 ## problems
 
