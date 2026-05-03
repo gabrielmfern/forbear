@@ -1478,6 +1478,11 @@ pub fn update() !void {
     self.lastUpdateTime = timestamp;
 }
 
+pub fn isMouseButtonPressed() bool {
+    const self = getContext();
+    return self.mouseButtonPressed;
+}
+
 /// Returns some layouting values of the current node from the last frame
 pub fn useNodeMeasurement() ?Node.Measurement {
     const self = getContext();

@@ -128,11 +128,11 @@ pub fn ScrollBar(state: *ScrollingState) void {
         };
         if (parentMeasurement.contentSize[1] > innerSize[1]) {
             forbear.component(.{})({
-                const expanded = forbear.useState(bool, false);
+                const isHovered = forbear.useState(bool, false);
 
                 const scrollbarWidth = forbear.useTransition(
                     f32,
-                    if (expanded.*) 11.0 else 7.0,
+                    if (isHovered.*) 11.0 else 7.0,
                     0.15,
                     forbear.easeOut,
                 );
@@ -143,7 +143,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         .background = .{
                             .color = forbear.useTransition(
                                 Vec4,
-                                if (expanded.*)
+                                if (isHovered.*)
                                     forbear.rgb(43.89, 43.89, 43.89)
                                 else
                                     .{ 0.0, 0.0, 0.0, 0.0 },
@@ -155,7 +155,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         .borderWidth = .left(1.0),
                         .borderColor = forbear.useTransition(
                             Vec4,
-                            if (expanded.*)
+                            if (isHovered.*)
                                 forbear.rgb(60.824, 60.824, 60.824)
                             else
                                 .{ 0.0, 0.0, 0.0, 0.0 },
@@ -173,17 +173,6 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         .zIndex = 10,
                     },
                 })({
-                    if (forbear.on(.mouseEnter)) {
-                        expanded.* = true;
-                    }
-                    if (forbear.on(.mouseLeave)) {
-                        expanded.* = false;
-                    }
-                    if (forbear.on(.mouseDown)) {
-                        const mousePosition = forbear.useMousePosition();
-                        const thumbHeight = innerSize[1] * innerSize[1] / parentMeasurement.contentSize[1];
-                        state.offset[1] = (mousePosition[1] - thumbHeight / 2.0) * parentMeasurement.contentSize[1] / innerSize[1];
-                    }
 
                     // thumb
                     forbear.element(.{
@@ -205,13 +194,35 @@ pub fn ScrollBar(state: *ScrollingState) void {
                             .background = .{
                                 .color = forbear.useTransition(
                                     Vec4,
-                                    if (expanded.*) forbear.hex("#D0D0D0") else forbear.hex("#8D8D8D"),
+                                    if (isHovered.*) forbear.hex("#D0D0D0") else forbear.hex("#8D8D8D"),
                                     0.15,
                                     forbear.easeOut,
                                 ),
                             },
                         },
                     })({});
+
+                    const isDragging = forbear.useState(bool, false);
+                    if (forbear.on(.mouseEnter)) {
+                        isHovered.* = true;
+                    }
+                    if (forbear.on(.mouseLeave)) {
+                        isHovered.* = false;
+                    }
+                    if (forbear.on(.mouseDown)) {
+                        isDragging.* = true;
+                    }
+                    if (!forbear.isMouseButtonPressed()) {
+                        isDragging.* = false;
+                    }
+                    if (isDragging.*) {
+                        const trackTop = parentMeasurement.position[1] + border.y[0] + padding.y[0];
+                        const localY = forbear.useMousePosition()[1] - trackTop;
+                        const thumbHeight = innerSize[1] * innerSize[1] / parentMeasurement.contentSize[1];
+                        const target = (localY - thumbHeight / 2.0) * parentMeasurement.contentSize[1] / innerSize[1];
+                        state.offset[1] = target;
+                        state.effectiveOffset[1] = target;
+                    }
                 });
             });
         }
