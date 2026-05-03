@@ -442,11 +442,11 @@ pub const white = hex("#ffffff");
 pub const black = hex("#000000");
 // TODO: add all CSS named colors here
 
-pub fn rgb(r: u8, g: u8, b: u8) Vec4 {
+pub fn rgb(r: f32, g: f32, b: f32) Vec4 {
     return .{
-        @as(f32, r) / 255.0,
-        @as(f32, g) / 255.0,
-        @as(f32, b) / 255.0,
+        r / 255.0,
+        g / 255.0,
+        b / 255.0,
         1.0,
     };
 }
@@ -479,6 +479,11 @@ pub fn hex(comptime value: []const u8) Vec4 {
             1.0;
         break :blk Vec4{ r, g, b, a };
     };
+}
+
+pub fn useMousePosition() Vec2 {
+    const self = getContext();
+    return self.mousePosition;
 }
 
 pub fn useViewportSize() Vec2 {

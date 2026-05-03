@@ -132,9 +132,33 @@ pub fn ScrollBar(state: *ScrollingState) void {
                 // track
                 forbear.element(.{
                     .style = .{
+                        .background = .{
+                            .color = forbear.useTransition(
+                                Vec4,
+                                if (expanded.*)
+                                    forbear.rgb(43.89, 43.89, 43.89)
+                                else
+                                    .{ 0.0, 0.0, 0.0, 0.0 },
+                                0.15,
+                                forbear.easeOut,
+                            ),
+                        },
+                        .borderStyle = .solid,
+                        .borderWidth = .left(1.0),
+                        .borderColor = forbear.useTransition(
+                            Vec4,
+                            if (expanded.*)
+                                forbear.rgb(60.824, 60.824, 60.824)
+                            else
+                                .{ 0.0, 0.0, 0.0, 0.0 },
+                            0.15,
+                            forbear.easeOut,
+                        ),
                         .placement = .{ .relative = .{ parentMeasurement.size[0] - scrollbarWidth, 0.0 } },
                         .width = .{ .fixed = scrollbarWidth },
                         .height = .{ .fixed = parentMeasurement.size[1] },
+                        .cursor = .default,
+                        .zIndex = 10,
                     },
                 })({
                     if (forbear.on(.mouseEnter)) {
@@ -143,19 +167,26 @@ pub fn ScrollBar(state: *ScrollingState) void {
                     if (forbear.on(.mouseLeave)) {
                         expanded.* = false;
                     }
+                    if (forbear.on(.mouseDown)) {
+                        const mousePosition = forbear.useMousePosition();
+                        const thumbHeight = parentMeasurement.size[1] * parentMeasurement.size[1] / parentMeasurement.contentSize[1];
+                        state.offset[1] = (mousePosition[1] - thumbHeight / 2.0) * parentMeasurement.contentSize[1] / parentMeasurement.size[1];
+                    }
 
                     // thumb
                     forbear.element(.{
                         .style = .{
                             .width = .{ .grow = 1.0 },
-                            .height = .{ .fixed = parentMeasurement.size[1] * parentMeasurement.size[1] / parentMeasurement.contentSize[1] },
+                            .height = .{
+                                .fixed = parentMeasurement.size[1] * parentMeasurement.size[1] / parentMeasurement.contentSize[1],
+                            },
                             .placement = .{
                                 .relative = Vec2{
-                                    0,
-                                    if (scrollingOffset[1] == 0)
+                                    if (expanded.*) 1.0 else 0.0,
+                                    if (state.effectiveOffset[1] == 0)
                                         0.0
                                     else
-                                        parentMeasurement.size[1] * (scrollingOffset[1] / parentMeasurement.contentSize[1]),
+                                        parentMeasurement.size[1] * (state.effectiveOffset[1] / parentMeasurement.contentSize[1]),
                                 },
                             },
                             .borderRadius = 6.0,
@@ -168,11 +199,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                                 ),
                             },
                         },
-                    })({
-                        if (forbear.on(.mouseMove)) |delta| {
-                            scrollingOffset[1] += delta[1] * parentMeasurement.contentSize[1] / parentMeasurement.size[1];
-                        }
-                    });
+                    })({});
                 });
             });
         }
