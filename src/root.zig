@@ -442,6 +442,15 @@ pub const white = hex("#ffffff");
 pub const black = hex("#000000");
 // TODO: add all CSS named colors here
 
+pub fn rgba(r: f32, g: f32, b: f32, a: f32) Vec4 {
+    return .{
+        r / 255.0,
+        g / 255.0,
+        b / 255.0,
+        a / 255.0,
+    };
+}
+
 pub fn rgb(r: f32, g: f32, b: f32) Vec4 {
     return .{
         r / 255.0,
