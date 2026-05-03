@@ -2,9 +2,7 @@ const std = @import("std");
 const forbear = @import("forbear");
 
 fn CounterExample() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         const count = forbear.useState(u32, 0);
 
         forbear.element(.{ .style = .{
@@ -36,9 +34,7 @@ fn CounterExample() void {
 }
 
 fn App() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         const viewportSize = forbear.useViewportSize();
         const isHovering = forbear.useState(bool, false);
 

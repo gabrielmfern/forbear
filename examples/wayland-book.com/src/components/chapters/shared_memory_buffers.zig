@@ -4,9 +4,7 @@ const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
 
 pub fn SharedMemoryBuffers() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },

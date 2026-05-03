@@ -6,9 +6,7 @@ const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
 
 pub fn FpsCounter() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         const deltaTime = forbear.useDeltaTime();
         const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
 
@@ -119,7 +117,7 @@ pub fn useScrolling() *ScrollingState {
 pub fn ScrollBar(state: *ScrollingState) void {
     if (forbear.useNodeMeasurement()) |parentMeasurement| {
         if (parentMeasurement.contentSize[1] > parentMeasurement.size[1]) {
-            forbear.component(.{ .sourceLocation = @src() })({
+            forbear.component(.{})({
                 const expanded = forbear.useState(bool, false);
 
                 const scrollbarWidth = forbear.useTransition(

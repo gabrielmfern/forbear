@@ -7,9 +7,7 @@ pub const ButtonProps = struct {
 };
 
 pub fn Button(props: ButtonProps) *const fn (void) void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{})({

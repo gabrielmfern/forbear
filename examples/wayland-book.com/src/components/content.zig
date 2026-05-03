@@ -58,9 +58,7 @@ fn Topbar() void {
 }
 
 pub fn Content(activeChatper: *usize) !void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         const viewport = forbear.useViewportSize();
         forbear.element(.{
             .style = .{

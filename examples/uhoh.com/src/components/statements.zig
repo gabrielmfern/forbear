@@ -3,9 +3,7 @@ const colors = @import("../colors.zig");
 const Section = @import("section.zig").Section;
 
 fn Statement(style: forbear.Style, text: []const u8) !void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = style.overwrite(.{
                 .direction = .horizontal,
@@ -26,9 +24,7 @@ fn Statement(style: forbear.Style, text: []const u8) !void {
 }
 
 pub fn Statements() !void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         Section(.{
             .yJustification = .start,
             .padding = .block(30.0),

@@ -632,9 +632,7 @@ fn endNoop(block: void) void {
 /// A thin wrapper around `element` that includes some aspect ratio handling
 /// definition logic in a way that feels more intuitve
 pub fn Image(style: Style, img: *ImageType) void {
-    component(.{
-        .sourceLocation = @src(),
-    })({
+    component(.{})({
         var complementedStyle = style;
         const imageWidth: f32 = @floatFromInt(img.width);
         const imageHeight: f32 = @floatFromInt(img.height);
@@ -936,9 +934,7 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 
     const arena = self.frameMeta.?.arena;
 
-    component(.{
-        .sourceLocation = @src(),
-    })({
+    component(.{})({
         text(std.fmt.allocPrint(arena, fmt, args) catch |err| blk: {
             handleFrameError(err);
             break :blk "N/A";
@@ -947,9 +943,7 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn BreakLine() void {
-    component(.{
-        .sourceLocation = @src(),
-    })({
+    component(.{})({
         text("\n");
     });
 }
@@ -1222,12 +1216,11 @@ fn componentEnd(block: void) void {
     popScope(.component);
 }
 
-const ComponentKey = union(enum) {
-    text: []const u8,
-    sourceLocation: std.builtin.SourceLocation,
+pub const ComponentProps = struct {
+    key: ?[]const u8 = null,
 };
 
-pub fn component(key: ComponentKey) *const fn (void) void {
+pub inline fn component(props: ComponentProps) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -1243,9 +1236,10 @@ pub fn component(key: ComponentKey) *const fn (void) void {
         hasher.update(std.mem.asBytes(&parentComponentKey));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
-    switch (key) {
-        .text => hasher.update(key.text),
-        .sourceLocation => hasher.update(std.mem.asBytes(&key.sourceLocation)),
+    if (props.key) |key| {
+        hasher.update(key);
+    } else {
+        hasher.update(std.mem.asBytes(&@returnAddress()));
     }
 
     const componentKey = hasher.final();

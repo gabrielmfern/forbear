@@ -3,9 +3,7 @@ const forbear = @import("forbear");
 const Colors = @import("../colors.zig");
 
 pub fn Sidebar() *const fn (void) void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         const viewport = forbear.useViewportSize();
         forbear.element(.{
             .style = .{
@@ -33,9 +31,7 @@ pub fn Sidebar() *const fn (void) void {
 }
 
 pub fn SidebarDivider() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },
@@ -54,12 +50,7 @@ pub const SidebarItemProps = struct {
 };
 
 pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
-    forbear.component(
-        if (props.key) |key|
-            .{ .text = key }
-        else
-            .{ .sourceLocation = @src() },
-    )({
+    forbear.component(.{ .key = props.key })({
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{
