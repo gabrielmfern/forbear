@@ -116,7 +116,17 @@ pub fn useScrolling() *ScrollingState {
 
 pub fn ScrollBar(state: *ScrollingState) void {
     if (forbear.useNodeMeasurement()) |parentMeasurement| {
-        if (parentMeasurement.contentSize[1] > parentMeasurement.size[1]) {
+        // `.relative` placement is measured from the parent's content box
+        // (inside its border + padding), so subtract those insets from the
+        // parent's outer size to get the box the scrollbar must fit into.
+        const parentNode = forbear.getParentNode() orelse return;
+        const padding = parentNode.style.padding;
+        const border = parentNode.style.borderWidth;
+        const innerSize = Vec2{
+            parentMeasurement.size[0] - padding.x[0] - padding.x[1] - border.x[0] - border.x[1],
+            parentMeasurement.size[1] - padding.y[0] - padding.y[1] - border.y[0] - border.y[1],
+        };
+        if (parentMeasurement.contentSize[1] > innerSize[1]) {
             forbear.component(.{})({
                 const expanded = forbear.useState(bool, false);
 
@@ -152,9 +162,13 @@ pub fn ScrollBar(state: *ScrollingState) void {
                             0.15,
                             forbear.easeOut,
                         ),
-                        .placement = .{ .relative = .{ parentMeasurement.size[0] - scrollbarWidth, 0.0 } },
+                        // Anchor against the parent's outer right edge regardless
+                        // of padding/border. `.relative` is measured from the
+                        // content box, so we step back out by the right
+                        // padding+border and then inward by `scrollbarWidth`.
+                        .placement = .{ .relative = .{ innerSize[0] + padding.x[1] + border.x[1] - scrollbarWidth, 0.0 } },
                         .width = .{ .fixed = scrollbarWidth },
-                        .height = .{ .fixed = parentMeasurement.size[1] },
+                        .height = .{ .fixed = innerSize[1] },
                         .cursor = .default,
                         .zIndex = 10,
                     },
@@ -167,8 +181,8 @@ pub fn ScrollBar(state: *ScrollingState) void {
                     }
                     if (forbear.on(.mouseDown)) {
                         const mousePosition = forbear.useMousePosition();
-                        const thumbHeight = parentMeasurement.size[1] * parentMeasurement.size[1] / parentMeasurement.contentSize[1];
-                        state.offset[1] = (mousePosition[1] - thumbHeight / 2.0) * parentMeasurement.contentSize[1] / parentMeasurement.size[1];
+                        const thumbHeight = innerSize[1] * innerSize[1] / parentMeasurement.contentSize[1];
+                        state.offset[1] = (mousePosition[1] - thumbHeight / 2.0) * parentMeasurement.contentSize[1] / innerSize[1];
                     }
 
                     // thumb
@@ -176,7 +190,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         .style = .{
                             .width = .{ .grow = 1.0 },
                             .height = .{
-                                .fixed = parentMeasurement.size[1] * parentMeasurement.size[1] / parentMeasurement.contentSize[1],
+                                .fixed = innerSize[1] * innerSize[1] / parentMeasurement.contentSize[1],
                             },
                             .placement = .{
                                 .relative = Vec2{
@@ -184,7 +198,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                                     if (state.effectiveOffset[1] == 0)
                                         0.0
                                     else
-                                        parentMeasurement.size[1] * (state.effectiveOffset[1] / parentMeasurement.contentSize[1]),
+                                        innerSize[1] * (state.effectiveOffset[1] / parentMeasurement.contentSize[1]),
                                 },
                             },
                             .borderRadius = 6.0,

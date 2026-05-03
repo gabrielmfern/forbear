@@ -5,21 +5,25 @@ fn CounterExample() void {
     forbear.component(.{})({
         const count = forbear.useState(u32, 0);
 
-        forbear.element(.{ .style = .{
-            .direction = .vertical,
-            .padding = .all(16.0),
-            .background = .{ .color = .{ 0.12, 0.12, 0.12, 1.0 } },
-            .borderRadius = 12.0,
-        } })({
+        forbear.element(.{
+            .style = .{
+                .direction = .vertical,
+                .padding = .all(16.0),
+                .background = .{ .color = .{ 0.12, 0.12, 0.12, 1.0 } },
+                .borderRadius = 12.0,
+            },
+        })({
             forbear.printText("Count: {d}", .{count.*});
 
-            forbear.element(.{ .style = .{
-                .margin = .top(12.0),
-                .padding = forbear.Padding.block(10.0).withInLine(16.0),
-                .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
-                .borderRadius = 8.0,
-                .cursor = .pointer,
-            } })({
+            forbear.element(.{
+                .style = .{
+                    .margin = .top(12.0),
+                    .padding = forbear.Padding.block(10.0).withInLine(16.0),
+                    .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
+                    .borderRadius = 8.0,
+                    .cursor = .pointer,
+                },
+            })({
                 if (forbear.on(.mouseEnter)) {
                     forbear.setCursor(.pointer);
                 }
@@ -36,7 +40,6 @@ fn CounterExample() void {
 fn App() void {
     forbear.component(.{})({
         const viewportSize = forbear.useViewportSize();
-        const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{
             .style = .{
@@ -54,6 +57,8 @@ fn App() void {
                     .padding = .all(10),
                 },
             })({
+                const isHovering = forbear.useState(bool, false);
+
                 forbear.FpsCounter();
 
                 forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
@@ -127,14 +132,16 @@ fn App() void {
                         .borderRadius = 12.0,
                     },
                 })({
-                    forbear.element(.{ .style = .{
-                        .width = .{ .fixed = 100 },
-                        .height = .{ .fixed = 80 },
-                        .margin = .all(10),
-                        .background = .{ .color = .{ 0.3, 0.3, 0.3, 0.8 } },
-                        .blendMode = .darken,
-                        .borderRadius = 8.0,
-                    } })({});
+                    forbear.element(.{
+                        .style = .{
+                            .width = .{ .fixed = 100 },
+                            .height = .{ .fixed = 80 },
+                            .margin = .all(10),
+                            .background = .{ .color = .{ 0.3, 0.3, 0.3, 0.8 } },
+                            .blendMode = .darken,
+                            .borderRadius = 8.0,
+                        },
+                    })({});
                 });
 
                 // Dashed border example
