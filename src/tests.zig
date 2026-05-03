@@ -1602,9 +1602,50 @@ test "relative-placed elements are positioned from parent origin" {
         const relChild = tree.at(parent.firstChild.?);
 
         // Parent sits at y=50 (below the 50px sibling). Relative child is
-        // offset (5, 15) from the parent's top-left corner.
-        try std.testing.expectEqual(parent.position[0] + 5.0, relChild.position[0]);
-        try std.testing.expectEqual(parent.position[1] + 15.0, relChild.position[1]);
+        // offset (5, 15) from the parent's content-box top-left, i.e. inside
+        // the parent's 10px padding.
+        try std.testing.expectEqual(parent.position[0] + 10.0 + 5.0, relChild.position[0]);
+        try std.testing.expectEqual(parent.position[1] + 10.0 + 15.0, relChild.position[1]);
+    });
+}
+
+test "relative-placed child is offset by parent border" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+                .borderStyle = .solid,
+                .borderWidth = .{ .x = .{ 4, 2 }, .y = .{ 6, 3 } },
+            },
+        })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .grow = 1.0 },
+                    .height = .{ .grow = 1.0 },
+                    .placement = .{ .relative = .{ 0.0, 0.0 } },
+                },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const parent = tree.at(0);
+        const relChild = tree.at(parent.firstChild.?);
+
+        // Relative child at (0, 0) lands inside the parent's border, so it
+        // starts at (left=4, top=6) and grows to fill the content box.
+        try std.testing.expectEqual(parent.position[0] + 4.0, relChild.position[0]);
+        try std.testing.expectEqual(parent.position[1] + 6.0, relChild.position[1]);
+        try std.testing.expectEqual(@as(f32, 100 - 4 - 2), relChild.size[0]);
+        try std.testing.expectEqual(@as(f32, 100 - 6 - 3), relChild.size[1]);
     });
 }
 

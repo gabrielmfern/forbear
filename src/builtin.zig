@@ -182,7 +182,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                             },
                             .placement = .{
                                 .relative = Vec2{
-                                    if (expanded.*) 1.0 else 0.0,
+                                    0,
                                     if (state.effectiveOffset[1] == 0)
                                         0.0
                                     else

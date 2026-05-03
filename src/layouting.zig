@@ -682,12 +682,17 @@ pub fn layout() !*NodeTree {
                     // placement that scrolls with the page.
                     .absolute => child.position += root.position + child.style.translate,
                     // Parent-relative: the user-supplied Vec2 is an offset
-                    // from the parent's top-left corner. The child adopts
-                    // the parent's resolved position so it inherits ancestor
+                    // from the parent's content-box top-left (i.e. inside
+                    // the parent's border + padding), matching how `grow`
+                    // sizes against the content area. The child adopts the
+                    // parent's resolved position so it inherits ancestor
                     // offsets and scroll naturally, but is not shifted by
                     // the parent's `childrenOffset` (which is the parent's
                     // per-container scroll offset for its flowing children).
-                    .relative => child.position += node.position + child.style.translate,
+                    .relative => child.position += node.position + Vec2{
+                        node.style.borderWidth.x[0] + node.style.padding.x[0],
+                        node.style.borderWidth.y[0] + node.style.padding.y[0],
+                    } + child.style.translate,
                     // Flow children: positions were computed by wrapAndPlace
                     // relative to the parent. Add the parent's resolved
                     // position and its `childrenOffset` to scroll them
