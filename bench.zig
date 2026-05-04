@@ -165,7 +165,7 @@ test "bench layout" {
 //   Leaf    :  4 + 4 =  8  ×  5×4×5         =  800
 //   total                                   = 1008
 fn StateLeaf(comptime tag: []const u8) void {
-    forbear.component(.{ .text = tag })({
+    forbear.component(.{ .key = tag })({
         _ = forbear.useState(u32, 0);
         _ = forbear.useState(f32, 0.0);
         _ = forbear.useState(bool, false);
@@ -184,7 +184,7 @@ fn StateLeaf(comptime tag: []const u8) void {
 }
 
 fn StatePanel(comptime tag: []const u8) void {
-    forbear.component(.{ .text = tag })({
+    forbear.component(.{ .key = tag })({
         _ = forbear.useState(u32, 0);
         _ = forbear.useState(f32, 0.0);
         _ = forbear.useState(bool, false);
@@ -208,7 +208,7 @@ fn StatePanel(comptime tag: []const u8) void {
 }
 
 fn StateSection(comptime tag: []const u8) void {
-    forbear.component(.{ .text = tag })({
+    forbear.component(.{ .key = tag })({
         _ = forbear.useState(u32, 0);
         _ = forbear.useState(f32, 0.0);
         _ = forbear.useState(bool, false);
@@ -234,7 +234,7 @@ fn StateSection(comptime tag: []const u8) void {
 fn buildUseStateTree(comptime stateCount: usize) void {
     @setEvalBranchQuota(1_000_000);
     forbear.component(.{
-        .text = "UseStateBenchApp_" ++ std.fmt.comptimePrint("{d}", .{stateCount}),
+        .key = "UseStateBenchApp_" ++ std.fmt.comptimePrint("{d}", .{stateCount}),
     })({
         forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
@@ -267,7 +267,7 @@ fn buildUseStateTree(comptime stateCount: usize) void {
 
             if (fullPanels > 0 or fullLeaves > 0 or tailLeafStates > 0) {
                 forbear.component(.{
-                    .text = "UseStateTail_" ++ std.fmt.comptimePrint("{d}", .{stateCount}),
+                    .key = "UseStateTail_" ++ std.fmt.comptimePrint("{d}", .{stateCount}),
                 })({
                     forbear.element(.{ .style = .{
                         .width = .{ .grow = 1.0 },
