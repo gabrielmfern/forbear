@@ -440,6 +440,7 @@ pub fn ease(progress: f32) f32 {
 pub const red = hex("#ff0000");
 pub const white = hex("#ffffff");
 pub const black = hex("#000000");
+pub const transparent = hex("#00000000");
 // TODO: add all CSS named colors here
 
 pub fn rgba(r: f32, g: f32, b: f32, a: f32) Vec4 {
