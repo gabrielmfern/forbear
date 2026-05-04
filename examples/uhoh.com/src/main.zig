@@ -27,9 +27,7 @@ const rainbowBar = [_]forbear.GradientStop{
 };
 
 fn App() !void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         const viewportSize = forbear.useViewportSize();
         forbear.element(.{
             .style = .{
@@ -40,7 +38,7 @@ fn App() !void {
                 .yJustification = .start,
             },
         })({
-            _ = forbear.useScrolling();
+            forbear.ScrollBar(forbear.useScrolling());
 
             forbear.FpsCounter();
 

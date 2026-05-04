@@ -8,7 +8,7 @@ const ListItem = @import("../list.zig").ListItem;
 const Paragraph = @import("../paragraph.zig").Paragraph;
 
 fn LicenseBadge() !void {
-    forbear.component(.{ .sourceLocation = @src() })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },
@@ -29,9 +29,7 @@ fn LicenseBadge() !void {
 }
 
 pub fn Introduction() !void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },

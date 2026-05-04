@@ -265,35 +265,45 @@ pub fn growAndShrink(
         const child = nodeTree.at(childIndex);
         childCount += 1;
 
-        if (child.style.placement == .flow) {
-            // Ensure minSize doesn't exceed maxSize before using it
-            child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
-            child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
+        // Ensure minSize doesn't exceed maxSize before using it
+        child.minSize[0] = @min(child.minSize[0], child.maxSize[0]);
+        child.minSize[1] = @min(child.minSize[1], child.maxSize[1]);
 
-            if (direction.perpendicular() == .vertical) {
-                const available = node.size[1] - node.fittingBase(.vertical) - child.style.margin.y[0] - child.style.margin.y[1];
-                if (child.style.height.isGrow() or (child.size[1] > available and child.minSize[1] < child.size[1])) {
-                    child.size[1] = @max(
-                        @min(
-                            available,
-                            child.maxSize[1],
-                        ),
-                        child.minSize[1],
-                    );
-                }
-            } else if (direction.perpendicular() == .horizontal) {
-                const available = node.size[0] - node.fittingBase(.horizontal) - child.style.margin.x[0] - child.style.margin.x[1];
-                if (child.style.width.isGrow() or (child.size[0] > available and child.minSize[0] < child.size[0])) {
-                    child.size[0] = @max(
-                        @min(
-                            available,
-                            child.maxSize[0],
-                        ),
-                        child.minSize[0],
-                    );
-                }
+        if (direction.perpendicular() == .vertical) {
+            const available = node.size[1] - node.fittingBase(.vertical) - child.style.margin.y[0] - child.style.margin.y[1];
+            if (child.style.height.isGrow() or (child.style.placement == .flow and child.size[1] > available and child.minSize[1] < child.size[1])) {
+                child.size[1] = @max(
+                    @min(
+                        available,
+                        child.maxSize[1],
+                    ),
+                    child.minSize[1],
+                );
             }
+        } else if (direction.perpendicular() == .horizontal) {
+            const available = node.size[0] - node.fittingBase(.horizontal) - child.style.margin.x[0] - child.style.margin.x[1];
+            if (child.style.width.isGrow() or (child.style.placement == .flow and child.size[0] > available and child.minSize[0] < child.size[0])) {
+                child.size[0] = @max(
+                    @min(
+                        available,
+                        child.maxSize[0],
+                    ),
+                    child.minSize[0],
+                );
+            }
+        }
+
+        if (child.style.placement == .flow) {
             remaining -= child.getOuterSize(direction);
+        } else if (child.style.getPreferredSize(direction).isGrow()) {
+            // Out-of-flow grow children size to the parent's content area on
+            // the main axis. They don't share space with siblings, so grow
+            // simply means "fill the parent on this axis".
+            const available = node.getSize(direction) - node.fittingBase(direction) - child.style.margin.get(direction)[0] - child.style.margin.get(direction)[1];
+            child.setSize(direction, @max(
+                @min(available, child.getMaxSize(direction)),
+                child.getMinSize(direction),
+            ));
         }
         childIndexOption = child.nextSibling;
     }
@@ -672,15 +682,22 @@ pub fn layout() !*NodeTree {
                     // placement that scrolls with the page.
                     .absolute => child.position += root.position + child.style.translate,
                     // Parent-relative: the user-supplied Vec2 is an offset
-                    // from the parent's top-left corner. `.flow` children
-                    // have their `child.position` computed by wrapAndPlace;
-                    // `.relative` children use the Vec2 stashed at element
-                    // creation time. Both paths then adopt the parent's
-                    // resolved position, so they inherit ancestor offsets
-                    // and scroll naturally. `childrenOffset` is the parent's
-                    // per-container scroll offset, which shifts all of its
-                    // flowing children together.
-                    .flow, .relative => child.position += node.position + node.childrenOffset + child.style.translate,
+                    // from the parent's content-box top-left (i.e. inside
+                    // the parent's border + padding), matching how `grow`
+                    // sizes against the content area. The child adopts the
+                    // parent's resolved position so it inherits ancestor
+                    // offsets and scroll naturally, but is not shifted by
+                    // the parent's `childrenOffset` (which is the parent's
+                    // per-container scroll offset for its flowing children).
+                    .relative => child.position += node.position + Vec2{
+                        node.style.borderWidth.x[0] + node.style.padding.x[0],
+                        node.style.borderWidth.y[0] + node.style.padding.y[0],
+                    } + child.style.translate,
+                    // Flow children: positions were computed by wrapAndPlace
+                    // relative to the parent. Add the parent's resolved
+                    // position and its `childrenOffset` to scroll them
+                    // together.
+                    .flow => child.position += node.position + node.childrenOffset + child.style.translate,
                 }
                 if (child.glyphs) |glyphs| {
                     for (glyphs.slice) |*glyph| {

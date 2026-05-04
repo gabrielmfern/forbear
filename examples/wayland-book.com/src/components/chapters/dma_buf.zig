@@ -6,9 +6,7 @@ const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 
 pub fn DmaBuf() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },

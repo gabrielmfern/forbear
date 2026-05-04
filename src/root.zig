@@ -3,10 +3,11 @@ const builtin = @import("builtin");
 
 pub const c = @import("c");
 
+pub const Font = @import("font.zig");
 const forbearBuiltin = @import("builtin.zig");
 pub const FpsCounter = forbearBuiltin.FpsCounter;
 pub const useScrolling = forbearBuiltin.useScrolling;
-pub const Font = @import("font.zig");
+pub const ScrollBar = forbearBuiltin.ScrollBar;
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
 const layouting = @import("layouting.zig");
@@ -37,6 +38,7 @@ pub fn setTraceWriter(writer: *std.Io.Writer) void {
     traceWriter = writer;
 }
 const Vec2 = @Vector(2, f32);
+const Vec3 = @Vector(3, f32);
 const Vec4 = @Vector(4, f32);
 
 const Context = @This();
@@ -66,6 +68,7 @@ pub const Event = enum {
     mouseLeave,
     mouseDown,
     mouseUp,
+    mouseMove,
     click,
     scroll,
 };
@@ -267,17 +270,30 @@ pub const Animation = struct {
     }
 };
 
-pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) f32 {
-    const startValue = useState(f32, value);
-    const currentValue = useState(f32, value);
-    const targetValue = useState(f32, value);
+pub fn useTransition(comptime T: type, value: T, duration: f32, easing: fn (f32) f32) T {
+    if (T != f32 and T != Vec2 and T != Vec3 and T != Vec4) {
+        @compileError("useTransition only supports f32, @Vector(2, f32), @Vector(3, f32), and @Vector(4, f32) types for now. If you want to see support for more types please open an issue.");
+    }
+    const isVector = T == Vec2 or T == Vec3 or T == Vec4;
+
+    const startValue = useState(T, value);
+    const currentValue = useState(T, value);
+    const targetValue = useState(T, value);
     const animation = useAnimation(duration);
     const epsilon: f32 = 0.0001;
 
-    if (targetValue.* != currentValue.*) {
+    const targetDiffersFromCurrent = if (isVector)
+        @reduce(.Or, targetValue.* != currentValue.*)
+    else
+        targetValue.* != currentValue.*;
+
+    if (targetDiffersFromCurrent) {
         if (animation.progress()) |progress| {
             if (progress < 1.0) {
-                currentValue.* = startValue.* + (targetValue.* - startValue.*) * easing(progress);
+                currentValue.* = startValue.* + (targetValue.* - startValue.*) * if (isVector)
+                    @as(T, @splat(easing(progress)))
+                else
+                    easing(progress);
             } else {
                 currentValue.* = targetValue.*;
                 startValue.* = targetValue.*;
@@ -286,7 +302,12 @@ pub fn useTransition(value: f32, duration: f32, easing: fn (f32) f32) f32 {
         }
     }
 
-    if (@abs(value - targetValue.*) > epsilon) {
+    const valueDiffersFromTarget = if (isVector)
+        @reduce(.Or, @abs(value - targetValue.*) > @as(T, @splat(epsilon)))
+    else
+        @abs(value - targetValue.*) > epsilon;
+
+    if (valueDiffersFromTarget) {
         targetValue.* = value;
         startValue.* = currentValue.*;
         animation.start();
@@ -401,9 +422,14 @@ fn bezierXDerivative(x1: f32, x2: f32, t: f32) f32 {
         3.0 * t * t * (1.0 - x2);
 }
 
-/// Equivalent to CSS's ease timing function
+/// Equivalent to CSS's ease-in-out timing function
 pub fn easeInOut(progress: f32) f32 {
     return cubicBezier(0.42, 0.0, 0.58, 1.0, progress);
+}
+
+/// Equivalent to CSS's ease-out timing function
+pub fn easeOut(progress: f32) f32 {
+    return cubicBezier(0.0, 0.0, 0.58, 1.0, progress);
 }
 
 /// Equivalent to CSS's ease timing function
@@ -416,32 +442,57 @@ pub const white = hex("#ffffff");
 pub const black = hex("#000000");
 // TODO: add all CSS named colors here
 
+pub fn rgba(r: f32, g: f32, b: f32, a: f32) Vec4 {
+    return .{
+        r / 255.0,
+        g / 255.0,
+        b / 255.0,
+        a,
+    };
+}
+
+pub fn rgb(r: f32, g: f32, b: f32) Vec4 {
+    return .{
+        r / 255.0,
+        g / 255.0,
+        b / 255.0,
+        1.0,
+    };
+}
+
 pub fn hex(comptime value: []const u8) Vec4 {
-    const digits = if (value.len > 0 and value[0] == '#') value[1..] else value;
-    const r = @as(f32, std.fmt.parseInt(
-        u8,
-        digits[0..2],
-        16,
-    ) catch @compileError("can't parse red channel")) / 255.0;
-    const g = @as(f32, std.fmt.parseInt(
-        u8,
-        digits[2..4],
-        16,
-    ) catch @compileError("can't parse green channel")) / 255.0;
-    const b = @as(f32, std.fmt.parseInt(
-        u8,
-        digits[4..6],
-        16,
-    ) catch @compileError("can't parse blue channel")) / 255.0;
-    const a = if (digits.len >= 8)
-        @as(f32, std.fmt.parseInt(
+    return comptime blk: {
+        const digits = if (value.len > 0 and value[0] == '#') value[1..] else value;
+        const r = @as(f32, std.fmt.parseInt(
             u8,
-            digits[6..8],
+            digits[0..2],
             16,
-        ) catch @compileError("can't parse alpha channel")) / 255.0
-    else
-        1.0;
-    return .{ r, g, b, a };
+        ) catch @compileError("can't parse red channel")) / 255.0;
+        const g = @as(f32, std.fmt.parseInt(
+            u8,
+            digits[2..4],
+            16,
+        ) catch @compileError("can't parse green channel")) / 255.0;
+        const b = @as(f32, std.fmt.parseInt(
+            u8,
+            digits[4..6],
+            16,
+        ) catch @compileError("can't parse blue channel")) / 255.0;
+        const a = if (digits.len >= 8)
+            @as(f32, std.fmt.parseInt(
+                u8,
+                digits[6..8],
+                16,
+            ) catch @compileError("can't parse alpha channel")) / 255.0
+        else
+            1.0;
+        break :blk Vec4{ r, g, b, a };
+    };
+}
+
+pub fn useMousePosition() Vec2 {
+    const self = getContext();
+    return self.mousePosition;
 }
 
 pub fn useViewportSize() Vec2 {
@@ -590,9 +641,7 @@ fn endNoop(block: void) void {
 /// A thin wrapper around `element` that includes some aspect ratio handling
 /// definition logic in a way that feels more intuitve
 pub fn Image(style: Style, img: *ImageType) void {
-    component(.{
-        .sourceLocation = @src(),
-    })({
+    component(.{})({
         var complementedStyle = style;
         const imageWidth: f32 = @floatFromInt(img.width);
         const imageHeight: f32 = @floatFromInt(img.height);
@@ -894,9 +943,7 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 
     const arena = self.frameMeta.?.arena;
 
-    component(.{
-        .sourceLocation = @src(),
-    })({
+    component(.{})({
         text(std.fmt.allocPrint(arena, fmt, args) catch |err| blk: {
             handleFrameError(err);
             break :blk "N/A";
@@ -905,9 +952,7 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn BreakLine() void {
-    component(.{
-        .sourceLocation = @src(),
-    })({
+    component(.{})({
         text("\n");
     });
 }
@@ -1180,12 +1225,11 @@ fn componentEnd(block: void) void {
     popScope(.component);
 }
 
-const ComponentKey = union(enum) {
-    text: []const u8,
-    sourceLocation: std.builtin.SourceLocation,
+pub const ComponentProps = struct {
+    key: ?[]const u8 = null,
 };
 
-pub fn component(key: ComponentKey) *const fn (void) void {
+pub inline fn component(props: ComponentProps) *const fn (void) void {
     const self = getContext();
 
     std.debug.assert(self.frameMeta != null);
@@ -1201,9 +1245,10 @@ pub fn component(key: ComponentKey) *const fn (void) void {
         hasher.update(std.mem.asBytes(&parentComponentKey));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
-    switch (key) {
-        .text => hasher.update(key.text),
-        .sourceLocation => hasher.update(std.mem.asBytes(&key.sourceLocation)),
+    if (props.key) |key| {
+        hasher.update(key);
+    } else {
+        hasher.update(std.mem.asBytes(&@returnAddress()));
     }
 
     const componentKey = hasher.final();
@@ -1335,7 +1380,7 @@ fn isMouseInsideMeasurement(self: *@This(), measurement: Node.Measurement) bool 
 }
 
 pub fn OnResult(comptime eventTag: Event) type {
-    return if (eventTag == .scroll) ?Vec2 else bool;
+    return if (eventTag == .scroll or eventTag == .mouseMove) ?Vec2 else bool;
 }
 
 /// Inline hit test against previous-frame measurement. No event queue —
@@ -1370,12 +1415,16 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     // measurement starts existing.
     const slot: ?*bool = switch (eventTag) {
         .mouseEnter, .mouseLeave, .mouseDown, .mouseUp => useState(bool, false),
-        .scroll => null,
+        .scroll, .mouseMove => null,
         .click => unreachable,
     };
+    const lastMousePositionSlot: ?*Vec2 = if (eventTag == .mouseMove)
+        useState(Vec2, self.mousePosition)
+    else
+        null;
 
     const measurement = useNodeMeasurement() orelse {
-        if (comptime eventTag == .scroll) return null;
+        if (comptime eventTag == .scroll or eventTag == .mouseMove) return null;
         return false;
     };
 
@@ -1410,6 +1459,14 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
                 return self.scrollDelta;
             return null;
         },
+        .mouseMove => {
+            const lastMousePosition = lastMousePositionSlot.?;
+            defer lastMousePosition.* = self.mousePosition;
+            if (!inside) return null;
+            const delta = self.mousePosition - lastMousePosition.*;
+            if (delta[0] != 0.0 or delta[1] != 0.0) return delta;
+            return null;
+        },
     }
 }
 
@@ -1428,6 +1485,11 @@ pub fn update() !void {
     self.deltaTime = rawDelta;
     self.cappedDeltaTime = @min(rawDelta, maxCappedDeltaTime);
     self.lastUpdateTime = timestamp;
+}
+
+pub fn isMouseButtonPressed() bool {
+    const self = getContext();
+    return self.mouseButtonPressed;
 }
 
 /// Returns some layouting values of the current node from the last frame
