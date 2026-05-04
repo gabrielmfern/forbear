@@ -3,9 +3,7 @@ const forbear = @import("forbear");
 const Heading = @import("../heading.zig").Heading;
 
 pub fn ClipboardAndDnd() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },

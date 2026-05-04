@@ -1,6 +1,7 @@
+.DS_Store
+.cursor/hooks/state
 .zig-cache
+layouting.log
+perf.data*
 zig-out
 zig-pkg
-.DS_Store
-perf.data*
-.cursor/hooks/state

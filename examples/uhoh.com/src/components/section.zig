@@ -1,9 +1,7 @@
 const forbear = @import("forbear");
 
 pub fn Section(style: forbear.Style) *const fn (void) void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },

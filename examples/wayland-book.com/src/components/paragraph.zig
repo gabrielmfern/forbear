@@ -6,9 +6,7 @@ pub const ParagraphProps = struct {
 };
 
 pub fn Paragraph(props: ParagraphProps) *const fn (void) void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = props.style.overwrite(.{
                 .width = .{ .grow = 1.0 },

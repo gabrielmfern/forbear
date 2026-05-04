@@ -59,10 +59,13 @@
 - [x] per element scrolling
     - I want to have a Scrolling component the user can just plop into their code and it just works 🤔
     - Another option is a useScrolling
-- [ ] scroll bar 🤔
+- [x] scroll bar 🤔
+- [ ] add code blocks
+- [ ] finishg bringing over all of the content into the app
 
 ## problems
 
+- elements cannot be hovered only when they're not fully clipped
 - nested scrolling is not supported (i.e., nested elements all with scrolling)
 - when there's scaling in linux, the scale only drops in after some frames
 - new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 

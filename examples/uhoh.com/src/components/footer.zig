@@ -3,9 +3,7 @@ const colors = @import("../colors.zig");
 const Section = @import("section.zig").Section;
 
 pub fn Footer() !void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         Section(.{ .direction = .vertical })({
             forbear.element(.{
                 .style = .{

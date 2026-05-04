@@ -83,9 +83,7 @@ const chapters = [_]ChapterEntry{
 };
 
 fn App() !void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         const activeChapter = forbear.useState(usize, 0);
 
         forbear.element(.{

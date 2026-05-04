@@ -7,9 +7,7 @@ const Paragraph = @import("../paragraph.zig").Paragraph;
 const Strong = @import("../strong.zig").Strong;
 
 pub fn WireProtocolBasics() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },

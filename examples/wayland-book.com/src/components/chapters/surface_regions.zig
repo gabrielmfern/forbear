@@ -6,9 +6,7 @@ const ListItem = @import("../list.zig").ListItem;
 const Paragraph = @import("../paragraph.zig").Paragraph;
 
 pub fn SurfaceRegions() void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },

@@ -58,9 +58,7 @@ fn Topbar() void {
 }
 
 pub fn Content(activeChatper: *usize) !void {
-    forbear.component(.{
-        .sourceLocation = @src(),
-    })({
+    forbear.component(.{})({
         const viewport = forbear.useViewportSize();
         forbear.element(.{
             .style = .{
@@ -71,7 +69,9 @@ pub fn Content(activeChatper: *usize) !void {
                 .yJustification = .start,
             },
         })({
-            _ = forbear.useScrolling();
+            const scrollingOffset = forbear.useScrolling();
+
+            forbear.ScrollBar(scrollingOffset);
 
             Topbar();
 
