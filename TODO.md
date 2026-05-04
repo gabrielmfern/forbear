@@ -60,8 +60,13 @@
     - I want to have a Scrolling component the user can just plop into their code and it just works 🤔
     - Another option is a useScrolling
 - [x] scroll bar 🤔
+- [ ] add back and forward buttons
 - [ ] add code blocks
 - [ ] finishg bringing over all of the content into the app
+- [ ] add svg rendering
+    - back and forward buttons need it
+
+### [ ] mini Slack app, that just shows a list of channels and messages, and allows you to send messages
 
 ## problems
 
