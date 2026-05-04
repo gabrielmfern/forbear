@@ -95,7 +95,7 @@ pub fn useScrolling() *ScrollingState {
         forbear.useSpringTransition(state.offset[1], spring),
     };
     animated = @min(
-        @max(state.effectiveOffset, identity),
+        @max(animated, identity),
         @max(
             if (forbear.useNodeMeasurement()) |measurement|
                 measurement.contentSize - measurement.size
