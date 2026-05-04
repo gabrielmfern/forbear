@@ -217,6 +217,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                     }
                     if (!forbear.isMouseButtonPressed()) {
                         isDragging.* = false;
+                        state.animate = if (builtin.os.tag == .macos) false else true;
                     }
                     if (isDragging.*) {
                         const trackTop = parentMeasurement.position[1] + border.y[0];
@@ -224,7 +225,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         const thumbHeight = trackHeight * innerSize[1] / parentMeasurement.contentSize[1];
                         const target = (localY - thumbHeight / 2.0) * parentMeasurement.contentSize[1] / trackHeight;
                         state.offset[1] = target;
-                        state.effectiveOffset[1] = target;
+                        state.animate = false;
                     }
                 });
             });
