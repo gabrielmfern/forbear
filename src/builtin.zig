@@ -132,10 +132,11 @@ pub fn ScrollBar(state: *ScrollingState) void {
         if (parentMeasurement.contentSize[1] > innerSize[1]) {
             forbear.component(.{})({
                 const isHovered = forbear.useState(bool, false);
+                const isDragging = forbear.useState(bool, false);
 
                 const scrollbarWidth = forbear.useTransition(
                     f32,
-                    if (isHovered.*) 11.0 else 7.0,
+                    if (isHovered.* or isDragging.*) 11.0 else 7.0,
                     0.15,
                     forbear.easeOut,
                 );
@@ -146,8 +147,8 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         .background = .{
                             .color = forbear.useTransition(
                                 Vec4,
-                                if (isHovered.*)
-                                    forbear.rgb(43.89, 43.89, 43.89)
+                                if (isHovered.* or isDragging.*)
+                                    forbear.rgba(180, 180, 180, 0.31)
                                 else
                                     .{ 0.0, 0.0, 0.0, 0.0 },
                                 0.15,
@@ -158,8 +159,8 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         .borderWidth = .left(1.0),
                         .borderColor = forbear.useTransition(
                             Vec4,
-                            if (isHovered.*)
-                                forbear.rgb(60.824, 60.824, 60.824)
+                            if (isHovered.* or isDragging.*)
+                                forbear.rgba(200, 200, 200, 0.47)
                             else
                                 .{ 0.0, 0.0, 0.0, 0.0 },
                             0.15,
@@ -197,7 +198,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                             .background = .{
                                 .color = forbear.useTransition(
                                     Vec4,
-                                    if (isHovered.*) forbear.hex("#D0D0D0") else forbear.hex("#8D8D8D"),
+                                    if (isHovered.* or isDragging.*) forbear.rgba(60, 60, 60, 0.78) else forbear.rgba(80, 80, 80, 0.55),
                                     0.15,
                                     forbear.easeOut,
                                 ),
@@ -205,7 +206,6 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         },
                     })({});
 
-                    const isDragging = forbear.useState(bool, false);
                     if (forbear.on(.mouseEnter)) {
                         isHovered.* = true;
                     }
