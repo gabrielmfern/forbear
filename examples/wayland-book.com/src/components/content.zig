@@ -87,6 +87,46 @@ fn Topbar() void {
     });
 }
 
+fn SectionButton() *const fn (void) void {
+    forbear.component(.{})({
+        const isHovering = forbear.useState(bool, false);
+        forbear.element(.{
+            .style = .{
+                .width = .{ .grow = 1.0 },
+                .height = .{ .grow = 1.0 },
+                .minWidth = 90.0,
+                .maxWidth = 150.0,
+                .xJustification = .center,
+                .yJustification = .center,
+                .color = forbear.useTransition(
+                    Vec4,
+                    if (isHovering.*) forbear.hex("#333333") else forbear.hex("#cccccc"),
+                    0.15,
+                    forbear.linear,
+                ),
+                .background = .{
+                    .color = forbear.useTransition(
+                        Vec4,
+                        if (isHovering.*) forbear.hex("#e6e6e6") else forbear.transparent,
+                        0.15,
+                        forbear.linear,
+                    ),
+                },
+            },
+        })({
+            if (forbear.on(.mouseEnter)) {
+                isHovering.* = true;
+            }
+            if (forbear.on(.mouseLeave)) {
+                isHovering.* = false;
+            }
+            forbear.componentChildrenSlot();
+        });
+    });
+
+    return forbear.componentChildrenSlotEnd();
+}
+
 pub fn Content(activeChapter: *usize) !void {
     forbear.component(.{})({
         const viewport = forbear.useViewportSize();
@@ -112,6 +152,14 @@ pub fn Content(activeChapter: *usize) !void {
                     .xJustification = .center,
                 },
             })({
+                if (activeChapter.* > 0) {
+                    SectionButton()({
+                        if (forbear.on(.click)) {
+                            activeChapter.* = activeChapter.* - 1;
+                        }
+                        forbear.text("previous");
+                    });
+                }
                 forbear.element(.{
                     .style = .{
                         .width = .{ .grow = 1.0 },
@@ -196,6 +244,14 @@ pub fn Content(activeChapter: *usize) !void {
                         },
                     }
                 });
+                if (activeChapter.* > 0) {
+                    SectionButton()({
+                        if (forbear.on(.click)) {
+                            activeChapter.* = activeChapter.* - 1;
+                        }
+                        forbear.text("next");
+                    });
+                }
             });
         });
     });
