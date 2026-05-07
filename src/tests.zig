@@ -3840,7 +3840,7 @@ test "State creation with manual handling" {
             forbear.component(.{
                 .key = "random",
             })({
-                componentKey = self.frameMeta.?.hookScopeStack.getLast().key;
+                componentKey = self.frameMeta.?.scopeStack.getLast().key;
                 const state1 = forbear.useState(i32, 42);
                 try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.items.len);
                 try std.testing.expectEqual(@sizeOf(i32), self.scopeStates.get(componentKey).?.items[0].len);
@@ -4017,14 +4017,14 @@ test "useState binds to nearest scope: element preferred, component inside eleme
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
             forbear.component(.{ .key = "outer" })({
-                componentKey = self.frameMeta.?.hookScopeStack.getLast().key;
+                componentKey = self.frameMeta.?.scopeStack.getLast().key;
 
                 // useState here binds to the outer component.
                 const componentState = forbear.useState(i32, 0);
                 componentState.* = 1;
 
                 forbear.element(.{ .key = "host" })({
-                    elementKey = self.frameMeta.?.hookScopeStack.getLast().key;
+                    elementKey = self.frameMeta.?.scopeStack.getLast().key;
 
                     // useState inside the element binds to the element, not the
                     // surrounding component.
@@ -4032,7 +4032,7 @@ test "useState binds to nearest scope: element preferred, component inside eleme
                     elementState.* = 2;
 
                     forbear.component(.{ .key = "inner" })({
-                        innerComponentKey = self.frameMeta.?.hookScopeStack.getLast().key;
+                        innerComponentKey = self.frameMeta.?.scopeStack.getLast().key;
                         // useState here binds to the inner component (closer than
                         // the wrapping element).
                         const innerState = forbear.useState(i32, 0);
@@ -4116,7 +4116,7 @@ test "stale scope state is pruned at frame end (element)" {
         forbear.element(.{ .key = "root" })({
             forbear.component(.{ .key = "host" })({
                 forbear.element(.{ .key = "transient" })({
-                    transientKey = self.frameMeta.?.hookScopeStack.getLast().key;
+                    transientKey = self.frameMeta.?.scopeStack.getLast().key;
                     _ = forbear.useState(i32, 7);
                 });
             });
@@ -4149,7 +4149,7 @@ test "stale scope state is pruned at frame end (component)" {
         forbear.element(.{ .key = "root" })({
             forbear.component(.{ .key = "host" })({
                 forbear.component(.{ .key = "transient" })({
-                    transientKey = self.frameMeta.?.hookScopeStack.getLast().key;
+                    transientKey = self.frameMeta.?.scopeStack.getLast().key;
                     _ = forbear.useState(i32, 7);
                 });
             });
