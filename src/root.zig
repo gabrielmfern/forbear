@@ -45,22 +45,10 @@ const Context = @This();
 
 var context: ?@This() = null;
 
-const ScopeKind = enum { component, element };
-
-const ScopeFrame = struct {
-    kind: ScopeKind,
+const HookScope = struct {
     key: u64,
-    useStateCursor: usize,
-    states: *std.ArrayList([]align(@alignOf(usize)) u8),
-};
-
-const ComponentChildrenSlotState = struct {
-    savedSlotParentStack: []usize,
-    savedPreEndParentStack: []usize,
-    slotPredecessor: ?usize,
-    afterChainStart: ?usize,
-    afterChainEnd: ?usize,
-    slotParentIndex: usize,
+    arena: std.heap.ArenaAllocator,
+    states: std.AutoHashMap(u64, []u8),
 };
 
 pub const Event = enum {
@@ -88,11 +76,18 @@ pub const FrameMeta = struct {
     /// lexical order. `useState` binds to the topmost frame regardless of
     /// kind; element-key hashing walks back to the nearest `.component`
     /// frame to keep per-component element-key namespacing stable.
-    scopeStack: std.ArrayList(ScopeFrame) = .empty,
+    hookScopeStack: std.ArrayList(HookScope) = .empty,
 
     previousPushedNodeIndex: ?usize = null,
     nodeParentStack: std.ArrayList(usize) = .empty,
-    componentChildrenSlotStates: std.ArrayList(ComponentChildrenSlotState) = .empty,
+    componentChildrenSlotStates: std.ArrayList(struct {
+        savedSlotParentStack: []usize,
+        savedPreEndParentStack: []usize,
+        slotPredecessor: ?usize,
+        afterChainStart: ?usize,
+        afterChainEnd: ?usize,
+        slotParentIndex: usize,
+    }) = .empty,
 };
 
 allocator: std.mem.Allocator,
@@ -537,36 +532,37 @@ pub fn useArena() std.mem.Allocator {
 // See https://github.com/gabrielmfern/forbear/pull/83#discussion_r3177038640
 const stateAlignment: std.mem.Alignment = .@"8";
 
-fn currentScope() ?*ScopeFrame {
+fn currentHookScope() ?*HookScope {
     const self = getContext();
-    if (self.frameMeta.?.scopeStack.items.len > 0) {
-        return &self.frameMeta.?.scopeStack.items[self.frameMeta.?.scopeStack.items.len - 1];
+    if (self.frameMeta.?.hookScopeStack.items.len > 0) {
+        return &self.frameMeta.?.hookScopeStack.items[self.frameMeta.?.hookScopeStack.items.len - 1];
     } else {
         return null;
     }
 }
 
-fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
+fn pushHooksScope(key: u64) error{OutOfMemory}!void {
     const self = getContext();
+    std.debug.assert(self.frameMeta != null);
     const statesResult = try self.scopeStates.getOrPut(key);
     if (!statesResult.found_existing) {
         const list = try self.allocator.create(StateBuffer);
         list.* = .empty;
         statesResult.value_ptr.* = list;
     }
-    try self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
-        .kind = kind,
+    const arena = std.heap.ArenaAllocator.init(self.allocator);
+    try self.frameMeta.?.hookScopeStack.append(self.frameMeta.?.arena, .{
         .key = key,
-        .useStateCursor = 0,
-        .states = statesResult.value_ptr.*,
+        .arena = arena,
+        .states = .init(arena),
     });
     try self.touchedScopeKeys.append(self.allocator, key);
 }
 
-fn popScope(expectedKind: ScopeKind) void {
+fn popHooksScope() void {
     const self = getContext();
-    if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
-        std.debug.assert(endedScope.kind == expectedKind);
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.hookScopeStack.pop()) |endedScope| {
         if (self.scopeStates.get(endedScope.key)) |scopeState| {
             if (endedScope.useStateCursor != scopeState.items.len) {
                 handleFrameError(error.RulesOfHooksViolated);
@@ -582,7 +578,7 @@ fn popScope(expectedKind: ScopeKind) void {
 /// `nodeParentStack.items.len` already differentiates by depth.
 fn nearestComponentScopeKey() ?u64 {
     const self = getContext();
-    const items = self.frameMeta.?.scopeStack.items;
+    const items = self.frameMeta.?.hookScopeStack.items;
     var i = items.len;
     while (i > 0) {
         i -= 1;
@@ -607,7 +603,7 @@ pub fn useState(T: type, initialValue: T) *T {
         return &Static.dummy;
     }
 
-    if (currentScope()) |scope| {
+    if (currentHookScope()) |scope| {
         const states = scope.states;
 
         self.touchedScopeKeys.append(self.allocator, scope.key) catch |err| {
@@ -776,7 +772,7 @@ fn elementEnd(block: void) void {
     std.debug.assert(self.frameMeta != null);
     std.debug.assert(self.frameMeta.?.nodeParentStack.items.len > 0);
 
-    popScope(.element);
+    popHooksScope(.element);
 
     self.frameMeta.?.previousPushedNodeIndex = self.frameMeta.?.nodeParentStack.pop();
 
@@ -912,7 +908,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         return &endNoop;
     };
 
-    pushScope(.element, result.ptr.key) catch |err| {
+    pushHooksScope(.element, result.ptr.key) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
@@ -1142,11 +1138,11 @@ pub noinline fn text(content: []const u8) void {
     };
     defer _ = self.frameMeta.?.nodeParentStack.pop();
 
-    pushScope(.element, result.ptr.key) catch |err| {
+    pushHooksScope(.element, result.ptr.key) catch |err| {
         handleFrameError(err);
         return;
     };
-    defer popScope(.element);
+    defer popHooksScope(.element);
 
     if (on(.mouseEnter)) {
         setCursor(style.cursor);
@@ -1223,7 +1219,7 @@ fn componentEnd(block: void) void {
         return;
     }
 
-    popScope(.component);
+    popHooksScope(.component);
 }
 
 pub const ComponentProps = struct {
@@ -1253,7 +1249,7 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
     }
 
     const componentKey = hasher.final();
-    pushScope(.component, componentKey) catch |err| {
+    pushHooksScope(.component, componentKey) catch |err| {
         handleFrameError(err);
         return endNoop;
     };
