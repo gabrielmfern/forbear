@@ -48,7 +48,6 @@ var context: ?@This() = null;
 const ScopeKind = enum { component, element };
 
 const ScopeFrame = struct {
-    kind: ScopeKind,
     key: u64,
     useStateCursor: usize,
     states: *std.ArrayList([]align(@alignOf(usize)) u8),
@@ -546,7 +545,7 @@ fn currentScope() ?*ScopeFrame {
     }
 }
 
-fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
+fn pushScope(key: u64) error{OutOfMemory}!void {
     const self = getContext();
     const statesResult = try self.scopeStates.getOrPut(key);
     if (!statesResult.found_existing) {
@@ -555,7 +554,6 @@ fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
         statesResult.value_ptr.* = list;
     }
     try self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, .{
-        .kind = kind,
         .key = key,
         .useStateCursor = 0,
         .states = statesResult.value_ptr.*,
@@ -563,10 +561,9 @@ fn pushScope(kind: ScopeKind, key: u64) error{OutOfMemory}!void {
     try self.touchedScopeKeys.append(self.allocator, key);
 }
 
-fn popScope(expectedKind: ScopeKind) void {
+fn popScope() void {
     const self = getContext();
     if (self.frameMeta.?.scopeStack.pop()) |endedScope| {
-        std.debug.assert(endedScope.kind == expectedKind);
         if (self.scopeStates.get(endedScope.key)) |scopeState| {
             if (endedScope.useStateCursor != scopeState.items.len) {
                 handleFrameError(error.RulesOfHooksViolated);
@@ -830,8 +827,8 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         0;
 
     var hasher = std.hash.Wyhash.init(0);
-    if (nearestComponentScopeKey()) |componentKey| {
-        hasher.update(std.mem.asBytes(&componentKey));
+    if (self.frameMeta.?.scopeStack.getLastOrNull()) |lastScope| {
+        hasher.update(std.mem.asBytes(lastScope.key));
     }
     hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeParentStack.items.len));
     if (props.key) |key| {
@@ -912,7 +909,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         return &endNoop;
     };
 
-    pushScope(.element, result.ptr.key) catch |err| {
+    pushScope(result.ptr.key) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
@@ -1253,7 +1250,7 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
     }
 
     const componentKey = hasher.final();
-    pushScope(.component, componentKey) catch |err| {
+    pushScope(componentKey) catch |err| {
         handleFrameError(err);
         return endNoop;
     };
