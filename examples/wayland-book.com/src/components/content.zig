@@ -107,7 +107,7 @@ fn SectionButton() *const fn (void) void {
                 .background = .{
                     .color = forbear.useTransition(
                         Vec4,
-                        if (isHovering.*) forbear.hex("#e6e6e6") else forbear.transparent,
+                        if (isHovering.*) forbear.hex("#e6e6e6") else forbear.hex("#e6e6e600"),
                         0.15,
                         forbear.linear,
                     ),
