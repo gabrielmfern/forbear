@@ -1,7 +1,14 @@
-.DS_Store
+# AI
 .cursor/hooks/state
-.zig-cache
 layouting.log
 perf.data*
+profile.json.gz
+
+# zig stuff
+.zig-cache
 zig-out
 zig-pkg
+
+# misc
+.DS_Store
+
