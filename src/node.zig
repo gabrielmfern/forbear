@@ -665,6 +665,7 @@ pub const Node = struct {
 
     pub const Measurement = struct {
         index: usize,
+        /// Internal tracking, can be ignored.
         done: bool,
 
         position: Vec2,
