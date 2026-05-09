@@ -2761,7 +2761,7 @@ test "Element tree stack stability" {
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{})({
-            const nodeParentStack = &self.frameMeta.?.nodeParentStack;
+            const nodeParentStack = &self.frameMeta.?.nodeStack;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             forbear.FpsCounter();
 
@@ -2783,13 +2783,13 @@ test "Element tree stack stability" {
             });
             try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
-        try std.testing.expectEqual(0, self.frameMeta.?.nodeParentStack.items.len);
+        try std.testing.expectEqual(0, self.frameMeta.?.nodeStack.items.len);
         try std.testing.expect(self.nodeTree.list.items.len > 0);
     });
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{})({
-            const nodeParentStack = &self.frameMeta.?.nodeParentStack;
+            const nodeParentStack = &self.frameMeta.?.nodeStack;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             forbear.FpsCounter();
             try std.testing.expectEqual(1, nodeParentStack.items.len);
@@ -2810,7 +2810,7 @@ test "Element tree stack stability" {
             });
             try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
-        try std.testing.expectEqual(0, self.frameMeta.?.nodeParentStack.items.len);
+        try std.testing.expectEqual(0, self.frameMeta.?.nodeStack.items.len);
         try std.testing.expect(self.nodeTree.list.items.len > 0);
     });
 }
@@ -3840,15 +3840,13 @@ test "State creation with manual handling" {
             forbear.component(.{
                 .key = "random",
             })({
-                componentKey = self.frameMeta.?.scopeStack.getLast().key;
+                componentKey = self.frameMeta.?.scopeStack.getLast();
                 const state1 = forbear.useState(i32, 42);
-                try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(i32), self.scopeStates.get(componentKey).?.items[0].len);
+                try std.testing.expectEqual(1, self.states.count());
                 try std.testing.expectEqual(42, state1.*);
 
                 const state2 = forbear.useState(f32, 3.14);
-                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(f32), self.scopeStates.get(componentKey).?.items[1].len);
+                try std.testing.expectEqual(2, self.states.count());
                 try std.testing.expectEqual(42, state1.*);
                 try std.testing.expectEqual(3.14, state2.*);
 
@@ -3866,11 +3864,9 @@ test "State creation with manual handling" {
                 .key = "random",
             })({
                 const state1 = forbear.useState(i32, 42);
-                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(i32), self.scopeStates.get(componentKey).?.items[0].len);
+                try std.testing.expectEqual(2, self.states.count());
                 const state2 = forbear.useState(f32, 3.14);
-                try std.testing.expectEqual(2, self.scopeStates.get(componentKey).?.items.len);
-                try std.testing.expectEqual(@sizeOf(f32), self.scopeStates.get(componentKey).?.items[1].len);
+                try std.testing.expectEqual(2, self.states.count());
 
                 try std.testing.expectEqual(100, state1.*);
                 try std.testing.expectEqual(6.28, state2.*);
@@ -4017,14 +4013,14 @@ test "useState binds to nearest scope: element preferred, component inside eleme
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
             forbear.component(.{ .key = "outer" })({
-                componentKey = self.frameMeta.?.scopeStack.getLast().key;
+                componentKey = self.frameMeta.?.scopeStack.getLast();
 
                 // useState here binds to the outer component.
                 const componentState = forbear.useState(i32, 0);
                 componentState.* = 1;
 
                 forbear.element(.{ .key = "host" })({
-                    elementKey = self.frameMeta.?.scopeStack.getLast().key;
+                    elementKey = self.frameMeta.?.scopeStack.getLast();
 
                     // useState inside the element binds to the element, not the
                     // surrounding component.
@@ -4032,7 +4028,7 @@ test "useState binds to nearest scope: element preferred, component inside eleme
                     elementState.* = 2;
 
                     forbear.component(.{ .key = "inner" })({
-                        innerComponentKey = self.frameMeta.?.scopeStack.getLast().key;
+                        innerComponentKey = self.frameMeta.?.scopeStack.getLast();
                         // useState here binds to the inner component (closer than
                         // the wrapping element).
                         const innerState = forbear.useState(i32, 0);
@@ -4043,12 +4039,6 @@ test "useState binds to nearest scope: element preferred, component inside eleme
         });
     });
 
-    // Each scope should have exactly one user-allocated slot in its own bucket.
-    // The element scope additionally reserves two internal slots inside `element()`
-    // for the cursor's mouseEnter/mouseLeave bookkeeping (see `on()`).
-    try std.testing.expectEqual(1, self.scopeStates.get(componentKey).?.items.len);
-    try std.testing.expectEqual(3, self.scopeStates.get(elementKey).?.items.len);
-    try std.testing.expectEqual(1, self.scopeStates.get(innerComponentKey).?.items.len);
     try std.testing.expect(componentKey != elementKey);
     try std.testing.expect(elementKey != innerComponentKey);
 }
@@ -4109,20 +4099,18 @@ test "stale scope state is pruned at frame end (element)" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    var transientKey: u64 = undefined;
-
-    // Frame 1: mount the transient element, capture its scope key.
+    // Frame 1: mount the transient element.
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
             forbear.component(.{ .key = "host" })({
                 forbear.element(.{ .key = "transient" })({
-                    transientKey = self.frameMeta.?.scopeStack.getLast().key;
                     _ = forbear.useState(i32, 7);
                 });
             });
         });
     });
-    try std.testing.expect(self.scopeStates.contains(transientKey));
+    const stateCountWithTransient = self.states.count();
+    try std.testing.expect(stateCountWithTransient >= 1);
 
     // Frame 2: omit the element. Its state should be dropped.
     _ = arena.reset(.retain_capacity);
@@ -4131,7 +4119,7 @@ test "stale scope state is pruned at frame end (element)" {
             forbear.component(.{ .key = "host" })({});
         });
     });
-    try std.testing.expect(!self.scopeStates.contains(transientKey));
+    try std.testing.expect(self.states.count() < stateCountWithTransient);
 }
 
 test "stale scope state is pruned at frame end (component)" {
@@ -4143,19 +4131,17 @@ test "stale scope state is pruned at frame end (component)" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    var transientKey: u64 = undefined;
-
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
             forbear.component(.{ .key = "host" })({
                 forbear.component(.{ .key = "transient" })({
-                    transientKey = self.frameMeta.?.scopeStack.getLast().key;
                     _ = forbear.useState(i32, 7);
                 });
             });
         });
     });
-    try std.testing.expect(self.scopeStates.contains(transientKey));
+    const stateCountWithTransient = self.states.count();
+    try std.testing.expect(stateCountWithTransient >= 1);
 
     _ = arena.reset(.retain_capacity);
     try forbear.frame(try frameMeta(arenaAllocator))({
@@ -4163,7 +4149,7 @@ test "stale scope state is pruned at frame end (component)" {
             forbear.component(.{ .key = "host" })({});
         });
     });
-    try std.testing.expect(!self.scopeStates.contains(transientKey));
+    try std.testing.expect(self.states.count() < stateCountWithTransient);
 }
 
 test "on() mouseEnter and mouseLeave fire on the correct element" {
@@ -5230,7 +5216,7 @@ test "Component children slotting: parent stack stability" {
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{})({
-            const stack = &self.frameMeta.?.nodeParentStack;
+            const stack = &self.frameMeta.?.nodeStack;
             try std.testing.expectEqual(1, stack.items.len);
 
             TestComponent()({
