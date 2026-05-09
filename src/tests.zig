@@ -5205,6 +5205,86 @@ test "Component children slotting: element children in slot" {
     });
 }
 
+// Mirrors examples/wayland-book.com/src/main.zig: a SidebarItem-style component
+// that exposes its inner element via a children slot, and the caller puts an
+// `if (forbear.on(.click))` handler inside that slot. Each instance is
+// disambiguated by `props.key`. The click must fire on the instance the mouse
+// is actually over, not on a sibling, even when several instances are rendered
+// in a loop from a single source line.
+fn SlotItem(props: struct { key: []const u8, position: f32 }) *const fn (void) void {
+    forbear.component(.{ .key = props.key })({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 50.0 },
+                .placement = .{ .absolute = .{ 0.0, props.position } },
+            },
+        })({
+            forbear.componentChildrenSlot();
+        });
+    });
+    return forbear.componentChildrenSlotEnd();
+}
+
+fn SlotClickListApp(itemKeys: []const []const u8, observedClicks: []bool) void {
+    forbear.element(.{
+        .style = .{
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
+        },
+    })({
+        for (itemKeys, 0..) |key, i| {
+            const yPos: f32 = @as(f32, @floatFromInt(i)) * 60.0;
+            SlotItem(.{ .key = key, .position = yPos })({
+                if (forbear.on(.click)) observedClicks[i] = true;
+            });
+        }
+    });
+}
+
+test "Component children slotting: on(.click) inside a slot fires on the right instance in a loop" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    const self = forbear.getContext();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    const items = [_][]const u8{ "a", "b", "c" };
+    var observedClicks = [_]bool{ false, false, false };
+
+    // Mouse is over item "b" (index 1, y range 60..110).
+    self.mousePosition = .{ 50.0, 80.0 };
+    self.mouseButtonPressed = false;
+
+    // Frame 1: prime measurements for each instance.
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        SlotClickListApp(&items, &observedClicks);
+        _ = try forbear.layout();
+        self.mouseButtonPressed = true;
+    });
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 2: button is held — mouseDown should fire on instance "b" only.
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        SlotClickListApp(&items, &observedClicks);
+        _ = try forbear.layout();
+        self.mouseButtonPressed = false;
+    });
+    _ = arena.reset(.retain_capacity);
+
+    // Frame 3: button releases over "b" → click fires on "b".
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        SlotClickListApp(&items, &observedClicks);
+    });
+
+    try std.testing.expect(!observedClicks[0]);
+    try std.testing.expect(observedClicks[1]);
+    try std.testing.expect(!observedClicks[2]);
+}
+
 // font.zig tests
 test "LRU cache - set_first" {
     const LRUIntString = forbear.Font.LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32));
