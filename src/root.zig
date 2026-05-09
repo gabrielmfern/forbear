@@ -256,6 +256,9 @@ pub const Animation = struct {
 };
 
 pub fn useTransition(comptime T: type, value: T, duration: f32, easing: fn (f32) f32) T {
+    hook();
+    defer hookEnd();
+
     if (T != f32 and T != Vec2 and T != Vec3 and T != Vec4) {
         @compileError("useTransition only supports f32, @Vector(2, f32), @Vector(3, f32), and @Vector(4, f32) types for now. If you want to see support for more types please open an issue.");
     }
@@ -297,7 +300,6 @@ pub fn useTransition(comptime T: type, value: T, duration: f32, easing: fn (f32)
         startValue.* = currentValue.*;
         animation.start();
     }
-
     return currentValue.*;
 }
 
@@ -308,6 +310,9 @@ pub const SpringConfig = struct {
 };
 
 pub fn useSpringTransition(target: f32, config: SpringConfig) f32 {
+    hook();
+    defer hookEnd();
+
     const self = getContext();
     const value = useState(f32, target);
     const velocity = useState(f32, 0.0);
@@ -330,6 +335,9 @@ pub fn useSpringTransition(target: f32, config: SpringConfig) f32 {
 }
 
 pub fn useAnimation(duration: f32) Animation {
+    hook();
+    defer hookEnd();
+
     const self = getContext();
     const state = useState(?AnimationState, null);
 
@@ -536,6 +544,10 @@ fn pushScope(key: u64) error{OutOfMemory}!void {
 
 fn popScope() void {
     const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) {
+        return;
+    }
     _ = self.frameMeta.?.scopeStack.pop();
 }
 
@@ -1196,6 +1208,28 @@ fn componentEnd(block: void) void {
     popScope();
 }
 
+pub inline fn hook() void {
+    const self = getContext();
+
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) {
+        return;
+    }
+    var hasher = std.hash.Wyhash.init(0);
+    if (self.frameMeta.?.scopeStack.getLastOrNull()) |lastScopeKey| {
+        hasher.update(std.mem.asBytes(&lastScopeKey));
+    }
+    hasher.update(std.mem.asBytes(&@returnAddress()));
+    pushScope(hasher.final()) catch |err| {
+        handleFrameError(err);
+        return;
+    };
+}
+
+pub fn hookEnd() void {
+    popScope();
+}
+
 pub const ComponentProps = struct {
     key: ?[]const u8 = null,
 };
@@ -1357,6 +1391,8 @@ pub fn OnResult(comptime eventTag: Event) type {
 /// Inline hit test against previous-frame measurement. No event queue —
 /// every caller sees the same raw input state each frame.
 pub fn on(comptime eventTag: Event) OnResult(eventTag) {
+    hook();
+    defer hookEnd();
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
 

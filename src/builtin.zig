@@ -57,6 +57,9 @@ const ScrollingState = struct {
 };
 
 pub fn useScrolling() *ScrollingState {
+    forbear.hook();
+    defer forbear.hookEnd();
+
     const node = forbear.getParentNode() orelse {
         std.log.err("useScrolling must be used within a node, that's within component", .{});
         forbear.handleFrameError(error.NoParentForScrollingHook);
