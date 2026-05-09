@@ -244,10 +244,10 @@ pub fn Content(activeChapter: *usize) !void {
                         },
                     }
                 });
-                if (activeChapter.* > 0) {
+                if (activeChapter.* < 57) {
                     SectionButton()({
                         if (forbear.on(.click)) {
-                            activeChapter.* = activeChapter.* - 1;
+                            activeChapter.* = activeChapter.* + 1;
                         }
                         forbear.text("next");
                     });
