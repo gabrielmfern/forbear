@@ -52,6 +52,8 @@ const Scope = struct { key: u64, arenaAllocator: std.heap.ArenaAllocator };
 const ComponentChildrenSlotState = struct {
     savedSlotParentStack: []usize,
     savedPreEndParentStack: []usize,
+    savedSlotScopeStack: []u64,
+    savedPreEndScopeStack: []u64,
     slotPredecessor: ?usize,
     afterChainStart: ?usize,
     afterChainEnd: ?usize,
@@ -1287,10 +1289,16 @@ pub fn componentChildrenSlot() void {
         handleFrameError(err);
         return;
     };
+    const savedScopeStack = fm.arena.dupe(u64, fm.scopeStack.items) catch |err| {
+        handleFrameError(err);
+        return;
+    };
 
     fm.componentChildrenSlotStates.append(fm.arena, .{
         .savedSlotParentStack = savedStack,
         .savedPreEndParentStack = &.{},
+        .savedSlotScopeStack = savedScopeStack,
+        .savedPreEndScopeStack = &.{},
         .slotPredecessor = self.nodeTree.at(parentIndex).lastChild,
         .afterChainStart = null,
         .afterChainEnd = null,
@@ -1324,9 +1332,13 @@ fn componentChildrenSlotEndFn(block: void) void {
         parent.lastChild = slotState.afterChainEnd;
     }
 
-    // Restore parent stack to pre-slotEnd state
+    // Restore parent stack and scope stack to pre-slotEnd state
     fm.nodeStack.clearRetainingCapacity();
     fm.nodeStack.appendSlice(fm.arena, slotState.savedPreEndParentStack) catch |err| {
+        handleFrameError(err);
+    };
+    fm.scopeStack.clearRetainingCapacity();
+    fm.scopeStack.appendSlice(fm.arena, slotState.savedPreEndScopeStack) catch |err| {
         handleFrameError(err);
     };
 }
@@ -1367,13 +1379,23 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
         self.nodeTree.at(start).previousSibling = null;
     }
 
-    // Save current parent stack, then restore to slot-time stack
+    // Save current parent and scope stacks, then restore to slot-time state so
+    // the children block runs as if it were inside the slot's owner.
     slotState.savedPreEndParentStack = fm.arena.dupe(usize, fm.nodeStack.items) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+    slotState.savedPreEndScopeStack = fm.arena.dupe(u64, fm.scopeStack.items) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
     fm.nodeStack.clearRetainingCapacity();
     fm.nodeStack.appendSlice(fm.arena, slotState.savedSlotParentStack) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+    fm.scopeStack.clearRetainingCapacity();
+    fm.scopeStack.appendSlice(fm.arena, slotState.savedSlotScopeStack) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
