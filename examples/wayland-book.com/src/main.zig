@@ -111,7 +111,6 @@ fn App() !void {
                         forbear.text(chapter.title);
                     });
                 }
-                // TODO: add an Acknowledgments section
             });
 
             try Content(activeChapter);
