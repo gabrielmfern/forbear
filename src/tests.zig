@@ -2885,6 +2885,24 @@ test "Element key stability across frames" {
     }
 }
 
+fn SiblingAddedComponentA(initialValue: u32, out: *u32) void {
+    forbear.component(.{ .key = "A" })({
+        const state = forbear.useState(u32, initialValue);
+        out.* = state.*;
+    });
+}
+
+fn SiblingAddedComponentB() void {
+    forbear.component(.{ .key = "B" })({});
+}
+
+fn SiblingAddedApp(includeB: bool, initialA: u32, out: *u32) void {
+    forbear.element(.{})({
+        if (includeB) SiblingAddedComponentB();
+        SiblingAddedComponentA(initialA, out);
+    });
+}
+
 test "Component state preserved when sibling is added" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -2893,32 +2911,11 @@ test "Component state preserved when sibling is added" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const ComponentA = struct {
-        fn render(initialValue: u32, out: *u32) void {
-            forbear.component(.{
-                .key = "A",
-            })({
-                const state = forbear.useState(u32, initialValue);
-                out.* = state.*;
-            });
-        }
-    }.render;
-
-    const ComponentB = struct {
-        fn render() void {
-            forbear.component(.{
-                .key = "B",
-            })({});
-        }
-    }.render;
-
     var stateOut: u32 = 0;
 
     // Frame 1: render only ComponentA, initializing state to 42
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            ComponentA(42, &stateOut);
-        });
+        SiblingAddedApp(false, 42, &stateOut);
     });
     try std.testing.expectEqual(42, stateOut);
 
@@ -2926,12 +2923,27 @@ test "Component state preserved when sibling is added" {
 
     // Frame 2: add ComponentB before ComponentA — A's state should still be 42
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            ComponentB();
-            ComponentA(99, &stateOut);
-        });
+        SiblingAddedApp(true, 99, &stateOut);
     });
     try std.testing.expectEqual(42, stateOut);
+}
+
+fn SiblingRemovedComponentA() void {
+    forbear.component(.{ .key = "A" })({});
+}
+
+fn SiblingRemovedComponentB(initialValue: u32, out: *u32) void {
+    forbear.component(.{ .key = "B" })({
+        const state = forbear.useState(u32, initialValue);
+        out.* = state.*;
+    });
+}
+
+fn SiblingRemovedApp(includeA: bool, initialB: u32, out: *u32) void {
+    forbear.element(.{})({
+        if (includeA) SiblingRemovedComponentA();
+        SiblingRemovedComponentB(initialB, out);
+    });
 }
 
 test "Component state preserved when sibling is removed" {
@@ -2942,33 +2954,11 @@ test "Component state preserved when sibling is removed" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const ComponentA = struct {
-        fn render() void {
-            forbear.component(.{
-                .key = "A",
-            })({});
-        }
-    }.render;
-
-    const ComponentB = struct {
-        fn render(initialValue: u32, out: *u32) void {
-            forbear.component(.{
-                .key = "B",
-            })({
-                const state = forbear.useState(u32, initialValue);
-                out.* = state.*;
-            });
-        }
-    }.render;
-
     var stateOut: u32 = 0;
 
     // Frame 1: render A then B, B gets state=42
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            ComponentA();
-            ComponentB(42, &stateOut);
-        });
+        SiblingRemovedApp(true, 42, &stateOut);
     });
     try std.testing.expectEqual(42, stateOut);
 
@@ -2976,9 +2966,7 @@ test "Component state preserved when sibling is removed" {
 
     // Frame 2: remove A, render only B — B's state should still be 42
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            ComponentB(99, &stateOut);
-        });
+        SiblingRemovedApp(false, 99, &stateOut);
     });
     try std.testing.expectEqual(42, stateOut);
 }
@@ -3017,6 +3005,23 @@ test "Sibling components at same call site get unique keys" {
     try std.testing.expectEqual(@as(u32, 2), second);
 }
 
+fn LoopItem(key: []const u8, initialValue: u32, observed: *u32) void {
+    forbear.component(.{ .key = key })({
+        const state = forbear.useState(u32, initialValue);
+        observed.* = state.*;
+    });
+}
+
+fn LoopApp(items: []const []const u8, fallbackInitial: u32, observed: *std.StringHashMap(u32)) !void {
+    forbear.element(.{})({
+        for (items, 0..) |item, i| {
+            var v: u32 = 0;
+            LoopItem(item, fallbackInitial + @as(u32, @intCast(i)), &v);
+            try observed.put(item, v);
+        }
+    });
+}
+
 test "Component state in a loop with manual keys" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -3025,42 +3030,38 @@ test "Component state in a loop with manual keys" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const items = [_][]const u8{ "alpha", "beta", "gamma" };
+    var observed = std.StringHashMap(u32).init(std.testing.allocator);
+    defer observed.deinit();
 
     // Frame 1: render 3 components with manual keys, each storing its index
+    const items = [_][]const u8{ "alpha", "beta", "gamma" };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            for (items, 0..) |item, i| {
-                forbear.component(.{
-                    .key = item,
-                })({
-                    const state = forbear.useState(u32, @intCast(i));
-                    _ = state;
-                });
-            }
-        });
+        try LoopApp(&items, 0, &observed);
     });
 
     _ = arena.reset(.retain_capacity);
 
-    // Frame 2: remove "beta" from the middle — alpha and gamma should keep state
+    // Frame 2: remove "beta" from the middle — alpha and gamma should keep state.
+    // Use a different fallback initial to prove the original values stuck.
     const items_without_beta = [_][]const u8{ "alpha", "gamma" };
-
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            for (items_without_beta) |item| {
-                forbear.component(.{
-                    .key = item,
-                })({
-                    const state = forbear.useState(u32, 999);
-                    if (std.mem.eql(u8, item, "alpha")) {
-                        try std.testing.expectEqual(0, state.*);
-                    } else if (std.mem.eql(u8, item, "gamma")) {
-                        try std.testing.expectEqual(2, state.*);
-                    }
-                });
-            }
-        });
+        try LoopApp(&items_without_beta, 999, &observed);
+    });
+    try std.testing.expectEqual(0, observed.get("alpha").?);
+    try std.testing.expectEqual(2, observed.get("gamma").?);
+}
+
+fn ConditionalElementApp(condition: bool, capturedKey: ?*u64) void {
+    forbear.element(.{})({
+        if (condition) {
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 50 },
+                    .height = .{ .fixed = 50 },
+                },
+            })({});
+            if (capturedKey) |slot| slot.* = forbear.getPreviousNode().?.key;
+        }
     });
 }
 
@@ -3072,65 +3073,46 @@ test "Element keys stable inside if statements" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
-
-    const conditionalElement = struct {
-        fn render(condition: bool) void {
-            if (condition) {
-                forbear.element(.{
-                    .style = .{
-                        .width = .{ .fixed = 50 },
-                        .height = .{ .fixed = 50 },
-                    },
-                })({});
-            }
-        }
-    }.render;
-
     var key1: u64 = 0;
     var key2: u64 = 0;
     var key3: u64 = 0;
 
     // Frame 1: condition true
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            conditionalElement(true);
-            key1 = self.nodeTree.at(1).key;
-        });
+        ConditionalElementApp(true, &key1);
     });
 
     _ = arena.reset(.retain_capacity);
 
     // Frame 2: condition true again — key should match
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            conditionalElement(true);
-            key2 = self.nodeTree.at(1).key;
-        });
+        ConditionalElementApp(true, &key2);
     });
-
     try std.testing.expectEqual(key1, key2);
 
     _ = arena.reset(.retain_capacity);
 
     // Frame 3: condition false — element not rendered
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            conditionalElement(false);
-        });
+        ConditionalElementApp(false, null);
     });
 
     _ = arena.reset(.retain_capacity);
 
     // Frame 4: condition true again — key should still match frame 1
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            conditionalElement(true);
-            key3 = self.nodeTree.at(1).key;
-        });
+        ConditionalElementApp(true, &key3);
     });
-
     try std.testing.expectEqual(key1, key3);
+}
+
+fn ForLoopKeyApp(items: []const []const u8, observedKeys: *std.StringHashMap(u64)) !void {
+    forbear.element(.{})({
+        for (items) |item| {
+            forbear.element(.{ .key = item })({});
+            try observedKeys.put(item, forbear.getPreviousNode().?.key);
+        }
+    });
 }
 
 test "Element keys stable in for-loop with manual keys" {
@@ -3142,48 +3124,43 @@ test "Element keys stable in for-loop with manual keys" {
     const arenaAllocator = arena.allocator();
 
     const items = [_][]const u8{ "alpha", "beta", "gamma" };
-    var keys = std.StringHashMap(u64).init(std.testing.allocator);
-    defer keys.deinit();
+    var keys1 = std.StringHashMap(u64).init(std.testing.allocator);
+    defer keys1.deinit();
+    var keys2 = std.StringHashMap(u64).init(std.testing.allocator);
+    defer keys2.deinit();
+    var keys3 = std.StringHashMap(u64).init(std.testing.allocator);
+    defer keys3.deinit();
 
     // Frame 1: render 3 elements with manual keys, capture each one's key
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            for (items) |item| {
-                forbear.element(.{ .key = item })({});
-                try keys.put(item, forbear.getPreviousNode().?.key);
-            }
-        });
+        try ForLoopKeyApp(&items, &keys1);
     });
 
     // All three keys must be distinct (manual key disambiguates same call site)
-    try std.testing.expect(keys.get("alpha").? != keys.get("beta").?);
-    try std.testing.expect(keys.get("beta").? != keys.get("gamma").?);
-    try std.testing.expect(keys.get("alpha").? != keys.get("gamma").?);
+    try std.testing.expect(keys1.get("alpha").? != keys1.get("beta").?);
+    try std.testing.expect(keys1.get("beta").? != keys1.get("gamma").?);
+    try std.testing.expect(keys1.get("alpha").? != keys1.get("gamma").?);
 
     _ = arena.reset(.retain_capacity);
 
     // Frame 2: same loop again — every element's key must match frame 1
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            for (items) |item| {
-                forbear.element(.{ .key = item })({});
-                try std.testing.expectEqual(keys.get(item).?, forbear.getPreviousNode().?.key);
-            }
-        });
+        try ForLoopKeyApp(&items, &keys2);
     });
+    for (items) |item| {
+        try std.testing.expectEqual(keys1.get(item).?, keys2.get(item).?);
+    }
 
     _ = arena.reset(.retain_capacity);
 
     // Frame 3: remove "beta" — alpha and gamma's keys should still match frame 1
     const items_without_beta = [_][]const u8{ "alpha", "gamma" };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            for (items_without_beta) |item| {
-                forbear.element(.{ .key = item })({});
-                try std.testing.expectEqual(keys.get(item).?, forbear.getPreviousNode().?.key);
-            }
-        });
+        try ForLoopKeyApp(&items_without_beta, &keys3);
     });
+    for (items_without_beta) |item| {
+        try std.testing.expectEqual(keys1.get(item).?, keys3.get(item).?);
+    }
 }
 
 test "Element keys stable for siblings around a conditional element" {
@@ -3337,6 +3314,29 @@ test "Wrapper components produce unique keys from different parent components" {
     });
 }
 
+const ComponentResolutionProps = struct {
+    callCount: *u32,
+    value: u32,
+};
+
+fn ComponentResolutionComponent(props: ComponentResolutionProps) !void {
+    forbear.component(.{ .key = "component-resolution-test" })({
+        props.callCount.* += 1;
+        const counter = forbear.useState(u32, props.value);
+        const innerArena = forbear.useArena();
+        try std.testing.expectEqual(10, counter.*);
+        forbear.element(.{})({
+            forbear.text(try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
+        });
+    });
+}
+
+fn ComponentResolutionApp(props: ComponentResolutionProps) !void {
+    forbear.element(.{})({
+        try ComponentResolutionComponent(props);
+    });
+}
+
 test "Component resolution" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -3347,38 +3347,13 @@ test "Component resolution" {
 
     var callCount: u32 = 0;
 
-    const MyComponentProps = struct {
-        callCount: *u32,
-        value: u32,
-    };
-
-    const MyComponent = (struct {
-        fn myComponent(props: MyComponentProps) !void {
-            forbear.component(.{
-                .key = "component-resolution-test",
-            })({
-                props.callCount.* += 1;
-                const counter = forbear.useState(u32, props.value);
-                const innerArena = forbear.useArena();
-                try std.testing.expectEqual(10, counter.*);
-                forbear.element(.{})({
-                    forbear.text(try std.fmt.allocPrint(innerArena, "Value {d}", .{counter.*}));
-                });
-            });
-        }
-    }).myComponent;
-
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            try MyComponent(.{ .callCount = &callCount, .value = 10 });
-        });
+        try ComponentResolutionApp(.{ .callCount = &callCount, .value = 10 });
         try std.testing.expectEqual(1, callCount);
     });
 
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{})({
-            try MyComponent(.{ .callCount = &callCount, .value = 20 });
-        });
+        try ComponentResolutionApp(.{ .callCount = &callCount, .value = 20 });
         try std.testing.expectEqual(2, callCount);
     });
 }
@@ -3825,6 +3800,21 @@ test "useSpringTransition - state persistence across frames" {
     try std.testing.expect(value3 >= value2 or @abs(value3 - 100.0) < 0.0001);
 }
 
+fn StateCreationCounter(observed1: *i32, observed2: *f32, mutate: bool) void {
+    forbear.component(.{ .key = "random" })({
+        const state1 = forbear.useState(i32, 42);
+        const state2 = forbear.useState(f32, 3.14);
+
+        if (mutate) {
+            state1.* = 100;
+            state2.* = 6.28;
+        }
+
+        observed1.* = state1.*;
+        observed2.* = state2.*;
+    });
+}
+
 test "State creation with manual handling" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
@@ -3833,56 +3823,52 @@ test "State creation with manual handling" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
-    var componentKey: u64 = undefined;
-    {
-        // First run that should allocate RAM, and still allow reading and writing the values
-        try forbear.frame(try frameMeta(arenaAllocator))({
-            forbear.component(.{
-                .key = "random",
-            })({
-                componentKey = self.frameMeta.?.scopeStack.getLast();
-                const state1 = forbear.useState(i32, 42);
-                try std.testing.expectEqual(1, self.states.count());
-                try std.testing.expectEqual(42, state1.*);
 
-                const state2 = forbear.useState(f32, 3.14);
-                try std.testing.expectEqual(2, self.states.count());
-                try std.testing.expectEqual(42, state1.*);
-                try std.testing.expectEqual(3.14, state2.*);
+    var observed1: i32 = 0;
+    var observed2: f32 = 0;
 
-                state1.* = 100;
-                state2.* = 6.28;
-                try std.testing.expectEqual(100, state1.*);
-                try std.testing.expectEqual(6.28, state2.*);
-            });
-        });
-    }
-    {
-        _ = arena.reset(.retain_capacity);
-        try forbear.frame(try frameMeta(arenaAllocator))({
-            forbear.component(.{
-                .key = "random",
-            })({
-                const state1 = forbear.useState(i32, 42);
-                try std.testing.expectEqual(2, self.states.count());
-                const state2 = forbear.useState(f32, 3.14);
-                try std.testing.expectEqual(2, self.states.count());
+    // Frame 1: state allocates, both useStates are mutated, count reaches 2.
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        StateCreationCounter(&observed1, &observed2, true);
+    });
+    try std.testing.expectEqual(2, self.states.count());
+    try std.testing.expectEqual(100, observed1);
+    try std.testing.expectEqual(6.28, observed2);
 
-                try std.testing.expectEqual(100, state1.*);
-                try std.testing.expectEqual(6.28, state2.*);
-            });
-        });
-    }
-    // {
-    //     _ = arena.reset(.retain_capacity);
-    //     // useState called outside a component captures NoComponentContext in frameMeta.err
-    //     try std.testing.expectError(
-    //         error.NoComponentContext,
-    //         forbear.frame(try frameMeta(arenaAllocator))({
-    //             _ = forbear.useState(i32, 42);
-    //         }),
-    //     );
-    // }
+    // Frame 2: state is reused, mutated values from frame 1 persist.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        StateCreationCounter(&observed1, &observed2, false);
+    });
+    try std.testing.expectEqual(2, self.states.count());
+    try std.testing.expectEqual(100, observed1);
+    try std.testing.expectEqual(6.28, observed2);
+}
+
+fn TransitionRealloc(targetTo: f32, observedFrom: *f32, observedTo: *f32, observedAnimation: *?forbear.AnimationState) !void {
+    // Mimics useTransition's calls:
+    //   const valueToTransitionFrom = useState(f32, value);
+    //   const valueToTransitionTo = useState(f32, value);
+    //   const animation = useAnimation(duration);  -> useState(?AnimationState, null)
+    forbear.component(.{ .key = "use-transition-realloc-test" })({
+        const valueToTransitionFrom = forbear.useState(f32, 1.0);
+        const valueToTransitionTo = forbear.useState(f32, 1.0);
+        const animationState = forbear.useState(?forbear.AnimationState, null);
+
+        // Earlier pointers must remain valid after the later useState calls;
+        // if realloc had moved the buffer they'd be dangling here.
+        try std.testing.expectEqual(valueToTransitionFrom.*, valueToTransitionFrom.*);
+        try std.testing.expectEqual(valueToTransitionTo.*, valueToTransitionTo.*);
+
+        // Simulate useTransition's "did the target change?" check.
+        if (targetTo != valueToTransitionTo.*) {
+            valueToTransitionTo.* = targetTo;
+        }
+
+        observedFrom.* = valueToTransitionFrom.*;
+        observedTo.* = valueToTransitionTo.*;
+        observedAnimation.* = animationState.*;
+    });
 }
 
 test "Multiple useState pointers remain valid after realloc (useTransition pattern)" {
@@ -3896,60 +3882,43 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    {
-        // First frame: all three useState calls allocate/grow the buffer
-        try forbear.frame(try frameMeta(arenaAllocator))({
-            forbear.component(.{
-                .key = "use-transition-realloc-test",
-            })({
-                // Mimics useTransition's calls:
-                //   const valueToTransitionFrom = useState(f32, value);
-                //   const valueToTransitionTo = useState(f32, value);
-                //   const animation = useAnimation(duration);  -> useState(?AnimationState, null)
-                const valueToTransitionFrom = forbear.useState(f32, 1.0);
-                try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
-                const valueToTransitionTo = forbear.useState(f32, 1.0);
-                try std.testing.expectEqual(1.0, valueToTransitionTo.*);
-                const animationState = forbear.useState(?forbear.AnimationState, null);
-                try std.testing.expectEqual(null, animationState.*);
+    var observedFrom: f32 = 0;
+    var observedTo: f32 = 0;
+    var observedAnimation: ?forbear.AnimationState = null;
 
-                // These dereferences should not segfault — if realloc moved the buffer,
-                // earlier pointers would be dangling and this would crash or read garbage.
-                try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
-                try std.testing.expectEqual(1.0, valueToTransitionTo.*);
-                try std.testing.expectEqual(null, animationState.*);
+    // Frame 1: useState allocates the buffer and we mutate the second slot.
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        try TransitionRealloc(2.0, &observedFrom, &observedTo, &observedAnimation);
+    });
+    try std.testing.expectEqual(1.0, observedFrom);
+    try std.testing.expectEqual(2.0, observedTo);
+    try std.testing.expectEqual(null, observedAnimation);
 
-                // Simulate the comparison from useTransition line 419:
-                //   if (value != valueToTransitionTo.*) { ... }
-                const value: f32 = 2.0;
-                if (value != valueToTransitionTo.*) {
-                    valueToTransitionTo.* = value;
-                }
-                try std.testing.expectEqual(2.0, valueToTransitionTo.*);
-                // The first pointer should still be valid and unchanged
-                try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
-            });
+    // Frame 2: buffer already exists at full size, no realloc — values persist.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        try TransitionRealloc(2.0, &observedFrom, &observedTo, &observedAnimation);
+    });
+    try std.testing.expectEqual(1.0, observedFrom);
+    try std.testing.expectEqual(2.0, observedTo);
+    try std.testing.expectEqual(null, observedAnimation);
+}
+
+fn StateSlot(elementKey: []const u8, observed: *i32, mutateTo: ?i32) void {
+    forbear.element(.{ .key = elementKey })({
+        const v = forbear.useState(i32, 0);
+        observed.* = v.*;
+        if (mutateTo) |m| v.* = m;
+    });
+}
+
+fn StateIsolationApp(leftMutateTo: ?i32, rightMutateTo: ?i32, leftObserved: *i32, rightObserved: *i32) void {
+    forbear.element(.{ .key = "root" })({
+        forbear.component(.{ .key = "host" })({
+            StateSlot("left", leftObserved, leftMutateTo);
+            StateSlot("right", rightObserved, rightMutateTo);
         });
-    }
-
-    {
-        // Second frame: buffer already exists at full size, no realloc needed
-        _ = arena.reset(.retain_capacity);
-        try forbear.frame(try frameMeta(arenaAllocator))({
-            forbear.component(.{
-                .key = "use-transition-realloc-test",
-            })({
-                const valueToTransitionFrom = forbear.useState(f32, 1.0);
-                const valueToTransitionTo = forbear.useState(f32, 1.0);
-                const animationState = forbear.useState(?forbear.AnimationState, null);
-
-                // Second frame should preserve mutated state from first frame
-                try std.testing.expectEqual(1.0, valueToTransitionFrom.*);
-                try std.testing.expectEqual(2.0, valueToTransitionTo.*);
-                try std.testing.expectEqual(null, animationState.*);
-            });
-        });
-    }
+    });
 }
 
 test "useState in element scope isolates state per element" {
@@ -3960,41 +3929,23 @@ test "useState in element scope isolates state per element" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    // Frame 1: two sibling elements each take a useState. Mutate them to
-    // distinct values and assert the values are independent.
-    try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "host" })({
-                forbear.element(.{ .key = "left" })({
-                    const v = forbear.useState(i32, 0);
-                    try std.testing.expectEqual(0, v.*);
-                    v.* = 11;
-                });
-                forbear.element(.{ .key = "right" })({
-                    const v = forbear.useState(i32, 0);
-                    try std.testing.expectEqual(0, v.*);
-                    v.* = 22;
-                });
-            });
-        });
-    });
+    var leftObserved: i32 = 0;
+    var rightObserved: i32 = 0;
 
-    // Frame 2: state should persist independently for each element.
+    // Frame 1: each sibling sees the initial value and writes a distinct one.
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        StateIsolationApp(11, 22, &leftObserved, &rightObserved);
+    });
+    try std.testing.expectEqual(0, leftObserved);
+    try std.testing.expectEqual(0, rightObserved);
+
+    // Frame 2: each sibling reads back its own previously-stored value.
     _ = arena.reset(.retain_capacity);
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "host" })({
-                forbear.element(.{ .key = "left" })({
-                    const v = forbear.useState(i32, 0);
-                    try std.testing.expectEqual(11, v.*);
-                });
-                forbear.element(.{ .key = "right" })({
-                    const v = forbear.useState(i32, 0);
-                    try std.testing.expectEqual(22, v.*);
-                });
-            });
-        });
+        StateIsolationApp(null, null, &leftObserved, &rightObserved);
     });
+    try std.testing.expectEqual(11, leftObserved);
+    try std.testing.expectEqual(22, rightObserved);
 }
 
 test "useState binds to nearest scope: element preferred, component inside element wins" {
@@ -4043,6 +3994,28 @@ test "useState binds to nearest scope: element preferred, component inside eleme
     try std.testing.expect(elementKey != innerComponentKey);
 }
 
+fn ReallocSlot(observedA: *f32, observedB: *f32, observedC: *?forbear.AnimationState, mutateBTo: ?f32) void {
+    forbear.element(.{ .key = "scope" })({
+        const a = forbear.useState(f32, 1.0);
+        const b = forbear.useState(f32, 1.0);
+        const c = forbear.useState(?forbear.AnimationState, null);
+
+        if (mutateBTo) |target| b.* = target;
+
+        observedA.* = a.*;
+        observedB.* = b.*;
+        observedC.* = c.*;
+    });
+}
+
+fn ReallocApp(observedA: *f32, observedB: *f32, observedC: *?forbear.AnimationState, mutateBTo: ?f32) void {
+    forbear.element(.{ .key = "root" })({
+        forbear.component(.{ .key = "realloc-host" })({
+            ReallocSlot(observedA, observedB, observedC, mutateBTo);
+        });
+    });
+}
+
 test "useState in element scope persists multiple slots across realloc" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
@@ -4051,43 +4024,26 @@ test "useState in element scope persists multiple slots across realloc" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
+    var observedA: f32 = 0;
+    var observedB: f32 = 0;
+    var observedC: ?forbear.AnimationState = null;
+
+    // Frame 1: allocate three useState slots and mutate the middle one.
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "realloc-host" })({
-                forbear.element(.{ .key = "scope" })({
-                    const a = forbear.useState(f32, 1.0);
-                    try std.testing.expectEqual(1.0, a.*);
-                    const b = forbear.useState(f32, 1.0);
-                    try std.testing.expectEqual(1.0, b.*);
-                    const c = forbear.useState(?forbear.AnimationState, null);
-                    try std.testing.expectEqual(null, c.*);
-
-                    // Earlier pointers must remain valid after subsequent allocs.
-                    try std.testing.expectEqual(1.0, a.*);
-                    try std.testing.expectEqual(1.0, b.*);
-                    b.* = 2.0;
-                    try std.testing.expectEqual(1.0, a.*);
-                    try std.testing.expectEqual(2.0, b.*);
-                });
-            });
-        });
+        ReallocApp(&observedA, &observedB, &observedC, 2.0);
     });
+    try std.testing.expectEqual(1.0, observedA);
+    try std.testing.expectEqual(2.0, observedB);
+    try std.testing.expectEqual(null, observedC);
 
+    // Frame 2: same render code; earlier slots' values must survive.
     _ = arena.reset(.retain_capacity);
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{ .key = "root" })({
-            forbear.component(.{ .key = "realloc-host" })({
-                forbear.element(.{ .key = "scope" })({
-                    const a = forbear.useState(f32, 1.0);
-                    const b = forbear.useState(f32, 1.0);
-                    const c = forbear.useState(?forbear.AnimationState, null);
-                    try std.testing.expectEqual(1.0, a.*);
-                    try std.testing.expectEqual(2.0, b.*);
-                    try std.testing.expectEqual(null, c.*);
-                });
-            });
-        });
+        ReallocApp(&observedA, &observedB, &observedC, null);
     });
+    try std.testing.expectEqual(1.0, observedA);
+    try std.testing.expectEqual(2.0, observedB);
+    try std.testing.expectEqual(null, observedC);
 }
 
 test "stale scope state is pruned at frame end (element)" {
@@ -4152,6 +4108,48 @@ test "stale scope state is pruned at frame end (component)" {
     try std.testing.expect(self.states.count() < stateCountWithTransient);
 }
 
+const HoverObservation = struct {
+    enter: bool = false,
+    leave: bool = false,
+};
+
+fn HoverFirst(observed: *HoverObservation) void {
+    forbear.element(.{
+        .style = .{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        },
+    })({
+        observed.enter = forbear.on(.mouseEnter);
+        observed.leave = forbear.on(.mouseLeave);
+    });
+}
+
+fn HoverSecond(observed: *HoverObservation) void {
+    forbear.element(.{
+        .style = .{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+            .placement = .{ .absolute = .{ 200.0, 0.0 } },
+        },
+    })({
+        observed.enter = forbear.on(.mouseEnter);
+        observed.leave = forbear.on(.mouseLeave);
+    });
+}
+
+fn HoverApp(firstObserved: *HoverObservation, secondObserved: *HoverObservation) void {
+    forbear.element(.{
+        .style = .{
+            .width = .{ .grow = 1.0 },
+            .height = .{ .grow = 1.0 },
+        },
+    })({
+        HoverFirst(firstObserved);
+        HoverSecond(secondObserved);
+    });
+}
+
 test "on() mouseEnter and mouseLeave fire on the correct element" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -4162,47 +4160,13 @@ test "on() mouseEnter and mouseLeave fire on the correct element" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    // Use helper functions so element() is called from the same site each frame,
-    // giving stable keys across frames.
-    const helpers = struct {
-        fn root() *const fn (void) void {
-            return forbear.element(.{
-                .style = .{
-                    .width = .{ .grow = 1.0 },
-                    .height = .{ .grow = 1.0 },
-                },
-            });
-        }
-        fn first() *const fn (void) void {
-            return forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 100 },
-                    .height = .{ .fixed = 100 },
-                },
-            });
-        }
-        fn second() *const fn (void) void {
-            return forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 100 },
-                    .height = .{ .fixed = 100 },
-                    .placement = .{ .absolute = .{ 200.0, 0.0 } },
-                },
-            });
-        }
-    };
+    var firstObserved: HoverObservation = .{};
+    var secondObserved: HoverObservation = .{};
 
     // Frame 1: mouse outside both — prime measurements with wasMouseInside = false
     self.mousePosition = .{ 500.0, 500.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        helpers.root()({
-            helpers.first()({
-                _ = forbear.on(.mouseEnter);
-            });
-            helpers.second()({
-                _ = forbear.on(.mouseEnter);
-            });
-        });
+        HoverApp(&firstObserved, &secondObserved);
         _ = try forbear.layout();
     });
     _ = arena.reset(.retain_capacity);
@@ -4210,33 +4174,36 @@ test "on() mouseEnter and mouseLeave fire on the correct element" {
     // Frame 2: mouse moves into first → first.mouseEnter fires; second sees nothing
     self.mousePosition = .{ 50.0, 50.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        helpers.root()({
-            helpers.first()({
-                try std.testing.expect(forbear.on(.mouseEnter));
-                try std.testing.expect(!forbear.on(.mouseLeave));
-            });
-            helpers.second()({
-                try std.testing.expect(!forbear.on(.mouseEnter));
-                try std.testing.expect(!forbear.on(.mouseLeave));
-            });
-        });
+        HoverApp(&firstObserved, &secondObserved);
         _ = try forbear.layout();
     });
+    try std.testing.expect(firstObserved.enter);
+    try std.testing.expect(!firstObserved.leave);
+    try std.testing.expect(!secondObserved.enter);
+    try std.testing.expect(!secondObserved.leave);
     _ = arena.reset(.retain_capacity);
 
     // Frame 3: mouse moves from first into second → first.mouseLeave + second.mouseEnter
     self.mousePosition = .{ 250.0, 50.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        helpers.root()({
-            helpers.first()({
-                try std.testing.expect(!forbear.on(.mouseEnter));
-                try std.testing.expect(forbear.on(.mouseLeave));
-            });
-            helpers.second()({
-                try std.testing.expect(forbear.on(.mouseEnter));
-                try std.testing.expect(!forbear.on(.mouseLeave));
-            });
-        });
+        HoverApp(&firstObserved, &secondObserved);
+    });
+    try std.testing.expect(!firstObserved.enter);
+    try std.testing.expect(firstObserved.leave);
+    try std.testing.expect(secondObserved.enter);
+    try std.testing.expect(!secondObserved.leave);
+}
+
+fn EdgeTriggeredBox(observed: *HoverObservation) void {
+    forbear.element(.{
+        .key = "test-element",
+        .style = .{
+            .width = .{ .fixed = 100 },
+            .height = .{ .fixed = 100 },
+        },
+    })({
+        observed.enter = forbear.on(.mouseEnter);
+        observed.leave = forbear.on(.mouseLeave);
     });
 }
 
@@ -4250,86 +4217,52 @@ test "on() mouseEnter and mouseLeave are edge-triggered" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
+    var observed: HoverObservation = .{};
+
     // Frame 1: mouse outside — prime measurement with wasMouseInside = false
     self.mousePosition = .{ 500.0, 500.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .key = "test-element",
-            .style = .{
-                .width = .{ .fixed = 100 },
-                .height = .{ .fixed = 100 },
-            },
-        })({
-            try std.testing.expect(!forbear.on(.mouseEnter));
-            try std.testing.expect(!forbear.on(.mouseLeave));
-        });
+        EdgeTriggeredBox(&observed);
         _ = try forbear.layout();
     });
+    try std.testing.expect(!observed.enter);
+    try std.testing.expect(!observed.leave);
     _ = arena.reset(.retain_capacity);
 
     // Frame 2: mouse moves inside — mouseEnter fires, mouseLeave does not.
-    // Calling either query multiple times yields the same result (idempotent).
     self.mousePosition = .{ 50.0, 50.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .key = "test-element",
-            .style = .{
-                .width = .{ .fixed = 100 },
-                .height = .{ .fixed = 100 },
-            },
-        })({
-            try std.testing.expect(forbear.on(.mouseEnter));
-            try std.testing.expect(!forbear.on(.mouseLeave));
-        });
+        EdgeTriggeredBox(&observed);
         _ = try forbear.layout();
     });
+    try std.testing.expect(observed.enter);
+    try std.testing.expect(!observed.leave);
     _ = arena.reset(.retain_capacity);
 
     // Frame 3: mouse stays inside — neither edge fires
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .key = "test-element",
-            .style = .{
-                .width = .{ .fixed = 100 },
-                .height = .{ .fixed = 100 },
-            },
-        })({
-            try std.testing.expect(!forbear.on(.mouseEnter));
-            try std.testing.expect(!forbear.on(.mouseLeave));
-        });
+        EdgeTriggeredBox(&observed);
         _ = try forbear.layout();
     });
+    try std.testing.expect(!observed.enter);
+    try std.testing.expect(!observed.leave);
     _ = arena.reset(.retain_capacity);
 
     // Frame 4: mouse moves outside — mouseLeave fires, mouseEnter does not
     self.mousePosition = .{ 500.0, 500.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .key = "test-element",
-            .style = .{
-                .width = .{ .fixed = 100 },
-                .height = .{ .fixed = 100 },
-            },
-        })({
-            try std.testing.expect(!forbear.on(.mouseEnter));
-            try std.testing.expect(forbear.on(.mouseLeave));
-        });
+        EdgeTriggeredBox(&observed);
     });
+    try std.testing.expect(!observed.enter);
+    try std.testing.expect(observed.leave);
 
-    // Frame 5: mouse moves outside — neither edge fires
+    // Frame 5: mouse stays outside — neither edge fires
     self.mousePosition = .{ 500.0, 500.0 };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.element(.{
-            .key = "test-element",
-            .style = .{
-                .width = .{ .fixed = 100 },
-                .height = .{ .fixed = 100 },
-            },
-        })({
-            try std.testing.expect(!forbear.on(.mouseEnter));
-            try std.testing.expect(!forbear.on(.mouseLeave));
-        });
+        EdgeTriggeredBox(&observed);
     });
+    try std.testing.expect(!observed.enter);
+    try std.testing.expect(!observed.leave);
 }
 
 fn testCreateElementConfiguration(configuration: struct {
@@ -4713,6 +4646,19 @@ test "scrollDeltaAccumulator transfers to scrollDelta at frame start" {
     });
 }
 
+fn MouseUpButton(observedMouseUp: *bool) void {
+    forbear.component(.{ .key = "component" })({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            },
+        })({
+            observedMouseUp.* = forbear.on(.mouseUp);
+        });
+    });
+}
+
 test "mouseUp dispatches on button release" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -4723,38 +4669,21 @@ test "mouseUp dispatches on button release" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const box = struct {
-        fn create() *const fn (void) void {
-            return forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 100 },
-                    .height = .{ .fixed = 100 },
-                },
-            });
-        }
-    }.create;
+    var observedMouseUp: bool = false;
 
     self.mousePosition = .{ 50.0, 50.0 };
 
     // Frame 1: prime measurement entry; useState not yet called (measurement null)
     self.mouseButtonPressed = true;
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.component(.{ .key = "component" })({
-            box()({
-                _ = forbear.on(.mouseUp);
-            });
-        });
+        MouseUpButton(&observedMouseUp);
         _ = try forbear.layout();
     });
     _ = arena.reset(.retain_capacity);
 
     // Frame 2: prime wasPressedLastFrame=true (button held, first useState call)
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.component(.{ .key = "component" })({
-            box()({
-                _ = forbear.on(.mouseUp);
-            });
-        });
+        MouseUpButton(&observedMouseUp);
         _ = try forbear.layout();
         self.mouseButtonPressed = false;
     });
@@ -4762,10 +4691,27 @@ test "mouseUp dispatches on button release" {
 
     // Frame 3: on(.mouseUp) fires (wasPressedLastFrame=true, mouseButtonPressed=false)
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.component(.{ .key = "component" })({
-            box()({
-                try std.testing.expect(forbear.on(.mouseUp));
-            });
+        MouseUpButton(&observedMouseUp);
+    });
+    try std.testing.expect(observedMouseUp);
+}
+
+const ClickObservation = struct {
+    click: bool = false,
+    mouseUp: bool = false,
+};
+
+fn ClickButton(observed: *ClickObservation) void {
+    forbear.component(.{ .key = "component" })({
+        forbear.element(.{
+            .key = "tracked",
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 100 },
+            },
+        })({
+            observed.click = forbear.on(.click);
+            observed.mouseUp = forbear.on(.mouseUp);
         });
     });
 }
@@ -4780,62 +4726,33 @@ test "click fires when mouseDown and mouseUp on same element" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
+    var observed: ClickObservation = .{};
+
     self.mousePosition = .{ 50.0, 50.0 };
     self.mouseButtonPressed = false;
 
-    // no measurements for event handling, setting up mouse position
+    // Frame 1: no events fire yet — we're priming measurement and last-frame state.
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.component(.{ .key = "component" })({
-            forbear.element(.{
-                .key = "tracked",
-                .style = .{
-                    .width = .{ .fixed = 100 },
-                    .height = .{ .fixed = 100 },
-                },
-            })({
-                _ = forbear.on(.click);
-                _ = forbear.on(.mouseUp);
-            });
-        });
+        ClickButton(&observed);
         _ = try forbear.layout();
         self.mouseButtonPressed = true;
     });
     _ = arena.reset(.retain_capacity);
 
-    // mouse button releases
+    // Frame 2: button is held — mouseDown fires inside on(.click), seeds wasMouseDown.
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.component(.{ .key = "component" })({
-            forbear.element(.{
-                .key = "tracked",
-                .style = .{
-                    .width = .{ .fixed = 100 },
-                    .height = .{ .fixed = 100 },
-                },
-            })({
-                _ = forbear.on(.click);
-                _ = forbear.on(.mouseUp);
-            });
-        });
+        ClickButton(&observed);
         _ = try forbear.layout();
         self.mouseButtonPressed = false;
     });
     _ = arena.reset(.retain_capacity);
 
-    // mouseUp fires → click fires
+    // Frame 3: button releases over the same element → mouseUp + click fire.
     try forbear.frame(try frameMeta(arenaAllocator))({
-        forbear.component(.{ .key = "component" })({
-            forbear.element(.{
-                .key = "tracked",
-                .style = .{
-                    .width = .{ .fixed = 100 },
-                    .height = .{ .fixed = 100 },
-                },
-            })({
-                try std.testing.expect(forbear.on(.click));
-                try std.testing.expect(forbear.on(.mouseUp));
-            });
-        });
+        ClickButton(&observed);
     });
+    try std.testing.expect(observed.click);
+    try std.testing.expect(observed.mouseUp);
 }
 
 test "no click when mouse moves away between mouseDown and mouseUp" {
@@ -6317,6 +6234,31 @@ test "useNodeMeasurement returns previous frame's resolved size" {
     try std.testing.expectApproxEqAbs(@as(f32, 50.0), observedSize[1], 0.001);
 }
 
+fn MeasuredPositionChild(observed: *Vec2) void {
+    forbear.element(.{
+        .key = "measured-element",
+        .style = .{
+            .width = .{ .fixed = 40.0 },
+            .height = .{ .fixed = 40.0 },
+        },
+    })({
+        if (forbear.useNodeMeasurement()) |m| observed.* = m.position;
+    });
+}
+
+fn MeasuredPositionApp(observed: *Vec2) void {
+    forbear.element(.{
+        .style = .{
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 200.0 },
+            .padding = .all(30.0),
+            .direction = .horizontal,
+        },
+    })({
+        MeasuredPositionChild(observed);
+    });
+}
+
 test "useNodeMeasurement returns previous frame's resolved position" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -6325,48 +6267,17 @@ test "useNodeMeasurement returns previous frame's resolved position" {
     defer arenaAllocator.deinit();
     const arena = arenaAllocator.allocator();
 
+    var observedPosition: Vec2 = @splat(-1.0);
+
+    // Frame 1: prime measurement.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
-            .style = .{
-                .width = .{ .fixed = 200.0 },
-                .height = .{ .fixed = 200.0 },
-                .padding = .all(30.0),
-                .direction = .horizontal,
-            },
-        })({
-            forbear.element(.{
-                .key = "measured-element",
-                .style = .{
-                    .width = .{ .fixed = 40.0 },
-                    .height = .{ .fixed = 40.0 },
-                },
-            })({
-                _ = forbear.useNodeMeasurement();
-            });
-        });
+        MeasuredPositionApp(&observedPosition);
         _ = try forbear.layout();
     });
 
-    var observedPosition: Vec2 = @splat(-1.0);
+    // Frame 2: read the resolved position from the previous frame.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
-            .style = .{
-                .width = .{ .fixed = 200.0 },
-                .height = .{ .fixed = 200.0 },
-                .padding = .all(30.0),
-                .direction = .horizontal,
-            },
-        })({
-            forbear.element(.{
-                .key = "measured-element",
-                .style = .{
-                    .width = .{ .fixed = 40.0 },
-                    .height = .{ .fixed = 40.0 },
-                },
-            })({
-                if (forbear.useNodeMeasurement()) |m| observedPosition = m.position;
-            });
-        });
+        MeasuredPositionApp(&observedPosition);
         _ = try forbear.layout();
     });
 
@@ -6427,6 +6338,43 @@ test "useNodeMeasurement reflects most recent completed frame across three frame
     try std.testing.expectApproxEqAbs(@as(f32, 80.0), observedSize[1], 0.001);
 }
 
+fn FirstMeasuredSibling(observed: *Vec2) void {
+    forbear.element(.{
+        .key = "first-measured-element",
+        .style = .{
+            .width = .{ .fixed = 100.0 },
+            .height = .{ .fixed = 50.0 },
+        },
+    })({
+        if (forbear.useNodeMeasurement()) |m| observed.* = m.size;
+    });
+}
+
+fn SecondMeasuredSibling(observed: *Vec2) void {
+    forbear.element(.{
+        .key = "second-measured-element",
+        .style = .{
+            .width = .{ .fixed = 200.0 },
+            .height = .{ .fixed = 80.0 },
+        },
+    })({
+        if (forbear.useNodeMeasurement()) |m| observed.* = m.size;
+    });
+}
+
+fn SiblingMeasurementApp(firstObserved: *Vec2, secondObserved: *Vec2) void {
+    forbear.element(.{
+        .style = .{
+            .width = .{ .fixed = 500.0 },
+            .height = .{ .fixed = 200.0 },
+            .direction = .horizontal,
+        },
+    })({
+        FirstMeasuredSibling(firstObserved);
+        SecondMeasuredSibling(secondObserved);
+    });
+}
+
 test "useNodeMeasurement tracks sibling elements independently" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
@@ -6435,65 +6383,18 @@ test "useNodeMeasurement tracks sibling elements independently" {
     defer arenaAllocator.deinit();
     const arena = arenaAllocator.allocator();
 
+    var firstSize: Vec2 = @splat(-1.0);
+    var secondSize: Vec2 = @splat(-1.0);
+
+    // Frame 1: prime measurements.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
-            .style = .{
-                .width = .{ .fixed = 500.0 },
-                .height = .{ .fixed = 200.0 },
-                .direction = .horizontal,
-            },
-        })({
-            forbear.element(.{
-                .key = "first-measured-element",
-                .style = .{
-                    .width = .{ .fixed = 100.0 },
-                    .height = .{ .fixed = 50.0 },
-                },
-            })({
-                _ = forbear.useNodeMeasurement();
-            });
-            forbear.element(.{
-                .key = "second-measured-element",
-                .style = .{
-                    .width = .{ .fixed = 200.0 },
-                    .height = .{ .fixed = 80.0 },
-                },
-            })({
-                _ = forbear.useNodeMeasurement();
-            });
-        });
+        SiblingMeasurementApp(&firstSize, &secondSize);
         _ = try forbear.layout();
     });
 
-    var firstSize: Vec2 = @splat(-1.0);
-    var secondSize: Vec2 = @splat(-1.0);
+    // Frame 2: read each sibling's resolved size independently.
     try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
-            .style = .{
-                .width = .{ .fixed = 500.0 },
-                .height = .{ .fixed = 200.0 },
-                .direction = .horizontal,
-            },
-        })({
-            forbear.element(.{
-                .key = "first-measured-element",
-                .style = .{
-                    .width = .{ .fixed = 100.0 },
-                    .height = .{ .fixed = 50.0 },
-                },
-            })({
-                if (forbear.useNodeMeasurement()) |m| firstSize = m.size;
-            });
-            forbear.element(.{
-                .key = "second-measured-element",
-                .style = .{
-                    .width = .{ .fixed = 200.0 },
-                    .height = .{ .fixed = 80.0 },
-                },
-            })({
-                if (forbear.useNodeMeasurement()) |m| secondSize = m.size;
-            });
-        });
+        SiblingMeasurementApp(&firstSize, &secondSize);
         _ = try forbear.layout();
     });
 
