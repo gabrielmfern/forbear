@@ -910,6 +910,12 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;
 
+    // TODO: this does not seem to work with when I have two elements one
+    // beside the other, both have the cursor setup to something other than the
+    // one in the baseStyle here, then, I hover one of them, and move my mouse
+    // over to the other one. If the element I hovered is later on the tree,
+    // its mouseLeave will happen at the end, meaning the cursor will be set to
+    // the baseStyle cursor instead of the former element's cursor.
     if (on(.mouseEnter)) {
         setCursor(style.cursor);
     }
