@@ -76,6 +76,29 @@ pub fn ProfilingMetrics(props: ProfilingMetricsProps) void {
     });
 }
 
+const MachTimeValue = extern struct {
+    seconds: i32,
+    microseconds: i32,
+};
+const MachTaskBasicInfo = extern struct {
+    virtual_size: u64,
+    resident_size: u64,
+    resident_size_max: u64,
+    user_time: MachTimeValue,
+    system_time: MachTimeValue,
+    policy: i32,
+    suspend_count: i32,
+};
+const MACH_TASK_BASIC_INFO: u32 = 20;
+
+extern fn mach_task_self() u32;
+extern fn task_info(
+    target_task: u32,
+    flavor: u32,
+    task_info_out: *anyopaque,
+    task_info_count: *u32,
+) c_int;
+
 fn processResidentBytes() u64 {
     switch (builtin.os.tag) {
         .linux => {
@@ -101,6 +124,14 @@ fn processResidentBytes() u64 {
                 return 0;
             }
             return counters.WorkingSetSize;
+        },
+        .macos => {
+            var info: MachTaskBasicInfo = undefined;
+            var count: u32 = @sizeOf(MachTaskBasicInfo) / @sizeOf(u32);
+            if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, @ptrCast(&info), &count) != 0) {
+                return 0;
+            }
+            return info.resident_size;
         },
         else => @compileError("memory watching is unsupported for " ++ @tagName(builtin.os.tag)),
     }
