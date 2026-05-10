@@ -397,6 +397,26 @@ pub extern "user32" fn EnumDisplaySettingsW(lpszDeviceName: [*:0]const u16, iMod
 pub extern "user32" fn SetProcessWorkingSetSize(hProcess: HANDLE, dwMinimumWorkingSetSize: SIZE_T, dwMaximumWorkingSetSize: SIZE_T) callconv(.c) BOOL;
 pub extern "user32" fn GetCurrentProcess() callconv(.c) HANDLE;
 
+// Process memory info (psapi)
+pub const PROCESS_MEMORY_COUNTERS = extern struct {
+    cb: DWORD = @sizeOf(PROCESS_MEMORY_COUNTERS),
+    PageFaultCount: DWORD = 0,
+    PeakWorkingSetSize: SIZE_T = 0,
+    WorkingSetSize: SIZE_T = 0,
+    QuotaPeakPagedPoolUsage: SIZE_T = 0,
+    QuotaPagedPoolUsage: SIZE_T = 0,
+    QuotaPeakNonPagedPoolUsage: SIZE_T = 0,
+    QuotaNonPagedPoolUsage: SIZE_T = 0,
+    PagefileUsage: SIZE_T = 0,
+    PeakPagefileUsage: SIZE_T = 0,
+};
+
+pub extern "psapi" fn GetProcessMemoryInfo(
+    Process: HANDLE,
+    ppsmemCounters: *PROCESS_MEMORY_COUNTERS,
+    cb: DWORD,
+) callconv(.c) BOOL;
+
 // Vulkan
 pub const VkWin32SurfaceCreateFlagsKHR = c.VkFlags;
 pub const VkWin32SurfaceCreateInfoKHR = extern struct {

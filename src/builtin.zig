@@ -77,9 +77,9 @@ pub fn ProfilingMetrics(props: ProfilingMetricsProps) void {
 }
 
 fn processResidentBytes() u64 {
-    const io = forbear.useIo();
     switch (builtin.os.tag) {
         .linux => {
+            const io = forbear.useIo();
             const file = std.Io.Dir.openFileAbsolute(io, "/proc/self/statm", .{}) catch |err| {
                 forbear.handleFrameError(err);
                 return 0;
@@ -93,6 +93,14 @@ fn processResidentBytes() u64 {
             _ = it.next() orelse return 0;
             const rss_pages = std.fmt.parseInt(u64, it.next() orelse return 0, 10) catch return 0;
             return rss_pages * std.heap.pageSize();
+        },
+        .windows => {
+            const win32 = @import("windows/win32.zig");
+            var counters: win32.PROCESS_MEMORY_COUNTERS = .{};
+            if (win32.GetProcessMemoryInfo(win32.GetCurrentProcess(), &counters, @sizeOf(win32.PROCESS_MEMORY_COUNTERS)) == 0) {
+                return 0;
+            }
+            return counters.WorkingSetSize;
         },
         else => @compileError("memory watching is unsupported for " ++ @tagName(builtin.os.tag)),
     }
