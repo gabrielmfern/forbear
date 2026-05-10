@@ -833,7 +833,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
-    result.ptr.style = props.style.completeWith(baseStyle);
+    props.style.completeWith(baseStyle, &result.ptr.style);
 
     const parentZ = if (parentOptional) |parent|
         parent.z
@@ -1002,18 +1002,18 @@ pub noinline fn text(content: []const u8) void {
     else
         self.frameMeta.?.baseStyle;
 
-    const style = (Style{
+    (Style{
         .cursor = if (baseStyle.cursor == .default)
             .text
         else
             baseStyle.cursor,
         .xJustification = if (parentOptional) |parent| parent.style.xJustification else null,
         .yJustification = .start,
-    }).completeWith(baseStyle);
+    }).completeWith(baseStyle, &result.ptr.style);
 
-    const unitsPerEm: f32 = @floatFromInt(style.font.unitsPerEm());
+    const unitsPerEm: f32 = @floatFromInt(result.ptr.style.font.unitsPerEm());
     const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
-    const lineHeight = style.font.lineHeight() * style.lineHeight / unitsPerEm * style.fontSize;
+    const lineHeight = result.ptr.style.font.lineHeight() * result.ptr.style.lineHeight / unitsPerEm * result.ptr.style.fontSize;
 
     var effectiveContent = content;
     // converts \r\n, and \n\r, or just \r to \n for simplicity later on
@@ -1047,7 +1047,7 @@ pub noinline fn text(content: []const u8) void {
         effectiveContent = ownedContent;
     }
 
-    const shapedGlyphs = style.font.shape(effectiveContent) catch |err| {
+    const shapedGlyphs = result.ptr.style.font.shape(effectiveContent) catch |err| {
         handleFrameError(err);
         return;
     };
@@ -1069,8 +1069,8 @@ pub noinline fn text(content: []const u8) void {
     while (glyphIndex < shapedGlyphs.len) {
         defer glyphIndex += 1;
         const shapedGlyph = shapedGlyphs[glyphIndex];
-        var advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
-        const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(style.fontSize));
+        var advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(result.ptr.style.fontSize));
+        const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(result.ptr.style.fontSize));
         const isLinebreak = std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, "\n");
         if (isLinebreak) {
             advance[0] = -cursor[0];
@@ -1094,7 +1094,7 @@ pub noinline fn text(content: []const u8) void {
 
         cursor += advance;
         maxSize[0] = @max(maxSize[0], cursor[0]);
-        if (style.textWrapping == .word) {
+        if (result.ptr.style.textWrapping == .word) {
             if (std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, " ") or isLinebreak) {
                 wordAdvance = @splat(0.0);
                 maxSize[1] += lineHeight;
@@ -1102,10 +1102,10 @@ pub noinline fn text(content: []const u8) void {
                 wordAdvance += advance;
             }
             minSize[0] = @max(minSize[0], wordAdvance[0]);
-        } else if (style.textWrapping == .character) {
+        } else if (result.ptr.style.textWrapping == .character) {
             minSize[0] = @max(minSize[0], advance[0]);
             maxSize[1] += lineHeight;
-        } else if (style.textWrapping == .none) {
+        } else if (result.ptr.style.textWrapping == .none) {
             minSize[0] = @max(minSize[0], cursor[0]);
         }
     }
@@ -1141,7 +1141,6 @@ pub noinline fn text(content: []const u8) void {
         .lineHeight = lineHeight,
         .preBreakIndices = preBreakIndices.items,
     };
-    result.ptr.style = style;
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;
 
@@ -1165,7 +1164,7 @@ pub noinline fn text(content: []const u8) void {
     defer popScope();
 
     if (on(.mouseEnter)) {
-        setCursor(style.cursor);
+        setCursor(result.ptr.style.cursor);
     }
     if (on(.mouseLeave)) {
         setCursor(baseStyle.cursor);
