@@ -59,7 +59,7 @@ fn App() void {
             })({
                 const isHovering = forbear.useState(bool, false);
 
-                forbear.FpsCounter();
+                forbear.ProfilingMetrics(.{});
 
                 forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
                 forbear.element(.{

@@ -40,7 +40,7 @@ fn App() !void {
         })({
             forbear.ScrollBar(forbear.useScrolling());
 
-            forbear.FpsCounter();
+            forbear.ProfilingMetrics(.{});
 
             forbear.element(.{
                 .style = .{

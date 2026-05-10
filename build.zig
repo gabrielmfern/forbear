@@ -78,6 +78,7 @@ const Dependencies = struct {
                 module.linkSystemLibrary("user32", .{});
                 module.linkSystemLibrary("kernel32", .{});
                 module.linkSystemLibrary("gdi32", .{});
+                module.linkSystemLibrary("psapi", .{});
             },
             else => {},
         }
