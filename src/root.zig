@@ -707,7 +707,7 @@ fn frameEnd(block: void) anyerror!void {
         i -= 1;
         if (std.sort.binarySearch(
             u64,
-            self.touchedStates.items,
+            self.touchedScopes.items,
             self.scopes.items[i].key,
             keyCompare,
         ) == null) {
