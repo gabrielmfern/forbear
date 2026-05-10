@@ -2761,7 +2761,7 @@ test "Element tree stack stability" {
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{})({
-            const nodeParentStack = &self.frameMeta.?.nodeStack;
+            const nodeParentStack = &self.nodeStack;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             forbear.ProfilingMetrics(.{});
 
@@ -2783,13 +2783,13 @@ test "Element tree stack stability" {
             });
             try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
-        try std.testing.expectEqual(0, self.frameMeta.?.nodeStack.items.len);
+        try std.testing.expectEqual(0, self.nodeStack.items.len);
         try std.testing.expect(self.nodeTree.list.items.len > 0);
     });
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{})({
-            const nodeParentStack = &self.frameMeta.?.nodeStack;
+            const nodeParentStack = &self.nodeStack;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             forbear.ProfilingMetrics(.{});
             try std.testing.expectEqual(1, nodeParentStack.items.len);
@@ -2810,7 +2810,7 @@ test "Element tree stack stability" {
             });
             try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
-        try std.testing.expectEqual(0, self.frameMeta.?.nodeStack.items.len);
+        try std.testing.expectEqual(0, self.nodeStack.items.len);
         try std.testing.expect(self.nodeTree.list.items.len > 0);
     });
 }
@@ -3964,14 +3964,14 @@ test "useState binds to nearest scope: element preferred, component inside eleme
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{ .key = "root" })({
             forbear.component(.{ .key = "outer" })({
-                componentKey = self.frameMeta.?.scopeStack.getLast();
+                componentKey = self.scopeStack.getLast();
 
                 // useState here binds to the outer component.
                 const componentState = forbear.useState(i32, 0);
                 componentState.* = 1;
 
                 forbear.element(.{ .key = "host" })({
-                    elementKey = self.frameMeta.?.scopeStack.getLast();
+                    elementKey = self.scopeStack.getLast();
 
                     // useState inside the element binds to the element, not the
                     // surrounding component.
@@ -3979,7 +3979,7 @@ test "useState binds to nearest scope: element preferred, component inside eleme
                     elementState.* = 2;
 
                     forbear.component(.{ .key = "inner" })({
-                        innerComponentKey = self.frameMeta.?.scopeStack.getLast();
+                        innerComponentKey = self.scopeStack.getLast();
                         // useState here binds to the inner component (closer than
                         // the wrapping element).
                         const innerState = forbear.useState(i32, 0);
@@ -5133,7 +5133,7 @@ test "Component children slotting: parent stack stability" {
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{})({
-            const stack = &self.frameMeta.?.nodeStack;
+            const stack = &self.nodeStack;
             try std.testing.expectEqual(1, stack.items.len);
 
             TestComponent()({
