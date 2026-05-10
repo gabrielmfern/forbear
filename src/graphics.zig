@@ -3264,8 +3264,7 @@ pub const Renderer = struct {
             };
             c.vkGetPhysicalDeviceFeatures2(device.physicalDevice, &deviceFeatures2);
 
-            if (vulkan12Features.bufferDeviceAddress != c.VK_TRUE or
-                vulkan12Features.shaderInt8 != c.VK_TRUE or
+            if (vulkan12Features.shaderInt8 != c.VK_TRUE or
                 vulkan12Features.descriptorIndexing != c.VK_TRUE or
                 vulkan12Features.shaderSampledImageArrayNonUniformIndexing != c.VK_TRUE or
                 vulkan12Features.descriptorBindingPartiallyBound != c.VK_TRUE or
@@ -3389,7 +3388,6 @@ pub const Renderer = struct {
                 .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
                 .pNext = &c.VkPhysicalDeviceVulkan12Features{
                     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-                    .bufferDeviceAddress = c.VK_TRUE,
                     .shaderInt8 = c.VK_TRUE,
                     .descriptorIndexing = c.VK_TRUE,
                     .shaderSampledImageArrayNonUniformIndexing = c.VK_TRUE,
