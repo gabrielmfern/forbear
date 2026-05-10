@@ -78,13 +78,6 @@ pub const FrameMeta = struct {
 
     err: ?anyerror = null,
 
-    touchedScopes: std.ArrayList(u64) = .empty,
-    touchedStates: std.ArrayList(u64) = .empty,
-    /// stack of keys for scopes
-    scopeStack: std.ArrayList(u64) = .empty,
-    /// indices into the NodeTree
-    nodeStack: std.ArrayList(usize) = .empty,
-
     previousPushedNodeIndex: ?usize = null,
     componentChildrenSlotStates: std.ArrayList(ComponentChildrenSlotState) = .empty,
 };
@@ -118,6 +111,13 @@ viewportSize: Vec2,
 scopes: std.ArrayList(Scope) = .empty,
 states: std.AutoHashMap(u64, *anyopaque),
 
+touchedScopes: std.ArrayList(u64) = .empty,
+touchedStates: std.ArrayList(u64) = .empty,
+/// stack of keys for scopes
+scopeStack: std.ArrayList(u64) = .empty,
+/// indices into the NodeTree
+nodeStack: std.ArrayList(usize) = .empty,
+
 nodeTree: NodeTree,
 frameMeta: ?FrameMeta,
 
@@ -148,8 +148,13 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .lastUpdateTime = null,
         .viewportSize = @splat(0.0),
 
-        .scopes = try .initCapacity(allocator, 256),
+        .scopes = .empty,
         .states = .init(allocator),
+
+        .touchedScopes = .empty,
+        .touchedStates = .empty,
+        .scopeStack = .empty,
+        .nodeStack = .empty,
 
         .frameMeta = null,
         .nodeTree = .empty,
@@ -509,7 +514,7 @@ pub fn useLastUpdateTime() f64 {
 pub fn getParentNode() ?*Node {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
-    const index = self.frameMeta.?.nodeStack.getLastOrNull() orelse return null;
+    const index = self.nodeStack.getLastOrNull() orelse return null;
     return self.nodeTree.at(index);
 }
 
@@ -526,22 +531,40 @@ pub fn useArena() std.mem.Allocator {
     return self.frameMeta.?.arena;
 }
 
+fn scopeCompare(key: u64, scope: Scope) std.math.Order {
+    return std.math.order(key, scope.key);
+}
+
+fn keyCompare(keyA: u64, keyB: u64) std.math.Order {
+    return std.math.order(keyA, keyB);
+}
+
 fn pushScope(key: u64) error{OutOfMemory}!void {
     const self = getContext();
-    for (self.scopes.items) |scope| {
-        if (scope.key == key) {
-            try self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, key);
-            try self.frameMeta.?.touchedScopes.append(self.frameMeta.?.arena, key);
-            return;
-        }
+    if (std.sort.binarySearch(Scope, self.scopes.items, key, scopeCompare) != null) {
+        try self.scopeStack.append(self.allocator, key);
+        try self.touchedScopes.insert(
+            self.allocator,
+            std.sort.lowerBound(u64, self.touchedScopes.items, key, keyCompare),
+            key,
+        );
+        return;
     }
 
-    try self.scopes.append(self.allocator, Scope{
-        .arenaAllocator = std.heap.ArenaAllocator.init(self.allocator),
-        .key = key,
-    });
-    try self.frameMeta.?.scopeStack.append(self.frameMeta.?.arena, key);
-    try self.frameMeta.?.touchedScopes.append(self.frameMeta.?.arena, key);
+    try self.scopes.insert(
+        self.allocator,
+        std.sort.lowerBound(Scope, self.scopes.items, key, scopeCompare),
+        Scope{
+            .arenaAllocator = std.heap.ArenaAllocator.init(self.allocator),
+            .key = key,
+        },
+    );
+    try self.scopeStack.append(self.allocator, key);
+    try self.touchedScopes.insert(
+        self.allocator,
+        std.sort.lowerBound(u64, self.touchedScopes.items, key, keyCompare),
+        key,
+    );
 }
 
 fn popScope() void {
@@ -550,7 +573,7 @@ fn popScope() void {
     if (self.frameMeta.?.err != null) {
         return;
     }
-    _ = self.frameMeta.?.scopeStack.pop();
+    _ = self.scopeStack.pop();
 }
 
 pub noinline fn useState(comptime T: type, initialValue: T) *T {
@@ -566,22 +589,29 @@ pub noinline fn useState(comptime T: type, initialValue: T) *T {
         return &Static.dummy;
     }
 
-    if (self.frameMeta.?.scopeStack.getLastOrNull()) |scopeKey| {
+    if (self.scopeStack.getLastOrNull()) |scopeKey| {
         var hasher = std.hash.Wyhash.init(0);
         hasher.update(std.mem.asBytes(&scopeKey));
         hasher.update(std.mem.asBytes(&@returnAddress()));
 
         const scope: *Scope = blk: {
-            for (self.scopes.items) |*s| {
-                if (s.key == scopeKey) {
-                    break :blk s;
-                }
+            if (std.sort.binarySearch(
+                Scope,
+                self.scopes.items,
+                scopeKey,
+                scopeCompare,
+            )) |scopeIndex| {
+                break :blk &self.scopes.items[scopeIndex];
             }
             unreachable;
         };
         const stateKey = hasher.final();
 
-        self.frameMeta.?.touchedStates.append(self.frameMeta.?.arena, stateKey) catch |err| {
+        self.touchedStates.insert(
+            self.allocator,
+            std.sort.lowerBound(u64, self.touchedStates.items, stateKey, keyCompare),
+            stateKey,
+        ) catch |err| {
             std.log.err("Failed to track that state was touched: {}", .{err});
             @panic("Out of memory when tracking touched state for useState");
         };
@@ -675,14 +705,12 @@ fn frameEnd(block: void) anyerror!void {
     var i: usize = self.scopes.items.len;
     while (i > 0) {
         i -= 1;
-        var touched = false;
-        for (frameMeta.touchedScopes.items) |key| {
-            if (self.scopes.items[i].key == key) {
-                touched = true;
-                break;
-            }
-        }
-        if (!touched) {
+        if (std.sort.binarySearch(
+            u64,
+            self.touchedStates.items,
+            self.scopes.items[i].key,
+            keyCompare,
+        ) == null) {
             const scope = self.scopes.orderedRemove(i);
             scope.arenaAllocator.deinit();
         }
@@ -695,14 +723,12 @@ fn frameEnd(block: void) anyerror!void {
     defer staleStateKeys.deinit(frameMeta.arena);
     var existingStateKeys = self.states.keyIterator();
     while (existingStateKeys.next()) |stateKey| {
-        var touched = false;
-        for (frameMeta.touchedStates.items) |touchedKey| {
-            if (stateKey.* == touchedKey) {
-                touched = true;
-                break;
-            }
-        }
-        if (!touched) {
+        if (std.sort.binarySearch(
+            u64,
+            self.touchedStates.items,
+            stateKey.*,
+            keyCompare,
+        ) == null) {
             try staleStateKeys.append(frameMeta.arena, stateKey.*);
         }
     }
@@ -739,6 +765,8 @@ fn frameEnd(block: void) anyerror!void {
         _ = self.previousFrameNodeMeasurements.remove(staleKey);
     }
 
+    self.touchedStates.clearRetainingCapacity();
+    self.touchedScopes.clearRetainingCapacity();
     self.nodeTree.clearRetainingCapacity();
 }
 
@@ -758,11 +786,11 @@ fn elementEnd(block: void) void {
     _ = block;
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
-    std.debug.assert(self.frameMeta.?.nodeStack.items.len > 0);
+    std.debug.assert(self.nodeStack.items.len > 0);
 
     popScope();
 
-    self.frameMeta.?.previousPushedNodeIndex = self.frameMeta.?.nodeStack.pop();
+    self.frameMeta.?.previousPushedNodeIndex = self.nodeStack.pop();
 
     const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
     const node = self.nodeTree.at(previousNodeIndex);
@@ -789,7 +817,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     if (self.frameMeta.?.err != null) return &endNoop;
 
-    const parentIndexOptional = self.frameMeta.?.nodeStack.getLastOrNull();
+    const parentIndexOptional = self.nodeStack.getLastOrNull();
 
     const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
         handleFrameError(err);
@@ -814,10 +842,10 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         0;
 
     var hasher = std.hash.Wyhash.init(0);
-    if (self.frameMeta.?.scopeStack.getLastOrNull()) |lastScopeKey| {
+    if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
         hasher.update(std.mem.asBytes(&lastScopeKey));
     }
-    hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeStack.items.len));
+    hasher.update(std.mem.asBytes(&self.nodeStack.items.len));
     if (props.key) |key| {
         hasher.update(key);
     } else {
@@ -891,7 +919,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     result.ptr.size[0] = @min(@max(result.ptr.size[0], result.ptr.minSize[0]), result.ptr.maxSize[0]);
     result.ptr.size[1] = @min(@max(result.ptr.size[1], result.ptr.minSize[1]), result.ptr.maxSize[1]);
 
-    self.frameMeta.?.nodeStack.append(self.frameMeta.?.arena, result.index) catch |err| {
+    self.nodeStack.append(self.frameMeta.?.arena, result.index) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
@@ -958,7 +986,7 @@ pub noinline fn text(content: []const u8) void {
 
     if (self.frameMeta.?.err != null) return;
 
-    const parentIndexOptional = self.frameMeta.?.nodeStack.getLastOrNull();
+    const parentIndexOptional = self.nodeStack.getLastOrNull();
 
     const arena = self.frameMeta.?.arena;
     const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
@@ -1091,10 +1119,10 @@ pub noinline fn text(content: []const u8) void {
         0;
 
     var hasher = std.hash.Wyhash.init(0);
-    if (self.frameMeta.?.scopeStack.getLastOrNull()) |lastScopeKey| {
+    if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
         hasher.update(std.mem.asBytes(&lastScopeKey));
     }
-    hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeStack.items.len));
+    hasher.update(std.mem.asBytes(&self.nodeStack.items.len));
     // We don't hash the text content here because text selection would be nice
     // to work even with text changing
     //
@@ -1126,11 +1154,11 @@ pub noinline fn text(content: []const u8) void {
     // Push self onto the parent stack so `on(.mouseOver)` resolves the
     // text node's own measurement, then pop. The text node itself is not
     // a scope and has no children, so this is purely for hit-testing.
-    self.frameMeta.?.nodeStack.append(self.frameMeta.?.arena, result.index) catch |err| {
+    self.nodeStack.append(self.frameMeta.?.arena, result.index) catch |err| {
         handleFrameError(err);
         return;
     };
-    defer _ = self.frameMeta.?.nodeStack.pop();
+    defer _ = self.nodeStack.pop();
 
     pushScope(result.ptr.key) catch |err| {
         handleFrameError(err);
@@ -1224,7 +1252,7 @@ pub inline fn hook() void {
         return;
     }
     var hasher = std.hash.Wyhash.init(0);
-    if (self.frameMeta.?.scopeStack.getLastOrNull()) |lastScopeKey| {
+    if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
         hasher.update(std.mem.asBytes(&lastScopeKey));
     }
     hasher.update(std.mem.asBytes(&@returnAddress()));
@@ -1254,10 +1282,10 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
     // the component keys wrapping this component and the amount of parents in
     // the node tree up to this point are what differentiate this instance from
     // other instances of the same component
-    if (self.frameMeta.?.scopeStack.getLastOrNull()) |lastScopeKey| {
+    if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
         hasher.update(std.mem.asBytes(&lastScopeKey));
     }
-    hasher.update(std.mem.asBytes(&self.frameMeta.?.nodeStack.items.len));
+    hasher.update(std.mem.asBytes(&self.nodeStack.items.len));
     if (props.key) |key| {
         hasher.update(key);
     } else {
@@ -1280,16 +1308,16 @@ pub fn componentChildrenSlot() void {
     const fm = &self.frameMeta.?;
     if (fm.err != null) return;
 
-    const parentIndex = fm.nodeStack.getLastOrNull() orelse {
+    const parentIndex = self.nodeStack.getLastOrNull() orelse {
         handleFrameError(error.NoParentForSlot);
         return;
     };
 
-    const savedStack = fm.arena.dupe(usize, fm.nodeStack.items) catch |err| {
+    const savedStack = fm.arena.dupe(usize, self.nodeStack.items) catch |err| {
         handleFrameError(err);
         return;
     };
-    const savedScopeStack = fm.arena.dupe(u64, fm.scopeStack.items) catch |err| {
+    const savedScopeStack = fm.arena.dupe(u64, self.scopeStack.items) catch |err| {
         handleFrameError(err);
         return;
     };
@@ -1333,12 +1361,12 @@ fn componentChildrenSlotEndFn(block: void) void {
     }
 
     // Restore parent stack and scope stack to pre-slotEnd state
-    fm.nodeStack.clearRetainingCapacity();
-    fm.nodeStack.appendSlice(fm.arena, slotState.savedPreEndParentStack) catch |err| {
+    self.nodeStack.clearRetainingCapacity();
+    self.nodeStack.appendSlice(fm.arena, slotState.savedPreEndParentStack) catch |err| {
         handleFrameError(err);
     };
-    fm.scopeStack.clearRetainingCapacity();
-    fm.scopeStack.appendSlice(fm.arena, slotState.savedPreEndScopeStack) catch |err| {
+    self.scopeStack.clearRetainingCapacity();
+    self.scopeStack.appendSlice(fm.arena, slotState.savedPreEndScopeStack) catch |err| {
         handleFrameError(err);
     };
 }
@@ -1381,35 +1409,26 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
 
     // Save current parent and scope stacks, then restore to slot-time state so
     // the children block runs as if it were inside the slot's owner.
-    slotState.savedPreEndParentStack = fm.arena.dupe(usize, fm.nodeStack.items) catch |err| {
+    slotState.savedPreEndParentStack = fm.arena.dupe(usize, self.nodeStack.items) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
-    slotState.savedPreEndScopeStack = fm.arena.dupe(u64, fm.scopeStack.items) catch |err| {
+    slotState.savedPreEndScopeStack = fm.arena.dupe(u64, self.scopeStack.items) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
-    fm.nodeStack.clearRetainingCapacity();
-    fm.nodeStack.appendSlice(fm.arena, slotState.savedSlotParentStack) catch |err| {
+    self.nodeStack.clearRetainingCapacity();
+    self.nodeStack.appendSlice(fm.arena, slotState.savedSlotParentStack) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
-    fm.scopeStack.clearRetainingCapacity();
-    fm.scopeStack.appendSlice(fm.arena, slotState.savedSlotScopeStack) catch |err| {
+    self.scopeStack.clearRetainingCapacity();
+    self.scopeStack.appendSlice(fm.arena, slotState.savedSlotScopeStack) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
 
     return &componentChildrenSlotEndFn;
-}
-
-fn isMouseInsideMeasurement(self: *@This(), measurement: Node.Measurement) bool {
-    const pos = measurement.position;
-    const size = measurement.size;
-    return self.mousePosition[0] >= pos[0] and
-        self.mousePosition[1] >= pos[1] and
-        self.mousePosition[0] <= pos[0] + size[0] and
-        self.mousePosition[1] <= pos[1] + size[1];
 }
 
 pub fn OnResult(comptime eventTag: Event) type {
@@ -1463,7 +1482,12 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
         return false;
     };
 
-    const inside = self.isMouseInsideMeasurement(measurement);
+    const pos = measurement.position;
+    const size = measurement.size;
+    const inside = self.mousePosition[0] >= pos[0] and
+        self.mousePosition[1] >= pos[1] and
+        self.mousePosition[0] <= pos[0] + size[0] and
+        self.mousePosition[1] <= pos[1] + size[1];
 
     switch (eventTag) {
         .mouseEnter, .mouseLeave => {
@@ -1531,7 +1555,7 @@ pub fn isMouseButtonPressed() bool {
 pub fn useNodeMeasurement() ?Node.Measurement {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
-    const parentNodeIndex = self.frameMeta.?.nodeStack.getLastOrNull() orelse return null;
+    const parentNodeIndex = self.nodeStack.getLastOrNull() orelse return null;
     const parentNode = self.nodeTree.at(parentNodeIndex);
     const entry = self.previousFrameNodeMeasurements.getOrPut(parentNode.key) catch |err| {
         std.log.err("Failed to get or put previous frame node measurement: {}", .{err});
@@ -1646,11 +1670,14 @@ pub fn deinit() void {
 
     self.previousFrameNodeMeasurements.deinit();
 
-    for (self.scopes.items) |scope| {
+    for (self.scopes.items) |*scope| {
         scope.arenaAllocator.deinit();
     }
     self.states.deinit();
     self.scopes.deinit(self.allocator);
+    self.scopeStack.deinit(self.allocator);
+    self.touchedStates.deinit(self.allocator);
+    self.touchedScopes.deinit(self.allocator);
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
