@@ -531,6 +531,11 @@ pub fn useArena() std.mem.Allocator {
     return self.frameMeta.?.arena;
 }
 
+pub fn useIo() std.Io {
+    const self = getContext();
+    return self.io;
+}
+
 fn scopeCompare(key: u64, scope: Scope) std.math.Order {
     return std.math.order(key, scope.key);
 }
