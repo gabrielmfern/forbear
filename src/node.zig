@@ -402,49 +402,47 @@ pub const Style = struct {
         };
     }
 
-    pub fn completeWith(self: @This(), base: BaseStyle) CompleteStyle {
-        return CompleteStyle{
-            .background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } },
-            .blendMode = self.blendMode orelse base.blendMode,
-            .filter = self.filter orelse base.filter,
+    pub fn completeWith(self: @This(), base: BaseStyle, out: *CompleteStyle) void {
+        out.background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } };
+        out.blendMode = self.blendMode orelse base.blendMode;
+        out.filter = self.filter orelse base.filter;
 
-            .color = self.color orelse base.color,
+        out.color = self.color orelse base.color;
 
-            .borderRadius = self.borderRadius orelse 0.0,
-            .borderColor = self.borderColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 },
-            .borderWidth = self.borderWidth orelse .all(0.0),
-            .borderStyle = self.borderStyle orelse .solid,
+        out.borderRadius = self.borderRadius orelse 0.0;
+        out.borderColor = self.borderColor orelse Vec4{ 0.0, 0.0, 0.0, 0.0 };
+        out.borderWidth = self.borderWidth orelse .all(0.0);
+        out.borderStyle = self.borderStyle orelse .solid;
 
-            .shadow = self.shadow,
+        out.shadow = self.shadow;
 
-            .font = self.font orelse base.font,
-            .fontWeight = self.fontWeight orelse base.fontWeight,
-            .fontSize = self.fontSize orelse base.fontSize,
-            .lineHeight = self.lineHeight orelse base.lineHeight,
-            .textWrapping = self.textWrapping orelse base.textWrapping,
-            .cursor = self.cursor orelse base.cursor,
+        out.font = self.font orelse base.font;
+        out.fontWeight = self.fontWeight orelse base.fontWeight;
+        out.fontSize = self.fontSize orelse base.fontSize;
+        out.lineHeight = self.lineHeight orelse base.lineHeight;
+        out.textWrapping = self.textWrapping orelse base.textWrapping;
+        out.cursor = self.cursor orelse base.cursor;
 
-            .overflow = self.overflow orelse .visible,
-            .placement = self.placement orelse .flow,
-            .zIndex = self.zIndex,
+        out.overflow = self.overflow orelse .visible;
+        out.placement = self.placement orelse .flow;
+        out.zIndex = self.zIndex;
 
-            .minWidth = self.minWidth,
-            .maxWidth = self.maxWidth,
-            .width = self.width orelse .fit,
+        out.minWidth = self.minWidth;
+        out.maxWidth = self.maxWidth;
+        out.width = self.width orelse .fit;
 
-            .minHeight = self.minHeight,
-            .maxHeight = self.maxHeight,
-            .height = self.height orelse .fit,
+        out.minHeight = self.minHeight;
+        out.maxHeight = self.maxHeight;
+        out.height = self.height orelse .fit;
 
-            .translate = self.translate orelse @splat(0.0),
+        out.translate = self.translate orelse @splat(0.0);
 
-            .padding = self.padding orelse .all(0.0),
-            .margin = self.margin orelse .all(0.0),
+        out.padding = self.padding orelse .all(0.0);
+        out.margin = self.margin orelse .all(0.0);
 
-            .direction = self.direction orelse .horizontal,
-            .xJustification = self.xJustification orelse .start,
-            .yJustification = self.yJustification orelse .start,
-        };
+        out.direction = self.direction orelse .horizontal;
+        out.xJustification = self.xJustification orelse .start;
+        out.yJustification = self.yJustification orelse .start;
     }
 };
 
@@ -665,6 +663,7 @@ pub const Node = struct {
 
     pub const Measurement = struct {
         index: usize,
+        /// Internal tracking, can be ignored.
         done: bool,
 
         position: Vec2,

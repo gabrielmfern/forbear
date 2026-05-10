@@ -62,6 +62,7 @@ const XdgSurfaces = @import("./chapters/xdg_surfaces.zig").XdgSurfaces;
 const XkbBriefly = @import("./chapters/xkb_briefly.zig").XkbBriefly;
 const Heading = @import("heading.zig").Heading;
 
+const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
 
 fn Topbar() void {
@@ -87,31 +88,80 @@ fn Topbar() void {
     });
 }
 
+fn SectionButton(style: forbear.Style) *const fn (void) void {
+    forbear.component(.{})({
+        const isHovering = forbear.useState(bool, false);
+        forbear.element(.{
+            .style = style.overwrite(.{
+                .width = .{ .fixed = 90.0 },
+                .xJustification = .center,
+                .yJustification = .center,
+                .cursor = .pointer,
+                .color = forbear.useTransition(
+                    Vec4,
+                    if (isHovering.*) forbear.hex("#333333") else forbear.hex("#cccccc"),
+                    0.15,
+                    forbear.linear,
+                ),
+                .background = .{
+                    .color = forbear.useTransition(
+                        Vec4,
+                        if (isHovering.*) forbear.hex("#e6e6e6") else forbear.hex("#e6e6e600"),
+                        0.15,
+                        forbear.linear,
+                    ),
+                },
+            }),
+        })({
+            if (forbear.on(.mouseEnter)) {
+                isHovering.* = true;
+            }
+            if (forbear.on(.mouseLeave)) {
+                isHovering.* = false;
+            }
+            forbear.componentChildrenSlot();
+        });
+    });
+
+    return forbear.componentChildrenSlotEnd();
+}
+
 pub fn Content(activeChapter: *usize) !void {
     forbear.component(.{})({
         const viewport = forbear.useViewportSize();
         forbear.element(.{
             .style = .{
                 .width = .{ .grow = 1.0 },
-                .height = .{ .fixed = viewport[1] },
                 .direction = .vertical,
                 .xJustification = .center,
-                .yJustification = .start,
             },
         })({
-            const scrollingOffset = forbear.useScrolling();
-
-            forbear.ScrollBar(scrollingOffset);
-
             Topbar();
 
             forbear.element(.{
                 .style = .{
                     .width = .{ .grow = 1.0 },
-                    .height = .{ .grow = 1.0 },
+                    .height = .{ .fixed = viewport[1] },
                     .xJustification = .center,
                 },
             })({
+                const scrollingOffset = forbear.useScrolling();
+
+                forbear.ScrollBar(scrollingOffset);
+
+                const measurement = forbear.useNodeMeasurement();
+
+                if (activeChapter.* > 0 and viewport[0] > 1380 and measurement != null) {
+                    SectionButton(.{
+                        .placement = .{ .relative = @splat(0.0) },
+                        .height = .{ .grow = 1.0 },
+                    })({
+                        if (forbear.on(.click)) {
+                            activeChapter.* = activeChapter.* - 1;
+                        }
+                        forbear.text("previous");
+                    });
+                }
                 forbear.element(.{
                     .style = .{
                         .width = .{ .grow = 1.0 },
@@ -196,6 +246,23 @@ pub fn Content(activeChapter: *usize) !void {
                         },
                     }
                 });
+
+                if (activeChapter.* < 57 and viewport[0] > 1380 and measurement != null) {
+                    SectionButton(.{
+                        .placement = .{
+                            .relative = Vec2{
+                                measurement.?.size[0] - 90.0,
+                                0.0,
+                            },
+                        },
+                        .height = .{ .grow = 1.0 },
+                    })({
+                        if (forbear.on(.click)) {
+                            activeChapter.* = activeChapter.* + 1;
+                        }
+                        forbear.text("next");
+                    });
+                }
             });
         });
     });
