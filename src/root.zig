@@ -829,12 +829,11 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     else
         null;
 
-    const incompleteStyle = props.style;
     const baseStyle = if (parentOptional) |parent|
         BaseStyle.from(parent.style)
     else
         self.frameMeta.?.baseStyle;
-    const style = incompleteStyle.completeWith(baseStyle);
+    result.ptr.style = props.style.completeWith(baseStyle);
 
     const parentZ = if (parentOptional) |parent|
         parent.z
@@ -853,62 +852,61 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     }
 
     result.ptr.key = hasher.final();
-    result.ptr.style = style;
-    result.ptr.z = if (incompleteStyle.zIndex) |zIndex|
+    result.ptr.z = if (props.style.zIndex) |zIndex|
         zIndex
     else if (parentZ < std.math.maxInt(u16))
         parentZ + 1
     else
         parentZ;
-    result.ptr.position = switch (style.placement) {
+    result.ptr.position = switch (result.ptr.style.placement) {
         .fixed => |v| v,
         .absolute => |v| v,
         .relative => |v| v,
         .flow => @splat(0.0),
     };
     result.ptr.size = .{
-        switch (style.width) {
+        switch (result.ptr.style.width) {
             .fixed => |width| width,
-            .ratio => |ratio| if (style.height == .fixed)
-                style.height.fixed * ratio
+            .ratio => |ratio| if (result.ptr.style.height == .fixed)
+                result.ptr.style.height.fixed * ratio
             else
                 0.0,
             .fit, .grow => 0.0,
         },
-        switch (style.height) {
+        switch (result.ptr.style.height) {
             .fixed => |height| height,
-            .ratio => |ratio| if (style.width == .fixed)
-                style.width.fixed * ratio
+            .ratio => |ratio| if (result.ptr.style.width == .fixed)
+                result.ptr.style.width.fixed * ratio
             else
                 0.0,
             .fit, .grow => 0.0,
         },
     };
     result.ptr.minSize = .{
-        if (style.minWidth) |minWidth|
+        if (result.ptr.style.minWidth) |minWidth|
             minWidth
-        else if (style.width == .fixed)
-            style.width.fixed
+        else if (result.ptr.style.width == .fixed)
+            result.ptr.style.width.fixed
         else
             0.0,
-        if (style.minHeight) |minHeight|
+        if (result.ptr.style.minHeight) |minHeight|
             minHeight
-        else if (style.height == .fixed)
-            style.height.fixed
+        else if (result.ptr.style.height == .fixed)
+            result.ptr.style.height.fixed
         else
             0.0,
     };
     result.ptr.maxSize = .{
-        if (style.maxWidth) |maxWidth|
+        if (result.ptr.style.maxWidth) |maxWidth|
             maxWidth
-        else if (style.width == .fixed)
-            style.width.fixed
+        else if (result.ptr.style.width == .fixed)
+            result.ptr.style.width.fixed
         else
             std.math.inf(f32),
-        if (style.maxHeight) |maxHeight|
+        if (result.ptr.style.maxHeight) |maxHeight|
             maxHeight
-        else if (style.height == .fixed)
-            style.height.fixed
+        else if (result.ptr.style.height == .fixed)
+            result.ptr.style.height.fixed
         else
             std.math.inf(f32),
     };
@@ -947,7 +945,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     // its mouseLeave will happen at the end, meaning the cursor will be set to
     // the baseStyle cursor instead of the former element's cursor.
     if (on(.mouseEnter)) {
-        setCursor(style.cursor);
+        setCursor(result.ptr.style.cursor);
     }
     if (on(.mouseLeave)) {
         setCursor(baseStyle.cursor);
