@@ -92,7 +92,7 @@ fn App() !void {
                 .height = .{ .grow = 1.0 },
             },
         })({
-            forbear.FpsCounter();
+            forbear.ProfilingMetrics(.{});
             Sidebar()({
                 for (chapters, 0..) |chapter, i| {
                     SidebarItem(.{

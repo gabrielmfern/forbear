@@ -5,11 +5,14 @@ const forbear = @import("root.zig");
 const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
 
-pub fn FpsCounter() void {
-    forbear.component(.{})({
-        const deltaTime = forbear.useDeltaTime();
-        const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
+pub const ProfilingMetricsProps = struct {
+    fps: bool = true,
+    deltaTime: bool = true,
+    memory: bool = true,
+};
 
+pub fn ProfilingMetrics(props: ProfilingMetricsProps) void {
+    forbear.component(.{})({
         forbear.element(.{
             .style = .{
                 .placement = .{ .fixed = .{ 10, 10 } },
@@ -24,30 +27,75 @@ pub fn FpsCounter() void {
                 .direction = .vertical,
             },
         })({
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .grow = 1.0 },
-                },
-            })({
-                forbear.text("FPS:");
+            if (props.fps) {
+                const deltaTime = forbear.useDeltaTime();
+                const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
                 forbear.element(.{
-                    .style = .{ .width = .{ .grow = 1.0 } },
-                })({});
-                forbear.printText("{d:.1}", .{fps});
-            });
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .grow = 1.0 },
-                },
-            })({
-                forbear.text("delta time:");
+                    .style = .{
+                        .width = .{ .grow = 1.0 },
+                    },
+                })({
+                    forbear.text("FPS:");
+                    forbear.element(.{
+                        .style = .{ .width = .{ .grow = 1.0 } },
+                    })({});
+                    forbear.printText("{d:.1}", .{fps});
+                });
+            }
+
+            if (props.deltaTime) {
+                const deltaTime = forbear.useDeltaTime();
                 forbear.element(.{
-                    .style = .{ .width = .{ .grow = 1.0 } },
-                })({});
-                forbear.printText("{d:.1}ms", .{deltaTime * 1000.0});
-            });
+                    .style = .{
+                        .width = .{ .grow = 1.0 },
+                    },
+                })({
+                    forbear.text("delta time:");
+                    forbear.element(.{
+                        .style = .{ .width = .{ .grow = 1.0 } },
+                    })({});
+                    forbear.printText("{d:.1}ms", .{deltaTime * 1000.0});
+                });
+            }
+
+            if (props.memory) {
+                const mib = @as(f32, @floatFromInt(processResidentBytes())) / (1024.0 * 1024.0);
+                forbear.element(.{
+                    .style = .{
+                        .width = .{ .grow = 1.0 },
+                    },
+                })({
+                    forbear.text("memory:");
+                    forbear.element(.{
+                        .style = .{ .width = .{ .grow = 1.0 } },
+                    })({});
+                    forbear.printText("{d:.1} MB", .{mib});
+                });
+            }
         });
     });
+}
+
+fn processResidentBytes() u64 {
+    const io = forbear.useIo();
+    switch (builtin.os.tag) {
+        .linux => {
+            const file = std.Io.Dir.openFileAbsolute(io, "/proc/self/statm", .{}) catch |err| {
+                forbear.handleFrameError(err);
+                return 0;
+            };
+            var buffer: [64]u8 = undefined;
+            const bytesRead = file.readPositionalAll(io, &buffer, 0) catch |err| {
+                forbear.handleFrameError(err);
+                return 0;
+            };
+            var it = std.mem.tokenizeScalar(u8, buffer[0..bytesRead], ' ');
+            _ = it.next() orelse return 0;
+            const rss_pages = std.fmt.parseInt(u64, it.next() orelse return 0, 10) catch return 0;
+            return rss_pages * std.heap.pageSize();
+        },
+        else => @compileError("memory watching is unsupported for " ++ @tagName(builtin.os.tag)),
+    }
 }
 
 const ScrollingState = struct {

@@ -2763,7 +2763,7 @@ test "Element tree stack stability" {
         forbear.element(.{})({
             const nodeParentStack = &self.frameMeta.?.nodeStack;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
-            forbear.FpsCounter();
+            forbear.ProfilingMetrics(.{});
 
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             forbear.element(.{})({
@@ -2791,7 +2791,7 @@ test "Element tree stack stability" {
         forbear.element(.{})({
             const nodeParentStack = &self.frameMeta.?.nodeStack;
             try std.testing.expectEqual(1, nodeParentStack.items.len);
-            forbear.FpsCounter();
+            forbear.ProfilingMetrics(.{});
             try std.testing.expectEqual(1, nodeParentStack.items.len);
             forbear.element(.{})({
                 try std.testing.expectEqual(2, nodeParentStack.items.len);

@@ -5,7 +5,7 @@ pub const c = @import("c");
 
 pub const Font = @import("font.zig");
 const forbearBuiltin = @import("builtin.zig");
-pub const FpsCounter = forbearBuiltin.FpsCounter;
+pub const ProfilingMetrics = forbearBuiltin.ProfilingMetrics;
 pub const useScrolling = forbearBuiltin.useScrolling;
 pub const ScrollBar = forbearBuiltin.ScrollBar;
 pub const Graphics = @import("graphics.zig");
