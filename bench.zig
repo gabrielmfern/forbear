@@ -141,8 +141,6 @@ fn LayoutBenchmark(comptime nodeCount: usize) fn (std.mem.Allocator) void {
     }.run;
 }
 
-test "bench layout" {}
-
 // ~1000 useState calls spread across mixed component+element scopes at
 // depths 0..7. Each leaf component contains both an inner element scope and
 // is itself nested several components deep.
