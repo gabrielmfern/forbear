@@ -16,9 +16,13 @@ pub fn BuffersAndSurfaces() void {
 
         Paragraph(.{})({
             forbear.text("There are two primitives which are used for this purpose: buffers and surfaces, governed respectively by the ");
-            Strong()({ forbear.text("wl_buffer"); });
+            Strong()({
+                forbear.text("wl_buffer");
+            });
             forbear.text(" and ");
-            Strong()({ forbear.text("wl_surface"); });
+            Strong()({
+                forbear.text("wl_surface");
+            });
             forbear.text(" interfaces. Buffers act as an opaque container for some underlying pixel storage, and are supplied by clients with a number of methods — shared memory buffers and GPU handles being the most common.");
         });
     });

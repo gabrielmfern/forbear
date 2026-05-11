@@ -18,9 +18,13 @@ pub fn PopupsAndParentWindows() void {
 
         Paragraph(.{})({
             forbear.text("For Wayland, the XDG shell provides facilities for managing these windows: popups. We looked at ");
-            Strong()({ forbear.text("get_toplevel"); });
+            Strong()({
+                forbear.text("get_toplevel");
+            });
             forbear.text(" for creating top-level application windows earlier. In the case of popups, the ");
-            Strong()({ forbear.text("get_popup"); });
+            Strong()({
+                forbear.text("get_popup");
+            });
             forbear.text(" request is used instead.");
         });
 
@@ -30,7 +34,9 @@ pub fn PopupsAndParentWindows() void {
 
         Paragraph(.{})({
             forbear.text("The first and second arguments are reasonably self-explanatory, but the third one introduces a new concept: positioners. The purpose of the positioner is, as the name might suggest, to position the new popup. This is used to allow the compositor to participate in the positioning of popups using its privileged information, for example to avoid having the popup extend past the edge of the display. We'll discuss positioners in chapter 10.4, for now you can simply create one and pass it in without further configuration to achieve reasonably sane default behavior, utilizing the appropriate ");
-            Strong()({ forbear.text("create_positioner"); });
+            Strong()({
+                forbear.text("create_positioner");
+            });
             forbear.text(" request:");
         });
 
@@ -45,23 +51,33 @@ pub fn PopupsAndParentWindows() void {
         List()({
             ListItem()({
                 forbear.text("Create a new ");
-                Strong()({ forbear.text("wl_surface"); });
+                Strong()({
+                    forbear.text("wl_surface");
+                });
             });
             ListItem()({
                 forbear.text("Obtain an ");
-                Strong()({ forbear.text("xdg_surface"); });
+                Strong()({
+                    forbear.text("xdg_surface");
+                });
                 forbear.text(" for it");
             });
             ListItem()({
                 forbear.text("Create a new ");
-                Strong()({ forbear.text("xdg_positioner"); });
+                Strong()({
+                    forbear.text("xdg_positioner");
+                });
                 forbear.text(", saving its configuration for chapter 10.4");
             });
             ListItem()({
                 forbear.text("Create an ");
-                Strong()({ forbear.text("xdg_popup"); });
+                Strong()({
+                    forbear.text("xdg_popup");
+                });
                 forbear.text(" from our XDG surface and XDG positioner, assigning its parent to the ");
-                Strong()({ forbear.text("xdg_toplevel"); });
+                Strong()({
+                    forbear.text("xdg_toplevel");
+                });
                 forbear.text(" we created earlier.");
             });
         });

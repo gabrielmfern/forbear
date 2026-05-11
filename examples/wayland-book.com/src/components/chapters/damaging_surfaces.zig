@@ -20,7 +20,9 @@ pub fn DamagingSurfaces() void {
 
         Paragraph(.{})({
             forbear.text("If so, sharp eye! This code ");
-            Strong()({ forbear.text("damages"); });
+            Strong()({
+                forbear.text("damages");
+            });
             forbear.text(" our surface, indicating to the compositor that it needs to be redrawn. Here we damage the entire surface (and well beyond it), but we could instead only damage part of it.");
         });
 
@@ -29,13 +31,21 @@ pub fn DamagingSurfaces() void {
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("Note"); });
+            Strong()({
+                forbear.text("Note");
+            });
             forbear.text(": The Wayland protocol provides two requests for damaging surfaces: ");
-            Strong()({ forbear.text("damage"); });
+            Strong()({
+                forbear.text("damage");
+            });
             forbear.text(" and ");
-            Strong()({ forbear.text("damage_buffer"); });
+            Strong()({
+                forbear.text("damage_buffer");
+            });
             forbear.text(". The former is effectively deprecated, and you should only use the latter. The difference between them is that ");
-            Strong()({ forbear.text("damage"); });
+            Strong()({
+                forbear.text("damage");
+            });
             forbear.text(" takes into account all of the transforms affecting the surface, such as rotations, scale factor, and buffer position and clipping. The latter instead applies damage relative to the buffer, which is generally easier to reason about.");
         });
     });

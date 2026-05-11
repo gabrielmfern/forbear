@@ -16,15 +16,21 @@ pub fn TouchInput() void {
 
         Paragraph(.{})({
             forbear.text("Most touch-screen devices support ");
-            Strong()({ forbear.text("multitouch"); });
+            Strong()({
+                forbear.text("multitouch");
+            });
             forbear.text(": they can track multiple locations where the screen has been touched. Each of these \"touch points\" is assigned an ID which is unique among all currently active points where the screen is being touched, but might be reused if you lift your finger and press again.");
         });
 
         Paragraph(.{})({
             forbear.text("Similarly to other input devices, you may obtain a ");
-            Strong()({ forbear.text("wl_touch"); });
+            Strong()({
+                forbear.text("wl_touch");
+            });
             forbear.text(" resource with ");
-            Strong()({ forbear.text("wl_seat.get_touch"); });
+            Strong()({
+                forbear.text("wl_seat.get_touch");
+            });
             forbear.text(", and you should send a \"release\" request when you're finished with it.");
         });
 
@@ -34,13 +40,17 @@ pub fn TouchInput() void {
 
         Paragraph(.{})({
             forbear.text("Like pointers, a single frame of touch processing on the server might carry information about many changes, but the server sends these as discrete Wayland events. The ");
-            Strong()({ forbear.text("wl_touch.frame"); });
+            Strong()({
+                forbear.text("wl_touch.frame");
+            });
             forbear.text(" event is used to group these together.");
         });
 
         Paragraph(.{})({
             forbear.text("Clients should accumulate all ");
-            Strong()({ forbear.text("wl_touch"); });
+            Strong()({
+                forbear.text("wl_touch");
+            });
             forbear.text(" events as they're received, then process pending inputs as a single touch event when the \"frame\" event is received.");
         });
 

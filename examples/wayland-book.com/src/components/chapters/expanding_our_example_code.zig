@@ -24,7 +24,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("The first thing we'll need is a reference to a seat. We'll add it to our ");
-            Strong()({ forbear.text("client_state"); });
+            Strong()({
+                forbear.text("client_state");
+            });
             forbear.text(" struct, and add keyboard, pointer, and touch objects for later use as well:");
         });
 
@@ -34,7 +36,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("We'll also need to update ");
-            Strong()({ forbear.text("registry_global"); });
+            Strong()({
+                forbear.text("registry_global");
+            });
             forbear.text(" to register a listener for that seat.");
         });
 
@@ -52,7 +56,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("If you compile (");
-            Strong()({ forbear.text("cc -o client client.c xdg-shell-protocol.c"); });
+            Strong()({
+                forbear.text("cc -o client client.c xdg-shell-protocol.c");
+            });
             forbear.text(") and run this now, you should seat the name of the seat printed to stderr.");
         });
 
@@ -78,7 +84,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("Then we'll need to update our ");
-            Strong()({ forbear.text("wl_seat_capabilities"); });
+            Strong()({
+                forbear.text("wl_seat_capabilities");
+            });
             forbear.text(" to set up the pointer object for seats which are capable of pointer input.");
         });
 
@@ -88,15 +96,25 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("This merits some explanation. Recall that ");
-            Strong()({ forbear.text("capabilities"); });
+            Strong()({
+                forbear.text("capabilities");
+            });
             forbear.text(" is a bitmask of the kinds of devices supported by this seat — a bitwise AND (&) with a capability will produce a non-zero value if supported. Then, if we have a pointer and have ");
-            Strong()({ forbear.text("not"); });
+            Strong()({
+                forbear.text("not");
+            });
             forbear.text(" already configured it, we take the first branch, using ");
-            Strong()({ forbear.text("wl_seat_get_pointer"); });
+            Strong()({
+                forbear.text("wl_seat_get_pointer");
+            });
             forbear.text(" to obtain a pointer reference and storing it in our state. If the seat does ");
-            Strong()({ forbear.text("not"); });
+            Strong()({
+                forbear.text("not");
+            });
             forbear.text(" support pointers, but we already have one configured, we use ");
-            Strong()({ forbear.text("wl_pointer_release"); });
+            Strong()({
+                forbear.text("wl_pointer_release");
+            });
             forbear.text(" to get rid of it. Remember that the capabilities of a seat can change at runtime, for example when the user un-plugs and re-plugs their mouse.");
         });
 
@@ -126,7 +144,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("Axis events are somewhat more complex, because there are two axes: horizontal and vertical. Thus, our ");
-            Strong()({ forbear.text("pointer_event"); });
+            Strong()({
+                forbear.text("pointer_event");
+            });
             forbear.text(" struct contains an array with two groups of axis events. Our code to handle these ends up something like this:");
         });
 
@@ -156,7 +176,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("Let's update our ");
-            Strong()({ forbear.text("client_state"); });
+            Strong()({
+                forbear.text("client_state");
+            });
             forbear.text(" struct with some fields to store XKB state.");
         });
 
@@ -166,7 +188,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("We need the xkbcommon headers to define these. While we're at it, I'm going to pull in ");
-            Strong()({ forbear.text("assert.h"); });
+            Strong()({
+                forbear.text("assert.h");
+            });
             forbear.text(" as well:");
         });
 
@@ -192,7 +216,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("We'll have to define the ");
-            Strong()({ forbear.text("wl_keyboard_listener"); });
+            Strong()({
+                forbear.text("wl_keyboard_listener");
+            });
             forbear.text(" we use here, too.");
         });
 
@@ -210,11 +236,17 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("Now we can see why we added ");
-            Strong()({ forbear.text("assert.h"); });
+            Strong()({
+                forbear.text("assert.h");
+            });
             forbear.text(" — we're using it here to make sure that the keymap format is the one we expect. Then, we use mmap to map the file descriptor the compositor sent us to a ");
-            Strong()({ forbear.text("char *"); });
+            Strong()({
+                forbear.text("char *");
+            });
             forbear.text(" pointer we can pass into ");
-            Strong()({ forbear.text("xkb_keymap_new_from_string"); });
+            Strong()({
+                forbear.text("xkb_keymap_new_from_string");
+            });
             forbear.text(". Don't forget to munmap and close that fd afterwards — then we set up our XKB state. Note as well that we have also unrefed any previous XKB keymap or state that we had set up in a prior call to this function, in case the compositor changes the keymap at runtime.");
         });
 
@@ -264,7 +296,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("We'll add this struct to ");
-            Strong()({ forbear.text("client_state"); });
+            Strong()({
+                forbear.text("client_state");
+            });
             forbear.text(":");
         });
 
@@ -302,11 +336,17 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("The basic purpose of this function is to pick a ");
-            Strong()({ forbear.text("touch_point"); });
+            Strong()({
+                forbear.text("touch_point");
+            });
             forbear.text(" from the array we added to the ");
-            Strong()({ forbear.text("touch_event"); });
+            Strong()({
+                forbear.text("touch_event");
+            });
             forbear.text(" struct, based on the touch ID we're receiving events for. If we find an existing ");
-            Strong()({ forbear.text("touch_point"); });
+            Strong()({
+                forbear.text("touch_point");
+            });
             forbear.text(" for that ID, we return it. If not, we return the first available touch point. In case we run out, we return NULL.");
         });
 
@@ -336,7 +376,9 @@ pub fn ExpandingOurExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("The touch cancel event is somewhat different, as it \"cancels\" all active touch points at once. We'll just store this in the ");
-            Strong()({ forbear.text("touch_event"); });
+            Strong()({
+                forbear.text("touch_event");
+            });
             forbear.text("'s top-level event mask.");
         });
 

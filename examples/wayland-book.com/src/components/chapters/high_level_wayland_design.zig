@@ -14,29 +14,51 @@ pub fn HighLevelWaylandDesign() void {
 
         Paragraph(.{})({
             forbear.text("Your computer has ");
-            Strong()({ forbear.text("input"); });
+            Strong()({
+                forbear.text("input");
+            });
             forbear.text(" and ");
-            Strong()({ forbear.text("output"); });
+            Strong()({
+                forbear.text("output");
+            });
             forbear.text(" devices, which respectively are responsible for receiving information from you and displaying information to you. These input devices take the form of, for example:");
         });
 
         List()({
-            ListItem()({ forbear.text("Keyboards"); });
-            ListItem()({ forbear.text("Mice"); });
-            ListItem()({ forbear.text("Touchpads"); });
-            ListItem()({ forbear.text("Touch screens"); });
-            ListItem()({ forbear.text("Drawing tablets"); });
+            ListItem()({
+                forbear.text("Keyboards");
+            });
+            ListItem()({
+                forbear.text("Mice");
+            });
+            ListItem()({
+                forbear.text("Touchpads");
+            });
+            ListItem()({
+                forbear.text("Touch screens");
+            });
+            ListItem()({
+                forbear.text("Drawing tablets");
+            });
         });
 
         Paragraph(.{})({
             forbear.text("Your output devices generally take the form of displays, on your desk or your laptop or mobile device. These resources are shared between all of your applications, and the role of the ");
-            Strong()({ forbear.text("Wayland compositor"); });
+            Strong()({
+                forbear.text("Wayland compositor");
+            });
             forbear.text(" is to dispatch input events to the appropriate ");
-            Strong()({ forbear.text("Wayland client"); });
+            Strong()({
+                forbear.text("Wayland client");
+            });
             forbear.text(" and to display their windows in their appropriate place on your outputs. The process of bringing together all of your application windows for display on an output is called ");
-            Strong()({ forbear.text("compositing"); });
+            Strong()({
+                forbear.text("compositing");
+            });
             forbear.text(" - and thus we call the software which does this the ");
-            Strong()({ forbear.text("compositor"); });
+            Strong()({
+                forbear.text("compositor");
+            });
             forbear.text(".");
         });
 
@@ -54,13 +76,17 @@ pub fn HighLevelWaylandDesign() void {
 
         Paragraph(.{})({
             forbear.text("A typical computer is equipped with a few important pieces of hardware. Outside of the box, we have your displays, keyboard, mouse, perhaps some speakers and a cute USB cup warmer. There are several components ");
-            Strong()({ forbear.text("inside"); });
+            Strong()({
+                forbear.text("inside");
+            });
             forbear.text(" the box for interfacing with these devices. Your keyboard and mouse, for example, are probably plugged into USB ports, for which your system has a dedicated USB controller. Your displays are plugged into your GPU.");
         });
 
         Paragraph(.{})({
             forbear.text("These systems have their own jobs and state. For example, your GPU has state in the form of memory for storing pixel buffers in, and jobs like ");
-            Strong()({ forbear.text("scanning out"); });
+            Strong()({
+                forbear.text("scanning out");
+            });
             forbear.text(" these buffers to your displays. Your GPU also provides a processor which is specially tuned to be good at highly parallel jobs (such as calculating the right color for each of the 2,073,600 pixels on a 1080p display), and bad at everything else. The USB controller has the unenviable job of implementing the legendarily dry USB specification for receiving input events from your keyboard, or instructing your coaster to assume a temperature carefully selected to at once avoid lawsuits and frustrate you with cold coffee.");
         });
 
@@ -74,17 +100,29 @@ pub fn HighLevelWaylandDesign() void {
 
         Paragraph(.{})({
             forbear.text("This responsibility falls onto the kernel. The kernel is a complex beast, so we'll focus on only the parts which are relevant to Wayland. Linux's job is to provide an abstraction over your hardware, so that it can be safely accessed by ");
-            Strong()({ forbear.text("userspace"); });
+            Strong()({
+                forbear.text("userspace");
+            });
             forbear.text(" - where our Wayland compositors run. For graphics, this is called the ");
-            Strong()({ forbear.text("DRM"); });
+            Strong()({
+                forbear.text("DRM");
+            });
             forbear.text(", or ");
-            Strong()({ forbear.text("direct rendering manager"); });
+            Strong()({
+                forbear.text("direct rendering manager");
+            });
             forbear.text(", which efficiently tasks the GPU with work from userspace. An important subsystem of DRM is ");
-            Strong()({ forbear.text("KMS"); });
+            Strong()({
+                forbear.text("KMS");
+            });
             forbear.text(", or ");
-            Strong()({ forbear.text("kernel mode setting"); });
+            Strong()({
+                forbear.text("kernel mode setting");
+            });
             forbear.text(", for enumerating your displays and setting properties such as their selected resolution (also known as their \"mode\"). Input devices are abstracted through an interface called ");
-            Strong()({ forbear.text("evdev"); });
+            Strong()({
+                forbear.text("evdev");
+            });
             forbear.text(".");
         });
 
@@ -114,7 +152,9 @@ pub fn HighLevelWaylandDesign() void {
 
         Paragraph(.{})({
             forbear.text("Mesa is one of the most important parts of the Linux graphics stack. It provides, among other things, vendor-optimized implementations of OpenGL (and Vulkan) for Linux and the ");
-            Strong()({ forbear.text("GBM"); });
+            Strong()({
+                forbear.text("GBM");
+            });
             forbear.text(" (Generic Buffer Management) library - an abstraction on top of libdrm for allocating buffers on the GPU. Most Wayland compositors will use both GBM and OpenGL via Mesa, and most Wayland clients will use at least its OpenGL or Vulkan implementations.");
         });
 
@@ -148,9 +188,13 @@ pub fn HighLevelWaylandDesign() void {
 
         Paragraph(.{})({
             forbear.text("A simple library used by clients and compositors alike for efficiently manipulating pixel buffers, doing math with intersecting rectangles, and performing other similar ");
-            Strong()({ forbear.text("pix"); });
+            Strong()({
+                forbear.text("pix");
+            });
             forbear.text("el ");
-            Strong()({ forbear.text("man"); });
+            Strong()({
+                forbear.text("man");
+            });
             forbear.text("ipulation tasks.");
         });
 

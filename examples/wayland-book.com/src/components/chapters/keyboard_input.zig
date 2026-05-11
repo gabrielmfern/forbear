@@ -14,13 +14,21 @@ pub fn KeyboardInput() void {
 
         Paragraph(.{})({
             forbear.text("Equipped with an understanding of how to use XKB, let's extend our Wayland code to provide us with key events to feed into it. Similarly to how we obtained a ");
-            Strong()({ forbear.text("wl_pointer"); });
+            Strong()({
+                forbear.text("wl_pointer");
+            });
             forbear.text(" resource, we can use the ");
-            Strong()({ forbear.text("wl_seat.get_keyboard"); });
+            Strong()({
+                forbear.text("wl_seat.get_keyboard");
+            });
             forbear.text(" request to create a ");
-            Strong()({ forbear.text("wl_keyboard"); });
+            Strong()({
+                forbear.text("wl_keyboard");
+            });
             forbear.text(" for a seat whose capabilities include ");
-            Strong()({ forbear.text("WL_SEAT_CAPABILITY_KEYBOARD"); });
+            Strong()({
+                forbear.text("WL_SEAT_CAPABILITY_KEYBOARD");
+            });
             forbear.text(". When you're done with it, you should send the \"release\" request:");
         });
 
@@ -42,9 +50,13 @@ pub fn KeyboardInput() void {
 
         Paragraph(.{})({
             forbear.text("When you bind to ");
-            Strong()({ forbear.text("wl_keyboard"); });
+            Strong()({
+                forbear.text("wl_keyboard");
+            });
             forbear.text(", the first event that the server is likely to send is ");
-            Strong()({ forbear.text("keymap"); });
+            Strong()({
+                forbear.text("keymap");
+            });
             forbear.text(".");
         });
 
@@ -54,7 +66,9 @@ pub fn KeyboardInput() void {
 
         Paragraph(.{})({
             forbear.text("The ");
-            Strong()({ forbear.text("keymap_format"); });
+            Strong()({
+                forbear.text("keymap_format");
+            });
             forbear.text(" enum is provided in the event that we come up with a new format for keymaps, but at the time of writing, XKB keymaps are the only format which the server is likely to send.");
         });
 
@@ -68,7 +82,9 @@ pub fn KeyboardInput() void {
 
         Paragraph(.{})({
             forbear.text("Once we have a keymap, we can interpret future keypress events for this ");
-            Strong()({ forbear.text("wl_keyboard"); });
+            Strong()({
+                forbear.text("wl_keyboard");
+            });
             forbear.text(". Note that the server can send a new keymap at any time, and all future key events should be interpreted in that light.");
         });
 
@@ -82,11 +98,17 @@ pub fn KeyboardInput() void {
 
         Paragraph(.{})({
             forbear.text("Like ");
-            Strong()({ forbear.text("wl_pointer"); });
+            Strong()({
+                forbear.text("wl_pointer");
+            });
             forbear.text("'s \"enter\" and \"leave\" events are issued when a pointer is moved over your surface, the server sends ");
-            Strong()({ forbear.text("wl_keyboard.enter"); });
+            Strong()({
+                forbear.text("wl_keyboard.enter");
+            });
             forbear.text(" when a surface receives keyboard focus, and ");
-            Strong()({ forbear.text("wl_keyboard.leave"); });
+            Strong()({
+                forbear.text("wl_keyboard.leave");
+            });
             forbear.text(" when it's lost. Many applications will change their appearance under these conditions — for example, to start drawing a blinking caret.");
         });
 
@@ -111,7 +133,9 @@ pub fn KeyboardInput() void {
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("Important"); });
+            Strong()({
+                forbear.text("Important");
+            });
             forbear.text(": the scancode from this event is the Linux evdev scancode. To translate this to an XKB scancode, you must add 8 to the evdev scancode.");
         });
 

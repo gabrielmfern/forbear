@@ -60,7 +60,9 @@ pub fn InteractiveMoveAndResize() void {
 
         Paragraph(.{})({
             forbear.text("The last detail which bears mentioning when discussing the behavior of client-side decorations is the protocol which governs the negotiation of their use in the first place. Different Wayland clients and servers may have different preferences about the use of server-side or client-side window decorations. To express these intentions, a protocol extension is used: ");
-            Strong()({ forbear.text("xdg-decoration"); });
+            Strong()({
+                forbear.text("xdg-decoration");
+            });
             forbear.text(". It can be found in wayland-protocols. The protocol provides a global:");
         });
 
@@ -70,7 +72,9 @@ pub fn InteractiveMoveAndResize() void {
 
         Paragraph(.{})({
             forbear.text("You may pass your xdg_toplevel object into the ");
-            Strong()({ forbear.text("get_toplevel_decoration"); });
+            Strong()({
+                forbear.text("get_toplevel_decoration");
+            });
             forbear.text(" request to obtain an object with the following interface:");
         });
 
@@ -80,11 +84,17 @@ pub fn InteractiveMoveAndResize() void {
 
         Paragraph(.{})({
             forbear.text("The ");
-            Strong()({ forbear.text("set_mode"); });
+            Strong()({
+                forbear.text("set_mode");
+            });
             forbear.text(" request is used to express a preference from the client, and ");
-            Strong()({ forbear.text("unset_mode"); });
+            Strong()({
+                forbear.text("unset_mode");
+            });
             forbear.text(" is used to express no preference. The compositor will then use the ");
-            Strong()({ forbear.text("configure"); });
+            Strong()({
+                forbear.text("configure");
+            });
             forbear.text(" event to tell the client whether or not to use client-side decorations. For more details, consult the full XML.");
         });
     });

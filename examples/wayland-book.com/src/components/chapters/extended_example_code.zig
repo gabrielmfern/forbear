@@ -20,9 +20,13 @@ pub fn ExtendedExampleCode() void {
 
         Paragraph(.{})({
             forbear.text("Then run ");
-            Strong()({ forbear.text("./client"); });
+            Strong()({
+                forbear.text("./client");
+            });
             forbear.text(" to see it in action, or ");
-            Strong()({ forbear.text("WAYLAND_DEBUG=1 ./client"); });
+            Strong()({
+                forbear.text("WAYLAND_DEBUG=1 ./client");
+            });
             forbear.text(" to include a bunch of useful debugging information. Tada! In future chapters we will be building upon this client, so stow this code away somewhere safe.");
         });
 

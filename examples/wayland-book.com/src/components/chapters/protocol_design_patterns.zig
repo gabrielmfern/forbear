@@ -22,28 +22,50 @@ pub fn ProtocolDesignPatterns() void {
 
         Paragraph(.{})({
             forbear.text("The most important of the Wayland protocol design patterns is ");
-            Strong()({ forbear.text("atomicity"); });
+            Strong()({
+                forbear.text("atomicity");
+            });
             forbear.text(". A stated goal of Wayland is \"every frame is perfect\". To this end, most interfaces allow you to update them transactionally, using several requests to build up a new representation of its state, then committing them all at once. For example, there are several properties that may be configured on a ");
-            Strong()({ forbear.text("wl_surface"); });
+            Strong()({
+                forbear.text("wl_surface");
+            });
             forbear.text(":");
         });
 
         List()({
-            ListItem()({ forbear.text("An attached pixel buffer"); });
-            ListItem()({ forbear.text("A damaged area that needs to be redrawn"); });
-            ListItem()({ forbear.text("A region defined as opaque, for optimization purposes"); });
-            ListItem()({ forbear.text("A region where input events are acceptable"); });
-            ListItem()({ forbear.text("A transformation, like rotating 90 degrees"); });
-            ListItem()({ forbear.text("A buffer scale, used for HiDPI"); });
+            ListItem()({
+                forbear.text("An attached pixel buffer");
+            });
+            ListItem()({
+                forbear.text("A damaged area that needs to be redrawn");
+            });
+            ListItem()({
+                forbear.text("A region defined as opaque, for optimization purposes");
+            });
+            ListItem()({
+                forbear.text("A region where input events are acceptable");
+            });
+            ListItem()({
+                forbear.text("A transformation, like rotating 90 degrees");
+            });
+            ListItem()({
+                forbear.text("A buffer scale, used for HiDPI");
+            });
         });
 
         Paragraph(.{})({
             forbear.text("The interface includes separate requests for configuring each of these, but these are applied to a ");
-            Strong()({ forbear.text("pending"); });
+            Strong()({
+                forbear.text("pending");
+            });
             forbear.text(" state. Only when the ");
-            Strong()({ forbear.text("commit"); });
+            Strong()({
+                forbear.text("commit");
+            });
             forbear.text(" request is sent does the pending state get merged into the ");
-            Strong()({ forbear.text("current"); });
+            Strong()({
+                forbear.text("current");
+            });
             forbear.text(" state, allowing you to atomically update all of these properties within a single frame. Combined with a few other key design decisions, this allows Wayland compositors to render everything perfectly in every frame — no tearing or partially updated windows, just every pixel in its place and every place in its pixel.");
         });
 

@@ -16,13 +16,17 @@ pub fn SeatsHandlingInput() void {
 
         Paragraph(.{})({
             forbear.text("It's important to remember that this is an ");
-            Strong()({ forbear.text("abstraction"); });
+            Strong()({
+                forbear.text("abstraction");
+            });
             forbear.text(", and that the seats represented on a Wayland display may not correspond 1:1 with reality. In practice, it's rare for more than a single seat to be available on a Wayland session. If you plug a second keyboard into your computer, it's generally assigned to the same seat as the first, and the keyboard layout and so on are dynamically switched as you start typing on each. These implementation details are left to the Wayland compositor to consider.");
         });
 
         Paragraph(.{})({
             forbear.text("From the client's perspective, it's reasonably straightforward. If you bind to the ");
-            Strong()({ forbear.text("wl_seat"); });
+            Strong()({
+                forbear.text("wl_seat");
+            });
             forbear.text(" global, you get access to the following interface:");
         });
 
@@ -31,21 +35,33 @@ pub fn SeatsHandlingInput() void {
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("Note"); });
+            Strong()({
+                forbear.text("Note");
+            });
             forbear.text(": This interface has been updated many times — take note of the version when you bind to the global. This book assumes you're binding to the latest version, which is version 7 at the time of writing.");
         });
 
         Paragraph(.{})({
             forbear.text("This interface is relatively straightforward. The server will send the client a ");
-            Strong()({ forbear.text("capabilities"); });
+            Strong()({
+                forbear.text("capabilities");
+            });
             forbear.text(" event to signal what kinds of input devices are supported by this seat — represented by a bitfield of ");
-            Strong()({ forbear.text("capability"); });
+            Strong()({
+                forbear.text("capability");
+            });
             forbear.text(" values — and the client can bind to the input devices it wishes to use accordingly. For example, if the server sends ");
-            Strong()({ forbear.text("capabilities"); });
+            Strong()({
+                forbear.text("capabilities");
+            });
             forbear.text(" where (caps & WL_SEAT_CAPABILITY_KEYBOARD) > 0 is true, the client may then use the ");
-            Strong()({ forbear.text("get_keyboard"); });
+            Strong()({
+                forbear.text("get_keyboard");
+            });
             forbear.text(" request to obtain a ");
-            Strong()({ forbear.text("wl_keyboard"); });
+            Strong()({
+                forbear.text("wl_keyboard");
+            });
             forbear.text(" object for this seat. The semantics for each particular input device are covered in the remaining chapters.");
         });
 
@@ -79,23 +95,37 @@ pub fn SeatsHandlingInput() void {
 
         Paragraph(.{})({
             forbear.text("A single input event from an input device may be broken up into several Wayland events for practical reasons. For example, a ");
-            Strong()({ forbear.text("wl_pointer"); });
+            Strong()({
+                forbear.text("wl_pointer");
+            });
             forbear.text(" will emit an ");
-            Strong()({ forbear.text("axis"); });
+            Strong()({
+                forbear.text("axis");
+            });
             forbear.text(" event as you use the scroll wheel, but it will separately emit an event telling you what ");
-            Strong()({ forbear.text("kind"); });
+            Strong()({
+                forbear.text("kind");
+            });
             forbear.text(" of axis it was: scroll wheel, a finger on a touchpad, tilting the scroll wheel to the side, etc. The same input event from the input source may have also included some motion of the mouse, or the click of a button, if the user did all of these things quickly enough.");
         });
 
         Paragraph(.{})({
             forbear.text("The semantic grouping of these related events differs slightly from input type to input type, but the ");
-            Strong()({ forbear.text("frame"); });
+            Strong()({
+                forbear.text("frame");
+            });
             forbear.text(" event is generally common between them. In short, if you buffer up all of the input events you receive from a device, then wait for the ");
-            Strong()({ forbear.text("frame"); });
+            Strong()({
+                forbear.text("frame");
+            });
             forbear.text(" event to signal that you've received all events for a single input \"frame\", you can interpret the buffered up ");
-            Strong()({ forbear.text("Wayland"); });
+            Strong()({
+                forbear.text("Wayland");
+            });
             forbear.text(" events as a single ");
-            Strong()({ forbear.text("input"); });
+            Strong()({
+                forbear.text("input");
+            });
             forbear.text(" event, then reset the buffer and start collecting events for the next frame.");
         });
 
@@ -109,7 +139,9 @@ pub fn SeatsHandlingInput() void {
 
         Paragraph(.{})({
             forbear.text("When you're done using a device, each interface has a ");
-            Strong()({ forbear.text("release"); });
+            Strong()({
+                forbear.text("release");
+            });
             forbear.text(" request you can use to clean it up. It'll look something like this:");
         });
 

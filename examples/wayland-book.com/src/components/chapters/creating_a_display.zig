@@ -22,7 +22,9 @@ pub fn CreatingADisplay() void {
 
         Paragraph(.{})({
             forbear.text("Connecting to a Wayland server and creating a ");
-            Strong()({ forbear.text("wl_display"); });
+            Strong()({
+                forbear.text("wl_display");
+            });
             forbear.text(" to manage the connection's state is quite easy:");
         });
 
@@ -51,9 +53,15 @@ pub fn CreatingADisplay() void {
         });
 
         List()({
-            ListItem()({ forbear.text("If $WAYLAND_DISPLAY is set, attempt to connect to $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"); });
-            ListItem()({ forbear.text("Otherwise, attempt to connect to $XDG_RUNTIME_DIR/wayland-0"); });
-            ListItem()({ forbear.text("Otherwise, fail :("); });
+            ListItem()({
+                forbear.text("If $WAYLAND_DISPLAY is set, attempt to connect to $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY");
+            });
+            ListItem()({
+                forbear.text("Otherwise, attempt to connect to $XDG_RUNTIME_DIR/wayland-0");
+            });
+            ListItem()({
+                forbear.text("Otherwise, fail :(");
+            });
         });
 
         Paragraph(.{})({

@@ -12,19 +12,29 @@ pub fn InterfacesAndListeners() void {
 
         Paragraph(.{})({
             forbear.text("Finally, we reach the summit of libwayland's abstractions: interfaces and listeners. The ideas discussed in previous chapters — ");
-            Strong()({ forbear.text("wl_proxy"); });
+            Strong()({
+                forbear.text("wl_proxy");
+            });
             forbear.text(" and ");
-            Strong()({ forbear.text("wl_resource"); });
+            Strong()({
+                forbear.text("wl_resource");
+            });
             forbear.text(", and the primitives — are singular implementations which live in libwayland, and they exist to provide support to this layer. When you run an XML file through wayland-scanner, it generates ");
-            Strong()({ forbear.text("interfaces"); });
+            Strong()({
+                forbear.text("interfaces");
+            });
             forbear.text(" and ");
-            Strong()({ forbear.text("listeners"); });
+            Strong()({
+                forbear.text("listeners");
+            });
             forbear.text(", as well as glue code between them and the low-level wire protocol interfaces, all specific to each interface in the high-level protocols.");
         });
 
         Paragraph(.{})({
             forbear.text("Recall that each actor on a Wayland connection can both receive and send messages. A client is listening for events and sending requests, and a server listens for requests and sends events. Each side listens for the messages of the other using an aptly-named ");
-            Strong()({ forbear.text("wl_listener"); });
+            Strong()({
+                forbear.text("wl_listener");
+            });
             forbear.text(". Here's an example of this interface:");
         });
 
@@ -34,7 +44,9 @@ pub fn InterfacesAndListeners() void {
 
         Paragraph(.{})({
             forbear.text("This is a client-side listener for a ");
-            Strong()({ forbear.text("wl_surface"); });
+            Strong()({
+                forbear.text("wl_surface");
+            });
             forbear.text(". The XML that wayland-scanner uses to generate this is:");
         });
 
@@ -44,7 +56,9 @@ pub fn InterfacesAndListeners() void {
 
         Paragraph(.{})({
             forbear.text("It should be fairly clear how these events become a listener interface. Each function pointer takes some arbitrary user data, a reference to the resource which the event pertains to, and the arguments to that event. We can bind a listener to a ");
-            Strong()({ forbear.text("wl_surface"); });
+            Strong()({
+                forbear.text("wl_surface");
+            });
             forbear.text(" like so:");
         });
 
@@ -54,7 +68,9 @@ pub fn InterfacesAndListeners() void {
 
         Paragraph(.{})({
             forbear.text("The ");
-            Strong()({ forbear.text("wl_surface"); });
+            Strong()({
+                forbear.text("wl_surface");
+            });
             forbear.text(" interface also defines some requests that the client can make for that surface:");
         });
 
