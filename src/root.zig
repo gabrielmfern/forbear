@@ -773,6 +773,8 @@ fn frameEnd(block: void) anyerror!void {
     self.touchedStates.clearRetainingCapacity();
     self.touchedScopes.clearRetainingCapacity();
     self.nodeTree.clearRetainingCapacity();
+    self.nodeStack.clearRetainingCapacity();
+    self.scopeStack.clearRetainingCapacity();
 }
 
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
@@ -922,7 +924,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     result.ptr.size[0] = @min(@max(result.ptr.size[0], result.ptr.minSize[0]), result.ptr.maxSize[0]);
     result.ptr.size[1] = @min(@max(result.ptr.size[1], result.ptr.minSize[1]), result.ptr.maxSize[1]);
 
-    self.nodeStack.append(self.frameMeta.?.arena, result.index) catch |err| {
+    self.nodeStack.append(self.allocator, result.index) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
@@ -1156,7 +1158,7 @@ pub noinline fn text(content: []const u8) void {
     // Push self onto the parent stack so `on(.mouseOver)` resolves the
     // text node's own measurement, then pop. The text node itself is not
     // a scope and has no children, so this is purely for hit-testing.
-    self.nodeStack.append(self.frameMeta.?.arena, result.index) catch |err| {
+    self.nodeStack.append(self.allocator, result.index) catch |err| {
         handleFrameError(err);
         return;
     };
@@ -1364,11 +1366,11 @@ fn componentChildrenSlotEndFn(block: void) void {
 
     // Restore parent stack and scope stack to pre-slotEnd state
     self.nodeStack.clearRetainingCapacity();
-    self.nodeStack.appendSlice(fm.arena, slotState.savedPreEndParentStack) catch |err| {
+    self.nodeStack.appendSlice(self.allocator, slotState.savedPreEndParentStack) catch |err| {
         handleFrameError(err);
     };
     self.scopeStack.clearRetainingCapacity();
-    self.scopeStack.appendSlice(fm.arena, slotState.savedPreEndScopeStack) catch |err| {
+    self.scopeStack.appendSlice(self.allocator, slotState.savedPreEndScopeStack) catch |err| {
         handleFrameError(err);
     };
 }
@@ -1420,12 +1422,12 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
         return &endNoop;
     };
     self.nodeStack.clearRetainingCapacity();
-    self.nodeStack.appendSlice(fm.arena, slotState.savedSlotParentStack) catch |err| {
+    self.nodeStack.appendSlice(self.allocator, slotState.savedSlotParentStack) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
     self.scopeStack.clearRetainingCapacity();
-    self.scopeStack.appendSlice(fm.arena, slotState.savedSlotScopeStack) catch |err| {
+    self.scopeStack.appendSlice(self.allocator, slotState.savedSlotScopeStack) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
@@ -1678,6 +1680,7 @@ pub fn deinit() void {
     self.states.deinit();
     self.scopes.deinit(self.allocator);
     self.scopeStack.deinit(self.allocator);
+    self.nodeStack.deinit(self.allocator);
     self.touchedStates.deinit(self.allocator);
     self.touchedScopes.deinit(self.allocator);
 
