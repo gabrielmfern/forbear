@@ -351,13 +351,21 @@ pub fn build(b: *std.Build) void {
         });
         bench_module.addImport("forbear", forbear);
 
+        const install = b.option(bool, "install", "Install benchmark executable instead of running it") orelse false;
+
         const bench_exe = b.addExecutable(.{
             .name = "bench",
             .root_module = bench_module,
         });
-        const run_bench = b.addRunArtifact(bench_exe);
         const bench_step = b.step("bench", "Run benchmarks");
-        bench_step.dependOn(&run_bench.step);
+        if (install) {
+            const install_bench = b.addInstallArtifact(bench_exe, .{});
+            bench_step.dependOn(&install_bench.step);
+        } else {
+            const run_bench = b.addRunArtifact(bench_exe);
+            if (b.args) |args| run_bench.addArgs(args);
+            bench_step.dependOn(&run_bench.step);
+        }
     }
 
     {
