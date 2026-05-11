@@ -119,12 +119,7 @@ fn LayoutBenchmark(comptime nodeCount: usize) fn (std.mem.Allocator) void {
         fn run(allocator: std.mem.Allocator) void {
             var arena = std.heap.ArenaAllocator.init(allocator);
             defer arena.deinit();
-            forbear.init(allocator, std.testing.io, undefined) catch unreachable;
-            defer forbear.deinit();
-
-            forbear.registerFont("Inter", @embedFile("Inter.ttf")) catch unreachable;
-
-            const meta = forbear.FrameMeta{
+            (forbear.frame(.{
                 .arena = arena.allocator(),
                 .viewportSize = .{ 1920, 1080 },
                 .baseStyle = .{
@@ -137,9 +132,7 @@ fn LayoutBenchmark(comptime nodeCount: usize) fn (std.mem.Allocator) void {
                     .blendMode = .normal,
                     .cursor = .default,
                 },
-            };
-
-            (forbear.frame(meta)({
+            })({
                 buildLayoutTree(nodeCount);
                 _ = forbear.layout() catch unreachable;
             })) catch unreachable;
@@ -290,12 +283,7 @@ fn UseStateBenchmark(comptime stateCount: usize) fn (std.mem.Allocator) void {
         fn run(allocator: std.mem.Allocator) void {
             var arena = std.heap.ArenaAllocator.init(allocator);
             defer arena.deinit();
-            forbear.init(allocator, std.testing.io, undefined) catch unreachable;
-            defer forbear.deinit();
-
-            forbear.registerFont("Inter", @embedFile("Inter.ttf")) catch unreachable;
-
-            const meta = forbear.FrameMeta{
+            (forbear.frame(.{
                 .arena = arena.allocator(),
                 .viewportSize = .{ 1920, 1080 },
                 .baseStyle = .{
@@ -308,9 +296,7 @@ fn UseStateBenchmark(comptime stateCount: usize) fn (std.mem.Allocator) void {
                     .blendMode = .normal,
                     .cursor = .default,
                 },
-            };
-
-            (forbear.frame(meta)({
+            })({
                 buildUseStateTree(stateCount);
             })) catch unreachable;
         }
@@ -320,32 +306,30 @@ fn UseStateBenchmark(comptime stateCount: usize) fn (std.mem.Allocator) void {
 pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
 
-    var layoutBench = zbench.Benchmark.init(allocator, .{});
-    defer layoutBench.deinit();
+    forbear.init(allocator, init.io, undefined) catch unreachable;
+    defer forbear.deinit();
+    forbear.registerFont("Inter", @embedFile("Inter.ttf")) catch unreachable;
 
-    try layoutBench.add("layout() 27 nodes", LayoutBenchmark(27), .{});
-    try layoutBench.add("layout() 135 nodes", LayoutBenchmark(135), .{});
-    try layoutBench.add("layout() 500 nodes", LayoutBenchmark(500), .{});
-    try layoutBench.add("layout() 1000 nodes", LayoutBenchmark(1000), .{});
-    try layoutBench.add("layout() 2641 nodes", LayoutBenchmark(2641), .{});
-    try layoutBench.add("layout() 5000 nodes", LayoutBenchmark(5000), .{});
-    try layoutBench.add("layout() 10000 nodes", LayoutBenchmark(10000), .{});
+    var layout_metrics: [7]Metrics = undefined;
+    layout_metrics[0] = try run(allocator, "layout() 27 nodes", LayoutBenchmark(27), .{allocator}, .{});
+    layout_metrics[1] = try run(allocator, "layout() 135 nodes", LayoutBenchmark(135), .{allocator}, .{});
+    layout_metrics[2] = try run(allocator, "layout() 500 nodes", LayoutBenchmark(500), .{allocator}, .{});
+    layout_metrics[3] = try run(allocator, "layout() 1000 nodes", LayoutBenchmark(1000), .{allocator}, .{});
+    layout_metrics[4] = try run(allocator, "layout() 2641 nodes", LayoutBenchmark(2641), .{allocator}, .{});
+    layout_metrics[5] = try run(allocator, "layout() 5000 nodes", LayoutBenchmark(5000), .{allocator}, .{});
+    layout_metrics[6] = try run(allocator, "layout() 10000 nodes", LayoutBenchmark(10000), .{allocator}, .{});
+    try print(.{ .metrics = &layout_metrics });
 
-    try layoutBench.run(init.io, std.Io.File.stdout());
-
-    var useStateBench = zbench.Benchmark.init(allocator, .{});
-    defer useStateBench.deinit();
-
-    try useStateBench.add("useState() 10 states", UseStateBenchmark(10), .{ .track_allocations = true });
-    try useStateBench.add("useState() 50 states", UseStateBenchmark(50), .{ .track_allocations = true });
-    try useStateBench.add("useState() 100 states", UseStateBenchmark(100), .{ .track_allocations = true });
-    try useStateBench.add("useState() 250 states", UseStateBenchmark(250), .{ .track_allocations = true });
-    try useStateBench.add("useState() 500 states", UseStateBenchmark(500), .{ .track_allocations = true });
-    try useStateBench.add("useState() 1000 states", UseStateBenchmark(1000), .{ .track_allocations = true });
-    try useStateBench.add("useState() 2000 states", UseStateBenchmark(2000), .{ .track_allocations = true });
-    try useStateBench.add("useState() 5000 states", UseStateBenchmark(5000), .{ .track_allocations = true });
-
-    try useStateBench.run(init.io, std.Io.File.stdout());
+    var state_metrics: [8]Metrics = undefined;
+    state_metrics[0] = try run(allocator, "useState() 10 states", UseStateBenchmark(10), .{allocator}, .{});
+    state_metrics[1] = try run(allocator, "useState() 50 states", UseStateBenchmark(50), .{allocator}, .{});
+    state_metrics[2] = try run(allocator, "useState() 100 states", UseStateBenchmark(100), .{allocator}, .{});
+    state_metrics[3] = try run(allocator, "useState() 250 states", UseStateBenchmark(250), .{allocator}, .{});
+    state_metrics[4] = try run(allocator, "useState() 500 states", UseStateBenchmark(500), .{allocator}, .{});
+    state_metrics[5] = try run(allocator, "useState() 1000 states", UseStateBenchmark(1000), .{allocator}, .{});
+    state_metrics[6] = try run(allocator, "useState() 2000 states", UseStateBenchmark(2000), .{allocator}, .{});
+    state_metrics[7] = try run(allocator, "useState() 5000 states", UseStateBenchmark(5000), .{allocator}, .{});
+    try print(.{ .metrics = &state_metrics });
 }
 
 // =================================================================================
@@ -702,7 +686,10 @@ fn Group(comptime events: []const Event) type {
     };
 }
 
-const BenchmarkOptions = struct {};
+const PrintOptions = struct {
+    metrics: []const Metrics,
+    baseline_index: ?usize = null,
+};
 
 const Column = struct {
     title: []const u8,
@@ -711,14 +698,14 @@ const Column = struct {
     active: bool,
 };
 
-fn print(options: Options) !void {
+fn print(options: PrintOptions) !void {
     var buffer: [64 * 1024]u8 = undefined;
     var w: Writer = .fixed(&buffer);
     try write(&w, options);
     std.debug.print("{s}", .{w.buffered()});
 }
 
-fn write(w: *Writer, options: Options) !void {
+fn write(w: *Writer, options: PrintOptions) !void {
     if (options.metrics.len == 0) return;
 
     // Initialize columns with Header names and default visibility
