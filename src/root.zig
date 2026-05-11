@@ -47,7 +47,9 @@ pub fn getContext() *@This() {
     return &context.?;
 }
 
-const Scope = struct { key: u64, arenaAllocator: std.heap.ArenaAllocator };
+const Scope = struct { key: u64, arenaAllocator: std.heap.ArenaAllocator, lastFrame: u32 };
+
+const StateEntry = struct { ptr: *anyopaque, lastFrame: u32 };
 
 const ComponentChildrenSlotState = struct {
     savedSlotParentStack: []usize,
@@ -109,10 +111,16 @@ lastUpdateTime: ?f64,
 viewportSize: Vec2,
 
 scopes: std.ArrayList(Scope) = .empty,
-states: std.AutoHashMap(u64, *anyopaque),
+states: std.AutoHashMap(u64, StateEntry),
 
-touchedScopes: std.ArrayList(u64) = .empty,
-touchedStates: std.ArrayList(u64) = .empty,
+/// Monotonically incremented at the start of every `frame()`. Used as
+/// the "this state was touched this frame" marker in lieu of an
+/// auxiliary sorted touched-keys list. A `u32` gives ~136 years of
+/// 60fps frames before wrapping; on wrap any state whose `lastFrame`
+/// happens to coincide will be retained for one extra frame, which is
+/// harmless.
+frameCounter: u32 = 0,
+
 /// stack of keys for scopes
 scopeStack: std.ArrayList(u64) = .empty,
 /// indices into the NodeTree
@@ -150,9 +158,8 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
 
         .scopes = .empty,
         .states = .init(allocator),
+        .frameCounter = 0,
 
-        .touchedScopes = .empty,
-        .touchedStates = .empty,
         .scopeStack = .empty,
         .nodeStack = .empty,
 
@@ -546,30 +553,23 @@ fn keyCompare(keyA: u64, keyB: u64) std.math.Order {
 
 fn pushScope(key: u64) error{OutOfMemory}!void {
     const self = getContext();
-    if (std.sort.binarySearch(Scope, self.scopes.items, key, scopeCompare) != null) {
+    if (std.sort.binarySearch(Scope, self.scopes.items, key, scopeCompare)) |scopeIndex| {
+        self.scopes.items[scopeIndex].lastFrame = self.frameCounter;
         try self.scopeStack.append(self.allocator, key);
-        try self.touchedScopes.insert(
-            self.allocator,
-            std.sort.lowerBound(u64, self.touchedScopes.items, key, keyCompare),
-            key,
-        );
         return;
     }
 
+    const insertIndex = std.sort.lowerBound(Scope, self.scopes.items, key, scopeCompare);
     try self.scopes.insert(
         self.allocator,
-        std.sort.lowerBound(Scope, self.scopes.items, key, scopeCompare),
+        insertIndex,
         Scope{
             .arenaAllocator = std.heap.ArenaAllocator.init(self.allocator),
             .key = key,
+            .lastFrame = self.frameCounter,
         },
     );
     try self.scopeStack.append(self.allocator, key);
-    try self.touchedScopes.insert(
-        self.allocator,
-        std.sort.lowerBound(u64, self.touchedScopes.items, key, keyCompare),
-        key,
-    );
 }
 
 fn popScope() void {
@@ -612,15 +612,6 @@ pub noinline fn useState(comptime T: type, initialValue: T) *T {
         };
         const stateKey = hasher.final();
 
-        self.touchedStates.insert(
-            self.allocator,
-            std.sort.lowerBound(u64, self.touchedStates.items, stateKey, keyCompare),
-            stateKey,
-        ) catch |err| {
-            std.log.err("Failed to track that state was touched: {}", .{err});
-            @panic("Out of memory when tracking touched state for useState");
-        };
-
         const state = self.states.getOrPut(stateKey) catch |err| {
             std.log.err("Failed to track that state was touched: {}", .{err});
             @panic("Out of memory when tracking touched state for useState");
@@ -631,10 +622,12 @@ pub noinline fn useState(comptime T: type, initialValue: T) *T {
                 @panic("Out of memory when allocating state for useState");
             };
             value.* = initialValue;
-            state.value_ptr.* = @ptrCast(@alignCast(value));
+            state.value_ptr.* = .{ .ptr = @ptrCast(@alignCast(value)), .lastFrame = self.frameCounter };
+        } else {
+            state.value_ptr.lastFrame = self.frameCounter;
         }
 
-        return @ptrCast(@alignCast(state.value_ptr.*));
+        return @ptrCast(@alignCast(state.value_ptr.ptr));
     } else {
         if (!builtin.is_test) {
             std.log.err("You might be calling a hook (useState) outside of a component or element scope, and forbear cannot track things outside of one.", .{});
@@ -710,13 +703,8 @@ fn frameEnd(block: void) anyerror!void {
     var i: usize = self.scopes.items.len;
     while (i > 0) {
         i -= 1;
-        if (std.sort.binarySearch(
-            u64,
-            self.touchedScopes.items,
-            self.scopes.items[i].key,
-            keyCompare,
-        ) == null) {
-            const scope = self.scopes.orderedRemove(i);
+        if (self.scopes.items[i].lastFrame != self.frameCounter) {
+            var scope = self.scopes.orderedRemove(i);
             scope.arenaAllocator.deinit();
         }
     }
@@ -726,15 +714,10 @@ fn frameEnd(block: void) anyerror!void {
     // removed
     var staleStateKeys: std.ArrayList(u64) = .empty;
     defer staleStateKeys.deinit(frameMeta.arena);
-    var existingStateKeys = self.states.keyIterator();
-    while (existingStateKeys.next()) |stateKey| {
-        if (std.sort.binarySearch(
-            u64,
-            self.touchedStates.items,
-            stateKey.*,
-            keyCompare,
-        ) == null) {
-            try staleStateKeys.append(frameMeta.arena, stateKey.*);
+    var existingStates = self.states.iterator();
+    while (existingStates.next()) |entry| {
+        if (entry.value_ptr.lastFrame != self.frameCounter) {
+            try staleStateKeys.append(frameMeta.arena, entry.key_ptr.*);
         }
     }
     for (staleStateKeys.items) |staleKey| {
@@ -770,8 +753,6 @@ fn frameEnd(block: void) anyerror!void {
         _ = self.previousFrameNodeMeasurements.remove(staleKey);
     }
 
-    self.touchedStates.clearRetainingCapacity();
-    self.touchedScopes.clearRetainingCapacity();
     self.nodeTree.clearRetainingCapacity();
     self.nodeStack.clearRetainingCapacity();
     self.scopeStack.clearRetainingCapacity();
@@ -783,6 +764,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.scrollDelta = self.scrollDeltaAccumulator;
     self.scrollDeltaAccumulator = @splat(0.0);
 
+    self.frameCounter +%= 1;
     self.frameMeta = meta;
     return &frameEnd;
 }
@@ -1681,8 +1663,6 @@ pub fn deinit() void {
     self.scopes.deinit(self.allocator);
     self.scopeStack.deinit(self.allocator);
     self.nodeStack.deinit(self.allocator);
-    self.touchedStates.deinit(self.allocator);
-    self.touchedScopes.deinit(self.allocator);
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {
