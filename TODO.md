@@ -61,6 +61,9 @@
     - Another option is a useScrolling
 - [x] scroll bar 🤔
 - [x] add back and forward buttons
+- [ ] add a way to diifferent parts of text without adding new elements
+    - in the future we should have support for something like inline elements like what HTML has 
+    - but that would be overkill for this, and would also not be so performant for these use cases
 - [ ] add code blocks
 - [ ] finishg bringing over all of the content into the app
 - [ ] add svg rendering

@@ -224,6 +224,7 @@ pub const CompleteStyle = struct {
     textWrapping: TextWrapping,
     cursor: Cursor,
 
+    inLine: bool,
     overflow: Overflow,
     placement: Placement,
     zIndex: ?u16 = null,
@@ -339,6 +340,7 @@ pub const Style = struct {
 
     cursor: ?Cursor = null,
 
+    inLine: ?bool = null,
     overflow: ?Overflow = null,
     placement: ?Placement = null,
     zIndex: ?u16 = null,
@@ -380,6 +382,7 @@ pub const Style = struct {
             .textWrapping = self.textWrapping orelse other.textWrapping,
             .cursor = self.cursor orelse other.cursor,
 
+            .inLine = self.inLine orelse other.inLine,
             .overflow = self.overflow orelse other.overflow,
             .placement = self.placement orelse other.placement,
             .zIndex = self.zIndex orelse other.zIndex,
@@ -403,7 +406,9 @@ pub const Style = struct {
     }
 
     pub fn completeWith(self: @This(), base: BaseStyle, out: *CompleteStyle) void {
-        out.background = self.background orelse .{ .color = Vec4{ 0.0, 0.0, 0.0, 0.0 } };
+        out.background = self.background orelse .{
+            .color = Vec4{ 0.0, 0.0, 0.0, 0.0 },
+        };
         out.blendMode = self.blendMode orelse base.blendMode;
         out.filter = self.filter orelse base.filter;
 
@@ -423,6 +428,7 @@ pub const Style = struct {
         out.textWrapping = self.textWrapping orelse base.textWrapping;
         out.cursor = self.cursor orelse base.cursor;
 
+        out.inLine = self.inLine orelse false;
         out.overflow = self.overflow orelse .visible;
         out.placement = self.placement orelse .flow;
         out.zIndex = self.zIndex;
