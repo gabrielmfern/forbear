@@ -20,7 +20,9 @@ pub fn Subsurfaces() void {
 
         Paragraph(.{})({
             forbear.text("The interface for managing these is the ");
-            Strong()({ forbear.text("wl_subcompositor"); });
+            Strong()({
+                forbear.text("wl_subcompositor");
+            });
             forbear.text(" interface. The get_subsurface request is the main entry-point to the subcompositor:");
         });
 
@@ -30,11 +32,17 @@ pub fn Subsurfaces() void {
 
         Paragraph(.{})({
             forbear.text("Once you have a ");
-            Strong()({ forbear.text("wl_subsurface"); });
+            Strong()({
+                forbear.text("wl_subsurface");
+            });
             forbear.text(" object associated with a ");
-            Strong()({ forbear.text("wl_surface"); });
+            Strong()({
+                forbear.text("wl_surface");
+            });
             forbear.text(", it becomes a child of that surface. Subsurfaces can themselves have subsurfaces, resulting in an ordered tree of surfaces beneath any top-level surface. Manipulating these children is done through the ");
-            Strong()({ forbear.text("wl_subsurface"); });
+            Strong()({
+                forbear.text("wl_subsurface");
+            });
             forbear.text(" interface:");
         });
 
@@ -48,25 +56,37 @@ pub fn Subsurfaces() void {
 
         Paragraph(.{})({
             forbear.text("The synchronization of the various properties of a ");
-            Strong()({ forbear.text("wl_subsurface"); });
+            Strong()({
+                forbear.text("wl_subsurface");
+            });
             forbear.text(" requires some explanation. These position and z-order properties are synchronized with the parent surface's lifecycle. When a ");
-            Strong()({ forbear.text("wl_surface.commit"); });
+            Strong()({
+                forbear.text("wl_surface.commit");
+            });
             forbear.text(" request is sent for the main surface, all of its subsurfaces have changes to their position and z-order applied with it.");
         });
 
         Paragraph(.{})({
             forbear.text("However, the ");
-            Strong()({ forbear.text("wl_surface"); });
+            Strong()({
+                forbear.text("wl_surface");
+            });
             forbear.text(" state associated with this subsurface, such as the attachment of buffers and accumulation of damage, need not be linked to the parent surface's lifecycle. This is the purpose of the ");
-            Strong()({ forbear.text("set_sync"); });
+            Strong()({
+                forbear.text("set_sync");
+            });
             forbear.text(" and ");
-            Strong()({ forbear.text("set_desync"); });
+            Strong()({
+                forbear.text("set_desync");
+            });
             forbear.text(" requests. Subsurfaces synced with their parent surface will commit all of their state when the parent surface is committed. Desynced surfaces will manage their own commit lifecycle like any other.");
         });
 
         Paragraph(.{})({
             forbear.text("In short, the sync and desync requests are non-buffered and apply immediately. The position and z-order requests are buffered, and are not affected by the sync/desync property of the surface — they are always committed with the parent surface. The remaining surface state, on the associated ");
-            Strong()({ forbear.text("wl_surface"); });
+            Strong()({
+                forbear.text("wl_surface");
+            });
             forbear.text(", is committed in accordance with the sync/desync status of the subsurface.");
         });
     });

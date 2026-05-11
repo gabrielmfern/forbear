@@ -23,7 +23,9 @@ pub fn TheHighLevelProtocol() void {
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("Note"); });
+            Strong()({
+                forbear.text("Note");
+            });
             forbear.text(": I've trimmed this snippet for brevity, but if you have the wayland.xml file in front of you, seek out this interface and examine it yourself — included is additional documentation explaining the purpose and precise semantics of each request and event.");
         });
 

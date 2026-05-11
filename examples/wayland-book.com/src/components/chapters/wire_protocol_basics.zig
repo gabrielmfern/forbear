@@ -13,7 +13,9 @@ pub fn WireProtocolBasics() void {
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("Note"); });
+            Strong()({
+                forbear.text("Note");
+            });
             forbear.text(": If you're just going to use libwayland, this chapter is optional - feel free to skip to chapter 2.2.");
         });
 
@@ -22,22 +24,30 @@ pub fn WireProtocolBasics() void {
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("int, uint"); });
+            Strong()({
+                forbear.text("int, uint");
+            });
             forbear.text(": 32-bit signed or unsigned integer.");
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("fixed"); });
+            Strong()({
+                forbear.text("fixed");
+            });
             forbear.text(": 24.8 bit signed fixed-point numbers.");
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("object"); });
+            Strong()({
+                forbear.text("object");
+            });
             forbear.text(": 32-bit object ID.");
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("new_id"); });
+            Strong()({
+                forbear.text("new_id");
+            });
             forbear.text(": 32-bit object ID which allocates that object when received.");
         });
 
@@ -46,22 +56,30 @@ pub fn WireProtocolBasics() void {
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("string"); });
+            Strong()({
+                forbear.text("string");
+            });
             forbear.text(": A string, prefixed with a 32-bit integer specifying its length (in bytes), followed by the string contents and a NUL terminator, padded to 32 bits with undefined data. The encoding is not specified, but in practice UTF-8 is used.");
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("array"); });
+            Strong()({
+                forbear.text("array");
+            });
             forbear.text(": A blob of arbitrary data, prefixed with a 32-bit integer specifying its length (in bytes), then the verbatim contents of the array, padded to 32 bits with undefined data.");
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("fd"); });
+            Strong()({
+                forbear.text("fd");
+            });
             forbear.text(": 0-bit value on the primary transport, but transfers a file descriptor to the other end using the ancillary data in the Unix domain socket message (msg_control).");
         });
 
         Paragraph(.{})({
-            Strong()({ forbear.text("enum"); });
+            Strong()({
+                forbear.text("enum");
+            });
             forbear.text(": A single value (or bitmap) from an enumeration of known constants, encoded into a 32-bit integer.");
         });
 
