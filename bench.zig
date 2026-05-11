@@ -369,7 +369,7 @@ pub fn main(init: std.process.Init) !void {
     defer forbear.deinit();
     try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
 
-    var layout_metrics: [7]Metrics = undefined;
+    var layout_metrics: [9]Metrics = undefined;
     layout_metrics[0] = try runLayoutBench(init.io, allocator, 27);
     layout_metrics[1] = try runLayoutBench(init.io, allocator, 135);
     layout_metrics[2] = try runLayoutBench(init.io, allocator, 500);
@@ -377,17 +377,20 @@ pub fn main(init: std.process.Init) !void {
     layout_metrics[4] = try runLayoutBench(init.io, allocator, 2641);
     layout_metrics[5] = try runLayoutBench(init.io, allocator, 5000);
     layout_metrics[6] = try runLayoutBench(init.io, allocator, 10000);
+    layout_metrics[7] = try runLayoutBench(init.io, allocator, 20000);
+    layout_metrics[8] = try runLayoutBench(init.io, allocator, 50000);
     try print(.{ .metrics = &layout_metrics });
 
-    var state_metrics: [8]Metrics = undefined;
-    state_metrics[0] = try run(init.io, allocator, "useState() 10 states", UseStateBenchmark(10), .{allocator}, .{});
-    state_metrics[1] = try run(init.io, allocator, "useState() 50 states", UseStateBenchmark(50), .{allocator}, .{});
-    state_metrics[2] = try run(init.io, allocator, "useState() 100 states", UseStateBenchmark(100), .{allocator}, .{});
-    state_metrics[3] = try run(init.io, allocator, "useState() 250 states", UseStateBenchmark(250), .{allocator}, .{});
-    state_metrics[4] = try run(init.io, allocator, "useState() 500 states", UseStateBenchmark(500), .{allocator}, .{});
-    state_metrics[5] = try run(init.io, allocator, "useState() 1000 states", UseStateBenchmark(1000), .{allocator}, .{});
-    state_metrics[6] = try run(init.io, allocator, "useState() 2000 states", UseStateBenchmark(2000), .{allocator}, .{});
-    state_metrics[7] = try run(init.io, allocator, "useState() 5000 states", UseStateBenchmark(5000), .{allocator}, .{});
+    var state_metrics: [9]Metrics = undefined;
+    state_metrics[0] = try run(init.io, allocator, "useState() 27 states", UseStateBenchmark(27), .{allocator}, .{});
+    state_metrics[1] = try run(init.io, allocator, "useState() 135 states", UseStateBenchmark(135), .{allocator}, .{});
+    state_metrics[2] = try run(init.io, allocator, "useState() 500 states", UseStateBenchmark(500), .{allocator}, .{});
+    state_metrics[3] = try run(init.io, allocator, "useState() 1000 states", UseStateBenchmark(1000), .{allocator}, .{});
+    state_metrics[4] = try run(init.io, allocator, "useState() 2000 states", UseStateBenchmark(2000), .{allocator}, .{});
+    state_metrics[5] = try run(init.io, allocator, "useState() 5000 states", UseStateBenchmark(5000), .{allocator}, .{});
+    state_metrics[6] = try run(init.io, allocator, "useState() 10000 states", UseStateBenchmark(10000), .{allocator}, .{});
+    state_metrics[7] = try run(init.io, allocator, "useState() 20000 states", UseStateBenchmark(20000), .{allocator}, .{});
+    state_metrics[8] = try run(init.io, allocator, "useState() 50000 states", UseStateBenchmark(50000), .{allocator}, .{});
     try print(.{ .metrics = &state_metrics });
 }
 
