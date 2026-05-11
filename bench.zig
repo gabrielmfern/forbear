@@ -7,7 +7,8 @@ const PERF_EVENT_IOC_DISABLE = linux.PERF.EVENT_IOC.DISABLE;
 const Writer = std.Io.Writer;
 const math = std.math;
 const sort = std.sort;
-const Timer = std.time.Timer;
+const Timestamp = std.Io.Timestamp;
+const Clock = std.Io.Clock;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
@@ -306,29 +307,29 @@ fn UseStateBenchmark(comptime stateCount: usize) fn (std.mem.Allocator) void {
 pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
 
-    forbear.init(allocator, init.io, undefined) catch unreachable;
+    try forbear.init(allocator, init.io, undefined);
     defer forbear.deinit();
-    forbear.registerFont("Inter", @embedFile("Inter.ttf")) catch unreachable;
+    try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
 
     var layout_metrics: [7]Metrics = undefined;
-    layout_metrics[0] = try run(allocator, "layout() 27 nodes", LayoutBenchmark(27), .{allocator}, .{});
-    layout_metrics[1] = try run(allocator, "layout() 135 nodes", LayoutBenchmark(135), .{allocator}, .{});
-    layout_metrics[2] = try run(allocator, "layout() 500 nodes", LayoutBenchmark(500), .{allocator}, .{});
-    layout_metrics[3] = try run(allocator, "layout() 1000 nodes", LayoutBenchmark(1000), .{allocator}, .{});
-    layout_metrics[4] = try run(allocator, "layout() 2641 nodes", LayoutBenchmark(2641), .{allocator}, .{});
-    layout_metrics[5] = try run(allocator, "layout() 5000 nodes", LayoutBenchmark(5000), .{allocator}, .{});
-    layout_metrics[6] = try run(allocator, "layout() 10000 nodes", LayoutBenchmark(10000), .{allocator}, .{});
+    layout_metrics[0] = try run(init.io, allocator, "layout() 27 nodes", LayoutBenchmark(27), .{allocator}, .{});
+    layout_metrics[1] = try run(init.io, allocator, "layout() 135 nodes", LayoutBenchmark(135), .{allocator}, .{});
+    layout_metrics[2] = try run(init.io, allocator, "layout() 500 nodes", LayoutBenchmark(500), .{allocator}, .{});
+    layout_metrics[3] = try run(init.io, allocator, "layout() 1000 nodes", LayoutBenchmark(1000), .{allocator}, .{});
+    layout_metrics[4] = try run(init.io, allocator, "layout() 2641 nodes", LayoutBenchmark(2641), .{allocator}, .{});
+    layout_metrics[5] = try run(init.io, allocator, "layout() 5000 nodes", LayoutBenchmark(5000), .{allocator}, .{});
+    layout_metrics[6] = try run(init.io, allocator, "layout() 10000 nodes", LayoutBenchmark(10000), .{allocator}, .{});
     try print(.{ .metrics = &layout_metrics });
 
     var state_metrics: [8]Metrics = undefined;
-    state_metrics[0] = try run(allocator, "useState() 10 states", UseStateBenchmark(10), .{allocator}, .{});
-    state_metrics[1] = try run(allocator, "useState() 50 states", UseStateBenchmark(50), .{allocator}, .{});
-    state_metrics[2] = try run(allocator, "useState() 100 states", UseStateBenchmark(100), .{allocator}, .{});
-    state_metrics[3] = try run(allocator, "useState() 250 states", UseStateBenchmark(250), .{allocator}, .{});
-    state_metrics[4] = try run(allocator, "useState() 500 states", UseStateBenchmark(500), .{allocator}, .{});
-    state_metrics[5] = try run(allocator, "useState() 1000 states", UseStateBenchmark(1000), .{allocator}, .{});
-    state_metrics[6] = try run(allocator, "useState() 2000 states", UseStateBenchmark(2000), .{allocator}, .{});
-    state_metrics[7] = try run(allocator, "useState() 5000 states", UseStateBenchmark(5000), .{allocator}, .{});
+    state_metrics[0] = try run(init.io, allocator, "useState() 10 states", UseStateBenchmark(10), .{allocator}, .{});
+    state_metrics[1] = try run(init.io, allocator, "useState() 50 states", UseStateBenchmark(50), .{allocator}, .{});
+    state_metrics[2] = try run(init.io, allocator, "useState() 100 states", UseStateBenchmark(100), .{allocator}, .{});
+    state_metrics[3] = try run(init.io, allocator, "useState() 250 states", UseStateBenchmark(250), .{allocator}, .{});
+    state_metrics[4] = try run(init.io, allocator, "useState() 500 states", UseStateBenchmark(500), .{allocator}, .{});
+    state_metrics[5] = try run(init.io, allocator, "useState() 1000 states", UseStateBenchmark(1000), .{allocator}, .{});
+    state_metrics[6] = try run(init.io, allocator, "useState() 2000 states", UseStateBenchmark(2000), .{allocator}, .{});
+    state_metrics[7] = try run(init.io, allocator, "useState() 5000 states", UseStateBenchmark(5000), .{allocator}, .{});
     try print(.{ .metrics = &state_metrics });
 }
 
@@ -934,7 +935,7 @@ pub const Options = struct {
     bytes_per_op: usize = 0,
 };
 
-pub fn run(allocator: Allocator, name: []const u8, function: anytype, args: anytype, options: Options) !Metrics {
+pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype, args: anytype, options: Options) !Metrics {
     assertFunctionDef(function, args);
 
     // ref: https://pyk.sh/blog/2025-12-08-bench-fixing-constant-folding
@@ -950,14 +951,14 @@ pub fn run(allocator: Allocator, name: []const u8, function: anytype, args: anyt
     // Target: 1ms (1,000,000 ns) per measurement block.
     const min_sample_time_ns = 1_000_000;
     var batch_size: u64 = 1;
-    var timer = try Timer.start();
+    var ts = Timestamp.now(io, .awake);
 
     while (true) {
-        timer.reset();
+        ts = Timestamp.now(io, .awake);
         for (0..batch_size) |_| {
             try execute(function, runtime_args);
         }
-        const duration = timer.read();
+        const duration: u64 = @intCast(ts.durationTo(Timestamp.now(io, .awake)).nanoseconds);
 
         if (duration >= min_sample_time_ns) break;
 
@@ -979,11 +980,11 @@ pub fn run(allocator: Allocator, name: []const u8, function: anytype, args: anyt
     defer allocator.free(samples);
 
     for (0..options.sample_size) |i| {
-        timer.reset();
+        ts = Timestamp.now(io, .awake);
         for (0..batch_size) |_| {
             try execute(function, runtime_args);
         }
-        const total_ns = timer.read();
+        const total_ns: u64 = @intCast(ts.durationTo(Timestamp.now(io, .awake)).nanoseconds);
         // Average time per operation for this batch
         samples[i] = @as(f64, @floatFromInt(total_ns)) / @as(f64, @floatFromInt(batch_size));
     }
@@ -1115,9 +1116,9 @@ fn createRuntimeArgs(function: anytype, args: anytype) RuntimeArgsType(@TypeOf(f
     var runtime_args: TupleType = undefined;
 
     // We only need the length here to iterate
-    const fn_params = getFnParams(@TypeOf(function));
+    const params_len = comptime getFnParams(@TypeOf(function)).len;
 
-    inline for (0..fn_params.len) |i| {
+    inline for (0..params_len) |i| {
         runtime_args[i] = args[i];
     }
     return runtime_args;
