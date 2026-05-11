@@ -15,10 +15,10 @@ const builtin = @import("builtin");
 const forbear = @import("forbear");
 
 // Per-node style picks for the layout benchmark. Dispatching by a
-// comptime index lets us vary sizing/padding/justification/min-max
+// runtime index lets us vary sizing/padding/justification/min-max
 // constraints across the tree so layout does meaningful work for each
 // kind of node (instead of only resolving uniform `grow` leaves).
-inline fn leafStyle(comptime idx: usize) forbear.Style {
+fn leafStyle(idx: usize) forbear.Style {
     return switch (idx % 6) {
         0 => .{ .width = .{ .fixed = 40 }, .height = .{ .fixed = 30 } },
         1 => .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 24 } },
@@ -29,17 +29,16 @@ inline fn leafStyle(comptime idx: usize) forbear.Style {
         },
         3 => .{ .width = .{ .fixed = 60 }, .height = .{ .ratio = 0.5 } },
         4 => .{ .width = .{ .ratio = 2.0 }, .height = .{ .fixed = 28 } },
-        5 => .{
+        else => .{
             .width = .{ .grow = 1.0 },
             .height = .{ .fixed = 30 },
             .minWidth = 24,
             .maxWidth = 200,
         },
-        else => unreachable,
     };
 }
 
-inline fn rowStyle(comptime idx: usize) forbear.Style {
+fn rowStyle(idx: usize) forbear.Style {
     return switch (idx % 3) {
         0 => .{
             .width = .{ .grow = 1.0 },
@@ -52,31 +51,29 @@ inline fn rowStyle(comptime idx: usize) forbear.Style {
             .direction = .horizontal,
             .xJustification = .center,
         },
-        2 => .{
+        else => .{
             .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .horizontal,
             .padding = forbear.Padding.all(4),
             .yJustification = .center,
         },
-        else => unreachable,
     };
 }
 
-inline fn sectionStyle(comptime idx: usize) forbear.Style {
+fn sectionStyle(idx: usize) forbear.Style {
     return switch (idx % 2) {
         0 => .{
             .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .vertical,
         },
-        1 => .{
+        else => .{
             .width = .{ .grow = 1.0 },
             .height = .fit,
             .direction = .vertical,
             .padding = forbear.Padding.all(8),
         },
-        else => unreachable,
     };
 }
 
@@ -86,9 +83,14 @@ inline fn sectionStyle(comptime idx: usize) forbear.Style {
 //
 // Per-section: 1 wrapper + R rows × (1 + L leaves) = 1 + R*(1+L)
 // With R=5, L=6: row = 7 nodes, section = 36 nodes.
-fn buildLayoutTree(comptime nodeCount: usize) void {
-    @setEvalBranchQuota(1_000_000);
-
+//
+// Runtime loops keep this monomorphic (one compiled copy regardless of
+// `nodeCount`), so layout perf at 10000 nodes doesn't blow up codegen.
+// Each element gets an explicit `key` because all iterations of a
+// runtime `for` share the same `@returnAddress()`; the key string only
+// needs to live long enough to be hashed inside `element()`, so we can
+// reuse a single stack buffer.
+fn buildLayoutTree(nodeCount: usize) void {
     const R: usize = 5;
     const L: usize = 6;
     const rowSize: usize = 1 + L;
@@ -112,12 +114,17 @@ fn buildLayoutTree(comptime nodeCount: usize) void {
         .height = .{ .grow = 1.0 },
         .direction = .vertical,
     } })({
-        inline for (0..fullSections) |si| {
-            forbear.element(.{ .style = sectionStyle(si) })({
-                inline for (0..R) |ri| {
-                    forbear.element(.{ .style = rowStyle(ri + si) })({
-                        inline for (0..L) |li| {
-                            forbear.element(.{ .style = leafStyle(li + ri * 2 + si * 3) })({});
+        var keyBuf: [48]u8 = undefined;
+
+        for (0..fullSections) |si| {
+            const sk = std.fmt.bufPrint(&keyBuf, "s{d}", .{si}) catch unreachable;
+            forbear.element(.{ .style = sectionStyle(si), .key = sk })({
+                for (0..R) |ri| {
+                    const rk = std.fmt.bufPrint(&keyBuf, "s{d}r{d}", .{ si, ri }) catch unreachable;
+                    forbear.element(.{ .style = rowStyle(ri + si), .key = rk })({
+                        for (0..L) |li| {
+                            const lk = std.fmt.bufPrint(&keyBuf, "s{d}r{d}l{d}", .{ si, ri, li }) catch unreachable;
+                            forbear.element(.{ .style = leafStyle(li + ri * 2 + si * 3), .key = lk })({});
                         }
                     });
                 }
@@ -125,26 +132,30 @@ fn buildLayoutTree(comptime nodeCount: usize) void {
         }
 
         if (hasPartialSection) {
-            forbear.element(.{ .style = sectionStyle(fullSections) })({
-                inline for (0..partialRows) |ri| {
-                    forbear.element(.{ .style = rowStyle(ri + fullSections) })({
-                        inline for (0..L) |li| {
-                            forbear.element(.{ .style = leafStyle(li + ri * 2 + fullSections * 3) })({});
+            forbear.element(.{ .style = sectionStyle(fullSections), .key = "ps" })({
+                for (0..partialRows) |ri| {
+                    const rk = std.fmt.bufPrint(&keyBuf, "psr{d}", .{ri}) catch unreachable;
+                    forbear.element(.{ .style = rowStyle(ri + fullSections), .key = rk })({
+                        for (0..L) |li| {
+                            const lk = std.fmt.bufPrint(&keyBuf, "psr{d}l{d}", .{ ri, li }) catch unreachable;
+                            forbear.element(.{ .style = leafStyle(li + ri * 2 + fullSections * 3), .key = lk })({});
                         }
                     });
                 }
                 if (hasPartialRow) {
-                    forbear.element(.{ .style = rowStyle(partialRows + fullSections) })({
-                        inline for (0..tailLeavesInRow) |li| {
-                            forbear.element(.{ .style = leafStyle(li + partialRows * 2 + fullSections * 3) })({});
+                    forbear.element(.{ .style = rowStyle(partialRows + fullSections), .key = "pstail" })({
+                        for (0..tailLeavesInRow) |li| {
+                            const lk = std.fmt.bufPrint(&keyBuf, "pstail_l{d}", .{li}) catch unreachable;
+                            forbear.element(.{ .style = leafStyle(li + partialRows * 2 + fullSections * 3), .key = lk })({});
                         }
                     });
                 }
             });
         }
 
-        inline for (0..strayLeaves) |li| {
-            forbear.element(.{ .style = leafStyle(li) })({});
+        for (0..strayLeaves) |li| {
+            const lk = std.fmt.bufPrint(&keyBuf, "stray{d}", .{li}) catch unreachable;
+            forbear.element(.{ .style = leafStyle(li), .key = lk })({});
         }
     });
 }
