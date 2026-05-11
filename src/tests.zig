@@ -3845,6 +3845,92 @@ test "State creation with manual handling" {
     try std.testing.expectEqual(6.28, observed2);
 }
 
+fn ConditionalState(callSecond: bool) void {
+    forbear.component(.{ .key = "conditional-state-test" })({
+        _ = forbear.useState(u32, 1);
+        if (callSecond) {
+            _ = forbear.useState(u32, 2);
+        }
+    });
+}
+
+test "useState entry is reaped when its call site is skipped" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    defer forbear.deinit();
+    const self = forbear.getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Frame 1: both useStates run.
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ConditionalState(true);
+    });
+    try std.testing.expectEqual(@as(u32, 2), self.states.count());
+
+    // Frame 2: conditional call site is skipped — its entry must be removed.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ConditionalState(false);
+    });
+    try std.testing.expectEqual(@as(u32, 1), self.states.count());
+
+    // Frame 3: bringing the call back re-allocates the slot.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ConditionalState(true);
+    });
+    try std.testing.expectEqual(@as(u32, 2), self.states.count());
+}
+
+fn ChildWithStates(key: []const u8) void {
+    forbear.component(.{ .key = key })({
+        _ = forbear.useState(u32, 0);
+        _ = forbear.useState(u32, 0);
+    });
+}
+
+fn ParentWithChildren(includeB: bool) void {
+    forbear.component(.{ .key = "parent-with-children" })({
+        ChildWithStates("child-a");
+        if (includeB) ChildWithStates("child-b");
+    });
+}
+
+test "unmounted scope is removed and its states are reaped" {
+    // Relies on `std.testing.allocator` to leak-fail at deinit if any
+    // unmounted scope's arena was not freed.
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    defer forbear.deinit();
+    const self = forbear.getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Frame 1: parent + child-a + child-b → 3 scopes, 4 states (2 per child).
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ParentWithChildren(true);
+    });
+    const scopesAfterMount = self.scopes.items.len;
+    try std.testing.expectEqual(@as(u32, 4), self.states.count());
+
+    // Frame 2: child-b unmounts → its scope and both its states must be gone.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ParentWithChildren(false);
+    });
+    try std.testing.expectEqual(scopesAfterMount - 1, self.scopes.items.len);
+    try std.testing.expectEqual(@as(u32, 2), self.states.count());
+
+    // Frame 3: nothing rendered → all scopes (including parent) and states gone.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({});
+    try std.testing.expectEqual(@as(usize, 0), self.scopes.items.len);
+    try std.testing.expectEqual(@as(u32, 0), self.states.count());
+}
+
 fn TransitionRealloc(targetTo: f32, observedFrom: *f32, observedTo: *f32, observedAnimation: *?forbear.AnimationState) !void {
     // Mimics useTransition's calls:
     //   const valueToTransitionFrom = useState(f32, value);
