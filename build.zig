@@ -347,7 +347,7 @@ pub fn build(b: *std.Build) void {
         const bench_module = b.createModule(.{
             .root_source_file = b.path("bench.zig"),
             .target = target,
-            .optimize = .ReleaseSafe,
+            .optimize = optimize,
         });
         bench_module.addImport("forbear", forbear);
 
