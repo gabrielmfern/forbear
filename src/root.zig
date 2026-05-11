@@ -55,10 +55,54 @@ const Scope = struct {
     /// entry. The map's backing storage and its `*T` values both live in
     /// `arenaAllocator`, so nothing extra needs freeing when the scope
     /// dies — `arenaAllocator.deinit()` releases everything in one shot.
-    states: std.AutoHashMapUnmanaged(usize, StateEntry) = .empty,
+    states: std.HashMapUnmanaged(usize, StateEntry, StateKeyContext, std.hash_map.default_max_load_percentage) = .empty,
 };
 
 const StateEntry = struct { ptr: *anyopaque, lastFrame: u32 };
+
+/// SplitMix64 finalizer. Mixes both high and low bits well, so
+/// downstream hashmap slot indexing (low bits) and fingerprinting
+/// (high bits) both behave even when inputs are clustered (e.g. code
+/// addresses from `@returnAddress()` or sequential `nodeStack` depths).
+/// Three multiplies + a few shifts — much cheaper than `Wyhash.init +
+/// update + final` that this replaces in element / component / text /
+/// hook key derivation.
+inline fn mixU64(state: u64, value: u64) u64 {
+    var z = state ^ value;
+    z = (z ^ (z >> 30)) *% 0xbf58476d1ce4e5b9;
+    z = (z ^ (z >> 27)) *% 0x94d049bb133111eb;
+    z = z ^ (z >> 31);
+    return z;
+}
+
+/// Identity hash for scope keys. Scope keys are produced by `mixU64`
+/// chains in element / component / text / hook key derivation, so they
+/// are already well-distributed — re-hashing them with Wyhash (the
+/// default `AutoContext` behavior) just burns cycles.
+const ScopeKeyContext = struct {
+    pub fn hash(_: ScopeKeyContext, k: u64) u64 {
+        return k;
+    }
+    pub fn eql(_: ScopeKeyContext, a: u64, b: u64) bool {
+        return a == b;
+    }
+};
+
+/// Per-state hash context. State keys are raw `@returnAddress()`
+/// values, which cluster in their low bits because of code alignment,
+/// so we run them through SplitMix64 before they hit the hashmap.
+const StateKeyContext = struct {
+    pub fn hash(_: StateKeyContext, k: usize) u64 {
+        var z: u64 = @as(u64, k);
+        z = (z ^ (z >> 30)) *% 0xbf58476d1ce4e5b9;
+        z = (z ^ (z >> 27)) *% 0x94d049bb133111eb;
+        z = z ^ (z >> 31);
+        return z;
+    }
+    pub fn eql(_: StateKeyContext, a: usize, b: usize) bool {
+        return a == b;
+    }
+};
 
 const ComponentChildrenSlotState = struct {
     savedSlotParentStack: []usize,
@@ -119,7 +163,7 @@ cappedDeltaTime: ?f64,
 lastUpdateTime: ?f64,
 viewportSize: Vec2,
 
-scopes: std.AutoHashMapUnmanaged(u64, Scope) = .empty,
+scopes: std.HashMapUnmanaged(u64, Scope, ScopeKeyContext, std.hash_map.default_max_load_percentage) = .empty,
 
 /// Monotonically incremented at the start of every `frame()`. Used as
 /// the "this scope/state was touched this frame" marker on each Scope
@@ -820,18 +864,18 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     else
         0;
 
-    var hasher = std.hash.Wyhash.init(0);
+    var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-        hasher.update(std.mem.asBytes(&lastScopeKey));
+        k = mixU64(k, lastScopeKey);
     }
-    hasher.update(std.mem.asBytes(&self.nodeStack.items.len));
+    k = mixU64(k, @as(u64, self.nodeStack.items.len));
     if (props.key) |key| {
-        hasher.update(key);
+        k = mixU64(k, std.hash.Wyhash.hash(0, key));
     } else {
-        hasher.update(std.mem.asBytes(&@returnAddress()));
+        k = mixU64(k, @returnAddress());
     }
 
-    result.ptr.key = hasher.final();
+    result.ptr.key = k;
     result.ptr.z = if (props.style.zIndex) |zIndex|
         zIndex
     else if (parentZ < std.math.maxInt(u16))
@@ -1096,18 +1140,18 @@ pub noinline fn text(content: []const u8) void {
     else
         0;
 
-    var hasher = std.hash.Wyhash.init(0);
+    var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-        hasher.update(std.mem.asBytes(&lastScopeKey));
+        k = mixU64(k, lastScopeKey);
     }
-    hasher.update(std.mem.asBytes(&self.nodeStack.items.len));
-    // We don't hash the text content here because text selection would be nice
+    k = mixU64(k, @as(u64, self.nodeStack.items.len));
+    // We don't mix the text content here because text selection would be nice
     // to work even with text changing
     //
-    // hasher.update(effectiveContent);
-    hasher.update(std.mem.asBytes(&@returnAddress()));
+    // k = mixU64(k, std.hash.Wyhash.hash(0, effectiveContent));
+    k = mixU64(k, @returnAddress());
 
-    result.ptr.key = hasher.final();
+    result.ptr.key = k;
     result.ptr.position = @splat(0.0);
     result.ptr.z = if (parentZ < std.math.maxInt(u16))
         parentZ + 1
@@ -1228,12 +1272,12 @@ pub inline fn hook() void {
     if (self.frameMeta.?.err != null) {
         return;
     }
-    var hasher = std.hash.Wyhash.init(0);
+    var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-        hasher.update(std.mem.asBytes(&lastScopeKey));
+        k = mixU64(k, lastScopeKey);
     }
-    hasher.update(std.mem.asBytes(&@returnAddress()));
-    pushScope(hasher.final()) catch |err| {
+    k = mixU64(k, @returnAddress());
+    pushScope(k) catch |err| {
         handleFrameError(err);
         return;
     };
@@ -1255,21 +1299,21 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
         return &endNoop;
     }
 
-    var hasher = std.hash.Wyhash.init(0);
     // the component keys wrapping this component and the amount of parents in
     // the node tree up to this point are what differentiate this instance from
     // other instances of the same component
+    var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-        hasher.update(std.mem.asBytes(&lastScopeKey));
+        k = mixU64(k, lastScopeKey);
     }
-    hasher.update(std.mem.asBytes(&self.nodeStack.items.len));
+    k = mixU64(k, @as(u64, self.nodeStack.items.len));
     if (props.key) |key| {
-        hasher.update(key);
+        k = mixU64(k, std.hash.Wyhash.hash(0, key));
     } else {
-        hasher.update(std.mem.asBytes(&@returnAddress()));
+        k = mixU64(k, @returnAddress());
     }
 
-    const componentKey = hasher.final();
+    const componentKey = k;
     pushScope(componentKey) catch |err| {
         handleFrameError(err);
         return endNoop;
