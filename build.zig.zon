@@ -17,10 +17,6 @@
         .stb_image = .{
             .path = "dependencies/stb_image",
         },
-        .zbench = .{
-            .url = "https://github.com/hendriknielaender/zBench/archive/refs/tags/v0.13.0.tar.gz",
-            .hash = "zbench-0.13.0-YTdc7xVBAQCCMC-IdLLuotBeiNNNm8k9Pi2V4VYqrwfI",
-        },
     },
     .paths = .{
         "build.zig",
