@@ -6,11 +6,11 @@ const Paragraph = @import("../paragraph.zig").Paragraph;
 pub fn ProtocolDesign() void {
     forbear.component(.{})({
         Heading(.{ .level = 1 })({
-            forbear.text("Protocol Design");
+            forbear.text("Protocol design");
         });
 
         Paragraph(.{})({
-            forbear.text("Placeholder content.");
+            forbear.text("TODO");
         });
     });
 }
