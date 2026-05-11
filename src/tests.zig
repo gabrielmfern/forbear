@@ -17,7 +17,8 @@ pub const shallowBaseStyle = forbear.BaseStyle{
 /// asserted against a single global state hashmap.
 fn totalStateCount() u32 {
     var n: u32 = 0;
-    for (forbear.getContext().scopes.items) |*scope| {
+    var it = forbear.getContext().scopes.valueIterator();
+    while (it.next()) |scope| {
         n += scope.states.count();
     }
     return n;
@@ -3921,7 +3922,7 @@ test "unmounted scope is removed and its states are reaped" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         ParentWithChildren(true);
     });
-    const scopesAfterMount = self.scopes.items.len;
+    const scopesAfterMount = self.scopes.count();
     try std.testing.expectEqual(@as(u32, 4), totalStateCount());
 
     // Frame 2: child-b unmounts → its scope and both its states must be gone.
@@ -3929,13 +3930,13 @@ test "unmounted scope is removed and its states are reaped" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         ParentWithChildren(false);
     });
-    try std.testing.expectEqual(scopesAfterMount - 1, self.scopes.items.len);
+    try std.testing.expectEqual(scopesAfterMount - 1, self.scopes.count());
     try std.testing.expectEqual(@as(u32, 2), totalStateCount());
 
     // Frame 3: nothing rendered → all scopes (including parent) and states gone.
     _ = arena.reset(.retain_capacity);
     try forbear.frame(try frameMeta(arenaAllocator))({});
-    try std.testing.expectEqual(@as(usize, 0), self.scopes.items.len);
+    try std.testing.expectEqual(@as(usize, 0), self.scopes.count());
     try std.testing.expectEqual(@as(u32, 0), totalStateCount());
 }
 
