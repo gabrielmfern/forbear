@@ -137,6 +137,25 @@ pub const FrameMeta = struct {
     componentChildrenSlotStates: std.ArrayList(ComponentChildrenSlotState) = .empty,
 };
 
+// Hot fields kept at the front of the struct so they sit at low,
+// stable offsets and don't get pushed across cache lines as the
+// trailing fields evolve. `frameMeta` and `nodeTree` are read on every
+// `forbear.layout()` pass and every `element` / `component` / `text` /
+// `useState` call; `scopes`, `scopeStack`, and `frameCounter` are read
+// on every `useState` and `pushScope`.
+frameMeta: ?FrameMeta,
+nodeTree: NodeTree,
+scopes: std.HashMapUnmanaged(u64, Scope, ScopeKeyContext, std.hash_map.default_max_load_percentage) = .empty,
+scopeStack: std.ArrayList(u64) = .empty,
+nodeStack: std.ArrayList(usize) = .empty,
+/// Monotonically incremented at the start of every `frame()`. Used as
+/// the "this scope/state was touched this frame" marker on each Scope
+/// and StateEntry, in lieu of an auxiliary sorted touched-keys list.
+/// A `u32` gives ~136 years of 60fps frames before wrapping; on wrap
+/// any entry whose `lastFrame` happens to coincide will be retained
+/// for one extra frame, which is harmless.
+frameCounter: u32 = 0,
+
 allocator: std.mem.Allocator,
 io: std.Io,
 
@@ -162,24 +181,6 @@ cappedDeltaTime: ?f64,
 /// Seconds
 lastUpdateTime: ?f64,
 viewportSize: Vec2,
-
-scopes: std.HashMapUnmanaged(u64, Scope, ScopeKeyContext, std.hash_map.default_max_load_percentage) = .empty,
-
-/// Monotonically incremented at the start of every `frame()`. Used as
-/// the "this scope/state was touched this frame" marker on each Scope
-/// and StateEntry, in lieu of an auxiliary sorted touched-keys list.
-/// A `u32` gives ~136 years of 60fps frames before wrapping; on wrap
-/// any entry whose `lastFrame` happens to coincide will be retained
-/// for one extra frame, which is harmless.
-frameCounter: u32 = 0,
-
-/// stack of keys for scopes
-scopeStack: std.ArrayList(u64) = .empty,
-/// indices into the NodeTree
-nodeStack: std.ArrayList(usize) = .empty,
-
-nodeTree: NodeTree,
-frameMeta: ?FrameMeta,
 
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
