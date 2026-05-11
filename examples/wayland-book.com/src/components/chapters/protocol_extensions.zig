@@ -10,7 +10,7 @@ pub fn ProtocolExtensions() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Placeholder content.");
+            forbear.text("TODO");
         });
     });
 }

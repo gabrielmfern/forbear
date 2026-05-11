@@ -10,7 +10,7 @@ pub fn DataOffers() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Placeholder content.");
+            forbear.text("TODO");
         });
     });
 }

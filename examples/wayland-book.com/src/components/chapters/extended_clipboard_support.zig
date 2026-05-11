@@ -10,7 +10,7 @@ pub fn ExtendedClipboardSupport() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Placeholder content.");
+            forbear.text("TODO");
         });
     });
 }

@@ -10,7 +10,7 @@ pub fn ClipboardAccess() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Placeholder content.");
+            forbear.text("TODO");
         });
     });
 }
