@@ -47,7 +47,17 @@ pub fn getContext() *@This() {
     return &context.?;
 }
 
-const Scope = struct { key: u64, arenaAllocator: std.heap.ArenaAllocator, lastFrame: u32 };
+const Scope = struct {
+    key: u64,
+    arenaAllocator: std.heap.ArenaAllocator,
+    lastFrame: u32,
+    /// Per-scope state map. Key is the `@returnAddress()` of the `useState`
+    /// call site (unique per source location); value is the live state
+    /// entry. The map's backing storage and its `*T` values both live in
+    /// `arenaAllocator`, so nothing extra needs freeing when the scope
+    /// dies — `arenaAllocator.deinit()` releases everything in one shot.
+    states: std.AutoHashMapUnmanaged(usize, StateEntry) = .empty,
+};
 
 const StateEntry = struct { ptr: *anyopaque, lastFrame: u32 };
 
@@ -111,14 +121,13 @@ lastUpdateTime: ?f64,
 viewportSize: Vec2,
 
 scopes: std.ArrayList(Scope) = .empty,
-states: std.AutoHashMap(u64, StateEntry),
 
 /// Monotonically incremented at the start of every `frame()`. Used as
-/// the "this state was touched this frame" marker in lieu of an
-/// auxiliary sorted touched-keys list. A `u32` gives ~136 years of
-/// 60fps frames before wrapping; on wrap any state whose `lastFrame`
-/// happens to coincide will be retained for one extra frame, which is
-/// harmless.
+/// the "this scope/state was touched this frame" marker on each Scope
+/// and StateEntry, in lieu of an auxiliary sorted touched-keys list.
+/// A `u32` gives ~136 years of 60fps frames before wrapping; on wrap
+/// any entry whose `lastFrame` happens to coincide will be retained
+/// for one extra frame, which is harmless.
 frameCounter: u32 = 0,
 
 /// stack of keys for scopes
@@ -157,7 +166,6 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .viewportSize = @splat(0.0),
 
         .scopes = .empty,
-        .states = .init(allocator),
         .frameCounter = 0,
 
         .scopeStack = .empty,
@@ -595,10 +603,6 @@ pub noinline fn useState(comptime T: type, initialValue: T) *T {
     }
 
     if (self.scopeStack.getLastOrNull()) |scopeKey| {
-        var hasher = std.hash.Wyhash.init(0);
-        hasher.update(std.mem.asBytes(&scopeKey));
-        hasher.update(std.mem.asBytes(&@returnAddress()));
-
         const scope: *Scope = blk: {
             if (std.sort.binarySearch(
                 Scope,
@@ -610,14 +614,14 @@ pub noinline fn useState(comptime T: type, initialValue: T) *T {
             }
             unreachable;
         };
-        const stateKey = hasher.final();
 
-        const state = self.states.getOrPut(stateKey) catch |err| {
+        const arena = scope.arenaAllocator.allocator();
+        const state = scope.states.getOrPut(arena, @returnAddress()) catch |err| {
             std.log.err("Failed to track that state was touched: {}", .{err});
             @panic("Out of memory when tracking touched state for useState");
         };
         if (!state.found_existing) {
-            const value = scope.arenaAllocator.allocator().create(T) catch |err| {
+            const value = arena.create(T) catch |err| {
                 std.log.err("Failed to allocate state for useState: {}", .{err});
                 @panic("Out of memory when allocating state for useState");
             };
@@ -709,19 +713,24 @@ fn frameEnd(block: void) anyerror!void {
         }
     }
 
-    // TODO: we're removing the state here, but we're not freeing it. We're
-    // also not removing state when freeing state at the point a scope is
-    // removed
-    var staleStateKeys: std.ArrayList(u64) = .empty;
+    // For each surviving scope, drop state entries whose call site
+    // wasn't visited this frame. The underlying `*T` storage stays in
+    // the scope's arena until the whole scope is unmounted (one-shot
+    // free via `arenaAllocator.deinit()` above) — same lifetime model
+    // as before, just per-scope instead of a global map.
+    var staleStateKeys: std.ArrayList(usize) = .empty;
     defer staleStateKeys.deinit(frameMeta.arena);
-    var existingStates = self.states.iterator();
-    while (existingStates.next()) |entry| {
-        if (entry.value_ptr.lastFrame != self.frameCounter) {
-            try staleStateKeys.append(frameMeta.arena, entry.key_ptr.*);
+    for (self.scopes.items) |*scope| {
+        staleStateKeys.clearRetainingCapacity();
+        var entries = scope.states.iterator();
+        while (entries.next()) |entry| {
+            if (entry.value_ptr.lastFrame != self.frameCounter) {
+                try staleStateKeys.append(frameMeta.arena, entry.key_ptr.*);
+            }
         }
-    }
-    for (staleStateKeys.items) |staleKey| {
-        _ = self.states.remove(staleKey);
+        for (staleStateKeys.items) |staleKey| {
+            _ = scope.states.remove(staleKey);
+        }
     }
 
     var staleFrameNodeMeasurements: std.ArrayList(u64) = .empty;
@@ -1659,7 +1668,6 @@ pub fn deinit() void {
     for (self.scopes.items) |*scope| {
         scope.arenaAllocator.deinit();
     }
-    self.states.deinit();
     self.scopes.deinit(self.allocator);
     self.scopeStack.deinit(self.allocator);
     self.nodeStack.deinit(self.allocator);
