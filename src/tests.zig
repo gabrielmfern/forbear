@@ -13,6 +13,17 @@ pub const shallowBaseStyle = forbear.BaseStyle{
     .cursor = .default,
 };
 
+/// Sums the per-scope `states` map sizes. Used by tests that previously
+/// asserted against a single global state hashmap.
+fn totalStateCount() u32 {
+    var n: u32 = 0;
+    var it = forbear.getContext().scopes.valueIterator();
+    while (it.next()) |scope| {
+        n += scope.states.count();
+    }
+    return n;
+}
+
 pub fn frameMeta(arena: std.mem.Allocator) !forbear.FrameMeta {
     try forbear.registerFont("Inter", @embedFile("inter_font"));
     return forbear.FrameMeta{
@@ -3819,7 +3830,6 @@ test "State creation with manual handling" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3831,7 +3841,7 @@ test "State creation with manual handling" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         StateCreationCounter(&observed1, &observed2, true);
     });
-    try std.testing.expectEqual(2, self.states.count());
+    try std.testing.expectEqual(2, totalStateCount());
     try std.testing.expectEqual(100, observed1);
     try std.testing.expectEqual(6.28, observed2);
 
@@ -3840,9 +3850,94 @@ test "State creation with manual handling" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         StateCreationCounter(&observed1, &observed2, false);
     });
-    try std.testing.expectEqual(2, self.states.count());
+    try std.testing.expectEqual(2, totalStateCount());
     try std.testing.expectEqual(100, observed1);
     try std.testing.expectEqual(6.28, observed2);
+}
+
+fn ConditionalState(callSecond: bool) void {
+    forbear.component(.{ .key = "conditional-state-test" })({
+        _ = forbear.useState(u32, 1);
+        if (callSecond) {
+            _ = forbear.useState(u32, 2);
+        }
+    });
+}
+
+test "useState entry is reaped when its call site is skipped" {
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    defer forbear.deinit();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Frame 1: both useStates run.
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ConditionalState(true);
+    });
+    try std.testing.expectEqual(@as(u32, 2), totalStateCount());
+
+    // Frame 2: conditional call site is skipped — its entry must be removed.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ConditionalState(false);
+    });
+    try std.testing.expectEqual(@as(u32, 1), totalStateCount());
+
+    // Frame 3: bringing the call back re-allocates the slot.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ConditionalState(true);
+    });
+    try std.testing.expectEqual(@as(u32, 2), totalStateCount());
+}
+
+fn ChildWithStates(key: []const u8) void {
+    forbear.component(.{ .key = key })({
+        _ = forbear.useState(u32, 0);
+        _ = forbear.useState(u32, 0);
+    });
+}
+
+fn ParentWithChildren(includeB: bool) void {
+    forbear.component(.{ .key = "parent-with-children" })({
+        ChildWithStates("child-a");
+        if (includeB) ChildWithStates("child-b");
+    });
+}
+
+test "unmounted scope is removed and its states are reaped" {
+    // Relies on `std.testing.allocator` to leak-fail at deinit if any
+    // unmounted scope's arena was not freed.
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    defer forbear.deinit();
+    const self = forbear.getContext();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Frame 1: parent + child-a + child-b → 3 scopes, 4 states (2 per child).
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ParentWithChildren(true);
+    });
+    const scopesAfterMount = self.scopes.count();
+    try std.testing.expectEqual(@as(u32, 4), totalStateCount());
+
+    // Frame 2: child-b unmounts → its scope and both its states must be gone.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        ParentWithChildren(false);
+    });
+    try std.testing.expectEqual(scopesAfterMount - 1, self.scopes.count());
+    try std.testing.expectEqual(@as(u32, 2), totalStateCount());
+
+    // Frame 3: nothing rendered → all scopes (including parent) and states gone.
+    _ = arena.reset(.retain_capacity);
+    try forbear.frame(try frameMeta(arenaAllocator))({});
+    try std.testing.expectEqual(@as(usize, 0), self.scopes.count());
+    try std.testing.expectEqual(@as(u32, 0), totalStateCount());
 }
 
 fn TransitionRealloc(targetTo: f32, observedFrom: *f32, observedTo: *f32, observedAnimation: *?forbear.AnimationState) !void {
@@ -4050,7 +4145,6 @@ test "stale scope state is pruned at frame end (element)" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -4065,7 +4159,7 @@ test "stale scope state is pruned at frame end (element)" {
             });
         });
     });
-    const stateCountWithTransient = self.states.count();
+    const stateCountWithTransient = totalStateCount();
     try std.testing.expect(stateCountWithTransient >= 1);
 
     // Frame 2: omit the element. Its state should be dropped.
@@ -4075,14 +4169,13 @@ test "stale scope state is pruned at frame end (element)" {
             forbear.component(.{ .key = "host" })({});
         });
     });
-    try std.testing.expect(self.states.count() < stateCountWithTransient);
+    try std.testing.expect(totalStateCount() < stateCountWithTransient);
 }
 
 test "stale scope state is pruned at frame end (component)" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -4096,7 +4189,7 @@ test "stale scope state is pruned at frame end (component)" {
             });
         });
     });
-    const stateCountWithTransient = self.states.count();
+    const stateCountWithTransient = totalStateCount();
     try std.testing.expect(stateCountWithTransient >= 1);
 
     _ = arena.reset(.retain_capacity);
@@ -4105,7 +4198,7 @@ test "stale scope state is pruned at frame end (component)" {
             forbear.component(.{ .key = "host" })({});
         });
     });
-    try std.testing.expect(self.states.count() < stateCountWithTransient);
+    try std.testing.expect(totalStateCount() < stateCountWithTransient);
 }
 
 const HoverObservation = struct {

@@ -289,20 +289,8 @@ fn renderingMain(
     try renderer.waitIdle();
 }
 
-pub fn main() !void {
-    var gpa = std.heap.DebugAllocator(.{}){};
-    defer {
-        if (gpa.deinit() == .leak) {
-            std.log.err("Memory was leaked", .{});
-        }
-    }
-
-    const allocator = gpa.allocator();
-
-    var threaded = std.Io.Threaded.init(allocator, .{});
-    defer threaded.deinit();
-    const io = threaded.io();
-
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.arena.allocator();
     var graphics = try forbear.Graphics.init(
         allocator,
         "forbear playground",
@@ -321,7 +309,7 @@ pub fn main() !void {
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
 
-    try forbear.init(allocator, io, &renderer);
+    try forbear.init(allocator, init.io, &renderer);
     defer forbear.deinit();
     forbear.setWindowHandlers(window);
 
@@ -331,7 +319,7 @@ pub fn main() !void {
         .{
             allocator,
             &renderer,
-            io,
+            init.io,
             window,
         },
     );
