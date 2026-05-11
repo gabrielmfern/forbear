@@ -632,34 +632,43 @@ pub const NodeTree = struct {
 };
 
 pub const Node = struct {
-    tree: *NodeTree,
-
-    parent: ?usize = null,
-    firstChild: ?usize = null,
-    lastChild: ?usize = null,
-    nextSibling: ?usize = null,
-    previousSibling: ?usize = null,
-    glyphs: ?Glyphs = null,
-
-    key: u64,
-
-    /// Generally used for scrolling. This is added to the position of the children of this node
-    childrenOffset: Vec2 = @splat(0.0),
-    position: Vec2,
-    z: u16,
+    // Hot layout fields packed into the first cache line (64 B). Layout
+    // reads `size` (~46×), `position` (~22×), `firstChild` (~15×) and
+    // `nextSibling` (~14×) on every traversal, plus `minSize`/`maxSize`
+    // during grow/shrink. Together: 4×Vec2 + 2×?usize = 64 B exactly.
     size: Vec2,
-    maxSize: Vec2,
+    position: Vec2,
     minSize: Vec2,
+    maxSize: Vec2,
+    firstChild: ?usize = null,
+    nextSibling: ?usize = null,
+
+    // `style` is the most-read field overall (~62× per node) but is a
+    // large struct, so it lives right after the hot 64 B and gets its
+    // own cache line(s).
+    style: CompleteStyle,
+
+    // Read by layout but only a few times per node, or only by drawing
+    // / post-layout walks.
     /// Bounding extent of this node's flowing descendants relative to
     /// `position`. Useful for clamping scroll offsets: scrollable range is
     /// `max(0, contentSize - size)`. For leaf nodes (or nodes without flow
     /// children), this remains zero.
     contentSize: Vec2 = @splat(0.0),
+    /// Generally used for scrolling. This is added to the position of the children of this node
+    childrenOffset: Vec2 = @splat(0.0),
     /// Clip rect inherited from ancestors that have constrained size with overflowing children.
     /// Format: [x, y, width, height]. If null, no clipping is applied.
     clipRect: ?Vec4 = null,
+    glyphs: ?Glyphs = null,
+    key: u64,
+    z: u16,
 
-    style: CompleteStyle,
+    // Not touched by layout — back-of-the-struct.
+    tree: *NodeTree,
+    parent: ?usize = null,
+    lastChild: ?usize = null,
+    previousSibling: ?usize = null,
 
     pub const Measurement = struct {
         index: usize,
