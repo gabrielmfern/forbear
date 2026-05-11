@@ -47,7 +47,62 @@ pub fn getContext() *@This() {
     return &context.?;
 }
 
-const Scope = struct { key: u64, arenaAllocator: std.heap.ArenaAllocator };
+const Scope = struct {
+    arenaAllocator: std.heap.ArenaAllocator,
+    lastFrame: u32,
+    /// Per-scope state map. Key is the `@returnAddress()` of the `useState`
+    /// call site (unique per source location); value is the live state
+    /// entry. The map's backing storage and its `*T` values both live in
+    /// `arenaAllocator`, so nothing extra needs freeing when the scope
+    /// dies — `arenaAllocator.deinit()` releases everything in one shot.
+    states: std.HashMapUnmanaged(usize, StateEntry, StateKeyContext, std.hash_map.default_max_load_percentage) = .empty,
+};
+
+const StateEntry = struct { ptr: *anyopaque, lastFrame: u32 };
+
+/// SplitMix64 finalizer. Mixes both high and low bits well, so
+/// downstream hashmap slot indexing (low bits) and fingerprinting
+/// (high bits) both behave even when inputs are clustered (e.g. code
+/// addresses from `@returnAddress()` or sequential `nodeStack` depths).
+/// Three multiplies + a few shifts — much cheaper than `Wyhash.init +
+/// update + final` that this replaces in element / component / text /
+/// hook key derivation.
+inline fn mixU64(state: u64, value: u64) u64 {
+    var z = state ^ value;
+    z = (z ^ (z >> 30)) *% 0xbf58476d1ce4e5b9;
+    z = (z ^ (z >> 27)) *% 0x94d049bb133111eb;
+    z = z ^ (z >> 31);
+    return z;
+}
+
+/// Identity hash for scope keys. Scope keys are produced by `mixU64`
+/// chains in element / component / text / hook key derivation, so they
+/// are already well-distributed — re-hashing them with Wyhash (the
+/// default `AutoContext` behavior) just burns cycles.
+const ScopeKeyContext = struct {
+    pub fn hash(_: ScopeKeyContext, k: u64) u64 {
+        return k;
+    }
+    pub fn eql(_: ScopeKeyContext, a: u64, b: u64) bool {
+        return a == b;
+    }
+};
+
+/// Per-state hash context. State keys are raw `@returnAddress()`
+/// values, which cluster in their low bits because of code alignment,
+/// so we run them through SplitMix64 before they hit the hashmap.
+const StateKeyContext = struct {
+    pub fn hash(_: StateKeyContext, k: usize) u64 {
+        var z: u64 = @as(u64, k);
+        z = (z ^ (z >> 30)) *% 0xbf58476d1ce4e5b9;
+        z = (z ^ (z >> 27)) *% 0x94d049bb133111eb;
+        z = z ^ (z >> 31);
+        return z;
+    }
+    pub fn eql(_: StateKeyContext, a: usize, b: usize) bool {
+        return a == b;
+    }
+};
 
 const ComponentChildrenSlotState = struct {
     savedSlotParentStack: []usize,
@@ -82,6 +137,25 @@ pub const FrameMeta = struct {
     componentChildrenSlotStates: std.ArrayList(ComponentChildrenSlotState) = .empty,
 };
 
+// Hot fields kept at the front of the struct so they sit at low,
+// stable offsets and don't get pushed across cache lines as the
+// trailing fields evolve. `frameMeta` and `nodeTree` are read on every
+// `forbear.layout()` pass and every `element` / `component` / `text` /
+// `useState` call; `scopes`, `scopeStack`, and `frameCounter` are read
+// on every `useState` and `pushScope`.
+frameMeta: ?FrameMeta,
+nodeTree: NodeTree,
+scopes: std.HashMapUnmanaged(u64, Scope, ScopeKeyContext, std.hash_map.default_max_load_percentage) = .empty,
+scopeStack: std.ArrayList(u64) = .empty,
+nodeStack: std.ArrayList(usize) = .empty,
+/// Monotonically incremented at the start of every `frame()`. Used as
+/// the "this scope/state was touched this frame" marker on each Scope
+/// and StateEntry, in lieu of an auxiliary sorted touched-keys list.
+/// A `u32` gives ~136 years of 60fps frames before wrapping; on wrap
+/// any entry whose `lastFrame` happens to coincide will be retained
+/// for one extra frame, which is harmless.
+frameCounter: u32 = 0,
+
 allocator: std.mem.Allocator,
 io: std.Io,
 
@@ -107,19 +181,6 @@ cappedDeltaTime: ?f64,
 /// Seconds
 lastUpdateTime: ?f64,
 viewportSize: Vec2,
-
-scopes: std.ArrayList(Scope) = .empty,
-states: std.AutoHashMap(u64, *anyopaque),
-
-touchedScopes: std.ArrayList(u64) = .empty,
-touchedStates: std.ArrayList(u64) = .empty,
-/// stack of keys for scopes
-scopeStack: std.ArrayList(u64) = .empty,
-/// indices into the NodeTree
-nodeStack: std.ArrayList(usize) = .empty,
-
-nodeTree: NodeTree,
-frameMeta: ?FrameMeta,
 
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
@@ -149,10 +210,8 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .viewportSize = @splat(0.0),
 
         .scopes = .empty,
-        .states = .init(allocator),
+        .frameCounter = 0,
 
-        .touchedScopes = .empty,
-        .touchedStates = .empty,
         .scopeStack = .empty,
         .nodeStack = .empty,
 
@@ -536,40 +595,18 @@ pub fn useIo() std.Io {
     return self.io;
 }
 
-fn scopeCompare(key: u64, scope: Scope) std.math.Order {
-    return std.math.order(key, scope.key);
-}
-
-fn keyCompare(keyA: u64, keyB: u64) std.math.Order {
-    return std.math.order(keyA, keyB);
-}
-
 fn pushScope(key: u64) error{OutOfMemory}!void {
     const self = getContext();
-    if (std.sort.binarySearch(Scope, self.scopes.items, key, scopeCompare) != null) {
-        try self.scopeStack.append(self.allocator, key);
-        try self.touchedScopes.insert(
-            self.allocator,
-            std.sort.lowerBound(u64, self.touchedScopes.items, key, keyCompare),
-            key,
-        );
-        return;
-    }
-
-    try self.scopes.insert(
-        self.allocator,
-        std.sort.lowerBound(Scope, self.scopes.items, key, scopeCompare),
-        Scope{
+    const result = try self.scopes.getOrPut(self.allocator, key);
+    if (result.found_existing) {
+        result.value_ptr.lastFrame = self.frameCounter;
+    } else {
+        result.value_ptr.* = Scope{
             .arenaAllocator = std.heap.ArenaAllocator.init(self.allocator),
-            .key = key,
-        },
-    );
+            .lastFrame = self.frameCounter,
+        };
+    }
     try self.scopeStack.append(self.allocator, key);
-    try self.touchedScopes.insert(
-        self.allocator,
-        std.sort.lowerBound(u64, self.touchedScopes.items, key, keyCompare),
-        key,
-    );
 }
 
 fn popScope() void {
@@ -595,46 +632,25 @@ pub noinline fn useState(comptime T: type, initialValue: T) *T {
     }
 
     if (self.scopeStack.getLastOrNull()) |scopeKey| {
-        var hasher = std.hash.Wyhash.init(0);
-        hasher.update(std.mem.asBytes(&scopeKey));
-        hasher.update(std.mem.asBytes(&@returnAddress()));
+        const scope: *Scope = self.scopes.getPtr(scopeKey) orelse unreachable;
 
-        const scope: *Scope = blk: {
-            if (std.sort.binarySearch(
-                Scope,
-                self.scopes.items,
-                scopeKey,
-                scopeCompare,
-            )) |scopeIndex| {
-                break :blk &self.scopes.items[scopeIndex];
-            }
-            unreachable;
-        };
-        const stateKey = hasher.final();
-
-        self.touchedStates.insert(
-            self.allocator,
-            std.sort.lowerBound(u64, self.touchedStates.items, stateKey, keyCompare),
-            stateKey,
-        ) catch |err| {
-            std.log.err("Failed to track that state was touched: {}", .{err});
-            @panic("Out of memory when tracking touched state for useState");
-        };
-
-        const state = self.states.getOrPut(stateKey) catch |err| {
+        const arena = scope.arenaAllocator.allocator();
+        const state = scope.states.getOrPut(arena, @returnAddress()) catch |err| {
             std.log.err("Failed to track that state was touched: {}", .{err});
             @panic("Out of memory when tracking touched state for useState");
         };
         if (!state.found_existing) {
-            const value = scope.arenaAllocator.allocator().create(T) catch |err| {
+            const value = arena.create(T) catch |err| {
                 std.log.err("Failed to allocate state for useState: {}", .{err});
                 @panic("Out of memory when allocating state for useState");
             };
             value.* = initialValue;
-            state.value_ptr.* = @ptrCast(@alignCast(value));
+            state.value_ptr.* = .{ .ptr = @ptrCast(@alignCast(value)), .lastFrame = self.frameCounter };
+        } else {
+            state.value_ptr.lastFrame = self.frameCounter;
         }
 
-        return @ptrCast(@alignCast(state.value_ptr.*));
+        return @ptrCast(@alignCast(state.value_ptr.ptr));
     } else {
         if (!builtin.is_test) {
             std.log.err("You might be calling a hook (useState) outside of a component or element scope, and forbear cannot track things outside of one.", .{});
@@ -707,38 +723,41 @@ fn frameEnd(block: void) anyerror!void {
     defer self.frameMeta = null;
     if (frameMeta.err) |err| return err;
 
-    var i: usize = self.scopes.items.len;
-    while (i > 0) {
-        i -= 1;
-        if (std.sort.binarySearch(
-            u64,
-            self.touchedScopes.items,
-            self.scopes.items[i].key,
-            keyCompare,
-        ) == null) {
-            const scope = self.scopes.orderedRemove(i);
+    // Reap unmounted scopes (and prune stale states from the survivors)
+    // in a single pass. Collect-then-remove so we don't mutate either
+    // map mid-iteration. Scope keys are u64; state keys are usize.
+    var staleScopeKeys: std.ArrayList(u64) = .empty;
+    defer staleScopeKeys.deinit(frameMeta.arena);
+    var staleStateKeys: std.ArrayList(usize) = .empty;
+    defer staleStateKeys.deinit(frameMeta.arena);
+
+    var scopeEntries = self.scopes.iterator();
+    while (scopeEntries.next()) |scopeEntry| {
+        const scope = scopeEntry.value_ptr;
+        if (scope.lastFrame != self.frameCounter) {
+            try staleScopeKeys.append(frameMeta.arena, scopeEntry.key_ptr.*);
+            continue;
+        }
+        // Surviving scope: drop state entries whose call site wasn't
+        // visited this frame. The underlying `*T` storage stays in the
+        // scope's arena until the whole scope is unmounted — same
+        // lifetime model as before.
+        staleStateKeys.clearRetainingCapacity();
+        var stateEntries = scope.states.iterator();
+        while (stateEntries.next()) |stateEntry| {
+            if (stateEntry.value_ptr.lastFrame != self.frameCounter) {
+                try staleStateKeys.append(frameMeta.arena, stateEntry.key_ptr.*);
+            }
+        }
+        for (staleStateKeys.items) |staleKey| {
+            _ = scope.states.remove(staleKey);
+        }
+    }
+    for (staleScopeKeys.items) |staleKey| {
+        if (self.scopes.getPtr(staleKey)) |scope| {
             scope.arenaAllocator.deinit();
         }
-    }
-
-    // TODO: we're removing the state here, but we're not freeing it. We're
-    // also not removing state when freeing state at the point a scope is
-    // removed
-    var staleStateKeys: std.ArrayList(u64) = .empty;
-    defer staleStateKeys.deinit(frameMeta.arena);
-    var existingStateKeys = self.states.keyIterator();
-    while (existingStateKeys.next()) |stateKey| {
-        if (std.sort.binarySearch(
-            u64,
-            self.touchedStates.items,
-            stateKey.*,
-            keyCompare,
-        ) == null) {
-            try staleStateKeys.append(frameMeta.arena, stateKey.*);
-        }
-    }
-    for (staleStateKeys.items) |staleKey| {
-        _ = self.states.remove(staleKey);
+        _ = self.scopes.remove(staleKey);
     }
 
     var staleFrameNodeMeasurements: std.ArrayList(u64) = .empty;
@@ -770,9 +789,9 @@ fn frameEnd(block: void) anyerror!void {
         _ = self.previousFrameNodeMeasurements.remove(staleKey);
     }
 
-    self.touchedStates.clearRetainingCapacity();
-    self.touchedScopes.clearRetainingCapacity();
     self.nodeTree.clearRetainingCapacity();
+    self.nodeStack.clearRetainingCapacity();
+    self.scopeStack.clearRetainingCapacity();
 }
 
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
@@ -781,6 +800,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.scrollDelta = self.scrollDeltaAccumulator;
     self.scrollDeltaAccumulator = @splat(0.0);
 
+    self.frameCounter +%= 1;
     self.frameMeta = meta;
     return &frameEnd;
 }
@@ -845,18 +865,18 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     else
         0;
 
-    var hasher = std.hash.Wyhash.init(0);
+    var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-        hasher.update(std.mem.asBytes(&lastScopeKey));
+        k = mixU64(k, lastScopeKey);
     }
-    hasher.update(std.mem.asBytes(&self.nodeStack.items.len));
+    k = mixU64(k, @as(u64, self.nodeStack.items.len));
     if (props.key) |key| {
-        hasher.update(key);
+        k = mixU64(k, std.hash.Wyhash.hash(0, key));
     } else {
-        hasher.update(std.mem.asBytes(&@returnAddress()));
+        k = mixU64(k, @returnAddress());
     }
 
-    result.ptr.key = hasher.final();
+    result.ptr.key = k;
     result.ptr.z = if (props.style.zIndex) |zIndex|
         zIndex
     else if (parentZ < std.math.maxInt(u16))
@@ -922,7 +942,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     result.ptr.size[0] = @min(@max(result.ptr.size[0], result.ptr.minSize[0]), result.ptr.maxSize[0]);
     result.ptr.size[1] = @min(@max(result.ptr.size[1], result.ptr.minSize[1]), result.ptr.maxSize[1]);
 
-    self.nodeStack.append(self.frameMeta.?.arena, result.index) catch |err| {
+    self.nodeStack.append(self.allocator, result.index) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
@@ -1121,18 +1141,18 @@ pub noinline fn text(content: []const u8) void {
     else
         0;
 
-    var hasher = std.hash.Wyhash.init(0);
+    var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-        hasher.update(std.mem.asBytes(&lastScopeKey));
+        k = mixU64(k, lastScopeKey);
     }
-    hasher.update(std.mem.asBytes(&self.nodeStack.items.len));
-    // We don't hash the text content here because text selection would be nice
+    k = mixU64(k, @as(u64, self.nodeStack.items.len));
+    // We don't mix the text content here because text selection would be nice
     // to work even with text changing
     //
-    // hasher.update(effectiveContent);
-    hasher.update(std.mem.asBytes(&@returnAddress()));
+    // k = mixU64(k, std.hash.Wyhash.hash(0, effectiveContent));
+    k = mixU64(k, @returnAddress());
 
-    result.ptr.key = hasher.final();
+    result.ptr.key = k;
     result.ptr.position = @splat(0.0);
     result.ptr.z = if (parentZ < std.math.maxInt(u16))
         parentZ + 1
@@ -1156,7 +1176,7 @@ pub noinline fn text(content: []const u8) void {
     // Push self onto the parent stack so `on(.mouseOver)` resolves the
     // text node's own measurement, then pop. The text node itself is not
     // a scope and has no children, so this is purely for hit-testing.
-    self.nodeStack.append(self.frameMeta.?.arena, result.index) catch |err| {
+    self.nodeStack.append(self.allocator, result.index) catch |err| {
         handleFrameError(err);
         return;
     };
@@ -1253,12 +1273,12 @@ pub inline fn hook() void {
     if (self.frameMeta.?.err != null) {
         return;
     }
-    var hasher = std.hash.Wyhash.init(0);
+    var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-        hasher.update(std.mem.asBytes(&lastScopeKey));
+        k = mixU64(k, lastScopeKey);
     }
-    hasher.update(std.mem.asBytes(&@returnAddress()));
-    pushScope(hasher.final()) catch |err| {
+    k = mixU64(k, @returnAddress());
+    pushScope(k) catch |err| {
         handleFrameError(err);
         return;
     };
@@ -1280,21 +1300,21 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
         return &endNoop;
     }
 
-    var hasher = std.hash.Wyhash.init(0);
     // the component keys wrapping this component and the amount of parents in
     // the node tree up to this point are what differentiate this instance from
     // other instances of the same component
+    var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-        hasher.update(std.mem.asBytes(&lastScopeKey));
+        k = mixU64(k, lastScopeKey);
     }
-    hasher.update(std.mem.asBytes(&self.nodeStack.items.len));
+    k = mixU64(k, @as(u64, self.nodeStack.items.len));
     if (props.key) |key| {
-        hasher.update(key);
+        k = mixU64(k, std.hash.Wyhash.hash(0, key));
     } else {
-        hasher.update(std.mem.asBytes(&@returnAddress()));
+        k = mixU64(k, @returnAddress());
     }
 
-    const componentKey = hasher.final();
+    const componentKey = k;
     pushScope(componentKey) catch |err| {
         handleFrameError(err);
         return endNoop;
@@ -1364,11 +1384,11 @@ fn componentChildrenSlotEndFn(block: void) void {
 
     // Restore parent stack and scope stack to pre-slotEnd state
     self.nodeStack.clearRetainingCapacity();
-    self.nodeStack.appendSlice(fm.arena, slotState.savedPreEndParentStack) catch |err| {
+    self.nodeStack.appendSlice(self.allocator, slotState.savedPreEndParentStack) catch |err| {
         handleFrameError(err);
     };
     self.scopeStack.clearRetainingCapacity();
-    self.scopeStack.appendSlice(fm.arena, slotState.savedPreEndScopeStack) catch |err| {
+    self.scopeStack.appendSlice(self.allocator, slotState.savedPreEndScopeStack) catch |err| {
         handleFrameError(err);
     };
 }
@@ -1420,12 +1440,12 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
         return &endNoop;
     };
     self.nodeStack.clearRetainingCapacity();
-    self.nodeStack.appendSlice(fm.arena, slotState.savedSlotParentStack) catch |err| {
+    self.nodeStack.appendSlice(self.allocator, slotState.savedSlotParentStack) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
     self.scopeStack.clearRetainingCapacity();
-    self.scopeStack.appendSlice(fm.arena, slotState.savedSlotScopeStack) catch |err| {
+    self.scopeStack.appendSlice(self.allocator, slotState.savedSlotScopeStack) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
@@ -1672,14 +1692,13 @@ pub fn deinit() void {
 
     self.previousFrameNodeMeasurements.deinit();
 
-    for (self.scopes.items) |*scope| {
+    var scopeIter = self.scopes.valueIterator();
+    while (scopeIter.next()) |scope| {
         scope.arenaAllocator.deinit();
     }
-    self.states.deinit();
     self.scopes.deinit(self.allocator);
     self.scopeStack.deinit(self.allocator);
-    self.touchedStates.deinit(self.allocator);
-    self.touchedScopes.deinit(self.allocator);
+    self.nodeStack.deinit(self.allocator);
 
     var fontsIterator = self.fonts.valueIterator();
     while (fontsIterator.next()) |font| {

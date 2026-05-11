@@ -14,15 +14,83 @@ const builtin = @import("builtin");
 
 const forbear = @import("forbear");
 
+// Per-node style picks for the layout benchmark. Dispatching by a
+// runtime index lets us vary sizing/padding/justification/min-max
+// constraints across the tree so layout does meaningful work for each
+// kind of node (instead of only resolving uniform `grow` leaves).
+fn leafStyle(idx: usize) forbear.Style {
+    return switch (idx % 6) {
+        0 => .{ .width = .{ .fixed = 40 }, .height = .{ .fixed = 30 } },
+        1 => .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 24 } },
+        2 => .{
+            .width = .{ .grow = 2.0 },
+            .height = .{ .fixed = 30 },
+            .padding = forbear.Padding.all(2),
+        },
+        3 => .{ .width = .{ .fixed = 60 }, .height = .{ .ratio = 0.5 } },
+        4 => .{ .width = .{ .ratio = 2.0 }, .height = .{ .fixed = 28 } },
+        else => .{
+            .width = .{ .grow = 1.0 },
+            .height = .{ .fixed = 30 },
+            .minWidth = 24,
+            .maxWidth = 200,
+        },
+    };
+}
+
+fn rowStyle(idx: usize) forbear.Style {
+    return switch (idx % 3) {
+        0 => .{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .horizontal,
+        },
+        1 => .{
+            .width = .{ .grow = 1.0 },
+            .height = .{ .fixed = 60 },
+            .direction = .horizontal,
+            .xJustification = .center,
+        },
+        else => .{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .horizontal,
+            .padding = forbear.Padding.all(4),
+            .yJustification = .center,
+        },
+    };
+}
+
+fn sectionStyle(idx: usize) forbear.Style {
+    return switch (idx % 2) {
+        0 => .{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .vertical,
+        },
+        else => .{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .vertical,
+            .padding = forbear.Padding.all(8),
+        },
+    };
+}
+
 // Builds a layout-only tree of exactly `nodeCount` element nodes (root
 // counts) by packing into uniformly shaped sections / rows / leaves and
 // distributing any remainder as a partial section + partial row.
 //
 // Per-section: 1 wrapper + R rows × (1 + L leaves) = 1 + R*(1+L)
 // With R=5, L=6: row = 7 nodes, section = 36 nodes.
-fn buildLayoutTree(comptime nodeCount: usize) void {
-    @setEvalBranchQuota(1_000_000);
-
+//
+// Runtime loops keep this monomorphic (one compiled copy regardless of
+// `nodeCount`), so layout perf at 10000 nodes doesn't blow up codegen.
+// Each element gets an explicit `key` because all iterations of a
+// runtime `for` share the same `@returnAddress()`; the key string only
+// needs to live long enough to be hashed inside `element()`, so we can
+// reuse a single stack buffer.
+fn buildLayoutTree(nodeCount: usize) void {
     const R: usize = 5;
     const L: usize = 6;
     const rowSize: usize = 1 + L;
@@ -46,23 +114,17 @@ fn buildLayoutTree(comptime nodeCount: usize) void {
         .height = .{ .grow = 1.0 },
         .direction = .vertical,
     } })({
-        inline for (0..fullSections) |_| {
-            forbear.element(.{ .style = .{
-                .width = .{ .grow = 1.0 },
-                .height = .fit,
-                .direction = .vertical,
-            } })({
-                inline for (0..R) |_| {
-                    forbear.element(.{ .style = .{
-                        .width = .{ .grow = 1.0 },
-                        .height = .fit,
-                        .direction = .horizontal,
-                    } })({
-                        inline for (0..L) |_| {
-                            forbear.element(.{ .style = .{
-                                .width = .{ .grow = 1.0 },
-                                .height = .{ .fixed = 30 },
-                            } })({});
+        var keyBuf: [48]u8 = undefined;
+
+        for (0..fullSections) |si| {
+            const sk = std.fmt.bufPrint(&keyBuf, "s{d}", .{si}) catch unreachable;
+            forbear.element(.{ .style = sectionStyle(si), .key = sk })({
+                for (0..R) |ri| {
+                    const rk = std.fmt.bufPrint(&keyBuf, "s{d}r{d}", .{ si, ri }) catch unreachable;
+                    forbear.element(.{ .style = rowStyle(ri + si), .key = rk })({
+                        for (0..L) |li| {
+                            const lk = std.fmt.bufPrint(&keyBuf, "s{d}r{d}l{d}", .{ si, ri, li }) catch unreachable;
+                            forbear.element(.{ .style = leafStyle(li + ri * 2 + si * 3), .key = lk })({});
                         }
                     });
                 }
@@ -70,90 +132,96 @@ fn buildLayoutTree(comptime nodeCount: usize) void {
         }
 
         if (hasPartialSection) {
-            forbear.element(.{ .style = .{
-                .width = .{ .grow = 1.0 },
-                .height = .fit,
-                .direction = .vertical,
-            } })({
-                inline for (0..partialRows) |_| {
-                    forbear.element(.{ .style = .{
-                        .width = .{ .grow = 1.0 },
-                        .height = .fit,
-                        .direction = .horizontal,
-                    } })({
-                        inline for (0..L) |_| {
-                            forbear.element(.{ .style = .{
-                                .width = .{ .grow = 1.0 },
-                                .height = .{ .fixed = 30 },
-                            } })({});
+            forbear.element(.{ .style = sectionStyle(fullSections), .key = "ps" })({
+                for (0..partialRows) |ri| {
+                    const rk = std.fmt.bufPrint(&keyBuf, "psr{d}", .{ri}) catch unreachable;
+                    forbear.element(.{ .style = rowStyle(ri + fullSections), .key = rk })({
+                        for (0..L) |li| {
+                            const lk = std.fmt.bufPrint(&keyBuf, "psr{d}l{d}", .{ ri, li }) catch unreachable;
+                            forbear.element(.{ .style = leafStyle(li + ri * 2 + fullSections * 3), .key = lk })({});
                         }
                     });
                 }
                 if (hasPartialRow) {
-                    forbear.element(.{ .style = .{
-                        .width = .{ .grow = 1.0 },
-                        .height = .fit,
-                        .direction = .horizontal,
-                    } })({
-                        inline for (0..tailLeavesInRow) |_| {
-                            forbear.element(.{ .style = .{
-                                .width = .{ .grow = 1.0 },
-                                .height = .{ .fixed = 30 },
-                            } })({});
+                    forbear.element(.{ .style = rowStyle(partialRows + fullSections), .key = "pstail" })({
+                        for (0..tailLeavesInRow) |li| {
+                            const lk = std.fmt.bufPrint(&keyBuf, "pstail_l{d}", .{li}) catch unreachable;
+                            forbear.element(.{ .style = leafStyle(li + partialRows * 2 + fullSections * 3), .key = lk })({});
                         }
                     });
                 }
             });
         }
 
-        inline for (0..strayLeaves) |_| {
-            forbear.element(.{ .style = .{
-                .width = .{ .grow = 1.0 },
-                .height = .{ .fixed = 30 },
-            } })({});
+        for (0..strayLeaves) |li| {
+            const lk = std.fmt.bufPrint(&keyBuf, "stray{d}", .{li}) catch unreachable;
+            forbear.element(.{ .style = leafStyle(li), .key = lk })({});
         }
     });
 }
 
-fn LayoutBenchmark(comptime nodeCount: usize) fn (std.mem.Allocator) void {
-    return struct {
-        fn run(allocator: std.mem.Allocator) void {
-            var arena = std.heap.ArenaAllocator.init(allocator);
-            defer arena.deinit();
-            (forbear.frame(.{
-                .arena = arena.allocator(),
-                .viewportSize = .{ 1920, 1080 },
-                .baseStyle = .{
-                    .font = forbear.useFont("Inter") catch unreachable,
-                    .color = .{ 0, 0, 0, 1 },
-                    .fontSize = 16,
-                    .fontWeight = 400,
-                    .lineHeight = 1.0,
-                    .textWrapping = .none,
-                    .blendMode = .normal,
-                    .cursor = .default,
-                },
-            })({
-                buildLayoutTree(nodeCount);
-                _ = forbear.layout() catch unreachable;
-            })) catch unreachable;
-        }
-    }.run;
+fn layoutOnce(arena: *std.heap.ArenaAllocator) void {
+    // The frame arena is shared across every benchmark iteration. `layout()`
+    // allocates transient scratch buffers (grow factors, sibling orderings,
+    // etc.) per call; if we never reset, that memory accumulates over
+    // thousands of iterations and balloons heap usage at large node counts.
+    // The node tree itself lives in forbear's internal allocator, so
+    // resetting the frame arena does not invalidate it.
+    _ = arena.reset(.retain_capacity);
+    _ = forbear.layout() catch unreachable;
 }
 
-test "bench layout" {}
+// Builds the tree inside a frame once, then runs `run()` against
+// `layoutOnce` so only the cost of `forbear.layout()` is measured.
+// `layout()` is safe to call repeatedly within a single frame: it
+// recomputes sizes/positions from scratch and the node tree is only
+// cleared in `frameEnd`.
+fn runLayoutBench(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    comptime nodeCount: usize,
+) !Metrics {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
 
-// ~1000 useState calls spread across mixed component+element scopes at
-// depths 0..7. Each leaf component contains both an inner element scope and
-// is itself nested several components deep.
+    const frameEnd = forbear.frame(.{
+        .arena = arena.allocator(),
+        .viewportSize = .{ 1920, 1080 },
+        .baseStyle = .{
+            .font = forbear.useFont("Inter") catch unreachable,
+            .color = .{ 0, 0, 0, 1 },
+            .fontSize = 16,
+            .fontWeight = 400,
+            .lineHeight = 1.0,
+            .textWrapping = .none,
+            .blendMode = .normal,
+            .cursor = .default,
+        },
+    });
+
+    buildLayoutTree(nodeCount);
+
+    const name = std.fmt.comptimePrint("layout() {d} nodes", .{nodeCount});
+    const metrics = try run(io, allocator, name, layoutOnce, .{&arena}, .{});
+
+    try frameEnd({});
+    return metrics;
+}
+
+// ~stateCount useState calls spread across mixed component+element scopes
+// at depths 0..7. Each leaf component contains both an inner element scope
+// and is itself nested several components deep.
 //
 // Per-scope state counts (component scope + immediate element scope):
 //   App     :  4 + 4 =  8
-//   Section :  4 + 4 =  8  ×  5             =   40
-//   Panel   :  4 + 4 =  8  ×  5×4           =  160
-//   Leaf    :  4 + 4 =  8  ×  5×4×5         =  800
-//   total                                   = 1008
-fn StateLeaf(comptime tag: []const u8) void {
+//   Section :  4 + 4 =  8  ×  N_sections    →
+//   Panel   :  4 + 4 =  8  ×  N_sections×4  →
+//   Leaf    :  4 + 4 =  8  ×  N_sections×4×5 →
+//
+// Runtime loops + explicit `key` strings keep this monomorphic. The 4
+// useState calls per scope stay written out (not in a loop) so each call
+// has a distinct `@returnAddress()` and hashes to a distinct state slot.
+fn StateLeaf(tag: []const u8) void {
     forbear.component(.{ .key = tag })({
         _ = forbear.useState(u32, 0);
         _ = forbear.useState(f32, 0.0);
@@ -172,7 +240,7 @@ fn StateLeaf(comptime tag: []const u8) void {
     });
 }
 
-fn StatePanel(comptime tag: []const u8) void {
+fn StatePanel(tag: []const u8) void {
     forbear.component(.{ .key = tag })({
         _ = forbear.useState(u32, 0);
         _ = forbear.useState(f32, 0.0);
@@ -189,14 +257,16 @@ fn StatePanel(comptime tag: []const u8) void {
             _ = forbear.useState(bool, false);
             _ = forbear.useState(u64, 0);
 
-            inline for (0..5) |i| {
-                StateLeaf(tag ++ "_l" ++ std.fmt.comptimePrint("{d}", .{i}));
+            var kb: [64]u8 = undefined;
+            for (0..5) |i| {
+                const child = std.fmt.bufPrint(&kb, "{s}_l{d}", .{ tag, i }) catch unreachable;
+                StateLeaf(child);
             }
         });
     });
 }
 
-fn StateSection(comptime tag: []const u8) void {
+fn StateSection(tag: []const u8) void {
     forbear.component(.{ .key = tag })({
         _ = forbear.useState(u32, 0);
         _ = forbear.useState(f32, 0.0);
@@ -213,18 +283,20 @@ fn StateSection(comptime tag: []const u8) void {
             _ = forbear.useState(bool, false);
             _ = forbear.useState(u64, 0);
 
-            inline for (0..4) |i| {
-                StatePanel(tag ++ "_p" ++ std.fmt.comptimePrint("{d}", .{i}));
+            var kb: [64]u8 = undefined;
+            for (0..4) |i| {
+                const child = std.fmt.bufPrint(&kb, "{s}_p{d}", .{ tag, i }) catch unreachable;
+                StatePanel(child);
             }
         });
     });
 }
 
-fn buildUseStateTree(comptime stateCount: usize) void {
-    @setEvalBranchQuota(1_000_000);
-    forbear.component(.{
-        .key = "UseStateBenchApp_" ++ std.fmt.comptimePrint("{d}", .{stateCount}),
-    })({
+fn buildUseStateTree(stateCount: usize) void {
+    var appKeyBuf: [40]u8 = undefined;
+    const appKey = std.fmt.bufPrint(&appKeyBuf, "UseStateBenchApp_{d}", .{stateCount}) catch unreachable;
+
+    forbear.component(.{ .key = appKey })({
         forbear.element(.{ .style = .{
             .width = .{ .grow = 1.0 },
             .height = .{ .grow = 1.0 },
@@ -236,8 +308,8 @@ fn buildUseStateTree(comptime stateCount: usize) void {
             // element-scope states (8 per leaf). Any remainder past the
             // last full leaf is added as element-scope states on the
             // outer element above to keep the count exact.
-            const leavesPerPanel = 5;
-            const panelsPerSection = 4;
+            const leavesPerPanel: usize = 5;
+            const panelsPerSection: usize = 4;
 
             const perLeaf: usize = 8;
             const perPanel: usize = leavesPerPanel * perLeaf;
@@ -250,28 +322,42 @@ fn buildUseStateTree(comptime stateCount: usize) void {
             const fullLeaves = afterPanels / perLeaf;
             const tailLeafStates = afterPanels - fullLeaves * perLeaf;
 
-            inline for (0..sections) |si| {
-                StateSection("us_" ++ std.fmt.comptimePrint("{d}_s{d}", .{ stateCount, si }));
+            var kb: [64]u8 = undefined;
+            for (0..sections) |si| {
+                const ck = std.fmt.bufPrint(&kb, "us_{d}_s{d}", .{ stateCount, si }) catch unreachable;
+                StateSection(ck);
             }
 
             if (fullPanels > 0 or fullLeaves > 0 or tailLeafStates > 0) {
-                forbear.component(.{
-                    .key = "UseStateTail_" ++ std.fmt.comptimePrint("{d}", .{stateCount}),
-                })({
+                var tailKeyBuf: [40]u8 = undefined;
+                const tailKey = std.fmt.bufPrint(&tailKeyBuf, "UseStateTail_{d}", .{stateCount}) catch unreachable;
+                forbear.component(.{ .key = tailKey })({
                     forbear.element(.{ .style = .{
                         .width = .{ .grow = 1.0 },
                         .height = .fit,
                         .direction = .vertical,
                     } })({
-                        inline for (0..fullPanels) |pi| {
-                            StatePanel("us_" ++ std.fmt.comptimePrint("{d}_tp{d}", .{ stateCount, pi }));
+                        var tkb: [64]u8 = undefined;
+                        for (0..fullPanels) |pi| {
+                            const ck = std.fmt.bufPrint(&tkb, "us_{d}_tp{d}", .{ stateCount, pi }) catch unreachable;
+                            StatePanel(ck);
                         }
-                        inline for (0..fullLeaves) |li| {
-                            StateLeaf("us_" ++ std.fmt.comptimePrint("{d}_tl{d}", .{ stateCount, li }));
+                        for (0..fullLeaves) |li| {
+                            const ck = std.fmt.bufPrint(&tkb, "us_{d}_tl{d}", .{ stateCount, li }) catch unreachable;
+                            StateLeaf(ck);
                         }
-                        inline for (0..tailLeafStates) |_| {
-                            _ = forbear.useState(u32, 0);
-                        }
+
+                        // `tailLeafStates ∈ 0..7`. Each `useState` call site
+                        // needs to be a distinct source line so it hashes
+                        // to a distinct state slot — runtime `for` would
+                        // collapse them all onto one `@returnAddress`.
+                        if (tailLeafStates >= 1) _ = forbear.useState(u32, 0);
+                        if (tailLeafStates >= 2) _ = forbear.useState(u32, 0);
+                        if (tailLeafStates >= 3) _ = forbear.useState(u32, 0);
+                        if (tailLeafStates >= 4) _ = forbear.useState(u32, 0);
+                        if (tailLeafStates >= 5) _ = forbear.useState(u32, 0);
+                        if (tailLeafStates >= 6) _ = forbear.useState(u32, 0);
+                        if (tailLeafStates >= 7) _ = forbear.useState(u32, 0);
                     });
                 });
             }
@@ -279,57 +365,70 @@ fn buildUseStateTree(comptime stateCount: usize) void {
     });
 }
 
-fn UseStateBenchmark(comptime stateCount: usize) fn (std.mem.Allocator) void {
-    return struct {
-        fn run(allocator: std.mem.Allocator) void {
-            var arena = std.heap.ArenaAllocator.init(allocator);
-            defer arena.deinit();
-            (forbear.frame(.{
-                .arena = arena.allocator(),
-                .viewportSize = .{ 1920, 1080 },
-                .baseStyle = .{
-                    .font = forbear.useFont("Inter") catch unreachable,
-                    .color = .{ 0, 0, 0, 1 },
-                    .fontSize = 16,
-                    .fontWeight = 400,
-                    .lineHeight = 1.0,
-                    .textWrapping = .none,
-                    .blendMode = .normal,
-                    .cursor = .default,
-                },
-            })({
-                buildUseStateTree(stateCount);
-            })) catch unreachable;
-        }
-    }.run;
+fn useStateFrame(allocator: std.mem.Allocator, stateCount: usize) void {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    (forbear.frame(.{
+        .arena = arena.allocator(),
+        .viewportSize = .{ 1920, 1080 },
+        .baseStyle = .{
+            .font = forbear.useFont("Inter") catch unreachable,
+            .color = .{ 0, 0, 0, 1 },
+            .fontSize = 16,
+            .fontWeight = 400,
+            .lineHeight = 1.0,
+            .textWrapping = .none,
+            .blendMode = .normal,
+            .cursor = .default,
+        },
+    })({
+        buildUseStateTree(stateCount);
+    })) catch unreachable;
+}
+
+fn runUseStateBench(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    comptime stateCount: usize,
+) !Metrics {
+    const name = std.fmt.comptimePrint("useState() {d} states", .{stateCount});
+    return try run(io, allocator, name, useStateFrame, .{ allocator, stateCount }, .{});
 }
 
 pub fn main(init: std.process.Init) !void {
-    const allocator = init.arena.allocator();
+    // Use a real general-purpose allocator instead of `init.arena.allocator()`.
+    // `init.arena` is a non-freeing arena, so every `ArrayList` resize inside
+    // forbear and every per-iteration `arena.deinit()` in the bench would leak
+    // pages into it. At large node/state counts that growth easily reaches
+    // multi-GB. `smp_allocator` actually frees on `rawFree`.
+    const allocator = std.heap.smp_allocator;
 
     try forbear.init(allocator, init.io, undefined);
     defer forbear.deinit();
     try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
 
-    var layout_metrics: [7]Metrics = undefined;
-    layout_metrics[0] = try run(init.io, allocator, "layout() 27 nodes", LayoutBenchmark(27), .{allocator}, .{});
-    layout_metrics[1] = try run(init.io, allocator, "layout() 135 nodes", LayoutBenchmark(135), .{allocator}, .{});
-    layout_metrics[2] = try run(init.io, allocator, "layout() 500 nodes", LayoutBenchmark(500), .{allocator}, .{});
-    layout_metrics[3] = try run(init.io, allocator, "layout() 1000 nodes", LayoutBenchmark(1000), .{allocator}, .{});
-    layout_metrics[4] = try run(init.io, allocator, "layout() 2641 nodes", LayoutBenchmark(2641), .{allocator}, .{});
-    layout_metrics[5] = try run(init.io, allocator, "layout() 5000 nodes", LayoutBenchmark(5000), .{allocator}, .{});
-    layout_metrics[6] = try run(init.io, allocator, "layout() 10000 nodes", LayoutBenchmark(10000), .{allocator}, .{});
+    var layout_metrics: [9]Metrics = undefined;
+    layout_metrics[0] = try runLayoutBench(init.io, allocator, 27);
+    layout_metrics[1] = try runLayoutBench(init.io, allocator, 135);
+    layout_metrics[2] = try runLayoutBench(init.io, allocator, 500);
+    layout_metrics[3] = try runLayoutBench(init.io, allocator, 1000);
+    layout_metrics[4] = try runLayoutBench(init.io, allocator, 2641);
+    layout_metrics[5] = try runLayoutBench(init.io, allocator, 5000);
+    layout_metrics[6] = try runLayoutBench(init.io, allocator, 10000);
+    layout_metrics[7] = try runLayoutBench(init.io, allocator, 20000);
+    layout_metrics[8] = try runLayoutBench(init.io, allocator, 50000);
     try print(.{ .metrics = &layout_metrics });
 
-    var state_metrics: [8]Metrics = undefined;
-    state_metrics[0] = try run(init.io, allocator, "useState() 10 states", UseStateBenchmark(10), .{allocator}, .{});
-    state_metrics[1] = try run(init.io, allocator, "useState() 50 states", UseStateBenchmark(50), .{allocator}, .{});
-    state_metrics[2] = try run(init.io, allocator, "useState() 100 states", UseStateBenchmark(100), .{allocator}, .{});
-    state_metrics[3] = try run(init.io, allocator, "useState() 250 states", UseStateBenchmark(250), .{allocator}, .{});
-    state_metrics[4] = try run(init.io, allocator, "useState() 500 states", UseStateBenchmark(500), .{allocator}, .{});
-    state_metrics[5] = try run(init.io, allocator, "useState() 1000 states", UseStateBenchmark(1000), .{allocator}, .{});
-    state_metrics[6] = try run(init.io, allocator, "useState() 2000 states", UseStateBenchmark(2000), .{allocator}, .{});
-    state_metrics[7] = try run(init.io, allocator, "useState() 5000 states", UseStateBenchmark(5000), .{allocator}, .{});
+    var state_metrics: [9]Metrics = undefined;
+    state_metrics[0] = try runUseStateBench(init.io, allocator, 27);
+    state_metrics[1] = try runUseStateBench(init.io, allocator, 135);
+    state_metrics[2] = try runUseStateBench(init.io, allocator, 500);
+    state_metrics[3] = try runUseStateBench(init.io, allocator, 1000);
+    state_metrics[4] = try runUseStateBench(init.io, allocator, 2000);
+    state_metrics[5] = try runUseStateBench(init.io, allocator, 5000);
+    state_metrics[6] = try runUseStateBench(init.io, allocator, 10000);
+    state_metrics[7] = try runUseStateBench(init.io, allocator, 20000);
+    state_metrics[8] = try runUseStateBench(init.io, allocator, 50000);
     try print(.{ .metrics = &state_metrics });
 }
 
