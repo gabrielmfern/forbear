@@ -14,6 +14,72 @@ const builtin = @import("builtin");
 
 const forbear = @import("forbear");
 
+// Per-node style picks for the layout benchmark. Dispatching by a
+// comptime index lets us vary sizing/padding/justification/min-max
+// constraints across the tree so layout does meaningful work for each
+// kind of node (instead of only resolving uniform `grow` leaves).
+inline fn leafStyle(comptime idx: usize) forbear.Style {
+    return switch (idx % 6) {
+        0 => .{ .width = .{ .fixed = 40 }, .height = .{ .fixed = 30 } },
+        1 => .{ .width = .{ .grow = 1.0 }, .height = .{ .fixed = 24 } },
+        2 => .{
+            .width = .{ .grow = 2.0 },
+            .height = .{ .fixed = 30 },
+            .padding = forbear.Padding.all(2),
+        },
+        3 => .{ .width = .{ .fixed = 60 }, .height = .{ .ratio = 0.5 } },
+        4 => .{ .width = .{ .ratio = 2.0 }, .height = .{ .fixed = 28 } },
+        5 => .{
+            .width = .{ .grow = 1.0 },
+            .height = .{ .fixed = 30 },
+            .minWidth = 24,
+            .maxWidth = 200,
+        },
+        else => unreachable,
+    };
+}
+
+inline fn rowStyle(comptime idx: usize) forbear.Style {
+    return switch (idx % 3) {
+        0 => .{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .horizontal,
+        },
+        1 => .{
+            .width = .{ .grow = 1.0 },
+            .height = .{ .fixed = 60 },
+            .direction = .horizontal,
+            .xJustification = .center,
+        },
+        2 => .{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .horizontal,
+            .padding = forbear.Padding.all(4),
+            .yJustification = .center,
+        },
+        else => unreachable,
+    };
+}
+
+inline fn sectionStyle(comptime idx: usize) forbear.Style {
+    return switch (idx % 2) {
+        0 => .{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .vertical,
+        },
+        1 => .{
+            .width = .{ .grow = 1.0 },
+            .height = .fit,
+            .direction = .vertical,
+            .padding = forbear.Padding.all(8),
+        },
+        else => unreachable,
+    };
+}
+
 // Builds a layout-only tree of exactly `nodeCount` element nodes (root
 // counts) by packing into uniformly shaped sections / rows / leaves and
 // distributing any remainder as a partial section + partial row.
@@ -46,23 +112,12 @@ fn buildLayoutTree(comptime nodeCount: usize) void {
         .height = .{ .grow = 1.0 },
         .direction = .vertical,
     } })({
-        inline for (0..fullSections) |_| {
-            forbear.element(.{ .style = .{
-                .width = .{ .grow = 1.0 },
-                .height = .fit,
-                .direction = .vertical,
-            } })({
-                inline for (0..R) |_| {
-                    forbear.element(.{ .style = .{
-                        .width = .{ .grow = 1.0 },
-                        .height = .fit,
-                        .direction = .horizontal,
-                    } })({
-                        inline for (0..L) |_| {
-                            forbear.element(.{ .style = .{
-                                .width = .{ .grow = 1.0 },
-                                .height = .{ .fixed = 30 },
-                            } })({});
+        inline for (0..fullSections) |si| {
+            forbear.element(.{ .style = sectionStyle(si) })({
+                inline for (0..R) |ri| {
+                    forbear.element(.{ .style = rowStyle(ri + si) })({
+                        inline for (0..L) |li| {
+                            forbear.element(.{ .style = leafStyle(li + ri * 2 + si * 3) })({});
                         }
                     });
                 }
@@ -70,75 +125,69 @@ fn buildLayoutTree(comptime nodeCount: usize) void {
         }
 
         if (hasPartialSection) {
-            forbear.element(.{ .style = .{
-                .width = .{ .grow = 1.0 },
-                .height = .fit,
-                .direction = .vertical,
-            } })({
-                inline for (0..partialRows) |_| {
-                    forbear.element(.{ .style = .{
-                        .width = .{ .grow = 1.0 },
-                        .height = .fit,
-                        .direction = .horizontal,
-                    } })({
-                        inline for (0..L) |_| {
-                            forbear.element(.{ .style = .{
-                                .width = .{ .grow = 1.0 },
-                                .height = .{ .fixed = 30 },
-                            } })({});
+            forbear.element(.{ .style = sectionStyle(fullSections) })({
+                inline for (0..partialRows) |ri| {
+                    forbear.element(.{ .style = rowStyle(ri + fullSections) })({
+                        inline for (0..L) |li| {
+                            forbear.element(.{ .style = leafStyle(li + ri * 2 + fullSections * 3) })({});
                         }
                     });
                 }
                 if (hasPartialRow) {
-                    forbear.element(.{ .style = .{
-                        .width = .{ .grow = 1.0 },
-                        .height = .fit,
-                        .direction = .horizontal,
-                    } })({
-                        inline for (0..tailLeavesInRow) |_| {
-                            forbear.element(.{ .style = .{
-                                .width = .{ .grow = 1.0 },
-                                .height = .{ .fixed = 30 },
-                            } })({});
+                    forbear.element(.{ .style = rowStyle(partialRows + fullSections) })({
+                        inline for (0..tailLeavesInRow) |li| {
+                            forbear.element(.{ .style = leafStyle(li + partialRows * 2 + fullSections * 3) })({});
                         }
                     });
                 }
             });
         }
 
-        inline for (0..strayLeaves) |_| {
-            forbear.element(.{ .style = .{
-                .width = .{ .grow = 1.0 },
-                .height = .{ .fixed = 30 },
-            } })({});
+        inline for (0..strayLeaves) |li| {
+            forbear.element(.{ .style = leafStyle(li) })({});
         }
     });
 }
 
-fn LayoutBenchmark(comptime nodeCount: usize) fn (std.mem.Allocator) void {
-    return struct {
-        fn run(allocator: std.mem.Allocator) void {
-            var arena = std.heap.ArenaAllocator.init(allocator);
-            defer arena.deinit();
-            (forbear.frame(.{
-                .arena = arena.allocator(),
-                .viewportSize = .{ 1920, 1080 },
-                .baseStyle = .{
-                    .font = forbear.useFont("Inter") catch unreachable,
-                    .color = .{ 0, 0, 0, 1 },
-                    .fontSize = 16,
-                    .fontWeight = 400,
-                    .lineHeight = 1.0,
-                    .textWrapping = .none,
-                    .blendMode = .normal,
-                    .cursor = .default,
-                },
-            })({
-                buildLayoutTree(nodeCount);
-                _ = forbear.layout() catch unreachable;
-            })) catch unreachable;
-        }
-    }.run;
+fn layoutOnce() void {
+    _ = forbear.layout() catch unreachable;
+}
+
+// Builds the tree inside a frame once, then runs `run()` against
+// `layoutOnce` so only the cost of `forbear.layout()` is measured.
+// `layout()` is safe to call repeatedly within a single frame: it
+// recomputes sizes/positions from scratch and the node tree is only
+// cleared in `frameEnd`.
+fn runLayoutBench(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    comptime nodeCount: usize,
+) !Metrics {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    const frameEnd = forbear.frame(.{
+        .arena = arena.allocator(),
+        .viewportSize = .{ 1920, 1080 },
+        .baseStyle = .{
+            .font = forbear.useFont("Inter") catch unreachable,
+            .color = .{ 0, 0, 0, 1 },
+            .fontSize = 16,
+            .fontWeight = 400,
+            .lineHeight = 1.0,
+            .textWrapping = .none,
+            .blendMode = .normal,
+            .cursor = .default,
+        },
+    });
+
+    buildLayoutTree(nodeCount);
+
+    const name = std.fmt.comptimePrint("layout() {d} nodes", .{nodeCount});
+    const metrics = try run(io, allocator, name, layoutOnce, .{}, .{});
+
+    try frameEnd({});
+    return metrics;
 }
 
 // ~1000 useState calls spread across mixed component+element scopes at
@@ -310,13 +359,13 @@ pub fn main(init: std.process.Init) !void {
     try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
 
     var layout_metrics: [7]Metrics = undefined;
-    layout_metrics[0] = try run(init.io, allocator, "layout() 27 nodes", LayoutBenchmark(27), .{allocator}, .{});
-    layout_metrics[1] = try run(init.io, allocator, "layout() 135 nodes", LayoutBenchmark(135), .{allocator}, .{});
-    layout_metrics[2] = try run(init.io, allocator, "layout() 500 nodes", LayoutBenchmark(500), .{allocator}, .{});
-    layout_metrics[3] = try run(init.io, allocator, "layout() 1000 nodes", LayoutBenchmark(1000), .{allocator}, .{});
-    layout_metrics[4] = try run(init.io, allocator, "layout() 2641 nodes", LayoutBenchmark(2641), .{allocator}, .{});
-    layout_metrics[5] = try run(init.io, allocator, "layout() 5000 nodes", LayoutBenchmark(5000), .{allocator}, .{});
-    layout_metrics[6] = try run(init.io, allocator, "layout() 10000 nodes", LayoutBenchmark(10000), .{allocator}, .{});
+    layout_metrics[0] = try runLayoutBench(init.io, allocator, 27);
+    layout_metrics[1] = try runLayoutBench(init.io, allocator, 135);
+    layout_metrics[2] = try runLayoutBench(init.io, allocator, 500);
+    layout_metrics[3] = try runLayoutBench(init.io, allocator, 1000);
+    layout_metrics[4] = try runLayoutBench(init.io, allocator, 2641);
+    layout_metrics[5] = try runLayoutBench(init.io, allocator, 5000);
+    layout_metrics[6] = try runLayoutBench(init.io, allocator, 10000);
     try print(.{ .metrics = &layout_metrics });
 
     var state_metrics: [8]Metrics = undefined;
