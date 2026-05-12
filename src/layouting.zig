@@ -502,23 +502,24 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
     // segment and then repeat
 
     var cursor: Vec2 = .{ 0, 0 };
-    var currentParent
+    var currentParent = nodeTree.at(0);
     var segment: std.ArrayList(Atom) = .empty;
 
-    for (nodeTree.list.items) |node| {
+    for (nodeTree.list.items) |*node| {
         if (node.style.inLine) {
-            if (node.glyphs == null or node.style.textWrapping == .none) {
-                try segment.append(arena, Atom{
-                    .size = node.size,
-                    .payload = .{ .node = node },
-                });
-            } else {
+            if (node.glyphs) |glyphs| {
+                if (node.style.textWrapping == .none) {
+                    try segment.append(arena, Atom{
+                        .size = node.size,
+                        .payload = .{ .node = node },
+                    });
+                }
                 switch (node.style.textWrapping) {
                     .character => {
-                        for (node.glyphs.?.slice, 0..) |glyph, i| {
+                        for (glyphs.slice, 0..) |glyph, i| {
                             try segment.append(arena, Atom{
-                                .size = Vec2{ glyph.advance[0], node.glyphs.?.lineHeight },
-                                .payload = .{ .glyphs = node.glyphs.?.slice[i .. i + 1] },
+                                .size = Vec2{ glyph.advance[0], glyphs.lineHeight },
+                                .payload = .{ .glyphs = glyphs.slice[i .. i + 1] },
                             });
                         }
                     },
@@ -526,35 +527,33 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
                         var wordStart: usize = 0;
                         var wordEnd: usize = 0;
                         var width: f32 = 0.0;
-                        while (wordEnd < node.glyphs.?.slice.len) {
-                            if (std.mem.startsWith(u8, &node.glyphs.?.slice[wordEnd].textBuf, " ")) {
+                        while (wordEnd < glyphs.slice.len) {
+                            if (std.mem.startsWith(u8, &glyphs.slice[wordEnd].textBuf, " ")) {
                                 std.debug.assert(wordEnd >= wordStart);
                                 try segment.append(arena, Atom{
-                                    .size = .{ width, node.glyphs.?.lineHeight },
-                                    .payload = .{ .glyphs = node.glyphs.?.slice[wordStart .. wordEnd + 1] },
+                                    .size = .{ width, glyphs.lineHeight },
+                                    .payload = .{ .glyphs = glyphs.slice[wordStart .. wordEnd + 1] },
                                 });
                                 wordStart = wordEnd + 1;
                                 width = 0.0;
                             }
                             wordEnd += 1;
-                            width += node.glyphs.?.slice[wordEnd].advance[0];
+                            width += glyphs.slice[wordEnd].advance[0];
                         }
                     },
                     else => unreachable,
                 }
+            } else if (node.firstChild == null) {
+                try segment.append(arena, Atom{
+                    .size = node.size,
+                    .payload = .{ .node = node },
+                });
             }
-        } else if (segment.items.len > 0) {
-            const Line = struct {
-                start: usize,
-                end: usize,
-                width: f32,
-                height: f32,
-            };
-
-            var cursor: Vec2 = @splat(0.0);
-            for (segment.items) |atom| {
-            }
-        } else {
+            std.debug.assert(nodeTree.list.items.len > node.firstChild);
+            // An inline node that has children does not contribute an atom
+            // itself, so we do nothing since the loop should do its job in the
+            // remaining iterations
+        } else if (segment.items.len == 0) {
             if (node.parent) |parent| {
                 const direction = nodeTree.at(parent).style.d;
                 node.position = cursor + Vec2{
@@ -569,6 +568,21 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
                     cursor[0] = @max(cursor[0], node.style.margin.x[0] + node.size[0] + node.style.margin.x[1]);
                 }
             }
+        } else {
+            const Line = struct {
+                start: usize,
+                end: usize,
+                width: f32,
+                height: f32,
+            };
+
+            var cursor: Vec2 = @splat(0.0);
+            for (segment.items) |atom| {
+            }
+            segment.clearRetainingCapacity();
+        }
+        if (node.firstChild != null) {
+            currentParent = node;
         }
     }
     // const base = Vec2{
