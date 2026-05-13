@@ -7126,6 +7126,42 @@ test "childrenOffset propagates through descendants via ancestor positions" {
     });
 }
 
+test "root translate offsets the root's position" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 100.0 },
+                .height = .{ .fixed = 50.0 },
+                .translate = .{ 50.0, 80.0 },
+            },
+        })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 20.0 },
+                    .height = .{ .fixed = 20.0 },
+                },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const root = tree.at(0);
+        const child = tree.at(root.firstChild.?);
+
+        try std.testing.expectApproxEqAbs(@as(f32, 50.0), root.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80.0), root.position[1], 0.001);
+        // Flow child inherits the root's translated position.
+        try std.testing.expectApproxEqAbs(@as(f32, 50.0), child.position[0], 0.001);
+        try std.testing.expectApproxEqAbs(@as(f32, 80.0), child.position[1], 0.001);
+    });
+}
+
 test "contentSize for a leaf element is zero" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
