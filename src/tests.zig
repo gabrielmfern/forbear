@@ -347,7 +347,7 @@ test "wrapped text propagates height upward" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        var textNode: *forbear.Node = undefined;
+        var textNodeIndex: usize = undefined;
 
         forbear.element(.{
             .style = .{
@@ -364,11 +364,12 @@ test "wrapped text propagates height upward" {
                 },
             })({
                 forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
-                textNode = forbear.getPreviousNode().?;
+                textNodeIndex = forbear.getPreviousNodeIndex().?;
             });
         });
 
         const tree = try forbear.layout();
+        const textNode = tree.at(textNodeIndex);
         const rootNode = tree.at(0);
         const innerIdx = rootNode.firstChild.?;
         const innerNode = tree.at(innerIdx);
@@ -391,7 +392,7 @@ fn expectTextLineCount(content: []const u8, expectedLines: usize) !void {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        var textNode: *forbear.Node = undefined;
+        var textNodeIndex: usize = undefined;
         forbear.element(.{
             .style = .{
                 .width = .fit,
@@ -400,10 +401,11 @@ fn expectTextLineCount(content: []const u8, expectedLines: usize) !void {
             },
         })({
             forbear.text(content);
-            textNode = forbear.getPreviousNode().?;
+            textNodeIndex = forbear.getPreviousNodeIndex().?;
         });
 
         _ = try forbear.layout();
+        const textNode = forbear.getContext().nodeTree.at(textNodeIndex);
 
         const lineHeight = textNode.glyphs.?.lineHeight;
         try std.testing.expect(lineHeight > 0);
@@ -669,7 +671,7 @@ fn measureLaidOutText(
 
     var result: LaidOutText = undefined;
     try forbear.frame(try frameMeta(arena))({
-        var textNode: *forbear.Node = undefined;
+        var textNodeIndex: usize = undefined;
         forbear.element(.{
             .style = .{
                 .width = .{ .fixed = width },
@@ -679,10 +681,11 @@ fn measureLaidOutText(
             },
         })({
             forbear.text(content);
-            textNode = forbear.getPreviousNode().?;
+            textNodeIndex = forbear.getPreviousNodeIndex().?;
         });
 
         _ = try forbear.layout();
+        const textNode = forbear.getContext().nodeTree.at(textNodeIndex);
 
         const glyphs = textNode.glyphs.?;
         var maxLine: usize = 0;
@@ -787,7 +790,7 @@ test "wrapped text simple ancestry stays at origin" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        var textNode: *forbear.Node = undefined;
+        var textNodeIndex: usize = undefined;
 
         forbear.element(.{
             .style = .{
@@ -804,11 +807,12 @@ test "wrapped text simple ancestry stays at origin" {
                 },
             })({
                 forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
-                textNode = forbear.getPreviousNode().?;
+                textNodeIndex = forbear.getPreviousNodeIndex().?;
             });
         });
 
         const tree = try forbear.layout();
+        const textNode = tree.at(textNodeIndex);
         const rootNode = tree.at(0);
         const innerNode = tree.at(rootNode.firstChild.?);
 
@@ -919,7 +923,7 @@ test "wrapped text propagates height upward with siblings" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        var textNode: *forbear.Node = undefined;
+        var textNodeIndex: usize = undefined;
 
         forbear.element(.{
             .style = .{
@@ -936,7 +940,7 @@ test "wrapped text propagates height upward with siblings" {
                 },
             })({
                 forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
-                textNode = forbear.getPreviousNode().?;
+                textNodeIndex = forbear.getPreviousNodeIndex().?;
             });
             forbear.element(.{
                 .style = .{
@@ -946,6 +950,7 @@ test "wrapped text propagates height upward with siblings" {
         });
 
         const tree = try forbear.layout();
+        const textNode = tree.at(textNodeIndex);
         const rootNode = tree.at(0);
         const firstChild = tree.at(rootNode.firstChild.?);
         const secondChild = tree.at(firstChild.nextSibling.?);
@@ -969,7 +974,7 @@ test "wrapped text stacks siblings after wrapping" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        var textNode: *forbear.Node = undefined;
+        var textNodeIndex: usize = undefined;
 
         forbear.element(.{
             .style = .{
@@ -986,7 +991,7 @@ test "wrapped text stacks siblings after wrapping" {
                 },
             })({
                 forbear.text("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore");
-                textNode = forbear.getPreviousNode().?;
+                textNodeIndex = forbear.getPreviousNodeIndex().?;
             });
             forbear.element(.{
                 .style = .{
@@ -996,6 +1001,7 @@ test "wrapped text stacks siblings after wrapping" {
         });
 
         const tree = try forbear.layout();
+        const textNode = tree.at(textNodeIndex);
         const rootNode = tree.at(0);
         const firstChild = tree.at(rootNode.firstChild.?);
         const secondChild = tree.at(firstChild.nextSibling.?);
@@ -2795,7 +2801,7 @@ test "Element tree stack stability" {
             try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
         try std.testing.expectEqual(0, self.nodeStack.items.len);
-        try std.testing.expect(self.nodeTree.list.items.len > 0);
+        try std.testing.expect(self.nodeTree.list.len > 0);
     });
 
     try forbear.frame(try frameMeta(arenaAllocator))({
@@ -2822,7 +2828,7 @@ test "Element tree stack stability" {
             try std.testing.expectEqual(1, nodeParentStack.items.len);
         });
         try std.testing.expectEqual(0, self.nodeStack.items.len);
-        try std.testing.expect(self.nodeTree.list.items.len > 0);
+        try std.testing.expect(self.nodeTree.list.len > 0);
     });
 }
 
@@ -3297,7 +3303,7 @@ test "Wrapper components produce unique keys from different parent components" {
                     forbear.BreakLine();
                 });
                 const ctx = forbear.getContext();
-                out.* = ctx.nodeTree.at(ctx.nodeTree.list.items.len - 1).key;
+                out.* = ctx.nodeTree.at(ctx.nodeTree.list.len - 1).key;
             });
         }
     }.render;
@@ -3309,7 +3315,7 @@ test "Wrapper components produce unique keys from different parent components" {
                     forbear.BreakLine();
                 });
                 const ctx = forbear.getContext();
-                out.* = ctx.nodeTree.at(ctx.nodeTree.list.items.len - 1).key;
+                out.* = ctx.nodeTree.at(ctx.nodeTree.list.len - 1).key;
             });
         }
     }.render;
@@ -6897,9 +6903,7 @@ test "childrenOffset shifts flow children by the offset" {
                 .direction = .horizontal,
             },
         })({
-            if (forbear.getParentNode()) |parent| {
-                parent.childrenOffset = .{ -40, -15 };
-            }
+            forbear.setParentChildrenOffset(.{ -40, -15 });
             forbear.element(.{
                 .style = .{
                     .width = .{ .fixed = 50.0 },
@@ -6943,9 +6947,7 @@ test "childrenOffset does not shift relative children" {
                 .height = .{ .fixed = 200.0 },
             },
         })({
-            if (forbear.getParentNode()) |parent| {
-                parent.childrenOffset = .{ 25, 10 };
-            }
+            forbear.setParentChildrenOffset(.{ 25, 10 });
             forbear.element(.{
                 .style = .{
                     .width = .{ .fixed = 50.0 },
@@ -6981,9 +6983,7 @@ test "childrenOffset does not shift fixed children" {
                 .height = .{ .fixed = 200.0 },
             },
         })({
-            if (forbear.getParentNode()) |parent| {
-                parent.childrenOffset = .{ 500, 500 };
-            }
+            forbear.setParentChildrenOffset(.{ 500, 500 });
             forbear.element(.{
                 .style = .{
                     .width = .{ .fixed = 50.0 },
@@ -7018,9 +7018,7 @@ test "childrenOffset does not shift absolute children" {
                 .height = .{ .fixed = 200.0 },
             },
         })({
-            if (forbear.getParentNode()) |parent| {
-                parent.childrenOffset = .{ 500, 500 };
-            }
+            forbear.setParentChildrenOffset(.{ 500, 500 });
             forbear.element(.{
                 .style = .{
                     .width = .{ .fixed = 50.0 },
@@ -7057,9 +7055,7 @@ test "childrenOffset does not change contentSize" {
                 .direction = .horizontal,
             },
         })({
-            if (forbear.getParentNode()) |parent| {
-                parent.childrenOffset = .{ -123, 456 };
-            }
+            forbear.setParentChildrenOffset(.{ -123, 456 });
             forbear.element(.{
                 .style = .{
                     .width = .{ .fixed = 400.0 },
@@ -7093,9 +7089,7 @@ test "childrenOffset propagates through descendants via ancestor positions" {
                 .height = .{ .fixed = 300.0 },
             },
         })({
-            if (forbear.getParentNode()) |parent| {
-                parent.childrenOffset = .{ -10, -20 };
-            }
+            forbear.setParentChildrenOffset(.{ -10, -20 });
             forbear.element(.{
                 .style = .{
                     .width = .{ .fixed = 200.0 },

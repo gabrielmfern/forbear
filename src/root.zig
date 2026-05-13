@@ -570,18 +570,40 @@ pub fn useLastUpdateTime() f64 {
     return self.lastUpdateTime orelse self.startTime;
 }
 
-pub fn getParentNode() ?*Node {
+pub fn getParentNode() ?Node {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
     const index = self.nodeStack.getLastOrNull() orelse return null;
     return self.nodeTree.at(index);
 }
 
-pub fn getPreviousNode() ?*Node {
+pub fn getParentNodeIndex() ?usize {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    return self.nodeStack.getLastOrNull();
+}
+
+pub fn getPreviousNode() ?Node {
     const self = getContext();
     std.debug.assert(self.frameMeta != null);
     const index = self.frameMeta.?.previousPushedNodeIndex orelse return null;
     return self.nodeTree.at(index);
+}
+
+pub fn getPreviousNodeIndex() ?usize {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    return self.frameMeta.?.previousPushedNodeIndex;
+}
+
+/// Mutate the current parent node's `childrenOffset` (used to scroll its
+/// flowing children). Convenience wrapper over a column write — kept here
+/// so callers don't have to reach into the slice themselves.
+pub fn setParentChildrenOffset(offset: Vec2) void {
+    const self = getContext();
+    std.debug.assert(self.frameMeta != null);
+    const idx = self.nodeStack.getLastOrNull() orelse return;
+    self.nodeTree.list.slice().items(.childrenOffset)[idx] = offset;
 }
 
 pub fn useArena() std.mem.Allocator {
@@ -764,7 +786,7 @@ fn frameEnd(block: void) anyerror!void {
     defer staleFrameNodeMeasurements.deinit(frameMeta.arena);
     var iterator = self.previousFrameNodeMeasurements.iterator();
     while (iterator.next()) |entry| {
-        if (self.nodeTree.list.items.len < entry.value_ptr.index + 1) {
+        if (self.nodeTree.list.len < entry.value_ptr.index + 1) {
             try staleFrameNodeMeasurements.append(frameMeta.arena, entry.key_ptr.*);
             continue;
         }
@@ -818,16 +840,20 @@ fn elementEnd(block: void) void {
     self.frameMeta.?.previousPushedNodeIndex = self.nodeStack.pop();
 
     const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
-    const node = self.nodeTree.at(previousNodeIndex);
+    const s = self.nodeTree.list.slice();
+    const sizes = s.items(.size);
+    const minSizes = s.items(.minSize);
+    const maxSizes = s.items(.maxSize);
+    const style = &s.items(.style)[previousNodeIndex];
 
-    if (node.style.width == .ratio) {
-        node.size[0] = node.style.width.ratio * node.size[1];
+    if (style.width == .ratio) {
+        sizes[previousNodeIndex][0] = style.width.ratio * sizes[previousNodeIndex][1];
     }
-    if (node.style.height == .ratio) {
-        node.size[1] = node.style.height.ratio * node.size[0];
+    if (style.height == .ratio) {
+        sizes[previousNodeIndex][1] = style.height.ratio * sizes[previousNodeIndex][0];
     }
-    node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
-    node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
+    sizes[previousNodeIndex][0] = @min(@max(sizes[previousNodeIndex][0], minSizes[previousNodeIndex][0]), maxSizes[previousNodeIndex][0]);
+    sizes[previousNodeIndex][1] = @min(@max(sizes[previousNodeIndex][1], minSizes[previousNodeIndex][1]), maxSizes[previousNodeIndex][1]);
 }
 
 pub const ElementProps = struct {
@@ -844,26 +870,28 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     const parentIndexOptional = self.nodeStack.getLastOrNull();
 
-    const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
+    // Snapshot parent fields (style, z) before `putNode` appends, since
+    // a column reallocation invalidates any previously-cached slice.
+    var parentStyleOpt: ?CompleteStyle = null;
+    var parentZ: u16 = 0;
+    if (parentIndexOptional) |pi| {
+        const s = self.nodeTree.list.slice();
+        parentStyleOpt = s.items(.style)[pi];
+        parentZ = s.items(.z)[pi];
+    }
+
+    const index = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
         handleFrameError(err);
         return &endNoop;
     };
 
-    const parentOptional = if (parentIndexOptional) |parentIndex|
-        self.nodeTree.at(parentIndex)
-    else
-        null;
-
-    const baseStyle = if (parentOptional) |parent|
-        BaseStyle.from(parent.style)
+    const baseStyle = if (parentStyleOpt) |parentStyle|
+        BaseStyle.from(parentStyle)
     else
         self.frameMeta.?.baseStyle;
-    props.style.completeWith(baseStyle, &result.ptr.style);
 
-    const parentZ = if (parentOptional) |parent|
-        parent.z
-    else
-        0;
+    var completedStyle: CompleteStyle = undefined;
+    props.style.completeWith(baseStyle, &completedStyle);
 
     var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
@@ -876,62 +904,63 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         k = mixU64(k, @returnAddress());
     }
 
-    result.ptr.key = k;
-    result.ptr.z = if (props.style.zIndex) |zIndex|
+    const z: u16 = if (completedStyle.zIndex) |zIndex|
         zIndex
     else if (parentZ < std.math.maxInt(u16))
         parentZ + 1
     else
         parentZ;
-    result.ptr.position = switch (result.ptr.style.placement) {
+
+    const position: Vec2 = switch (completedStyle.placement) {
         .fixed => |v| v,
         .absolute => |v| v,
         .relative => |v| v,
         .flow => @splat(0.0),
     };
-    result.ptr.size = .{
-        switch (result.ptr.style.width) {
-            .fixed => |width| width,
-            .ratio => |ratio| if (result.ptr.style.height == .fixed)
-                result.ptr.style.height.fixed * ratio
+
+    var size: Vec2 = .{
+        switch (completedStyle.width) {
+            .fixed => |w| w,
+            .ratio => |ratio| if (completedStyle.height == .fixed)
+                completedStyle.height.fixed * ratio
             else
                 0.0,
             .fit, .grow => 0.0,
         },
-        switch (result.ptr.style.height) {
-            .fixed => |height| height,
-            .ratio => |ratio| if (result.ptr.style.width == .fixed)
-                result.ptr.style.width.fixed * ratio
+        switch (completedStyle.height) {
+            .fixed => |h| h,
+            .ratio => |ratio| if (completedStyle.width == .fixed)
+                completedStyle.width.fixed * ratio
             else
                 0.0,
             .fit, .grow => 0.0,
         },
     };
-    result.ptr.minSize = .{
-        if (result.ptr.style.minWidth) |minWidth|
-            minWidth
-        else if (result.ptr.style.width == .fixed)
-            result.ptr.style.width.fixed
+    var minSize: Vec2 = .{
+        if (completedStyle.minWidth) |mw|
+            mw
+        else if (completedStyle.width == .fixed)
+            completedStyle.width.fixed
         else
             0.0,
-        if (result.ptr.style.minHeight) |minHeight|
-            minHeight
-        else if (result.ptr.style.height == .fixed)
-            result.ptr.style.height.fixed
+        if (completedStyle.minHeight) |mh|
+            mh
+        else if (completedStyle.height == .fixed)
+            completedStyle.height.fixed
         else
             0.0,
     };
-    result.ptr.maxSize = .{
-        if (result.ptr.style.maxWidth) |maxWidth|
-            maxWidth
-        else if (result.ptr.style.width == .fixed)
-            result.ptr.style.width.fixed
+    const maxSize: Vec2 = .{
+        if (completedStyle.maxWidth) |mw|
+            mw
+        else if (completedStyle.width == .fixed)
+            completedStyle.width.fixed
         else
             std.math.inf(f32),
-        if (result.ptr.style.maxHeight) |maxHeight|
-            maxHeight
-        else if (result.ptr.style.height == .fixed)
-            result.ptr.style.height.fixed
+        if (completedStyle.maxHeight) |mh|
+            mh
+        else if (completedStyle.height == .fixed)
+            completedStyle.height.fixed
         else
             std.math.inf(f32),
     };
@@ -939,29 +968,45 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     // Clamp initial size to [minSize, maxSize] so that fitChild sees correct
     // values (e.g. image elements with fixed width and ratio height that
     // exceed their maxWidth/maxHeight constraints).
-    result.ptr.size[0] = @min(@max(result.ptr.size[0], result.ptr.minSize[0]), result.ptr.maxSize[0]);
-    result.ptr.size[1] = @min(@max(result.ptr.size[1], result.ptr.minSize[1]), result.ptr.maxSize[1]);
+    size[0] = @min(@max(size[0], minSize[0]), maxSize[0]);
+    size[1] = @min(@max(size[1], minSize[1]), maxSize[1]);
 
-    self.nodeStack.append(self.allocator, result.index) catch |err| {
-        handleFrameError(err);
-        return &endNoop;
-    };
-
-    pushScope(result.ptr.key) catch |err| {
-        handleFrameError(err);
-        return &endNoop;
-    };
-
+    // Initial fit-base: fit-sized axes start at the parent's padding+border
+    // contribution; min-fit axes match.
     inline for (Direction.array) |fitDirection| {
-        if (result.ptr.style.getPreferredSize(fitDirection) == .fit) {
-            result.ptr.setSize(fitDirection, result.ptr.fittingBase(fitDirection));
+        const dirIdx: usize = if (fitDirection == .horizontal) 0 else 1;
+        if (completedStyle.getPreferredSize(fitDirection) == .fit) {
+            size[dirIdx] = completedStyle.fittingBase(fitDirection);
         }
-        if (result.ptr.shouldFitMin(fitDirection)) {
-            result.ptr.setMinSize(fitDirection, result.ptr.fittingBase(fitDirection));
+        if (completedStyle.shouldFitMin(fitDirection)) {
+            minSize[dirIdx] = completedStyle.fittingBase(fitDirection);
         }
     }
 
-    self.frameMeta.?.previousPushedNodeIndex = result.index;
+    // Single column-write block per appended node — slice is fresh and
+    // therefore valid until the next `putNode`.
+    {
+        const s = self.nodeTree.list.slice();
+        s.items(.key)[index] = k;
+        s.items(.z)[index] = z;
+        s.items(.style)[index] = completedStyle;
+        s.items(.position)[index] = position;
+        s.items(.size)[index] = size;
+        s.items(.minSize)[index] = minSize;
+        s.items(.maxSize)[index] = maxSize;
+    }
+
+    self.nodeStack.append(self.allocator, index) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+
+    pushScope(k) catch |err| {
+        handleFrameError(err);
+        return &endNoop;
+    };
+
+    self.frameMeta.?.previousPushedNodeIndex = index;
 
     // TODO: this does not seem to work with when I have two elements one
     // beside the other, both have the cursor setup to something other than the
@@ -970,7 +1015,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     // its mouseLeave will happen at the end, meaning the cursor will be set to
     // the baseStyle cursor instead of the former element's cursor.
     if (on(.mouseEnter)) {
-        setCursor(result.ptr.style.cursor);
+        setCursor(completedStyle.cursor);
     }
     if (on(.mouseLeave)) {
         setCursor(baseStyle.cursor);
@@ -1012,33 +1057,39 @@ pub noinline fn text(content: []const u8) void {
     const parentIndexOptional = self.nodeStack.getLastOrNull();
 
     const arena = self.frameMeta.?.arena;
-    const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
+
+    // Snapshot parent style/z before append.
+    var parentStyleOpt: ?CompleteStyle = null;
+    var parentZ: u16 = 0;
+    if (parentIndexOptional) |pi| {
+        const s = self.nodeTree.list.slice();
+        parentStyleOpt = s.items(.style)[pi];
+        parentZ = s.items(.z)[pi];
+    }
+
+    const index = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
         handleFrameError(err);
         return;
     };
 
-    const parentOptional = if (parentIndexOptional) |parentIndex|
-        self.nodeTree.at(parentIndex)
-    else
-        null;
-
-    const baseStyle = if (parentOptional) |parent|
-        BaseStyle.from(parent.style)
+    const baseStyle = if (parentStyleOpt) |parentStyle|
+        BaseStyle.from(parentStyle)
     else
         self.frameMeta.?.baseStyle;
 
+    var completedStyle: CompleteStyle = undefined;
     (Style{
         .cursor = if (baseStyle.cursor == .default)
             .text
         else
             baseStyle.cursor,
-        .xJustification = if (parentOptional) |parent| parent.style.xJustification else null,
+        .xJustification = if (parentStyleOpt) |ps| ps.xJustification else null,
         .yJustification = .start,
-    }).completeWith(baseStyle, &result.ptr.style);
+    }).completeWith(baseStyle, &completedStyle);
 
-    const unitsPerEm: f32 = @floatFromInt(result.ptr.style.font.unitsPerEm());
+    const unitsPerEm: f32 = @floatFromInt(completedStyle.font.unitsPerEm());
     const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
-    const lineHeight = result.ptr.style.font.lineHeight() * result.ptr.style.lineHeight / unitsPerEm * result.ptr.style.fontSize;
+    const lineHeight = completedStyle.font.lineHeight() * completedStyle.lineHeight / unitsPerEm * completedStyle.fontSize;
 
     var effectiveContent = content;
     // converts \r\n, and \n\r, or just \r to \n for simplicity later on
@@ -1072,7 +1123,7 @@ pub noinline fn text(content: []const u8) void {
         effectiveContent = ownedContent;
     }
 
-    const shapedGlyphs = result.ptr.style.font.shape(effectiveContent) catch |err| {
+    const shapedGlyphs = completedStyle.font.shape(effectiveContent) catch |err| {
         handleFrameError(err);
         return;
     };
@@ -1094,8 +1145,8 @@ pub noinline fn text(content: []const u8) void {
     while (glyphIndex < shapedGlyphs.len) {
         defer glyphIndex += 1;
         const shapedGlyph = shapedGlyphs[glyphIndex];
-        var advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(result.ptr.style.fontSize));
-        const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(result.ptr.style.fontSize));
+        var advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(completedStyle.fontSize));
+        const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(completedStyle.fontSize));
         const isLinebreak = std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, "\n");
         if (isLinebreak) {
             advance[0] = -cursor[0];
@@ -1119,7 +1170,7 @@ pub noinline fn text(content: []const u8) void {
 
         cursor += advance;
         maxSize[0] = @max(maxSize[0], cursor[0]);
-        if (result.ptr.style.textWrapping == .word) {
+        if (completedStyle.textWrapping == .word) {
             if (std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, " ") or isLinebreak) {
                 wordAdvance = @splat(0.0);
                 maxSize[1] += lineHeight;
@@ -1127,19 +1178,14 @@ pub noinline fn text(content: []const u8) void {
                 wordAdvance += advance;
             }
             minSize[0] = @max(minSize[0], wordAdvance[0]);
-        } else if (result.ptr.style.textWrapping == .character) {
+        } else if (completedStyle.textWrapping == .character) {
             minSize[0] = @max(minSize[0], advance[0]);
             maxSize[1] += lineHeight;
-        } else if (result.ptr.style.textWrapping == .none) {
+        } else if (completedStyle.textWrapping == .none) {
             minSize[0] = @max(minSize[0], cursor[0]);
         }
     }
     minSize[1] = cursor[1] + lineHeight;
-
-    const parentZ = if (parentOptional) |parent|
-        parent.z
-    else
-        0;
 
     var k: u64 = 0;
     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
@@ -1152,44 +1198,50 @@ pub noinline fn text(content: []const u8) void {
     // k = mixU64(k, std.hash.Wyhash.hash(0, effectiveContent));
     k = mixU64(k, @returnAddress());
 
-    result.ptr.key = k;
-    result.ptr.position = @splat(0.0);
-    result.ptr.z = if (parentZ < std.math.maxInt(u16))
+    const z: u16 = if (parentZ < std.math.maxInt(u16))
         parentZ + 1
     else
         parentZ;
-    result.ptr.size = .{ maxSize[0], minSize[1] };
-    result.ptr.minSize = minSize;
-    result.ptr.maxSize = maxSize;
-    result.ptr.glyphs = Glyphs{
-        .slice = layoutGlyphs[0 .. layoutGlyphs.len - linebreakCount],
-        .lineHeight = lineHeight,
-        .preBreakIndices = preBreakIndices.items,
-    };
 
-    self.frameMeta.?.previousPushedNodeIndex = result.index;
+    {
+        const s = self.nodeTree.list.slice();
+        s.items(.key)[index] = k;
+        s.items(.z)[index] = z;
+        s.items(.style)[index] = completedStyle;
+        s.items(.position)[index] = @splat(0.0);
+        s.items(.size)[index] = .{ maxSize[0], minSize[1] };
+        s.items(.minSize)[index] = minSize;
+        s.items(.maxSize)[index] = maxSize;
+        s.items(.glyphs)[index] = Glyphs{
+            .slice = layoutGlyphs[0 .. layoutGlyphs.len - linebreakCount],
+            .lineHeight = lineHeight,
+            .preBreakIndices = preBreakIndices.items,
+        };
+    }
 
-    if (parentOptional) |parent| {
-        parent.fitChild(result.ptr);
+    self.frameMeta.?.previousPushedNodeIndex = index;
+
+    if (parentIndexOptional) |parentIndex| {
+        layouting.fitChildInto(self.nodeTree.list.slice(), parentIndex, index);
     }
 
     // Push self onto the parent stack so `on(.mouseOver)` resolves the
     // text node's own measurement, then pop. The text node itself is not
     // a scope and has no children, so this is purely for hit-testing.
-    self.nodeStack.append(self.allocator, result.index) catch |err| {
+    self.nodeStack.append(self.allocator, index) catch |err| {
         handleFrameError(err);
         return;
     };
     defer _ = self.nodeStack.pop();
 
-    pushScope(result.ptr.key) catch |err| {
+    pushScope(k) catch |err| {
         handleFrameError(err);
         return;
     };
     defer popScope();
 
     if (on(.mouseEnter)) {
-        setCursor(result.ptr.style.cursor);
+        setCursor(completedStyle.cursor);
     }
     if (on(.mouseLeave)) {
         setCursor(baseStyle.cursor);
@@ -1367,19 +1419,23 @@ fn componentChildrenSlotEndFn(block: void) void {
     if (fm.err != null) return;
 
     const slotState = fm.componentChildrenSlotStates.pop() orelse return;
-    const parent = self.nodeTree.at(slotState.parentIndex);
+    const s = self.nodeTree.list.slice();
+    const firstChilds = s.items(.firstChild);
+    const lastChilds = s.items(.lastChild);
+    const nextSiblings = s.items(.nextSibling);
+    const previousSiblings = s.items(.previousSibling);
 
     // Reattach the after-chain
     if (slotState.afterChainStart) |afterStart| {
-        const currentLast = parent.lastChild;
+        const currentLast = lastChilds[slotState.parentIndex];
         if (currentLast) |last| {
-            self.nodeTree.at(last).nextSibling = afterStart;
-            self.nodeTree.at(afterStart).previousSibling = last;
+            nextSiblings[last] = afterStart;
+            previousSiblings[afterStart] = last;
         } else {
-            parent.firstChild = afterStart;
-            self.nodeTree.at(afterStart).previousSibling = null;
+            firstChilds[slotState.parentIndex] = afterStart;
+            previousSiblings[afterStart] = null;
         }
-        parent.lastChild = slotState.afterChainEnd;
+        lastChilds[slotState.parentIndex] = slotState.afterChainEnd;
     }
 
     // Restore parent stack and scope stack to pre-slotEnd state
@@ -1406,27 +1462,31 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
         return &endNoop;
     }
     const slotState = &states.items[states.items.len - 1];
-    const parent = self.nodeTree.at(slotState.parentIndex);
+    const s = self.nodeTree.list.slice();
+    const firstChilds = s.items(.firstChild);
+    const lastChilds = s.items(.lastChild);
+    const nextSiblings = s.items(.nextSibling);
+    const previousSiblings = s.items(.previousSibling);
 
     // Determine after-chain (nodes added after slot by the component body)
     const afterStart = if (slotState.slotPredecessor) |pred|
-        self.nodeTree.at(pred).nextSibling
+        nextSiblings[pred]
     else
-        parent.firstChild;
+        firstChilds[slotState.parentIndex];
 
     if (afterStart) |start| {
         // Detach the after-chain from the parent
         slotState.afterChainStart = start;
-        slotState.afterChainEnd = parent.lastChild;
+        slotState.afterChainEnd = lastChilds[slotState.parentIndex];
 
         if (slotState.slotPredecessor) |pred| {
-            self.nodeTree.at(pred).nextSibling = null;
-            parent.lastChild = pred;
+            nextSiblings[pred] = null;
+            lastChilds[slotState.parentIndex] = pred;
         } else {
-            parent.firstChild = null;
-            parent.lastChild = null;
+            firstChilds[slotState.parentIndex] = null;
+            lastChilds[slotState.parentIndex] = null;
         }
-        self.nodeTree.at(start).previousSibling = null;
+        previousSiblings[start] = null;
     }
 
     // Save current parent and scope stacks, then restore to slot-time state so
