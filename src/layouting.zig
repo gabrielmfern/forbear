@@ -220,14 +220,6 @@ fn shrinkChildren(
 /// leaves carry intrinsic sizes (text glyphs, fixed dimensions) and wrap
 /// containers are sized later by `wrapAndPlace` based on actual line
 /// breaks.
-///
-/// Iteration is a single backward pass over `nodeTree.list.items`. Because
-/// `putNode` always assigns a child index higher than its parent, walking
-/// the list in reverse visits every descendant before its ancestor — which
-/// is exactly what bottom-up accumulation needs. The previous recursive
-/// version traversed the linked-list-inside-an-arraylist tree; the linear
-/// scan does the same work in storage order, which is cache-friendly and
-/// avoids per-call pointer chases.
 pub fn fit(nodeTree: *NodeTree) void {
     var i = nodeTree.list.items.len;
     while (i > 0) {
@@ -263,12 +255,6 @@ pub fn fit(nodeTree: *NodeTree) void {
 /// using `grow` factors, clamp each child's perpendicular axis to the
 /// parent's available room, and resolve ratio sizes that depend on the
 /// just-set opposite axis.
-///
-/// Iteration is a single forward pass over `nodeTree.list.items`. Forward
-/// order visits each parent before any of its descendants (because
-/// `putNode` assigns child indices strictly greater than their parent's),
-/// so by the time a child is reached as a parent in its own right, its size
-/// has already been resolved by the iteration of its actual parent.
 pub fn growAndShrink(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
     if (nodeTree.list.items.len == 0) return;
 
