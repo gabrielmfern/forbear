@@ -487,19 +487,9 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
     };
 
     // a segment can be formed going down to any depth, as long as the inline
-    // remains through an ubroken chain down to that descendant.
+    // remains through an unbroken chain down to that descendant.
     //
-    // we first need to figure out all of the atoms for a segment, then we need
-    // to figure out where a new segment beigins.
-    //
-    // then, once we know this "shell" work is done, we can sum the advances of
-    // atoms and measure where to insert line breaks, which is where we can
-    // also optimize the algorithm
-    //
-    // we can iterate through the tree accumulating the atoms in the segment,
-    // and then once we find the end of the segment we can apply the wrapping.
-    // once we're done, we continue the walk in the tree accumulating the next
-    // segment and then repeat
+    // an atom can only be a leaf node, or a slice of glyphs.
 
     var cursor: Vec2 = .{ 0, 0 };
     var currentParent = nodeTree.at(0);
@@ -680,7 +670,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
     // }
 }
 
-pub  layout() !*NodeTree {
+pub fn layout() !*NodeTree {
     const context = forbear.getContext();
 
     std.debug.assert(context.frameMeta != null);
