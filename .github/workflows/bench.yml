@@ -46,17 +46,6 @@ jobs:
             spirv-tools \
             wayland-protocols
 
-      - name: Allow perf_event_open
-        # GitHub-hosted runners are VMs with no hardware PMU exposed, so the
-        # `cpu_cycles` / `cache_misses` group still won't open; the bench
-        # falls back to software events (page faults, context switches) in
-        # that case. But Ubuntu kernels ship paranoid=3 by default, which
-        # would block even the software events for unprivileged users, so
-        # drop the level to 1 here. Best-effort — print and continue.
-        run: |
-          cat /proc/sys/kernel/perf_event_paranoid || true
-          sudo sysctl -w kernel.perf_event_paranoid=1 || true
-
       - name: Stash bench harness from PR head
         run: |
           mkdir -p .bench-harness
