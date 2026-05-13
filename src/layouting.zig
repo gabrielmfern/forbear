@@ -258,8 +258,7 @@ pub fn fit(nodeTree: *NodeTree) void {
 pub fn growAndShrink(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
     if (nodeTree.list.items.len == 0) return;
 
-    // Single reusable buffer sized to the widest sibling group; the previous
-    // recursive version allocated a fresh one per parent.
+    // Single reusable buffer sized to the widest sibling group
     var maxChildCount: usize = 0;
     for (nodeTree.list.items) |*node| {
         var count: usize = 0;
@@ -672,9 +671,6 @@ pub fn layout() !*NodeTree {
     if (context.nodeTree.list.items.len > 0) {
         const root = context.nodeTree.at(0);
 
-        // Pass 1: bottom-up fit. Containers absorb their children's intrinsic
-        // sizes. Text nodes still report unwrapped widths/heights because pass
-        // 3 is where wrapping happens.
         fit(&context.nodeTree);
 
         if (root.style.width.isGrow()) {
@@ -684,37 +680,28 @@ pub fn layout() !*NodeTree {
             root.size[1] = @min(@max(viewportSize[1], root.minSize[1]), root.maxSize[1]);
         }
 
-        // Pass 2: top-down grow/shrink. Each container distributes its main-axis
-        // space among children and clamps their perpendicular axis. This is what
-        // gives text nodes a final width for pass 3 to wrap against.
         try growAndShrink(arena, &context.nodeTree);
 
-        // Pass 3: place children and wrap text against final widths. Wrapping
-        // updates text-node heights and wrap-container heights to match the
-        // post-layout line stack, and expands fit/grow containers to enclose
-        // their content's true height.
         try wrapAndPlace(arena, &context.nodeTree);
 
-        // Pass 4: re-grow. Wrapping in pass 3 changed perpendicular sizes
-        // (taller text nodes, taller wrap containers) — fit/grow ancestors
-        // were already updated by wrapAndPlace itself, but their grow-sized
-        // siblings still need redistribution and cross-axis clamping against
-        // the new sizes.
+        // Wrapping in pass 3 changed perpendicular sizes (taller text nodes,
+        // taller wrap containers) — ancestors were already effectively refit
+        // by wrapAndPlace itself, but their grow-sized siblings still need
+        // redistribution and cross-axis clamping against the new sizes.
+        //
+        // The intention is for this to only change cross-axis sizes.
         try growAndShrink(arena, &context.nodeTree);
 
-        // Pass 5: final placement. Pass 4 may have shrunk or grown some
-        // children; cursors and justification offsets need to be
-        // recomputed. Wrapping itself is stable because widths haven't
-        // changed since pass 2, but placement and wrapping share their main
-        // loop so the whole pass runs.
+        // Pass 4 may have shrunk or grown some children; cursors and
+        // justification offsets need to be recomputed. Wrapping itself is
+        // stable because widths haven't changed since pass 2, but placement
+        // and wrapping share their main loop so the whole pass runs.
+        //
+        // The intention is for this to only change positions.
         try wrapAndPlace(arena, &context.nodeTree);
 
         root.position += root.style.translate;
 
-        // Pass 6: turn parent-local positions into world-space positions. Walk
-        // the list forward; each ancestor's world position is already final
-        // by the time its descendants are reached, because `putNode` puts
-        // ancestors at lower indices.
         for (context.nodeTree.list.items) |*node| {
             var childIndexOption = node.firstChild;
             while (childIndexOption) |childIndex| {
@@ -756,11 +743,6 @@ pub fn layout() !*NodeTree {
             }
         }
 
-        // Pass 7: content-size pass. The bounding extent of each node's
-        // flowing descendants, in the node's local coordinate space (i.e.
-        // relative to `node.position`). Computed once positions are final so
-        // callers can use it to clamp scroll offsets. Order-independent
-        // per-node work, so the linear scan direction is arbitrary.
         for (context.nodeTree.list.items) |*node| {
             var contentSize: Vec2 = @splat(0.0);
             var childIndexOption = node.firstChild;
@@ -780,19 +762,6 @@ pub fn layout() !*NodeTree {
             node.contentSize = contentSize;
         }
 
-        // Pass 8: clip rects. A node N "generates" a clip rect when it has a
-        // constrained size and at least one child outside its frame; that
-        // rect propagates to every descendant of N, intersected with any
-        // clip they're already under. Walking forward and using a side array
-        // for the clip that descendants should inherit collapses the
-        // previously-recursive `applyClipRect` into one pass.
-        //
-        // The renderer reads `node.clipRect` to scissor each draw. A
-        // generator's *own* draws (background, border, shadow) are NOT
-        // clipped to its own rect — shadows in particular need to render
-        // outside the generator. So we keep `node.clipRect` to "what this
-        // node inherited from generators above it", and store "what this
-        // node passes down" separately.
         const propagated = try arena.alloc(?Vec4, context.nodeTree.list.items.len);
         @memset(propagated, null);
         for (context.nodeTree.list.items, 0..) |*node, idx| {
