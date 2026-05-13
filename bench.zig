@@ -503,6 +503,15 @@ const Metrics = struct {
     ipc: ?f64 = null,
     /// Average cache misses per operation
     cache_misses: ?f64 = null,
+
+    ///////////////////////////////////////////////////////////////////////////////
+    // Software events (Linux only, fallback when hardware PMU is unavailable —
+    // e.g. inside CI runner VMs)
+
+    /// Average page faults per operation
+    page_faults: ?f64 = null,
+    /// Average context switches per operation
+    context_switches: ?f64 = null,
 };
 
 // Bits for perf_event_attr.read_format
@@ -513,14 +522,27 @@ const PERF_FORMAT_GROUP = 1 << 3;
 
 // Various ioctls act on perf_event_open() file descriptors:
 const PERF_EVENT_IOC_ID = linux.IOCTL.IOR('$', 7, u64);
-/// The hardware events supported by the kernel for performance monitoring.
-/// These map directly to `perf_event_attr.config` values.
+/// Events supported by the kernel for performance monitoring. Each maps to a
+/// `(type, config)` pair for the `perf_event_open` syscall. Hardware events
+/// require a real PMU; the software events still work in VMs (CI runners
+/// don't expose a hardware PMU), so we use them as a fallback.
 const Event = enum {
     cpu_cycles,
     instructions,
     cache_misses,
     branch_misses,
     bus_cycles,
+    // Software events — counted by the kernel, available even in VMs.
+    page_faults,
+    context_switches,
+    cpu_migrations,
+
+    fn toType(self: Event) linux.PERF.TYPE {
+        return switch (self) {
+            .cpu_cycles, .instructions, .cache_misses, .branch_misses, .bus_cycles => linux.PERF.TYPE.HARDWARE,
+            .page_faults, .context_switches, .cpu_migrations => linux.PERF.TYPE.SOFTWARE,
+        };
+    }
 
     /// Converts the enum into the specific kernel configuration integer
     /// required by the `perf_event_open` syscall.
@@ -531,6 +553,9 @@ const Event = enum {
             .cache_misses => @intFromEnum(linux.PERF.COUNT.HW.CACHE_MISSES),
             .branch_misses => @intFromEnum(linux.PERF.COUNT.HW.BRANCH_MISSES),
             .bus_cycles => @intFromEnum(linux.PERF.COUNT.HW.BUS_CYCLES),
+            .page_faults => @intFromEnum(linux.PERF.COUNT.SW.PAGE_FAULTS),
+            .context_switches => @intFromEnum(linux.PERF.COUNT.SW.CONTEXT_SWITCHES),
+            .cpu_migrations => @intFromEnum(linux.PERF.COUNT.SW.CPU_MIGRATIONS),
         };
     }
 };
@@ -638,16 +663,14 @@ fn Group(comptime events: []const Event) type {
 
             // Leader
             var group_fd = @as(i32, -1);
-            const event_config = events[0].toConfig();
-            self.event_fds[0] = try perf_open_group(group_fd, event_config);
+            self.event_fds[0] = try perf_open_group(group_fd, events[0].toType(), events[0].toConfig());
             self.event_ids[0] = try ioctl_get_id(self.event_fds[0]);
             group_fd = self.event_fds[0];
 
             // Siblings
             if (events.len > 1) {
                 for (events[1..], 1..) |event, i| {
-                    const config = event.toConfig();
-                    self.event_fds[i] = try perf_open_group(group_fd, config);
+                    self.event_fds[i] = try perf_open_group(group_fd, event.toType(), event.toConfig());
                     self.event_ids[i] = try ioctl_get_id(self.event_fds[i]);
                 }
             }
@@ -731,9 +754,9 @@ fn Group(comptime events: []const Event) type {
         // perf & ioctl calls
 
         // Open new file descriptor for the specific event
-        fn perf_open_group(group_fd: linux.fd_t, config: u64) Error!linux.fd_t {
+        fn perf_open_group(group_fd: linux.fd_t, event_type: linux.PERF.TYPE, config: u64) Error!linux.fd_t {
             var attr = std.mem.zeroes(linux.perf_event_attr);
-            attr.type = linux.PERF.TYPE.HARDWARE;
+            attr.type = event_type;
             attr.config = config;
 
             // Enable grouping and ID tracking
@@ -820,6 +843,8 @@ fn write(w: *Writer, options: PrintOptions) !void {
     var col_instr = Column{ .title = "Instructions", .width = 0, .align_right = true, .active = false };
     var col_ipc = Column{ .title = "IPC", .width = 0, .align_right = true, .active = false };
     var col_miss = Column{ .title = "Cache Misses", .width = 0, .align_right = true, .active = false };
+    var col_page_faults = Column{ .title = "Page Faults", .width = 0, .align_right = true, .active = false };
+    var col_ctx_switches = Column{ .title = "Ctx Switches", .width = 0, .align_right = true, .active = false };
 
     // We must format every number to a temporary buffer to know its length.
     var buf: [64]u8 = undefined;
@@ -835,7 +860,6 @@ fn write(w: *Writer, options: PrintOptions) !void {
     col_name.width = col_name.title.len;
     col_time.width = col_time.title.len;
     col_speedup.width = col_speedup.title.len;
-    // col_cpu.width = col_cpu.title.len;
     col_iter.width = col_iter.title.len;
     col_bytes.width = col_bytes.title.len;
     col_ops.width = col_ops.title.len;
@@ -843,13 +867,15 @@ fn write(w: *Writer, options: PrintOptions) !void {
     col_instr.width = col_instr.title.len;
     col_ipc.width = col_ipc.title.len;
     col_miss.width = col_miss.title.len;
+    col_page_faults.width = col_page_faults.title.len;
+    col_ctx_switches.width = col_ctx_switches.title.len;
 
     for (options.metrics) |m| {
         // Name: +2 for backticks
         col_name.width = @max(col_name.width, m.name.len + 2);
 
-        // Time
-        const s_time = try fmtTime(&buf, m.mean_ns);
+        // Time (with ± std deviation)
+        const s_time = try fmtTimeWithSd(&buf, m.mean_ns, m.std_dev_ns);
         col_time.width = @max(col_time.width, s_time.len);
 
         // Relative
@@ -861,8 +887,8 @@ fn write(w: *Writer, options: PrintOptions) !void {
             col_speedup.width = @max(col_speedup.width, s_rel.len);
         }
 
-        // Iterations
-        const s_iter = try std.fmt.bufPrint(&buf, "{d}", .{m.samples});
+        // Iterations (batch size — how many ops per sample)
+        const s_iter = try std.fmt.bufPrint(&buf, "{d}", .{m.iterations});
         col_iter.width = @max(col_iter.width, s_iter.len);
 
         // Optional Columns (Enable & Measure)
@@ -897,6 +923,23 @@ fn write(w: *Writer, options: PrintOptions) !void {
             const s = try fmtMetric(&buf, v);
             col_miss.width = @max(col_miss.width, s.len);
         }
+        // Software events are typically 0 in a CPU-bound steady-state
+        // benchmark, so only surface the column if at least one row has a
+        // non-trivial value worth showing.
+        if (m.page_faults) |v| {
+            if (v > 0.001) {
+                col_page_faults.active = true;
+                const s = try fmtMetric(&buf, v);
+                col_page_faults.width = @max(col_page_faults.width, s.len);
+            }
+        }
+        if (m.context_switches) |v| {
+            if (v > 0.001) {
+                col_ctx_switches.active = true;
+                const s = try fmtMetric(&buf, v);
+                col_ctx_switches.width = @max(col_ctx_switches.width, s.len);
+            }
+        }
     }
 
     // Header Row
@@ -911,6 +954,8 @@ fn write(w: *Writer, options: PrintOptions) !void {
     if (col_instr.active) try printCell(w, col_instr.title, col_instr);
     if (col_ipc.active) try printCell(w, col_ipc.title, col_ipc);
     if (col_miss.active) try printCell(w, col_miss.title, col_miss);
+    if (col_page_faults.active) try printCell(w, col_page_faults.title, col_page_faults);
+    if (col_ctx_switches.active) try printCell(w, col_ctx_switches.title, col_ctx_switches);
     try w.writeAll("\n");
 
     // Separator Row
@@ -925,6 +970,8 @@ fn write(w: *Writer, options: PrintOptions) !void {
     if (col_instr.active) try printDivider(w, col_instr);
     if (col_ipc.active) try printDivider(w, col_ipc);
     if (col_miss.active) try printDivider(w, col_miss);
+    if (col_page_faults.active) try printDivider(w, col_page_faults);
+    if (col_ctx_switches.active) try printDivider(w, col_ctx_switches);
     try w.writeAll("\n");
 
     // Data Rows
@@ -935,8 +982,8 @@ fn write(w: *Writer, options: PrintOptions) !void {
         const name_s = try std.fmt.bufPrint(&buf, "`{s}`", .{m.name});
         try printCell(w, name_s, col_name);
 
-        // Time
-        try printCell(w, try fmtTime(&buf, m.mean_ns), col_time);
+        // Time (with ± std deviation)
+        try printCell(w, try fmtTimeWithSd(&buf, m.mean_ns, m.std_dev_ns), col_time);
 
         // Relative
         if (col_speedup.active) {
@@ -978,6 +1025,12 @@ fn write(w: *Writer, options: PrintOptions) !void {
         if (col_miss.active) {
             if (m.cache_misses) |v| try printCell(w, try fmtMetric(&buf, v), col_miss) else try printCell(w, "-", col_miss);
         }
+        if (col_page_faults.active) {
+            if (m.page_faults) |v| try printCell(w, try fmtMetric(&buf, v), col_page_faults) else try printCell(w, "-", col_page_faults);
+        }
+        if (col_ctx_switches.active) {
+            if (m.context_switches) |v| try printCell(w, try fmtMetric(&buf, v), col_ctx_switches) else try printCell(w, "-", col_ctx_switches);
+        }
 
         try w.writeAll("\n");
     }
@@ -1016,6 +1069,22 @@ fn fmtTime(buf: []u8, ns: f64) ![]const u8 {
     return std.fmt.bufPrint(buf, "{d:.2} s", .{ns / 1_000_000_000.0});
 }
 
+/// Formats `mean ns ± sd ns` using the unit picked by `mean` for both halves,
+/// so the values line up visually instead of jumping between us / ns / ms.
+fn fmtTimeWithSd(buf: []u8, mean_ns: f64, sd_ns: f64) ![]const u8 {
+    const divisor: f64, const unit: []const u8 = blk: {
+        if (mean_ns < 1_000) break :blk .{ 1.0, "ns" };
+        if (mean_ns < 1_000_000) break :blk .{ 1_000.0, "us" };
+        if (mean_ns < 1_000_000_000) break :blk .{ 1_000_000.0, "ms" };
+        break :blk .{ 1_000_000_000.0, "s" };
+    };
+    return std.fmt.bufPrint(buf, "{d:.2} {s} ± {d:.3}", .{
+        mean_ns / divisor,
+        unit,
+        sd_ns / divisor,
+    });
+}
+
 fn fmtBytes(buf: []u8, mb: f64) ![]const u8 {
     if (mb > 1000) return std.fmt.bufPrint(buf, "{d:.2}GB/s", .{mb / 1024.0});
     return std.fmt.bufPrint(buf, "{d:.2}MB/s", .{mb});
@@ -1030,7 +1099,7 @@ fn fmtMetric(buf: []u8, val: f64) ![]const u8 {
 
 pub const Options = struct {
     warmup_iters: u64 = 100,
-    sample_size: u64 = 1000,
+    sample_size: u64 = 3000,
     bytes_per_op: usize = 0,
 };
 
@@ -1128,14 +1197,25 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
     };
 
     if (builtin.os.tag == .linux) {
-        const events = [_]Event{ .cpu_cycles, .instructions, .cache_misses };
-        const perf_group = Group(&events);
-        if (perf_group.init()) |pg| {
+        const hw_events = [_]Event{ .cpu_cycles, .instructions, .cache_misses };
+        const sw_events = [_]Event{ .page_faults, .context_switches };
+        const HwGroup = Group(&hw_events);
+        const SwGroup = Group(&sw_events);
+
+        // Counters just accumulate, so we don't need anywhere near `sample_size`
+        // samples for an accurate per-op average — cap the perf pass so a
+        // larger timing-pass `sample_size` doesn't multiply the bench runtime.
+        const perf_samples = @min(options.sample_size, 1000);
+        const total_ops = @as(f64, @floatFromInt(perf_samples * batch_size));
+
+        // Hardware PMU events. These require a real PMU; CI runners and other
+        // VMs typically don't expose one, so this attempt fails there.
+        if (HwGroup.init()) |pg| {
             var group = pg;
             defer group.deinit();
 
             try group.enable();
-            for (0..options.sample_size) |_| {
+            for (0..perf_samples) |_| {
                 for (0..batch_size) |_| {
                     try execute(function, runtime_args);
                 }
@@ -1143,7 +1223,6 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
             try group.disable();
 
             const m = try group.read();
-            const total_ops = @as(f64, @floatFromInt(options.sample_size * batch_size));
             const avg_cycles = @as(f64, @floatFromInt(m.cpu_cycles)) / total_ops;
             const avg_instr = @as(f64, @floatFromInt(m.instructions)) / total_ops;
             const avg_misses = @as(f64, @floatFromInt(m.cache_misses)) / total_ops;
@@ -1154,7 +1233,27 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
             if (avg_cycles > 0) {
                 metrics.ipc = avg_instr / avg_cycles;
             }
-        } else |_| {} // skip counter if we can't open it
+        } else |_| {
+            // Hardware PMU unavailable — fall back to kernel-tracked software
+            // events. These at least give *something* visible in CI (page
+            // faults catch allocation churn, context switches catch noise).
+            if (SwGroup.init()) |pg| {
+                var group = pg;
+                defer group.deinit();
+
+                try group.enable();
+                for (0..perf_samples) |_| {
+                    for (0..batch_size) |_| {
+                        try execute(function, runtime_args);
+                    }
+                }
+                try group.disable();
+
+                const m = try group.read();
+                metrics.page_faults = @as(f64, @floatFromInt(m.page_faults)) / total_ops;
+                metrics.context_switches = @as(f64, @floatFromInt(m.context_switches)) / total_ops;
+            } else |_| {}
+        }
     }
 
     return metrics;
