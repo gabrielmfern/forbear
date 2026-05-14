@@ -13,25 +13,34 @@ A GUI application framework with the purpose of creating apps that are as beauti
 const forbear = @import("forbear");
 
 fn App() void {
-  const count = forbear.useState(u32, 0);
-
-  // forbear is an immediate-mode GUI framework. Each frame, your code
-  // describes the UI tree using function calls and re-renders everything, 
-  // doing layouting again as well.
-  //
-  // the second call opens a scope for children — this is how you nest elements.
-  forbear.element(.{ .width = .grow, .direction = .vertical })({
-    forbear.printText("Count: {d}", .{count.value.*});
-    
+  forbear.component(.{})({
+    // forbear is an immediate-mode GUI framework. Each frame, your code
+    // describes the UI tree using function calls and re-renders everything, 
+    // doing layouting again as well.
+    //
+    // the second call opens a scope for children — this is how you nest elements.
     forbear.element(.{ 
-      .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
-      .borderRadius = 8.0,
+      .style = .{
+        .width = .grow, 
+        .direction = .vertical
+      },
     })({
-      if (forbear.on(.click)) {
-        count.value.* += 1;
-      }
+      const count = forbear.useState(u32, 0);
 
-      forbear.text("Increment");
+      forbear.printText("Count: {d}", .{count.value.*});
+      
+      forbear.element(.{ 
+        .style = .{
+          .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
+          .borderRadius = 8.0,
+        },
+      })({
+        if (forbear.on(.click)) {
+          count.* += 1;
+        }
+
+        forbear.text("Increment");
+      });
     });
   });
 }
