@@ -490,21 +490,27 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
     // remains through an unbroken chain down to that descendant.
     //
     // an atom can only be a leaf node, or a slice of glyphs.
+    //
+    // if I try to place the leaf node, I need to also place the parents up to
+    // the inline ancestor
+    //
+    // necessarily the cursor placement of nodes is tied to the parent. the
+    // only exception is indeed when wrapping happens.
 
-    var cursor: Vec2 = .{ 0, 0 };
+    var cursor: Vec2 = @splat(0.0);
     var currentParent = nodeTree.at(0);
     var segment: std.ArrayList(Atom) = .empty;
 
     for (nodeTree.list.items) |*node| {
         if (node.style.inLine) {
             if (node.glyphs) |glyphs| {
-                if (node.style.textWrapping == .none) {
-                    try segment.append(arena, Atom{
-                        .size = node.size,
-                        .payload = .{ .node = node },
-                    });
-                }
                 switch (node.style.textWrapping) {
+                    .none => {
+                        try segment.append(arena, Atom{
+                            .size = node.size,
+                            .payload = .{ .node = node },
+                        });
+                    },
                     .character => {
                         for (glyphs.slice, 0..) |glyph, i| {
                             try segment.append(arena, Atom{
@@ -543,22 +549,25 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
             // An inline node that has children does not contribute an atom
             // itself, so we do nothing since the loop should do its job in the
             // remaining iterations
-        } else if (segment.items.len == 0) {
-            if (node.parent) |parent| {
-                const direction = nodeTree.at(parent).style.d;
-                node.position = cursor + Vec2{
-                    node.style.margin.x[0],
-                    node.style.margin.y[0],
-                };
-                if (direction == .horizontal) {
-                    cursor[0] += node.style.margin.x[0] + node.size[0] + node.style.margin.x[1];
-                    cursor[1] = @max(cursor[1], node.style.margin.y[0] + node.size[1] + node.style.margin.y[1]);
-                } else {
-                    cursor[1] += node.style.margin.y[0] + node.size[1] + node.style.margin.y[1];
-                    cursor[0] = @max(cursor[0], node.style.margin.x[0] + node.size[0] + node.style.margin.x[1]);
+        } else {
+            if (segment.items.len == 0) {
+                if (node.parent) |parent| {
+                    const direction = nodeTree.at(parent).style.d;
+                    node.position = cursor + Vec2{
+                        node.style.margin.x[0],
+                        node.style.margin.y[0],
+                    };
+                    if (direction == .horizontal) {
+                        cursor[0] += node.style.margin.x[0] + node.size[0] + node.style.margin.x[1];
+                        cursor[1] = @max(cursor[1], node.style.margin.y[0] + node.size[1] + node.style.margin.y[1]);
+                    } else {
+                        cursor[1] += node.style.margin.y[0] + node.size[1] + node.style.margin.y[1];
+                        cursor[0] = @max(cursor[0], node.style.margin.x[0] + node.size[0] + node.style.margin.x[1]);
+                    }
                 }
             }
-        } else {
+
+            // flush the segment by wrapping the atoms and placing them
             const Line = struct {
                 start: usize,
                 end: usize,
@@ -566,9 +575,8 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
                 height: f32,
             };
 
-            var cursor: Vec2 = @splat(0.0);
-            for (segment.items) |atom| {
-            }
+            var atomCursor: Vec2 = @splat(0.0);
+            for (segment.items) |atom| {}
             segment.clearRetainingCapacity();
         }
         if (node.firstChild != null) {
