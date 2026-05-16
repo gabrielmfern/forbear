@@ -35,40 +35,82 @@ I've come to decide we should abandon this idea. Though it is an interesting DX 
 
 Raddebugger as an inspiration, defines a list of strings for any UI_Box which have styles specific to them, this way the same-wrapped piece of text can have styles.
 
-**Option A — `text()` as a scope that collects styled runs (HTML-like DX)**
+### `text()` as a scope that collects styled runs
 
 ```zig
 forbear.text(.{})({
-    forbear.write("Wayland is a ");
-    Strong()({ forbear.write("display server protocol"); });
-    forbear.write(", successor to ");
-    Em()({ forbear.write("X.Org"); });
+  forbear.write("Wayland is a ");
+  Strong({ 
+    forbear.write("display server protocol"); 
+  });
+  forbear.write(", successor to ");
+  Em({ 
+    forbear.write("X.Org"); 
+  });
 });
 
-pub const Strong = forbear.textStyle(.{ .fontWeight = 700 });
-pub const Em     = forbear.textStyle(.{ .fontStyle = .italic });
+pub fn Strong() *const fn(void) void {
+  return forbear.textStyle(.{ .fontWeight = 700 });
+}
+pub fn Em() *const fn(void) void {
+  return forbear.textStyle(.{ .fontStyle = .italic });
+}
 ```
 
-**Option B — declarative spans (egui/Flutter shape)**
+Pros:
+- DX is very much like HTML
+- `Strong`/`Em` stay as real reusable components, same shape as the rest of the codebase.
+- Composes with control flow naturally — you can `if`/`for`/`switch` inside the `text()` block and each branch just writes more spans.
+- Base style only spelled once; nested scopes layer overrides on top.
+
+Cons:
+- Can easily confuse users making them write an element down inside of text, which is invalid, or use the "style helpers" as elements or components.
+- Feels a little repetitive with the node tree, because we will need to track down the enabled styles from scopes like the ones in the example
+- Requires implicit per-frame state (a "current text builder") that `write` and `textStyle` push into — same shape as the existing hook/component scope stack, but one more thing to maintain.
+- Compile-time enforcement that `Strong` only works inside `text()` is hard to express in Zig; the violation likely shows up as a runtime panic or just wrong output.
+- Style inheritance through scope makes it less obvious at the call site which styles apply to a given `write`.
+
+### declarative spans (egui/Flutter shape)
 
 ```zig
 forbear.richText(.{ .spans = &.{
-    .{ .text = "Wayland is a " },
-    .{ .text = "display server protocol", .style = .{ .fontWeight = 700 } },
-    .{ .text = ", successor to " },
-    .{ .text = "X.Org", .style = .{ .fontStyle = .italic } },
+  .{ .text = "Wayland is a " },
+  .{ .text = "display server protocol", .style = .{ .fontWeight = 700 } },
+  .{ .text = ", successor to " },
+  .{ .text = "X.Org", .style = .{ .fontStyle = .italic } },
 }});
 ```
 
-**Option C — SwiftUI-style concatenation**
+Pros:
+- No implicit scope state — the spans are just data, easy to pass around, build dynamically, or come from i18n.
+- Trivial to implement: one array, one shape pass, no stack to maintain.
+- Impossible to misuse: you can't write a normal element inside a span list.
+
+Cons:
+- Loses the nestable `Strong()`/`Em()` component DX that HTML has.
+- Verbose for long text — every span is a struct literal.
+- Sharing a base style across spans means repeating the style block or constructing a base variable manually
+- Does not have composaibility, so you can't use a component that defines itself styles that you'd reuse.
+- Reusing styles is a different pattern that just doing components, which is the more elegant DX.
+- Not as easy to mix with control-flow (if statements, for-loops, etc.)
+
+### SwiftUI-style concatenation
 
 ```zig
 forbear.text(.{})(
-    forbear.run("Wayland is a ")
-        .append(forbear.run("display server protocol").bold())
-        .append(forbear.run(", successor to "))
-        .append(forbear.run("X.Org").italic()),
+  forbear.run("Wayland is a ")
+    .append(forbear.run("display server protocol").bold())
+    .append(forbear.run(", successor to "))
+    .append(forbear.run("X.Org").italic()),
 );
 ```
+
+Pros:
+- Reads close to prose, no separate style block per span.
+- No scope state — the chain is the data.
+
+Cons:
+- Awkward in Zig without method chaining ergonomics; every `.bold()` etc. needs an explicit method on a builder type.
+- Hard to mix with control flow (loops, conditional spans) without breaking the chain.
 
 
