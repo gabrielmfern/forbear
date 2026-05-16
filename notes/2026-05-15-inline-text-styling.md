@@ -1,3 +1,20 @@
+How others do it: 
+**Tree of styled inline nodes**
+- HTML/CSS: `display: inline` elements, which exist in contrast to `display: block` for elements like `<span>`, `<strong>`, `<u>`, etc.
+- Flutter: `RichText` with a root `TextSpan` and child `TextSpan`s, each with its own `TextStyle`. The whole tree is shaped as one paragraph so wrapping works across style changes.
+- React Native: nested `<Text>` components — inner `Text` inherits and overrides styles, parent owns wrapping.
+- SwiftUI: `Text("a ").bold() + Text("b").foregroundColor(.red)` — concatenation builds one logical text block that wraps as a unit.
+
+**Single string + attribute ranges**
+- NSAttributedString / TextKit (Cocoa): one `NSString` plus attributes keyed by `NSRange`.
+- egui: `LayoutJob` — a string plus a `Vec<LayoutSection>` mapping byte ranges to `TextFormat`.
+- GPUI (Zed): `StyledText` with `HighlightStyle` applied over ranges of a single string.
+- Qt: `QTextLayout` with `QTextFormatRange`.
+- Skia ParagraphBuilder: builder where you `pushStyle`/`addText`/`popStyle`; produces style runs over one paragraph.
+- Raddebugger: per-UI_Box list of strings + styles — same shape as attribute-range, structured as parallel arrays.
+
+**Non-solution: Dear ImGui** — `TextColored`, `SameLine()`, `PushStyleColor`. No real wrapping across mixed-style runs; `TextWrapped` only handles a single style.
+
 ## inline nodes approach
 
 HTML/CSS does this through `display: inline` elements, which exist in contrast to `display: block` for elements like `<span>`, `<strong>`, `<u>`, etc.
@@ -16,4 +33,42 @@ I've come to decide we should abandon this idea. Though it is an interesting DX 
 
 ## Text-specific styles
 
-Raddebugger as in inspiration, lets the glyphs inside of a UI_Box have styles specific to them, this way the same piece of text can have styles.
+Raddebugger as an inspiration, defines a list of strings for any UI_Box which have styles specific to them, this way the same-wrapped piece of text can have styles.
+
+**Option A — `text()` as a scope that collects styled runs (HTML-like DX)**
+
+```zig
+forbear.text(.{})({
+    forbear.write("Wayland is a ");
+    Strong()({ forbear.write("display server protocol"); });
+    forbear.write(", successor to ");
+    Em()({ forbear.write("X.Org"); });
+});
+
+pub const Strong = forbear.textStyle(.{ .fontWeight = 700 });
+pub const Em     = forbear.textStyle(.{ .fontStyle = .italic });
+```
+
+**Option B — declarative spans (egui/Flutter shape)**
+
+```zig
+forbear.richText(.{ .spans = &.{
+    .{ .text = "Wayland is a " },
+    .{ .text = "display server protocol", .style = .{ .fontWeight = 700 } },
+    .{ .text = ", successor to " },
+    .{ .text = "X.Org", .style = .{ .fontStyle = .italic } },
+}});
+```
+
+**Option C — SwiftUI-style concatenation**
+
+```zig
+forbear.text(.{})(
+    forbear.run("Wayland is a ")
+        .append(forbear.run("display server protocol").bold())
+        .append(forbear.run(", successor to "))
+        .append(forbear.run("X.Org").italic()),
+);
+```
+
+
