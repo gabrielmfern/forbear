@@ -523,14 +523,14 @@ fn wrapSegment(arena: std.mem.Allocator, segment: Segment) !void {
         line.width += atom.size[0];
         line.height = @max(line.height, atom.size[1]);
 
-        for (atom.glyphs) |glyph| {
+        for (atom.glyphs) |*glyph| {
             // glyph position is relative to the source node,
             // therefore just adding this here is enough
             glyph.position += segmentCursor;
         }
         atom.node.position += segmentCursor;
 
-        segmentCursor += atom.size[0];
+        segmentCursor[0] += atom.size[0];
     }
     if (lines.size > 0.0) {
         try lines.append(arena, line);
@@ -541,23 +541,9 @@ fn wrapSegment(arena: std.mem.Allocator, segment: Segment) !void {
 }
 
 pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
-    // a segment can be formed going down to any depth, as long as the inline
-    // remains through an unbroken chain down to that descendant.
-    //
-    // an atom can only be a leaf node, or a slice of glyphs.
-    //
-    // if I try to place the leaf node, I need to also place the parents up to
-    // the inline ancestor
-    //
-    // necessarily the cursor placement of nodes is tied to the parent. the
-    // only exception is indeed when wrapping happens.
     var segment: Segment = .{ .parent = undefined, .parentIndex = undefined, .atoms = .empty };
 
     for (nodeTree.list.items) |*node| {
-        // TOOD: we need to account for when the segment has began and the chain
-        // remains unbroken until the children of its parent end, and then the
-        // parent has a sibling that is inline. in that specific case we should
-        // break up the chain and consider it the beginning of a new segment
         if (node.style.inLine) {
             if (segment.atoms.items.len == 0) {
                 if (node.parent == null) {
@@ -582,6 +568,10 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
                 if (!isDescendant) {
                     try wrapSegment(arena, segment);
                     segment.atoms.clearRetainingCapacity();
+
+                    std.debug.assert(node.parent != null);
+                    segment.parent = nodeTree.at(node.parent.?);
+                    segment.parentIndex = node.parent.?;
                 }
             }
             if (node.glyphs) |glyphs| {
@@ -629,6 +619,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
                     else => unreachable,
                 }
             } else if (node.firstChild == null) {
+                // all node atoms are leaf nodes
                 try segment.atoms.append(arena, Segment.Atom{
                     .size = node.size,
                     .node = node,
@@ -656,103 +647,10 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *const NodeTree) !void {
         }
     }
     if (segment.atoms.items.len > 0) {
-        // this mean the tree ended on an inline node, with a segment we need to
+        // this means the tree ended on an inline node, with a segment we need to
         // wrap
         try wrapSegment(arena, segment);
     }
-    // const base = Vec2{
-    //     node.style.borderWidth.x[0] + node.style.padding.x[0],
-    //     node.style.borderWidth.y[0] + node.style.padding.y[0],
-    // };
-    //
-    // if (node.firstChild) |firstChildIndex| {
-    //     var cursor = base;
-    //     var lines = std.ArrayList(Line).empty;
-    //     var currentLine = Line{ .start = firstChildIndex, .end = firstChildIndex, .width = 0.0, .height = 0.0 };
-    //     var wrapHeightAddition: f32 = 0.0;
-    //
-    //     var childIndexOption = node.firstChild;
-    //     while (childIndexOption) |childIndex| {
-    //         const child = nodeTree.at(childIndex);
-    //         try wrapAndPlace(arena, child, nodeTree);
-    //
-    //         if (child.style.placement == .flow) {
-    //             const childOuterWidth = child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
-    //             const childOuterHeight = child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
-    //
-    //             if (node.style.overflow == .wrap) {
-    //                 const remainingSpace = node.size[0] - cursor[0] - node.style.borderWidth.x[1] - node.style.padding.x[1];
-    //                 if (childOuterWidth > remainingSpace) {
-    //                     const addition = currentLine.height + child.style.margin.y[0];
-    //                     cursor[1] += addition;
-    //                     // TODO: where does the bottom margin get used in this flow? I believe we're missing something
-    //                     node.size[1] += addition;
-    //                     wrapHeightAddition += addition;
-    //                     if (node.style.width == .ratio) {
-    //                         node.size[0] = node.size[1] * node.style.width.ratio;
-    //                     }
-    //                     cursor[0] = base[0];
-    //                     try lines.append(arena, currentLine);
-    //
-    //                     // New line starts at the overflow child; .end is still the prior line until assigned below.
-    //                     currentLine = .{ .start = childIndex, .end = childIndex, .width = 0, .height = 0 };
-    //                 }
-    //             }
-    //
-    //             cursor[0] += child.style.margin.x[0];
-    //             child.position = cursor + Vec2{ 0, child.style.margin.y[0] };
-    //             cursor[0] += child.size[0] + child.style.margin.x[1];
-    //
-    //             currentLine.width += childOuterWidth;
-    //             currentLine.height = @max(currentLine.height, childOuterHeight);
-    //         }
-    //
-    //         currentLine.end = childIndex;
-    //         childIndexOption = child.nextSibling;
-    //     }
-    //     try lines.append(arena, currentLine);
-    //
-    //     if (node.style.overflow == .wrap) {
-    //         // Wrap containers: height = base + wrapped lines + last line
-    //         node.size[1] = node.fittingBase(.vertical) + wrapHeightAddition + currentLine.height;
-    //         if (node.style.width == .ratio) {
-    //             node.size[0] = node.size[1] * node.style.width.ratio;
-    //         }
-    //     } else if (node.style.height == .fit or node.style.height.isGrow()) {
-    //         // Non-wrap: expand height to fit tallest child
-    //         const newHeight = node.fittingBase(.vertical) + currentLine.height;
-    //         node.size[1] = @max(node.size[1], newHeight);
-    //     }
-    //
-    //     const availableWidth = node.size[0] - node.fittingBase(.horizontal);
-    //     const availableHeight = node.size[1] - node.fittingBase(.vertical);
-    //     for (lines.items) |line| {
-    //         const xOffset: f32 = switch (node.style.xJustification) {
-    //             .start => 0.0,
-    //             .center => (availableWidth - line.width) / 2.0,
-    //             .end => availableWidth - line.width,
-    //         };
-    //         // For single-line containers, align children within the
-    //         // full available height so .center/.end work when the
-    //         // parent is taller than its content. For multi-line
-    //         // (wrapping), align within each line's height.
-    //         const alignHeight = if (lines.items.len == 1) @max(line.height, availableHeight) else line.height;
-    //         childIndexOption = line.start;
-    //         while (childIndexOption) |childIndex| {
-    //             const child = nodeTree.at(childIndex);
-    //             if (child.style.placement == .flow) {
-    //                 child.position[0] += xOffset;
-    //                 child.position[1] += switch (node.style.yJustification) {
-    //                     .start => 0.0,
-    //                     .center => (alignHeight - child.size[1]) / 2.0,
-    //                     .end => alignHeight - child.size[1],
-    //                 };
-    //             }
-    //             if (childIndex == line.end) break;
-    //             childIndexOption = child.nextSibling;
-    //         }
-    //     }
-    // }
 }
 
 pub fn layout() !*NodeTree {
