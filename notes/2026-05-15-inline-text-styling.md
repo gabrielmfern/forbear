@@ -46,7 +46,9 @@ forbear.text(.{})({
     forbear.write("X.Org"); 
   });
 });
+```
 
+```zig 
 pub fn Strong() *const fn(void) void {
   return forbear.textStyle(.{ .fontWeight = 700 });
 }
@@ -68,10 +70,35 @@ Cons:
 - Compile-time enforcement that `Strong` only works inside `text()` is hard to express in Zig; the violation likely shows up as a runtime panic or just wrong output.
 - Style inheritance through scope makes it less obvious at the call site which styles apply to a given `write`.
 
+I like this API the best though it has its downsides. We should also somehow support users writing just the raw string without having to do forbear.text -> forbear.write every single time.
+
+An idea for this would be to keep forbear.text just receiving a strinw:
+
+```zig
+forbear.text("Wayland is a display server protocol, successor to X.Org");
+```
+
+and then have with a new primitive:
+
+```zig
+forbear.composeText(.{})({
+  forbear.write("Wayland is a ");
+  Strong({ 
+    forbear.write("display server protocol"); 
+  });
+  forbear.write(", successor to ");
+  Em({ 
+    forbear.write("X.Org"); 
+  });
+});
+```
+
+This feels like it would make it less likely the user could confuse this and use forbear.element, or forbear.component in this.
+
 ### declarative spans (egui/Flutter shape)
 
 ```zig
-forbear.richText(.{ .spans = &.{
+forbear.text(.{ .spans = &.{
   .{ .text = "Wayland is a " },
   .{ .text = "display server protocol", .style = .{ .fontWeight = 700 } },
   .{ .text = ", successor to " },
