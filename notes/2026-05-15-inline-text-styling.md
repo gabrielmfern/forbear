@@ -13,8 +13,6 @@ How others do it:
 - Skia ParagraphBuilder: builder where you `pushStyle`/`addText`/`popStyle`; produces style runs over one paragraph.
 - Raddebugger: per-UI_Box list of strings + styles — same shape as attribute-range, structured as parallel arrays.
 
-**Non-solution: Dear ImGui** — `TextColored`, `SameLine()`, `PushStyleColor`. No real wrapping across mixed-style runs; `TextWrapped` only handles a single style.
-
 ## inline nodes approach
 
 HTML/CSS does this through `display: inline` elements, which exist in contrast to `display: block` for elements like `<span>`, `<strong>`, `<u>`, etc.
