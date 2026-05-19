@@ -257,6 +257,22 @@ pub const CompleteStyle = struct {
         }
         return self.minHeight;
     }
+
+    pub fn fittingBase(self: @This(), direction: Direction) f32 {
+        const paddingVector = self.padding.get(direction);
+        const padding = paddingVector[0] + paddingVector[1];
+        const borderWidthVector = self.borderWidth.get(direction);
+        const border = borderWidthVector[0] + borderWidthVector[1];
+        return padding + border;
+    }
+
+    pub fn shouldFitMin(self: @This(), direction: Direction) bool {
+        const preferredSize = self.getPreferredSize(direction);
+        return switch (preferredSize) {
+            .fixed => false,
+            else => self.getMinSize(direction) == null,
+        };
+    }
 };
 
 pub const BaseStyle = struct {
@@ -472,70 +488,37 @@ pub const Glyphs = struct {
 /// Utilizies a flat tree structure where ndoes can reference one another by
 /// using indices, this way keeping stable references without using pointers.
 pub const NodeTree = struct {
-    list: std.ArrayList(Node),
+    list: std.MultiArrayList(Node) = .{},
 
-    pub const empty = @This(){ .list = .empty };
-
-    pub const Walker = struct {
-        start: usize,
-        current: ?usize,
-        tree: *const NodeTree,
-
-        pub fn reset(self: *@This()) void {
-            self.current = null;
-        }
-
-        fn nextOutside(self: *@This(), index: usize) ?usize {
-            const node = self.tree.at(index);
-            if (node.nextSibling) |nextSibling| {
-                return nextSibling;
-            } else if (node.parent) |parentIndex| {
-                return self.nextOutside(parentIndex);
-            } else {
-                return null;
-            }
-        }
-
-        pub fn next(self: *@This()) ?*Node {
-            if (self.current) |current| {
-                const node = self.tree.at(current);
-                if (node.firstChild) |firstChild| {
-                    self.current = firstChild;
-                } else {
-                    self.current = self.nextOutside(current);
-                }
-            } else {
-                self.current = self.start;
-            }
-
-            const idx = self.current orelse return null;
-            return self.tree.at(idx);
-        }
-    };
+    pub const empty: @This() = .{};
 
     pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
         self.list.deinit(allocator);
     }
 
     pub fn clearRetainingCapacity(self: *@This()) void {
-        self.list.clearRetainingCapacity();
+        self.list.shrinkRetainingCapacity(0);
     }
 
-    pub fn walk(self: *@This()) Walker {
-        return Walker{
-            .start = 0,
-            .current = null,
-            .tree = self,
-        };
+    pub fn len(self: @This()) usize {
+        return self.list.len;
     }
 
-    pub fn at(self: @This(), index: usize) *Node {
-        return &self.list.items[index];
+    pub fn slice(self: *@This()) std.MultiArrayList(Node).Slice {
+        return self.list.slice();
     }
 
-    pub fn dump(self: *const @This(), writer: *std.Io.Writer) !void {
-        if (self.list.items.len > 0) {
-            try self.list.items[0].dump(writer, 0, 0);
+    /// Returns the node at `index` *by value*, assembled from the underlying
+    /// column storage. Read-only — mutations require column writes via
+    /// `slice()`.
+    pub fn at(self: @This(), index: usize) Node {
+        return self.list.get(index);
+    }
+
+    pub fn dump(self: *@This(), writer: *std.Io.Writer) !void {
+        if (self.list.len > 0) {
+            const node = self.list.get(0);
+            try node.dump(writer, 0, 0);
             try writer.flush();
         }
     }
@@ -544,53 +527,33 @@ pub const NodeTree = struct {
         self: *@This(),
         allocator: std.mem.Allocator,
         parentOpt: ?usize,
-    ) !struct { ptr: *Node, index: usize } {
-        const index = self.list.items.len;
+    ) !usize {
+        const index = self.list.len;
         if (index != 0 and parentOpt == null) {
             return error.MultipleRootsAreNotAllowed;
         }
 
-        var node = Node{
+        try self.list.append(allocator, .{
             .tree = self,
-
             .parent = parentOpt,
-            .firstChild = null,
-            .lastChild = null,
-            .previousSibling = null,
-            .nextSibling = null,
+        });
 
-            .key = undefined,
-
-            .position = undefined,
-            .z = undefined,
-            .size = undefined,
-            .maxSize = undefined,
-            .minSize = undefined,
-
-            .style = undefined,
-        };
         if (parentOpt) |parentIndex| {
-            const parent = self.at(parentIndex);
-            if (parent.lastChild) |old_last| {
-                self.at(old_last).nextSibling = index;
-            }
-            node.previousSibling = parent.lastChild;
-            if (parent.firstChild == null) {
-                parent.firstChild = index;
-            }
-            parent.lastChild = index;
-        }
-        try self.list.append(allocator, node);
-        return .{ .ptr = self.at(index), .index = index };
-    }
+            const s = self.list.slice();
+            const firstChilds = s.items(.firstChild);
+            const lastChilds = s.items(.lastChild);
+            const nextSiblings = s.items(.nextSibling);
+            const previousSiblings = s.items(.previousSibling);
 
-    pub fn fitAncestors(self: *@This(), nodeIndex: usize, child: *const Node) void {
-        var currentIndexOpt = self.at(nodeIndex).parent;
-        while (currentIndexOpt) |currentIndex| {
-            const current = self.at(currentIndex);
-            current.fitChild(child);
-            currentIndexOpt = current.parent;
+            if (lastChilds[parentIndex]) |old_last| {
+                nextSiblings[old_last] = index;
+            }
+            previousSiblings[index] = lastChilds[parentIndex];
+            if (firstChilds[parentIndex] == null) firstChilds[parentIndex] = index;
+            lastChilds[parentIndex] = index;
         }
+
+        return index;
     }
 
     test {
@@ -607,26 +570,21 @@ pub const NodeTree = struct {
         _ = try tree.putNode(gpa, 0); // 6
         _ = try tree.putNode(gpa, 0); // 7
 
-        var walker = tree.walk();
-        for (0..10) |_| {
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(0, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(1, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(3, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(5, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(2, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(4, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(6, walker.current);
-            try std.testing.expect(walker.next() != null);
-            try std.testing.expectEqual(7, walker.current);
-            try std.testing.expect(walker.next() == null);
-            try std.testing.expectEqual(null, walker.current);
+        // Linear-scan invariant: every non-root node's parent has a lower
+        // index, and any non-null firstChild has a higher index. Layout
+        // passes rely on this to substitute depth-first walks with
+        // forward/reverse linear scans over the column arrays.
+        const s = tree.list.slice();
+        const parents = s.items(.parent);
+        const firstChilds = s.items(.firstChild);
+        for (1..tree.list.len) |i| {
+            try std.testing.expect(parents[i] != null);
+            try std.testing.expect(parents[i].? < i);
+        }
+        for (0..tree.list.len) |i| {
+            if (firstChilds[i]) |fc| {
+                try std.testing.expect(fc > i);
+            }
         }
     }
 };
@@ -636,17 +594,18 @@ pub const Node = struct {
     // reads `size` (~46×), `position` (~22×), `firstChild` (~15×) and
     // `nextSibling` (~14×) on every traversal, plus `minSize`/`maxSize`
     // during grow/shrink. Together: 4×Vec2 + 2×?usize = 64 B exactly.
-    size: Vec2,
-    position: Vec2,
-    minSize: Vec2,
-    maxSize: Vec2,
+    size: Vec2 = @splat(0.0),
+    position: Vec2 = @splat(0.0),
+    minSize: Vec2 = @splat(0.0),
+    maxSize: Vec2 = @splat(std.math.inf(f32)),
     firstChild: ?usize = null,
     nextSibling: ?usize = null,
 
     // `style` is the most-read field overall (~62× per node) but is a
     // large struct, so it lives right after the hot 64 B and gets its
-    // own cache line(s).
-    style: CompleteStyle,
+    // own cache line(s). Defaulted to `undefined`: callers always assign
+    // the completed style before any layout pass reads it.
+    style: CompleteStyle = undefined,
 
     // Read by layout but only a few times per node, or only by drawing
     // / post-layout walks.
@@ -661,8 +620,8 @@ pub const Node = struct {
     /// Format: [x, y, width, height]. If null, no clipping is applied.
     clipRect: ?Vec4 = null,
     glyphs: ?Glyphs = null,
-    key: u64,
-    z: u16,
+    key: u64 = 0,
+    z: u16 = 0,
 
     // Not touched by layout — back-of-the-struct.
     tree: *NodeTree,
@@ -689,87 +648,6 @@ pub const Node = struct {
             .fixed => false,
             else => self.style.getMinSize(direction) == null,
         };
-    }
-
-    pub fn fitChild(self: *@This(), child: *const Node) void {
-        if (child.style.placement != .flow) return;
-
-        // Check if parent should accumulate child sizes.
-        // .fit nodes always accumulate. .grow nodes also accumulate because
-        // when their parent can't provide space, content determines size.
-        const fitH = self.style.width == .fit or self.style.width.isGrow() or self.shouldFitMin(.horizontal);
-        const fitV = self.style.height == .fit or self.style.height.isGrow() or self.shouldFitMin(.vertical);
-        if (!fitH and !fitV) return;
-
-        const wraps = self.style.overflow == .wrap and self.style.direction == .horizontal;
-
-        inline for (Direction.array) |fitDirection| {
-            const preferredSize = self.style.getPreferredSize(fitDirection);
-            const layoutDirection = self.style.direction;
-            const marginVector = child.style.margin.get(fitDirection);
-            const margins = marginVector[0] + marginVector[1];
-
-            const contribution = margins + child.getSize(fitDirection);
-            // For vertical minSize: use max(size, minSize) to capture wrapped text height
-            // For horizontal minSize: use minSize only to avoid unwrapped text width bloat
-            // Text wrapping changes height, not width, so this distinction matters.
-            const minContribution = margins + if (fitDirection == .vertical)
-                @max(child.getSize(fitDirection), child.getMinSize(fitDirection))
-            else
-                child.getMinSize(fitDirection);
-
-            // For .fit, always accumulate. For .grow, use max to expand if content requires it.
-            const shouldAccumulate = preferredSize == .fit or preferredSize.isGrow();
-
-            if (layoutDirection == fitDirection) {
-                if (wraps) {
-                    // With wrapping, inline-axis min is the widest single
-                    // child (any child could end up alone on a line).
-                    if (shouldAccumulate) {
-                        self.setSize(fitDirection, @max(
-                            self.getSize(fitDirection),
-                            contribution + self.fittingBase(fitDirection),
-                        ));
-                    }
-                    if (self.shouldFitMin(fitDirection)) {
-                        self.setMinSize(fitDirection, @max(
-                            self.getMinSize(fitDirection),
-                            minContribution + self.fittingBase(fitDirection),
-                        ));
-                    }
-                } else {
-                    if (preferredSize == .fit) {
-                        // TODO: ensure the max and min sizes here
-                        self.addSize(fitDirection, contribution);
-                    } else if (preferredSize.isGrow()) {
-                        // For grow, expand to fit content if needed
-                        self.setSize(fitDirection, @max(
-                            self.getSize(fitDirection),
-                            contribution + self.fittingBase(fitDirection),
-                        ));
-                    }
-                    if (self.shouldFitMin(fitDirection)) {
-                        // Main axis: use minSize to avoid unwrapped text bloat
-                        self.addMinSize(fitDirection, minContribution);
-                    }
-                }
-            } else {
-                // cross axis fitting
-                if (shouldAccumulate) {
-                    // TODO: ensure the max and min sizes here
-                    self.setSize(fitDirection, @max(
-                        contribution + self.fittingBase(fitDirection),
-                        self.getSize(fitDirection),
-                    ));
-                }
-                if (self.shouldFitMin(fitDirection)) {
-                    self.setMinSize(fitDirection, @max(
-                        minContribution + self.fittingBase(fitDirection),
-                        self.getMinSize(fitDirection),
-                    ));
-                }
-            }
-        }
     }
 
     /// The size of the element + the margins around it
@@ -905,38 +783,6 @@ pub const Node = struct {
             const child = self.tree.at(ci);
             try child.dump(writer, ci, indent + 1);
             childIdx = child.nextSibling;
-        }
-    }
-
-    pub fn setMinSize(self: *@This(), direction: Direction, size: f32) void {
-        if (direction == .horizontal) {
-            self.minSize[0] = size;
-        } else {
-            self.minSize[1] = size;
-        }
-    }
-
-    pub fn addMinSize(self: *@This(), direction: Direction, increment: f32) void {
-        if (direction == .horizontal) {
-            self.minSize[0] += increment;
-        } else {
-            self.minSize[1] += increment;
-        }
-    }
-
-    pub fn setSize(self: *@This(), direction: Direction, size: f32) void {
-        if (direction == .horizontal) {
-            self.size[0] = size;
-        } else {
-            self.size[1] = size;
-        }
-    }
-
-    pub fn addSize(self: *@This(), direction: Direction, increment: f32) void {
-        if (direction == .horizontal) {
-            self.size[0] += increment;
-        } else {
-            self.size[1] += increment;
         }
     }
 

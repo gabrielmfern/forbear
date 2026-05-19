@@ -147,11 +147,11 @@ pub fn useScrolling() *ScrollingState {
     forbear.hook();
     defer forbear.hookEnd();
 
-    const node = forbear.getParentNode() orelse {
+    if (forbear.getParentNodeIndex() == null) {
         std.log.err("useScrolling must be used within a node, that's within component", .{});
         forbear.handleFrameError(error.NoParentForScrollingHook);
         return @constCast(&std.mem.zeroes(ScrollingState));
-    };
+    }
     const identity: Vec2 = @splat(0.0);
 
     const state = forbear.useState(ScrollingState, .{
@@ -200,7 +200,7 @@ pub fn useScrolling() *ScrollingState {
         state.effectiveOffset = state.offset;
     }
 
-    node.childrenOffset = -state.effectiveOffset;
+    forbear.setParentChildrenOffset(-state.effectiveOffset);
     return state;
 }
 

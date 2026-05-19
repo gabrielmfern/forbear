@@ -57,13 +57,18 @@ pub fn buildDrawCommands(
     viewport: Vec2,
 ) ![]DrawCommand {
     var nodesToRender = std.ArrayList(usize).empty;
-    for (nodeTree.list.items, 0..) |node, i| {
-        const insideView = node.position[0] + node.size[0] > 0.0 and
-            node.position[1] + node.size[1] > 0.0 and
-            viewport[0] > node.position[0] and
-            viewport[1] > node.position[1];
-        if (!insideView) continue;
-        try nodesToRender.append(arena, i);
+    {
+        const s = nodeTree.list.slice();
+        const positions = s.items(.position);
+        const sizes = s.items(.size);
+        for (0..s.len) |i| {
+            const insideView = positions[i][0] + sizes[i][0] > 0.0 and
+                positions[i][1] + sizes[i][1] > 0.0 and
+                viewport[0] > positions[i][0] and
+                viewport[1] > positions[i][1];
+            if (!insideView) continue;
+            try nodesToRender.append(arena, i);
+        }
     }
 
     // Max possible: each node can emit element + shadow + text = 3 commands
@@ -3837,14 +3842,16 @@ pub const Renderer = struct {
         );
 
         var nodesToRender = std.ArrayList(usize).empty;
-        for (nodeTree.list.items, 0..) |node, i| {
+        {
+            const s = nodeTree.list.slice();
+            const positions = s.items(.position);
+            const sizes = s.items(.size);
             const viewport = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
-            const insideView = node.position[0] + node.size[0] > 0.0 and node.position[1] + node.size[1] > 0.0 and viewport[0] > node.position[0] and viewport[1] > node.position[1];
-            if (!insideView) {
-                continue;
+            for (0..s.len) |i| {
+                const insideView = positions[i][0] + sizes[i][0] > 0.0 and positions[i][1] + sizes[i][1] > 0.0 and viewport[0] > positions[i][0] and viewport[1] > positions[i][1];
+                if (!insideView) continue;
+                try nodesToRender.append(arena, i);
             }
-
-            try nodesToRender.append(arena, i);
         }
 
         const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
