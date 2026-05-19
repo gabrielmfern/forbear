@@ -1152,6 +1152,20 @@ pub fn BreakLine() void {
     });
 }
 
+fn composeTextEnd(block: void) void {
+    _ = block;
+}
+
+// I like the API of this for doing styles on text, but I really do not like this API for using something like a code inline, so we
+// would not supporte background, padding, margin nor anything like that
+//
+// But then, eventually we will definitely support doing something like code inline. Since we're not adding it in from this API, because
+// we're going to repeat code instead of using what we already have for Node, which is not good at all. I also don't want to define a separate
+// Style struct here either :/
+
+pub noinline fn composeText(textStyle: Style) *const fn (void) void {
+}
+
 pub noinline fn text(content: []const u8) void {
     if (content.len == 0) {
         return;

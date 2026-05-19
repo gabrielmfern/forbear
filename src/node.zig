@@ -318,6 +318,36 @@ pub const Placement = union(enum) {
     relative: Vec2,
 };
 
+=
+
+pub const TextStyle = struct {
+    font: ?*Font,
+    backgroundColor: ?Vec4,
+    color: ?Vec4,
+    fontSize: ?f32,
+    fontWeight: ?u32,
+    lineHeight: ?f32,
+    textWrapping: ?TextWrapping,
+};
+
+pub const CompleteTextStyle = struct {
+    font: *Font,
+    color: Vec4,
+    fontSize: f32,
+    fontWeight: u32,
+    lineHeight: f32,
+    textWrapping: TextWrapping,
+};
+
+pub const BaseTextStyle = struct {
+    font: *Font,
+    color: Vec4,
+    fontSize: f32,
+    fontWeight: u32,
+    lineHeight: f32,
+    textWrapping: TextWrapping,
+};
+
 pub const Style = struct {
     background: ?Background = null,
     blendMode: ?BlendMode = null,
