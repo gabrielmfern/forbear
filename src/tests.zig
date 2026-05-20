@@ -17,7 +17,7 @@ pub const shallowBaseStyle = forbear.BaseStyle{
 /// asserted against a single global state hashmap.
 fn totalStateCount() u32 {
     var n: u32 = 0;
-    var it = forbear.getContext().scopes.valueIterator();
+    var it = forbear.getForbear().scopes.valueIterator();
     while (it.next()) |scope| {
         n += scope.states.count();
     }
@@ -2768,7 +2768,7 @@ test "Element tree stack stability" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{})({
@@ -2834,7 +2834,7 @@ test "Element key stability across frames" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     // Helper to collect keys from the tree
     const collectKeys = struct {
@@ -3296,7 +3296,7 @@ test "Wrapper components produce unique keys from different parent components" {
                 forbear.element(.{})({
                     forbear.BreakLine();
                 });
-                const ctx = forbear.getContext();
+                const ctx = forbear.getForbear();
                 out.* = ctx.nodeTree.at(ctx.nodeTree.list.items.len - 1).key;
             });
         }
@@ -3308,7 +3308,7 @@ test "Wrapper components produce unique keys from different parent components" {
                 forbear.element(.{})({
                     forbear.BreakLine();
                 });
-                const ctx = forbear.getContext();
+                const ctx = forbear.getForbear();
                 out.* = ctx.nodeTree.at(ctx.nodeTree.list.items.len - 1).key;
             });
         }
@@ -3399,7 +3399,7 @@ test "useSpringTransition - basic convergence" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3441,7 +3441,7 @@ test "useSpringTransition - zero delta time" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3472,7 +3472,7 @@ test "useSpringTransition - null delta time" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3497,7 +3497,7 @@ test "useSpringTransition - small delta time" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3534,7 +3534,7 @@ test "useSpringTransition - large delta time" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3568,7 +3568,7 @@ test "useSpringTransition - convergence threshold" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3611,7 +3611,7 @@ test "useSpringTransition - different spring configurations" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3670,7 +3670,7 @@ test "useSpringTransition - heavy mass" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3701,7 +3701,7 @@ test "useSpringTransition - target changes during animation" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3743,7 +3743,7 @@ test "useSpringTransition - negative values" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3778,7 +3778,7 @@ test "useSpringTransition - state persistence across frames" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -3913,7 +3913,7 @@ test "unmounted scope is removed and its states are reaped" {
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -4047,7 +4047,7 @@ test "useState binds to nearest scope: element preferred, component inside eleme
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(std.testing.allocator, std.testing.io, renderer);
     defer forbear.deinit();
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
@@ -4247,7 +4247,7 @@ test "on() mouseEnter and mouseLeave fire on the correct element" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4304,7 +4304,7 @@ test "on() mouseEnter and mouseLeave are edge-triggered" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4451,7 +4451,7 @@ test "element fitting - text child inflates fit parent inline" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{
@@ -4484,7 +4484,7 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.element(.{
@@ -4510,7 +4510,7 @@ test "mouseDown dispatches on button press" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4557,7 +4557,7 @@ test "scroll dispatches to hovered element with accumulated delta" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4602,7 +4602,7 @@ test "scroll is not dispatched to unhovered elements" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4643,7 +4643,7 @@ test "scroll reaches every hovered ancestor" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4707,7 +4707,7 @@ test "scrollDeltaAccumulator transfers to scrollDelta at frame start" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4756,7 +4756,7 @@ test "mouseUp dispatches on button release" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4813,7 +4813,7 @@ test "click fires when mouseDown and mouseUp on same element" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4852,7 +4852,7 @@ test "no click when mouse moves away between mouseDown and mouseUp" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4933,7 +4933,7 @@ test "Component children slotting: basic before + children + after" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
@@ -4981,7 +4981,7 @@ test "Component children slotting: empty slot (no children passed)" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
@@ -5018,7 +5018,7 @@ test "Component children slotting: slot at beginning (no before-content)" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
@@ -5056,7 +5056,7 @@ test "Component children slotting: slot at end (no after-content)" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
@@ -5094,7 +5094,7 @@ test "Component children slotting: multiple instances with different children" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
@@ -5152,7 +5152,7 @@ test "Component children slotting: nested slotted components" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
@@ -5209,7 +5209,7 @@ test "Component children slotting: parent stack stability" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
@@ -5258,7 +5258,7 @@ test "Component children slotting: element children in slot" {
     defer arena.deinit();
     const arenaAllocator = arena.allocator();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     const TestComponent = (struct {
         fn call() *const fn (void) void {
@@ -5339,7 +5339,7 @@ test "Component children slotting: on(.click) inside a slot fires on the right i
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
     defer forbear.deinit();
 
-    const self = forbear.getContext();
+    const self = forbear.getForbear();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

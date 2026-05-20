@@ -41,10 +41,10 @@ const Vec2 = @Vector(2, f32);
 const Vec3 = @Vector(3, f32);
 const Vec4 = @Vector(4, f32);
 
-const Context = @This();
-var context: ?@This() = null;
-pub fn getContext() *@This() {
-    return &context.?;
+const Forbear = @This();
+var forbear: ?@This() = null;
+pub fn getForbear() *@This() {
+    return &forbear.?;
 }
 
 const Scope = struct {
@@ -55,10 +55,13 @@ const Scope = struct {
     /// entry. The map's backing storage and its `*T` values both live in
     /// `arenaAllocator`, so nothing extra needs freeing when the scope
     /// dies — `arenaAllocator.deinit()` releases everything in one shot.
-    states: std.HashMapUnmanaged(usize, StateEntry, StateKeyContext, std.hash_map.default_max_load_percentage) = .empty,
+    states: std.HashMapUnmanaged(
+        usize,
+        struct { ptr: *anyopaque, lastFrame: u32 },
+        ReturnAddressKeyContext,
+        std.hash_map.default_max_load_percentage,
+    ) = .empty,
 };
-
-const StateEntry = struct { ptr: *anyopaque, lastFrame: u32 };
 
 /// SplitMix64 finalizer. Mixes both high and low bits well, so
 /// downstream hashmap slot indexing (low bits) and fingerprinting
@@ -75,31 +78,24 @@ inline fn mixU64(state: u64, value: u64) u64 {
     return z;
 }
 
-/// Identity hash for scope keys. Scope keys are produced by `mixU64`
-/// chains in element / component / text / hook key derivation, so they
-/// are already well-distributed — re-hashing them with Wyhash (the
-/// default `AutoContext` behavior) just burns cycles.
-const ScopeKeyContext = struct {
-    pub fn hash(_: ScopeKeyContext, k: u64) u64 {
+const NoopKeyConext = struct {
+    pub fn hash(_: NoopKeyConext, k: u64) u64 {
         return k;
     }
-    pub fn eql(_: ScopeKeyContext, a: u64, b: u64) bool {
+    pub fn eql(_: NoopKeyConext, a: u64, b: u64) bool {
         return a == b;
     }
 };
 
-/// Per-state hash context. State keys are raw `@returnAddress()`
-/// values, which cluster in their low bits because of code alignment,
-/// so we run them through SplitMix64 before they hit the hashmap.
-const StateKeyContext = struct {
-    pub fn hash(_: StateKeyContext, k: usize) u64 {
+const ReturnAddressKeyContext = struct {
+    pub fn hash(_: ReturnAddressKeyContext, k: usize) u64 {
         var z: u64 = @as(u64, k);
         z = (z ^ (z >> 30)) *% 0xbf58476d1ce4e5b9;
         z = (z ^ (z >> 27)) *% 0x94d049bb133111eb;
         z = z ^ (z >> 31);
         return z;
     }
-    pub fn eql(_: StateKeyContext, a: usize, b: usize) bool {
+    pub fn eql(_: ReturnAddressKeyContext, a: usize, b: usize) bool {
         return a == b;
     }
 };
@@ -145,7 +141,23 @@ pub const FrameMeta = struct {
 // on every `useState` and `pushScope`.
 frameMeta: ?FrameMeta,
 nodeTree: NodeTree,
-scopes: std.HashMapUnmanaged(u64, Scope, ScopeKeyContext, std.hash_map.default_max_load_percentage) = .empty,
+scopes: std.HashMapUnmanaged(
+    u64,
+    Scope,
+    NoopKeyConext,
+    std.hash_map.default_max_load_percentage,
+) = .empty,
+contextValues: std.HashMapUnmanaged(
+    u64,
+    struct {
+        contents: *anyopaque,
+        arenaAllocator: std.heap.ArenaAllocator,
+        lastFrame: u32,
+    },
+    NoopKeyConext,
+    std.hash_map.default_max_load_percentage,
+) = .empty,
+contextStack: std.ArrayList(struct { valueKey: u64, contextKey: u64 }) = .empty,
 scopeStack: std.ArrayList(u64) = .empty,
 nodeStack: std.ArrayList(usize) = .empty,
 /// Monotonically incremented at the start of every `frame()`. Used as
@@ -186,11 +198,11 @@ images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Renderer) !void {
-    if (context != null) {
+    if (forbear != null) {
         return error.AlreadyInitialized;
     }
 
-    context = @This(){
+    forbear = @This(){
         .allocator = allocator,
         .io = io,
 
@@ -226,7 +238,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
 /// Registers a font from the given embedded byte contents. The font is associated with
 /// `uniqueIdentifier` and only deinits when the forbear context is deinited.
 pub fn registerFont(uniqueIdentifier: []const u8, comptime contents: []const u8) !void {
-    const self = getContext();
+    const self = getForbear();
     const result = try self.fonts.getOrPut(uniqueIdentifier);
     if (!result.found_existing) {
         result.value_ptr.* = try Font.init(self.allocator, uniqueIdentifier, contents);
@@ -239,7 +251,7 @@ pub fn registerFont(uniqueIdentifier: []const u8, comptime contents: []const u8)
 /// Before using this, call `registerFont` with the same unique identifier to
 /// ensure the font is loaded and available.
 pub fn useFont(uniqueIdentifier: []const u8) !*Font {
-    const self = getContext();
+    const self = getForbear();
     return self.fonts.getPtr(uniqueIdentifier) orelse {
         std.log.err("Could not find font by the unique identifier {s}", .{uniqueIdentifier});
         return error.FontNotFound;
@@ -248,7 +260,7 @@ pub fn useFont(uniqueIdentifier: []const u8) !*Font {
 
 /// Embeds an image from the given path. Only deinits when the forbear context is deinited.
 pub fn registerImage(uniqueIdentifier: []const u8, comptime contents: []const u8, format: Graphics.Image.Format) !void {
-    const self = getContext();
+    const self = getForbear();
     const result = try self.images.getOrPut(uniqueIdentifier);
     if (!result.found_existing) {
         result.value_ptr.* = try Graphics.Image.init(
@@ -265,7 +277,7 @@ pub fn registerImage(uniqueIdentifier: []const u8, comptime contents: []const u8
 /// Before using this, call `registerImage` with the same unique identifier to
 /// ensure the image is loaded and available.
 pub fn useImage(uniqueIdentifier: []const u8) !*ImageType {
-    const self = getContext();
+    const self = getForbear();
     return self.images.getPtr(uniqueIdentifier) orelse {
         std.log.err("Could not find image by the unique identifier {s}", .{uniqueIdentifier});
         // TODO: return null, and then allow for null in forbear.image where it
@@ -379,7 +391,7 @@ pub fn useSpringTransition(target: f32, config: SpringConfig) f32 {
     hook();
     defer hookEnd();
 
-    const self = getContext();
+    const self = getForbear();
     const value = useState(f32, target);
     const velocity = useState(f32, 0.0);
 
@@ -404,7 +416,7 @@ pub fn useAnimation(duration: f32) Animation {
     hook();
     defer hookEnd();
 
-    const self = getContext();
+    const self = getForbear();
     const state = useState(?AnimationState, null);
 
     if (state.* != null) {
@@ -551,52 +563,52 @@ pub fn hex(comptime value: []const u8) Vec4 {
 }
 
 pub fn useMousePosition() Vec2 {
-    const self = getContext();
+    const self = getForbear();
     return self.mousePosition;
 }
 
 pub fn useViewportSize() Vec2 {
-    const self = getContext();
+    const self = getForbear();
     return self.viewportSize;
 }
 
 pub fn useDeltaTime() f64 {
-    const self = getContext();
+    const self = getForbear();
     return self.deltaTime orelse 0.0;
 }
 
 pub fn useLastUpdateTime() f64 {
-    const self = getContext();
+    const self = getForbear();
     return self.lastUpdateTime orelse self.startTime;
 }
 
 pub fn getParentNode() ?*Node {
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     const index = self.nodeStack.getLastOrNull() orelse return null;
     return self.nodeTree.at(index);
 }
 
 pub fn getPreviousNode() ?*Node {
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     const index = self.frameMeta.?.previousPushedNodeIndex orelse return null;
     return self.nodeTree.at(index);
 }
 
 pub fn useArena() std.mem.Allocator {
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     return self.frameMeta.?.arena;
 }
 
 pub fn useIo() std.Io {
-    const self = getContext();
+    const self = getForbear();
     return self.io;
 }
 
 fn pushScope(key: u64) error{OutOfMemory}!void {
-    const self = getContext();
+    const self = getForbear();
     const result = try self.scopes.getOrPut(self.allocator, key);
     if (result.found_existing) {
         result.value_ptr.lastFrame = self.frameCounter;
@@ -610,7 +622,7 @@ fn pushScope(key: u64) error{OutOfMemory}!void {
 }
 
 fn popScope() void {
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) {
         return;
@@ -619,7 +631,7 @@ fn popScope() void {
 }
 
 pub noinline fn useState(comptime T: type, initialValue: T) *T {
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
 
     if (self.frameMeta.?.err != null) {
@@ -659,7 +671,7 @@ pub noinline fn useState(comptime T: type, initialValue: T) *T {
     }
 }
 
-fn endNoop(block: void) void {
+fn noopEnd(block: void) void {
     _ = block;
 }
 
@@ -716,7 +728,7 @@ pub fn Image(style: Style, img: *ImageType) void {
 
 fn frameEnd(block: void) anyerror!void {
     _ = block;
-    const self = getContext();
+    const self = getForbear();
 
     std.debug.assert(self.frameMeta != null);
     const frameMeta = self.frameMeta.?;
@@ -795,7 +807,7 @@ fn frameEnd(block: void) anyerror!void {
 }
 
 pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
-    const self = getContext();
+    const self = getForbear();
 
     self.scrollDelta = self.scrollDeltaAccumulator;
     self.scrollDeltaAccumulator = @splat(0.0);
@@ -809,7 +821,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
 /// function as return value
 fn elementEnd(block: void) void {
     _ = block;
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     std.debug.assert(self.nodeStack.items.len > 0);
 
@@ -836,17 +848,17 @@ pub const ElementProps = struct {
 };
 
 pub noinline fn element(props: ElementProps) *const fn (void) void {
-    const self = getContext();
+    const self = getForbear();
 
     std.debug.assert(self.frameMeta != null);
 
-    if (self.frameMeta.?.err != null) return &endNoop;
+    if (self.frameMeta.?.err != null) return &noopEnd;
 
     const parentIndexOptional = self.nodeStack.getLastOrNull();
 
     const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
         handleFrameError(err);
-        return &endNoop;
+        return &noopEnd;
     };
 
     const parentOptional = if (parentIndexOptional) |parentIndex|
@@ -944,12 +956,12 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     self.nodeStack.append(self.allocator, result.index) catch |err| {
         handleFrameError(err);
-        return &endNoop;
+        return &noopEnd;
     };
 
     pushScope(result.ptr.key) catch |err| {
         handleFrameError(err);
-        return &endNoop;
+        return &noopEnd;
     };
 
     inline for (Direction.array) |fitDirection| {
@@ -980,7 +992,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 }
 
 pub fn printText(comptime fmt: []const u8, args: anytype) void {
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
 
     const arena = self.frameMeta.?.arena;
@@ -991,6 +1003,80 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
             break :blk "N/A";
         });
     });
+}
+
+pub const UiContext = struct {
+    address: u64,
+    T: type,
+};
+
+pub noinline fn createContext(comptime T: type) UiContext {
+    return .{
+        .address = @as(u64, @returnAddress()),
+        .T = T,
+    };
+}
+
+fn contextEnd(block: void) void {
+    _ = block;
+    const self = getForbear();
+    _ = self.contextStack.pop();
+}
+
+pub fn useContext(
+    comptime uiContext: UiContext,
+) ?*uiContext.T {
+    const self = getForbear();
+    var i = self.contextStack.items.len - 1;
+    while (i >= 0) : (i -= 1) {
+        const contextEntry = self.contextStack.items[i];
+        if (contextEntry.contextKey == uiContext.address) {
+            const valueEntry = self.contextValues.getPtr(contextEntry.valueKey) orelse unreachable;
+            return @alignCast(@ptrCast(valueEntry.contents));
+        }
+    }
+    return null;
+}
+
+pub fn context(
+    comptime uiContext: UiContext,
+    initialValue: context.T,
+) *const fn (void) void {
+    const self = getForbear();
+
+    var valueKey: u64 = 0;
+    if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
+        valueKey = mixU64(valueKey, lastScopeKey);
+    }
+    valueKey = mixU64(valueKey, @as(u64, self.nodeStack.items.len));
+    valueKey = mixU64(valueKey, uiContext.address);
+    valueKey = mixU64(valueKey, @as(u64, @returnAddress()));
+
+    if (!self.contextValues.contains(self.allocator, valueKey)) {
+        const arena = std.heap.ArenaAllocator.init(self.allocator);
+        const value = arena.allocator().create(context.T) catch |err| {
+            handleFrameError(err);
+            return &noopEnd;
+        };
+        value.* = initialValue;
+        self.contextValues.put(self.allocator, valueKey, .{
+            .arenaAllocator = arena,
+            .contents = @alignCast(@ptrCast(value)),
+            .lastFrame = self.frameCounter,
+        }) catch |err| {
+            handleFrameError(err);
+            return &noopEnd;
+        };
+    }
+    self.contextStack.append(self.allocator, .{
+        .contextKey = uiContext.address,
+        .valueKey = valueKey,
+    }) catch |err| {
+        handleFrameError(err);
+        return &noopEnd;
+    };
+
+    return &contextEnd;
 }
 
 pub fn BreakLine() void {
@@ -1004,7 +1090,7 @@ pub noinline fn text(content: []const u8) void {
         return;
     }
 
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
 
     if (self.frameMeta.?.err != null) return;
@@ -1200,7 +1286,7 @@ pub noinline fn text(content: []const u8) void {
 /// (typically from a `forbear.on(.mouseOver)` branch) — the last call wins,
 /// so deeper/later mounted elements take precedence.
 pub fn setCursor(cursor: Cursor) void {
-    const self = getContext();
+    const self = getForbear();
     if (self.window) |window| {
         window.setCursor(cursor, 0) catch |err| {
             std.log.err("Failed to set cursor: {}", .{err});
@@ -1243,7 +1329,7 @@ pub inline fn PropsOf(comptime function: anytype) type {
 }
 
 pub fn handleFrameError(err: anyerror) void {
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
 
     self.frameMeta.?.err = err;
@@ -1256,7 +1342,7 @@ pub fn handleFrameError(err: anyerror) void {
 
 fn componentEnd(block: void) void {
     _ = block;
-    const self = getContext();
+    const self = getForbear();
 
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) {
@@ -1267,7 +1353,7 @@ fn componentEnd(block: void) void {
 }
 
 pub inline fn hook() void {
-    const self = getContext();
+    const self = getForbear();
 
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) {
@@ -1293,11 +1379,11 @@ pub const ComponentProps = struct {
 };
 
 pub inline fn component(props: ComponentProps) *const fn (void) void {
-    const self = getContext();
+    const self = getForbear();
 
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) {
-        return &endNoop;
+        return &noopEnd;
     }
 
     // the component keys wrapping this component and the amount of parents in
@@ -1317,14 +1403,14 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
     const componentKey = k;
     pushScope(componentKey) catch |err| {
         handleFrameError(err);
-        return endNoop;
+        return noopEnd;
     };
 
     return &componentEnd;
 }
 
 pub fn componentChildrenSlot() void {
-    const self = getContext();
+    const self = getForbear();
 
     std.debug.assert(self.frameMeta != null);
     const fm = &self.frameMeta.?;
@@ -1360,7 +1446,7 @@ pub fn componentChildrenSlot() void {
 
 fn componentChildrenSlotEndFn(block: void) void {
     _ = block;
-    const self = getContext();
+    const self = getForbear();
 
     std.debug.assert(self.frameMeta != null);
     const fm = &self.frameMeta.?;
@@ -1394,16 +1480,16 @@ fn componentChildrenSlotEndFn(block: void) void {
 }
 
 pub fn componentChildrenSlotEnd() *const fn (void) void {
-    const self = getContext();
+    const self = getForbear();
 
     std.debug.assert(self.frameMeta != null);
     const fm = &self.frameMeta.?;
-    if (fm.err != null) return &endNoop;
+    if (fm.err != null) return &noopEnd;
 
     const states = &fm.componentChildrenSlotStates;
     if (states.items.len == 0) {
         handleFrameError(error.NoMatchingSlotBegin);
-        return &endNoop;
+        return &noopEnd;
     }
     const slotState = &states.items[states.items.len - 1];
     const parent = self.nodeTree.at(slotState.parentIndex);
@@ -1433,21 +1519,21 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
     // the children block runs as if it were inside the slot's owner.
     slotState.savedPreEndParentStack = fm.arena.dupe(usize, self.nodeStack.items) catch |err| {
         handleFrameError(err);
-        return &endNoop;
+        return &noopEnd;
     };
     slotState.savedPreEndScopeStack = fm.arena.dupe(u64, self.scopeStack.items) catch |err| {
         handleFrameError(err);
-        return &endNoop;
+        return &noopEnd;
     };
     self.nodeStack.clearRetainingCapacity();
     self.nodeStack.appendSlice(self.allocator, slotState.savedSlotParentStack) catch |err| {
         handleFrameError(err);
-        return &endNoop;
+        return &noopEnd;
     };
     self.scopeStack.clearRetainingCapacity();
     self.scopeStack.appendSlice(self.allocator, slotState.savedSlotScopeStack) catch |err| {
         handleFrameError(err);
-        return &endNoop;
+        return &noopEnd;
     };
 
     return &componentChildrenSlotEndFn;
@@ -1462,7 +1548,7 @@ pub fn OnResult(comptime eventTag: Event) type {
 pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     hook();
     defer hookEnd();
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
 
     if (comptime eventTag == .click) {
@@ -1552,7 +1638,7 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
 }
 
 pub fn update() !void {
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err) |err| return err;
 
@@ -1569,13 +1655,13 @@ pub fn update() !void {
 }
 
 pub fn isMouseButtonPressed() bool {
-    const self = getContext();
+    const self = getForbear();
     return self.mouseButtonPressed;
 }
 
 /// Returns some layouting values of the current node from the last frame
 pub fn useNodeMeasurement() ?Node.Measurement {
-    const self = getContext();
+    const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     const parentNodeIndex = self.nodeStack.getLastOrNull() orelse return null;
     const parentNode = self.nodeTree.at(parentNodeIndex);
@@ -1612,14 +1698,14 @@ fn timestampSeconds(io: std.Io) f64 {
 }
 
 pub fn setWindowHandlers(window: *Window) void {
-    const self = getContext();
+    const self = getForbear();
     self.window = window;
 
     window.handlers.resize = .{
         .function = &(struct {
             fn handler(_: *Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
                 _ = dpi;
-                const ctx: *Context = @ptrCast(@alignCast(data));
+                const ctx: *Forbear = @ptrCast(@alignCast(data));
                 ctx.renderer.handleResize(width, height) catch |err| {
                     std.log.err("Renderer failed to handle resize: {}", .{err});
                 };
@@ -1630,7 +1716,7 @@ pub fn setWindowHandlers(window: *Window) void {
     window.handlers.scroll = .{
         .function = &(struct {
             fn handler(wnd: *Window, axis: Window.ScrollAxis, nativeOffset: f32, data: *anyopaque) void {
-                const ctx: *Context = @ptrCast(@alignCast(data));
+                const ctx: *Forbear = @ptrCast(@alignCast(data));
                 // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
                 // values from the trackpad/mouse, so we use them directly.
                 // On other platforms, the native offset is a raw axis value where
@@ -1663,7 +1749,7 @@ pub fn setWindowHandlers(window: *Window) void {
     window.handlers.pointerMotion = .{
         .function = &(struct {
             fn handler(_: *Window, x: f32, y: f32, data: *anyopaque) void {
-                const ctx: *Context = @ptrCast(@alignCast(data));
+                const ctx: *Forbear = @ptrCast(@alignCast(data));
                 ctx.mousePosition = .{ x, y };
             }
         }).handler,
@@ -1672,7 +1758,7 @@ pub fn setWindowHandlers(window: *Window) void {
     window.handlers.pointerButton = .{
         .function = &(struct {
             fn handler(_: *Window, _: u32, _: u32, button: u32, state: u32, data: *anyopaque) void {
-                const ctx: *Context = @ptrCast(@alignCast(data));
+                const ctx: *Forbear = @ptrCast(@alignCast(data));
                 // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
                 if (button == 272) {
                     if (state == 1) {
@@ -1688,7 +1774,7 @@ pub fn setWindowHandlers(window: *Window) void {
 }
 
 pub fn deinit() void {
-    const self = getContext();
+    const self = getForbear();
 
     self.previousFrameNodeMeasurements.deinit();
 
@@ -1697,6 +1783,8 @@ pub fn deinit() void {
         scope.arenaAllocator.deinit();
     }
     self.scopes.deinit(self.allocator);
+    self.contextValues.deinit(self.allocator);
+    self.contextStack.deinit(self.allocator);
     self.scopeStack.deinit(self.allocator);
     self.nodeStack.deinit(self.allocator);
 
@@ -1713,7 +1801,7 @@ pub fn deinit() void {
 
     self.nodeTree.deinit(self.allocator);
 
-    context = null;
+    forbear = null;
 }
 
 test {
