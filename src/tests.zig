@@ -7188,9 +7188,9 @@ test "contentSize for a leaf element is zero" {
 
 // context tests
 
-const SimpleCtx = forbear.createContext(u32);
-const ThemeCtx = forbear.createContext(u32);
-const NestedCtx = forbear.createContext(u32);
+const SimpleCtx = forbear.createContext(opaque {}, u32);
+const ThemeCtx = forbear.createContext(opaque {}, u32);
+const NestedCtx = forbear.createContext(opaque {}, u32);
 
 test "context value is visible to a descendant via useContext" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
@@ -7207,7 +7207,7 @@ test "context value is visible to a descendant via useContext" {
         forbear.element(.{
             .style = .{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 100.0 } },
         })({
-            forbear.context(SimpleCtx, @as(u32, 42))({
+            SimpleCtx.Provider(@as(u32, 42))({
                 forbear.element(.{
                     .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                 })({
@@ -7234,17 +7234,17 @@ test "same context nested with different values resolves to nearest provider" {
     var middleObserved: ?u32 = null;
     var innermostObserved: ?u32 = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.context(NestedCtx, @as(u32, 1))({
+        NestedCtx.Provider(@as(u32, 1))({
             forbear.element(.{
                 .style = .{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 100.0 } },
             })({
                 if (forbear.useContext(NestedCtx)) |v| outerObserved = v.*;
-                forbear.context(NestedCtx, @as(u32, 2))({
+                NestedCtx.Provider(@as(u32, 2))({
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 50.0 } },
                     })({
                         if (forbear.useContext(NestedCtx)) |v| middleObserved = v.*;
-                        forbear.context(NestedCtx, @as(u32, 3))({
+                        NestedCtx.Provider(@as(u32, 3))({
                             forbear.element(.{
                                 .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                             })({
@@ -7274,8 +7274,8 @@ test "two different contexts at the same scope each resolve to their own value" 
     var observedSimple: ?u32 = null;
     var observedTheme: ?u32 = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.context(SimpleCtx, @as(u32, 100))({
-            forbear.context(ThemeCtx, @as(u32, 200))({
+        SimpleCtx.Provider(@as(u32, 100))({
+            ThemeCtx.Provider(@as(u32, 200))({
                 forbear.element(.{
                     .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                 })({
