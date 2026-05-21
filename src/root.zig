@@ -781,6 +781,21 @@ fn frameEnd(block: void) anyerror!void {
         _ = self.scopes.remove(staleKey);
     }
 
+    var staleContextValueKeys: std.ArrayList(u64) = .empty;
+    defer staleContextValueKeys.deinit(frameMeta.arena);
+    var contextEntries = self.contextValues.iterator();
+    while (contextEntries.next()) |contextEntry| {
+        if (contextEntry.value_ptr.lastFrame != self.frameCounter) {
+            try staleContextValueKeys.append(frameMeta.arena, contextEntry.key_ptr.*);
+        }
+    }
+    for (staleContextValueKeys.items) |staleKey| {
+        if (self.contextValues.getPtr(staleKey)) |valueEntry| {
+            valueEntry.arenaAllocator.deinit();
+        }
+        _ = self.contextValues.remove(staleKey);
+    }
+
     var staleFrameNodeMeasurements: std.ArrayList(u64) = .empty;
     defer staleFrameNodeMeasurements.deinit(frameMeta.arena);
     var iterator = self.previousFrameNodeMeasurements.iterator();
@@ -1039,7 +1054,9 @@ pub inline fn createContext(
             valueKey = mixU64(valueKey, contextKey);
             valueKey = mixU64(valueKey, @as(u64, @returnAddress()));
 
-            if (!self.contextValues.contains(valueKey)) {
+            if (self.contextValues.getPtr(valueKey)) |existing| {
+                existing.lastFrame = self.frameCounter;
+            } else {
                 var arena = std.heap.ArenaAllocator.init(self.allocator);
                 const value = arena.allocator().create(T) catch |err| {
                     handleFrameError(err);
@@ -1786,6 +1803,14 @@ pub fn setWindowHandlers(window: *Window) void {
 
 pub fn deinit() void {
     const self = getForbear();
+    var fontsIterator = self.fonts.valueIterator();
+    while (fontsIterator.next()) |font| {
+        font.deinit();
+    }
+    var imagesIterator = self.images.valueIterator();
+    while (imagesIterator.next()) |img| {
+        img.deinit();
+    }
     self.arena.deinit();
     forbear = null;
 }
