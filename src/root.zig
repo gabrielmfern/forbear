@@ -1027,8 +1027,9 @@ pub fn useContext(
     comptime uiContext: UiContext,
 ) ?*uiContext.T {
     const self = getForbear();
-    var i = self.contextStack.items.len - 1;
-    while (i >= 0) : (i -= 1) {
+    var i = self.contextStack.items.len;
+    while (i > 0) {
+        i -= 1;
         const contextEntry = self.contextStack.items[i];
         if (contextEntry.contextKey == uiContext.address) {
             const valueEntry = self.contextValues.getPtr(contextEntry.valueKey) orelse unreachable;
@@ -1040,7 +1041,7 @@ pub fn useContext(
 
 pub fn context(
     comptime uiContext: UiContext,
-    initialValue: context.T,
+    initialValue: uiContext.T,
 ) *const fn (void) void {
     const self = getForbear();
 
@@ -1052,9 +1053,9 @@ pub fn context(
     valueKey = mixU64(valueKey, uiContext.address);
     valueKey = mixU64(valueKey, @as(u64, @returnAddress()));
 
-    if (!self.contextValues.contains(self.allocator, valueKey)) {
-        const arena = std.heap.ArenaAllocator.init(self.allocator);
-        const value = arena.allocator().create(context.T) catch |err| {
+    if (!self.contextValues.contains(valueKey)) {
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        const value = arena.allocator().create(uiContext.T) catch |err| {
             handleFrameError(err);
             return &noopEnd;
         };
