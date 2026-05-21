@@ -1006,13 +1006,20 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub const UiContext = struct {
-    address: u64,
+    key: u64,
     T: type,
 };
 
-pub noinline fn createContext(comptime T: type) UiContext {
+pub inline fn createContext(
+    comptime source: std.builtin.SourceLocation,
+    comptime T: type,
+) UiContext {
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(source.file);
+    hasher.update(std.mem.asBytes(&source.line));
+    hasher.update(std.mem.asBytes(&source.column));
     return .{
-        .address = @as(u64, @returnAddress()),
+        .key = hasher.final(),
         .T = T,
     };
 }
@@ -1031,9 +1038,9 @@ pub fn useContext(
     while (i > 0) {
         i -= 1;
         const contextEntry = self.contextStack.items[i];
-        if (contextEntry.contextKey == uiContext.address) {
+        if (contextEntry.contextKey == uiContext.key) {
             const valueEntry = self.contextValues.getPtr(contextEntry.valueKey) orelse unreachable;
-            return @alignCast(@ptrCast(valueEntry.contents));
+            return @ptrCast(@alignCast(valueEntry.contents));
         }
     }
     return null;
@@ -1050,7 +1057,7 @@ pub fn context(
         valueKey = mixU64(valueKey, lastScopeKey);
     }
     valueKey = mixU64(valueKey, @as(u64, self.nodeStack.items.len));
-    valueKey = mixU64(valueKey, uiContext.address);
+    valueKey = mixU64(valueKey, uiContext.key);
     valueKey = mixU64(valueKey, @as(u64, @returnAddress()));
 
     if (!self.contextValues.contains(valueKey)) {
@@ -1062,7 +1069,7 @@ pub fn context(
         value.* = initialValue;
         self.contextValues.put(self.allocator, valueKey, .{
             .arenaAllocator = arena,
-            .contents = @alignCast(@ptrCast(value)),
+            .contents = @ptrCast(@alignCast(value)),
             .lastFrame = self.frameCounter,
         }) catch |err| {
             handleFrameError(err);
@@ -1070,7 +1077,7 @@ pub fn context(
         };
     }
     self.contextStack.append(self.allocator, .{
-        .contextKey = uiContext.address,
+        .contextKey = uiContext.key,
         .valueKey = valueKey,
     }) catch |err| {
         handleFrameError(err);
