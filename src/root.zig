@@ -168,6 +168,7 @@ nodeStack: std.ArrayList(usize) = .empty,
 /// for one extra frame, which is harmless.
 frameCounter: u32 = 0,
 
+arena: std.heap.ArenaAllocator,
 allocator: std.mem.Allocator,
 io: std.Io,
 
@@ -203,14 +204,15 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
     }
 
     forbear = @This(){
-        .allocator = allocator,
+        .arena = std.heap.ArenaAllocator.init(allocator),
+        .allocator = undefined,
         .io = io,
 
         .mousePosition = @splat(0.0),
         .mouseButtonPressed = false,
         .scrollDeltaAccumulator = @splat(0.0),
         .scrollDelta = @splat(0.0),
-        .previousFrameNodeMeasurements = std.AutoHashMap(u64, Node.Measurement).init(allocator),
+        .previousFrameNodeMeasurements = undefined,
 
         .renderer = renderer,
         .window = null,
@@ -230,9 +232,13 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .frameMeta = null,
         .nodeTree = .empty,
 
-        .images = std.StringHashMap(ImageType).init(allocator),
-        .fonts = std.StringHashMap(Font).init(allocator),
+        .images = undefined,
+        .fonts = undefined,
     };
+    forbear.?.allocator = forbear.?.arena.allocator();
+    forbear.?.previousFrameNodeMeasurements = std.AutoHashMap(u64, Node.Measurement,).init(forbear.?.allocator);
+    forbear.?.images = std.StringHashMap(ImageType).init(forbear.?.allocator);
+    forbear.?.fonts = std.StringHashMap(Font).init(forbear.?.allocator);
 }
 
 /// Registers a font from the given embedded byte contents. The font is associated with
@@ -1005,22 +1011,57 @@ pub fn printText(comptime fmt: []const u8, args: anytype) void {
     });
 }
 
-pub const UiContext = struct {
-    key: u64,
-    T: type,
-};
-
 pub inline fn createContext(
-    comptime source: std.builtin.SourceLocation,
+    /// Generally just an `opaque`
+    comptime Tag: type,
     comptime T: type,
-) UiContext {
+) type {
     var hasher = std.hash.Wyhash.init(0);
-    hasher.update(source.file);
-    hasher.update(std.mem.asBytes(&source.line));
-    hasher.update(std.mem.asBytes(&source.column));
-    return .{
-        .key = hasher.final(),
-        .T = T,
+    hasher.update(@typeName(Tag));
+    hasher.update(@typeName(T));
+    const contextKey = hasher.final();
+
+    return struct {
+        pub const key: u64 = contextKey;
+        pub const ValueType = T;
+
+        pub noinline fn Provider(initialValue: T) *const fn (void) void {
+            const self = getForbear();
+
+            var valueKey: u64 = 0;
+            if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
+                valueKey = mixU64(valueKey, lastScopeKey);
+            }
+            valueKey = mixU64(valueKey, @as(u64, self.nodeStack.items.len));
+            valueKey = mixU64(valueKey, contextKey);
+            valueKey = mixU64(valueKey, @as(u64, @returnAddress()));
+
+            if (!self.contextValues.contains(valueKey)) {
+                var arena = std.heap.ArenaAllocator.init(self.allocator);
+                const value = arena.allocator().create(T) catch |err| {
+                    handleFrameError(err);
+                    return &noopEnd;
+                };
+                value.* = initialValue;
+                self.contextValues.put(self.allocator, valueKey, .{
+                    .arenaAllocator = arena,
+                    .contents = @ptrCast(@alignCast(value)),
+                    .lastFrame = self.frameCounter,
+                }) catch |err| {
+                    handleFrameError(err);
+                    return &noopEnd;
+                };
+            }
+            self.contextStack.append(self.allocator, .{
+                .contextKey = contextKey,
+                .valueKey = valueKey,
+            }) catch |err| {
+                handleFrameError(err);
+                return &noopEnd;
+            };
+
+            return &contextEnd;
+        }
     };
 }
 
@@ -1031,60 +1072,19 @@ fn contextEnd(block: void) void {
 }
 
 pub fn useContext(
-    comptime uiContext: UiContext,
-) ?*uiContext.T {
+    comptime Context: type,
+) ?*Context.ValueType {
     const self = getForbear();
     var i = self.contextStack.items.len;
     while (i > 0) {
         i -= 1;
         const contextEntry = self.contextStack.items[i];
-        if (contextEntry.contextKey == uiContext.key) {
+        if (contextEntry.contextKey == Context.key) {
             const valueEntry = self.contextValues.getPtr(contextEntry.valueKey) orelse unreachable;
             return @ptrCast(@alignCast(valueEntry.contents));
         }
     }
     return null;
-}
-
-pub fn context(
-    comptime uiContext: UiContext,
-    initialValue: uiContext.T,
-) *const fn (void) void {
-    const self = getForbear();
-
-    var valueKey: u64 = 0;
-    if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-        valueKey = mixU64(valueKey, lastScopeKey);
-    }
-    valueKey = mixU64(valueKey, @as(u64, self.nodeStack.items.len));
-    valueKey = mixU64(valueKey, uiContext.key);
-    valueKey = mixU64(valueKey, @as(u64, @returnAddress()));
-
-    if (!self.contextValues.contains(valueKey)) {
-        var arena = std.heap.ArenaAllocator.init(self.allocator);
-        const value = arena.allocator().create(uiContext.T) catch |err| {
-            handleFrameError(err);
-            return &noopEnd;
-        };
-        value.* = initialValue;
-        self.contextValues.put(self.allocator, valueKey, .{
-            .arenaAllocator = arena,
-            .contents = @ptrCast(@alignCast(value)),
-            .lastFrame = self.frameCounter,
-        }) catch |err| {
-            handleFrameError(err);
-            return &noopEnd;
-        };
-    }
-    self.contextStack.append(self.allocator, .{
-        .contextKey = uiContext.key,
-        .valueKey = valueKey,
-    }) catch |err| {
-        handleFrameError(err);
-        return &noopEnd;
-    };
-
-    return &contextEnd;
 }
 
 pub fn BreakLine() void {
@@ -1783,32 +1783,7 @@ pub fn setWindowHandlers(window: *Window) void {
 
 pub fn deinit() void {
     const self = getForbear();
-
-    self.previousFrameNodeMeasurements.deinit();
-
-    var scopeIter = self.scopes.valueIterator();
-    while (scopeIter.next()) |scope| {
-        scope.arenaAllocator.deinit();
-    }
-    self.scopes.deinit(self.allocator);
-    self.contextValues.deinit(self.allocator);
-    self.contextStack.deinit(self.allocator);
-    self.scopeStack.deinit(self.allocator);
-    self.nodeStack.deinit(self.allocator);
-
-    var fontsIterator = self.fonts.valueIterator();
-    while (fontsIterator.next()) |font| {
-        font.deinit();
-    }
-    self.fonts.deinit();
-    var imagesIterator = self.images.valueIterator();
-    while (imagesIterator.next()) |img| {
-        img.deinit();
-    }
-    self.images.deinit();
-
-    self.nodeTree.deinit(self.allocator);
-
+    self.arena.deinit();
     forbear = null;
 }
 
