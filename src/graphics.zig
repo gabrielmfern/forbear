@@ -653,7 +653,7 @@ pub const Image = struct {
         var height: c_int = undefined;
         var channels: c_int = undefined;
         // stb_image doesn't allow to not pass in the width, hegith and channel pointers
-        const io = root.getContext().io;
+        const io = root.getForbear().io;
         const timerStart = std.Io.Clock.Timestamp.now(io, .awake);
         const pixelsPtr = stb_image.stbi_load_from_memory(self.contents.ptr, @intCast(self.contents.len), &width, &height, &channels, 4);
         if (pixelsPtr == null) return error.ImageLoadFailed;
@@ -3102,10 +3102,10 @@ pub const Renderer = struct {
 
     fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
         std.log.debug("swapchain recreation has began", .{});
-        const timestamp = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms);
+        const timestamp = @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms);
 
         const previousSwapchain = self.swapchain;
-        const recreateStart = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms);
+        const recreateStart = @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms);
         if (builtin.os.tag == .windows) {
             // On Windows, there is a stupid hell of a bug, probably because
             // we're using a rendering thread, that makes it so
@@ -3149,12 +3149,12 @@ pub const Renderer = struct {
             previousSwapchain.deinit(self.logicalDevice);
         }
         errdefer self.swapchain.deinit(self.logicalDevice);
-        std.log.debug("spent {d}ms just recreating swapchain", .{@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms) - recreateStart});
+        std.log.debug("spent {d}ms just recreating swapchain", .{@divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms) - recreateStart});
 
         destroyFramebuffers(self.swapchainFramebuffers, self.logicalDevice, self.allocator);
 
         self.swapchainFramebuffers = try createFramebuffers(self.logicalDevice, self.renderPass, self.swapchain, self.allocator);
-        std.log.debug("swapchain recreation took {d}ms", .{@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms) - timestamp});
+        std.log.debug("swapchain recreation took {d}ms", .{@divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms) - timestamp});
 
         for (0..maxFramesInFlight) |i| {
             c.vkDestroyFence(self.logicalDevice, self.inFlightFences[i], null);
@@ -3209,7 +3209,7 @@ pub const Renderer = struct {
     }
 
     pub fn viewportSize(self: *Self) Vec2 {
-        const io = root.getContext().io;
+        const io = root.getForbear().io;
         self.mutex.lockUncancelable(io);
         defer self.mutex.unlock(io);
         return .{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
@@ -3645,7 +3645,7 @@ pub const Renderer = struct {
     }
 
     pub fn handleResize(self: *Self, width: u32, height: u32) !void {
-        const io = root.getContext().io;
+        const io = root.getForbear().io;
         self.mutex.lockUncancelable(io);
         defer self.mutex.unlock(io);
         try self.stallForFrames();
@@ -3704,7 +3704,7 @@ pub const Renderer = struct {
     }
 
     pub fn waitIdle(self: *Self) !void {
-        const io = root.getContext().io;
+        const io = root.getForbear().io;
         self.mutex.lockUncancelable(io);
         defer self.mutex.unlock(io);
         try ensureNoError(c.vkDeviceWaitIdle(self.logicalDevice));
@@ -3785,7 +3785,7 @@ pub const Renderer = struct {
         clearColor: Vec4,
         targetFrameTimeNs: u64,
     ) !void {
-        const io = root.getContext().io;
+        const io = root.getForbear().io;
         self.mutex.lockUncancelable(io);
         defer self.mutex.unlock(io);
         try ensureNoError(c.vkWaitForFences(
@@ -3799,7 +3799,7 @@ pub const Renderer = struct {
 
         try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0));
 
-        var start = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms);
+        var start = @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms);
         var imageIndex: u32 = undefined;
         ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
@@ -3820,8 +3820,8 @@ pub const Renderer = struct {
                 else => return err,
             }
         };
-        if (@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms) - start > 100) {
-            std.log.err("image ({d}) acquiring took {d}ms!!!!!!!", .{ imageIndex, @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_ms) - start });
+        if (@divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms) - start > 100) {
+            std.log.err("image ({d}) acquiring took {d}ms!!!!!!!", .{ imageIndex, @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms) - start });
         }
 
         const framebuffers = self.swapchainFramebuffers;
@@ -3849,7 +3849,7 @@ pub const Renderer = struct {
 
         const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
 
-        start = @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us);
+        start = @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_us);
         // --- Resize pass: single iteration to count shadows, elements,
         // glyphs and then allocate enough memory on the shader buffers ---
         var totalShadowCount: usize = 0;
@@ -4072,8 +4072,8 @@ pub const Renderer = struct {
             }
         }
 
-        if (@divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start > 1000) {
-            std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, @divTrunc(std.Io.Clock.awake.now(root.getContext().io).toNanoseconds(), std.time.ns_per_us) - start });
+        if (@divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_us) - start > 1000) {
+            std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_us) - start });
         }
 
         try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
@@ -4212,7 +4212,7 @@ pub const Renderer = struct {
         // This is only done for the first 50 frames because after that FIFO
         // should kick in properly.
         if (builtin.os.tag == .linux and self.framesRenderedInSwapchain < 50) {
-            try self.frameRateCapper.cap(root.getContext().io, targetFrameTimeNs);
+            try self.frameRateCapper.cap(root.getForbear().io, targetFrameTimeNs);
         }
         if (self.framesRenderedInSwapchain == 50) {
             switch (builtin.os.tag) {

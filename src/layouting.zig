@@ -661,7 +661,7 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
 }
 
 pub fn layout() !*NodeTree {
-    const context = forbear.getContext();
+    const context = forbear.getForbear();
 
     std.debug.assert(context.frameMeta != null);
     if (context.frameMeta.?.err) |err| return err;
