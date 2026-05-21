@@ -7191,6 +7191,14 @@ test "contentSize for a leaf element is zero" {
 const SimpleCtx = forbear.createContext(opaque {}, u32);
 const ThemeCtx = forbear.createContext(opaque {}, u32);
 const NestedCtx = forbear.createContext(opaque {}, u32);
+const SiblingCtx = forbear.createContext(opaque {}, u32);
+const PersistCtx = forbear.createContext(opaque {}, u32);
+
+const StructValue = struct {
+    flags: [4]u32,
+    label: [8]u8,
+};
+const StructCtx = forbear.createContext(opaque {}, StructValue);
 
 test "context value is visible to a descendant via useContext" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
@@ -7289,4 +7297,130 @@ test "two different contexts at the same scope each resolve to their own value" 
 
     try std.testing.expectEqual(@as(?u32, 100), observedSimple);
     try std.testing.expectEqual(@as(?u32, 200), observedTheme);
+}
+
+test "useContext returns null when no provider has been mounted" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var atTopLevel: ?u32 = 999;
+    var insideNestedElement: ?u32 = 999;
+    try forbear.frame(try frameMeta(arena))({
+        if (forbear.useContext(SimpleCtx)) |v| atTopLevel = v.* else atTopLevel = null;
+        forbear.element(.{
+            .style = .{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 50.0 } },
+        })({
+            forbear.element(.{
+                .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+            })({
+                if (forbear.useContext(SimpleCtx)) |v| insideNestedElement = v.* else insideNestedElement = null;
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(@as(?u32, null), atTopLevel);
+    try std.testing.expectEqual(@as(?u32, null), insideNestedElement);
+}
+
+test "provider value does not leak to siblings after its block ends" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var insideFirst: ?u32 = null;
+    var betweenProviders: ?u32 = 999;
+    var insideSecond: ?u32 = null;
+    var afterSecond: ?u32 = 999;
+    try forbear.frame(try frameMeta(arena))({
+        SiblingCtx.Provider(@as(u32, 7))({
+            if (forbear.useContext(SiblingCtx)) |v| insideFirst = v.*;
+        });
+        if (forbear.useContext(SiblingCtx)) |v| betweenProviders = v.* else betweenProviders = null;
+        SiblingCtx.Provider(@as(u32, 9))({
+            if (forbear.useContext(SiblingCtx)) |v| insideSecond = v.*;
+        });
+        if (forbear.useContext(SiblingCtx)) |v| afterSecond = v.* else afterSecond = null;
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(@as(?u32, 7), insideFirst);
+    try std.testing.expectEqual(@as(?u32, null), betweenProviders);
+    try std.testing.expectEqual(@as(?u32, 9), insideSecond);
+    try std.testing.expectEqual(@as(?u32, null), afterSecond);
+}
+
+fn PersistComponent(observed: *?u32, writeBack: ?u32) void {
+    PersistCtx.Provider(@as(u32, 10))({
+        if (forbear.useContext(PersistCtx)) |v| {
+            observed.* = v.*;
+            if (writeBack) |w| v.* = w;
+        }
+    });
+}
+
+test "provider value persists and is mutable across frames" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    // Frame 1: mount the provider with an initial value of 10, then mutate
+    // it through the pointer returned by useContext.
+    var observedFrame1: ?u32 = null;
+    try forbear.frame(try frameMeta(arena))({
+        PersistComponent(&observedFrame1, 77);
+        _ = try forbear.layout();
+    });
+
+    // Frame 2: remount the provider through the same component. The
+    // initial value (10) should be ignored because a value already exists
+    // for this bucket; the stored 77 from frame 1 should be observed.
+    var observedFrame2: ?u32 = null;
+    try forbear.frame(try frameMeta(arena))({
+        PersistComponent(&observedFrame2, null);
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(@as(?u32, 10), observedFrame1);
+    try std.testing.expectEqual(@as(?u32, 77), observedFrame2);
+}
+
+test "provider round-trips a non-trivial struct value" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const initial: StructValue = .{
+        .flags = .{ 1, 2, 3, 4 },
+        .label = .{ 'f', 'o', 'r', 'b', 'e', 'a', 'r', 0 },
+    };
+
+    var observed: ?StructValue = null;
+    try forbear.frame(try frameMeta(arena))({
+        StructCtx.Provider(initial)({
+            forbear.element(.{
+                .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+            })({
+                if (forbear.useContext(StructCtx)) |v| observed = v.*;
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expect(observed != null);
+    try std.testing.expectEqualSlices(u32, &initial.flags, &observed.?.flags);
+    try std.testing.expectEqualSlices(u8, &initial.label, &observed.?.label);
 }
