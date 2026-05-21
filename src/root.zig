@@ -236,7 +236,10 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .fonts = undefined,
     };
     forbear.?.allocator = forbear.?.arena.allocator();
-    forbear.?.previousFrameNodeMeasurements = std.AutoHashMap(u64, Node.Measurement,).init(forbear.?.allocator);
+    forbear.?.previousFrameNodeMeasurements = std.AutoHashMap(
+        u64,
+        Node.Measurement,
+    ).init(forbear.?.allocator);
     forbear.?.images = std.StringHashMap(ImageType).init(forbear.?.allocator);
     forbear.?.fonts = std.StringHashMap(Font).init(forbear.?.allocator);
 }
