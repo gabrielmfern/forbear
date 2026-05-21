@@ -7185,3 +7185,108 @@ test "contentSize for a leaf element is zero" {
         try std.testing.expectApproxEqAbs(@as(f32, 0.0), root.contentSize[1], 0.001);
     });
 }
+
+// context tests
+
+const SimpleCtx = forbear.createContext(u32);
+const ThemeCtx = forbear.createContext(u32);
+const NestedCtx = forbear.createContext(u32);
+
+test "context value is visible to a descendant via useContext" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: ?u32 = null;
+    var observedAtRoot: ?u32 = null;
+    try forbear.frame(try frameMeta(arena))({
+        if (forbear.useContext(SimpleCtx)) |v| observedAtRoot = v.*;
+        forbear.element(.{
+            .style = .{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 100.0 } },
+        })({
+            forbear.context(SimpleCtx, @as(u32, 42))({
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                })({
+                    if (forbear.useContext(SimpleCtx)) |v| observed = v.*;
+                });
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(@as(?u32, null), observedAtRoot);
+    try std.testing.expectEqual(@as(?u32, 42), observed);
+}
+
+test "same context nested with different values resolves to nearest provider" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var outerObserved: ?u32 = null;
+    var middleObserved: ?u32 = null;
+    var innermostObserved: ?u32 = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.context(NestedCtx, @as(u32, 1))({
+            forbear.element(.{
+                .style = .{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 100.0 } },
+            })({
+                if (forbear.useContext(NestedCtx)) |v| outerObserved = v.*;
+                forbear.context(NestedCtx, @as(u32, 2))({
+                    forbear.element(.{
+                        .style = .{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 50.0 } },
+                    })({
+                        if (forbear.useContext(NestedCtx)) |v| middleObserved = v.*;
+                        forbear.context(NestedCtx, @as(u32, 3))({
+                            forbear.element(.{
+                                .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                            })({
+                                if (forbear.useContext(NestedCtx)) |v| innermostObserved = v.*;
+                            });
+                        });
+                    });
+                });
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(@as(?u32, 1), outerObserved);
+    try std.testing.expectEqual(@as(?u32, 2), middleObserved);
+    try std.testing.expectEqual(@as(?u32, 3), innermostObserved);
+}
+
+test "two different contexts at the same scope each resolve to their own value" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observedSimple: ?u32 = null;
+    var observedTheme: ?u32 = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.context(SimpleCtx, @as(u32, 100))({
+            forbear.context(ThemeCtx, @as(u32, 200))({
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                })({
+                    if (forbear.useContext(SimpleCtx)) |v| observedSimple = v.*;
+                    if (forbear.useContext(ThemeCtx)) |v| observedTheme = v.*;
+                });
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(@as(?u32, 100), observedSimple);
+    try std.testing.expectEqual(@as(?u32, 200), observedTheme);
+}
