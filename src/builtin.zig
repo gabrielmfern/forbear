@@ -240,7 +240,7 @@ pub fn ScrollBar(state: *ScrollingState) void {
                                 if (isHovered.* or isDragging.*)
                                     forbear.rgba(180, 180, 180, 0.31)
                                 else
-                                    .{ 0.0, 0.0, 0.0, 0.0 },
+                                    forbear.rgba(180, 180, 180, 0.0),
                                 0.15,
                                 forbear.easeOut,
                             ),
