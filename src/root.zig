@@ -32,6 +32,8 @@ pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("window/root.zig").Window;
 pub const Cursor = @import("window/root.zig").Cursor;
+pub const Key = @import("window/root.zig").Key;
+pub const KeyboardKey = @import("window/root.zig").KeyboardKey;
 
 pub var traceWriter: ?*std.Io.Writer = null;
 pub fn setTraceWriter(writer: *std.Io.Writer) void {
@@ -119,6 +121,22 @@ pub const Event = enum {
     mouseMove,
     click,
     scroll,
+    keypress,
+    keydown,
+    keyup,
+};
+
+/// Internal record of a keyboard event, stored in the cross-frame accumulator
+/// with the text bytes inlined (the window callback only owns the slice for
+/// the duration of its call). Materialized back into a `KeyboardKey` when
+/// snapshotted at frame start.
+const QueuedKeyEvent = struct {
+    kind: enum { keypress, keydown, keyup },
+    time: u32,
+    key: Key,
+    text_buf: [16]u8,
+    text_len: u8,
+    is_repeat: bool,
 };
 
 pub const FrameMeta = struct {
@@ -179,6 +197,17 @@ mouseButtonPressed: bool,
 scrollDeltaAccumulator: Vec2,
 /// Stable snapshot of scroll delta for the current frame.
 scrollDelta: Vec2,
+/// Key events arriving between frames land here. Drained into the three
+/// per-kind snapshot slices at `frame()` start. Backed by `self.allocator`
+/// so the buffer survives across frames; `clearRetainingCapacity` keeps it
+/// reusable without per-event allocations once a steady state is reached.
+keyEventsAccumulator: std.ArrayList(QueuedKeyEvent) = .empty,
+/// Per-kind snapshots for the current frame. Slices live in `frameMeta.arena`
+/// and are rebuilt every frame. `KeyboardKey.text` inside each entry points
+/// into the same arena, so it's valid for the rest of the frame.
+keypressEvents: []const KeyboardKey = &.{},
+keydownEvents: []const KeyboardKey = &.{},
+keyupEvents: []const KeyboardKey = &.{},
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 
 renderer: *Graphics.Renderer,
@@ -212,6 +241,10 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .mouseButtonPressed = false,
         .scrollDeltaAccumulator = @splat(0.0),
         .scrollDelta = @splat(0.0),
+        .keyEventsAccumulator = .empty,
+        .keypressEvents = &.{},
+        .keydownEvents = &.{},
+        .keyupEvents = &.{},
         .previousFrameNodeMeasurements = undefined,
 
         .renderer = renderer,
@@ -836,9 +869,56 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.scrollDelta = self.scrollDeltaAccumulator;
     self.scrollDeltaAccumulator = @splat(0.0);
 
+    self.snapshotKeyEvents(meta.arena);
+
     self.frameCounter +%= 1;
     self.frameMeta = meta;
     return &frameEnd;
+}
+
+/// Drains `keyEventsAccumulator` into the three per-kind `[]KeyboardKey`
+/// snapshots, with all text bytes copied into `frame_arena` so the slices
+/// stay valid for the whole frame.
+fn snapshotKeyEvents(self: *Forbear, frame_arena: std.mem.Allocator) void {
+    const empty: []const KeyboardKey = &.{};
+    self.keypressEvents = empty;
+    self.keydownEvents = empty;
+    self.keyupEvents = empty;
+    defer self.keyEventsAccumulator.clearRetainingCapacity();
+
+    if (self.keyEventsAccumulator.items.len == 0) return;
+
+    // Dup the QueuedKeyEvent storage into the frame arena first so the
+    // text_buf inside each entry has a stable address for the KeyboardKey
+    // slices we build next.
+    const queued = frame_arena.dupe(QueuedKeyEvent, self.keyEventsAccumulator.items) catch |err| {
+        std.log.err("Failed to snapshot key events: {}", .{err});
+        return;
+    };
+
+    var keypress: std.ArrayList(KeyboardKey) = .empty;
+    var keydown: std.ArrayList(KeyboardKey) = .empty;
+    var keyup: std.ArrayList(KeyboardKey) = .empty;
+    for (queued) |*ev| {
+        const kk: KeyboardKey = .{
+            .time = ev.time,
+            .key = ev.key,
+            .text = ev.text_buf[0..ev.text_len],
+            .is_repeat = ev.is_repeat,
+        };
+        const target = switch (ev.kind) {
+            .keypress => &keypress,
+            .keydown => &keydown,
+            .keyup => &keyup,
+        };
+        target.append(frame_arena, kk) catch |err| {
+            std.log.err("Failed to record key event: {}", .{err});
+            return;
+        };
+    }
+    self.keypressEvents = keypress.items;
+    self.keydownEvents = keydown.items;
+    self.keyupEvents = keyup.items;
 }
 
 /// TODO: share the github of the person I got the trick of using an end
@@ -1568,12 +1648,31 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
 }
 
 pub fn OnResult(comptime eventTag: Event) type {
-    return if (eventTag == .scroll or eventTag == .mouseMove) ?Vec2 else bool;
+    return switch (eventTag) {
+        .scroll, .mouseMove => ?Vec2,
+        .keypress, .keydown, .keyup => []const KeyboardKey,
+        else => bool,
+    };
 }
 
 /// Inline hit test against previous-frame measurement. No event queue —
 /// every caller sees the same raw input state each frame.
+///
+/// Keyboard events (`.keypress` / `.keydown` / `.keyup`) are **global** for
+/// now: every caller sees every key event that happened since the last
+/// frame, regardless of which element invoked `on()`. Focus scoping is a
+/// separate concern layered on top.
 pub fn on(comptime eventTag: Event) OnResult(eventTag) {
+    if (comptime eventTag == .keypress or eventTag == .keydown or eventTag == .keyup) {
+        const self = getForbear();
+        return switch (eventTag) {
+            .keypress => self.keypressEvents,
+            .keydown => self.keydownEvents,
+            .keyup => self.keyupEvents,
+            else => unreachable,
+        };
+    }
+
     hook();
     defer hookEnd();
     const self = getForbear();
@@ -1606,7 +1705,8 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     const slot: ?*bool = switch (eventTag) {
         .mouseEnter, .mouseLeave, .mouseDown, .mouseUp => useState(bool, false),
         .scroll, .mouseMove => null,
-        .click => unreachable,
+        // Keyboard tags + `.click` returned earlier.
+        .click, .keypress, .keydown, .keyup => unreachable,
     };
     const lastMousePositionSlot: ?*Vec2 = if (eventTag == .mouseMove)
         useState(Vec2, self.mousePosition)
@@ -1647,7 +1747,7 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
             defer wasPressedLastFrame.* = self.mouseButtonPressed;
             return !self.mouseButtonPressed and wasPressedLastFrame.* and inside;
         },
-        .click => unreachable,
+        .click, .keypress, .keydown, .keyup => unreachable,
         .scroll => {
             if (!inside) return null;
             if (self.scrollDelta[0] != 0.0 or self.scrollDelta[1] != 0.0)
@@ -1799,6 +1899,39 @@ pub fn setWindowHandlers(window: *Window) void {
         }).handler,
         .data = @ptrCast(@alignCast(self)),
     };
+    window.handlers.keypress = .{
+        .function = &makeKeyHandler(.keypress),
+        .data = @ptrCast(@alignCast(self)),
+    };
+    window.handlers.keydown = .{
+        .function = &makeKeyHandler(.keydown),
+        .data = @ptrCast(@alignCast(self)),
+    };
+    window.handlers.keyup = .{
+        .function = &makeKeyHandler(.keyup),
+        .data = @ptrCast(@alignCast(self)),
+    };
+}
+
+fn makeKeyHandler(comptime kind: @FieldType(QueuedKeyEvent, "kind")) fn (*Window, KeyboardKey, *anyopaque) void {
+    return (struct {
+        fn handler(_: *Window, key: KeyboardKey, data: *anyopaque) void {
+            const ctx: *Forbear = @ptrCast(@alignCast(data));
+            const copy_len: u8 = @intCast(@min(key.text.len, 16));
+            var buf: [16]u8 = undefined;
+            @memcpy(buf[0..copy_len], key.text[0..copy_len]);
+            ctx.keyEventsAccumulator.append(ctx.allocator, .{
+                .kind = kind,
+                .time = key.time,
+                .key = key.key,
+                .text_buf = buf,
+                .text_len = copy_len,
+                .is_repeat = key.is_repeat,
+            }) catch |err| {
+                std.log.err("Failed to enqueue key event: {}", .{err});
+            };
+        }
+    }).handler;
 }
 
 pub fn deinit() void {
