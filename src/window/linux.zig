@@ -88,10 +88,15 @@ keyRepeatDelay: i32 = 600,
 /// The currently held repeatable key, if any. Drives the timerfd that
 /// synthesizes `keydown` events. `xkb_keycode` is kept for the
 /// release-match check (so we only cancel when *this* key is released);
-/// `key` is what we ship in the synthetic event.
+/// `key` + `text_buf` are what we ship in the synthetic event.
 heldKey: ?struct {
     xkb_keycode: u32,
     key: Key,
+    /// Stored UTF-8 produced by the initial press; replayed on every
+    /// synthetic repeat. 16 bytes is way more than a single keysym can
+    /// produce (UTF-8 max codepoint is 4 bytes).
+    text_buf: [16]u8,
+    text_len: u8,
 } = null,
 /// CLOCK_MONOTONIC timerfd that fires when the next synthetic `keydown`
 /// is due. Disarmed when no key is held or the held key isn't repeatable.
@@ -813,9 +818,22 @@ fn keyboardHandleKey(
         0;
     const mapped: Key = keysymToKey(keysym);
 
+    var text_buf: [16]u8 = undefined;
+    var text_len: usize = 0;
+    if (window.xkbState) |xs| {
+        const n = c.xkb_state_key_get_utf8(xs, xkbKeycode, &text_buf, text_buf.len);
+        if (n > 0) {
+            const un: usize = @intCast(n);
+            // n is the length excluding the NUL byte; xkb truncates if the
+            // buffer was too small. Treat truncation as no-text.
+            if (un < text_buf.len) text_len = un;
+        }
+    }
+
     const ev: KeyboardKey = .{
         .time = time,
         .key = mapped,
+        .text = text_buf[0..text_len],
         .is_repeat = false,
     };
 
@@ -830,7 +848,14 @@ fn keyboardHandleKey(
         else
             true;
         if (window.keyRepeatRate > 0 and repeats) {
-            window.heldKey = .{ .xkb_keycode = xkbKeycode, .key = mapped };
+            var stored: [16]u8 = undefined;
+            @memcpy(stored[0..text_len], text_buf[0..text_len]);
+            window.heldKey = .{
+                .xkb_keycode = xkbKeycode,
+                .key = mapped,
+                .text_buf = stored,
+                .text_len = @intCast(text_len),
+            };
             window.armRepeatTimer(window.keyRepeatDelay);
         } else {
             window.cancelKeyRepeat();
@@ -907,6 +932,7 @@ fn fireKeyRepeat(self: *Self) void {
         const ev: KeyboardKey = .{
             .time = 0,
             .key = held.key,
+            .text = held.text_buf[0..held.text_len],
             .is_repeat = true,
         };
         h.function(self, ev, h.data);

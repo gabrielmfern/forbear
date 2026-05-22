@@ -93,6 +93,12 @@ pub const KeyboardKey = struct {
     /// Cross-platform key identity. `.unknown` if the backend reported a
     /// key this enum doesn't cover yet.
     key: Key,
+    /// UTF-8 of the character this key produced under the current layout and
+    /// modifier state. Empty when the key has no textual interpretation
+    /// (Shift, F1, arrows, ...). For Tab it's `"\t"`, Enter is `"\r"`, etc.
+    /// Slice is valid only for the duration of the handler call — copy if
+    /// you need to keep it.
+    text: []const u8 = "",
     /// True only for `keydown` events synthesized while the key is held.
     /// Always false for `keypress` and `keyup`.
     is_repeat: bool,
