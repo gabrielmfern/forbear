@@ -3054,9 +3054,9 @@ test "Component state in a loop with manual keys" {
 
     // Frame 2: remove "beta" from the middle — alpha and gamma should keep state.
     // Use a different fallback initial to prove the original values stuck.
-    const items_without_beta = [_][]const u8{ "alpha", "gamma" };
+    const itemsWithoutBeta = [_][]const u8{ "alpha", "gamma" };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        try LoopApp(&items_without_beta, 999, &observed);
+        try LoopApp(&itemsWithoutBeta, 999, &observed);
     });
     try std.testing.expectEqual(0, observed.get("alpha").?);
     try std.testing.expectEqual(2, observed.get("gamma").?);
@@ -3165,11 +3165,11 @@ test "Element keys stable in for-loop with manual keys" {
     _ = arena.reset(.retain_capacity);
 
     // Frame 3: remove "beta" — alpha and gamma's keys should still match frame 1
-    const items_without_beta = [_][]const u8{ "alpha", "gamma" };
+    const itemsWithoutBeta = [_][]const u8{ "alpha", "gamma" };
     try forbear.frame(try frameMeta(arenaAllocator))({
-        try ForLoopKeyApp(&items_without_beta, &keys3);
+        try ForLoopKeyApp(&itemsWithoutBeta, &keys3);
     });
-    for (items_without_beta) |item| {
+    for (itemsWithoutBeta) |item| {
         try std.testing.expectEqual(keys1.get(item).?, keys3.get(item).?);
     }
 }
@@ -5409,37 +5409,37 @@ test "LRU Cache" {
     std.debug.print("After inserting all three entries:\n", .{});
     lru.print();
 
-    const entry_2 = lru.get(2);
-    try std.testing.expect(entry_2 != null);
-    try std.testing.expectEqual(2, entry_2.?.key);
-    try std.testing.expectEqualSlices(u8, "2", entry_2.?.value);
-    try std.testing.expectEqual(entry_2.?, &lru.entries[lru.first.?]);
+    const entry2 = lru.get(2);
+    try std.testing.expect(entry2 != null);
+    try std.testing.expectEqual(2, entry2.?.key);
+    try std.testing.expectEqualSlices(u8, "2", entry2.?.value);
+    try std.testing.expectEqual(entry2.?, &lru.entries[lru.first.?]);
     std.debug.print("After accessing entry 2:\n", .{});
     lru.print();
 
-    const entry_1 = lru.get(1);
-    try std.testing.expect(entry_1 != null);
-    try std.testing.expectEqual(1, entry_1.?.key);
-    try std.testing.expectEqualSlices(u8, "1", entry_1.?.value);
-    try std.testing.expectEqual(entry_1.?, &lru.entries[lru.first.?]);
+    const entry1 = lru.get(1);
+    try std.testing.expect(entry1 != null);
+    try std.testing.expectEqual(1, entry1.?.key);
+    try std.testing.expectEqualSlices(u8, "1", entry1.?.value);
+    try std.testing.expectEqual(entry1.?, &lru.entries[lru.first.?]);
     std.debug.print("After accessing entry 1:\n", .{});
     lru.print();
 
-    const entry_3 = lru.get(3);
-    try std.testing.expect(entry_3 != null);
-    try std.testing.expectEqual(3, entry_3.?.key);
-    try std.testing.expectEqualSlices(u8, "3", entry_3.?.value);
-    try std.testing.expectEqual(entry_3.?, &lru.entries[lru.first.?]);
+    const entry3 = lru.get(3);
+    try std.testing.expect(entry3 != null);
+    try std.testing.expectEqual(3, entry3.?.key);
+    try std.testing.expectEqualSlices(u8, "3", entry3.?.value);
+    try std.testing.expectEqual(entry3.?, &lru.entries[lru.first.?]);
     std.debug.print("After accessing entry 3:\n", .{});
     lru.print();
 
     // Adding a new value should evict the least recently used value
-    const entry_4 = lru.put(4, "4");
+    const entry4 = lru.put(4, "4");
     std.debug.print("After adding the entry '4' beyond the capacity of the LRU:\n", .{});
     lru.print();
-    try std.testing.expectEqual(entry_4.index, lru.first.?);
+    try std.testing.expectEqual(entry4.index, lru.first.?);
     // The entry for 2 should have been discarded completely
-    try std.testing.expectEqual(entry_1.?, &lru.entries[lru.last.?]);
+    try std.testing.expectEqual(entry1.?, &lru.entries[lru.last.?]);
     try std.testing.expect(lru.get(2) == null);
 }
 
@@ -5452,12 +5452,12 @@ test "LRU cache - update existing key" {
     _ = lru.put(3, "three");
 
     // Update existing key should replace value and move to front
-    const updated_index = lru.put(2, "TWO");
+    const updatedIndex = lru.put(2, "TWO");
 
     const entry = lru.get(2);
     try std.testing.expect(entry != null);
     try std.testing.expectEqualSlices(u8, "TWO", entry.?.value);
-    try std.testing.expectEqual(updated_index.index, lru.first.?);
+    try std.testing.expectEqual(updatedIndex.index, lru.first.?);
     try std.testing.expectEqual(2, lru.entries[lru.first.?].key);
     try std.testing.expectEqual(3, lru.length);
 }

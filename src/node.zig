@@ -571,8 +571,8 @@ pub const NodeTree = struct {
         };
         if (parentOpt) |parentIndex| {
             const parent = self.at(parentIndex);
-            if (parent.lastChild) |old_last| {
-                self.at(old_last).nextSibling = index;
+            if (parent.lastChild) |oldLast| {
+                self.at(oldLast).nextSibling = index;
             }
             node.previousSibling = parent.lastChild;
             if (parent.firstChild == null) {
