@@ -879,7 +879,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
 /// Drains `keyEventsAccumulator` into the three per-kind `[]KeyboardKey`
 /// snapshots, with all text bytes copied into `frame_arena` so the slices
 /// stay valid for the whole frame.
-fn snapshotKeyEvents(self: *Forbear, frame_arena: std.mem.Allocator) void {
+fn snapshotKeyEvents(self: *Forbear, frameArena: std.mem.Allocator) void {
     const empty: []const KeyboardKey = &.{};
     self.keypressEvents = empty;
     self.keydownEvents = empty;
@@ -891,7 +891,7 @@ fn snapshotKeyEvents(self: *Forbear, frame_arena: std.mem.Allocator) void {
     // Dup the QueuedKeyEvent storage into the frame arena first so the
     // text_buf inside each entry has a stable address for the KeyboardKey
     // slices we build next.
-    const queued = frame_arena.dupe(QueuedKeyEvent, self.keyEventsAccumulator.items) catch |err| {
+    const queued = frameArena.dupe(QueuedKeyEvent, self.keyEventsAccumulator.items) catch |err| {
         std.log.err("Failed to snapshot key events: {}", .{err});
         return;
     };
@@ -911,7 +911,7 @@ fn snapshotKeyEvents(self: *Forbear, frame_arena: std.mem.Allocator) void {
             .keydown => &keydown,
             .keyup => &keyup,
         };
-        target.append(frame_arena, kk) catch |err| {
+        target.append(frameArena, kk) catch |err| {
             std.log.err("Failed to record key event: {}", .{err});
             return;
         };
