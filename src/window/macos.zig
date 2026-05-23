@@ -88,6 +88,14 @@ const NSEventTypeOtherMouseDragged: NSUInteger = 27;
 const NSEventTypeScrollWheel: NSUInteger = 22;
 const NSEventTypeKeyDown: NSUInteger = 10;
 const NSEventTypeKeyUp: NSUInteger = 11;
+/// Fired when *any* modifier key's state changes (Shift/Ctrl/Alt/Cmd/Caps).
+/// Pure modifier-key transitions on macOS never come through keyDown/keyUp.
+const NSEventTypeFlagsChanged: NSUInteger = 12;
+
+const NSEventModifierFlagCapsLock: NSUInteger = 1 << 16;
+const NSEventModifierFlagControl: NSUInteger = 1 << 18;
+const NSEventModifierFlagOption: NSUInteger = 1 << 19;
+const NSEventModifierFlagCommand: NSUInteger = 1 << 20;
 
 // kVK_* virtual key codes (HIToolbox/Events.h). Hardware-independent —
 // the same physical key reports the same kVK regardless of layout.
@@ -141,14 +149,12 @@ fn macosKeycodeToKeys(code: u16) Keys {
         0x6D => .{ .f10 = true },
         0x67 => .{ .f11 = true },
         0x6F => .{ .f12 = true },
-        // L/R modifier keys collapse into a single flag — chord hotkey
-        // code never cares which side, and NSEvent.modifierFlags would
-        // be the more accurate source if we ever needed live state.
-        0x38, 0x3C => .{ .shift = true },
-        0x3B, 0x3E => .{ .control = true },
-        0x3A, 0x3D => .{ .alt = true },
-        0x37, 0x36 => .{ .super = true },
-        0x39 => .{ .capsLock = true },
+        // Modifier kVK codes (Shift L/R, Control L/R, Option L/R,
+        // Command L/R, CapsLock) are intentionally not mapped here —
+        // those transitions arrive as `NSEventTypeFlagsChanged`, not
+        // keyDown/keyUp, and the unified `.shift/.control/.alt/.super/
+        // .capsLock` flags are populated from `NSEvent.modifierFlags`
+        // there.
         0x7B => .{ .arrowLeft = true },
         0x7C => .{ .arrowRight = true },
         0x7E => .{ .arrowUp = true },
@@ -672,6 +678,38 @@ fn processEvent(self: *Self, event: c.id) void {
                 button_released;
             handler.function(self, 0, 0, linux_left_mouse_button, state, handler.data);
         }
+    }
+
+    if (event_type == NSEventTypeFlagsChanged) {
+        const modifierFlagsFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSUInteger);
+        const flags = modifierFlagsFn(event, sel("modifierFlags"));
+
+        var current: Keys = .{};
+        current.shift = (flags & NSEventModifierFlagShift) != 0;
+        current.control = (flags & NSEventModifierFlagControl) != 0;
+        current.alt = (flags & NSEventModifierFlagOption) != 0;
+        current.super = (flags & NSEventModifierFlagCommand) != 0;
+        current.capsLock = (flags & NSEventModifierFlagCapsLock) != 0;
+
+        self.keysMutex.lock();
+        defer self.keysMutex.unlock();
+
+        var oldMods: Keys = .{};
+        oldMods.shift = self.keysDown.shift;
+        oldMods.control = self.keysDown.control;
+        oldMods.alt = self.keysDown.alt;
+        oldMods.super = self.keysDown.super;
+        oldMods.capsLock = self.keysDown.capsLock;
+
+        self.pendingPressed = self.pendingPressed.with(current.without(oldMods));
+        self.pendingReleased = self.pendingReleased.with(oldMods.without(current));
+
+        self.keysDown.shift = current.shift;
+        self.keysDown.control = current.control;
+        self.keysDown.alt = current.alt;
+        self.keysDown.super = current.super;
+        self.keysDown.capsLock = current.capsLock;
+        return;
     }
 
     if (event_type == NSEventTypeKeyDown or event_type == NSEventTypeKeyUp) {

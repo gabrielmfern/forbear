@@ -129,14 +129,49 @@ fn virtualKeyToKeys(vk: win32.WPARAM) Keys {
         0x79 => .{ .f10 = true },
         0x7A => .{ .f11 = true },
         0x7B => .{ .f12 = true },
-        // L/R modifier variants AND the generic VK_SHIFT/CONTROL/MENU all
-        // collapse into a single modifier flag — chord hotkey code never
-        // cares which side.
-        0xA0, 0xA1, 0x10 => .{ .shift = true },
-        0xA2, 0xA3, 0x11 => .{ .control = true },
-        0xA4, 0xA5, 0x12 => .{ .alt = true },
+        // Modifier VKs (`VK_*SHIFT/CONTROL/MENU/LWIN/RWIN`) are
+        // intentionally not mapped here — `refreshModifiersFromOS`
+        // samples the OS's combined state on every key event so the
+        // collapsed `.shift/.control/.alt/.super` flags stay correct
+        // when one side is released while the other is still held.
         else => .{},
     };
+}
+
+/// Sample the OS's effective modifier state via `GetKeyState` and reconcile
+/// it with `self.keysDown`'s modifier bits. Whatever bits flipped this call
+/// also get appended to `pendingPressed` / `pendingReleased` so consumers
+/// of `on(.keyDown)` / `on(.keyUp)` see modifier edges as expected.
+///
+/// Caller holds `keysMutex`.
+fn refreshModifiersFromOS(self: *Self) void {
+    const down = struct {
+        fn f(vk: c_int) bool {
+            return (win32.GetKeyState(vk) & @as(i16, @bitCast(@as(u16, 0x8000)))) != 0;
+        }
+    }.f;
+
+    var current: Keys = .{};
+    // `VK_SHIFT/CONTROL/MENU` themselves report the OR of L/R state.
+    current.shift = down(win32.VK_SHIFT);
+    current.control = down(win32.VK_CONTROL);
+    current.alt = down(win32.VK_MENU);
+    // No combined "Windows key" VK — OR the two sides explicitly.
+    current.super = down(win32.VK_LWIN) or down(win32.VK_RWIN);
+
+    var oldMods: Keys = .{};
+    oldMods.shift = self.keysDown.shift;
+    oldMods.control = self.keysDown.control;
+    oldMods.alt = self.keysDown.alt;
+    oldMods.super = self.keysDown.super;
+
+    self.pendingPressed = self.pendingPressed.with(current.without(oldMods));
+    self.pendingReleased = self.pendingReleased.with(oldMods.without(current));
+
+    self.keysDown.shift = current.shift;
+    self.keysDown.control = current.control;
+    self.keysDown.alt = current.alt;
+    self.keysDown.super = current.super;
 }
 
 pub fn init(
@@ -324,6 +359,7 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                     self.pendingPressed = self.pendingPressed.with(key);
                     self.keysDown = self.keysDown.with(key);
                 }
+                refreshModifiersFromOS(self);
                 self.keysMutex.unlock();
             }
         },
@@ -333,6 +369,7 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                 self.keysMutex.lock();
                 self.pendingReleased = self.pendingReleased.with(key);
                 self.keysDown = self.keysDown.without(key);
+                refreshModifiersFromOS(self);
                 self.keysMutex.unlock();
             }
         },
