@@ -365,9 +365,13 @@ fn buildUseStateTree(stateCount: usize) void {
     });
 }
 
-fn useStateFrame(allocator: std.mem.Allocator, stateCount: usize) void {
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
+fn useStateFrame(arena: *std.heap.ArenaAllocator, stateCount: usize) void {
+    // Reset-and-reuse instead of init/deinit per iteration. A fresh arena
+    // each call ends up doing mmap on init and munmap on deinit, which on
+    // GitHub-hosted runners pays variable hypervisor overhead and dominates
+    // the per-call cost for small `stateCount`. The layout bench already
+    // uses this pattern (see `layoutOnce`).
+    _ = arena.reset(.retain_capacity);
     (forbear.frame(.{
         .arena = arena.allocator(),
         .viewportSize = .{ 1920, 1080 },
@@ -391,8 +395,11 @@ fn runUseStateBench(
     allocator: std.mem.Allocator,
     comptime stateCount: usize,
 ) !Metrics {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
     const name = std.fmt.comptimePrint("useState() {d} states", .{stateCount});
-    return try run(io, allocator, name, useStateFrame, .{ allocator, stateCount }, .{});
+    return try run(io, allocator, name, useStateFrame, .{ &arena, stateCount }, .{});
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -875,14 +882,14 @@ fn write(w: *Writer, options: PrintOptions) !void {
         col_name.width = @max(col_name.width, m.name.len + 2);
 
         // Time (with ± std deviation)
-        const s_time = try fmtTimeWithSd(&buf, m.mean_ns, m.std_dev_ns);
+        const s_time = try fmtTimeWithSd(&buf, m.median_ns, m.std_dev_ns);
         col_time.width = @max(col_time.width, s_time.len);
 
         // Relative
         if (col_speedup.active) {
             const base = options.metrics[options.baseline_index.?];
             // Avoid division by zero
-            const ratio = if (m.mean_ns > 0) base.mean_ns / m.mean_ns else 0;
+            const ratio = if (m.median_ns > 0) base.median_ns / m.median_ns else 0;
             const s_rel = try std.fmt.bufPrint(&buf, "{d:.2}x", .{ratio});
             col_speedup.width = @max(col_speedup.width, s_rel.len);
         }
@@ -983,12 +990,12 @@ fn write(w: *Writer, options: PrintOptions) !void {
         try printCell(w, name_s, col_name);
 
         // Time (with ± std deviation)
-        try printCell(w, try fmtTimeWithSd(&buf, m.mean_ns, m.std_dev_ns), col_time);
+        try printCell(w, try fmtTimeWithSd(&buf, m.median_ns, m.std_dev_ns), col_time);
 
         // Relative
         if (col_speedup.active) {
             const base = options.metrics[options.baseline_index.?];
-            const ratio = if (m.mean_ns > 0) base.mean_ns / m.mean_ns else 0;
+            const ratio = if (m.median_ns > 0) base.median_ns / m.median_ns else 0;
             const s_rel = try std.fmt.bufPrint(&buf, "{d:.2}x", .{ratio});
             try printCell(w, s_rel, col_speedup);
         }
@@ -1173,8 +1180,13 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
     }
     const variance = sum_sq_diff / @as(f64, @floatFromInt(options.sample_size));
 
-    // Calculate Operations Per Second
-    const ops_sec = if (mean > 0) 1_000_000_000.0 / mean else 0;
+    const median = samples[options.sample_size / 2];
+
+    // Derive ops_sec from the median rather than the mean. On noisy hosts
+    // (e.g. GitHub-hosted runners) a handful of slow samples drag the mean
+    // upward and make the headline number jump run-to-run even when the
+    // underlying work is unchanged. Median is robust to that tail.
+    const ops_sec = if (median > 0) 1_000_000_000.0 / median else 0;
 
     // Calculate MB/s (Megabytes per second)
     // Formula: (Ops/Sec * Bytes/Op) / 1,000,000
@@ -1188,7 +1200,7 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
         .min_ns = samples[0],
         .max_ns = samples[samples.len - 1],
         .mean_ns = mean,
-        .median_ns = samples[options.sample_size / 2],
+        .median_ns = median,
         .std_dev_ns = math.sqrt(variance),
         .samples = options.sample_size,
         .iterations = batch_size,
