@@ -126,6 +126,13 @@ pub const Event = enum {
     keyup,
 };
 
+/// Maximum keyboard events buffered between frames. At 60fps and a typical
+/// OS repeat rate of 25–30 keys/sec, a single frame sees well under 1 repeat
+/// event; this cap absorbs ~2s of stalled queue (or one really large Windows
+/// `WM_KEYDOWN` coalesce burst) before we start dropping the *newest* events
+/// rather than letting the accumulator grow without bound in the root arena.
+const max_buffered_key_events = 64;
+
 /// Internal record of a keyboard event, stored in the cross-frame accumulator
 /// with the text bytes inlined (the window callback only owns the slice for
 /// the duration of its call). Materialized back into a `KeyboardKey` when
@@ -197,11 +204,14 @@ mouseButtonPressed: bool,
 scrollDeltaAccumulator: Vec2,
 /// Stable snapshot of scroll delta for the current frame.
 scrollDelta: Vec2,
-/// Key events arriving between frames land here. Drained into the three
-/// per-kind snapshot slices at `frame()` start. Backed by `self.allocator`
-/// so the buffer survives across frames; `clearRetainingCapacity` keeps it
-/// reusable without per-event allocations once a steady state is reached.
-keyEventsAccumulator: std.ArrayList(QueuedKeyEvent) = .empty,
+/// Key events arriving between frames land in this fixed buffer. Drained
+/// into the three per-kind snapshot slices at `frame()` start. Bounded —
+/// once full, new events are dropped (see `max_buffered_key_events` for
+/// the rationale and `pushKeyEvent`).
+keyEventsAccumulator: struct {
+    items: [max_buffered_key_events]QueuedKeyEvent = undefined,
+    len: usize = 0,
+} = .{},
 /// Per-kind snapshots for the current frame. Slices live in `frameMeta.arena`
 /// and are rebuilt every frame. `KeyboardKey.text` inside each entry points
 /// into the same arena, so it's valid for the rest of the frame.
@@ -241,7 +251,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .mouseButtonPressed = false,
         .scrollDeltaAccumulator = @splat(0.0),
         .scrollDelta = @splat(0.0),
-        .keyEventsAccumulator = .empty,
+        .keyEventsAccumulator = .{},
         .keypressEvents = &.{},
         .keydownEvents = &.{},
         .keyupEvents = &.{},
@@ -877,24 +887,19 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
 }
 
 /// Drains `keyEventsAccumulator` into the three per-kind `[]KeyboardKey`
-/// snapshots, with all text bytes copied into `frame_arena` so the slices
-/// stay valid for the whole frame.
+/// snapshots. `KeyboardKey.text` slices point into the accumulator's own
+/// `text_buf` storage, which is stable until the next frame's `len = 0`
+/// reset — i.e. valid for the entire current frame.
 fn snapshotKeyEvents(self: *Forbear, frameArena: std.mem.Allocator) void {
     const empty: []const KeyboardKey = &.{};
     self.keypressEvents = empty;
     self.keydownEvents = empty;
     self.keyupEvents = empty;
-    defer self.keyEventsAccumulator.clearRetainingCapacity();
+    defer self.keyEventsAccumulator.len = 0;
 
-    if (self.keyEventsAccumulator.items.len == 0) return;
+    if (self.keyEventsAccumulator.len == 0) return;
 
-    // Dup the QueuedKeyEvent storage into the frame arena first so the
-    // text_buf inside each entry has a stable address for the KeyboardKey
-    // slices we build next.
-    const queued = frameArena.dupe(QueuedKeyEvent, self.keyEventsAccumulator.items) catch |err| {
-        std.log.err("Failed to snapshot key events: {}", .{err});
-        return;
-    };
+    const queued = self.keyEventsAccumulator.items[0..self.keyEventsAccumulator.len];
 
     var keypress: std.ArrayList(KeyboardKey) = .empty;
     var keydown: std.ArrayList(KeyboardKey) = .empty;
@@ -1917,19 +1922,22 @@ fn makeKeyHandler(comptime kind: @FieldType(QueuedKeyEvent, "kind")) fn (*Window
     return (struct {
         fn handler(_: *Window, key: KeyboardKey, data: *anyopaque) void {
             const ctx: *Forbear = @ptrCast(@alignCast(data));
+            // Drop-newest when the buffer is full — keeps the chronologically
+            // earliest events intact, which is the more useful guarantee for
+            // sequence-sensitive consumers (e.g. text input).
+            if (ctx.keyEventsAccumulator.len >= max_buffered_key_events) return;
             const copy_len: u8 = @intCast(@min(key.text.len, 16));
             var buf: [16]u8 = undefined;
             @memcpy(buf[0..copy_len], key.text[0..copy_len]);
-            ctx.keyEventsAccumulator.append(ctx.allocator, .{
+            ctx.keyEventsAccumulator.items[ctx.keyEventsAccumulator.len] = .{
                 .kind = kind,
                 .time = key.time,
                 .key = key.key,
                 .text_buf = buf,
                 .text_len = copy_len,
                 .is_repeat = key.is_repeat,
-            }) catch |err| {
-                std.log.err("Failed to enqueue key event: {}", .{err});
             };
+            ctx.keyEventsAccumulator.len += 1;
         }
     }).handler;
 }
