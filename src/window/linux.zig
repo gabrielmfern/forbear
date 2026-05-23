@@ -3,10 +3,10 @@ const posix = std.posix;
 const os = std.os;
 
 const c = @import("c");
-const window_root = @import("root.zig");
-const Cursor = window_root.Cursor;
-pub const Keys = window_root.Keys;
-pub const KeyboardSnapshot = window_root.KeyboardSnapshot;
+const windowRoot = @import("root.zig");
+const Cursor = windowRoot.Cursor;
+pub const Keys = windowRoot.Keys;
+pub const KeyboardSnapshot = windowRoot.KeyboardSnapshot;
 
 const Self = @This();
 
@@ -66,7 +66,7 @@ wlKeyboard: *c.wl_keyboard,
 
 /// Keyboard state. The Wayland event thread writes; Forbear's render
 /// thread drains via `snapshotKeyboard()` at frame start.
-keysMutex: window_root.SpinLock = .{},
+keysMutex: windowRoot.SpinLock = .{},
 keysDown: Keys = .{},
 pendingPressed: Keys = .{},
 pendingReleased: Keys = .{},
@@ -121,9 +121,9 @@ fn BindingInfo(T: type) type {
             };
         }
 
-        fn is(self: @This(), interface_name: []const u8) bool {
+        fn is(self: @This(), interfaceName: []const u8) bool {
             const selfName = self.interface.name[0..std.mem.len(self.interface.name)];
-            return std.mem.eql(u8, interface_name, selfName);
+            return std.mem.eql(u8, interfaceName, selfName);
         }
 
         fn bind(self: @This(), registry: ?*c.wl_registry, name: u32, advertisedVersion: u32) *T {
@@ -144,8 +144,8 @@ fn handleMonitorGeometry(
     wlOutput: ?*c.wl_output,
     x: i32,
     y: i32,
-    physical_width: i32,
-    physical_height: i32,
+    physicalWidth: i32,
+    physicalHeight: i32,
     subpixel: i32,
     make: [*c]const u8,
     model: [*c]const u8,
@@ -155,8 +155,8 @@ fn handleMonitorGeometry(
     _ = wlOutput;
     _ = x;
     _ = y;
-    window.physicalWidthMilimeters = physical_width;
-    window.physicalHeightMilimeters = physical_height;
+    window.physicalWidthMilimeters = physicalWidth;
+    window.physicalHeightMilimeters = physicalHeight;
     _ = subpixel;
     _ = make;
     _ = model;
@@ -272,7 +272,7 @@ fn global(
     data: ?*anyopaque,
     registry: ?*c.wl_registry,
     name: u32,
-    interface_ptr: [*c]const u8,
+    interfacePtr: [*c]const u8,
     version: u32,
 ) callconv(.c) void {
     const window: *Self = @ptrCast(@alignCast(data.?));
@@ -310,7 +310,7 @@ fn global(
         1,
     );
 
-    const interfaceName: []const u8 = interface_ptr[0..std.mem.len(interface_ptr)];
+    const interfaceName: []const u8 = interfacePtr[0..std.mem.len(interfacePtr)];
 
     if (compositor.is(interfaceName)) {
         window.wlCompositor = compositor.bind(registry, name, version);
@@ -826,9 +826,9 @@ fn keyboardHandleModifiers(
     data: ?*anyopaque,
     wl_keyboard: ?*c.wl_keyboard,
     serial: u32,
-    mods_depressed: u32,
-    mods_latched: u32,
-    mods_locked: u32,
+    modsDepressed: u32,
+    modsLatched: u32,
+    modsLocked: u32,
     group: u32,
 ) callconv(.c) void {
     _ = wl_keyboard;
@@ -837,7 +837,7 @@ fn keyboardHandleModifiers(
     const window: *Self = @ptrCast(@alignCast(data));
 
     const xkbState = window.xkbState orelse return;
-    _ = c.xkb_state_update_mask(xkbState, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+    _ = c.xkb_state_update_mask(xkbState, modsDepressed, modsLatched, modsLocked, 0, 0, group);
 
     // Translate the effective xkb modifier mask into our `Keys` modifier
     // bits. This is the path that picks up remaps like `caps:ctrl_modifier`

@@ -81,22 +81,22 @@ const MachTimeValue = extern struct {
     microseconds: i32,
 };
 const MachTaskBasicInfo = extern struct {
-    virtual_size: u64,
+    virtualSize: u64,
     resident_size: u64,
-    resident_size_max: u64,
-    user_time: MachTimeValue,
-    system_time: MachTimeValue,
+    residentSizeMax: u64,
+    userTime: MachTimeValue,
+    systemTime: MachTimeValue,
     policy: i32,
-    suspend_count: i32,
+    suspendCount: i32,
 };
 const MACH_TASK_BASIC_INFO: u32 = 20;
 
-extern fn mach_task_self() u32;
-extern fn task_info(
-    target_task: u32,
+extern fn machTaskSelf() u32;
+extern fn taskInfo(
+    targetTask: u32,
     flavor: u32,
-    task_info_out: *anyopaque,
-    task_info_count: *u32,
+    taskInfoOut: *anyopaque,
+    taskInfoCount: *u32,
 ) c_int;
 
 fn processResidentBytes() u64 {
@@ -114,8 +114,8 @@ fn processResidentBytes() u64 {
             };
             var it = std.mem.tokenizeScalar(u8, buffer[0..bytesRead], ' ');
             _ = it.next() orelse return 0;
-            const rss_pages = std.fmt.parseInt(u64, it.next() orelse return 0, 10) catch return 0;
-            return rss_pages * std.heap.pageSize();
+            const rssPages = std.fmt.parseInt(u64, it.next() orelse return 0, 10) catch return 0;
+            return rssPages * std.heap.pageSize();
         },
         .windows => {
             const win32 = @import("windows/win32.zig");
@@ -128,7 +128,7 @@ fn processResidentBytes() u64 {
         .macos => {
             var info: MachTaskBasicInfo = undefined;
             var count: u32 = @sizeOf(MachTaskBasicInfo) / @sizeOf(u32);
-            if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, @ptrCast(&info), &count) != 0) {
+            if (taskInfo(machTaskSelf(), MACH_TASK_BASIC_INFO, @ptrCast(&info), &count) != 0) {
                 return 0;
             }
             return info.resident_size;

@@ -414,29 +414,29 @@ pub fn main(init: std.process.Init) !void {
     defer forbear.deinit();
     try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
 
-    var layout_metrics: [9]Metrics = undefined;
-    layout_metrics[0] = try runLayoutBench(init.io, allocator, 27);
-    layout_metrics[1] = try runLayoutBench(init.io, allocator, 135);
-    layout_metrics[2] = try runLayoutBench(init.io, allocator, 500);
-    layout_metrics[3] = try runLayoutBench(init.io, allocator, 1000);
-    layout_metrics[4] = try runLayoutBench(init.io, allocator, 2641);
-    layout_metrics[5] = try runLayoutBench(init.io, allocator, 5000);
-    layout_metrics[6] = try runLayoutBench(init.io, allocator, 10000);
-    layout_metrics[7] = try runLayoutBench(init.io, allocator, 20000);
-    layout_metrics[8] = try runLayoutBench(init.io, allocator, 50000);
-    try print(.{ .metrics = &layout_metrics });
+    var layoutMetrics: [9]Metrics = undefined;
+    layoutMetrics[0] = try runLayoutBench(init.io, allocator, 27);
+    layoutMetrics[1] = try runLayoutBench(init.io, allocator, 135);
+    layoutMetrics[2] = try runLayoutBench(init.io, allocator, 500);
+    layoutMetrics[3] = try runLayoutBench(init.io, allocator, 1000);
+    layoutMetrics[4] = try runLayoutBench(init.io, allocator, 2641);
+    layoutMetrics[5] = try runLayoutBench(init.io, allocator, 5000);
+    layoutMetrics[6] = try runLayoutBench(init.io, allocator, 10000);
+    layoutMetrics[7] = try runLayoutBench(init.io, allocator, 20000);
+    layoutMetrics[8] = try runLayoutBench(init.io, allocator, 50000);
+    try print(.{ .metrics = &layoutMetrics });
 
-    var state_metrics: [9]Metrics = undefined;
-    state_metrics[0] = try runUseStateBench(init.io, allocator, 27);
-    state_metrics[1] = try runUseStateBench(init.io, allocator, 135);
-    state_metrics[2] = try runUseStateBench(init.io, allocator, 500);
-    state_metrics[3] = try runUseStateBench(init.io, allocator, 1000);
-    state_metrics[4] = try runUseStateBench(init.io, allocator, 2000);
-    state_metrics[5] = try runUseStateBench(init.io, allocator, 5000);
-    state_metrics[6] = try runUseStateBench(init.io, allocator, 10000);
-    state_metrics[7] = try runUseStateBench(init.io, allocator, 20000);
-    state_metrics[8] = try runUseStateBench(init.io, allocator, 50000);
-    try print(.{ .metrics = &state_metrics });
+    var stateMetrics: [9]Metrics = undefined;
+    stateMetrics[0] = try runUseStateBench(init.io, allocator, 27);
+    stateMetrics[1] = try runUseStateBench(init.io, allocator, 135);
+    stateMetrics[2] = try runUseStateBench(init.io, allocator, 500);
+    stateMetrics[3] = try runUseStateBench(init.io, allocator, 1000);
+    stateMetrics[4] = try runUseStateBench(init.io, allocator, 2000);
+    stateMetrics[5] = try runUseStateBench(init.io, allocator, 5000);
+    stateMetrics[6] = try runUseStateBench(init.io, allocator, 10000);
+    stateMetrics[7] = try runUseStateBench(init.io, allocator, 20000);
+    stateMetrics[8] = try runUseStateBench(init.io, allocator, 50000);
+    try print(.{ .metrics = &stateMetrics });
 }
 
 // =================================================================================
@@ -568,13 +568,13 @@ const Event = enum {
 };
 
 fn GroupReadOutputType(comptime events: []const Event) type {
-    var field_names: [events.len][]const u8 = undefined;
-    var field_types: [events.len]type = undefined;
-    var field_attrs: [events.len]Type.StructField.Attributes = undefined;
+    var fieldNames: [events.len][]const u8 = undefined;
+    var fieldTypes: [events.len]type = undefined;
+    var fieldAttrs: [events.len]Type.StructField.Attributes = undefined;
     for (events, 0..) |event, index| {
-        field_names[index] = @tagName(event);
-        field_types[index] = u64;
-        field_attrs[index] = .{
+        fieldNames[index] = @tagName(event);
+        fieldTypes[index] = u64;
+        fieldAttrs[index] = .{
             .@"comptime" = false,
             .@"align" = @alignOf(u64),
             .default_value_ptr = null,
@@ -583,9 +583,9 @@ fn GroupReadOutputType(comptime events: []const Event) type {
     return @Struct(
         .auto,
         null,
-        &field_names,
-        &field_types,
-        &field_attrs,
+        &fieldNames,
+        &fieldTypes,
+        &fieldAttrs,
     );
 }
 
@@ -669,16 +669,16 @@ fn Group(comptime events: []const Event) type {
             @memset(&self.event_fds, -1);
 
             // Leader
-            var group_fd = @as(i32, -1);
-            self.event_fds[0] = try perf_open_group(group_fd, events[0].toType(), events[0].toConfig());
-            self.event_ids[0] = try ioctl_get_id(self.event_fds[0]);
-            group_fd = self.event_fds[0];
+            var groupFd = @as(i32, -1);
+            self.event_fds[0] = try perfOpenGroup(groupFd, events[0].toType(), events[0].toConfig());
+            self.event_ids[0] = try ioctlGetId(self.event_fds[0]);
+            groupFd = self.event_fds[0];
 
             // Siblings
             if (events.len > 1) {
                 for (events[1..], 1..) |event, i| {
-                    self.event_fds[i] = try perf_open_group(group_fd, event.toType(), event.toConfig());
-                    self.event_ids[i] = try ioctl_get_id(self.event_fds[i]);
+                    self.event_fds[i] = try perfOpenGroup(groupFd, event.toType(), event.toConfig());
+                    self.event_ids[i] = try ioctlGetId(self.event_fds[i]);
                 }
             }
             return self;
@@ -687,9 +687,9 @@ fn Group(comptime events: []const Event) type {
         /// Closes all file descriptors associated with this event group.
         /// This invalidates the group object.
         fn deinit(self: *Self) void {
-            for (self.event_fds, 0..) |event_fd, index| {
-                if (event_fd != -1) {
-                    _ = linux.close(event_fd);
+            for (self.event_fds, 0..) |eventFd, index| {
+                if (eventFd != -1) {
+                    _ = linux.close(eventFd);
                 }
                 self.event_fds[index] = -1;
                 self.event_ids[index] = 0;
@@ -698,17 +698,17 @@ fn Group(comptime events: []const Event) type {
 
         /// Resets and enables the event group. Counting begins immediately.
         fn enable(self: *Self) Error!void {
-            const group_fd = self.event_fds[0];
-            if (group_fd == -1) return error.BadGroup;
-            try ioctl_reset_group(group_fd);
-            try ioctl_enable_group(group_fd);
+            const groupFd = self.event_fds[0];
+            if (groupFd == -1) return error.BadGroup;
+            try ioctlResetGroup(groupFd);
+            try ioctlEnableGroup(groupFd);
         }
 
         /// Disables the event group. Counting stops immediately.
         fn disable(self: *Self) Error!void {
-            const group_fd = self.event_fds[0];
-            if (group_fd == -1) return error.BadGroup;
-            try ioctl_disable_group(group_fd);
+            const groupFd = self.event_fds[0];
+            if (groupFd == -1) return error.BadGroup;
+            try ioctlDisableGroup(groupFd);
         }
 
         /// Reads the current values from the kernel and maps them to the
@@ -733,8 +733,8 @@ fn Group(comptime events: []const Event) type {
             if (data.time_running == 0) return output;
 
             // Multiplexing scaling: scaled_value = value * (time_enabled / time_running)
-            const scale_needed = data.time_running < data.time_enabled;
-            const scale_factor = if (scale_needed)
+            const scaleNeeded = data.time_running < data.time_enabled;
+            const scaleFactor = if (scaleNeeded)
                 @as(f64, @floatFromInt(data.time_enabled)) / @as(f64, @floatFromInt(data.time_running))
             else
                 1.0;
@@ -742,8 +742,8 @@ fn Group(comptime events: []const Event) type {
             for (data.values) |item| {
                 var val = item.value;
 
-                if (scale_needed) {
-                    val = @as(u64, @intFromFloat(@as(f64, @floatFromInt(val)) * scale_factor));
+                if (scaleNeeded) {
+                    val = @as(u64, @intFromFloat(@as(f64, @floatFromInt(val)) * scaleFactor));
                 }
 
                 // Map the kernel ID back to our event tags
@@ -761,9 +761,9 @@ fn Group(comptime events: []const Event) type {
         // perf & ioctl calls
 
         // Open new file descriptor for the specific event
-        fn perf_open_group(group_fd: linux.fd_t, event_type: linux.PERF.TYPE, config: u64) Error!linux.fd_t {
+        fn perfOpenGroup(groupFd: linux.fd_t, eventType: linux.PERF.TYPE, config: u64) Error!linux.fd_t {
             var attr = std.mem.zeroes(linux.perf_event_attr);
-            attr.type = event_type;
+            attr.type = eventType;
             attr.config = config;
 
             // Enable grouping and ID tracking
@@ -772,7 +772,7 @@ fn Group(comptime events: []const Event) type {
                 PERF_FORMAT_TOTAL_TIME_RUNNING |
                 PERF_FORMAT_ID;
 
-            attr.flags.disabled = (group_fd == -1); // Only leader starts disabled
+            attr.flags.disabled = (groupFd == -1); // Only leader starts disabled
             attr.flags.inherit = true;
             attr.flags.exclude_kernel = true;
             attr.flags.exclude_hv = true;
@@ -783,13 +783,13 @@ fn Group(comptime events: []const Event) type {
             const cpu = -1;
             const flags = 0;
 
-            const rc = linux.perf_event_open(&attr, pid, cpu, group_fd, flags);
+            const rc = linux.perf_event_open(&attr, pid, cpu, groupFd, flags);
             if (linux.errno(rc) != .SUCCESS) return error.OpenGroupFailed;
             return @intCast(rc);
         }
 
         // ref: `man 2 perf_event_open` then search for `PERF_EVENT_IOC_ID`
-        fn ioctl_get_id(fd: linux.fd_t) Error!u64 {
+        fn ioctlGetId(fd: linux.fd_t) Error!u64 {
             var id: u64 = 0;
             const rc = linux.ioctl(fd, PERF_EVENT_IOC_ID, @intFromPtr(&id));
             if (linux.errno(rc) != .SUCCESS) return error.GetIdFailed;
@@ -797,19 +797,19 @@ fn Group(comptime events: []const Event) type {
         }
 
         // ref: `man 2 perf_event_open` then search for `PERF_EVENT_IOC_RESET`
-        fn ioctl_reset_group(fd: linux.fd_t) Error!void {
+        fn ioctlResetGroup(fd: linux.fd_t) Error!void {
             const rc = linux.ioctl(fd, PERF_EVENT_IOC_RESET, 0);
             if (linux.errno(rc) != .SUCCESS) return error.ResetGroupFailed;
         }
 
         // ref: `man 2 perf_event_open` then search for `PERF_EVENT_IOC_ENABLE`
-        fn ioctl_enable_group(fd: linux.fd_t) Error!void {
+        fn ioctlEnableGroup(fd: linux.fd_t) Error!void {
             const rc = linux.ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
             if (linux.errno(rc) != .SUCCESS) return error.EnableGroupFailed;
         }
 
         // ref: `man 2 perf_event_open` then search for `PERF_EVENT_IOC_DISABLE`
-        fn ioctl_disable_group(fd: linux.fd_t) Error!void {
+        fn ioctlDisableGroup(fd: linux.fd_t) Error!void {
             const rc = linux.ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
             if (linux.errno(rc) != .SUCCESS) return error.DisableGroupFailed;
         }
@@ -839,19 +839,19 @@ fn write(w: *Writer, options: PrintOptions) !void {
     if (options.metrics.len == 0) return;
 
     // Initialize columns with Header names and default visibility
-    var col_name = Column{ .title = "Benchmark", .width = 0, .align_right = false, .active = true };
-    var col_time = Column{ .title = "Time", .width = 0, .align_right = true, .active = true };
-    var col_speedup = Column{ .title = "Speedup", .width = 0, .align_right = true, .active = false };
-    var col_iter = Column{ .title = "Iterations", .width = 0, .align_right = true, .active = true };
+    var colName = Column{ .title = "Benchmark", .width = 0, .align_right = false, .active = true };
+    var colTime = Column{ .title = "Time", .width = 0, .align_right = true, .active = true };
+    var colSpeedup = Column{ .title = "Speedup", .width = 0, .align_right = true, .active = false };
+    var colIter = Column{ .title = "Iterations", .width = 0, .align_right = true, .active = true };
 
-    var col_bytes = Column{ .title = "Bytes/s", .width = 0, .align_right = true, .active = false };
-    var col_ops = Column{ .title = "Ops/s", .width = 0, .align_right = true, .active = false };
-    var col_cycles = Column{ .title = "Cycles", .width = 0, .align_right = true, .active = false };
-    var col_instr = Column{ .title = "Instructions", .width = 0, .align_right = true, .active = false };
-    var col_ipc = Column{ .title = "IPC", .width = 0, .align_right = true, .active = false };
-    var col_miss = Column{ .title = "Cache Misses", .width = 0, .align_right = true, .active = false };
-    var col_page_faults = Column{ .title = "Page Faults", .width = 0, .align_right = true, .active = false };
-    var col_ctx_switches = Column{ .title = "Ctx Switches", .width = 0, .align_right = true, .active = false };
+    var colBytes = Column{ .title = "Bytes/s", .width = 0, .align_right = true, .active = false };
+    var colOps = Column{ .title = "Ops/s", .width = 0, .align_right = true, .active = false };
+    var colCycles = Column{ .title = "Cycles", .width = 0, .align_right = true, .active = false };
+    var colInstr = Column{ .title = "Instructions", .width = 0, .align_right = true, .active = false };
+    var colIpc = Column{ .title = "IPC", .width = 0, .align_right = true, .active = false };
+    var colMiss = Column{ .title = "Cache Misses", .width = 0, .align_right = true, .active = false };
+    var colPageFaults = Column{ .title = "Page Faults", .width = 0, .align_right = true, .active = false };
+    var colCtxSwitches = Column{ .title = "Ctx Switches", .width = 0, .align_right = true, .active = false };
 
     // We must format every number to a temporary buffer to know its length.
     var buf: [64]u8 = undefined;
@@ -859,126 +859,126 @@ fn write(w: *Writer, options: PrintOptions) !void {
     // Activate Rel column if baseline_index is valid
     if (options.baseline_index) |idx| {
         if (idx < options.metrics.len) {
-            col_speedup.active = true;
+            colSpeedup.active = true;
         }
     }
 
     // Check headers first
-    col_name.width = col_name.title.len;
-    col_time.width = col_time.title.len;
-    col_speedup.width = col_speedup.title.len;
-    col_iter.width = col_iter.title.len;
-    col_bytes.width = col_bytes.title.len;
-    col_ops.width = col_ops.title.len;
-    col_cycles.width = col_cycles.title.len;
-    col_instr.width = col_instr.title.len;
-    col_ipc.width = col_ipc.title.len;
-    col_miss.width = col_miss.title.len;
-    col_page_faults.width = col_page_faults.title.len;
-    col_ctx_switches.width = col_ctx_switches.title.len;
+    colName.width = colName.title.len;
+    colTime.width = colTime.title.len;
+    colSpeedup.width = colSpeedup.title.len;
+    colIter.width = colIter.title.len;
+    colBytes.width = colBytes.title.len;
+    colOps.width = colOps.title.len;
+    colCycles.width = colCycles.title.len;
+    colInstr.width = colInstr.title.len;
+    colIpc.width = colIpc.title.len;
+    colMiss.width = colMiss.title.len;
+    colPageFaults.width = colPageFaults.title.len;
+    colCtxSwitches.width = colCtxSwitches.title.len;
 
     for (options.metrics) |m| {
         // Name: +2 for backticks
-        col_name.width = @max(col_name.width, m.name.len + 2);
+        colName.width = @max(colName.width, m.name.len + 2);
 
         // Time (with ± std deviation)
-        const s_time = try fmtTimeWithSd(&buf, m.median_ns, m.std_dev_ns);
-        col_time.width = @max(col_time.width, s_time.len);
+        const sTime = try fmtTimeWithSd(&buf, m.median_ns, m.std_dev_ns);
+        colTime.width = @max(colTime.width, sTime.len);
 
         // Relative
-        if (col_speedup.active) {
+        if (colSpeedup.active) {
             const base = options.metrics[options.baseline_index.?];
             // Avoid division by zero
             const ratio = if (m.median_ns > 0) base.median_ns / m.median_ns else 0;
-            const s_rel = try std.fmt.bufPrint(&buf, "{d:.2}x", .{ratio});
-            col_speedup.width = @max(col_speedup.width, s_rel.len);
+            const sRel = try std.fmt.bufPrint(&buf, "{d:.2}x", .{ratio});
+            colSpeedup.width = @max(colSpeedup.width, sRel.len);
         }
 
         // Iterations (batch size — how many ops per sample)
-        const s_iter = try std.fmt.bufPrint(&buf, "{d}", .{m.iterations});
-        col_iter.width = @max(col_iter.width, s_iter.len);
+        const sIter = try std.fmt.bufPrint(&buf, "{d}", .{m.iterations});
+        colIter.width = @max(colIter.width, sIter.len);
 
         // Optional Columns (Enable & Measure)
         if (m.mb_sec > 0.001) {
-            col_bytes.active = true;
+            colBytes.active = true;
             const s = try fmtBytes(&buf, m.mb_sec);
-            col_bytes.width = @max(col_bytes.width, s.len);
+            colBytes.width = @max(colBytes.width, s.len);
         }
         if (m.ops_sec > 0.001 and m.mb_sec <= 0.001) {
-            col_ops.active = true;
-            const s_val = try fmtMetric(&buf, m.ops_sec);
+            colOps.active = true;
+            const sVal = try fmtMetric(&buf, m.ops_sec);
             // We append "/s" in the final output, so add 2 to length
-            col_ops.width = @max(col_ops.width, s_val.len + 2);
+            colOps.width = @max(colOps.width, sVal.len + 2);
         }
         if (m.cycles) |v| {
-            col_cycles.active = true;
+            colCycles.active = true;
             const s = try fmtMetric(&buf, v);
-            col_cycles.width = @max(col_cycles.width, s.len);
+            colCycles.width = @max(colCycles.width, s.len);
         }
         if (m.instructions) |v| {
-            col_instr.active = true;
+            colInstr.active = true;
             const s = try fmtMetric(&buf, v);
-            col_instr.width = @max(col_instr.width, s.len);
+            colInstr.width = @max(colInstr.width, s.len);
         }
         if (m.ipc) |v| {
-            col_ipc.active = true;
+            colIpc.active = true;
             const s = try std.fmt.bufPrint(&buf, "{d:.2}", .{v});
-            col_ipc.width = @max(col_ipc.width, s.len);
+            colIpc.width = @max(colIpc.width, s.len);
         }
         if (m.cache_misses) |v| {
-            col_miss.active = true;
+            colMiss.active = true;
             const s = try fmtMetric(&buf, v);
-            col_miss.width = @max(col_miss.width, s.len);
+            colMiss.width = @max(colMiss.width, s.len);
         }
         // Software events are typically 0 in a CPU-bound steady-state
         // benchmark, so only surface the column if at least one row has a
         // non-trivial value worth showing.
         if (m.page_faults) |v| {
             if (v > 0.001) {
-                col_page_faults.active = true;
+                colPageFaults.active = true;
                 const s = try fmtMetric(&buf, v);
-                col_page_faults.width = @max(col_page_faults.width, s.len);
+                colPageFaults.width = @max(colPageFaults.width, s.len);
             }
         }
         if (m.context_switches) |v| {
             if (v > 0.001) {
-                col_ctx_switches.active = true;
+                colCtxSwitches.active = true;
                 const s = try fmtMetric(&buf, v);
-                col_ctx_switches.width = @max(col_ctx_switches.width, s.len);
+                colCtxSwitches.width = @max(colCtxSwitches.width, s.len);
             }
         }
     }
 
     // Header Row
     try w.writeAll("| ");
-    try printCell(w, col_name.title, col_name);
-    try printCell(w, col_time.title, col_time);
-    if (col_speedup.active) try printCell(w, col_speedup.title, col_speedup);
-    try printCell(w, col_iter.title, col_iter);
-    if (col_bytes.active) try printCell(w, col_bytes.title, col_bytes);
-    if (col_ops.active) try printCell(w, col_ops.title, col_ops);
-    if (col_cycles.active) try printCell(w, col_cycles.title, col_cycles);
-    if (col_instr.active) try printCell(w, col_instr.title, col_instr);
-    if (col_ipc.active) try printCell(w, col_ipc.title, col_ipc);
-    if (col_miss.active) try printCell(w, col_miss.title, col_miss);
-    if (col_page_faults.active) try printCell(w, col_page_faults.title, col_page_faults);
-    if (col_ctx_switches.active) try printCell(w, col_ctx_switches.title, col_ctx_switches);
+    try printCell(w, colName.title, colName);
+    try printCell(w, colTime.title, colTime);
+    if (colSpeedup.active) try printCell(w, colSpeedup.title, colSpeedup);
+    try printCell(w, colIter.title, colIter);
+    if (colBytes.active) try printCell(w, colBytes.title, colBytes);
+    if (colOps.active) try printCell(w, colOps.title, colOps);
+    if (colCycles.active) try printCell(w, colCycles.title, colCycles);
+    if (colInstr.active) try printCell(w, colInstr.title, colInstr);
+    if (colIpc.active) try printCell(w, colIpc.title, colIpc);
+    if (colMiss.active) try printCell(w, colMiss.title, colMiss);
+    if (colPageFaults.active) try printCell(w, colPageFaults.title, colPageFaults);
+    if (colCtxSwitches.active) try printCell(w, colCtxSwitches.title, colCtxSwitches);
     try w.writeAll("\n");
 
     // Separator Row
     try w.writeAll("| ");
-    try printDivider(w, col_name);
-    try printDivider(w, col_time);
-    if (col_speedup.active) try printDivider(w, col_speedup);
-    try printDivider(w, col_iter);
-    if (col_bytes.active) try printDivider(w, col_bytes);
-    if (col_ops.active) try printDivider(w, col_ops);
-    if (col_cycles.active) try printDivider(w, col_cycles);
-    if (col_instr.active) try printDivider(w, col_instr);
-    if (col_ipc.active) try printDivider(w, col_ipc);
-    if (col_miss.active) try printDivider(w, col_miss);
-    if (col_page_faults.active) try printDivider(w, col_page_faults);
-    if (col_ctx_switches.active) try printDivider(w, col_ctx_switches);
+    try printDivider(w, colName);
+    try printDivider(w, colTime);
+    if (colSpeedup.active) try printDivider(w, colSpeedup);
+    try printDivider(w, colIter);
+    if (colBytes.active) try printDivider(w, colBytes);
+    if (colOps.active) try printDivider(w, colOps);
+    if (colCycles.active) try printDivider(w, colCycles);
+    if (colInstr.active) try printDivider(w, colInstr);
+    if (colIpc.active) try printDivider(w, colIpc);
+    if (colMiss.active) try printDivider(w, colMiss);
+    if (colPageFaults.active) try printDivider(w, colPageFaults);
+    if (colCtxSwitches.active) try printDivider(w, colCtxSwitches);
     try w.writeAll("\n");
 
     // Data Rows
@@ -986,57 +986,57 @@ fn write(w: *Writer, options: PrintOptions) !void {
         try w.writeAll("| ");
 
         // Name
-        const name_s = try std.fmt.bufPrint(&buf, "`{s}`", .{m.name});
-        try printCell(w, name_s, col_name);
+        const nameS = try std.fmt.bufPrint(&buf, "`{s}`", .{m.name});
+        try printCell(w, nameS, colName);
 
         // Time (with ± std deviation)
-        try printCell(w, try fmtTimeWithSd(&buf, m.median_ns, m.std_dev_ns), col_time);
+        try printCell(w, try fmtTimeWithSd(&buf, m.median_ns, m.std_dev_ns), colTime);
 
         // Relative
-        if (col_speedup.active) {
+        if (colSpeedup.active) {
             const base = options.metrics[options.baseline_index.?];
             const ratio = if (m.median_ns > 0) base.median_ns / m.median_ns else 0;
-            const s_rel = try std.fmt.bufPrint(&buf, "{d:.2}x", .{ratio});
-            try printCell(w, s_rel, col_speedup);
+            const sRel = try std.fmt.bufPrint(&buf, "{d:.2}x", .{ratio});
+            try printCell(w, sRel, colSpeedup);
         }
 
         // Iterations
-        const iter_s = try std.fmt.bufPrint(&buf, "{d}", .{m.iterations});
-        try printCell(w, iter_s, col_iter);
+        const iterS = try std.fmt.bufPrint(&buf, "{d}", .{m.iterations});
+        try printCell(w, iterS, colIter);
 
         // Optional
-        if (col_bytes.active) {
-            if (m.mb_sec > 0.001) try printCell(w, try fmtBytes(&buf, m.mb_sec), col_bytes) else try printCell(w, "-", col_bytes);
+        if (colBytes.active) {
+            if (m.mb_sec > 0.001) try printCell(w, try fmtBytes(&buf, m.mb_sec), colBytes) else try printCell(w, "-", colBytes);
         }
-        if (col_ops.active) {
+        if (colOps.active) {
             if (m.ops_sec > 0.001) {
                 // Must manually construct the string with suffix to match width measurement
                 const val = try fmtMetric(&buf, m.ops_sec);
                 var buf2: [64]u8 = undefined;
                 const final = try std.fmt.bufPrint(&buf2, "{s}/s", .{val});
-                try printCell(w, final, col_ops);
-            } else try printCell(w, "-", col_ops);
+                try printCell(w, final, colOps);
+            } else try printCell(w, "-", colOps);
         }
-        if (col_cycles.active) {
-            if (m.cycles) |v| try printCell(w, try fmtMetric(&buf, v), col_cycles) else try printCell(w, "-", col_cycles);
+        if (colCycles.active) {
+            if (m.cycles) |v| try printCell(w, try fmtMetric(&buf, v), colCycles) else try printCell(w, "-", colCycles);
         }
-        if (col_instr.active) {
-            if (m.instructions) |v| try printCell(w, try fmtMetric(&buf, v), col_instr) else try printCell(w, "-", col_instr);
+        if (colInstr.active) {
+            if (m.instructions) |v| try printCell(w, try fmtMetric(&buf, v), colInstr) else try printCell(w, "-", colInstr);
         }
-        if (col_ipc.active) {
+        if (colIpc.active) {
             if (m.ipc) |v| {
                 const s = try std.fmt.bufPrint(&buf, "{d:.2}", .{v});
-                try printCell(w, s, col_ipc);
-            } else try printCell(w, "-", col_ipc);
+                try printCell(w, s, colIpc);
+            } else try printCell(w, "-", colIpc);
         }
-        if (col_miss.active) {
-            if (m.cache_misses) |v| try printCell(w, try fmtMetric(&buf, v), col_miss) else try printCell(w, "-", col_miss);
+        if (colMiss.active) {
+            if (m.cache_misses) |v| try printCell(w, try fmtMetric(&buf, v), colMiss) else try printCell(w, "-", colMiss);
         }
-        if (col_page_faults.active) {
-            if (m.page_faults) |v| try printCell(w, try fmtMetric(&buf, v), col_page_faults) else try printCell(w, "-", col_page_faults);
+        if (colPageFaults.active) {
+            if (m.page_faults) |v| try printCell(w, try fmtMetric(&buf, v), colPageFaults) else try printCell(w, "-", colPageFaults);
         }
-        if (col_ctx_switches.active) {
-            if (m.context_switches) |v| try printCell(w, try fmtMetric(&buf, v), col_ctx_switches) else try printCell(w, "-", col_ctx_switches);
+        if (colCtxSwitches.active) {
+            if (m.context_switches) |v| try printCell(w, try fmtMetric(&buf, v), colCtxSwitches) else try printCell(w, "-", colCtxSwitches);
         }
 
         try w.writeAll("\n");
@@ -1044,14 +1044,14 @@ fn write(w: *Writer, options: PrintOptions) !void {
 }
 
 fn printCell(w: *Writer, text: []const u8, col: Column) !void {
-    const pad_len = if (col.width > text.len) col.width - text.len else 0;
+    const padLen = if (col.width > text.len) col.width - text.len else 0;
 
     if (col.align_right) {
-        _ = try w.splatByte(' ', pad_len);
+        _ = try w.splatByte(' ', padLen);
         try w.writeAll(text);
     } else {
         try w.writeAll(text);
-        _ = try w.splatByte(' ', pad_len);
+        _ = try w.splatByte(' ', padLen);
     }
     try w.writeAll(" | ");
 }
@@ -1078,7 +1078,7 @@ fn fmtTime(buf: []u8, ns: f64) ![]const u8 {
 
 /// Formats `mean ns ± sd ns` using the unit picked by `mean` for both halves,
 /// so the values line up visually instead of jumping between us / ns / ms.
-fn fmtTimeWithSd(buf: []u8, mean_ns: f64, sd_ns: f64) ![]const u8 {
+fn fmtTimeWithSd(buf: []u8, mean_ns: f64, sdNs: f64) ![]const u8 {
     const divisor: f64, const unit: []const u8 = blk: {
         if (mean_ns < 1_000) break :blk .{ 1.0, "ns" };
         if (mean_ns < 1_000_000) break :blk .{ 1_000.0, "us" };
@@ -1088,7 +1088,7 @@ fn fmtTimeWithSd(buf: []u8, mean_ns: f64, sd_ns: f64) ![]const u8 {
     return std.fmt.bufPrint(buf, "{d:.2} {s} ± {d:.3}", .{
         mean_ns / divisor,
         unit,
-        sd_ns / divisor,
+        sdNs / divisor,
     });
 }
 
@@ -1114,34 +1114,34 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
     assertFunctionDef(function, args);
 
     // ref: https://pyk.sh/blog/2025-12-08-bench-fixing-constant-folding
-    var runtime_args = createRuntimeArgs(function, args);
-    std.mem.doNotOptimizeAway(&runtime_args);
+    var runtimeArgs = createRuntimeArgs(function, args);
+    std.mem.doNotOptimizeAway(&runtimeArgs);
 
     for (0..options.warmup_iters) |_| {
-        try execute(function, runtime_args);
+        try execute(function, runtimeArgs);
     }
 
     // We need to determine a batch_size such that the total execution time of the batch
     // is large enough to minimize timer resolution noise.
     // Target: 1ms (1,000,000 ns) per measurement block.
-    const min_sample_time_ns = 1_000_000;
+    const minSampleTimeNs = 1_000_000;
     var batch_size: u64 = 1;
     var ts = Timestamp.now(io, .awake);
 
     while (true) {
         ts = Timestamp.now(io, .awake);
         for (0..batch_size) |_| {
-            try execute(function, runtime_args);
+            try execute(function, runtimeArgs);
         }
         const duration: u64 = @intCast(ts.durationTo(Timestamp.now(io, .awake)).nanoseconds);
 
-        if (duration >= min_sample_time_ns) break;
+        if (duration >= minSampleTimeNs) break;
 
         // If the duration is 0 (too fast to measure) or small, scale up
         if (duration == 0) {
             batch_size *= 10;
         } else {
-            const ratio = @as(f64, @floatFromInt(min_sample_time_ns)) / @as(f64, @floatFromInt(duration));
+            const ratio = @as(f64, @floatFromInt(minSampleTimeNs)) / @as(f64, @floatFromInt(duration));
             const multiplier = @as(u64, @intFromFloat(std.math.ceil(ratio)));
             if (multiplier <= 1) {
                 batch_size *= 2; // Fallback growth
@@ -1157,11 +1157,11 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
     for (0..options.sample_size) |i| {
         ts = Timestamp.now(io, .awake);
         for (0..batch_size) |_| {
-            try execute(function, runtime_args);
+            try execute(function, runtimeArgs);
         }
-        const total_ns: u64 = @intCast(ts.durationTo(Timestamp.now(io, .awake)).nanoseconds);
+        const totalNs: u64 = @intCast(ts.durationTo(Timestamp.now(io, .awake)).nanoseconds);
         // Average time per operation for this batch
-        samples[i] = @as(f64, @floatFromInt(total_ns)) / @as(f64, @floatFromInt(batch_size));
+        samples[i] = @as(f64, @floatFromInt(totalNs)) / @as(f64, @floatFromInt(batch_size));
     }
 
     // Sort samples to find the median and process min/max
@@ -1173,12 +1173,12 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
     const mean = sum / @as(f64, @floatFromInt(options.sample_size));
 
     // Calculate Variance for Standard Deviation
-    var sum_sq_diff: f64 = 0;
+    var sumSqDiff: f64 = 0;
     for (samples) |s| {
         const diff = s - mean;
-        sum_sq_diff += diff * diff;
+        sumSqDiff += diff * diff;
     }
-    const variance = sum_sq_diff / @as(f64, @floatFromInt(options.sample_size));
+    const variance = sumSqDiff / @as(f64, @floatFromInt(options.sample_size));
 
     const median = samples[options.sample_size / 2];
 
@@ -1209,16 +1209,16 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
     };
 
     if (builtin.os.tag == .linux) {
-        const hw_events = [_]Event{ .cpu_cycles, .instructions, .cache_misses };
-        const sw_events = [_]Event{ .page_faults, .context_switches };
-        const HwGroup = Group(&hw_events);
-        const SwGroup = Group(&sw_events);
+        const hwEvents = [_]Event{ .cpu_cycles, .instructions, .cache_misses };
+        const swEvents = [_]Event{ .page_faults, .context_switches };
+        const HwGroup = Group(&hwEvents);
+        const SwGroup = Group(&swEvents);
 
         // Counters just accumulate, so we don't need anywhere near `sample_size`
         // samples for an accurate per-op average — cap the perf pass so a
         // larger timing-pass `sample_size` doesn't multiply the bench runtime.
         const perf_samples = @min(options.sample_size, 1000);
-        const total_ops = @as(f64, @floatFromInt(perf_samples * batch_size));
+        const totalOps = @as(f64, @floatFromInt(perf_samples * batch_size));
 
         // Hardware PMU events. These require a real PMU; CI runners and other
         // VMs typically don't expose one, so this attempt fails there.
@@ -1229,21 +1229,21 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
             try group.enable();
             for (0..perf_samples) |_| {
                 for (0..batch_size) |_| {
-                    try execute(function, runtime_args);
+                    try execute(function, runtimeArgs);
                 }
             }
             try group.disable();
 
             const m = try group.read();
-            const avg_cycles = @as(f64, @floatFromInt(m.cpu_cycles)) / total_ops;
-            const avg_instr = @as(f64, @floatFromInt(m.instructions)) / total_ops;
-            const avg_misses = @as(f64, @floatFromInt(m.cache_misses)) / total_ops;
+            const avgCycles = @as(f64, @floatFromInt(m.cpu_cycles)) / totalOps;
+            const avgInstr = @as(f64, @floatFromInt(m.instructions)) / totalOps;
+            const avgMisses = @as(f64, @floatFromInt(m.cache_misses)) / totalOps;
 
-            metrics.cycles = avg_cycles;
-            metrics.instructions = avg_instr;
-            metrics.cache_misses = avg_misses;
-            if (avg_cycles > 0) {
-                metrics.ipc = avg_instr / avg_cycles;
+            metrics.cycles = avgCycles;
+            metrics.instructions = avgInstr;
+            metrics.cache_misses = avgMisses;
+            if (avgCycles > 0) {
+                metrics.ipc = avgInstr / avgCycles;
             }
         } else |_| {
             // Hardware PMU unavailable — fall back to kernel-tracked software
@@ -1256,14 +1256,14 @@ pub fn run(io: std.Io, allocator: Allocator, name: []const u8, function: anytype
                 try group.enable();
                 for (0..perf_samples) |_| {
                     for (0..batch_size) |_| {
-                        try execute(function, runtime_args);
+                        try execute(function, runtimeArgs);
                     }
                 }
                 try group.disable();
 
                 const m = try group.read();
-                metrics.page_faults = @as(f64, @floatFromInt(m.page_faults)) / total_ops;
-                metrics.context_switches = @as(f64, @floatFromInt(m.context_switches)) / total_ops;
+                metrics.page_faults = @as(f64, @floatFromInt(m.page_faults)) / totalOps;
+                metrics.context_switches = @as(f64, @floatFromInt(m.context_switches)) / totalOps;
             } else |_| {}
         }
     }
@@ -1296,8 +1296,8 @@ fn unwrapFnType(comptime T: type) type {
 
 fn assertFunctionDef(function: anytype, args: anytype) void {
     const ArgsType = @TypeOf(args);
-    const args_info = @typeInfo(ArgsType);
-    if (args_info != .@"struct" or !args_info.@"struct".is_tuple) {
+    const argsInfo = @typeInfo(ArgsType);
+    if (argsInfo != .@"struct" or !argsInfo.@"struct".is_tuple) {
         @compileError("Expected 'args' to be a tuple, found '" ++ @typeName(ArgsType) ++ "'");
     }
 
@@ -1307,12 +1307,12 @@ fn assertFunctionDef(function: anytype, args: anytype) void {
     }
 
     const params_len = @typeInfo(FnType).@"fn".params.len;
-    const args_len = @typeInfo(ArgsType).@"struct".fields.len;
+    const argsLen = @typeInfo(ArgsType).@"struct".fields.len;
 
-    if (params_len != args_len) {
+    if (params_len != argsLen) {
         @compileError(std.fmt.comptimePrint(
             "Function expects {d} arguments, but args tuple has {d}",
-            .{ params_len, args_len },
+            .{ params_len, argsLen },
         ));
     }
 }
@@ -1323,27 +1323,27 @@ fn assertFunctionDef(function: anytype, args: anytype) void {
 /// Constructs the runtime argument tuple based on function parameters and input args.
 fn createRuntimeArgs(function: anytype, args: anytype) RuntimeArgsType(@TypeOf(function), @TypeOf(args)) {
     const TupleType = RuntimeArgsType(@TypeOf(function), @TypeOf(args));
-    var runtime_args: TupleType = undefined;
+    var runtimeArgs: TupleType = undefined;
 
     // We only need the length here to iterate
     const params_len = comptime getFnParams(@TypeOf(function)).len;
 
     inline for (0..params_len) |i| {
-        runtime_args[i] = args[i];
+        runtimeArgs[i] = args[i];
     }
-    return runtime_args;
+    return runtimeArgs;
 }
 
 /// Computes the precise Tuple type required to hold the arguments.
 fn RuntimeArgsType(comptime FnType: type, comptime ArgsType: type) type {
-    const fn_params = getFnParams(FnType);
-    const args_fields = @typeInfo(ArgsType).@"struct".fields;
-    comptime var types: [fn_params.len]type = undefined;
-    inline for (fn_params, 0..) |p, i| {
+    const fnParams = getFnParams(FnType);
+    const argsFields = @typeInfo(ArgsType).@"struct".fields;
+    comptime var types: [fnParams.len]type = undefined;
+    inline for (fnParams, 0..) |p, i| {
         if (p.type) |t| {
             types[i] = t;
         } else {
-            types[i] = args_fields[i].type;
+            types[i] = argsFields[i].type;
         }
     }
     return std.meta.Tuple(&types);

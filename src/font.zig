@@ -329,29 +329,29 @@ pub fn LRU(
                 std.debug.assert(self.last != null);
                 std.debug.assert(self.first != null);
 
-                const removed_least_recent_entry = self.entries[self.last.?];
+                const removedLeastRecentEntry = self.entries[self.last.?];
 
                 // since the capacity of the entries is full, we reuse the last entry's memory with
                 // the one from this new one
-                const new_entry_index = self.last.?;
-                self.entries[new_entry_index].key = entry.key;
-                self.entries[new_entry_index].value = entry.value;
-                self.set_first(new_entry_index);
+                const newEntryIndex = self.last.?;
+                self.entries[newEntryIndex].key = entry.key;
+                self.entries[newEntryIndex].value = entry.value;
+                self.set_first(newEntryIndex);
                 // we remove before here to ensure the capacity of the hashmap is available for the
                 // new entry's key
-                _ = self.entries_map.remove(removed_least_recent_entry.key);
-                self.entries_map.putAssumeCapacity(key, new_entry_index);
+                _ = self.entries_map.remove(removedLeastRecentEntry.key);
+                self.entries_map.putAssumeCapacity(key, newEntryIndex);
 
-                return .{ .index = new_entry_index, .evicted = removed_least_recent_entry };
+                return .{ .index = newEntryIndex, .evicted = removedLeastRecentEntry };
             } else {
-                const new_entry_index = self.length;
-                self.entries[new_entry_index] = entry;
-                self.set_first(new_entry_index);
+                const newEntryIndex = self.length;
+                self.entries[newEntryIndex] = entry;
+                self.set_first(newEntryIndex);
                 self.length += 1;
 
-                self.entries_map.putAssumeCapacity(key, new_entry_index);
+                self.entries_map.putAssumeCapacity(key, newEntryIndex);
 
-                return .{ .index = new_entry_index, .evicted = null };
+                return .{ .index = newEntryIndex, .evicted = null };
             }
         }
 
@@ -366,12 +366,12 @@ pub fn LRU(
         }
 
         fn get_index(self: *@This(), key: Key) ?usize {
-            if (self.entries_map.get(key)) |entry_index| {
+            if (self.entries_map.get(key)) |entryIndex| {
                 std.debug.assert(self.first != null);
-                if (entry_index != self.first.?) {
-                    self.set_first(entry_index);
+                if (entryIndex != self.first.?) {
+                    self.set_first(entryIndex);
                 }
-                return entry_index;
+                return entryIndex;
             } else {
                 return null;
             }

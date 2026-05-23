@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const wayland_book = b.addModule("wayland-book", .{
+    const waylandBook = b.addModule("wayland-book", .{
         .root_source_file = b.path("src/main.zig"),
         .link_libc = true,
         .target = target,
@@ -15,18 +15,18 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    wayland_book.addImport("forbear", forbear.module("forbear"));
+    waylandBook.addImport("forbear", forbear.module("forbear"));
 
     const exe = b.addExecutable(.{
         .name = "wayland-book.com",
-        .root_module = wayland_book,
+        .root_module = waylandBook,
         .use_llvm = true,
     });
     b.installArtifact(exe);
 
-    const run_command = b.addRunArtifact(exe);
-    run_command.step.dependOn(b.getInstallStep());
+    const runCommand = b.addRunArtifact(exe);
+    runCommand.step.dependOn(b.getInstallStep());
 
-    const run_step = b.step("run", "Run the example");
-    run_step.dependOn(&run_command.step);
+    const runStep = b.step("run", "Run the example");
+    runStep.dependOn(&runCommand.step);
 }

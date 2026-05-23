@@ -1145,15 +1145,15 @@ const FontTextureAtlas = struct {
             c.vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
         }
 
-        const free_rectangle = FreeRectangle{
+        const freeRectangle = FreeRectangle{
             .u = 0,
             .v = 0,
             .width = extent.width,
             .height = extent.height,
         };
 
-        var free_rectangles = try std.ArrayList(FreeRectangle).initCapacity(allocator, 1);
-        free_rectangles.appendAssumeCapacity(free_rectangle);
+        var freeRectangles = try std.ArrayList(FreeRectangle).initCapacity(allocator, 1);
+        freeRectangles.appendAssumeCapacity(freeRectangle);
 
         var imageData: ?*anyopaque = undefined;
         try ensureNoError(c.vkMapMemory(logicalDevice, memory, 0, memRequirements.size, 0, &imageData));
@@ -1171,7 +1171,7 @@ const FontTextureAtlas = struct {
             .rowPitch = @intCast(subresourceLayout.rowPitch),
 
             .capacityExtent = extent,
-            .freeRectangles = free_rectangles,
+            .freeRectangles = freeRectangles,
         };
     }
 
@@ -1183,11 +1183,11 @@ const FontTextureAtlas = struct {
         var bestRectangleIndex: ?usize = null;
         var bestAreaDifference: usize = @intCast(std.math.maxInt(usize));
 
-        const required_area = wantedWidth * wantedHeight;
+        const requiredArea = wantedWidth * wantedHeight;
         for (self.freeRectangles.items, 0..) |freeRectangle, index| {
             if (freeRectangle.width >= wantedWidth and freeRectangle.height >= wantedHeight) {
                 const freeArea = freeRectangle.width * freeRectangle.height;
-                const areaDifference = freeArea - required_area;
+                const areaDifference = freeArea - requiredArea;
                 if (areaDifference < bestAreaDifference) {
                     bestAreaDifference = areaDifference;
                     bestRectangleIndex = index;
@@ -1265,26 +1265,26 @@ const FontTextureAtlas = struct {
         // Convert RGB (3 bytes per pixel from FreeType LCD) to RGBA (4 bytes per pixel)
         // rowPitch is in bytes, and we have 4 bytes per pixel (RGBA)
         for (0..uploadHeight) |y| {
-            const dest_row_start = (freeRectangle.v + y) * self.rowPitch + freeRectangle.u * 4;
+            const destRowStart = (freeRectangle.v + y) * self.rowPitch + freeRectangle.u * 4;
             if (data != null) {
-                const src_row_start = y * pitch;
+                const srcRowStart = y * pitch;
                 for (0..pixelWidth) |x| {
-                    const src_offset = src_row_start + x * 3;
-                    const dest_offset = dest_row_start + x * 4;
+                    const srcOffset = srcRowStart + x * 3;
+                    const destOffset = destRowStart + x * 4;
                     // Copy RGB from FreeType LCD bitmap
-                    self.mapped[dest_offset + 0] = data.?[src_offset + 0]; // R
-                    self.mapped[dest_offset + 1] = data.?[src_offset + 1]; // G
-                    self.mapped[dest_offset + 2] = data.?[src_offset + 2]; // B
+                    self.mapped[destOffset + 0] = data.?[srcOffset + 0]; // R
+                    self.mapped[destOffset + 1] = data.?[srcOffset + 1]; // G
+                    self.mapped[destOffset + 2] = data.?[srcOffset + 2]; // B
                     // Alpha = max of RGB coverages (for discard test and general alpha)
-                    self.mapped[dest_offset + 3] = @max(@max(data.?[src_offset + 0], data.?[src_offset + 1]), data.?[src_offset + 2]);
+                    self.mapped[destOffset + 3] = @max(@max(data.?[srcOffset + 0], data.?[srcOffset + 1]), data.?[srcOffset + 2]);
                 }
             } else {
                 for (0..pixelWidth) |x| {
-                    const dest_offset = dest_row_start + x * 4;
-                    self.mapped[dest_offset + 0] = 0;
-                    self.mapped[dest_offset + 1] = 0;
-                    self.mapped[dest_offset + 2] = 0;
-                    self.mapped[dest_offset + 3] = 0;
+                    const destOffset = destRowStart + x * 4;
+                    self.mapped[destOffset + 0] = 0;
+                    self.mapped[destOffset + 1] = 0;
+                    self.mapped[destOffset + 2] = 0;
+                    self.mapped[destOffset + 3] = 0;
                 }
             }
         }

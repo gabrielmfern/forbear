@@ -49,10 +49,10 @@ const Dependencies = struct {
                 module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
             },
             .windows => {
-                const vulkan_sdk = module.owner.graph.environ_map.get("VULKAN_SDK") orelse
+                const vulkanSdk = module.owner.graph.environ_map.get("VULKAN_SDK") orelse
                     @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
-                module.addIncludePath(.{ .cwd_relative = module.owner.fmt("{s}/Include", .{vulkan_sdk}) });
-                module.addLibraryPath(.{ .cwd_relative = module.owner.fmt("{s}/Lib", .{vulkan_sdk}) });
+                module.addIncludePath(.{ .cwd_relative = module.owner.fmt("{s}/Include", .{vulkanSdk}) });
+                module.addLibraryPath(.{ .cwd_relative = module.owner.fmt("{s}/Lib", .{vulkanSdk}) });
             },
             else => {},
         }
@@ -98,20 +98,20 @@ const BuildContext = struct {
 pub fn addShaderImport(b: *std.Build, module: *std.Build.Module, path: []const u8, name: []const u8) void {
     // Step 1: Compile GLSL to SPIR-V
     const glslangValidatorCommand = b.addSystemCommand(&.{ "glslangValidator", "-V", "-o" });
-    const unoptimized_spirv = glslangValidatorCommand.addOutputFileArg(std.fs.path.basename(path));
+    const unoptimizedSpirv = glslangValidatorCommand.addOutputFileArg(std.fs.path.basename(path));
     glslangValidatorCommand.addFileArg(b.path(path));
 
     // Step 2: Optimize SPIR-V
     const spirvOptCommand = b.addSystemCommand(&.{ "spirv-opt", "-O", "-o" });
     const basename = std.fs.path.basename(path);
-    const optimized_name = b.fmt("optimized_{s}", .{basename});
-    const optimized_spirv = spirvOptCommand.addOutputFileArg(optimized_name);
-    spirvOptCommand.addFileArg(unoptimized_spirv);
+    const optimizedName = b.fmt("optimized_{s}", .{basename});
+    const optimizedSpirv = spirvOptCommand.addOutputFileArg(optimizedName);
+    spirvOptCommand.addFileArg(unoptimizedSpirv);
 
     // Step 3: Use optimized SPIR-V
     module.addAnonymousImport(
         name,
-        .{ .root_source_file = optimized_spirv },
+        .{ .root_source_file = optimizedSpirv },
     );
 }
 
@@ -131,48 +131,48 @@ fn createForbearModule(
     var dependencies = Dependencies.init(b, target, optimize);
     dependencies.addToModule(forbear);
 
-    const c_header = switch (target.result.os.tag) {
+    const cHeader = switch (target.result.os.tag) {
         .linux => b.path("src/c_linux.h"),
         .macos => b.path("src/c_macos.h"),
         .windows => b.path("src/c_windows.h"),
         else => @panic("Unsupported OS"),
     };
-    const translate_c = b.addTranslateC(.{
-        .root_source_file = c_header,
+    const translateC = b.addTranslateC(.{
+        .root_source_file = cHeader,
         .target = target,
         .optimize = optimize,
     });
     switch (target.result.os.tag) {
         .linux => {
-            translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
-            translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" });
-            translate_c.linkSystemLibrary("wayland-client", .{});
-            translate_c.linkSystemLibrary("wayland-cursor", .{});
-            translate_c.linkSystemLibrary("xkbcommon", .{});
-            translate_c.linkSystemLibrary("vulkan", .{});
+            translateC.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
+            translateC.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" });
+            translateC.linkSystemLibrary("wayland-client", .{});
+            translateC.linkSystemLibrary("wayland-cursor", .{});
+            translateC.linkSystemLibrary("xkbcommon", .{});
+            translateC.linkSystemLibrary("vulkan", .{});
         },
-        .macos => translate_c.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
+        .macos => translateC.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
         .windows => {
-            const vulkan_sdk = b.graph.environ_map.get("VULKAN_SDK") orelse
+            const vulkanSdk = b.graph.environ_map.get("VULKAN_SDK") orelse
                 @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
-            translate_c.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/Include", .{vulkan_sdk}) });
+            translateC.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/Include", .{vulkanSdk}) });
         },
         else => {},
     }
     if (target.result.os.tag == .macos) {
-        const sdk_path_raw = b.run(&.{ "xcrun", "--show-sdk-path" });
-        const sdk_path = std.mem.trim(u8, sdk_path_raw, " \n\t");
-        translate_c.addSystemFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdk_path}) });
+        const sdkPathRaw = b.run(&.{ "xcrun", "--show-sdk-path" });
+        const sdkPath = std.mem.trim(u8, sdkPathRaw, " \n\t");
+        translateC.addSystemFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdkPath}) });
     }
 
-    const font_translate_c = b.addTranslateC(.{
+    const fontTranslateC = b.addTranslateC(.{
         .root_source_file = b.path("src/font_c.h"),
         .target = target,
         .optimize = optimize,
     });
-    font_translate_c.addIncludePath(dependencies.freetype.path("include"));
-    font_translate_c.addIncludePath(dependencies.kb_text_shape.path("."));
-    forbear.addImport("font_c", font_translate_c.createModule());
+    fontTranslateC.addIncludePath(dependencies.freetype.path("include"));
+    fontTranslateC.addIncludePath(dependencies.kb_text_shape.path("."));
+    forbear.addImport("font_c", fontTranslateC.createModule());
 
     const stb_translate_c = b.addTranslateC(.{
         .root_source_file = b.path("src/stb_image_c.h"),
@@ -226,10 +226,10 @@ fn createForbearModule(
             forbear.addCSourceFile(.{ .file = protocolCPath, .flags = &.{} });
         }
         forbear.addIncludePath(wf.getDirectory());
-        translate_c.addIncludePath(wf.getDirectory());
+        translateC.addIncludePath(wf.getDirectory());
     }
 
-    forbear.addImport("c", translate_c.createModule());
+    forbear.addImport("c", translateC.createModule());
 
     addShaderImport(b, forbear, "shaders/element/vertex.vert", "element_vertex_shader");
     addShaderImport(b, forbear, "shaders/element/fragment.frag", "element_fragment_shader");
@@ -248,14 +248,14 @@ fn createForbearModule(
 
 fn addPlaygroundExecutable(
     b: *std.Build,
-    module_name: []const u8,
-    executable_name: []const u8,
+    moduleName: []const u8,
+    executableName: []const u8,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     forbear: *std.Build.Module,
     dependencies: *Dependencies,
 ) *std.Build.Step.Compile {
-    const playground = b.addModule(module_name, .{
+    const playground = b.addModule(moduleName, .{
         .root_source_file = b.path("playground.zig"),
         .link_libc = true,
         .target = target,
@@ -266,7 +266,7 @@ fn addPlaygroundExecutable(
     playground.addImport("forbear", forbear);
 
     return b.addExecutable(.{
-        .name = executable_name,
+        .name = executableName,
         .root_module = playground,
         .use_llvm = true,
     });
@@ -274,13 +274,13 @@ fn addPlaygroundExecutable(
 
 fn addUhohExecutable(
     b: *std.Build,
-    module_name: []const u8,
-    executable_name: []const u8,
+    moduleName: []const u8,
+    executableName: []const u8,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     forbear: *std.Build.Module,
 ) *std.Build.Step.Compile {
-    const uhoh = b.addModule(module_name, .{
+    const uhoh = b.addModule(moduleName, .{
         .root_source_file = b.path("examples/uhoh.com/src/main.zig"),
         .link_libc = true,
         .target = target,
@@ -289,7 +289,7 @@ fn addUhohExecutable(
     uhoh.addImport("forbear", forbear);
 
     return b.addExecutable(.{
-        .name = executable_name,
+        .name = executableName,
         .root_module = uhoh,
         .use_llvm = true,
     });
@@ -297,23 +297,23 @@ fn addUhohExecutable(
 
 fn addWaylandBookExecutable(
     b: *std.Build,
-    module_name: []const u8,
-    executable_name: []const u8,
+    moduleName: []const u8,
+    executableName: []const u8,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     forbear: *std.Build.Module,
 ) *std.Build.Step.Compile {
-    const wayland_book = b.addModule(module_name, .{
+    const waylandBook = b.addModule(moduleName, .{
         .root_source_file = b.path("examples/wayland-book.com/src/main.zig"),
         .link_libc = true,
         .target = target,
         .optimize = optimize,
     });
-    wayland_book.addImport("forbear", forbear);
+    waylandBook.addImport("forbear", forbear);
 
     return b.addExecutable(.{
-        .name = executable_name,
-        .root_module = wayland_book,
+        .name = executableName,
+        .root_module = waylandBook,
         .use_llvm = true,
     });
 }
@@ -322,55 +322,55 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const default_context = createForbearModule(b, "forbear", target, optimize);
-    const forbear = default_context.forbear;
-    var dependencies = default_context.dependencies;
+    const defaultContext = createForbearModule(b, "forbear", target, optimize);
+    const forbear = defaultContext.forbear;
+    var dependencies = defaultContext.dependencies;
 
     const testFilterOption = b.option([]const u8, "test-filter", "Only run tests whose names contain this string");
     const testDebugOption = b.option(bool, "test-debug", "Generate a debuggable test executable") orelse false;
-    const mod_tests = b.addTest(.{
+    const modTests = b.addTest(.{
         .root_module = forbear,
         .filters = if (testFilterOption) |filter| &.{filter} else &.{},
         .test_runner = .{ .path = b.path("test_runner.zig"), .mode = .simple },
     });
-    const test_step = b.step("test", "Run tests");
+    const testStep = b.step("test", "Run tests");
     if (testDebugOption) {
-        const install_tests = b.addInstallArtifact(mod_tests, .{});
-        test_step.dependOn(&install_tests.step);
+        const installTests = b.addInstallArtifact(modTests, .{});
+        testStep.dependOn(&installTests.step);
     } else {
-        const run_mod_tests = b.addRunArtifact(mod_tests);
-        test_step.dependOn(&run_mod_tests.step);
+        const runModTests = b.addRunArtifact(modTests);
+        testStep.dependOn(&runModTests.step);
     }
 
     // Benchmarks
     {
-        const bench_module = b.createModule(.{
+        const benchModule = b.createModule(.{
             .root_source_file = b.path("bench.zig"),
             .target = target,
             .optimize = optimize,
         });
-        bench_module.addImport("forbear", forbear);
+        benchModule.addImport("forbear", forbear);
 
         const install = b.option(bool, "install", "Install benchmark executable instead of running it") orelse false;
 
-        const bench_exe = b.addExecutable(.{
+        const benchExe = b.addExecutable(.{
             .name = "bench",
-            .root_module = bench_module,
+            .root_module = benchModule,
         });
-        const bench_step = b.step("bench", "Run benchmarks");
+        const benchStep = b.step("bench", "Run benchmarks");
         if (install) {
-            const install_bench = b.addInstallArtifact(bench_exe, .{});
-            bench_step.dependOn(&install_bench.step);
+            const installBench = b.addInstallArtifact(benchExe, .{});
+            benchStep.dependOn(&installBench.step);
         } else {
-            const run_bench = b.addRunArtifact(bench_exe);
-            if (b.args) |args| run_bench.addArgs(args);
-            bench_step.dependOn(&run_bench.step);
+            const runBench = b.addRunArtifact(benchExe);
+            if (b.args) |args| runBench.addArgs(args);
+            benchStep.dependOn(&runBench.step);
         }
     }
 
     {
         // Playground
-        const playground_exe = addPlaygroundExecutable(
+        const playgroundExe = addPlaygroundExecutable(
             b,
             "playground",
             "playground",
@@ -379,21 +379,21 @@ pub fn build(b: *std.Build) void {
             forbear,
             &dependencies,
         );
-        b.installArtifact(playground_exe);
+        b.installArtifact(playgroundExe);
 
-        const run_playground_command = b.addRunArtifact(playground_exe);
-        run_playground_command.step.dependOn(b.getInstallStep());
+        const runPlaygroundCommand = b.addRunArtifact(playgroundExe);
+        runPlaygroundCommand.step.dependOn(b.getInstallStep());
 
-        const run_playground_step = b.step("run", "Run the playground");
-        run_playground_step.dependOn(&run_playground_command.step);
+        const runPlaygroundStep = b.step("run", "Run the playground");
+        runPlaygroundStep.dependOn(&runPlaygroundCommand.step);
     }
 
     // Check step - builds all examples and playground
     {
-        const check_step = b.step("check", "Build all examples and playground");
+        const checkStep = b.step("check", "Build all examples and playground");
 
         // Build playground
-        const playground_exe = addPlaygroundExecutable(
+        const playgroundExe = addPlaygroundExecutable(
             b,
             "playground_check",
             "playground_check",
@@ -402,22 +402,22 @@ pub fn build(b: *std.Build) void {
             forbear,
             &dependencies,
         );
-        check_step.dependOn(&playground_exe.step);
+        checkStep.dependOn(&playgroundExe.step);
 
         // Build uhoh.com and wayland-book.com examples.
         // On non-Windows, run standalone builds to exercise each example's own build.zig.
         // On Windows, Vulkan SDK import library resolution fails inside child zig-build
         // processes, so compile the example sources directly through the root build instead.
         if (target.result.os.tag != .windows) {
-            const uhoh_build = b.addSystemCommand(&.{ "zig", "build" });
-            uhoh_build.setCwd(b.path("examples/uhoh.com"));
-            check_step.dependOn(&uhoh_build.step);
+            const uhohBuild = b.addSystemCommand(&.{ "zig", "build" });
+            uhohBuild.setCwd(b.path("examples/uhoh.com"));
+            checkStep.dependOn(&uhohBuild.step);
 
-            const wayland_book_build = b.addSystemCommand(&.{ "zig", "build" });
-            wayland_book_build.setCwd(b.path("examples/wayland-book.com"));
-            check_step.dependOn(&wayland_book_build.step);
+            const waylandBookBuild = b.addSystemCommand(&.{ "zig", "build" });
+            waylandBookBuild.setCwd(b.path("examples/wayland-book.com"));
+            checkStep.dependOn(&waylandBookBuild.step);
         } else {
-            const uhoh_check = addUhohExecutable(
+            const uhohCheck = addUhohExecutable(
                 b,
                 "uhoh_check",
                 "uhoh_check",
@@ -425,9 +425,9 @@ pub fn build(b: *std.Build) void {
                 optimize,
                 forbear,
             );
-            check_step.dependOn(&uhoh_check.step);
+            checkStep.dependOn(&uhohCheck.step);
 
-            const wayland_book_check = addWaylandBookExecutable(
+            const waylandBookCheck = addWaylandBookExecutable(
                 b,
                 "wayland_book_check",
                 "wayland_book_check",
@@ -435,46 +435,46 @@ pub fn build(b: *std.Build) void {
                 optimize,
                 forbear,
             );
-            check_step.dependOn(&wayland_book_check.step);
+            checkStep.dependOn(&waylandBookCheck.step);
         }
     }
 
     // Package step - builds debug executables and copies them for CI upload
     {
-        const package_step = b.step("package", "Build and package debug executables");
-        const package_directory: std.Build.InstallDir = .{ .custom = "pr-binaries" };
-        const package_context = createForbearModule(b, "forbear_package", target, .Debug);
-        var package_dependencies = package_context.dependencies;
-        const package_playground_exe = addPlaygroundExecutable(
+        const packageStep = b.step("package", "Build and package debug executables");
+        const packageDirectory: std.Build.InstallDir = .{ .custom = "pr-binaries" };
+        const packageContext = createForbearModule(b, "forbear_package", target, .Debug);
+        var packageDependencies = packageContext.dependencies;
+        const packagePlaygroundExe = addPlaygroundExecutable(
             b,
             "playground_package",
             "playground",
             target,
             .Debug,
-            package_context.forbear,
-            &package_dependencies,
+            packageContext.forbear,
+            &packageDependencies,
         );
-        const package_uhoh_exe = addUhohExecutable(
+        const packageUhohExe = addUhohExecutable(
             b,
             "uhoh_package",
             "uhoh.com",
             target,
             .Debug,
-            package_context.forbear,
+            packageContext.forbear,
         );
 
-        const install_playground_binary = b.addInstallFileWithDir(
-            package_playground_exe.getEmittedBin(),
-            package_directory,
-            package_playground_exe.out_filename,
+        const installPlaygroundBinary = b.addInstallFileWithDir(
+            packagePlaygroundExe.getEmittedBin(),
+            packageDirectory,
+            packagePlaygroundExe.out_filename,
         );
-        const install_uhoh_binary = b.addInstallFileWithDir(
-            package_uhoh_exe.getEmittedBin(),
-            package_directory,
-            package_uhoh_exe.out_filename,
+        const installUhohBinary = b.addInstallFileWithDir(
+            packageUhohExe.getEmittedBin(),
+            packageDirectory,
+            packageUhohExe.out_filename,
         );
 
-        package_step.dependOn(&install_playground_binary.step);
-        package_step.dependOn(&install_uhoh_binary.step);
+        packageStep.dependOn(&installPlaygroundBinary.step);
+        packageStep.dependOn(&installUhohBinary.step);
     }
 }

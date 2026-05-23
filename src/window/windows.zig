@@ -1,13 +1,13 @@
 const std = @import("std");
 const win32 = @import("../windows/win32.zig");
-const window_root = @import("root.zig");
-const Cursor = window_root.Cursor;
-pub const Keys = window_root.Keys;
-pub const KeyboardSnapshot = window_root.KeyboardSnapshot;
+const windowRoot = @import("root.zig");
+const Cursor = windowRoot.Cursor;
+pub const Keys = windowRoot.Keys;
+pub const KeyboardSnapshot = windowRoot.KeyboardSnapshot;
 
-const linux_left_mouse_button: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
-const button_pressed: u32 = 1;
-const button_released: u32 = 0;
+const linuxLeftMouseButton: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
+const buttonPressed: u32 = 1;
+const buttonReleased: u32 = 0;
 
 handle: win32.HWND,
 hInstance: win32.HINSTANCE,
@@ -21,7 +21,7 @@ dpi: [2]u32,
 
 /// Keyboard state. The wndProc thread writes; Forbear's render thread drains
 /// via `snapshotKeyboard()`. Held bitset + edge bitsets, all `Key`-typed.
-keysMutex: window_root.SpinLock = .{},
+keysMutex: windowRoot.SpinLock = .{},
 keysDown: Keys = .{},
 pendingPressed: Keys = .{},
 pendingReleased: Keys = .{},
@@ -323,14 +323,14 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
         win32.WM_LBUTTONDOWN => {
             if (window) |self| {
                 if (self.handlers.pointerButton) |handler| {
-                    handler.function(self, 0, 0, linux_left_mouse_button, button_pressed, handler.data);
+                    handler.function(self, 0, 0, linuxLeftMouseButton, buttonPressed, handler.data);
                 }
             }
         },
         win32.WM_LBUTTONUP => {
             if (window) |self| {
                 if (self.handlers.pointerButton) |handler| {
-                    handler.function(self, 0, 0, linux_left_mouse_button, button_released, handler.data);
+                    handler.function(self, 0, 0, linuxLeftMouseButton, buttonReleased, handler.data);
                 }
             }
         },
@@ -351,11 +351,11 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                 // Coalesce count (bits 0..15) and scan code (bits 16..23)
                 // are intentionally ignored.
                 const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
-                const was_already_down: bool = (lp & (1 << 30)) != 0;
+                const wasAlreadyDown: bool = (lp & (1 << 30)) != 0;
                 const key = virtualKeyToKeys(wParam);
 
                 self.keysMutex.lock();
-                if (!was_already_down) {
+                if (!wasAlreadyDown) {
                     self.pendingPressed = self.pendingPressed.with(key);
                     self.keysDown = self.keysDown.with(key);
                 }
@@ -418,30 +418,30 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
 }
 
 pub fn targetFrameTimeNs(self: *const @This()) u64 {
-    const fallback_60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
+    const fallback60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
 
     // Get the monitor that contains most of this window
     const monitor = win32.MonitorFromWindow(self.handle, win32.MONITOR_DEFAULTTONEAREST);
     if (monitor == null) {
-        return fallback_60hz;
+        return fallback60hz;
     }
 
     // Get monitor info to retrieve the device name
     var monitorInfo: win32.MONITORINFOEXW = .{};
     if (win32.GetMonitorInfoW(monitor, &monitorInfo) == 0) {
-        return fallback_60hz;
+        return fallback60hz;
     }
 
     // Get current display settings for this monitor
     var devMode: win32.DEVMODEW = .{};
     if (win32.EnumDisplaySettingsW(@ptrCast(&monitorInfo.szDevice), win32.ENUM_CURRENT_SETTINGS, &devMode) == 0) {
-        return fallback_60hz;
+        return fallback60hz;
     }
 
     const refreshRate = devMode.dmDisplayFrequency;
     if (refreshRate == 0 or refreshRate == 1) {
         // 0 or 1 means default/unknown
-        return fallback_60hz;
+        return fallback60hz;
     }
 
     return @divTrunc(1_000_000_000, @as(u64, refreshRate));

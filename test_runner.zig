@@ -17,11 +17,11 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const native_os = builtin.os.tag;
+const nativeOs = builtin.os.tag;
 const windows = std.os.windows;
 
 // kernel32 exports removed from Zig 0.16 stdlib, declared here for Windows builds
-const Win32 = if (native_os == .windows) struct {
+const Win32 = if (nativeOs == .windows) struct {
     pub extern "kernel32" fn DuplicateHandle(
         hSourceProcessHandle: windows.HANDLE,
         hSourceHandle: windows.HANDLE,
@@ -371,69 +371,69 @@ fn runSingleTestProcess(selectedTestName: []const u8) !u8 {
 }
 
 fn runTestInChildProcess(allocator: Allocator, testName: []const u8) !ChildOutcome {
-    if (native_os == .windows) {
+    if (nativeOs == .windows) {
         return runTestWithCreateProcess(allocator, testName);
     }
     return runTestWithFork(allocator, testName);
 }
 
 fn runTestWithCreateProcess(allocator: Allocator, testName: []const u8) !ChildOutcome {
-    var exe_buf: [windows.PATH_MAX_WIDE + 1]u16 = undefined;
-    const exe_len = Win32.GetModuleFileNameW(null, &exe_buf, exe_buf.len);
-    if (exe_len == 0 or exe_len >= exe_buf.len) return error.GetModuleFileNameFailed;
+    var exeBuf: [windows.PATH_MAX_WIDE + 1]u16 = undefined;
+    const exe_len = Win32.GetModuleFileNameW(null, &exeBuf, exeBuf.len);
+    if (exe_len == 0 or exe_len >= exeBuf.len) return error.GetModuleFileNameFailed;
 
-    const exe_path_z = try allocator.allocSentinel(u16, exe_len, 0);
-    defer allocator.free(exe_path_z);
-    @memcpy(exe_path_z[0..exe_len], exe_buf[0..exe_len]);
+    const exePathZ = try allocator.allocSentinel(u16, exe_len, 0);
+    defer allocator.free(exePathZ);
+    @memcpy(exePathZ[0..exe_len], exeBuf[0..exe_len]);
 
     // CreateProcessW treats lpCommandLine as mutable. Wrap the path in quotes
     // so any spaces in the path are preserved as part of argv[0].
-    const cmd_w = try allocator.allocSentinel(u16, exe_len + 2, 0);
-    defer allocator.free(cmd_w);
-    cmd_w[0] = '"';
-    @memcpy(cmd_w[1 .. 1 + exe_len], exe_buf[0..exe_len]);
-    cmd_w[1 + exe_len] = '"';
+    const cmdW = try allocator.allocSentinel(u16, exe_len + 2, 0);
+    defer allocator.free(cmdW);
+    cmdW[0] = '"';
+    @memcpy(cmdW[1 .. 1 + exe_len], exeBuf[0..exe_len]);
+    cmdW[1 + exe_len] = '"';
 
-    const env_block = try buildChildEnvBlock(allocator, testName);
-    defer allocator.free(env_block);
+    const envBlock = try buildChildEnvBlock(allocator, testName);
+    defer allocator.free(envBlock);
 
     var sa: windows.SECURITY_ATTRIBUTES = .{
         .nLength = @sizeOf(windows.SECURITY_ATTRIBUTES),
         .bInheritHandle = windows.BOOL.TRUE,
         .lpSecurityDescriptor = null,
     };
-    var read_end: windows.HANDLE = undefined;
-    var write_end: windows.HANDLE = undefined;
-    if (Win32.CreatePipe(&read_end, &write_end, &sa, 0) == windows.BOOL.FALSE) {
+    var readEnd: windows.HANDLE = undefined;
+    var writeEnd: windows.HANDLE = undefined;
+    if (Win32.CreatePipe(&readEnd, &writeEnd, &sa, 0) == windows.BOOL.FALSE) {
         return error.PipeCreationFailed;
     }
     // The parent's read end must not be inheritable; otherwise the child keeps
     // the pipe open and ReadFile never returns EOF after the child exits.
-    _ = Win32.SetHandleInformation(read_end, Win32.HANDLE_FLAG_INHERIT, 0);
+    _ = Win32.SetHandleInformation(readEnd, Win32.HANDLE_FLAG_INHERIT, 0);
 
     var si: windows.STARTUPINFOW = std.mem.zeroes(windows.STARTUPINFOW);
     si.cb = @sizeOf(windows.STARTUPINFOW);
     si.dwFlags = Win32.STARTF_USESTDHANDLES;
     si.hStdInput = windows.peb().ProcessParameters.hStdInput;
-    si.hStdOutput = write_end;
-    si.hStdError = write_end;
+    si.hStdOutput = writeEnd;
+    si.hStdError = writeEnd;
 
     var pi: Win32.PROCESS_INFORMATION = undefined;
     const spawned = Win32.CreateProcessW(
-        exe_path_z.ptr,
-        cmd_w.ptr,
+        exePathZ.ptr,
+        cmdW.ptr,
         null,
         null,
         windows.BOOL.TRUE,
         Win32.CREATE_UNICODE_ENVIRONMENT,
-        env_block.ptr,
+        envBlock.ptr,
         null,
         &si,
         &pi,
     );
     if (spawned == windows.BOOL.FALSE) {
-        windows.CloseHandle(read_end);
-        windows.CloseHandle(write_end);
+        windows.CloseHandle(readEnd);
+        windows.CloseHandle(writeEnd);
         return error.CreateProcessFailed;
     }
     defer windows.CloseHandle(pi.hProcess);
@@ -441,32 +441,32 @@ fn runTestWithCreateProcess(allocator: Allocator, testName: []const u8) !ChildOu
 
     // Close the parent's copy of the write end so ReadFile reaches EOF when
     // the child exits.
-    windows.CloseHandle(write_end);
+    windows.CloseHandle(writeEnd);
 
     var outputList: std.ArrayListUnmanaged(u8) = .empty;
     var chunk: [4096]u8 = undefined;
     while (outputList.items.len < childMaxOutputBytes) {
         var bytes_read: u32 = 0;
-        const read_ok = Win32.ReadFile(read_end, &chunk, chunk.len, &bytes_read, null);
-        if (read_ok == windows.BOOL.FALSE) break;
+        const readOk = Win32.ReadFile(readEnd, &chunk, chunk.len, &bytes_read, null);
+        if (readOk == windows.BOOL.FALSE) break;
         if (bytes_read == 0) break;
         outputList.appendSlice(allocator, chunk[0..bytes_read]) catch {};
     }
-    windows.CloseHandle(read_end);
+    windows.CloseHandle(readEnd);
 
     _ = Win32.WaitForSingleObject(pi.hProcess, Win32.INFINITE);
-    var exit_code: u32 = 0;
-    _ = Win32.GetExitCodeProcess(pi.hProcess, &exit_code);
+    var exitCode: u32 = 0;
+    _ = Win32.GetExitCodeProcess(pi.hProcess, &exitCode);
 
     const output = try outputList.toOwnedSlice(allocator);
 
     // Windows uses the exit code field to report unhandled exception NTSTATUS
     // values (e.g. 0xC0000005 for access violation). Anything above u8 range
     // is almost certainly a crash rather than a real process exit.
-    if (exit_code > 255) {
-        return .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = .{ .Unknown = exit_code } };
+    if (exitCode > 255) {
+        return .{ .status = .fail, .leaked = false, .output = output, .unexpectedTerm = .{ .Unknown = exitCode } };
     }
-    const code: u8 = @intCast(exit_code);
+    const code: u8 = @intCast(exitCode);
     return switch (code) {
         0 => .{ .status = .pass, .leaked = false, .output = output, .unexpectedTerm = null },
         childExitSkip => .{ .status = .skip, .leaked = false, .output = output, .unexpectedTerm = null },
@@ -481,27 +481,27 @@ fn runTestWithCreateProcess(allocator: Allocator, testName: []const u8) !ChildOu
 /// appending `FORBEAR_TEST_RUNNER_CASE=<testName>`. The block is a sequence of
 /// NUL-terminated UTF-16 `name=value` entries, terminated by an extra NUL.
 fn buildChildEnvBlock(allocator: Allocator, testName: []const u8) ![:0]u16 {
-    const parent_env = windows.peb().ProcessParameters.Environment;
+    const parentEnv = windows.peb().ProcessParameters.Environment;
 
     // Walk to the double-NUL terminator. `parent_end` indexes the first of
     // those two NULs, so `parent_env[0..parent_end+1]` includes the single NUL
     // that terminates the last existing entry.
-    var parent_end: usize = 0;
-    while (parent_env[parent_end] != 0 or parent_env[parent_end + 1] != 0) : (parent_end += 1) {}
-    const preserved_len = parent_end + 1;
+    var parentEnd: usize = 0;
+    while (parentEnv[parentEnd] != 0 or parentEnv[parentEnd + 1] != 0) : (parentEnd += 1) {}
+    const preserved_len = parentEnd + 1;
 
-    const entry_utf8 = try std.fmt.allocPrint(allocator, "{s}={s}", .{ childTestEnv, testName });
-    defer allocator.free(entry_utf8);
+    const entryUtf8 = try std.fmt.allocPrint(allocator, "{s}={s}", .{ childTestEnv, testName });
+    defer allocator.free(entryUtf8);
 
-    const entry_w = try std.unicode.utf8ToUtf16LeAlloc(allocator, entry_utf8);
-    defer allocator.free(entry_w);
+    const entryW = try std.unicode.utf8ToUtf16LeAlloc(allocator, entryUtf8);
+    defer allocator.free(entryW);
 
     // Layout: <preserved parent (ends with NUL)><entry><NUL><NUL(sentinel)>
-    const logical_len = preserved_len + entry_w.len + 1;
-    const block = try allocator.allocSentinel(u16, logical_len, 0);
-    @memcpy(block[0..preserved_len], parent_env[0..preserved_len]);
-    @memcpy(block[preserved_len .. preserved_len + entry_w.len], entry_w);
-    block[preserved_len + entry_w.len] = 0;
+    const logicalLen = preserved_len + entryW.len + 1;
+    const block = try allocator.allocSentinel(u16, logicalLen, 0);
+    @memcpy(block[0..preserved_len], parentEnv[0..preserved_len]);
+    @memcpy(block[preserved_len .. preserved_len + entryW.len], entryW);
+    block[preserved_len + entryW.len] = 0;
     return block;
 }
 
@@ -583,15 +583,15 @@ fn describeChildTerm(term: Term) []const u8 {
 const StderrCapture = struct {
     /// Duplicates the current stderr file descriptor / handle and returns it.
     fn duplicateStderr() ?File {
-        if (native_os == .windows) {
-            const stderr_handle = windows.peb().ProcessParameters.hStdError;
+        if (nativeOs == .windows) {
+            const stderrHandle = windows.peb().ProcessParameters.hStdError;
             var duplicated: windows.HANDLE = undefined;
-            const current_process = windows.GetCurrentProcess();
+            const currentProcess = windows.GetCurrentProcess();
             const DUPLICATE_SAME_ACCESS = 0x00000002;
             const rc = Win32.DuplicateHandle(
-                current_process,
-                stderr_handle,
-                current_process,
+                currentProcess,
+                stderrHandle,
+                currentProcess,
                 &duplicated,
                 0,
                 windows.BOOL.FALSE,
@@ -612,7 +612,7 @@ const StderrCapture = struct {
 
         const captureFile = createCaptureFile() orelse return null;
 
-        if (native_os == .windows) {
+        if (nativeOs == .windows) {
             // On Windows, std.debug.print reads hStdError from the PEB each time.
             // Swap it to point to our capture file.
             windows.peb().ProcessParameters.hStdError = captureFile.handle;
@@ -633,7 +633,7 @@ const StderrCapture = struct {
         const saved = realStderr orelse return "";
 
         // Restore the real stderr
-        if (native_os == .windows) {
+        if (nativeOs == .windows) {
             windows.peb().ProcessParameters.hStdError = saved.handle;
         } else {
             _ = std.c.dup2(saved.handle, std.c.STDERR_FILENO);
@@ -652,7 +652,7 @@ const StderrCapture = struct {
     }
 
     fn createCaptureFile() ?File {
-        if (native_os == .linux) {
+        if (nativeOs == .linux) {
             // Anonymous in-memory file — ideal on Linux, avoids temp file I/O
             const fd = std.posix.memfd_create("test_capture", 0) catch return null;
             return .{ .handle = fd };
@@ -662,28 +662,28 @@ const StderrCapture = struct {
         // This directory is used by Zig's own test infrastructure and is
         // expected to exist during builds.
         const cwd = std.fs.cwd();
-        var cache_dir = cwd.makeOpenPath(".zig-cache" ++ std.fs.path.sep_str ++ "tmp", .{}) catch return null;
-        defer cache_dir.close();
+        var cacheDir = cwd.makeOpenPath(".zig-cache" ++ std.fs.path.sep_str ++ "tmp", .{}) catch return null;
+        defer cacheDir.close();
 
         // Generate a unique filename using random bytes.
-        var random_bytes: [8]u8 = undefined;
-        std.crypto.random.bytes(&random_bytes);
-        var name_buf: [24]u8 = undefined;
-        const encoded = std.fs.base64_encoder.encode(&name_buf, &random_bytes);
+        var randomBytes: [8]u8 = undefined;
+        std.crypto.random.bytes(&randomBytes);
+        var nameBuf: [24]u8 = undefined;
+        const encoded = std.fs.base64_encoder.encode(&nameBuf, &randomBytes);
 
-        const file = cache_dir.createFile(encoded, .{ .read = true }) catch return null;
+        const file = cacheDir.createFile(encoded, .{ .read = true }) catch return null;
 
         // Delete the directory entry immediately; the file stays alive as long
         // as the handle is open. On Windows, deleteFile may fail (file is open),
         // but that's acceptable — the .zig-cache/tmp/ directory is ephemeral.
-        cache_dir.deleteFile(encoded) catch {};
+        cacheDir.deleteFile(encoded) catch {};
 
         return file;
     }
 };
 
 const CrashOutput = struct {
-    const PriorHandlers = switch (native_os) {
+    const PriorHandlers = switch (nativeOs) {
         .windows => void,
         else => struct {
             segv: std.c.Sigaction,
@@ -696,7 +696,7 @@ const CrashOutput = struct {
     fn install() void {
         if (realStderr == null) return;
 
-        switch (native_os) {
+        switch (nativeOs) {
             .windows => {
                 _ = Win32.AddVectoredExceptionHandler(1, handleWindows);
             },
@@ -717,7 +717,7 @@ const CrashOutput = struct {
 
     fn restoreRealStderr() void {
         if (realStderr) |saved| {
-            if (native_os == .windows) {
+            if (nativeOs == .windows) {
                 windows.peb().ProcessParameters.hStdError = saved.handle;
             } else {
                 _ = std.c.dup2(saved.handle, std.c.STDERR_FILENO);
@@ -764,7 +764,7 @@ const CrashOutput = struct {
         };
     }
 
-    fn handlePosix(sig: std.c.SIG, info: *const std.c.siginfo_t, ctx_ptr: ?*anyopaque) callconv(.c) void {
+    fn handlePosix(sig: std.c.SIG, info: *const std.c.siginfo_t, ctxPtr: ?*anyopaque) callconv(.c) void {
         restoreRealStderr();
 
         const previous = posixHandlerForSignal(sig) orelse {
@@ -772,7 +772,7 @@ const CrashOutput = struct {
         };
 
         if (previous.handler.sigaction) |handler| {
-            handler(sig, info, ctx_ptr);
+            handler(sig, info, ctxPtr);
             std.c.abort();
         }
 
@@ -828,7 +828,7 @@ fn printToRealStderr(comptime format: []const u8, args: anytype) void {
 }
 
 fn writeToRealStderr(msg: []const u8) void {
-    if (native_os == .windows) {
+    if (nativeOs == .windows) {
         const handle = if (realStderr) |file| file.handle else windows.peb().ProcessParameters.hStdError;
         _ = Win32.WriteFile(handle, msg.ptr, @intCast(msg.len), null, null);
     } else {
@@ -889,7 +889,7 @@ const SlowTracker = struct {
     };
 
     fn getNs() u64 {
-        if (native_os == .windows) {
+        if (nativeOs == .windows) {
             const F = struct {
                 var freq: u64 = 0;
             };
@@ -987,9 +987,9 @@ const Env = struct {
     }
 
     fn readEnv(allocator: Allocator, key: []const u8) ?[]const u8 {
-        const key_z = allocator.dupeZ(u8, key) catch return null;
-        defer allocator.free(key_z);
-        const ptr = std.c.getenv(key_z) orelse return null;
+        const keyZ = allocator.dupeZ(u8, key) catch return null;
+        defer allocator.free(keyZ);
+        const ptr = std.c.getenv(keyZ) orelse return null;
         const value = std.mem.sliceTo(ptr, 0);
         return allocator.dupe(u8, value) catch null;
     }

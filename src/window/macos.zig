@@ -1,19 +1,19 @@
 const std = @import("std");
 
 const c = @import("c");
-const window_root = @import("root.zig");
-const Cursor = window_root.Cursor;
-pub const Keys = window_root.Keys;
-pub const KeyboardSnapshot = window_root.KeyboardSnapshot;
+const windowRoot = @import("root.zig");
+const Cursor = windowRoot.Cursor;
+pub const Keys = windowRoot.Keys;
+pub const KeyboardSnapshot = windowRoot.KeyboardSnapshot;
 
 extern fn objc_autoreleasePoolPush() ?*anyopaque;
 extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;
 
 const Self = @This();
 
-const linux_left_mouse_button: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
-const button_pressed: u32 = 1;
-const button_released: u32 = 0;
+const linuxLeftMouseButton: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
+const buttonPressed: u32 = 1;
+const buttonReleased: u32 = 0;
 
 pub const ScrollAxis = enum(u32) {
     vertical = 0,
@@ -21,7 +21,7 @@ pub const ScrollAxis = enum(u32) {
 };
 
 // Global variable to hold the current window instance for delegate callbacks
-var g_current_window: ?*Self = null;
+var gCurrentWindow: ?*Self = null;
 
 pub const Handlers = struct {
     pointerMotion: ?struct {
@@ -196,8 +196,8 @@ fn getClass(name: [*:0]const u8) c.Class {
 
 fn nsstring(cstr: [*:0]const u8) c.id {
     const NSString = getClass("NSString");
-    const fn_ptr = msgSend(*const fn (c.Class, c.SEL, [*:0]const u8) callconv(.c) c.id);
-    return fn_ptr(NSString, sel("stringWithUTF8String:"), cstr);
+    const fnPtr = msgSend(*const fn (c.Class, c.SEL, [*:0]const u8) callconv(.c) c.id);
+    return fnPtr(NSString, sel("stringWithUTF8String:"), cstr);
 }
 
 fn applicationShouldTerminateAfterLastWindowClosed(self: c.id, _cmd: c.SEL, application: c.id) callconv(.c) BOOL {
@@ -207,41 +207,41 @@ fn applicationShouldTerminateAfterLastWindowClosed(self: c.id, _cmd: c.SEL, appl
     return 1; // YES
 }
 
-fn windowDidResize(self_obj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
-    _ = self_obj;
+fn windowDidResize(selfObj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
+    _ = selfObj;
     _ = _cmd;
     _ = notification;
 
     // Get the window instance from the global variable
-    if (g_current_window) |window| {
+    if (gCurrentWindow) |window| {
         // Get current window size
         const frame = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSRect);
-        const window_frame = frame(window.window, sel("frame"));
+        const windowFrame = frame(window.window, sel("frame"));
 
-        const new_width: u32 = @intFromFloat(window_frame.size.width);
-        const new_height: u32 = @intFromFloat(window_frame.size.height);
+        const newWidth: u32 = @intFromFloat(windowFrame.size.width);
+        const newHeight: u32 = @intFromFloat(windowFrame.size.height);
 
         // Update window dimensions
-        window.width = new_width;
-        window.height = new_height;
+        window.width = newWidth;
+        window.height = newHeight;
 
         // Update DPI and scale (window may have moved to a different screen)
         window.updateDpiAndScale();
 
         // Call the resize handler if it exists
         if (window.handlers.resize) |handler| {
-            handler.function(window, new_width, new_height, window.dpi, handler.data);
+            handler.function(window, newWidth, newHeight, window.dpi, handler.data);
         }
     }
 }
 
-fn windowDidChangeScreen(self_obj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
-    _ = self_obj;
+fn windowDidChangeScreen(selfObj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
+    _ = selfObj;
     _ = _cmd;
     _ = notification;
 
     // When window moves to a different screen, update DPI and scale
-    if (g_current_window) |window| {
+    if (gCurrentWindow) |window| {
         window.updateDpiAndScale();
 
         // Notify via resize handler since DPI/scale may have changed
@@ -251,13 +251,13 @@ fn windowDidChangeScreen(self_obj: c.id, _cmd: c.SEL, notification: c.id) callco
     }
 }
 
-fn windowDidChangeBackingProperties(self_obj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
-    _ = self_obj;
+fn windowDidChangeBackingProperties(selfObj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
+    _ = selfObj;
     _ = _cmd;
     _ = notification;
 
     // Called when backing scale factor changes (e.g., moving between Retina and non-Retina displays)
-    if (g_current_window) |window| {
+    if (gCurrentWindow) |window| {
         window.updateDpiAndScale();
 
         // Notify via resize handler since scale may have changed
@@ -271,29 +271,29 @@ fn createMenuBar(app: c.id) void {
     const NSMenu = getClass("NSMenu");
     const NSMenuItem = getClass("NSMenuItem");
 
-    const new_id = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-    const add_item = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-    const set_main_menu = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-    const set_submenu = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
+    const newId = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
+    const addItem = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
+    const setMainMenu = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
+    const setSubmenu = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
 
-    const menubar = new_id(NSMenu, sel("new"));
-    const appMenuItem = new_id(NSMenuItem, sel("new"));
+    const menubar = newId(NSMenu, sel("new"));
+    const appMenuItem = newId(NSMenuItem, sel("new"));
 
-    add_item(menubar, sel("addItem:"), appMenuItem);
-    set_main_menu(app, sel("setMainMenu:"), menubar);
+    addItem(menubar, sel("addItem:"), appMenuItem);
+    setMainMenu(app, sel("setMainMenu:"), menubar);
 
-    const appMenu = new_id(NSMenu, sel("new"));
-    set_submenu(appMenuItem, sel("setSubmenu:"), appMenu);
+    const appMenu = newId(NSMenu, sel("new"));
+    setSubmenu(appMenuItem, sel("setSubmenu:"), appMenu);
 
     const quitTitle = nsstring("Quit");
     const keyEquivalent = nsstring("q");
 
-    const alloc_id = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-    const init_quit = msgSend(*const fn (c.id, c.SEL, c.id, c.SEL, c.id) callconv(.c) c.id);
-    const set_target = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
+    const allocId = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
+    const initQuit = msgSend(*const fn (c.id, c.SEL, c.id, c.SEL, c.id) callconv(.c) c.id);
+    const setTarget = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
 
-    var quitItem = alloc_id(NSMenuItem, sel("alloc"));
-    quitItem = init_quit(
+    var quitItem = allocId(NSMenuItem, sel("alloc"));
+    quitItem = initQuit(
         quitItem,
         sel("initWithTitle:action:keyEquivalent:"),
         quitTitle,
@@ -301,8 +301,8 @@ fn createMenuBar(app: c.id) void {
         keyEquivalent,
     );
 
-    set_target(quitItem, sel("setTarget:"), app);
-    add_item(appMenu, sel("addItem:"), quitItem);
+    setTarget(quitItem, sel("setTarget:"), app);
+    addItem(appMenu, sel("addItem:"), quitItem);
 }
 
 // Everything native related to the window itself
@@ -327,7 +327,7 @@ handlers: Handlers,
 /// Guards `keysDown` / `pendingPressed` / `pendingReleased` between the
 /// input thread (where NSEvent callbacks fire) and Forbear's render thread
 /// (which drains via `snapshotKeyboard`).
-keysMutex: window_root.SpinLock = .{},
+keysMutex: windowRoot.SpinLock = .{},
 keysDown: Keys = .{},
 pendingPressed: Keys = .{},
 pendingReleased: Keys = .{},
@@ -378,10 +378,10 @@ pub fn init(
         c.objc_registerClassPair(AppDelegate);
     }
 
-    const new_id = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
+    const newId = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
     const setDelegate = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-    const delegate_class = getClass("MinimalAppDelegate");
-    const delegate = new_id(delegate_class, sel("new"));
+    const delegateClass = getClass("MinimalAppDelegate");
+    const delegate = newId(delegateClass, sel("new"));
     setDelegate(self.app, sel("setDelegate:"), delegate);
 
     createMenuBar(self.app);
@@ -395,20 +395,20 @@ pub fn init(
         NSWindowStyleMaskResizable;
 
     const alloc = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-    var window_obj = alloc(NSWindow, sel("alloc"));
+    var windowObj = alloc(NSWindow, sel("alloc"));
 
     const initWithContentRect = msgSend(*const fn (c.id, c.SEL, NSRect, NSUInteger, NSUInteger, BOOL) callconv(.c) c.id);
-    window_obj = initWithContentRect(
-        window_obj,
+    windowObj = initWithContentRect(
+        windowObj,
         sel("initWithContentRect:styleMask:backing:defer:"),
         contentRect,
         styleMask,
         NSBackingStoreBuffered,
         0, // NO
     );
-    if (window_obj == null) return error.WindowCreationFailed;
+    if (windowObj == null) return error.WindowCreationFailed;
 
-    self.window = window_obj;
+    self.window = windowObj;
 
     const setTitle = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
     setTitle(self.window, sel("setTitle:"), nsstring(title.ptr));
@@ -440,12 +440,12 @@ pub fn init(
 
         c.objc_registerClassPair(WindowDelegate);
 
-        const window_delegate = new_id(@ptrCast(WindowDelegate), sel("new"));
+        const windowDelegate = newId(@ptrCast(WindowDelegate), sel("new"));
 
         // Set the global window instance for delegate callbacks
-        g_current_window = self;
+        gCurrentWindow = self;
 
-        setDelegate(self.window, sel("setDelegate:"), window_delegate);
+        setDelegate(self.window, sel("setDelegate:"), windowDelegate);
     }
 
     const contentView = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
@@ -458,8 +458,8 @@ pub fn init(
 
         // MoltenVK expects a CAMetalLayer for presentation.
         const CAMetalLayer = getClass("CAMetalLayer");
-        const new_id_obj = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-        self.metal_layer = new_id_obj(CAMetalLayer, sel("new"));
+        const newIdObj = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
+        self.metal_layer = newIdObj(CAMetalLayer, sel("new"));
 
         const setLayer = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
         setLayer(self.content_view, sel("setLayer:"), self.metal_layer);
@@ -508,9 +508,9 @@ fn updateDpiFromScreen(self: *Self, screen: c.id) void {
 
     // Get the NSDeviceDescription dictionary to access display ID
     const deviceDescription = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
-    const device_desc = deviceDescription(screen, sel("deviceDescription"));
+    const deviceDesc = deviceDescription(screen, sel("deviceDescription"));
 
-    if (device_desc == null) {
+    if (deviceDesc == null) {
         // Fallback to 96 DPI if we can't get device description
         self.dpi = .{ 96, 96 };
         return;
@@ -519,43 +519,43 @@ fn updateDpiFromScreen(self: *Self, screen: c.id) void {
     // Get the NSScreenNumber (CGDirectDisplayID) from the device description
     const NSScreenNumber = nsstring("NSScreenNumber");
     const objectForKey = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) c.id);
-    const screen_number_value = objectForKey(device_desc, sel("objectForKey:"), NSScreenNumber);
+    const screenNumberValue = objectForKey(deviceDesc, sel("objectForKey:"), NSScreenNumber);
 
-    if (screen_number_value == null) {
+    if (screenNumberValue == null) {
         self.dpi = .{ 96, 96 };
         return;
     }
 
     const unsignedIntValue = msgSend(*const fn (c.id, c.SEL) callconv(.c) c_uint);
-    const display_id = unsignedIntValue(screen_number_value, sel("unsignedIntValue"));
+    const displayId = unsignedIntValue(screenNumberValue, sel("unsignedIntValue"));
 
     // Get physical screen size in millimeters using CoreGraphics
-    const physical_size_mm = c.CGDisplayScreenSize(display_id);
+    const physicalSizeMm = c.CGDisplayScreenSize(displayId);
 
     // Get pixel dimensions of the display
-    const pixel_width = c.CGDisplayPixelsWide(display_id);
-    const pixel_height = c.CGDisplayPixelsHigh(display_id);
+    const pixelWidth = c.CGDisplayPixelsWide(displayId);
+    const pixelHeight = c.CGDisplayPixelsHigh(displayId);
 
-    if (physical_size_mm.width <= 0 or physical_size_mm.height <= 0) {
+    if (physicalSizeMm.width <= 0 or physicalSizeMm.height <= 0) {
         // Fallback if physical dimensions unavailable
         self.dpi = .{ 96, 96 };
         return;
     }
 
     // Calculate physical DPI (pixels per inch), similar to Linux Wayland implementation
-    const millimeters_per_inch: f64 = 25.4;
-    const physical_dpi_x = @as(f64, @floatFromInt(pixel_width)) / (physical_size_mm.width / millimeters_per_inch);
-    const physical_dpi_y = @as(f64, @floatFromInt(pixel_height)) / (physical_size_mm.height / millimeters_per_inch);
+    const millimetersPerInch: f64 = 25.4;
+    const physicalDpiX = @as(f64, @floatFromInt(pixelWidth)) / (physicalSizeMm.width / millimetersPerInch);
+    const physicalDpiY = @as(f64, @floatFromInt(pixelHeight)) / (physicalSizeMm.height / millimetersPerInch);
 
     // Apply backing scale factor (like Linux applies fractional scale)
     self.dpi = .{
-        @intFromFloat(@round(physical_dpi_x)),
-        @intFromFloat(@round(physical_dpi_y)),
+        @intFromFloat(@round(physicalDpiX)),
+        @intFromFloat(@round(physicalDpiY)),
     };
 
     std.log.debug(
         "macOS screen DPI: {d}x{d}, physical size: {d:.1}x{d:.1}mm, pixels: {d}x{d}",
-        .{ self.dpi[0], self.dpi[1], physical_size_mm.width, physical_size_mm.height, pixel_width, pixel_height },
+        .{ self.dpi[0], self.dpi[1], physicalSizeMm.width, physicalSizeMm.height, pixelWidth, pixelHeight },
     );
 }
 
@@ -598,7 +598,7 @@ pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
 /// Returns the target frame time in nanoseconds based on the display's refresh rate.
 /// Falls back to 60Hz (~16.67ms) if the refresh rate cannot be determined.
 pub fn targetFrameTimeNs(self: *const Self) u64 {
-    const fallback_60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
+    const fallback60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
 
     // Get the screen that the window is currently on
     const getScreen = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
@@ -609,49 +609,49 @@ pub fn targetFrameTimeNs(self: *const Self) u64 {
         const NSScreen = getClass("NSScreen");
         const mainScreen = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
         screen = mainScreen(NSScreen, sel("mainScreen"));
-        if (screen == null) return fallback_60hz;
+        if (screen == null) return fallback60hz;
     }
 
     // Get the display ID for this screen
     const deviceDescription = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
-    const device_desc = deviceDescription(screen, sel("deviceDescription"));
-    if (device_desc == null) return fallback_60hz;
+    const deviceDesc = deviceDescription(screen, sel("deviceDescription"));
+    if (deviceDesc == null) return fallback60hz;
 
     // Get the NSScreenNumber (CGDirectDisplayID) from the device description
     const NSScreenNumber = nsstring("NSScreenNumber");
     const objectForKey = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) c.id);
-    const screen_number_value = objectForKey(device_desc, sel("objectForKey:"), NSScreenNumber);
-    if (screen_number_value == null) return fallback_60hz;
+    const screenNumberValue = objectForKey(deviceDesc, sel("objectForKey:"), NSScreenNumber);
+    if (screenNumberValue == null) return fallback60hz;
 
     // Get the unsigned int value (CGDirectDisplayID)
     const unsignedIntValue = msgSend(*const fn (c.id, c.SEL) callconv(.c) c_uint);
-    const display_id = unsignedIntValue(screen_number_value, sel("unsignedIntValue"));
+    const displayId = unsignedIntValue(screenNumberValue, sel("unsignedIntValue"));
 
     // Use Core Graphics to get the display mode and refresh rate
-    const display_mode = c.CGDisplayCopyDisplayMode(display_id);
-    if (display_mode == null) return fallback_60hz;
-    defer c.CGDisplayModeRelease(display_mode);
+    const displayMode = c.CGDisplayCopyDisplayMode(displayId);
+    if (displayMode == null) return fallback60hz;
+    defer c.CGDisplayModeRelease(displayMode);
 
-    const refresh_rate = c.CGDisplayModeGetRefreshRate(display_mode);
+    const refreshRate = c.CGDisplayModeGetRefreshRate(displayMode);
 
     // Some displays (especially built-in Retina displays) report 0 refresh rate
     // In that case, fall back to 60Hz
-    if (refresh_rate <= 0) return fallback_60hz;
+    if (refreshRate <= 0) return fallback60hz;
 
     // Convert refresh rate (Hz) to frame time (nanoseconds)
-    return @intFromFloat(@round(1_000_000_000.0 / refresh_rate));
+    return @intFromFloat(@round(1_000_000_000.0 / refreshRate));
 }
 
 fn processEvent(self: *Self, event: c.id) void {
     // Get event type
     const getType = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSUInteger);
-    const event_type = getType(event, sel("type"));
+    const eventType = getType(event, sel("type"));
 
     // Handle mouse motion events
-    if (event_type == NSEventTypeMouseMoved or
-        event_type == NSEventTypeLeftMouseDragged or
-        event_type == NSEventTypeRightMouseDragged or
-        event_type == NSEventTypeOtherMouseDragged)
+    if (eventType == NSEventTypeMouseMoved or
+        eventType == NSEventTypeLeftMouseDragged or
+        eventType == NSEventTypeRightMouseDragged or
+        eventType == NSEventTypeOtherMouseDragged)
     {
         if (self.handlers.pointerMotion) |handler| {
             // Get the mouse location in window coordinates (relative to content view, origin at bottom-left)
@@ -660,27 +660,27 @@ fn processEvent(self: *Self, event: c.id) void {
 
             // Get the content view's bounds to get the correct height for coordinate conversion
             const getBounds = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSRect);
-            const content_bounds = getBounds(self.content_view, sel("bounds"));
+            const contentBounds = getBounds(self.content_view, sel("bounds"));
 
             // macOS has origin at bottom-left, convert to top-left origin using content view height
             const x: f32 = @floatCast(location.x);
-            const y: f32 = @as(f32, @floatCast(content_bounds.size.height)) - @as(f32, @floatCast(location.y));
+            const y: f32 = @as(f32, @floatCast(contentBounds.size.height)) - @as(f32, @floatCast(location.y));
 
             handler.function(self, x, y, handler.data);
         }
     }
 
-    if (event_type == NSEventTypeLeftMouseDown or event_type == NSEventTypeLeftMouseUp) {
+    if (eventType == NSEventTypeLeftMouseDown or eventType == NSEventTypeLeftMouseUp) {
         if (self.handlers.pointerButton) |handler| {
-            const state = if (event_type == NSEventTypeLeftMouseDown)
-                button_pressed
+            const state = if (eventType == NSEventTypeLeftMouseDown)
+                buttonPressed
             else
-                button_released;
-            handler.function(self, 0, 0, linux_left_mouse_button, state, handler.data);
+                buttonReleased;
+            handler.function(self, 0, 0, linuxLeftMouseButton, state, handler.data);
         }
     }
 
-    if (event_type == NSEventTypeFlagsChanged) {
+    if (eventType == NSEventTypeFlagsChanged) {
         const modifierFlagsFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSUInteger);
         const flags = modifierFlagsFn(event, sel("modifierFlags"));
 
@@ -712,19 +712,19 @@ fn processEvent(self: *Self, event: c.id) void {
         return;
     }
 
-    if (event_type == NSEventTypeKeyDown or event_type == NSEventTypeKeyUp) {
+    if (eventType == NSEventTypeKeyDown or eventType == NSEventTypeKeyUp) {
         const keyCodeFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) u16);
         const isARepeatFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) BOOL);
 
         const code = keyCodeFn(event, sel("keyCode"));
         const key = macosKeycodeToKeys(code);
-        const is_repeat = isARepeatFn(event, sel("isARepeat")) != 0;
+        const isRepeat = isARepeatFn(event, sel("isARepeat")) != 0;
 
         self.keysMutex.lock();
-        if (event_type == NSEventTypeKeyDown) {
+        if (eventType == NSEventTypeKeyDown) {
             // Only fresh press transitions flip the edge bit; OS-driven
             // repeats just keep the held bit set (already set).
-            if (!is_repeat) {
+            if (!isRepeat) {
                 self.pendingPressed = self.pendingPressed.with(key);
                 self.keysDown = self.keysDown.with(key);
             }
@@ -736,7 +736,7 @@ fn processEvent(self: *Self, event: c.id) void {
     }
 
     // Handle scroll wheel events
-    if (event_type == NSEventTypeScrollWheel) {
+    if (eventType == NSEventTypeScrollWheel) {
         if (self.handlers.scroll) |handler| {
             const scrollingDeltaY = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
             const deltaY: f32 = @floatCast(scrollingDeltaY(event, sel("scrollingDeltaY")));
@@ -781,7 +781,7 @@ pub fn handleEvents(self: *Self) !void {
     const distantFuture = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
     const distantPast = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
 
-    const mask_any: NSUInteger = std.math.maxInt(NSUInteger);
+    const maskAny: NSUInteger = std.math.maxInt(NSUInteger);
     const mode = nsstring("kCFRunLoopDefaultMode");
 
     const nextEvent = msgSend(*const fn (c.id, c.SEL, NSUInteger, c.id, c.id, BOOL) callconv(.c) c.id);
@@ -795,12 +795,12 @@ pub fn handleEvents(self: *Self) !void {
 
     while (self.running) {
         // Block waiting for the next event (like GetMessageW on Windows or wl_display_dispatch on Linux)
-        const blocking_date = distantFuture(NSDate, sel("distantFuture"));
+        const blockingDate = distantFuture(NSDate, sel("distantFuture"));
         const event = nextEvent(
             self.app,
             sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
-            mask_any,
-            blocking_date,
+            maskAny,
+            blockingDate,
             mode,
             1, // YES
         );
@@ -813,19 +813,19 @@ pub fn handleEvents(self: *Self) !void {
             sendEvent(self.app, sel("sendEvent:"), event);
 
             // Process any additional pending events without blocking
-            const non_blocking_date = distantPast(NSDate, sel("distantPast"));
+            const nonBlockingDate = distantPast(NSDate, sel("distantPast"));
             while (true) {
-                const pending_event = nextEvent(
+                const pendingEvent = nextEvent(
                     self.app,
                     sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
-                    mask_any,
-                    non_blocking_date,
+                    maskAny,
+                    nonBlockingDate,
                     mode,
                     1,
                 );
-                if (pending_event == null) break;
-                self.processEvent(pending_event);
-                sendEvent(self.app, sel("sendEvent:"), pending_event);
+                if (pendingEvent == null) break;
+                self.processEvent(pendingEvent);
+                sendEvent(self.app, sel("sendEvent:"), pendingEvent);
             }
 
             updateWindows(self.app, sel("updateWindows"));
@@ -840,8 +840,8 @@ pub fn handleEvents(self: *Self) !void {
 
 pub fn deinit(self: *Self) void {
     // Clear the global window reference
-    if (g_current_window == self) {
-        g_current_window = null;
+    if (gCurrentWindow == self) {
+        gCurrentWindow = null;
     }
 
     if (self.window != null) {
