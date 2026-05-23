@@ -359,26 +359,52 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                     else => {},
                 }
                 // lParam encoding (WM_KEYDOWN):
-                //   bits 0 ..15  = repeat count (1 unless the message coalesces)
+                //   bits 0 ..15 = repeat count (>1 when Windows coalesced
+                //                 OS repeat ticks because the app was slow
+                //                 to drain its message queue)
                 //   bits 16..23 = scan code
-                //   bit  24     = Indicates whether it's an extended key
-                //   bit  30     = previous key state (1 = key was already down → OS repeat)
+                //   bit  24     = extended-key flag
+                //   bit  30     = previous key state (1 = key was already
+                //                 down → this message represents one or
+                //                 more OS repeats, not a fresh press)
                 const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
+                const repeat_count: u16 = @truncate(lp);
                 const scan_code: u32 = (lp >> 16) & 0xFF;
-                const is_repeat: bool = (lp & (1 << 30)) != 0;
+                const was_already_down: bool = (lp & (1 << 30)) != 0;
                 const mapped = virtualKeyToKey(wParam);
                 var text_buf: [16]u8 = undefined;
                 const text_len = translateToUtf8(wParam, scan_code, &text_buf);
-                const ev: KeyboardKey = .{
-                    .time = win32.GetMessageTime(),
-                    .key = mapped,
-                    .text = text_buf[0..text_len],
-                    .is_repeat = is_repeat,
-                };
-                if (!is_repeat) {
-                    if (self.handlers.keypress) |h| h.function(self, ev, h.data);
+                const time = win32.GetMessageTime();
+                const text = text_buf[0..text_len];
+
+                // `keypress` is one-shot per real press transition, no matter
+                // how many ticks got coalesced.
+                if (!was_already_down) {
+                    if (self.handlers.keypress) |h| {
+                        h.function(self, .{
+                            .time = time,
+                            .key = mapped,
+                            .text = text,
+                            .is_repeat = false,
+                        }, h.data);
+                    }
                 }
-                if (self.handlers.keydown) |h| h.function(self, ev, h.data);
+
+                // Replay each collapsed tick as its own `keydown`. The first
+                // emission is a true repeat only if Windows said so; every
+                // additional emission is by definition a repeat.
+                if (self.handlers.keydown) |h| {
+                    const n: u32 = if (repeat_count == 0) 1 else repeat_count;
+                    var i: u32 = 0;
+                    while (i < n) : (i += 1) {
+                        h.function(self, .{
+                            .time = time,
+                            .key = mapped,
+                            .text = text,
+                            .is_repeat = was_already_down or i > 0,
+                        }, h.data);
+                    }
+                }
             }
         },
         win32.WM_KEYUP => {
