@@ -2,8 +2,8 @@ const std = @import("std");
 const win32 = @import("../windows/win32.zig");
 const window_root = @import("root.zig");
 const Cursor = window_root.Cursor;
-pub const Key = window_root.Key;
-pub const KeyboardKey = window_root.KeyboardKey;
+pub const Keys = window_root.Keys;
+pub const KeyboardSnapshot = window_root.KeyboardSnapshot;
 
 const linux_left_mouse_button: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
 const button_pressed: u32 = 1;
@@ -19,9 +19,12 @@ className: [:0]const u16,
 running: bool,
 dpi: [2]u32,
 
-keysDown: struct {
-    shift: bool,
-},
+/// Keyboard state. The wndProc thread writes; Forbear's render thread drains
+/// via `snapshotKeyboard()`. Held bitset + edge bitsets, all `Key`-typed.
+keysMutex: window_root.SpinLock = .{},
+keysDown: Keys = .{},
+pendingPressed: Keys = .{},
+pendingReleased: Keys = .{},
 
 handlers: Handlers,
 
@@ -57,129 +60,89 @@ pub const Handlers = struct {
             data: *anyopaque,
         ) void,
     } = null,
-    /// One-shot: fires only on the initial transition to pressed.
-    keypress: ?struct {
-        data: *anyopaque,
-        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    } = null,
-    /// Fires on initial press and again for each OS-driven repeat tick
-    /// (`is_repeat` mirrors lParam bit 30 / "previous key state" on
-    /// WM_KEYDOWN, which is set when Windows re-fires the message for
-    /// a held key).
-    keydown: ?struct {
-        data: *anyopaque,
-        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    } = null,
-    /// One-shot: fires only on the transition to released.
-    keyup: ?struct {
-        data: *anyopaque,
-        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    } = null,
 };
 
-fn virtualKeyToKey(vk: win32.WPARAM) Key {
+fn virtualKeyToKeys(vk: win32.WPARAM) Keys {
     return switch (vk) {
-        0x08 => .backspace,
-        0x09 => .tab,
-        0x0D => .enter,
-        0x14 => .caps_lock,
-        0x1B => .escape,
-        0x20 => .space,
-        0x21 => .page_up,
-        0x22 => .page_down,
-        0x23 => .end,
-        0x24 => .home,
-        0x25 => .arrow_left,
-        0x26 => .arrow_up,
-        0x27 => .arrow_right,
-        0x28 => .arrow_down,
-        0x2D => .insert,
-        0x2E => .delete,
-        '0' => .digit_0,
-        '1' => .digit_1,
-        '2' => .digit_2,
-        '3' => .digit_3,
-        '4' => .digit_4,
-        '5' => .digit_5,
-        '6' => .digit_6,
-        '7' => .digit_7,
-        '8' => .digit_8,
-        '9' => .digit_9,
-        'A' => .a,
-        'B' => .b,
-        'C' => .c,
-        'D' => .d,
-        'E' => .e,
-        'F' => .f,
-        'G' => .g,
-        'H' => .h,
-        'I' => .i,
-        'J' => .j,
-        'K' => .k,
-        'L' => .l,
-        'M' => .m,
-        'N' => .n,
-        'O' => .o,
-        'P' => .p,
-        'Q' => .q,
-        'R' => .r,
-        'S' => .s,
-        'T' => .t,
-        'U' => .u,
-        'V' => .v,
-        'W' => .w,
-        'X' => .x,
-        'Y' => .y,
-        'Z' => .z,
-        0x5B => .super_left,
-        0x5C => .super_right,
-        0x70 => .f1,
-        0x71 => .f2,
-        0x72 => .f3,
-        0x73 => .f4,
-        0x74 => .f5,
-        0x75 => .f6,
-        0x76 => .f7,
-        0x77 => .f8,
-        0x78 => .f9,
-        0x79 => .f10,
-        0x7A => .f11,
-        0x7B => .f12,
-        0xA0 => .shift_left,
-        0xA1 => .shift_right,
-        0xA2 => .control_left,
-        0xA3 => .control_right,
-        0xA4 => .alt_left,
-        0xA5 => .alt_right,
+        0x08 => .{ .backspace = true },
+        0x09 => .{ .tab = true },
+        0x0D => .{ .enter = true },
+        0x14 => .{ .capsLock = true },
+        0x1B => .{ .escape = true },
+        0x20 => .{ .space = true },
+        0x21 => .{ .pageUp = true },
+        0x22 => .{ .pageDown = true },
+        0x23 => .{ .end = true },
+        0x24 => .{ .home = true },
+        0x25 => .{ .arrowLeft = true },
+        0x26 => .{ .arrowUp = true },
+        0x27 => .{ .arrowRight = true },
+        0x28 => .{ .arrowDown = true },
+        0x2D => .{ .insert = true },
+        0x2E => .{ .delete = true },
+        '0' => .{ .digit0 = true },
+        '1' => .{ .digit1 = true },
+        '2' => .{ .digit2 = true },
+        '3' => .{ .digit3 = true },
+        '4' => .{ .digit4 = true },
+        '5' => .{ .digit5 = true },
+        '6' => .{ .digit6 = true },
+        '7' => .{ .digit7 = true },
+        '8' => .{ .digit8 = true },
+        '9' => .{ .digit9 = true },
+        'A' => .{ .a = true },
+        'B' => .{ .b = true },
+        'C' => .{ .c = true },
+        'D' => .{ .d = true },
+        'E' => .{ .e = true },
+        'F' => .{ .f = true },
+        'G' => .{ .g = true },
+        'H' => .{ .h = true },
+        'I' => .{ .i = true },
+        'J' => .{ .j = true },
+        'K' => .{ .k = true },
+        'L' => .{ .l = true },
+        'M' => .{ .m = true },
+        'N' => .{ .n = true },
+        'O' => .{ .o = true },
+        'P' => .{ .p = true },
+        'Q' => .{ .q = true },
+        'R' => .{ .r = true },
+        'S' => .{ .s = true },
+        'T' => .{ .t = true },
+        'U' => .{ .u = true },
+        'V' => .{ .v = true },
+        'W' => .{ .w = true },
+        'X' => .{ .x = true },
+        'Y' => .{ .y = true },
+        'Z' => .{ .z = true },
+        0x5B => .{ .superLeft = true },
+        0x5C => .{ .superRight = true },
+        0x70 => .{ .f1 = true },
+        0x71 => .{ .f2 = true },
+        0x72 => .{ .f3 = true },
+        0x73 => .{ .f4 = true },
+        0x74 => .{ .f5 = true },
+        0x75 => .{ .f6 = true },
+        0x76 => .{ .f7 = true },
+        0x77 => .{ .f8 = true },
+        0x78 => .{ .f9 = true },
+        0x79 => .{ .f10 = true },
+        0x7A => .{ .f11 = true },
+        0x7B => .{ .f12 = true },
+        0xA0 => .{ .shiftLeft = true },
+        0xA1 => .{ .shiftRight = true },
+        0xA2 => .{ .controlLeft = true },
+        0xA3 => .{ .controlRight = true },
+        0xA4 => .{ .altLeft = true },
+        0xA5 => .{ .altRight = true },
         // Generic VK_SHIFT/CONTROL/MENU come through without left/right
         // distinction — bias to the left variant.
-        0x10 => .shift_left,
-        0x11 => .control_left,
-        0x12 => .alt_left,
-        else => .unknown,
+        0x10 => .{ .shiftLeft = true },
+        0x11 => .{ .controlLeft = true },
+        0x12 => .{ .altLeft = true },
+        else => .{},
     };
-}
-
-/// Translate the current keystroke into UTF-8 using the active keyboard
-/// layout + modifier state. Writes into `out` and returns the byte length.
-/// Returns 0 for keys with no textual interpretation (arrows, F-keys, etc.).
-fn translateToUtf8(virtualKey: win32.WPARAM, scan_code: u32, out: *[16]u8) usize {
-    var key_state: [256]u8 = undefined;
-    if (win32.GetKeyboardState(&key_state) == 0) return 0;
-
-    var utf16_buf: [4]u16 = undefined;
-    const n = win32.ToUnicode(
-        @intCast(virtualKey),
-        scan_code,
-        &key_state,
-        &utf16_buf,
-        utf16_buf.len,
-        0,
-    );
-    if (n <= 0) return 0;
-
-    const utf16_len: usize = @intCast(n);
-    return std.unicode.utf16LeToUtf8(&out, utf16_buf[0..utf16_len]) catch return 0;
 }
 
 pub fn init(
@@ -200,9 +163,11 @@ pub fn init(
     errdefer allocator.free(window.className);
     window.running = true;
 
-    window.keysDown = .{
-        .shift = false,
-    };
+    window.keysMutex = .{};
+    window.keysDown = .{};
+    window.pendingPressed = .{};
+    window.pendingReleased = .{};
+    window.handlers = .{};
 
     window.allocator = allocator;
 
@@ -352,86 +317,29 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
         },
         win32.WM_KEYDOWN => {
             if (window) |self| {
-                switch (wParam) {
-                    win32.VK_SHIFT => {
-                        self.keysDown.shift = true;
-                    },
-                    else => {},
-                }
-                // lParam encoding (WM_KEYDOWN):
-                //   bits 0 ..15 = repeat count (>1 when Windows coalesced
-                //                 OS repeat ticks because the app was slow
-                //                 to drain its message queue)
-                //   bits 16..23 = scan code
-                //   bit  24     = extended-key flag
-                //   bit  30     = previous key state (1 = key was already
-                //                 down → this message represents one or
-                //                 more OS repeats, not a fresh press)
+                // lParam bit 30 is "previous key state": 1 = OS repeat,
+                // 0 = fresh press. Only fresh presses flip the edge bit.
+                // Coalesce count (bits 0..15) and scan code (bits 16..23)
+                // are intentionally ignored.
                 const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
-                const repeat_count: u16 = @truncate(lp);
-                const scan_code: u32 = (lp >> 16) & 0xFF;
                 const was_already_down: bool = (lp & (1 << 30)) != 0;
-                const mapped = virtualKeyToKey(wParam);
-                var text_buf: [16]u8 = undefined;
-                const text_len = translateToUtf8(wParam, scan_code, &text_buf);
-                const time = win32.GetMessageTime();
-                const text = text_buf[0..text_len];
+                const key = virtualKeyToKeys(wParam);
 
-                // `keypress` is one-shot per real press transition, no matter
-                // how many ticks got coalesced.
+                self.keysMutex.lock();
                 if (!was_already_down) {
-                    if (self.handlers.keypress) |h| {
-                        h.function(self, .{
-                            .time = time,
-                            .key = mapped,
-                            .text = text,
-                            .is_repeat = false,
-                        }, h.data);
-                    }
+                    self.pendingPressed = self.pendingPressed.with(key);
+                    self.keysDown = self.keysDown.with(key);
                 }
-
-                // Replay each collapsed tick as its own `keydown`. The first
-                // emission is a true repeat only if Windows said so; every
-                // additional emission is by definition a repeat.
-                if (self.handlers.keydown) |h| {
-                    const n: u32 = if (repeat_count == 0) 1 else repeat_count;
-                    var i: u32 = 0;
-                    while (i < n) : (i += 1) {
-                        h.function(self, .{
-                            .time = time,
-                            .key = mapped,
-                            .text = text,
-                            .is_repeat = was_already_down or i > 0,
-                        }, h.data);
-                    }
-                }
+                self.keysMutex.unlock();
             }
         },
         win32.WM_KEYUP => {
             if (window) |self| {
-                switch (wParam) {
-                    win32.VK_SHIFT => {
-                        self.keysDown.shift = false;
-                    },
-                    else => {},
-                }
-                // lParam encoding (WM_KEYUP):
-                //   bits 0 ..15  = repeat count (always 1 for WM_KEYUP)
-                //   bits 16..23 = scan code
-                //   bit  24     = Indicates whether it's an extended key
-                //   bit  30     = previous key state (always 1 for WM_KEYUP)
-                const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
-                const scan_code: u32 = (lp >> 16) & 0xFF;
-                const mapped = virtualKeyToKey(wParam);
-                var text_buf: [16]u8 = undefined;
-                const text_len = translateToUtf8(wParam, scan_code, &text_buf);
-                const ev: KeyboardKey = .{
-                    .time = win32.GetMessageTime(),
-                    .key = mapped,
-                    .text = text_buf[0..text_len],
-                    .is_repeat = false,
-                };
-                if (self.handlers.keyup) |h| h.function(self, ev, h.data);
+                const key = virtualKeyToKeys(wParam);
+                self.keysMutex.lock();
+                self.pendingReleased = self.pendingReleased.with(key);
+                self.keysDown = self.keysDown.without(key);
+                self.keysMutex.unlock();
             }
         },
         win32.WM_DPICHANGED => {
@@ -508,8 +416,26 @@ pub fn targetFrameTimeNs(self: *const @This()) u64 {
     return @divTrunc(1_000_000_000, @as(u64, refreshRate));
 }
 
-pub fn isHoldingShift(self: *const Self) bool {
-    return self.keysDown.shift;
+pub fn isHoldingShift(self: *Self) bool {
+    self.keysMutex.lock();
+    defer self.keysMutex.unlock();
+    return self.keysDown.shiftLeft or self.keysDown.shiftRight;
+}
+
+/// Drain the keyboard state for the current frame. Holds `keysMutex` just
+/// long enough to copy the bitsets and reset the pending fields.
+pub fn snapshotKeyboard(self: *Self) KeyboardSnapshot {
+    self.keysMutex.lock();
+    defer self.keysMutex.unlock();
+
+    const snap: KeyboardSnapshot = .{
+        .held = self.keysDown,
+        .pressed = self.pendingPressed,
+        .released = self.pendingReleased,
+    };
+    self.pendingPressed = .{};
+    self.pendingReleased = .{};
+    return snap;
 }
 
 pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {

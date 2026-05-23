@@ -38,7 +38,26 @@
 //! ```
 //!
 //! So making this cross platform, is still quite easy.
+const std = @import("std");
 const builtin = @import("builtin");
+
+/// Tiny spin-lock used by Window backends to guard the keyboard
+/// snapshot fields between the input thread and Forbear's render thread.
+/// Critical sections are sub-microsecond (a few bit ops + a memcpy
+/// bounded by `textInputBuf.len`), so spinning beats parking — and
+/// Zig 0.16's blocking `std.Io.Mutex` would force us to thread `Io`
+/// down into the windowing backends.
+pub const SpinLock = struct {
+    inner: std.atomic.Mutex = .unlocked,
+
+    pub fn lock(self: *SpinLock) void {
+        while (!self.inner.tryLock()) std.atomic.spinLoopHint();
+    }
+
+    pub fn unlock(self: *SpinLock) void {
+        self.inner.unlock();
+    }
+};
 
 pub const Cursor = enum {
     default,
@@ -54,111 +73,141 @@ pub const Cursor = enum {
 /// Any key a backend can't classify reports `.unknown`. Extend this enum
 /// when adding support for new keys; never invent a new variant in a
 /// single backend.
-pub const Key = enum {
-    unknown,
+/// `Key` is a *set* of keys, not a single key — each field is one bit, so
+/// a `Key` value naturally holds any combination (none, one, or many).
+/// "Did the user just press Tab?" is `pressed.tab`. "Is left Ctrl held?"
+/// is `held.controlLeft`. "Is either shift held?" is
+/// `held.shiftLeft or held.shiftRight`.
+///
+/// Backed by exactly 128 bits so the whole set fits in a register and
+/// composes via plain `@bitCast` to/from `u128`. Field order matters —
+/// it determines the bit position for each key.
+pub const Keys = packed struct(u128) {
+    /// Reserved bit. The backends mappers return a default `.{}` (all
+    /// false) for keys not yet covered by this struct, so this field is
+    /// never set — kept around so bit 0 of the backing u128 stays unused.
+    _unknown: bool = false,
 
     // Letters
-    a,
-    b,
-    c,
-    d,
-    e,
-    f,
-    g,
-    h,
-    i,
-    j,
-    k,
-    l,
-    m,
-    n,
-    o,
-    p,
-    q,
-    r,
-    s,
-    t,
-    u,
-    v,
-    w,
-    x,
-    y,
-    z,
+    a: bool = false,
+    b: bool = false,
+    c: bool = false,
+    d: bool = false,
+    e: bool = false,
+    f: bool = false,
+    g: bool = false,
+    h: bool = false,
+    i: bool = false,
+    j: bool = false,
+    k: bool = false,
+    l: bool = false,
+    m: bool = false,
+    n: bool = false,
+    o: bool = false,
+    p: bool = false,
+    q: bool = false,
+    r: bool = false,
+    s: bool = false,
+    t: bool = false,
+    u: bool = false,
+    v: bool = false,
+    w: bool = false,
+    x: bool = false,
+    y: bool = false,
+    z: bool = false,
 
     // Top-row digits
-    digit_0,
-    digit_1,
-    digit_2,
-    digit_3,
-    digit_4,
-    digit_5,
-    digit_6,
-    digit_7,
-    digit_8,
-    digit_9,
+    digit0: bool = false,
+    digit1: bool = false,
+    digit2: bool = false,
+    digit3: bool = false,
+    digit4: bool = false,
+    digit5: bool = false,
+    digit6: bool = false,
+    digit7: bool = false,
+    digit8: bool = false,
+    digit9: bool = false,
 
     // Function keys
-    f1,
-    f2,
-    f3,
-    f4,
-    f5,
-    f6,
-    f7,
-    f8,
-    f9,
-    f10,
-    f11,
-    f12,
+    f1: bool = false,
+    f2: bool = false,
+    f3: bool = false,
+    f4: bool = false,
+    f5: bool = false,
+    f6: bool = false,
+    f7: bool = false,
+    f8: bool = false,
+    f9: bool = false,
+    f10: bool = false,
+    f11: bool = false,
+    f12: bool = false,
 
     // Modifiers
-    shift_left,
-    shift_right,
-    control_left,
-    control_right,
-    alt_left,
-    alt_right,
-    super_left,
-    super_right,
-    caps_lock,
+    shiftLeft: bool = false,
+    shiftRight: bool = false,
+    controlLeft: bool = false,
+    controlRight: bool = false,
+    altLeft: bool = false,
+    altRight: bool = false,
+    superLeft: bool = false,
+    superRight: bool = false,
+    capsLock: bool = false,
 
     // Navigation
-    arrow_left,
-    arrow_right,
-    arrow_up,
-    arrow_down,
-    home,
-    end,
-    page_up,
-    page_down,
+    arrowLeft: bool = false,
+    arrowRight: bool = false,
+    arrowUp: bool = false,
+    arrowDown: bool = false,
+    home: bool = false,
+    end: bool = false,
+    pageUp: bool = false,
+    pageDown: bool = false,
 
     // Editing & misc
-    tab,
-    escape,
-    enter,
-    space,
-    backspace,
-    delete,
-    insert,
+    tab: bool = false,
+    escape: bool = false,
+    enter: bool = false,
+    space: bool = false,
+    backspace: bool = false,
+    delete: bool = false,
+    insert: bool = false,
+
+    /// Padding to bring the struct to exactly 128 bits — declared so the
+    /// `packed struct(u128)` constraint holds even before we fill all the
+    /// remaining keys.
+    _padding: u55 = 0,
+
+    /// `self | other` — union of two sets.
+    pub fn with(self: Keys, other: Keys) Keys {
+        return @bitCast(@as(u128, @bitCast(self)) | @as(u128, @bitCast(other)));
+    }
+
+    /// `self & ~other` — remove `other`'s bits from `self`.
+    pub fn without(self: Keys, other: Keys) Keys {
+        return @bitCast(@as(u128, @bitCast(self)) & ~@as(u128, @bitCast(other)));
+    }
+
+    /// True if no bit is set.
+    pub fn isEmpty(self: Keys) bool {
+        return @as(u128, @bitCast(self)) == 0;
+    }
 };
 
-pub const KeyboardKey = struct {
-    /// Platform-native event timestamp. Semantics vary by backend (ms since
-    /// compositor epoch on Wayland, etc.); use it only for relative timing.
-    /// 0 for synthetic repeats.
-    time: u32,
-    /// Cross-platform key identity. `.unknown` if the backend reported a
-    /// key this enum doesn't cover yet.
-    key: Key,
-    /// UTF-8 of the character this key produced under the current layout and
-    /// modifier state. Empty when the key has no textual interpretation
-    /// (Shift, F1, arrows, ...). For Tab it's `"\t"`, Enter is `"\r"`, etc.
-    /// Slice is valid only for the duration of the handler call — copy if
-    /// you need to keep it.
-    text: []const u8 = "",
-    /// True only for `keydown` events synthesized while the key is held.
-    /// Always false for `keypress` and `keyup`.
-    is_repeat: bool,
+/// Cross-platform per-frame keyboard snapshot. Each backend produces one of
+/// these inside `Window.snapshotKeyboard()` so Forbear can sample input
+/// state at frame start without going through callbacks or holding the
+/// window's lock during mounting.
+///
+/// All three fields are u128 bitsets where each `Key` variant owns one bit:
+/// `@intFromEnum(Key.tab)` is *the bit*, not an index. `.unknown = 0` is
+/// the no-op identity for `|`.
+pub const KeyboardSnapshot = struct {
+    /// Currently-held keys at the moment of sample.
+    held: Keys = .{},
+    /// Keys that transitioned to down since the previous snapshot.
+    pressed: Keys = .{},
+    /// Keys that transitioned to up since the previous snapshot.
+    released: Keys = .{},
 };
 
 pub const Window = switch (builtin.os.tag) {

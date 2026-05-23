@@ -169,16 +169,6 @@ pub const WM_MOUSEWHEEL: UINT = 0x020A;
 // Virtual Keycodes https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
 pub const VK_SHIFT: usize = 0x10;
 
-pub extern "user32" fn GetKeyboardState(lpKeyState: [*]u8) callconv(.winapi) BOOL;
-pub extern "user32" fn ToUnicode(
-    wVirtKey: UINT,
-    wScanCode: UINT,
-    lpKeyState: [*]const u8,
-    pwszBuff: [*]u16,
-    cchBuff: c_int,
-    wFlags: UINT,
-) callconv(.winapi) c_int;
-pub extern "user32" fn GetMessageTime() callconv(.winapi) DWORD;
 
 // CW_USEDEFAULT
 pub const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));

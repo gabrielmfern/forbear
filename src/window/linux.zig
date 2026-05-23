@@ -5,8 +5,8 @@ const os = std.os;
 const c = @import("c");
 const window_root = @import("root.zig");
 const Cursor = window_root.Cursor;
-pub const Key = window_root.Key;
-pub const KeyboardKey = window_root.KeyboardKey;
+pub const Keys = window_root.Keys;
+pub const KeyboardSnapshot = window_root.KeyboardSnapshot;
 
 const Self = @This();
 
@@ -46,23 +46,6 @@ pub const Handlers = struct {
             data: *anyopaque,
         ) void,
     } = null,
-    /// One-shot: fires only on the initial transition to pressed.
-    keypress: ?struct {
-        data: *anyopaque,
-        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    } = null,
-    /// Fires on initial press and again for each OS-driven repeat tick
-    /// (rate/delay come from `wl_keyboard.repeat_info`). `key.is_repeat`
-    /// distinguishes synthetic repeats from the initial press.
-    keydown: ?struct {
-        data: *anyopaque,
-        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    } = null,
-    /// One-shot: fires only on the transition to released.
-    keyup: ?struct {
-        data: *anyopaque,
-        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    } = null,
 };
 
 // Everything native that is contextual
@@ -81,26 +64,12 @@ xkbKeymap: ?*c.xkb_keymap,
 xkbState: ?*c.xkb_state,
 wlKeyboard: *c.wl_keyboard,
 
-/// Key-repeat parameters from `wl_keyboard.repeat_info`. `keyRepeatRate == 0`
-/// means the compositor wants repeats disabled.
-keyRepeatRate: i32 = 25,
-keyRepeatDelay: i32 = 600,
-/// The currently held repeatable key, if any. Drives the timerfd that
-/// synthesizes `keydown` events. `xkb_keycode` is kept for the
-/// release-match check (so we only cancel when *this* key is released);
-/// `key` + `text_buf` are what we ship in the synthetic event.
-heldKey: ?struct {
-    xkb_keycode: u32,
-    key: Key,
-    /// Stored UTF-8 produced by the initial press; replayed on every
-    /// synthetic repeat. 16 bytes is way more than a single keysym can
-    /// produce (UTF-8 max codepoint is 4 bytes).
-    text_buf: [16]u8,
-    text_len: u8,
-} = null,
-/// CLOCK_MONOTONIC timerfd that fires when the next synthetic `keydown`
-/// is due. Disarmed when no key is held or the held key isn't repeatable.
-keyRepeatTimerFd: i32 = -1,
+/// Keyboard state. The Wayland event thread writes; Forbear's render
+/// thread drains via `snapshotKeyboard()` at frame start.
+keysMutex: window_root.SpinLock = .{},
+keysDown: Keys = .{},
+pendingPressed: Keys = .{},
+pendingReleased: Keys = .{},
 
 // cursor
 wlPointer: *c.wl_pointer,
@@ -648,83 +617,83 @@ const wlPointerListener: c.wl_pointer_listener = .{
     .axis_relative_direction = pointerHandleAxisRelativeDirection,
 };
 
-/// Translate an XKB keysym into the cross-platform `Key` enum.
-/// Returns `.unknown` for keys not yet covered.
-fn keysymToKey(sym: u32) Key {
+/// Translate an XKB keysym into a single-key `Keys` set.
+/// Returns an empty set for keys not yet covered.
+fn keysymToKeys(sym: u32) Keys {
     return switch (sym) {
-        c.XKB_KEY_Tab, c.XKB_KEY_ISO_Left_Tab => .tab,
-        c.XKB_KEY_Escape => .escape,
-        c.XKB_KEY_Return, c.XKB_KEY_KP_Enter => .enter,
-        c.XKB_KEY_space => .space,
-        c.XKB_KEY_BackSpace => .backspace,
-        c.XKB_KEY_Delete => .delete,
-        c.XKB_KEY_Insert => .insert,
-        c.XKB_KEY_Home => .home,
-        c.XKB_KEY_End => .end,
-        c.XKB_KEY_Page_Up => .page_up,
-        c.XKB_KEY_Page_Down => .page_down,
-        c.XKB_KEY_Left => .arrow_left,
-        c.XKB_KEY_Right => .arrow_right,
-        c.XKB_KEY_Up => .arrow_up,
-        c.XKB_KEY_Down => .arrow_down,
-        c.XKB_KEY_Shift_L => .shift_left,
-        c.XKB_KEY_Shift_R => .shift_right,
-        c.XKB_KEY_Control_L => .control_left,
-        c.XKB_KEY_Control_R => .control_right,
-        c.XKB_KEY_Alt_L => .alt_left,
-        c.XKB_KEY_Alt_R => .alt_right,
-        c.XKB_KEY_Super_L, c.XKB_KEY_Meta_L => .super_left,
-        c.XKB_KEY_Super_R, c.XKB_KEY_Meta_R => .super_right,
-        c.XKB_KEY_Caps_Lock => .caps_lock,
-        c.XKB_KEY_F1 => .f1,
-        c.XKB_KEY_F2 => .f2,
-        c.XKB_KEY_F3 => .f3,
-        c.XKB_KEY_F4 => .f4,
-        c.XKB_KEY_F5 => .f5,
-        c.XKB_KEY_F6 => .f6,
-        c.XKB_KEY_F7 => .f7,
-        c.XKB_KEY_F8 => .f8,
-        c.XKB_KEY_F9 => .f9,
-        c.XKB_KEY_F10 => .f10,
-        c.XKB_KEY_F11 => .f11,
-        c.XKB_KEY_F12 => .f12,
-        c.XKB_KEY_a, c.XKB_KEY_A => .a,
-        c.XKB_KEY_b, c.XKB_KEY_B => .b,
-        c.XKB_KEY_c, c.XKB_KEY_C => .c,
-        c.XKB_KEY_d, c.XKB_KEY_D => .d,
-        c.XKB_KEY_e, c.XKB_KEY_E => .e,
-        c.XKB_KEY_f, c.XKB_KEY_F => .f,
-        c.XKB_KEY_g, c.XKB_KEY_G => .g,
-        c.XKB_KEY_h, c.XKB_KEY_H => .h,
-        c.XKB_KEY_i, c.XKB_KEY_I => .i,
-        c.XKB_KEY_j, c.XKB_KEY_J => .j,
-        c.XKB_KEY_k, c.XKB_KEY_K => .k,
-        c.XKB_KEY_l, c.XKB_KEY_L => .l,
-        c.XKB_KEY_m, c.XKB_KEY_M => .m,
-        c.XKB_KEY_n, c.XKB_KEY_N => .n,
-        c.XKB_KEY_o, c.XKB_KEY_O => .o,
-        c.XKB_KEY_p, c.XKB_KEY_P => .p,
-        c.XKB_KEY_q, c.XKB_KEY_Q => .q,
-        c.XKB_KEY_r, c.XKB_KEY_R => .r,
-        c.XKB_KEY_s, c.XKB_KEY_S => .s,
-        c.XKB_KEY_t, c.XKB_KEY_T => .t,
-        c.XKB_KEY_u, c.XKB_KEY_U => .u,
-        c.XKB_KEY_v, c.XKB_KEY_V => .v,
-        c.XKB_KEY_w, c.XKB_KEY_W => .w,
-        c.XKB_KEY_x, c.XKB_KEY_X => .x,
-        c.XKB_KEY_y, c.XKB_KEY_Y => .y,
-        c.XKB_KEY_z, c.XKB_KEY_Z => .z,
-        c.XKB_KEY_0 => .digit_0,
-        c.XKB_KEY_1 => .digit_1,
-        c.XKB_KEY_2 => .digit_2,
-        c.XKB_KEY_3 => .digit_3,
-        c.XKB_KEY_4 => .digit_4,
-        c.XKB_KEY_5 => .digit_5,
-        c.XKB_KEY_6 => .digit_6,
-        c.XKB_KEY_7 => .digit_7,
-        c.XKB_KEY_8 => .digit_8,
-        c.XKB_KEY_9 => .digit_9,
-        else => .unknown,
+        c.XKB_KEY_Tab, c.XKB_KEY_ISO_Left_Tab => .{ .tab = true },
+        c.XKB_KEY_Escape => .{ .escape = true },
+        c.XKB_KEY_Return, c.XKB_KEY_KP_Enter => .{ .enter = true },
+        c.XKB_KEY_space => .{ .space = true },
+        c.XKB_KEY_BackSpace => .{ .backspace = true },
+        c.XKB_KEY_Delete => .{ .delete = true },
+        c.XKB_KEY_Insert => .{ .insert = true },
+        c.XKB_KEY_Home => .{ .home = true },
+        c.XKB_KEY_End => .{ .end = true },
+        c.XKB_KEY_Page_Up => .{ .pageUp = true },
+        c.XKB_KEY_Page_Down => .{ .pageDown = true },
+        c.XKB_KEY_Left => .{ .arrowLeft = true },
+        c.XKB_KEY_Right => .{ .arrowRight = true },
+        c.XKB_KEY_Up => .{ .arrowUp = true },
+        c.XKB_KEY_Down => .{ .arrowDown = true },
+        c.XKB_KEY_Shift_L => .{ .shiftLeft = true },
+        c.XKB_KEY_Shift_R => .{ .shiftRight = true },
+        c.XKB_KEY_Control_L => .{ .controlLeft = true },
+        c.XKB_KEY_Control_R => .{ .controlRight = true },
+        c.XKB_KEY_Alt_L => .{ .altLeft = true },
+        c.XKB_KEY_Alt_R => .{ .altRight = true },
+        c.XKB_KEY_Super_L, c.XKB_KEY_Meta_L => .{ .superLeft = true },
+        c.XKB_KEY_Super_R, c.XKB_KEY_Meta_R => .{ .superRight = true },
+        c.XKB_KEY_Caps_Lock => .{ .capsLock = true },
+        c.XKB_KEY_F1 => .{ .f1 = true },
+        c.XKB_KEY_F2 => .{ .f2 = true },
+        c.XKB_KEY_F3 => .{ .f3 = true },
+        c.XKB_KEY_F4 => .{ .f4 = true },
+        c.XKB_KEY_F5 => .{ .f5 = true },
+        c.XKB_KEY_F6 => .{ .f6 = true },
+        c.XKB_KEY_F7 => .{ .f7 = true },
+        c.XKB_KEY_F8 => .{ .f8 = true },
+        c.XKB_KEY_F9 => .{ .f9 = true },
+        c.XKB_KEY_F10 => .{ .f10 = true },
+        c.XKB_KEY_F11 => .{ .f11 = true },
+        c.XKB_KEY_F12 => .{ .f12 = true },
+        c.XKB_KEY_a, c.XKB_KEY_A => .{ .a = true },
+        c.XKB_KEY_b, c.XKB_KEY_B => .{ .b = true },
+        c.XKB_KEY_c, c.XKB_KEY_C => .{ .c = true },
+        c.XKB_KEY_d, c.XKB_KEY_D => .{ .d = true },
+        c.XKB_KEY_e, c.XKB_KEY_E => .{ .e = true },
+        c.XKB_KEY_f, c.XKB_KEY_F => .{ .f = true },
+        c.XKB_KEY_g, c.XKB_KEY_G => .{ .g = true },
+        c.XKB_KEY_h, c.XKB_KEY_H => .{ .h = true },
+        c.XKB_KEY_i, c.XKB_KEY_I => .{ .i = true },
+        c.XKB_KEY_j, c.XKB_KEY_J => .{ .j = true },
+        c.XKB_KEY_k, c.XKB_KEY_K => .{ .k = true },
+        c.XKB_KEY_l, c.XKB_KEY_L => .{ .l = true },
+        c.XKB_KEY_m, c.XKB_KEY_M => .{ .m = true },
+        c.XKB_KEY_n, c.XKB_KEY_N => .{ .n = true },
+        c.XKB_KEY_o, c.XKB_KEY_O => .{ .o = true },
+        c.XKB_KEY_p, c.XKB_KEY_P => .{ .p = true },
+        c.XKB_KEY_q, c.XKB_KEY_Q => .{ .q = true },
+        c.XKB_KEY_r, c.XKB_KEY_R => .{ .r = true },
+        c.XKB_KEY_s, c.XKB_KEY_S => .{ .s = true },
+        c.XKB_KEY_t, c.XKB_KEY_T => .{ .t = true },
+        c.XKB_KEY_u, c.XKB_KEY_U => .{ .u = true },
+        c.XKB_KEY_v, c.XKB_KEY_V => .{ .v = true },
+        c.XKB_KEY_w, c.XKB_KEY_W => .{ .w = true },
+        c.XKB_KEY_x, c.XKB_KEY_X => .{ .x = true },
+        c.XKB_KEY_y, c.XKB_KEY_Y => .{ .y = true },
+        c.XKB_KEY_z, c.XKB_KEY_Z => .{ .z = true },
+        c.XKB_KEY_0 => .{ .digit0 = true },
+        c.XKB_KEY_1 => .{ .digit1 = true },
+        c.XKB_KEY_2 => .{ .digit2 = true },
+        c.XKB_KEY_3 => .{ .digit3 = true },
+        c.XKB_KEY_4 => .{ .digit4 = true },
+        c.XKB_KEY_5 => .{ .digit5 = true },
+        c.XKB_KEY_6 => .{ .digit6 = true },
+        c.XKB_KEY_7 => .{ .digit7 = true },
+        c.XKB_KEY_8 => .{ .digit8 = true },
+        c.XKB_KEY_9 => .{ .digit9 = true },
+        else => .{},
     };
 }
 
@@ -795,7 +764,13 @@ fn keyboardHandleLeave(
     _ = surface;
     _ = serial;
     const window: *Self = @ptrCast(@alignCast(data));
-    window.cancelKeyRepeat();
+
+    // Focus is gone: mark every held key as released this frame so edge
+    // consumers see the transition, then clear the held set.
+    window.keysMutex.lock();
+    window.pendingReleased = window.pendingReleased.with(window.keysDown);
+    window.keysDown = .{};
+    window.keysMutex.unlock();
 }
 
 fn keyboardHandleKey(
@@ -808,6 +783,7 @@ fn keyboardHandleKey(
 ) callconv(.c) void {
     _ = wlKeyboard;
     _ = serial;
+    _ = time;
     const window: *Self = @ptrCast(@alignCast(data));
 
     // wl_keyboard reports evdev keycodes; xkb keycodes are evdev + 8.
@@ -816,56 +792,17 @@ fn keyboardHandleKey(
         c.xkb_state_key_get_one_sym(xs, xkbKeycode)
     else
         0;
-    const mapped: Key = keysymToKey(keysym);
+    const mapped: Keys = keysymToKeys(keysym);
 
-    var text_buf: [16]u8 = undefined;
-    var text_len: usize = 0;
-    if (window.xkbState) |xs| {
-        const n = c.xkb_state_key_get_utf8(xs, xkbKeycode, &text_buf, text_buf.len);
-        if (n > 0) {
-            const un: usize = @intCast(n);
-            // n is the length excluding the NUL byte; xkb truncates if the
-            // buffer was too small. Treat truncation as no-text.
-            if (un < text_buf.len) text_len = un;
-        }
-    }
-
-    const ev: KeyboardKey = .{
-        .time = time,
-        .key = mapped,
-        .text = text_buf[0..text_len],
-        .is_repeat = false,
-    };
-
+    window.keysMutex.lock();
     if (state == c.WL_KEYBOARD_KEY_STATE_PRESSED) {
-        if (window.handlers.keypress) |h| h.function(window, ev, h.data);
-        if (window.handlers.keydown) |h| h.function(window, ev, h.data);
-
-        // Arm repeat only if the compositor enabled repeats and the keymap
-        // marks this key as repeatable.
-        const repeats: bool = if (window.xkbKeymap) |km|
-            c.xkb_keymap_key_repeats(km, xkbKeycode) != 0
-        else
-            true;
-        if (window.keyRepeatRate > 0 and repeats) {
-            var stored: [16]u8 = undefined;
-            @memcpy(stored[0..text_len], text_buf[0..text_len]);
-            window.heldKey = .{
-                .xkb_keycode = xkbKeycode,
-                .key = mapped,
-                .text_buf = stored,
-                .text_len = @intCast(text_len),
-            };
-            window.armRepeatTimer(window.keyRepeatDelay);
-        } else {
-            window.cancelKeyRepeat();
-        }
+        window.pendingPressed = window.pendingPressed.with(mapped);
+        window.keysDown = window.keysDown.with(mapped);
     } else if (state == c.WL_KEYBOARD_KEY_STATE_RELEASED) {
-        if (window.handlers.keyup) |h| h.function(window, ev, h.data);
-        if (window.heldKey) |held| {
-            if (held.xkb_keycode == xkbKeycode) window.cancelKeyRepeat();
-        }
+        window.pendingReleased = window.pendingReleased.with(mapped);
+        window.keysDown = window.keysDown.without(mapped);
     }
+    window.keysMutex.unlock();
 }
 
 fn keyboardHandleModifiers(
@@ -888,58 +825,13 @@ fn keyboardHandleModifiers(
 }
 
 fn keyboardHandleRepeatInfo(
-    data: ?*anyopaque,
-    wl_keyboard: ?*c.wl_keyboard,
-    rate: i32,
-    delay: i32,
+    _: ?*anyopaque,
+    _: ?*c.wl_keyboard,
+    _: i32,
+    _: i32,
 ) callconv(.c) void {
-    _ = wl_keyboard;
-    const window: *Self = @ptrCast(@alignCast(data));
-    window.keyRepeatRate = rate;
-    window.keyRepeatDelay = delay;
-    if (rate == 0) window.cancelKeyRepeat();
-}
-
-/// Arm `keyRepeatTimerFd` to fire once after `ms` milliseconds.
-/// Pass 0 to disarm.
-fn armRepeatTimer(self: *Self, ms: i32) void {
-    const ns_total: i64 = @as(i64, ms) * std.time.ns_per_ms;
-    const its: std.os.linux.itimerspec = .{
-        .it_interval = .{ .sec = 0, .nsec = 0 },
-        .it_value = .{
-            .sec = @intCast(@divTrunc(ns_total, std.time.ns_per_s)),
-            .nsec = @intCast(@mod(ns_total, std.time.ns_per_s)),
-        },
-    };
-    _ = std.os.linux.timerfd_settime(self.keyRepeatTimerFd, .{}, &its, null);
-}
-
-fn cancelKeyRepeat(self: *Self) void {
-    self.heldKey = null;
-    self.armRepeatTimer(0);
-}
-
-/// Called from the event loop when the timerfd fires. Emits one synthetic
-/// `keydown` for the currently held key and re-arms at the OS-described rate.
-fn fireKeyRepeat(self: *Self) void {
-    const held = self.heldKey orelse return;
-    if (self.keyRepeatRate <= 0) {
-        self.cancelKeyRepeat();
-        return;
-    }
-
-    if (self.handlers.keydown) |h| {
-        const ev: KeyboardKey = .{
-            .time = 0,
-            .key = held.key,
-            .text = held.text_buf[0..held.text_len],
-            .is_repeat = true,
-        };
-        h.function(self, ev, h.data);
-    }
-
-    const interval_ms: i32 = @divTrunc(1000, self.keyRepeatRate);
-    self.armRepeatTimer(if (interval_ms <= 0) 1 else interval_ms);
+    // The held-state model doesn't need OS repeat info — consumers do
+    // their own hold-to-act timing from `dt` and `isKeyDown(...)`.
 }
 
 const wlKeyboardListener: c.wl_keyboard_listener = .{
@@ -1002,18 +894,10 @@ pub fn init(
     window.xkbKeymap = null;
     window.xkbState = null;
 
-    window.keyRepeatRate = 25;
-    window.keyRepeatDelay = 600;
-    window.heldKey = null;
-    {
-        const rc = std.os.linux.timerfd_create(.MONOTONIC, .{ .CLOEXEC = true });
-        switch (std.posix.errno(rc)) {
-            .SUCCESS => {},
-            else => return error.FailedToCreateTimerFd,
-        }
-        window.keyRepeatTimerFd = @intCast(rc);
-    }
-    errdefer _ = std.os.linux.close(window.keyRepeatTimerFd);
+    window.keysMutex = .{};
+    window.keysDown = .{};
+    window.pendingPressed = .{};
+    window.pendingReleased = .{};
 
     // Initialize optional fields to null before the registry roundtrip,
     // since allocator.create does not zero-initialize memory.
@@ -1122,28 +1006,20 @@ pub fn setResizeHandler(
     };
 }
 
-pub fn setKeypressHandler(
-    self: *Self,
-    handler: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    data: *anyopaque,
-) void {
-    self.handlers.keypress = .{ .data = data, .function = handler };
-}
+/// Drain the keyboard state for the current frame. Holds the keys mutex
+/// just long enough to copy the bitsets and reset the pending fields.
+pub fn snapshotKeyboard(self: *Self) KeyboardSnapshot {
+    self.keysMutex.lock();
+    defer self.keysMutex.unlock();
 
-pub fn setKeydownHandler(
-    self: *Self,
-    handler: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    data: *anyopaque,
-) void {
-    self.handlers.keydown = .{ .data = data, .function = handler };
-}
-
-pub fn setKeyupHandler(
-    self: *Self,
-    handler: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    data: *anyopaque,
-) void {
-    self.handlers.keyup = .{ .data = data, .function = handler };
+    const snap: KeyboardSnapshot = .{
+        .held = self.keysDown,
+        .pressed = self.pendingPressed,
+        .released = self.pendingReleased,
+    };
+    self.pendingPressed = .{};
+    self.pendingReleased = .{};
+    return snap;
 }
 
 pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
@@ -1171,58 +1047,9 @@ pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
 }
 
 pub fn handleEvents(self: *Self) !void {
-    const displayFd: i32 = c.wl_display_get_fd(self.wlDisplay);
-
     while (self.running) {
-        // Drain anything already queued before we block on poll. This is the
-        // standard `prepare_read` dance — keep dispatching pending events
-        // until prepare_read succeeds (returns 0).
-        while (c.wl_display_prepare_read(self.wlDisplay) != 0) {
-            if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
-                return error.WaylandDispatchFailed;
-            }
-        }
-
-        // Flush outgoing requests to the compositor.
-        while (true) {
-            const flushed = c.wl_display_flush(self.wlDisplay);
-            if (flushed >= 0) break;
-            if (std.posix.errno(@as(usize, @bitCast(@as(isize, flushed)))) == .AGAIN) {
-                // socket would block; let poll wait for OUT below
-                break;
-            }
-            c.wl_display_cancel_read(self.wlDisplay);
-            return error.WaylandFlushFailed;
-        }
-
-        var fds = [_]std.posix.pollfd{
-            .{ .fd = displayFd, .events = std.posix.POLL.IN, .revents = 0 },
-            .{ .fd = self.keyRepeatTimerFd, .events = std.posix.POLL.IN, .revents = 0 },
-        };
-        const n = std.posix.poll(&fds, -1) catch |err| {
-            c.wl_display_cancel_read(self.wlDisplay);
-            return err;
-        };
-        if (n == 0) {
-            c.wl_display_cancel_read(self.wlDisplay);
-            continue;
-        }
-
-        if (fds[0].revents & std.posix.POLL.IN != 0) {
-            if (c.wl_display_read_events(self.wlDisplay) == -1) {
-                return error.WaylandReadFailed;
-            }
-            if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
-                return error.WaylandDispatchFailed;
-            }
-        } else {
-            c.wl_display_cancel_read(self.wlDisplay);
-        }
-
-        if (fds[1].revents & std.posix.POLL.IN != 0) {
-            var expirations: u64 = 0;
-            _ = std.posix.read(self.keyRepeatTimerFd, std.mem.asBytes(&expirations)) catch {};
-            self.fireKeyRepeat();
+        if (c.wl_display_dispatch(self.wlDisplay) == -1) {
+            return error.WaylandDispatchFailed;
         }
     }
 }
@@ -1282,8 +1109,6 @@ pub fn deinit(self: *Self) void {
         c.xkb_keymap_unref(xkbKeymap);
     }
     c.xkb_context_unref(self.xkbContext);
-
-    if (self.keyRepeatTimerFd >= 0) _ = std.os.linux.close(self.keyRepeatTimerFd);
 
     self.allocator.destroy(self);
 }

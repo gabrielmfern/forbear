@@ -3,8 +3,8 @@ const std = @import("std");
 const c = @import("c");
 const window_root = @import("root.zig");
 const Cursor = window_root.Cursor;
-pub const Key = window_root.Key;
-pub const KeyboardKey = window_root.KeyboardKey;
+pub const Keys = window_root.Keys;
+pub const KeyboardSnapshot = window_root.KeyboardSnapshot;
 
 extern fn objc_autoreleasePoolPush() ?*anyopaque;
 extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;
@@ -45,23 +45,6 @@ pub const Handlers = struct {
             newDpi: [2]u32,
             data: *anyopaque,
         ) void,
-    } = null,
-    /// One-shot: fires only on the initial transition to pressed.
-    keypress: ?struct {
-        data: *anyopaque,
-        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    } = null,
-    /// Fires on initial press and again for each OS-driven repeat tick
-    /// (macOS schedules repeats itself via NSEvent; `is_repeat` mirrors
-    /// `NSEvent.isARepeat`).
-    keydown: ?struct {
-        data: *anyopaque,
-        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
-    } = null,
-    /// One-shot: fires only on the transition to released.
-    keyup: ?struct {
-        data: *anyopaque,
-        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
     } = null,
 };
 
@@ -107,83 +90,82 @@ const NSEventTypeKeyDown: NSUInteger = 10;
 const NSEventTypeKeyUp: NSUInteger = 11;
 
 // kVK_* virtual key codes (HIToolbox/Events.h). Hardware-independent —
-// the same physical key reports the same kVK regardless of layout, so
-// we map these directly into the cross-platform `Key` enum.
-fn macosKeycodeToKey(code: u16) Key {
+// the same physical key reports the same kVK regardless of layout.
+fn macosKeycodeToKeys(code: u16) Keys {
     return switch (code) {
-        0x00 => .a,
-        0x0B => .b,
-        0x08 => .c,
-        0x02 => .d,
-        0x0E => .e,
-        0x03 => .f,
-        0x05 => .g,
-        0x04 => .h,
-        0x22 => .i,
-        0x26 => .j,
-        0x28 => .k,
-        0x25 => .l,
-        0x2E => .m,
-        0x2D => .n,
-        0x1F => .o,
-        0x23 => .p,
-        0x0C => .q,
-        0x0F => .r,
-        0x01 => .s,
-        0x11 => .t,
-        0x20 => .u,
-        0x09 => .v,
-        0x0D => .w,
-        0x07 => .x,
-        0x10 => .y,
-        0x06 => .z,
-        0x1D => .digit_0,
-        0x12 => .digit_1,
-        0x13 => .digit_2,
-        0x14 => .digit_3,
-        0x15 => .digit_4,
-        0x17 => .digit_5,
-        0x16 => .digit_6,
-        0x1A => .digit_7,
-        0x1C => .digit_8,
-        0x19 => .digit_9,
-        0x7A => .f1,
-        0x78 => .f2,
-        0x63 => .f3,
-        0x76 => .f4,
-        0x60 => .f5,
-        0x61 => .f6,
-        0x62 => .f7,
-        0x64 => .f8,
-        0x65 => .f9,
-        0x6D => .f10,
-        0x67 => .f11,
-        0x6F => .f12,
-        0x38 => .shift_left,
-        0x3C => .shift_right,
-        0x3B => .control_left,
-        0x3E => .control_right,
-        0x3A => .alt_left,
-        0x3D => .alt_right,
-        0x37 => .super_left,
-        0x36 => .super_right,
-        0x39 => .caps_lock,
-        0x7B => .arrow_left,
-        0x7C => .arrow_right,
-        0x7E => .arrow_up,
-        0x7D => .arrow_down,
-        0x73 => .home,
-        0x77 => .end,
-        0x74 => .page_up,
-        0x79 => .page_down,
-        0x30 => .tab,
-        0x35 => .escape,
-        0x24 => .enter,
-        0x31 => .space,
-        0x33 => .backspace,
-        0x75 => .delete,
-        0x72 => .insert,
-        else => .unknown,
+        0x00 => .{ .a = true },
+        0x0B => .{ .b = true },
+        0x08 => .{ .c = true },
+        0x02 => .{ .d = true },
+        0x0E => .{ .e = true },
+        0x03 => .{ .f = true },
+        0x05 => .{ .g = true },
+        0x04 => .{ .h = true },
+        0x22 => .{ .i = true },
+        0x26 => .{ .j = true },
+        0x28 => .{ .k = true },
+        0x25 => .{ .l = true },
+        0x2E => .{ .m = true },
+        0x2D => .{ .n = true },
+        0x1F => .{ .o = true },
+        0x23 => .{ .p = true },
+        0x0C => .{ .q = true },
+        0x0F => .{ .r = true },
+        0x01 => .{ .s = true },
+        0x11 => .{ .t = true },
+        0x20 => .{ .u = true },
+        0x09 => .{ .v = true },
+        0x0D => .{ .w = true },
+        0x07 => .{ .x = true },
+        0x10 => .{ .y = true },
+        0x06 => .{ .z = true },
+        0x1D => .{ .digit0 = true },
+        0x12 => .{ .digit1 = true },
+        0x13 => .{ .digit2 = true },
+        0x14 => .{ .digit3 = true },
+        0x15 => .{ .digit4 = true },
+        0x17 => .{ .digit5 = true },
+        0x16 => .{ .digit6 = true },
+        0x1A => .{ .digit7 = true },
+        0x1C => .{ .digit8 = true },
+        0x19 => .{ .digit9 = true },
+        0x7A => .{ .f1 = true },
+        0x78 => .{ .f2 = true },
+        0x63 => .{ .f3 = true },
+        0x76 => .{ .f4 = true },
+        0x60 => .{ .f5 = true },
+        0x61 => .{ .f6 = true },
+        0x62 => .{ .f7 = true },
+        0x64 => .{ .f8 = true },
+        0x65 => .{ .f9 = true },
+        0x6D => .{ .f10 = true },
+        0x67 => .{ .f11 = true },
+        0x6F => .{ .f12 = true },
+        0x38 => .{ .shiftLeft = true },
+        0x3C => .{ .shiftRight = true },
+        0x3B => .{ .controlLeft = true },
+        0x3E => .{ .controlRight = true },
+        0x3A => .{ .altLeft = true },
+        0x3D => .{ .altRight = true },
+        0x37 => .{ .superLeft = true },
+        0x36 => .{ .superRight = true },
+        0x39 => .{ .capsLock = true },
+        0x7B => .{ .arrowLeft = true },
+        0x7C => .{ .arrowRight = true },
+        0x7E => .{ .arrowUp = true },
+        0x7D => .{ .arrowDown = true },
+        0x73 => .{ .home = true },
+        0x77 => .{ .end = true },
+        0x74 => .{ .pageUp = true },
+        0x79 => .{ .pageDown = true },
+        0x30 => .{ .tab = true },
+        0x35 => .{ .escape = true },
+        0x24 => .{ .enter = true },
+        0x31 => .{ .space = true },
+        0x33 => .{ .backspace = true },
+        0x75 => .{ .delete = true },
+        0x72 => .{ .insert = true },
+        else => .{},
     };
 }
 
@@ -337,6 +319,14 @@ allocator: std.mem.Allocator,
 
 handlers: Handlers,
 
+/// Guards `keysDown` / `pendingPressed` / `pendingReleased` between the
+/// input thread (where NSEvent callbacks fire) and Forbear's render thread
+/// (which drains via `snapshotKeyboard`).
+keysMutex: window_root.SpinLock = .{},
+keysDown: Keys = .{},
+pendingPressed: Keys = .{},
+pendingReleased: Keys = .{},
+
 pub fn init(
     allocator: std.mem.Allocator,
     width: u32,
@@ -356,6 +346,10 @@ pub fn init(
     self.running = true;
 
     self.handlers = .{};
+    self.keysMutex = .{};
+    self.keysDown = .{};
+    self.pendingPressed = .{};
+    self.pendingReleased = .{};
 
     self.pool = objc_autoreleasePoolPush();
 
@@ -684,49 +678,24 @@ fn processEvent(self: *Self, event: c.id) void {
     if (event_type == NSEventTypeKeyDown or event_type == NSEventTypeKeyUp) {
         const keyCodeFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) u16);
         const isARepeatFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) BOOL);
-        const timestampFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
-        const charactersFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
-        const utf8StringFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) ?[*:0]const u8);
 
         const code = keyCodeFn(event, sel("keyCode"));
-        const mapped: Key = macosKeycodeToKey(code);
+        const key = macosKeycodeToKeys(code);
         const is_repeat = isARepeatFn(event, sel("isARepeat")) != 0;
-        const ts = timestampFn(event, sel("timestamp"));
-        // NSTimeInterval is seconds since boot; truncate to ms (wraps every
-        // ~50 days, fine for relative-timing use).
-        const time_ms: u32 = @truncate(@as(u64, @intFromFloat(ts * 1000.0)));
 
-        // `characters` is layout/modifier-aware; `charactersIgnoringModifiers`
-        // would give us the base char. We want what the user typed.
-        var text: []const u8 = "";
-        const ns_chars = charactersFn(event, sel("characters"));
-        if (ns_chars != null) {
-            if (utf8StringFn(ns_chars, sel("UTF8String"))) |p| {
-                text = std.mem.span(p);
-            }
-        }
-        // Suppress private-use-area glyphs that AppKit emits for non-text keys
-        // (arrows, F-keys, etc. — e.g. U+F700+). They'd otherwise show up as
-        // 3-byte UTF-8 surrogates in `text` for keys that shouldn't have text.
-        if (text.len >= 3 and text[0] == 0xEF and (text[1] & 0xFC) == 0x9C) {
-            text = "";
-        }
-
-        const ev: KeyboardKey = .{
-            .time = time_ms,
-            .key = mapped,
-            .text = text,
-            .is_repeat = is_repeat,
-        };
-
+        self.keysMutex.lock();
         if (event_type == NSEventTypeKeyDown) {
+            // Only fresh press transitions flip the edge bit; OS-driven
+            // repeats just keep the held bit set (already set).
             if (!is_repeat) {
-                if (self.handlers.keypress) |h| h.function(self, ev, h.data);
+                self.pendingPressed = self.pendingPressed.with(key);
+                self.keysDown = self.keysDown.with(key);
             }
-            if (self.handlers.keydown) |h| h.function(self, ev, h.data);
         } else {
-            if (self.handlers.keyup) |h| h.function(self, ev, h.data);
+            self.pendingReleased = self.pendingReleased.with(key);
+            self.keysDown = self.keysDown.without(key);
         }
+        self.keysMutex.unlock();
     }
 
     // Handle scroll wheel events
@@ -752,6 +721,22 @@ fn processEvent(self: *Self, event: c.id) void {
             }
         }
     }
+}
+
+/// Drain the keyboard state for the current frame. Holds the keys mutex
+/// just long enough to copy the bitsets and reset the pending fields.
+pub fn snapshotKeyboard(self: *Self) KeyboardSnapshot {
+    self.keysMutex.lock();
+    defer self.keysMutex.unlock();
+
+    const snap: KeyboardSnapshot = .{
+        .held = self.keysDown,
+        .pressed = self.pendingPressed,
+        .released = self.pendingReleased,
+    };
+    self.pendingPressed = .{};
+    self.pendingReleased = .{};
+    return snap;
 }
 
 pub fn handleEvents(self: *Self) !void {
