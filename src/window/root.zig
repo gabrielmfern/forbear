@@ -69,20 +69,7 @@ pub const Cursor = enum {
 /// (XKB keysym on Linux, virtual-key code on Windows, etc.) into one of
 /// these. Layout-dependent keys (letters/digits) reflect the *typed*
 /// character — on AZERTY the physical Q key reports `.a`.
-///
-/// Any key a backend can't classify reports `.unknown`. Extend this enum
-/// when adding support for new keys; never invent a new variant in a
-/// single backend.
-/// `Key` is a *set* of keys, not a single key — each field is one bit, so
-/// a `Key` value naturally holds any combination (none, one, or many).
-/// "Did the user just press Tab?" is `pressed.tab`. "Is left Ctrl held?"
-/// is `held.controlLeft`. "Is either shift held?" is
-/// `held.shiftLeft or held.shiftRight`.
-///
-/// Backed by exactly 128 bits so the whole set fits in a register and
-/// composes via plain `@bitCast` to/from `u128`. Field order matters —
-/// it determines the bit position for each key.
-pub const Keys = packed struct(u128) {
+pub const Keys = packed struct {
     /// Reserved bit. The backends mappers return a default `.{}` (all
     /// false) for keys not yet covered by this struct, so this field is
     /// never set — kept around so bit 0 of the backing u128 stays unused.
@@ -172,24 +159,23 @@ pub const Keys = packed struct(u128) {
     delete: bool = false,
     insert: bool = false,
 
-    /// Padding to bring the struct to exactly 128 bits — declared so the
-    /// `packed struct(u128)` constraint holds even before we fill all the
-    /// remaining keys.
-    _padding: u55 = 0,
+    /// Integer type wide enough to hold every key bit. Tracks `Keys`
+    /// automatically — add a key, and `Backing` widens with it.
+    const Backing = @typeInfo(Keys).@"struct".backing_integer.?;
 
     /// `self | other` — union of two sets.
     pub fn with(self: Keys, other: Keys) Keys {
-        return @bitCast(@as(u128, @bitCast(self)) | @as(u128, @bitCast(other)));
+        return @bitCast(@as(Backing, @bitCast(self)) | @as(Backing, @bitCast(other)));
     }
 
     /// `self & ~other` — remove `other`'s bits from `self`.
     pub fn without(self: Keys, other: Keys) Keys {
-        return @bitCast(@as(u128, @bitCast(self)) & ~@as(u128, @bitCast(other)));
+        return @bitCast(@as(Backing, @bitCast(self)) & ~@as(Backing, @bitCast(other)));
     }
 
     /// True if no bit is set.
     pub fn isEmpty(self: Keys) bool {
-        return @as(u128, @bitCast(self)) == 0;
+        return @as(Backing, @bitCast(self)) == 0;
     }
 };
 
