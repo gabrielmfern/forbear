@@ -1,6 +1,9 @@
 const std = @import("std");
 const win32 = @import("../windows/win32.zig");
-const Cursor = @import("root.zig").Cursor;
+const window_root = @import("root.zig");
+const Cursor = window_root.Cursor;
+pub const Key = window_root.Key;
+pub const KeyboardKey = window_root.KeyboardKey;
 
 const linux_left_mouse_button: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
 const button_pressed: u32 = 1;
@@ -54,7 +57,130 @@ pub const Handlers = struct {
             data: *anyopaque,
         ) void,
     } = null,
+    /// One-shot: fires only on the initial transition to pressed.
+    keypress: ?struct {
+        data: *anyopaque,
+        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
+    } = null,
+    /// Fires on initial press and again for each OS-driven repeat tick
+    /// (`is_repeat` mirrors lParam bit 30 / "previous key state" on
+    /// WM_KEYDOWN, which is set when Windows re-fires the message for
+    /// a held key).
+    keydown: ?struct {
+        data: *anyopaque,
+        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
+    } = null,
+    /// One-shot: fires only on the transition to released.
+    keyup: ?struct {
+        data: *anyopaque,
+        function: *const fn (window: *Self, key: KeyboardKey, data: *anyopaque) void,
+    } = null,
 };
+
+fn virtualKeyToKey(vk: win32.WPARAM) Key {
+    return switch (vk) {
+        0x08 => .backspace,
+        0x09 => .tab,
+        0x0D => .enter,
+        0x14 => .caps_lock,
+        0x1B => .escape,
+        0x20 => .space,
+        0x21 => .page_up,
+        0x22 => .page_down,
+        0x23 => .end,
+        0x24 => .home,
+        0x25 => .arrow_left,
+        0x26 => .arrow_up,
+        0x27 => .arrow_right,
+        0x28 => .arrow_down,
+        0x2D => .insert,
+        0x2E => .delete,
+        '0' => .digit_0,
+        '1' => .digit_1,
+        '2' => .digit_2,
+        '3' => .digit_3,
+        '4' => .digit_4,
+        '5' => .digit_5,
+        '6' => .digit_6,
+        '7' => .digit_7,
+        '8' => .digit_8,
+        '9' => .digit_9,
+        'A' => .a,
+        'B' => .b,
+        'C' => .c,
+        'D' => .d,
+        'E' => .e,
+        'F' => .f,
+        'G' => .g,
+        'H' => .h,
+        'I' => .i,
+        'J' => .j,
+        'K' => .k,
+        'L' => .l,
+        'M' => .m,
+        'N' => .n,
+        'O' => .o,
+        'P' => .p,
+        'Q' => .q,
+        'R' => .r,
+        'S' => .s,
+        'T' => .t,
+        'U' => .u,
+        'V' => .v,
+        'W' => .w,
+        'X' => .x,
+        'Y' => .y,
+        'Z' => .z,
+        0x5B => .super_left,
+        0x5C => .super_right,
+        0x70 => .f1,
+        0x71 => .f2,
+        0x72 => .f3,
+        0x73 => .f4,
+        0x74 => .f5,
+        0x75 => .f6,
+        0x76 => .f7,
+        0x77 => .f8,
+        0x78 => .f9,
+        0x79 => .f10,
+        0x7A => .f11,
+        0x7B => .f12,
+        0xA0 => .shift_left,
+        0xA1 => .shift_right,
+        0xA2 => .control_left,
+        0xA3 => .control_right,
+        0xA4 => .alt_left,
+        0xA5 => .alt_right,
+        // Generic VK_SHIFT/CONTROL/MENU come through without left/right
+        // distinction — bias to the left variant.
+        0x10 => .shift_left,
+        0x11 => .control_left,
+        0x12 => .alt_left,
+        else => .unknown,
+    };
+}
+
+/// Translate the current keystroke into UTF-8 using the active keyboard
+/// layout + modifier state. Writes into `out` and returns the byte length.
+/// Returns 0 for keys with no textual interpretation (arrows, F-keys, etc.).
+fn translateToUtf8(virtualKey: win32.WPARAM, scan_code: u32, out: *[16]u8) usize {
+    var key_state: [256]u8 = undefined;
+    if (win32.GetKeyboardState(&key_state) == 0) return 0;
+
+    var utf16_buf: [4]u16 = undefined;
+    const n = win32.ToUnicode(
+        @intCast(virtualKey),
+        scan_code,
+        &key_state,
+        &utf16_buf,
+        utf16_buf.len,
+        0,
+    );
+    if (n <= 0) return 0;
+
+    const utf16_len: usize = @intCast(n);
+    return std.unicode.utf16LeToUtf8(&out, utf16_buf[0..utf16_len]) catch return 0;
+}
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -232,6 +358,27 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                     },
                     else => {},
                 }
+                // lParam encoding (WM_KEYDOWN):
+                //   bits 0 ..15  = repeat count (1 unless the message coalesces)
+                //   bits 16..23 = scan code
+                //   bit  24     = Indicates whether it's an extended key
+                //   bit  30     = previous key state (1 = key was already down → OS repeat)
+                const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
+                const scan_code: u32 = (lp >> 16) & 0xFF;
+                const is_repeat: bool = (lp & (1 << 30)) != 0;
+                const mapped = virtualKeyToKey(wParam);
+                var text_buf: [16]u8 = undefined;
+                const text_len = translateToUtf8(wParam, scan_code, &text_buf);
+                const ev: KeyboardKey = .{
+                    .time = win32.GetMessageTime(),
+                    .key = mapped,
+                    .text = text_buf[0..text_len],
+                    .is_repeat = is_repeat,
+                };
+                if (!is_repeat) {
+                    if (self.handlers.keypress) |h| h.function(self, ev, h.data);
+                }
+                if (self.handlers.keydown) |h| h.function(self, ev, h.data);
             }
         },
         win32.WM_KEYUP => {
@@ -242,6 +389,23 @@ fn wndProc(hwnd: win32.HWND, message: win32.UINT, wParam: win32.WPARAM, lParam: 
                     },
                     else => {},
                 }
+                // lParam encoding (WM_KEYUP):
+                //   bits 0 ..15  = repeat count (always 1 for WM_KEYUP)
+                //   bits 16..23 = scan code
+                //   bit  24     = Indicates whether it's an extended key
+                //   bit  30     = previous key state (always 1 for WM_KEYUP)
+                const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
+                const scan_code: u32 = (lp >> 16) & 0xFF;
+                const mapped = virtualKeyToKey(wParam);
+                var text_buf: [16]u8 = undefined;
+                const text_len = translateToUtf8(wParam, scan_code, &text_buf);
+                const ev: KeyboardKey = .{
+                    .time = win32.GetMessageTime(),
+                    .key = mapped,
+                    .text = text_buf[0..text_len],
+                    .is_repeat = false,
+                };
+                if (self.handlers.keyup) |h| h.function(self, ev, h.data);
             }
         },
         win32.WM_DPICHANGED => {
