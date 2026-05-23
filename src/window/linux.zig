@@ -617,6 +617,22 @@ const wlPointerListener: c.wl_pointer_listener = .{
     .axis_relative_direction = pointerHandleAxisRelativeDirection,
 };
 
+/// Look up the *unmodified* keysym for an xkb keycode under the current
+/// layout — i.e. what the key "is", not what it would type given the
+/// current Shift/AltGr state. This is what we want as a stable key
+/// identifier for `Keys.digit1`, `Keys.a`, etc.
+///
+/// Returns 0 if the keycode produces no symbols at level 0.
+fn baseKeysymForKeycode(window: *Self, xkbKeycode: u32) u32 {
+    const km = window.xkbKeymap orelse return 0;
+    const xs = window.xkbState orelse return 0;
+    const layout = c.xkb_state_key_get_layout(xs, xkbKeycode);
+    var syms: [*c]const c.xkb_keysym_t = undefined;
+    const n = c.xkb_keymap_key_get_syms_by_level(km, xkbKeycode, layout, 0, &syms);
+    if (n <= 0) return 0;
+    return syms[0];
+}
+
 /// Translate an XKB keysym into a single-key `Keys` set.
 /// Returns an empty set for keys not yet covered.
 fn keysymToKeys(sym: u32) Keys {
@@ -786,10 +802,13 @@ fn keyboardHandleKey(
 
     // wl_keyboard reports evdev keycodes; xkb keycodes are evdev + 8.
     const xkbKeycode: u32 = key + 8;
-    const keysym: u32 = if (window.xkbState) |xs|
-        c.xkb_state_key_get_one_sym(xs, xkbKeycode)
-    else
-        0;
+    // We want the *base* (level-0) keysym so the key's identity is stable
+    // across modifier state. `xkb_state_key_get_one_sym` would return e.g.
+    // `XKB_KEY_exclam` when Shift+1 is pressed, and we'd lose the
+    // `digit1` mapping. Looking up level 0 of the current layout gives
+    // `XKB_KEY_1` regardless of held modifiers, while still respecting
+    // the user's active keyboard layout.
+    const keysym: u32 = baseKeysymForKeycode(window, xkbKeycode);
     const mapped: Keys = keysymToKeys(keysym);
 
     window.keysMutex.lock();
