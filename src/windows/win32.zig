@@ -167,7 +167,18 @@ pub const WM_MBUTTONDBLCLK: UINT = 0x0209;
 pub const WM_MOUSEWHEEL: UINT = 0x020A;
 
 // Virtual Keycodes https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
-pub const VK_SHIFT: usize = 0x10;
+pub const VK_SHIFT: c_int = 0x10;
+pub const VK_CONTROL: c_int = 0x11;
+pub const VK_MENU: c_int = 0x12;
+pub const VK_LWIN: c_int = 0x5B;
+pub const VK_RWIN: c_int = 0x5C;
+
+/// `GetKeyState(vk)` returns the keyboard state for the calling thread:
+/// high bit set = key currently down. For `VK_SHIFT/VK_CONTROL/VK_MENU`,
+/// the result is the OR of the corresponding L/R keys — exactly what we
+/// need to keep a collapsed `.shift/.control/.alt` flag correct when one
+/// side is released while the other is still held.
+pub extern "user32" fn GetKeyState(nVirtKey: c_int) callconv(.winapi) i16;
 
 // CW_USEDEFAULT
 pub const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));

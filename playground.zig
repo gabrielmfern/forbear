@@ -88,6 +88,23 @@ fn App() void {
 
                 CounterExample();
 
+                forbear.element(.{
+                    .style = .{},
+                })({
+                    forbear.text("keys held ");
+                    // Sampled held-state: stays visible across frames as
+                    // long as the keys are held, no flickering. We walk
+                    // the struct's bool fields via reflection just to
+                    // render every held key as text.
+                    const held = forbear.keysHeld();
+                    inline for (@typeInfo(forbear.Keys).@"struct".fields) |field| {
+                        if (@field(held, field.name)) {
+                            forbear.text(" ");
+                            forbear.text(field.name);
+                        }
+                    }
+                });
+
                 // Demonstrates `.relative` placement: the badge is offset from
                 // the card's top-left corner and does not participate in the
                 // card's layout flow, so the card content below is unaffected.
