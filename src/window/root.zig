@@ -129,15 +129,16 @@ pub const Keys = packed struct {
     f11: bool = false,
     f12: bool = false,
 
-    // Modifiers
-    shiftLeft: bool = false,
-    shiftRight: bool = false,
-    controlLeft: bool = false,
-    controlRight: bool = false,
-    altLeft: bool = false,
-    altRight: bool = false,
-    superLeft: bool = false,
-    superRight: bool = false,
+    // Modifiers. These reflect the *effective* modifier state from the
+    // platform (xkb_state on Linux, NSEvent.modifierFlags on macOS,
+    // VK_*/keymap on Windows) — not just whether a specific physical key
+    // is held. So `caps:ctrl_modifier` on Linux makes `control` true
+    // while CapsLock is held, even though the keysym is still Caps_Lock.
+    // No left/right split: chord hotkeys virtually never care which side.
+    shift: bool = false,
+    control: bool = false,
+    alt: bool = false,
+    super: bool = false,
     capsLock: bool = false,
 
     // Navigation

@@ -141,14 +141,13 @@ fn macosKeycodeToKeys(code: u16) Keys {
         0x6D => .{ .f10 = true },
         0x67 => .{ .f11 = true },
         0x6F => .{ .f12 = true },
-        0x38 => .{ .shiftLeft = true },
-        0x3C => .{ .shiftRight = true },
-        0x3B => .{ .controlLeft = true },
-        0x3E => .{ .controlRight = true },
-        0x3A => .{ .altLeft = true },
-        0x3D => .{ .altRight = true },
-        0x37 => .{ .superLeft = true },
-        0x36 => .{ .superRight = true },
+        // L/R modifier keys collapse into a single flag — chord hotkey
+        // code never cares which side, and NSEvent.modifierFlags would
+        // be the more accurate source if we ever needed live state.
+        0x38, 0x3C => .{ .shift = true },
+        0x3B, 0x3E => .{ .control = true },
+        0x3A, 0x3D => .{ .alt = true },
+        0x37, 0x36 => .{ .super = true },
         0x39 => .{ .capsLock = true },
         0x7B => .{ .arrowLeft = true },
         0x7C => .{ .arrowRight = true },

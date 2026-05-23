@@ -116,8 +116,7 @@ fn virtualKeyToKeys(vk: win32.WPARAM) Keys {
         'X' => .{ .x = true },
         'Y' => .{ .y = true },
         'Z' => .{ .z = true },
-        0x5B => .{ .superLeft = true },
-        0x5C => .{ .superRight = true },
+        0x5B, 0x5C => .{ .super = true },
         0x70 => .{ .f1 = true },
         0x71 => .{ .f2 = true },
         0x72 => .{ .f3 = true },
@@ -130,17 +129,12 @@ fn virtualKeyToKeys(vk: win32.WPARAM) Keys {
         0x79 => .{ .f10 = true },
         0x7A => .{ .f11 = true },
         0x7B => .{ .f12 = true },
-        0xA0 => .{ .shiftLeft = true },
-        0xA1 => .{ .shiftRight = true },
-        0xA2 => .{ .controlLeft = true },
-        0xA3 => .{ .controlRight = true },
-        0xA4 => .{ .altLeft = true },
-        0xA5 => .{ .altRight = true },
-        // Generic VK_SHIFT/CONTROL/MENU come through without left/right
-        // distinction — bias to the left variant.
-        0x10 => .{ .shiftLeft = true },
-        0x11 => .{ .controlLeft = true },
-        0x12 => .{ .altLeft = true },
+        // L/R modifier variants AND the generic VK_SHIFT/CONTROL/MENU all
+        // collapse into a single modifier flag — chord hotkey code never
+        // cares which side.
+        0xA0, 0xA1, 0x10 => .{ .shift = true },
+        0xA2, 0xA3, 0x11 => .{ .control = true },
+        0xA4, 0xA5, 0x12 => .{ .alt = true },
         else => .{},
     };
 }
@@ -419,7 +413,7 @@ pub fn targetFrameTimeNs(self: *const @This()) u64 {
 pub fn isHoldingShift(self: *Self) bool {
     self.keysMutex.lock();
     defer self.keysMutex.unlock();
-    return self.keysDown.shiftLeft or self.keysDown.shiftRight;
+    return self.keysDown.shift;
 }
 
 /// Drain the keyboard state for the current frame. Holds `keysMutex` just

@@ -636,14 +636,12 @@ fn keysymToKeys(sym: u32) Keys {
         c.XKB_KEY_Right => .{ .arrowRight = true },
         c.XKB_KEY_Up => .{ .arrowUp = true },
         c.XKB_KEY_Down => .{ .arrowDown = true },
-        c.XKB_KEY_Shift_L => .{ .shiftLeft = true },
-        c.XKB_KEY_Shift_R => .{ .shiftRight = true },
-        c.XKB_KEY_Control_L => .{ .controlLeft = true },
-        c.XKB_KEY_Control_R => .{ .controlRight = true },
-        c.XKB_KEY_Alt_L => .{ .altLeft = true },
-        c.XKB_KEY_Alt_R => .{ .altRight = true },
-        c.XKB_KEY_Super_L, c.XKB_KEY_Meta_L => .{ .superLeft = true },
-        c.XKB_KEY_Super_R, c.XKB_KEY_Meta_R => .{ .superRight = true },
+        // Plain modifier keysyms are intentionally not mapped here —
+        // shift/control/alt/super come from xkb_state's *effective*
+        // modifier mask in `keyboardHandleModifiers`. That path also
+        // catches XKB remaps like `caps:ctrl_modifier`, where pressing
+        // CapsLock makes Control active even though the keysym stays
+        // `Caps_Lock`.
         c.XKB_KEY_Caps_Lock => .{ .capsLock = true },
         c.XKB_KEY_F1 => .{ .f1 = true },
         c.XKB_KEY_F2 => .{ .f2 = true },
@@ -819,9 +817,37 @@ fn keyboardHandleModifiers(
 
     const window: *Self = @ptrCast(@alignCast(data));
 
-    if (window.xkbState) |xkbState| {
-        _ = c.xkb_state_update_mask(xkbState, mods_depressed, mods_latched, mods_locked, 0, 0, group);
-    }
+    const xkbState = window.xkbState orelse return;
+    _ = c.xkb_state_update_mask(xkbState, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+
+    // Translate the effective xkb modifier mask into our `Keys` modifier
+    // bits. This is the path that picks up remaps like `caps:ctrl_modifier`
+    // — pressing CapsLock makes `Control` active here even though the
+    // keysym in `keyboardHandleKey` is still `Caps_Lock`.
+    const effective: c_int = c.XKB_STATE_MODS_EFFECTIVE;
+    var newMods: Keys = .{};
+    newMods.shift = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_SHIFT, effective) > 0;
+    newMods.control = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_CTRL, effective) > 0;
+    newMods.alt = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_ALT, effective) > 0;
+    newMods.super = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_LOGO, effective) > 0;
+
+    window.keysMutex.lock();
+    defer window.keysMutex.unlock();
+
+    var oldMods: Keys = .{};
+    oldMods.shift = window.keysDown.shift;
+    oldMods.control = window.keysDown.control;
+    oldMods.alt = window.keysDown.alt;
+    oldMods.super = window.keysDown.super;
+
+    // Edge events for modifiers that flipped this notification.
+    window.pendingPressed = window.pendingPressed.with(newMods.without(oldMods));
+    window.pendingReleased = window.pendingReleased.with(oldMods.without(newMods));
+
+    window.keysDown.shift = newMods.shift;
+    window.keysDown.control = newMods.control;
+    window.keysDown.alt = newMods.alt;
+    window.keysDown.super = newMods.super;
 }
 
 fn keyboardHandleRepeatInfo(
