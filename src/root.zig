@@ -32,6 +32,7 @@ pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("window/root.zig").Window;
 pub const Cursor = @import("window/root.zig").Cursor;
+pub const Keys = @import("window/root.zig").Keys;
 
 pub var traceWriter: ?*std.Io.Writer = null;
 pub fn setTraceWriter(writer: *std.Io.Writer) void {
@@ -119,6 +120,12 @@ pub const Event = enum {
     mouseMove,
     click,
     scroll,
+    /// Keys that transitioned to "down" since the previous frame's sample.
+    /// Returned as a `Keys` set: `if (forbear.on(.keyDown).tab) ...`.
+    /// Each press fires exactly once — held keys do *not* re-appear here.
+    keyDown,
+    /// Keys that transitioned to "up" since the previous frame's sample.
+    keyUp,
 };
 
 pub const FrameMeta = struct {
@@ -179,6 +186,14 @@ mouseButtonPressed: bool,
 scrollDeltaAccumulator: Vec2,
 /// Stable snapshot of scroll delta for the current frame.
 scrollDelta: Vec2,
+/// Currently-held keys, sampled at frame start. Read via `keysHeld()` or
+/// `isKeyDown(key)`. Updated inside `frame()` by polling the window.
+keysHeldSnapshot: Keys = .{},
+/// Keys that transitioned to down between the previous frame and this one.
+/// Returned by `on(.keyDown)`.
+keysPressedThisFrame: Keys = .{},
+/// Keys that transitioned to up between the previous frame and this one.
+keysReleasedThisFrame: Keys = .{},
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 
 renderer: *Graphics.Renderer,
@@ -212,6 +227,9 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .mouseButtonPressed = false,
         .scrollDeltaAccumulator = @splat(0.0),
         .scrollDelta = @splat(0.0),
+        .keysHeldSnapshot = .{},
+        .keysPressedThisFrame = .{},
+        .keysReleasedThisFrame = .{},
         .previousFrameNodeMeasurements = undefined,
 
         .renderer = renderer,
@@ -836,9 +854,26 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.scrollDelta = self.scrollDeltaAccumulator;
     self.scrollDeltaAccumulator = @splat(0.0);
 
+    self.snapshotKeyboard();
+
     self.frameCounter +%= 1;
     self.frameMeta = meta;
     return &frameEnd;
+}
+
+/// Pull the window's keyboard snapshot for this frame: the held set + the
+/// per-frame edge sets. All three are `Keys` values (packed u128) — no
+/// allocations, no iteration; consumers read individual keys as fields.
+fn snapshotKeyboard(self: *Forbear) void {
+    self.keysHeldSnapshot = .{};
+    self.keysPressedThisFrame = .{};
+    self.keysReleasedThisFrame = .{};
+
+    const window = self.window orelse return;
+    const snap = window.snapshotKeyboard();
+    self.keysHeldSnapshot = snap.held;
+    self.keysPressedThisFrame = snap.pressed;
+    self.keysReleasedThisFrame = snap.released;
 }
 
 /// TODO: share the github of the person I got the trick of using an end
@@ -1568,12 +1603,30 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
 }
 
 pub fn OnResult(comptime eventTag: Event) type {
-    return if (eventTag == .scroll or eventTag == .mouseMove) ?Vec2 else bool;
+    return switch (eventTag) {
+        .scroll, .mouseMove => ?Vec2,
+        .keyDown, .keyUp => Keys,
+        else => bool,
+    };
 }
 
 /// Inline hit test against previous-frame measurement. No event queue —
 /// every caller sees the same raw input state each frame.
+///
+/// Keyboard events (`.keyDown` / `.keyUp`) are **global** for now: every
+/// caller sees every key edge that occurred since the last frame,
+/// regardless of which element invoked `on()`. Focus scoping is a
+/// separate concern layered on top.
 pub fn on(comptime eventTag: Event) OnResult(eventTag) {
+    if (comptime eventTag == .keyDown or eventTag == .keyUp) {
+        const self = getForbear();
+        return switch (eventTag) {
+            .keyDown => self.keysPressedThisFrame,
+            .keyUp => self.keysReleasedThisFrame,
+            else => unreachable,
+        };
+    }
+
     hook();
     defer hookEnd();
     const self = getForbear();
@@ -1606,7 +1659,8 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     const slot: ?*bool = switch (eventTag) {
         .mouseEnter, .mouseLeave, .mouseDown, .mouseUp => useState(bool, false),
         .scroll, .mouseMove => null,
-        .click => unreachable,
+        // Keyboard tags + `.click` returned earlier.
+        .click, .keyDown, .keyUp => unreachable,
     };
     const lastMousePositionSlot: ?*Vec2 = if (eventTag == .mouseMove)
         useState(Vec2, self.mousePosition)
@@ -1647,7 +1701,7 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
             defer wasPressedLastFrame.* = self.mouseButtonPressed;
             return !self.mouseButtonPressed and wasPressedLastFrame.* and inside;
         },
-        .click => unreachable,
+        .click, .keyDown, .keyUp => unreachable,
         .scroll => {
             if (!inside) return null;
             if (self.scrollDelta[0] != 0.0 or self.scrollDelta[1] != 0.0)
@@ -1799,6 +1853,18 @@ pub fn setWindowHandlers(window: *Window) void {
         }).handler,
         .data = @ptrCast(@alignCast(self)),
     };
+    // Keyboard state is owned by the Window backend (atomic bitsets +
+    // text buffer behind a SpinLock) and sampled by `snapshotKeyboard`
+    // every frame. No handler registration needed.
+}
+
+/// All keys currently held, sampled at frame start. Stable for the
+/// duration of the frame. Read individual keys as fields:
+///   const held = forbear.keysHeld();
+///   if (held.controlLeft and forbear.on(.keyDown).z) undo();
+///   if (held.shiftLeft or held.shiftRight) doShifty();
+pub fn keysHeld() Keys {
+    return getForbear().keysHeldSnapshot;
 }
 
 pub fn deinit() void {

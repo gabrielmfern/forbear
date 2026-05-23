@@ -1,7 +1,10 @@
 const std = @import("std");
 
 const c = @import("c");
-const Cursor = @import("root.zig").Cursor;
+const window_root = @import("root.zig");
+const Cursor = window_root.Cursor;
+pub const Keys = window_root.Keys;
+pub const KeyboardSnapshot = window_root.KeyboardSnapshot;
 
 extern fn objc_autoreleasePoolPush() ?*anyopaque;
 extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;
@@ -83,6 +86,93 @@ const NSEventTypeLeftMouseDragged: NSUInteger = 6;
 const NSEventTypeRightMouseDragged: NSUInteger = 7;
 const NSEventTypeOtherMouseDragged: NSUInteger = 27;
 const NSEventTypeScrollWheel: NSUInteger = 22;
+const NSEventTypeKeyDown: NSUInteger = 10;
+const NSEventTypeKeyUp: NSUInteger = 11;
+/// Fired when *any* modifier key's state changes (Shift/Ctrl/Alt/Cmd/Caps).
+/// Pure modifier-key transitions on macOS never come through keyDown/keyUp.
+const NSEventTypeFlagsChanged: NSUInteger = 12;
+
+const NSEventModifierFlagCapsLock: NSUInteger = 1 << 16;
+const NSEventModifierFlagControl: NSUInteger = 1 << 18;
+const NSEventModifierFlagOption: NSUInteger = 1 << 19;
+const NSEventModifierFlagCommand: NSUInteger = 1 << 20;
+
+// kVK_* virtual key codes (HIToolbox/Events.h). Hardware-independent —
+// the same physical key reports the same kVK regardless of layout.
+fn macosKeycodeToKeys(code: u16) Keys {
+    return switch (code) {
+        0x00 => .{ .a = true },
+        0x0B => .{ .b = true },
+        0x08 => .{ .c = true },
+        0x02 => .{ .d = true },
+        0x0E => .{ .e = true },
+        0x03 => .{ .f = true },
+        0x05 => .{ .g = true },
+        0x04 => .{ .h = true },
+        0x22 => .{ .i = true },
+        0x26 => .{ .j = true },
+        0x28 => .{ .k = true },
+        0x25 => .{ .l = true },
+        0x2E => .{ .m = true },
+        0x2D => .{ .n = true },
+        0x1F => .{ .o = true },
+        0x23 => .{ .p = true },
+        0x0C => .{ .q = true },
+        0x0F => .{ .r = true },
+        0x01 => .{ .s = true },
+        0x11 => .{ .t = true },
+        0x20 => .{ .u = true },
+        0x09 => .{ .v = true },
+        0x0D => .{ .w = true },
+        0x07 => .{ .x = true },
+        0x10 => .{ .y = true },
+        0x06 => .{ .z = true },
+        0x1D => .{ .digit0 = true },
+        0x12 => .{ .digit1 = true },
+        0x13 => .{ .digit2 = true },
+        0x14 => .{ .digit3 = true },
+        0x15 => .{ .digit4 = true },
+        0x17 => .{ .digit5 = true },
+        0x16 => .{ .digit6 = true },
+        0x1A => .{ .digit7 = true },
+        0x1C => .{ .digit8 = true },
+        0x19 => .{ .digit9 = true },
+        0x7A => .{ .f1 = true },
+        0x78 => .{ .f2 = true },
+        0x63 => .{ .f3 = true },
+        0x76 => .{ .f4 = true },
+        0x60 => .{ .f5 = true },
+        0x61 => .{ .f6 = true },
+        0x62 => .{ .f7 = true },
+        0x64 => .{ .f8 = true },
+        0x65 => .{ .f9 = true },
+        0x6D => .{ .f10 = true },
+        0x67 => .{ .f11 = true },
+        0x6F => .{ .f12 = true },
+        // Modifier kVK codes (Shift L/R, Control L/R, Option L/R,
+        // Command L/R, CapsLock) are intentionally not mapped here —
+        // those transitions arrive as `NSEventTypeFlagsChanged`, not
+        // keyDown/keyUp, and the unified `.shift/.control/.alt/.super/
+        // .capsLock` flags are populated from `NSEvent.modifierFlags`
+        // there.
+        0x7B => .{ .arrowLeft = true },
+        0x7C => .{ .arrowRight = true },
+        0x7E => .{ .arrowUp = true },
+        0x7D => .{ .arrowDown = true },
+        0x73 => .{ .home = true },
+        0x77 => .{ .end = true },
+        0x74 => .{ .pageUp = true },
+        0x79 => .{ .pageDown = true },
+        0x30 => .{ .tab = true },
+        0x35 => .{ .escape = true },
+        0x24 => .{ .enter = true },
+        0x31 => .{ .space = true },
+        0x33 => .{ .backspace = true },
+        0x75 => .{ .delete = true },
+        0x72 => .{ .insert = true },
+        else => .{},
+    };
+}
 
 // NSEventModifierFlags
 const NSEventModifierFlagShift: NSUInteger = 1 << 17;
@@ -234,6 +324,14 @@ allocator: std.mem.Allocator,
 
 handlers: Handlers,
 
+/// Guards `keysDown` / `pendingPressed` / `pendingReleased` between the
+/// input thread (where NSEvent callbacks fire) and Forbear's render thread
+/// (which drains via `snapshotKeyboard`).
+keysMutex: window_root.SpinLock = .{},
+keysDown: Keys = .{},
+pendingPressed: Keys = .{},
+pendingReleased: Keys = .{},
+
 pub fn init(
     allocator: std.mem.Allocator,
     width: u32,
@@ -253,6 +351,10 @@ pub fn init(
     self.running = true;
 
     self.handlers = .{};
+    self.keysMutex = .{};
+    self.keysDown = .{};
+    self.pendingPressed = .{};
+    self.pendingReleased = .{};
 
     self.pool = objc_autoreleasePoolPush();
 
@@ -578,6 +680,61 @@ fn processEvent(self: *Self, event: c.id) void {
         }
     }
 
+    if (event_type == NSEventTypeFlagsChanged) {
+        const modifierFlagsFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSUInteger);
+        const flags = modifierFlagsFn(event, sel("modifierFlags"));
+
+        var current: Keys = .{};
+        current.shift = (flags & NSEventModifierFlagShift) != 0;
+        current.control = (flags & NSEventModifierFlagControl) != 0;
+        current.alt = (flags & NSEventModifierFlagOption) != 0;
+        current.super = (flags & NSEventModifierFlagCommand) != 0;
+        current.capsLock = (flags & NSEventModifierFlagCapsLock) != 0;
+
+        self.keysMutex.lock();
+        defer self.keysMutex.unlock();
+
+        var oldMods: Keys = .{};
+        oldMods.shift = self.keysDown.shift;
+        oldMods.control = self.keysDown.control;
+        oldMods.alt = self.keysDown.alt;
+        oldMods.super = self.keysDown.super;
+        oldMods.capsLock = self.keysDown.capsLock;
+
+        self.pendingPressed = self.pendingPressed.with(current.without(oldMods));
+        self.pendingReleased = self.pendingReleased.with(oldMods.without(current));
+
+        self.keysDown.shift = current.shift;
+        self.keysDown.control = current.control;
+        self.keysDown.alt = current.alt;
+        self.keysDown.super = current.super;
+        self.keysDown.capsLock = current.capsLock;
+        return;
+    }
+
+    if (event_type == NSEventTypeKeyDown or event_type == NSEventTypeKeyUp) {
+        const keyCodeFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) u16);
+        const isARepeatFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) BOOL);
+
+        const code = keyCodeFn(event, sel("keyCode"));
+        const key = macosKeycodeToKeys(code);
+        const is_repeat = isARepeatFn(event, sel("isARepeat")) != 0;
+
+        self.keysMutex.lock();
+        if (event_type == NSEventTypeKeyDown) {
+            // Only fresh press transitions flip the edge bit; OS-driven
+            // repeats just keep the held bit set (already set).
+            if (!is_repeat) {
+                self.pendingPressed = self.pendingPressed.with(key);
+                self.keysDown = self.keysDown.with(key);
+            }
+        } else {
+            self.pendingReleased = self.pendingReleased.with(key);
+            self.keysDown = self.keysDown.without(key);
+        }
+        self.keysMutex.unlock();
+    }
+
     // Handle scroll wheel events
     if (event_type == NSEventTypeScrollWheel) {
         if (self.handlers.scroll) |handler| {
@@ -601,6 +758,22 @@ fn processEvent(self: *Self, event: c.id) void {
             }
         }
     }
+}
+
+/// Drain the keyboard state for the current frame. Holds the keys mutex
+/// just long enough to copy the bitsets and reset the pending fields.
+pub fn snapshotKeyboard(self: *Self) KeyboardSnapshot {
+    self.keysMutex.lock();
+    defer self.keysMutex.unlock();
+
+    const snap: KeyboardSnapshot = .{
+        .held = self.keysDown,
+        .pressed = self.pendingPressed,
+        .released = self.pendingReleased,
+    };
+    self.pendingPressed = .{};
+    self.pendingReleased = .{};
+    return snap;
 }
 
 pub fn handleEvents(self: *Self) !void {

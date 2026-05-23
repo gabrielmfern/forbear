@@ -3,7 +3,10 @@ const posix = std.posix;
 const os = std.os;
 
 const c = @import("c");
-const Cursor = @import("root.zig").Cursor;
+const window_root = @import("root.zig");
+const Cursor = window_root.Cursor;
+pub const Keys = window_root.Keys;
+pub const KeyboardSnapshot = window_root.KeyboardSnapshot;
 
 const Self = @This();
 
@@ -60,6 +63,13 @@ xkbContext: *c.xkb_context,
 xkbKeymap: ?*c.xkb_keymap,
 xkbState: ?*c.xkb_state,
 wlKeyboard: *c.wl_keyboard,
+
+/// Keyboard state. The Wayland event thread writes; Forbear's render
+/// thread drains via `snapshotKeyboard()` at frame start.
+keysMutex: window_root.SpinLock = .{},
+keysDown: Keys = .{},
+pendingPressed: Keys = .{},
+pendingReleased: Keys = .{},
 
 // cursor
 wlPointer: *c.wl_pointer,
@@ -607,6 +617,100 @@ const wlPointerListener: c.wl_pointer_listener = .{
     .axis_relative_direction = pointerHandleAxisRelativeDirection,
 };
 
+/// Look up the *unmodified* keysym for an xkb keycode under the current
+/// layout — i.e. what the key "is", not what it would type given the
+/// current Shift/AltGr state. This is what we want as a stable key
+/// identifier for `Keys.digit1`, `Keys.a`, etc.
+///
+/// Returns 0 if the keycode produces no symbols at level 0.
+fn baseKeysymForKeycode(window: *Self, xkbKeycode: u32) u32 {
+    const km = window.xkbKeymap orelse return 0;
+    const xs = window.xkbState orelse return 0;
+    const layout = c.xkb_state_key_get_layout(xs, xkbKeycode);
+    var syms: [*c]const c.xkb_keysym_t = undefined;
+    const n = c.xkb_keymap_key_get_syms_by_level(km, xkbKeycode, layout, 0, &syms);
+    if (n <= 0) return 0;
+    return syms[0];
+}
+
+/// Translate an XKB keysym into a single-key `Keys` set.
+/// Returns an empty set for keys not yet covered.
+fn keysymToKeys(sym: u32) Keys {
+    return switch (sym) {
+        c.XKB_KEY_Tab, c.XKB_KEY_ISO_Left_Tab => .{ .tab = true },
+        c.XKB_KEY_Escape => .{ .escape = true },
+        c.XKB_KEY_Return, c.XKB_KEY_KP_Enter => .{ .enter = true },
+        c.XKB_KEY_space => .{ .space = true },
+        c.XKB_KEY_BackSpace => .{ .backspace = true },
+        c.XKB_KEY_Delete => .{ .delete = true },
+        c.XKB_KEY_Insert => .{ .insert = true },
+        c.XKB_KEY_Home => .{ .home = true },
+        c.XKB_KEY_End => .{ .end = true },
+        c.XKB_KEY_Page_Up => .{ .pageUp = true },
+        c.XKB_KEY_Page_Down => .{ .pageDown = true },
+        c.XKB_KEY_Left => .{ .arrowLeft = true },
+        c.XKB_KEY_Right => .{ .arrowRight = true },
+        c.XKB_KEY_Up => .{ .arrowUp = true },
+        c.XKB_KEY_Down => .{ .arrowDown = true },
+        // Plain modifier keysyms are intentionally not mapped here —
+        // shift/control/alt/super come from xkb_state's *effective*
+        // modifier mask in `keyboardHandleModifiers`. That path also
+        // catches XKB remaps like `caps:ctrl_modifier`, where pressing
+        // CapsLock makes Control active even though the keysym stays
+        // `Caps_Lock`.
+        c.XKB_KEY_Caps_Lock => .{ .capsLock = true },
+        c.XKB_KEY_F1 => .{ .f1 = true },
+        c.XKB_KEY_F2 => .{ .f2 = true },
+        c.XKB_KEY_F3 => .{ .f3 = true },
+        c.XKB_KEY_F4 => .{ .f4 = true },
+        c.XKB_KEY_F5 => .{ .f5 = true },
+        c.XKB_KEY_F6 => .{ .f6 = true },
+        c.XKB_KEY_F7 => .{ .f7 = true },
+        c.XKB_KEY_F8 => .{ .f8 = true },
+        c.XKB_KEY_F9 => .{ .f9 = true },
+        c.XKB_KEY_F10 => .{ .f10 = true },
+        c.XKB_KEY_F11 => .{ .f11 = true },
+        c.XKB_KEY_F12 => .{ .f12 = true },
+        c.XKB_KEY_a, c.XKB_KEY_A => .{ .a = true },
+        c.XKB_KEY_b, c.XKB_KEY_B => .{ .b = true },
+        c.XKB_KEY_c, c.XKB_KEY_C => .{ .c = true },
+        c.XKB_KEY_d, c.XKB_KEY_D => .{ .d = true },
+        c.XKB_KEY_e, c.XKB_KEY_E => .{ .e = true },
+        c.XKB_KEY_f, c.XKB_KEY_F => .{ .f = true },
+        c.XKB_KEY_g, c.XKB_KEY_G => .{ .g = true },
+        c.XKB_KEY_h, c.XKB_KEY_H => .{ .h = true },
+        c.XKB_KEY_i, c.XKB_KEY_I => .{ .i = true },
+        c.XKB_KEY_j, c.XKB_KEY_J => .{ .j = true },
+        c.XKB_KEY_k, c.XKB_KEY_K => .{ .k = true },
+        c.XKB_KEY_l, c.XKB_KEY_L => .{ .l = true },
+        c.XKB_KEY_m, c.XKB_KEY_M => .{ .m = true },
+        c.XKB_KEY_n, c.XKB_KEY_N => .{ .n = true },
+        c.XKB_KEY_o, c.XKB_KEY_O => .{ .o = true },
+        c.XKB_KEY_p, c.XKB_KEY_P => .{ .p = true },
+        c.XKB_KEY_q, c.XKB_KEY_Q => .{ .q = true },
+        c.XKB_KEY_r, c.XKB_KEY_R => .{ .r = true },
+        c.XKB_KEY_s, c.XKB_KEY_S => .{ .s = true },
+        c.XKB_KEY_t, c.XKB_KEY_T => .{ .t = true },
+        c.XKB_KEY_u, c.XKB_KEY_U => .{ .u = true },
+        c.XKB_KEY_v, c.XKB_KEY_V => .{ .v = true },
+        c.XKB_KEY_w, c.XKB_KEY_W => .{ .w = true },
+        c.XKB_KEY_x, c.XKB_KEY_X => .{ .x = true },
+        c.XKB_KEY_y, c.XKB_KEY_Y => .{ .y = true },
+        c.XKB_KEY_z, c.XKB_KEY_Z => .{ .z = true },
+        c.XKB_KEY_0 => .{ .digit0 = true },
+        c.XKB_KEY_1 => .{ .digit1 = true },
+        c.XKB_KEY_2 => .{ .digit2 = true },
+        c.XKB_KEY_3 => .{ .digit3 = true },
+        c.XKB_KEY_4 => .{ .digit4 = true },
+        c.XKB_KEY_5 => .{ .digit5 = true },
+        c.XKB_KEY_6 => .{ .digit6 = true },
+        c.XKB_KEY_7 => .{ .digit7 = true },
+        c.XKB_KEY_8 => .{ .digit8 = true },
+        c.XKB_KEY_9 => .{ .digit9 = true },
+        else => .{},
+    };
+}
+
 fn keyboardHandleKeymap(
     data: ?*anyopaque,
     wlKeyboard: ?*c.wl_keyboard,
@@ -672,12 +776,15 @@ fn keyboardHandleLeave(
 ) callconv(.c) void {
     _ = wlKeyboard;
     _ = surface;
-    const window: *Self = @ptrCast(@alignCast(data));
-    _ = window;
     _ = serial;
-    // if (window.handlers.keyboard_leave) |handler| {
-    //     handler.function(window, serial, handler.data);
-    // }
+    const window: *Self = @ptrCast(@alignCast(data));
+
+    // Focus is gone: mark every held key as released this frame so edge
+    // consumers see the transition, then clear the held set.
+    window.keysMutex.lock();
+    window.pendingReleased = window.pendingReleased.with(window.keysDown);
+    window.keysDown = .{};
+    window.keysMutex.unlock();
 }
 
 fn keyboardHandleKey(
@@ -689,15 +796,30 @@ fn keyboardHandleKey(
     state: u32,
 ) callconv(.c) void {
     _ = wlKeyboard;
-    const window: *Self = @ptrCast(@alignCast(data));
-    _ = window;
     _ = serial;
     _ = time;
-    _ = key;
-    _ = state;
-    // if (window.handlers.keyboard_key) |handler| {
-    //     handler.function(window, serial, time, key, state, handler.data);
-    // }
+    const window: *Self = @ptrCast(@alignCast(data));
+
+    // wl_keyboard reports evdev keycodes; xkb keycodes are evdev + 8.
+    const xkbKeycode: u32 = key + 8;
+    // We want the *base* (level-0) keysym so the key's identity is stable
+    // across modifier state. `xkb_state_key_get_one_sym` would return e.g.
+    // `XKB_KEY_exclam` when Shift+1 is pressed, and we'd lose the
+    // `digit1` mapping. Looking up level 0 of the current layout gives
+    // `XKB_KEY_1` regardless of held modifiers, while still respecting
+    // the user's active keyboard layout.
+    const keysym: u32 = baseKeysymForKeycode(window, xkbKeycode);
+    const mapped: Keys = keysymToKeys(keysym);
+
+    window.keysMutex.lock();
+    if (state == c.WL_KEYBOARD_KEY_STATE_PRESSED) {
+        window.pendingPressed = window.pendingPressed.with(mapped);
+        window.keysDown = window.keysDown.with(mapped);
+    } else if (state == c.WL_KEYBOARD_KEY_STATE_RELEASED) {
+        window.pendingReleased = window.pendingReleased.with(mapped);
+        window.keysDown = window.keysDown.without(mapped);
+    }
+    window.keysMutex.unlock();
 }
 
 fn keyboardHandleModifiers(
@@ -714,25 +836,47 @@ fn keyboardHandleModifiers(
 
     const window: *Self = @ptrCast(@alignCast(data));
 
-    if (window.xkbState) |xkbState| {
-        _ = c.xkb_state_update_mask(xkbState, mods_depressed, mods_latched, mods_locked, 0, 0, group);
-    }
+    const xkbState = window.xkbState orelse return;
+    _ = c.xkb_state_update_mask(xkbState, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+
+    // Translate the effective xkb modifier mask into our `Keys` modifier
+    // bits. This is the path that picks up remaps like `caps:ctrl_modifier`
+    // — pressing CapsLock makes `Control` active here even though the
+    // keysym in `keyboardHandleKey` is still `Caps_Lock`.
+    const effective: c_int = c.XKB_STATE_MODS_EFFECTIVE;
+    var newMods: Keys = .{};
+    newMods.shift = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_SHIFT, effective) > 0;
+    newMods.control = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_CTRL, effective) > 0;
+    newMods.alt = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_ALT, effective) > 0;
+    newMods.super = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_LOGO, effective) > 0;
+
+    window.keysMutex.lock();
+    defer window.keysMutex.unlock();
+
+    var oldMods: Keys = .{};
+    oldMods.shift = window.keysDown.shift;
+    oldMods.control = window.keysDown.control;
+    oldMods.alt = window.keysDown.alt;
+    oldMods.super = window.keysDown.super;
+
+    // Edge events for modifiers that flipped this notification.
+    window.pendingPressed = window.pendingPressed.with(newMods.without(oldMods));
+    window.pendingReleased = window.pendingReleased.with(oldMods.without(newMods));
+
+    window.keysDown.shift = newMods.shift;
+    window.keysDown.control = newMods.control;
+    window.keysDown.alt = newMods.alt;
+    window.keysDown.super = newMods.super;
 }
 
 fn keyboardHandleRepeatInfo(
-    data: ?*anyopaque,
-    wl_keyboard: ?*c.wl_keyboard,
-    rate: i32,
-    delay: i32,
+    _: ?*anyopaque,
+    _: ?*c.wl_keyboard,
+    _: i32,
+    _: i32,
 ) callconv(.c) void {
-    _ = wl_keyboard;
-    const window: *Self = @ptrCast(@alignCast(data));
-    _ = window;
-    _ = rate;
-    _ = delay;
-    // if (window.handlers.keyboard_repeat_info) |handler| {
-    //     handler.function(window, rate, delay, handler.data);
-    // }
+    // The held-state model doesn't need OS repeat info — consumers do
+    // their own hold-to-act timing from `dt` and `isKeyDown(...)`.
 }
 
 const wlKeyboardListener: c.wl_keyboard_listener = .{
@@ -794,6 +938,11 @@ pub fn init(
     errdefer c.xkb_context_unref(window.xkbContext);
     window.xkbKeymap = null;
     window.xkbState = null;
+
+    window.keysMutex = .{};
+    window.keysDown = .{};
+    window.pendingPressed = .{};
+    window.pendingReleased = .{};
 
     // Initialize optional fields to null before the registry roundtrip,
     // since allocator.create does not zero-initialize memory.
@@ -900,6 +1049,22 @@ pub fn setResizeHandler(
         .data = data,
         .function = handler,
     };
+}
+
+/// Drain the keyboard state for the current frame. Holds the keys mutex
+/// just long enough to copy the bitsets and reset the pending fields.
+pub fn snapshotKeyboard(self: *Self) KeyboardSnapshot {
+    self.keysMutex.lock();
+    defer self.keysMutex.unlock();
+
+    const snap: KeyboardSnapshot = .{
+        .held = self.keysDown,
+        .pressed = self.pendingPressed,
+        .released = self.pendingReleased,
+    };
+    self.pendingPressed = .{};
+    self.pendingReleased = .{};
+    return snap;
 }
 
 pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
