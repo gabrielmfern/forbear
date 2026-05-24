@@ -10,6 +10,7 @@ pub const ProfilingMetrics = forbearBuiltin.ProfilingMetrics;
 pub const useScrolling = forbearBuiltin.useScrolling;
 pub const ScrollBar = forbearBuiltin.ScrollBar;
 pub const FocusContext = forbearBuiltin.FocusContext;
+pub const FocusProvider = forbearBuiltin.FocusProvider;
 pub const Focus = forbearBuiltin.Focus;
 pub const FocusConsumes = forbearBuiltin.FocusConsumes;
 pub const EventPayload = forbearBuiltin.EventPayload;

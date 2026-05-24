@@ -376,22 +376,8 @@ pub const Focus = struct {
 pub const FocusContext = forbear.createContext(opaque {}, struct {
     focused: ?Focus,
     focusable: std.ArrayList(Focus),
-    /// Backing arena for `focusable`. Owned by the scope `init()` was
-    /// called from — usually the component that mounts the Provider.
     arena: std.mem.Allocator,
-    /// Frame counter at which `focusable` was last reset. The first
-    /// `register` call of a new frame wipes the previous frame's list, so
-    /// no explicit per-frame lifecycle hook is needed.
     listFrame: u32,
-
-    pub fn init() @This() {
-        return .{
-            .focused = null,
-            .focusable = .empty,
-            .arena = forbear.useScopeArena(),
-            .listFrame = 0,
-        };
-    }
 
     pub fn register(self: *@This(), consumesFn: FocusConsumes) void {
         const fb = forbear.getForbear();
@@ -409,8 +395,6 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
         }) catch |err| forbear.handleFrameError(err);
     }
 
-    /// Claim focus for the nearest parent node. The node must have already
-    /// `register`ed itself this frame.
     pub fn focus(self: *@This()) void {
         const node = forbear.getParentNode() orelse return;
         for (self.focusable.items) |f| {
@@ -427,12 +411,6 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
         return f.key == node.key;
     }
 
-    /// True when the focused widget's predicate claims this event.
-    /// Returns false when nothing is focused — so hotkeys fire freely.
-    /// Generic over event tag, mirroring `forbear.on`'s shape:
-    /// `consumes(.keyDown, keys)`, `consumes(.click, true)`,
-    /// `consumes(.scroll, delta)`. The comptime result type matches
-    /// `forbear.OnResult(eventTag)`.
     pub fn consumes(
         self: *const @This(),
         comptime eventTag: forbear.Event,
@@ -443,12 +421,9 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
         return f.consumes(payload);
     }
 
-    /// Runs after all focusables have registered this frame. Drops stale
-    /// focus (widget unmounted), then handles tab / shift+tab / escape.
     pub fn handleEvents(self: *@This()) void {
         const fb = forbear.getForbear();
 
-        // Drop focus if the focused widget didn't re-register this frame.
         if (self.focused) |f| validate: {
             if (self.listFrame == fb.frameCounter) {
                 for (self.focusable.items) |item| {
@@ -482,3 +457,18 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
         if (pressed.escape) self.focused = null;
     }
 });
+
+pub fn FocusProvider() *const fn (void) void {
+    forbear.component(.{})({
+        FocusContext.Provider(.{
+            .focused = null,
+            .focusable = .empty,
+            .arena = forbear.useScopeArena(),
+            .listFrame = 0,
+        })({
+            forbear.componentChildrenSlot();
+        });
+    });
+    return forbear.componentChildrenSlotEnd();
+}
+
