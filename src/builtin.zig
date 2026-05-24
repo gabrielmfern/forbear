@@ -91,8 +91,8 @@ const MachTaskBasicInfo = extern struct {
 };
 const MACH_TASK_BASIC_INFO: u32 = 20;
 
-extern fn machTaskSelf() u32;
-extern fn taskInfo(
+extern fn mach_task_self() u32;
+extern fn task_info(
     targetTask: u32,
     flavor: u32,
     taskInfoOut: *anyopaque,
@@ -128,7 +128,7 @@ fn processResidentBytes() u64 {
         .macos => {
             var info: MachTaskBasicInfo = undefined;
             var count: u32 = @sizeOf(MachTaskBasicInfo) / @sizeOf(u32);
-            if (taskInfo(machTaskSelf(), MACH_TASK_BASIC_INFO, @ptrCast(&info), &count) != 0) {
+            if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, @ptrCast(&info), &count) != 0) {
                 return 0;
             }
             return info.resident_size;
