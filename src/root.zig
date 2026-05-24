@@ -101,11 +101,15 @@ const ReturnAddressKeyContext = struct {
     }
 };
 
+const ContextStackEntry = struct { valueKey: u64, contextKey: u64 };
+
 const ComponentChildrenSlotState = struct {
     savedSlotParentStack: []usize,
     savedPreEndParentStack: []usize,
     savedSlotScopeStack: []u64,
     savedPreEndScopeStack: []u64,
+    savedSlotContextStack: []ContextStackEntry,
+    savedPreEndContextStack: []ContextStackEntry,
     slotPredecessor: ?usize,
     afterChainStart: ?usize,
     afterChainEnd: ?usize,
@@ -164,7 +168,7 @@ contextValues: std.HashMapUnmanaged(
     NoopKeyConext,
     std.hash_map.default_max_load_percentage,
 ) = .empty,
-contextStack: std.ArrayList(struct { valueKey: u64, contextKey: u64 }) = .empty,
+contextStack: std.ArrayList(ContextStackEntry) = .empty,
 scopeStack: std.ArrayList(u64) = .empty,
 nodeStack: std.ArrayList(usize) = .empty,
 /// Monotonically incremented at the start of every `frame()`. Used as
@@ -1492,12 +1496,18 @@ pub fn componentChildrenSlot() void {
         handleFrameError(err);
         return;
     };
+    const savedContextStack = fm.arena.dupe(ContextStackEntry, self.contextStack.items) catch |err| {
+        handleFrameError(err);
+        return;
+    };
 
     fm.componentChildrenSlotStates.append(fm.arena, .{
         .savedSlotParentStack = savedStack,
         .savedPreEndParentStack = &.{},
         .savedSlotScopeStack = savedScopeStack,
         .savedPreEndScopeStack = &.{},
+        .savedSlotContextStack = savedContextStack,
+        .savedPreEndContextStack = &.{},
         .slotPredecessor = self.nodeTree.at(parentIndex).lastChild,
         .afterChainStart = null,
         .afterChainEnd = null,
@@ -1538,6 +1548,10 @@ fn componentChildrenSlotEndFn(block: void) void {
     };
     self.scopeStack.clearRetainingCapacity();
     self.scopeStack.appendSlice(self.allocator, slotState.savedPreEndScopeStack) catch |err| {
+        handleFrameError(err);
+    };
+    self.contextStack.clearRetainingCapacity();
+    self.contextStack.appendSlice(self.allocator, slotState.savedPreEndContextStack) catch |err| {
         handleFrameError(err);
     };
 }
@@ -1588,6 +1602,10 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
         handleFrameError(err);
         return &noopEnd;
     };
+    slotState.savedPreEndContextStack = fm.arena.dupe(ContextStackEntry, self.contextStack.items) catch |err| {
+        handleFrameError(err);
+        return &noopEnd;
+    };
     self.nodeStack.clearRetainingCapacity();
     self.nodeStack.appendSlice(self.allocator, slotState.savedSlotParentStack) catch |err| {
         handleFrameError(err);
@@ -1595,6 +1613,11 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
     };
     self.scopeStack.clearRetainingCapacity();
     self.scopeStack.appendSlice(self.allocator, slotState.savedSlotScopeStack) catch |err| {
+        handleFrameError(err);
+        return &noopEnd;
+    };
+    self.contextStack.clearRetainingCapacity();
+    self.contextStack.appendSlice(self.allocator, slotState.savedSlotContextStack) catch |err| {
         handleFrameError(err);
         return &noopEnd;
     };
