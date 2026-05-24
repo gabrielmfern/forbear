@@ -7,7 +7,7 @@
 
 ## deal breakers
 
-- [ ] keying is not really stable for elements that can be removed or added back in
+- [x] keying is not really stable for elements that can be removed or added back in
   - we need manual keying for loops of children
 - [ ] stutters drops when images load in
     - we should decompress images async, across frames to avoid this
