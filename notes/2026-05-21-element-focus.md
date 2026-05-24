@@ -131,3 +131,28 @@ if (forbear.on(.keyDown)) |keys| {
 }
 ```
 
+The stored `ConsumesFn` above doesn't compile — a function-type alias can't reference an earlier comptime parameter, so `OnResult(event)` errors with `use of undeclared identifier 'event'`. Routing through a runtime `union(Event)` mirror of `OnResult` keeps the call site identical to the sketch while giving the stored predicate a single concrete type:
+
+```zig
+pub const EventPayload = union(forbear.Event) {
+    mouseEnter: bool, 
+    mouseLeave: bool, 
+    mouseDown: bool, 
+    mouseUp: bool,
+    mouseMove: ?Vec2, 
+    click: bool,      
+    scroll: ?Vec2,
+    keyDown: forbear.Keys, 
+    keyUp: forbear.Keys,
+};
+pub const FocusConsumes = *const fn (payload: EventPayload) bool;
+
+pub fn consumes(
+    self: *const @This(),
+    comptime eventTag: forbear.Event,
+    result: forbear.OnResult(eventTag),
+) bool {
+    const f = self.focused orelse return false;
+    return f.consumes(@unionInit(EventPayload, @tagName(eventTag), result));
+}
+```
