@@ -649,6 +649,33 @@ pub fn useArena() std.mem.Allocator {
     return self.frameMeta.?.arena;
 }
 
+/// Returns the arena allocator owned by the current scope (the topmost
+/// component / element / hook scope on the stack). Allocations live as
+/// long as the scope keeps re-rendering; the arena is released wholesale
+/// once the scope is missed for a frame.
+///
+/// Use this for state that must outlive the frame but die with the scope
+/// — context value backing storage, long-lived `ArrayList`s owned by a
+/// hook, anything you'd otherwise stash in a `useState`-allocated pointer
+/// and never free by hand.
+///
+/// Can, conceptually, completely replace useState and be more performant with
+/// the same exact result and more clearer design.
+pub fn useScopeArena() std.mem.Allocator {
+    const self = getForbear();
+    const scopeKey = self.scopeStack.getLastOrNull() orelse {
+        if (!builtin.is_test) {
+            std.log.err(
+                "useScopeArena called outside of a component / element / hook scope",
+                .{},
+            );
+        }
+        @panic("Invalid hook usage");
+    };
+    const scope = self.scopes.getPtr(scopeKey) orelse unreachable;
+    return scope.arenaAllocator.allocator();
+}
+
 pub fn useIo() std.Io {
     const self = getForbear();
     return self.io;
