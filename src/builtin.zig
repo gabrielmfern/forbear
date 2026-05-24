@@ -350,3 +350,135 @@ pub fn ScrollBar(state: *ScrollingState) void {
         }
     }
 }
+
+/// Runtime-tagged form of an event + its result. Mirrors `forbear.Event`
+/// one-for-one, with each variant carrying the payload type that
+/// `forbear.OnResult(tag)` returns for the matching event.
+pub const EventPayload = union(forbear.Event) {
+    mouseEnter: bool,
+    mouseLeave: bool,
+    mouseDown: bool,
+    mouseUp: bool,
+    mouseMove: ?Vec2,
+    click: bool,
+    scroll: ?Vec2,
+    keyDown: forbear.Keys,
+    keyUp: forbear.Keys,
+};
+
+pub const FocusConsumes = *const fn (payload: EventPayload) bool;
+
+pub const Focus = struct {
+    key: u64,
+    consumes: FocusConsumes,
+};
+
+pub const FocusContext = forbear.createContext(opaque {}, struct {
+    focused: ?Focus,
+    focusable: std.ArrayList(Focus),
+    /// Backing arena for `focusable`. Owned by the scope `init()` was
+    /// called from — usually the component that mounts the Provider.
+    arena: std.mem.Allocator,
+    /// Frame counter at which `focusable` was last reset. The first
+    /// `register` call of a new frame wipes the previous frame's list, so
+    /// no explicit per-frame lifecycle hook is needed.
+    listFrame: u32,
+
+    pub fn init() @This() {
+        return .{
+            .focused = null,
+            .focusable = .empty,
+            .arena = forbear.useScopeArena(),
+            .listFrame = 0,
+        };
+    }
+
+    pub fn register(self: *@This(), consumesFn: FocusConsumes) void {
+        const fb = forbear.getForbear();
+        if (self.listFrame != fb.frameCounter) {
+            self.focusable.clearRetainingCapacity();
+            self.listFrame = fb.frameCounter;
+        }
+        const node = forbear.getParentNode() orelse {
+            forbear.handleFrameError(error.NoParentForFocusRegistration);
+            return;
+        };
+        self.focusable.append(self.arena, .{
+            .key = node.key,
+            .consumes = consumesFn,
+        }) catch |err| forbear.handleFrameError(err);
+    }
+
+    /// Claim focus for the nearest parent node. The node must have already
+    /// `register`ed itself this frame.
+    pub fn focus(self: *@This()) void {
+        const node = forbear.getParentNode() orelse return;
+        for (self.focusable.items) |f| {
+            if (f.key == node.key) {
+                self.focused = f;
+                return;
+            }
+        }
+    }
+
+    pub fn hasFocus(self: *const @This()) bool {
+        const node = forbear.getParentNode() orelse return false;
+        const f = self.focused orelse return false;
+        return f.key == node.key;
+    }
+
+    /// True when the focused widget's predicate claims this event.
+    /// Returns false when nothing is focused — so hotkeys fire freely.
+    /// Generic over event tag, mirroring `forbear.on`'s shape:
+    /// `consumes(.keyDown, keys)`, `consumes(.click, true)`,
+    /// `consumes(.scroll, delta)`. The comptime result type matches
+    /// `forbear.OnResult(eventTag)`.
+    pub fn consumes(
+        self: *const @This(),
+        comptime eventTag: forbear.Event,
+        result: forbear.OnResult(eventTag),
+    ) bool {
+        const f = self.focused orelse return false;
+        const payload = @unionInit(EventPayload, @tagName(eventTag), result);
+        return f.consumes(payload);
+    }
+
+    /// Runs after all focusables have registered this frame. Drops stale
+    /// focus (widget unmounted), then handles tab / shift+tab / escape.
+    pub fn handleEvents(self: *@This()) void {
+        const fb = forbear.getForbear();
+
+        // Drop focus if the focused widget didn't re-register this frame.
+        if (self.focused) |f| validate: {
+            if (self.listFrame == fb.frameCounter) {
+                for (self.focusable.items) |item| {
+                    if (item.key == f.key) break :validate;
+                }
+                self.focused = null;
+            }
+        }
+
+        const pressed = forbear.on(.keyDown);
+        const items = self.focusable.items;
+        if (pressed.tab and items.len > 0) {
+            const shift = forbear.keysHeld().shift;
+            if (self.focused) |current| {
+                var idx: usize = 0;
+                for (items, 0..) |item, i| {
+                    if (item.key == current.key) {
+                        idx = i;
+                        break;
+                    }
+                }
+                const newIdx = if (shift)
+                    (idx + items.len - 1) % items.len
+                else
+                    (idx + 1) % items.len;
+                self.focused = items[newIdx];
+            } else {
+                self.focused = items[0];
+            }
+        }
+        if (pressed.escape) self.focused = null;
+    }
+});
