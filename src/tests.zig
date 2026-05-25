@@ -7424,3 +7424,44 @@ test "provider round-trips a non-trivial struct value" {
     try std.testing.expectEqualSlices(u32, &initial.flags, &observed.?.flags);
     try std.testing.expectEqualSlices(u8, &initial.label, &observed.?.label);
 }
+
+const SlotCtx = forbear.createContext(opaque {}, u32);
+
+test "context provided inside a component is visible to slotted children" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const SlottedProvider = (struct {
+        fn SlottedProvider() *const fn (void) void {
+            forbear.component(.{})({
+                SlotCtx.Provider(@as(u32, 55))({
+                    forbear.componentChildrenSlot();
+                });
+            });
+            return forbear.componentChildrenSlotEnd();
+        }
+    }).SlottedProvider;
+
+    var observed: ?u32 = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{})({
+            SlottedProvider()({
+                forbear.element(.{
+                    .style = .{
+                        .width = .{ .fixed = 50 },
+                        .height = .{ .fixed = 50 },
+                    },
+                })({
+                    if (forbear.useContext(SlotCtx)) |v| observed = v.*;
+                });
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(@as(?u32, 55), observed);
+}
