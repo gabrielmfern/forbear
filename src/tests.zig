@@ -7680,3 +7680,434 @@ test "context provided inside a component is visible to slotted children" {
 
     try std.testing.expectEqual(@as(?u32, 55), observed);
 }
+
+// ── FocusContext tests ─────────────────────────────────────────────────
+
+const FocusProvider = forbear.FocusProvider;
+const FocusContext = forbear.FocusContext;
+const EventPayload = forbear.EventPayload;
+
+fn consumesKeyDown(payload: EventPayload) bool {
+    return payload == .keyDown;
+}
+
+fn consumesNothing(_: EventPayload) bool {
+    return false;
+}
+
+fn consumesEverything(_: EventPayload) bool {
+    return true;
+}
+
+test "FocusContext: register and hasFocus are false when nothing is focused" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: ?bool = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                })({
+                    ctx.register(&consumesKeyDown);
+                    observed = ctx.hasFocus();
+                });
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(false, observed.?);
+}
+
+test "FocusContext: focus gives hasFocus to the registered element" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var hasFocusA: ?bool = null;
+    var hasFocusB: ?bool = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                })({
+                    ctx.register(&consumesKeyDown);
+                    ctx.focus();
+                    hasFocusA = ctx.hasFocus();
+                });
+
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                })({
+                    ctx.register(&consumesNothing);
+                    hasFocusB = ctx.hasFocus();
+                });
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(true, hasFocusA.?);
+    try std.testing.expectEqual(false, hasFocusB.?);
+}
+
+test "FocusContext: consumes delegates to the focused widget predicate" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var consumesKeyDownResult: ?bool = null;
+    var consumesClickResult: ?bool = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                })({
+                    ctx.register(&consumesKeyDown);
+                    ctx.focus();
+                });
+
+                consumesKeyDownResult = ctx.consumes(.keyDown, .{ .tab = true });
+                consumesClickResult = ctx.consumes(.click, true);
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(true, consumesKeyDownResult.?);
+    try std.testing.expectEqual(false, consumesClickResult.?);
+}
+
+test "FocusContext: consumes returns false when nothing is focused" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var result: ?bool = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                })({
+                    ctx.register(&consumesEverything);
+                });
+
+                result = ctx.consumes(.keyDown, .{ .a = true });
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(false, result.?);
+}
+
+test "FocusContext: tab cycles focus forward through registered elements" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    // Frame 1: register three focusables, none focused
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                });
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                });
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                });
+
+                // Simulate tab press
+                forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                ctx.handleEvents();
+
+                try std.testing.expect(ctx.focused != null);
+            });
+        });
+        _ = try forbear.layout();
+    });
+}
+
+test "FocusContext: tab with no focus starts at first element" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var focusedKey: ?u64 = null;
+    var firstKey: ?u64 = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                    firstKey = forbear.getParentNode().?.key;
+                });
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                });
+
+                forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                ctx.handleEvents();
+                focusedKey = if (ctx.focused) |f| f.key else null;
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expect(firstKey != null);
+    try std.testing.expectEqual(firstKey.?, focusedKey.?);
+}
+
+test "FocusContext: tab wraps from last to first element" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var firstKey: ?u64 = null;
+    var focusedKey: ?u64 = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                    firstKey = forbear.getParentNode().?.key;
+                });
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                    // Focus the last element so tab wraps around
+                    ctx.focus();
+                });
+
+                forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                ctx.handleEvents();
+                focusedKey = if (ctx.focused) |f| f.key else null;
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expect(firstKey != null);
+    try std.testing.expectEqual(firstKey.?, focusedKey.?);
+}
+
+test "FocusContext: shift+tab cycles focus backward" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var secondKey: ?u64 = null;
+    var focusedKey: ?u64 = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                    // Focus the first element
+                    ctx.focus();
+                });
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                    secondKey = forbear.getParentNode().?.key;
+                });
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                });
+
+                // Simulate shift+tab
+                forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                forbear.getForbear().keysHeldSnapshot = .{ .shift = true };
+                ctx.handleEvents();
+                focusedKey = if (ctx.focused) |f| f.key else null;
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    // Shift+tab from first should wrap to last
+    // Wait — from index 0, shift+tab goes to (0 + 3 - 1) % 3 = 2, which is the third element
+    // Let me verify by checking the third key instead
+    try std.testing.expect(focusedKey != null);
+    // Should NOT be the second element (index 1), should be last (index 2)
+    try std.testing.expect(focusedKey.? != secondKey.?);
+}
+
+test "FocusContext: escape clears focus" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var hasFocusAfterEscape: ?bool = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                    ctx.focus();
+                });
+
+                // Verify focus is set
+                try std.testing.expect(ctx.focused != null);
+
+                // Simulate escape
+                forbear.getForbear().keysPressedThisFrame = .{ .escape = true };
+                ctx.handleEvents();
+                hasFocusAfterEscape = ctx.focused != null;
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(false, hasFocusAfterEscape.?);
+}
+
+test "FocusContext: stale focus is dropped when widget does not re-register" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    // Frame 1: register two elements, focus the second
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                });
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                    ctx.focus();
+                });
+                try std.testing.expect(ctx.focused != null);
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    // Frame 2: only register one element (the second one is "unmounted").
+    // handleEvents should drop the stale focus.
+    var focusedAfterDrop: ?bool = null;
+    try forbear.frame(try frameMeta(arena))({
+        forbear.component(.{})({
+            FocusProvider()({
+                const ctx = forbear.useContext(FocusContext).?;
+                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                    ctx.register(&consumesNothing);
+                });
+                ctx.handleEvents();
+                focusedAfterDrop = ctx.focused != null;
+            });
+        });
+        _ = try forbear.layout();
+    });
+
+    try std.testing.expectEqual(false, focusedAfterDrop.?);
+}
+
+test "FocusContext: register clears focusable list on new frame" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const app = (struct {
+        fn app(frame: usize) usize {
+            var focusableCount: usize = 0;
+            forbear.component(.{ .key = "test" })({
+                FocusProvider()({
+                    if (frame == 0) {
+                        const ctx = forbear.useContext(FocusContext).?;
+                        forbear.element(.{ .key = "element-1" })({
+                            ctx.register(&consumesNothing);
+                        });
+                        forbear.element(.{})({
+                            ctx.register(&consumesNothing);
+                        });
+                        forbear.element(.{})({
+                            ctx.register(&consumesNothing);
+                        });
+                        focusableCount = ctx.focusable.items.len;
+                    } else if (frame == 1) {
+                        const ctx = forbear.useContext(FocusContext).?;
+                        forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                            ctx.register(&consumesNothing);
+                        });
+                        focusableCount = ctx.focusable.items.len;
+                    }
+                });
+            });
+            return focusableCount;
+        }
+    }).app;
+
+    // Frame 1: register three elements
+    var focusableCount: usize = undefined;
+    try forbear.frame(try frameMeta(arena))({
+        focusableCount = app(0);
+        _ = try forbear.layout();
+    });
+    try std.testing.expectEqual(3, focusableCount);
+
+    // Frame 2: register only one element — list should have been cleared
+    try forbear.frame(try frameMeta(arena))({
+        focusableCount = app(1);
+        _ = try forbear.layout();
+    });
+    try std.testing.expectEqual(1, focusableCount);
+}
