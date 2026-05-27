@@ -9,7 +9,7 @@ const Node = @import("node.zig").Node;
 const NodeTree = @import("node.zig").NodeTree;
 const c = @import("c");
 const stb_image = @import("stb_image_c");
-const Font = @import("font.zig");
+const Font = @import("text.zig");
 const layouting = @import("layouting.zig");
 const countTreeSize = layouting.countTreeSize;
 const Window = @import("window/root.zig").Window;
@@ -1262,12 +1262,7 @@ const FontTextureAtlas = struct {
         @memset(self.mapped, 0);
     }
 
-    const TextureCoordinates = struct {
-        u: f32,
-        v: f32,
-        w: f32,
-        h: f32,
-    };
+    const TextureCoordinates = Font.TextureCoordinates;
 
     /// Upload LCD/subpixel glyph data to the texture atlas.
     /// The input data is in FreeType LCD format (3 bytes per pixel: R, G, B).
@@ -2663,25 +2658,10 @@ const ElementsPipeline = struct {
 };
 
 const TextPipeline = struct {
-    const GlyphPageCache = std.HashMap(
-        GlyphPageKey,
-        GlyphPage,
-        struct {
-            pub fn hash(_: @This(), key: GlyphPageKey) u64 {
-                var hasher = std.hash.Wyhash.init(0);
-                // GlyphPageKey uses f32, which doesn't generally have a unique
-                // representation, meaning this hash can be non-unique, but
-                // since the values for font size are always >= 0, we know this
-                // is then unique.
-                hasher.update(std.mem.asBytes(&key));
-                return hasher.final();
-            }
-            pub fn eql(_: @This(), a: GlyphPageKey, b: GlyphPageKey) bool {
-                return std.meta.eql(a, b);
-            }
-        },
-        std.hash_map.default_max_load_percentage,
-    );
+    const GlyphRenderingData = Font.GlyphRenderingData;
+    const GlyphPageKey = Font.GlyphPageKey;
+    const GlyphPage = Font.GlyphPage;
+    const GlyphPageCache = Font.GlyphPageCache;
 
     pipelineLayout: c.VkPipelineLayout,
     graphicsPipeline: c.VkPipeline,
@@ -2694,25 +2674,10 @@ const TextPipeline = struct {
     allocator: std.mem.Allocator,
     glyphPageCache: GlyphPageCache,
     needsAtlasReset: bool = false,
+    rasterizationWorker: Font.RasterizationWorker,
     sampler: c.VkSampler,
 
     glyphs: ResizableStorageBuffer(GlypRenderingShaderData),
-
-    const GlyphRenderingData = struct {
-        textureCoordinates: FontTextureAtlas.TextureCoordinates,
-        bitmapWidth: u32,
-        bitmapHeight: u32,
-        bitmapLeft: i32,
-        bitmapTop: i32,
-    };
-
-    const GlyphPageKey = struct {
-        fontSize: f32,
-        fontWeight: u32,
-        fontKey: u64,
-    };
-
-    const GlyphPage = Font.LRU(c_uint, GlyphRenderingData, 256, std.hash_map.AutoContext(c_uint));
 
     const GlypRenderingShaderData = extern struct {
         modelViewProjectionMatrix: zmath.Mat,
@@ -3046,6 +3011,7 @@ const TextPipeline = struct {
 
             .allocator = allocator,
             .glyphPageCache = GlyphPageCache.init(allocator),
+            .rasterizationWorker = Font.RasterizationWorker.init(allocator),
             .fontTextureAtlas = fontTextureAtlas,
             .sampler = sampler,
         };
@@ -3092,6 +3058,7 @@ const TextPipeline = struct {
     }
 
     fn deinit(self: *@This(), logicalDevice: c.VkDevice, allocator: std.mem.Allocator) void {
+        self.rasterizationWorker.deinit();
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
         self.fontTextureAtlas.deinit(allocator, logicalDevice);
         c.vkDestroySampler(logicalDevice, self.sampler, null);
@@ -3978,6 +3945,44 @@ pub const Renderer = struct {
         const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
         const atlasHeightInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height));
 
+        // Drain completed rasterization results from the worker thread and upload to atlas
+        while (self.textPipeline.rasterizationWorker.dequeueResult()) |result| {
+            defer if (result.bitmap) |bmp| self.textPipeline.rasterizationWorker.allocator.free(bmp);
+
+            const pageKey = TextPipeline.GlyphPageKey{
+                .fontKey = result.fontKey,
+                .fontSize = result.fontSize,
+                .fontWeight = result.fontWeight,
+            };
+            const page = self.textPipeline.glyphPageCache.getPtr(pageKey) orelse continue;
+            const entry = page.getMut(result.glyphIndex) orelse continue;
+            if (!entry.value.pending) continue;
+
+            if (result.width > 0) {
+                const textureCoordinates = self.textPipeline.fontTextureAtlas.upload(
+                    result.bitmap,
+                    @intCast(result.width),
+                    @intCast(result.height),
+                    @intCast(@abs(result.pitch)),
+                ) catch |err| switch (err) {
+                    error.MaximumTextureAtlasSizeReached => {
+                        self.textPipeline.needsAtlasReset = true;
+                        continue;
+                    },
+                    else => {
+                        std.log.err("Atlas upload for rasterized glyph failed: {}", .{err});
+                        continue;
+                    },
+                };
+                entry.value.textureCoordinates = textureCoordinates;
+                entry.value.bitmapWidth = @intCast(result.width / 3);
+                entry.value.bitmapHeight = @intCast(result.height);
+                entry.value.bitmapLeft = @intCast(result.left);
+                entry.value.bitmapTop = @intCast(result.top);
+            }
+            entry.value.pending = false;
+        }
+
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
         var gradientStopIndex: usize = 0;
@@ -4070,7 +4075,6 @@ pub const Renderer = struct {
                 const unitsPerEm: f32 = @floatFromInt(node.style.font.unitsPerEm());
                 const pixelAscent = (node.style.font.ascent() / unitsPerEm) * node.style.fontSize;
 
-                // Outer lookup: once per layout box (per font/size/weight/dpi combo)
                 const glyphPageKey = TextPipeline.GlyphPageKey{
                     .fontKey = node.style.font.key,
                     .fontSize = node.style.fontSize,
@@ -4083,78 +4087,104 @@ pub const Renderer = struct {
                 const glyphPage = glyphPageGetResult.value_ptr;
 
                 for (glyphs.slice) |glyph| {
-                    // Inner lookup: LRU per glyph index (no hashing of the full key)
-                    const glyphRenderingData = blk: {
-                        // TODO: render glyphs in the GPU using the font texture atlas as frame buffer
+                    const glyphRenderingData: ?TextPipeline.GlyphRenderingData = blk: {
                         if (glyphPage.get(glyph.index)) |entry| {
+                            if (entry.value.pending) {
+                                break :blk null;
+                            }
                             break :blk entry.value;
                         } else {
-                            try node.style.font.setWeight(node.style.fontWeight, arena);
-                            const rasterizedGlyph = try node.style.font.rasterize(
-                                glyph.index,
-                                node.style.fontSize,
-                            );
+                            // Cache miss: enqueue to worker, put pending entry
+                            const enqueued = self.textPipeline.rasterizationWorker.enqueue(.{
+                                .font = node.style.font,
+                                .glyphIndex = glyph.index,
+                                .fontSize = node.style.fontSize,
+                                .fontWeight = node.style.fontWeight,
+                                .fontKey = node.style.font.key,
+                            });
 
-                            const textureCoordinates = self.textPipeline.fontTextureAtlas.upload(
-                                rasterizedGlyph.bitmap,
-                                @intCast(rasterizedGlyph.width),
-                                @intCast(rasterizedGlyph.height),
-                                @intCast(@abs(rasterizedGlyph.pitch)),
-                            ) catch |err| switch (err) {
-                                error.MaximumTextureAtlasSizeReached => {
-                                    self.textPipeline.needsAtlasReset = true;
-                                    continue;
-                                },
-                                else => return err,
-                            };
-                            const pixelWidth = rasterizedGlyph.width / 3;
-                            const data = TextPipeline.GlyphRenderingData{
-                                .bitmapTop = @intCast(rasterizedGlyph.top),
-                                .bitmapLeft = @intCast(rasterizedGlyph.left),
-                                .bitmapWidth = @intCast(pixelWidth),
-                                .bitmapHeight = @intCast(rasterizedGlyph.height),
-                                .textureCoordinates = textureCoordinates,
-                            };
-                            const putResult = glyphPage.put(glyph.index, data);
-                            if (putResult.evicted) |evicted| {
-                                try self.textPipeline.fontTextureAtlas.reclaim(.{
-                                    .u = @intFromFloat(evicted.value.textureCoordinates.u),
-                                    .v = @intFromFloat(evicted.value.textureCoordinates.v),
-                                    .width = evicted.value.bitmapWidth,
-                                    .height = evicted.value.bitmapHeight,
-                                });
+                            if (!enqueued) {
+                                // Back-pressure: ring full, fall back to sync rasterization
+                                try node.style.font.setWeight(node.style.fontWeight, arena);
+                                const rasterizedGlyph = try node.style.font.rasterize(
+                                    glyph.index,
+                                    node.style.fontSize,
+                                );
+                                const textureCoordinates = self.textPipeline.fontTextureAtlas.upload(
+                                    rasterizedGlyph.bitmap,
+                                    @intCast(rasterizedGlyph.width),
+                                    @intCast(rasterizedGlyph.height),
+                                    @intCast(@abs(rasterizedGlyph.pitch)),
+                                ) catch |err| switch (err) {
+                                    error.MaximumTextureAtlasSizeReached => {
+                                        self.textPipeline.needsAtlasReset = true;
+                                        continue;
+                                    },
+                                    else => return err,
+                                };
+                                const data = TextPipeline.GlyphRenderingData{
+                                    .bitmapTop = @intCast(rasterizedGlyph.top),
+                                    .bitmapLeft = @intCast(rasterizedGlyph.left),
+                                    .bitmapWidth = @intCast(rasterizedGlyph.width / 3),
+                                    .bitmapHeight = @intCast(rasterizedGlyph.height),
+                                    .textureCoordinates = textureCoordinates,
+                                    .pending = false,
+                                };
+                                const putResult = glyphPage.put(glyph.index, data);
+                                if (putResult.evicted) |evicted| {
+                                    if (!evicted.value.pending) {
+                                        try self.textPipeline.fontTextureAtlas.reclaim(.{
+                                            .u = @intFromFloat(evicted.value.textureCoordinates.u),
+                                            .v = @intFromFloat(evicted.value.textureCoordinates.v),
+                                            .width = evicted.value.bitmapWidth,
+                                            .height = evicted.value.bitmapHeight,
+                                        });
+                                    }
+                                }
+                                break :blk data;
                             }
-                            break :blk data;
+
+                            _ = glyphPage.put(glyph.index, .{});
+                            break :blk null;
                         }
                     };
 
-                    const left: f32 = @floatFromInt(glyphRenderingData.bitmapLeft);
-                    const top: f32 = @floatFromInt(glyphRenderingData.bitmapTop);
-                    const width: f32 = @floatFromInt(glyphRenderingData.bitmapWidth);
-                    const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
+                    if (glyphRenderingData) |data| {
+                        const left: f32 = @floatFromInt(data.bitmapLeft);
+                        const top: f32 = @floatFromInt(data.bitmapTop);
+                        const width: f32 = @floatFromInt(data.bitmapWidth);
+                        const height: f32 = @floatFromInt(data.bitmapHeight);
 
-                    self.textPipeline.glyphs.mapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
-                        .modelViewProjectionMatrix = zmath.mul(
-                            zmath.mul(
-                                zmath.scaling(width, height, 1.0),
-                                zmath.translation(
-                                    @round(glyph.position[0] + left),
-                                    @round(glyph.position[1] + pixelAscent - top),
-                                    0.0,
+                        self.textPipeline.glyphs.mapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
+                            .modelViewProjectionMatrix = zmath.mul(
+                                zmath.mul(
+                                    zmath.scaling(width, height, 1.0),
+                                    zmath.translation(
+                                        @round(glyph.position[0] + left),
+                                        @round(glyph.position[1] + pixelAscent - top),
+                                        0.0,
+                                    ),
                                 ),
+                                projectionMatrix,
                             ),
-                            projectionMatrix,
-                        ),
-                        .color = linearColor,
-                        .uvOffset = .{
-                            glyphRenderingData.textureCoordinates.u * atlasWidthInv,
-                            glyphRenderingData.textureCoordinates.v * atlasHeightInv,
-                        },
-                        .uvSize = .{
-                            glyphRenderingData.textureCoordinates.w * atlasWidthInv,
-                            glyphRenderingData.textureCoordinates.h * atlasHeightInv,
-                        },
-                    };
+                            .color = linearColor,
+                            .uvOffset = .{
+                                data.textureCoordinates.u * atlasWidthInv,
+                                data.textureCoordinates.v * atlasHeightInv,
+                            },
+                            .uvSize = .{
+                                data.textureCoordinates.w * atlasWidthInv,
+                                data.textureCoordinates.h * atlasHeightInv,
+                            },
+                        };
+                    } else {
+                        self.textPipeline.glyphs.mapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
+                            .modelViewProjectionMatrix = zmath.scaling(0, 0, 1),
+                            .color = .{ 0, 0, 0, 0 },
+                            .uvOffset = .{ 0, 0 },
+                            .uvSize = .{ 0, 0 },
+                        };
+                    }
                     glyphIndex += 1;
                 }
             }

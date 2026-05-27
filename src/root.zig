@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 
 pub const c = @import("c");
 
-pub const Font = @import("font.zig");
+pub const Font = @import("text.zig");
 const forbearBuiltin = @import("builtin.zig");
 pub const ProfilingMetrics = forbearBuiltin.ProfilingMetrics;
 pub const useScrolling = forbearBuiltin.useScrolling;

@@ -617,3 +617,226 @@ pub fn rasterize(
 pub fn getGlyphIndex(self: @This(), charcode: c_ulong) c_uint {
     return c.FT_Get_Char_Index(self.handle, charcode);
 }
+
+pub const TextureCoordinates = struct {
+    u: f32,
+    v: f32,
+    w: f32,
+    h: f32,
+};
+
+pub const GlyphRenderingData = struct {
+    textureCoordinates: TextureCoordinates = .{ .u = 0, .v = 0, .w = 0, .h = 0 },
+    bitmapWidth: u32 = 0,
+    bitmapHeight: u32 = 0,
+    bitmapLeft: i32 = 0,
+    bitmapTop: i32 = 0,
+    pending: bool = true,
+};
+
+pub const GlyphPageKey = struct {
+    fontSize: f32,
+    fontWeight: u32,
+    fontKey: u64,
+};
+
+pub const GlyphPageKeyContext = struct {
+    pub fn hash(_: @This(), key: GlyphPageKey) u64 {
+        var hasher = std.hash.Wyhash.init(0);
+        hasher.update(std.mem.asBytes(&key));
+        return hasher.final();
+    }
+    pub fn eql(_: @This(), a: GlyphPageKey, b: GlyphPageKey) bool {
+        return std.meta.eql(a, b);
+    }
+};
+
+pub const GlyphPage = LRU(c_uint, GlyphRenderingData, 256, std.hash_map.AutoContext(c_uint));
+pub const GlyphPageCache = std.HashMap(GlyphPageKey, GlyphPage, GlyphPageKeyContext, std.hash_map.default_max_load_percentage);
+
+pub const RasterizationWorker = struct {
+    const linux = std.os.linux;
+
+    pub const ring_capacity = 1024;
+
+    pub const Request = struct {
+        font: *@import("text.zig"),
+        glyphIndex: c_uint,
+        fontSize: f32,
+        fontWeight: u32,
+        fontKey: u64,
+    };
+
+    pub const Result = struct {
+        glyphIndex: c_uint,
+        fontSize: f32,
+        fontWeight: u32,
+        fontKey: u64,
+        bitmap: ?[]u8,
+        left: c_int,
+        top: c_int,
+        width: c_uint,
+        height: c_uint,
+        pitch: c_int,
+    };
+
+    requests: [ring_capacity]Request = undefined,
+    requestWrite: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    requestRead: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+
+    results: [ring_capacity]Result = undefined,
+    resultWrite: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    resultRead: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+
+    futexWord: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    shouldExit: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    thread: ?std.Thread = null,
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator) RasterizationWorker {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *RasterizationWorker) void {
+        self.shouldExit.store(true, .release);
+        self.wake();
+        if (self.thread) |thread| {
+            thread.join();
+        }
+        while (self.dequeueResult()) |result| {
+            if (result.bitmap) |bmp| self.allocator.free(bmp);
+        }
+    }
+
+    fn wake(self: *RasterizationWorker) void {
+        _ = self.futexWord.fetchAdd(1, .release);
+        _ = linux.futex_3arg(
+            @ptrCast(&self.futexWord),
+            .{ .cmd = .WAKE, .private = true },
+            1,
+        );
+    }
+
+    fn waitForWork(self: *RasterizationWorker) void {
+        const current = self.futexWord.load(.acquire);
+        if (self.requestRead.load(.monotonic) != self.requestWrite.load(.acquire)) return;
+        if (self.shouldExit.load(.acquire)) return;
+        _ = linux.futex_4arg(
+            @ptrCast(&self.futexWord),
+            .{ .cmd = .WAIT, .private = true },
+            current,
+            null,
+        );
+    }
+
+    pub fn enqueue(self: *RasterizationWorker, request: Request) bool {
+        if (self.thread == null) {
+            self.thread = std.Thread.spawn(
+                .{ .allocator = self.allocator },
+                workerMain,
+                .{self},
+            ) catch |err| {
+                std.log.err("Failed to spawn rasterization worker: {}", .{err});
+                return false;
+            };
+        }
+
+        const write = self.requestWrite.load(.monotonic);
+        const read = self.requestRead.load(.acquire);
+        if (write -% read >= ring_capacity) return false;
+        self.requests[write % ring_capacity] = request;
+        self.requestWrite.store(write +% 1, .release);
+        self.wake();
+        return true;
+    }
+
+    pub fn dequeueResult(self: *RasterizationWorker) ?Result {
+        const read = self.resultRead.load(.monotonic);
+        const write = self.resultWrite.load(.acquire);
+        if (read == write) return null;
+        const result = self.results[read % ring_capacity];
+        self.resultRead.store(read +% 1, .release);
+        return result;
+    }
+
+    fn workerMain(self: *RasterizationWorker) void {
+        while (true) {
+            const read = self.requestRead.load(.monotonic);
+            const write = self.requestWrite.load(.acquire);
+
+            if (read == write) {
+                if (self.shouldExit.load(.acquire)) return;
+                self.waitForWork();
+                continue;
+            }
+
+            const request = self.requests[read % ring_capacity];
+            self.requestRead.store(read +% 1, .release);
+
+            self.processRequest(request);
+        }
+    }
+
+    fn processRequest(self: *RasterizationWorker, request: Request) void {
+        request.font.setWeight(request.fontWeight, self.allocator) catch |err| {
+            std.log.err("Rasterization worker setWeight failed: {}", .{err});
+            self.pushEmptyResult(request);
+            return;
+        };
+
+        const rasterized = request.font.rasterize(request.glyphIndex, request.fontSize) catch |err| {
+            std.log.err("Rasterization worker rasterize failed: {}", .{err});
+            self.pushEmptyResult(request);
+            return;
+        };
+
+        const bitmapCopy = if (rasterized.bitmap) |bitmap|
+            self.allocator.dupe(u8, bitmap) catch {
+                std.log.err("Rasterization worker bitmap alloc failed", .{});
+                self.pushEmptyResult(request);
+                return;
+            }
+        else
+            null;
+
+        self.pushResult(.{
+            .glyphIndex = request.glyphIndex,
+            .fontSize = request.fontSize,
+            .fontWeight = request.fontWeight,
+            .fontKey = request.fontKey,
+            .bitmap = bitmapCopy,
+            .left = rasterized.left,
+            .top = rasterized.top,
+            .width = rasterized.width,
+            .height = rasterized.height,
+            .pitch = rasterized.pitch,
+        });
+    }
+
+    fn pushEmptyResult(self: *RasterizationWorker, request: Request) void {
+        self.pushResult(.{
+            .glyphIndex = request.glyphIndex,
+            .fontSize = request.fontSize,
+            .fontWeight = request.fontWeight,
+            .fontKey = request.fontKey,
+            .bitmap = null,
+            .left = 0,
+            .top = 0,
+            .width = 0,
+            .height = 0,
+            .pitch = 0,
+        });
+    }
+
+    fn pushResult(self: *RasterizationWorker, result: Result) void {
+        const write = self.resultWrite.load(.monotonic);
+        const read = self.resultRead.load(.acquire);
+        if (write -% read >= ring_capacity) {
+            if (result.bitmap) |bmp| self.allocator.free(bmp);
+            std.log.warn("Rasterization result ring full, dropping result", .{});
+            return;
+        }
+        self.results[write % ring_capacity] = result;
+        self.resultWrite.store(write +% 1, .release);
+    }
+};

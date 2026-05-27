@@ -5378,7 +5378,7 @@ test "Component children slotting: on(.click) inside a slot fires on the right i
     try std.testing.expect(!observedClicks[2]);
 }
 
-// font.zig tests
+// text.zig tests
 test "LRU cache - set_first" {
     const LRUIntString = forbear.Font.LRU(i32, []const u8, 3, std.hash_map.AutoContext(i32));
     var lru = try LRUIntString.init(std.testing.allocator);

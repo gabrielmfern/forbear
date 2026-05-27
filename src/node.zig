@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const forbear = @import("root.zig");
-const Font = @import("font.zig");
+const Font = @import("text.zig");
 const Graphics = @import("graphics.zig");
 const Cursor = @import("window/root.zig").Cursor;
 const layouting = @import("layouting.zig");
