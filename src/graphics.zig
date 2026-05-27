@@ -1198,6 +1198,70 @@ const FontTextureAtlas = struct {
         return bestRectangleIndex;
     }
 
+    fn reclaim(self: *@This(), rect: FreeRectangle) !void {
+        try self.freeRectangles.append(self.allocator, rect);
+        self.mergeFreeRectangles();
+    }
+
+    fn mergeFreeRectangles(self: *@This()) void {
+        var merged = true;
+        while (merged) {
+            merged = false;
+            var i: usize = 0;
+            outer: while (i < self.freeRectangles.items.len) {
+                var j: usize = i + 1;
+                while (j < self.freeRectangles.items.len) {
+                    const a = self.freeRectangles.items[i];
+                    const b = self.freeRectangles.items[j];
+
+                    if (a.width == b.width and a.u == b.u) {
+                        // vertically adjacent
+                        if (a.v + a.height == b.v) {
+                            self.freeRectangles.items[i] = .{ .u = a.u, .v = a.v, .width = a.width, .height = a.height + b.height };
+                            _ = self.freeRectangles.swapRemove(j);
+                            merged = true;
+                            continue :outer;
+                        } else if (b.v + b.height == a.v) {
+                            self.freeRectangles.items[i] = .{ .u = b.u, .v = b.v, .width = a.width, .height = a.height + b.height };
+                            _ = self.freeRectangles.swapRemove(j);
+                            merged = true;
+                            continue :outer;
+                        }
+                    }
+
+                    if (a.height == b.height and a.v == b.v) {
+                        // horizontally adjacent
+                        if (a.u + a.width == b.u) {
+                            self.freeRectangles.items[i] = .{ .u = a.u, .v = a.v, .width = a.width + b.width, .height = a.height };
+                            _ = self.freeRectangles.swapRemove(j);
+                            merged = true;
+                            continue :outer;
+                        } else if (b.u + b.width == a.u) {
+                            self.freeRectangles.items[i] = .{ .u = b.u, .v = b.v, .width = a.width + b.width, .height = a.height };
+                            _ = self.freeRectangles.swapRemove(j);
+                            merged = true;
+                            continue :outer;
+                        }
+                    }
+
+                    j += 1;
+                }
+                i += 1;
+            }
+        }
+    }
+
+    fn reset(self: *@This()) void {
+        self.freeRectangles.clearRetainingCapacity();
+        self.freeRectangles.appendAssumeCapacity(.{
+            .u = 0,
+            .v = 0,
+            .width = @intCast(self.capacityExtent.width),
+            .height = @intCast(self.capacityExtent.height),
+        });
+        @memset(self.mapped, 0);
+    }
+
     const TextureCoordinates = struct {
         u: f32,
         v: f32,
@@ -4021,12 +4085,27 @@ pub const Renderer = struct {
                                 node.style.fontSize,
                             );
 
-                            const textureCoordinates = try self.textPipeline.fontTextureAtlas.upload(
+                            const textureCoordinates = self.textPipeline.fontTextureAtlas.upload(
                                 rasterizedGlyph.bitmap,
                                 @intCast(rasterizedGlyph.width),
                                 @intCast(rasterizedGlyph.height),
                                 @intCast(@abs(rasterizedGlyph.pitch)),
-                            );
+                            ) catch |err| switch (err) {
+                                error.MaximumTextureAtlasSizeReached => blk2: {
+                                    self.textPipeline.fontTextureAtlas.reset();
+                                    var cacheIterator = self.textPipeline.glyphPageCache.iterator();
+                                    while (cacheIterator.next()) |entry| {
+                                        entry.value_ptr.clear();
+                                    }
+                                    break :blk2 try self.textPipeline.fontTextureAtlas.upload(
+                                        rasterizedGlyph.bitmap,
+                                        @intCast(rasterizedGlyph.width),
+                                        @intCast(rasterizedGlyph.height),
+                                        @intCast(@abs(rasterizedGlyph.pitch)),
+                                    );
+                                },
+                                else => return err,
+                            };
                             const pixelWidth = rasterizedGlyph.width / 3;
                             const data = TextPipeline.GlyphRenderingData{
                                 .bitmapTop = @intCast(rasterizedGlyph.top),
@@ -4035,7 +4114,15 @@ pub const Renderer = struct {
                                 .bitmapHeight = @intCast(rasterizedGlyph.height),
                                 .textureCoordinates = textureCoordinates,
                             };
-                            _ = glyphPage.put(glyph.index, data);
+                            const putResult = glyphPage.put(glyph.index, data);
+                            if (putResult.evicted) |evicted| {
+                                try self.textPipeline.fontTextureAtlas.reclaim(.{
+                                    .u = @intFromFloat(evicted.value.textureCoordinates.u),
+                                    .v = @intFromFloat(evicted.value.textureCoordinates.v),
+                                    .width = evicted.value.bitmapWidth,
+                                    .height = evicted.value.bitmapHeight,
+                                });
+                            }
                             break :blk data;
                         }
                     };
