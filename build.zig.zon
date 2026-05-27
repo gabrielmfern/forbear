@@ -9,13 +9,13 @@
             .hash = "zmath-0.11.0-dev-wjwivdMsAwD-xaLj76YHUq3t9JDH-X16xuMTmnDzqbu2",
         },
         .freetype = .{
-            .path = "dependencies/freetype",
+            .path = "vendor/freetype",
         },
         .kb_text_shape = .{
-            .path = "dependencies/kb_text_shape",
+            .path = "vendor/kb_text_shape",
         },
         .stb_image = .{
-            .path = "dependencies/stb_image",
+            .path = "vendor/stb_image",
         },
     },
     .paths = .{
