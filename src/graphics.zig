@@ -562,7 +562,7 @@ pub fn initRenderer(
         .windows => {
             try ensureNoError(vkCreateWin32SurfaceKHR(
                 self.vulkanInstance,
-                VkWin32SurfaceCreateInfoKHR{
+                &VkWin32SurfaceCreateInfoKHR{
                     .sType = c.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
                     .pNext = null,
                     .flags = 0,
