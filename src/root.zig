@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 
 pub const c = @import("c");
 
+pub const Cursor = @import("window.zig").Cursor;
 pub const Font = @import("font.zig");
 const forbearBuiltin = @import("builtin.zig");
 pub const ProfilingMetrics = forbearBuiltin.ProfilingMetrics;
@@ -10,6 +11,7 @@ pub const useScrolling = forbearBuiltin.useScrolling;
 pub const ScrollBar = forbearBuiltin.ScrollBar;
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
+pub const Keys = @import("window.zig").Keys;
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
 const nodeImport = @import("node.zig");
@@ -30,9 +32,7 @@ pub const CompleteStyle = nodeImport.CompleteStyle;
 pub const Style = nodeImport.Style;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
-pub const Window = @import("window/root.zig").Window;
-pub const Cursor = @import("window/root.zig").Cursor;
-pub const Keys = @import("window/root.zig").Keys;
+pub const Window = @import("window.zig").Window;
 
 pub var traceWriter: ?*std.Io.Writer = null;
 pub fn setTraceWriter(writer: *std.Io.Writer) void {

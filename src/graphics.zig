@@ -12,8 +12,7 @@ const stb_image = @import("stb_image_c");
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const countTreeSize = layouting.countTreeSize;
-const Window = @import("window/root.zig").Window;
-const win32 = @import("windows/win32.zig");
+const Window = @import("window.zig").Window;
 const root = @import("root.zig");
 
 const LayerInterval = struct {
@@ -503,6 +502,29 @@ const QueueIndices = struct {
 
 const Graphics = @This();
 
+// Win32 code required for graphics
+const HANDLE = *anyopaque;
+const HWND = ?HANDLE;
+const HINSTANCE = ?HANDLE;
+const SIZE_T = usize;
+const BOOL = c_int;
+const VkWin32SurfaceCreateFlagsKHR = c.VkFlags;
+const VkWin32SurfaceCreateInfoKHR = extern struct {
+    sType: c.VkStructureType,
+    pNext: ?*const anyopaque,
+    flags: VkWin32SurfaceCreateFlagsKHR,
+    hinstance: HINSTANCE,
+    hwnd: HWND,
+};
+extern "vulkan" fn vkCreateWin32SurfaceKHR(
+    instance: c.VkInstance,
+    pCreateInfo: ?*const VkWin32SurfaceCreateInfoKHR,
+    pAllocator: ?*c.VkAllocationCallbacks,
+    pSurface: ?*c.VkSurfaceKHR,
+) c.VkResult;
+extern "user32" fn SetProcessWorkingSetSize(hProcess: HANDLE, dwMinimumWorkingSetSize: SIZE_T, dwMaximumWorkingSetSize: SIZE_T) callconv(.c) BOOL;
+extern "user32" fn GetCurrentProcess() callconv(.c) HANDLE;
+
 pub fn initRenderer(
     self: *Graphics,
     window: *const Window,
@@ -539,9 +561,9 @@ pub fn initRenderer(
             ));
         },
         .windows => {
-            try ensureNoError(win32.vkCreateWin32SurfaceKHR(
+            try ensureNoError(vkCreateWin32SurfaceKHR(
                 self.vulkanInstance,
-                &win32.VkWin32SurfaceCreateInfoKHR{
+                VkWin32SurfaceCreateInfoKHR{
                     .sType = c.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
                     .pNext = null,
                     .flags = 0,
@@ -3180,9 +3202,9 @@ pub const Renderer = struct {
             // on Windows.
             previousSwapchain.deinit(self.logicalDevice);
             c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
-            try ensureNoError(win32.vkCreateWin32SurfaceKHR(
+            try ensureNoError(vkCreateWin32SurfaceKHR(
                 self.graphics.vulkanInstance,
-                &win32.VkWin32SurfaceCreateInfoKHR{
+                &VkWin32SurfaceCreateInfoKHR{
                     .sType = c.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
                     .pNext = null,
                     .flags = 0,
@@ -4308,7 +4330,7 @@ pub const Renderer = struct {
                     std.log.debug("fifty frames rendered, trimming memory {d}", .{c.malloc_trim(0)});
                 },
                 .windows => {
-                    _ = win32.SetProcessWorkingSetSize(win32.GetCurrentProcess(), std.math.maxInt(isize) - 1, std.math.maxInt(isize) - 1);
+                    _ = SetProcessWorkingSetSize(GetCurrentProcess(), std.math.maxInt(isize) - 1, std.math.maxInt(isize) - 1);
                 },
                 else => {},
             }
