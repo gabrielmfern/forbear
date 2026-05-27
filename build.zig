@@ -388,6 +388,38 @@ pub fn build(b: *std.Build) void {
         runPlaygroundStep.dependOn(&runPlaygroundCommand.step);
     }
 
+    // Stress tests — `zig build stress-<name>`
+    {
+        const stress_tests = [_]struct { name: []const u8, path: []const u8, desc: []const u8 }{
+            .{ .name = "stress-text-cache-misses", .path = "stress/text-cache-misses.zig", .desc = "Stress test: constant glyph cache misses from rotating unicode blocks and font sizes" },
+        };
+
+        for (stress_tests) |t| {
+            const mod = b.addModule(t.name, .{
+                .root_source_file = b.path(t.path),
+                .link_libc = true,
+                .target = target,
+                .optimize = optimize,
+            });
+            dependencies.addToModule(mod);
+            mod.addImport("forbear", forbear);
+            mod.addAnonymousImport("inter_font", .{ .root_source_file = b.path("Inter.ttf") });
+
+            const exe = b.addExecutable(.{
+                .name = t.name,
+                .root_module = mod,
+                .use_llvm = true,
+            });
+            b.installArtifact(exe);
+
+            const runCmd = b.addRunArtifact(exe);
+            runCmd.step.dependOn(b.getInstallStep());
+
+            const step = b.step(t.name, t.desc);
+            step.dependOn(&runCmd.step);
+        }
+    }
+
     // Check step - builds all examples and playground
     {
         const checkStep = b.step("check", "Build all examples and playground");
