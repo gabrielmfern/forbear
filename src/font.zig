@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const c = @import("font_c");
+const c = @import("c");
 
 const Vec2 = @Vector(2, f32);
 

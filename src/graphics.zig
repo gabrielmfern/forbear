@@ -8,7 +8,6 @@ const GradientStop = @import("node.zig").GradientStop;
 const Node = @import("node.zig").Node;
 const NodeTree = @import("node.zig").NodeTree;
 const c = @import("c");
-const stb_image = @import("stb_image_c");
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const countTreeSize = layouting.countTreeSize;
@@ -677,13 +676,13 @@ pub const Image = struct {
         // stb_image doesn't allow to not pass in the width, hegith and channel pointers
         const io = root.getForbear().io;
         const timerStart = std.Io.Clock.Timestamp.now(io, .awake);
-        const pixelsPtr = stb_image.stbi_load_from_memory(self.contents.ptr, @intCast(self.contents.len), &width, &height, &channels, 4);
+        const pixelsPtr = c.stbi_load_from_memory(self.contents.ptr, @intCast(self.contents.len), &width, &height, &channels, 4);
         if (pixelsPtr == null) return error.ImageLoadFailed;
         const decodeTime: u64 = @intCast(@max(0, timerStart.untilNow(io).raw.toNanoseconds()));
         std.debug.assert(self.width == width);
         std.debug.assert(self.height == height);
 
-        defer stb_image.stbi_image_free(pixelsPtr);
+        defer c.stbi_image_free(pixelsPtr);
 
         // Edge color dilation: extend visible colors into transparent pixels.
         //
@@ -902,7 +901,7 @@ pub const Image = struct {
                 var width: c_int = undefined;
                 var height: c_int = undefined;
                 var channels: c_int = undefined;
-                if (stb_image.stbi_info_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels) == 0) {
+                if (c.stbi_info_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels) == 0) {
                     return error.ImageInfoLoadFailed;
                 }
 

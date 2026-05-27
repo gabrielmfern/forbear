@@ -1,3 +1,26 @@
+#ifdef LINUX
+// Include wayland headers BEFORE vulkan to avoid translate-c naming collisions
+// (vulkan_wayland.h forward-declares struct wl_display/wl_surface, causing suffixed names)
+#include <wayland-client.h>
+#include <wayland-cursor.h>
+
+#define VK_USE_PLATFORM_WAYLAND_KHR 1
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_wayland.h>
+#include <malloc.h>
+#include <xkbcommon/xkbcommon.h>
+#include <xdg-shell-client-protocol.h>
+#include <fractional-scale-v1-client-protocol.h>
+#include <viewporter-client-protocol.h>
+#include <xdg-decoration-unstable-v1-client-protocol.h>
+#endif
+
+#ifdef WINDOWS
+#define VK_USE_PLATFORM_WIN32_KHR 1
+#include <vulkan/vulkan.h>
+#endif
+
+#ifdef MACOS
 #define VK_USE_PLATFORM_METAL_EXT 1
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_metal.h>
@@ -21,3 +44,17 @@ extern size_t CGDisplayPixelsHigh(CGDirectDisplayID display);
 extern CGDisplayModeRef CGDisplayCopyDisplayMode(CGDirectDisplayID display);
 extern void CGDisplayModeRelease(CGDisplayModeRef mode);
 extern double CGDisplayModeGetRefreshRate(CGDisplayModeRef mode);
+#endif
+
+#include <kb_text_shape.h>
+#include <freetype/ftadvanc.h>
+#include <freetype/ftbbox.h>
+#include <freetype/ftbitmap.h>
+#include <freetype/ftcolor.h>
+#include <freetype/ftlcdfil.h>
+#include <freetype/ftsizes.h>
+#include <freetype/ftstroke.h>
+#include <freetype/fttrigon.h>
+#include <freetype/ftmm.h>
+#include <freetype/ftsynth.h>
+#include <stb_image.h>
