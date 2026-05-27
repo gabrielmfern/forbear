@@ -46,7 +46,6 @@ extern void CGDisplayModeRelease(CGDisplayModeRef mode);
 extern double CGDisplayModeGetRefreshRate(CGDisplayModeRef mode);
 #endif
 
-#include <kb_text_shape.h>
 #include <freetype/ftadvanc.h>
 #include <freetype/ftbbox.h>
 #include <freetype/ftbitmap.h>
@@ -57,4 +56,6 @@ extern double CGDisplayModeGetRefreshRate(CGDisplayModeRef mode);
 #include <freetype/fttrigon.h>
 #include <freetype/ftmm.h>
 #include <freetype/ftsynth.h>
+
+#include <kb_text_shape.h>
 #include <stb_image.h>

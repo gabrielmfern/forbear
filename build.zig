@@ -17,18 +17,12 @@ const Dependencies = struct {
             .target = target,
             .optimize = optimize,
         });
-        const kb_text_shape = b.dependency("kb_text_shape", .{
-            .target = target,
-            .optimize = optimize,
-        });
+        const kb_text_shape = b.dependency("kb_text_shape", .{});
         const zmath = b.dependency("zmath", .{
             .target = target,
             .optimize = optimize,
         });
-        const stb_image = b.dependency("stb_image", .{
-            .target = target,
-            .optimize = optimize,
-        });
+        const stb_image = b.dependency("stb_image", .{});
 
         return @This(){
             .freetype = freetype,
@@ -58,8 +52,6 @@ const Dependencies = struct {
         }
 
         module.linkLibrary(self.freetype.artifact("freetype"));
-        module.linkLibrary(self.kb_text_shape.artifact("kb_text_shape"));
-        module.linkLibrary(self.stb_image.artifact("stb_image"));
         module.addImport("zmath", self.zmath.module("root"));
 
         switch (self.target.result.os.tag) {
@@ -131,8 +123,19 @@ fn createForbearModule(
     var dependencies = Dependencies.init(b, target, optimize);
     dependencies.addToModule(forbear);
 
+    forbear.addCSourceFile(.{
+        .file = b.path("src/vendor.c"),
+        .flags = &.{
+            "-fno-sanitize=alignment",
+            "-fno-sanitize=shift",
+            "-fno-sanitize=pointer-overflow",
+        },
+    });
+    forbear.addIncludePath(dependencies.kb_text_shape.path("."));
+    forbear.addIncludePath(dependencies.stb_image.path("."));
+
     const translateC = b.addTranslateC(.{
-        .root_source_file = b.path("src/c.h"),
+        .root_source_file = b.path("src/vendor.h"),
         .target = target,
         .optimize = optimize,
     });
