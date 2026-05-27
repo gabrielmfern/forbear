@@ -131,17 +131,20 @@ fn createForbearModule(
     var dependencies = Dependencies.init(b, target, optimize);
     dependencies.addToModule(forbear);
 
-    const cHeader = switch (target.result.os.tag) {
-        .linux => b.path("src/c_linux.h"),
-        .macos => b.path("src/c_macos.h"),
-        .windows => b.path("src/c_windows.h"),
-        else => @panic("Unsupported OS"),
-    };
     const translateC = b.addTranslateC(.{
-        .root_source_file = cHeader,
+        .root_source_file = b.path("src/c.h"),
         .target = target,
         .optimize = optimize,
     });
+    translateC.defineCMacro(switch (target.result.os.tag) {
+        .linux => "LINUX",
+        .macos => "MACOS",
+        .windows => "WINDOWS",
+        else => @panic("Unsupported OS"),
+    }, "1");
+    translateC.addIncludePath(dependencies.freetype.path("include"));
+    translateC.addIncludePath(dependencies.kb_text_shape.path("."));
+    translateC.addIncludePath(dependencies.stb_image.path("."));
     switch (target.result.os.tag) {
         .linux => {
             translateC.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
@@ -164,23 +167,6 @@ fn createForbearModule(
         const sdkPath = std.mem.trim(u8, sdkPathRaw, " \n\t");
         translateC.addSystemFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdkPath}) });
     }
-
-    const fontTranslateC = b.addTranslateC(.{
-        .root_source_file = b.path("src/font_c.h"),
-        .target = target,
-        .optimize = optimize,
-    });
-    fontTranslateC.addIncludePath(dependencies.freetype.path("include"));
-    fontTranslateC.addIncludePath(dependencies.kb_text_shape.path("."));
-    forbear.addImport("font_c", fontTranslateC.createModule());
-
-    const stb_translate_c = b.addTranslateC(.{
-        .root_source_file = b.path("src/stb_image_c.h"),
-        .target = target,
-        .optimize = optimize,
-    });
-    stb_translate_c.addIncludePath(dependencies.stb_image.path("."));
-    forbear.addImport("stb_image_c", stb_translate_c.createModule());
 
     if (target.result.os.tag == .linux) {
         const Protocol = struct {
