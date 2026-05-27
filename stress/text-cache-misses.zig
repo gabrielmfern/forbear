@@ -22,6 +22,88 @@ const unicode_blocks = [_][]const u8{
 
 var frameCount: u64 = 0;
 
+const FrameBenchmark = struct {
+    const max_samples = 16384;
+
+    frameTimes: [max_samples]f64 = undefined,
+    count: usize = 0,
+    totalElapsed: f64 = 0,
+
+    fn recordFrame(self: *@This(), dt: f64) void {
+        if (self.count < max_samples) {
+            self.frameTimes[self.count] = dt;
+        }
+        self.count += 1;
+        self.totalElapsed += dt;
+    }
+
+    fn report(self: *@This()) void {
+        const n = @min(self.count, max_samples);
+        if (n == 0) return;
+
+        const times = self.frameTimes[0..n];
+
+        var min: f64 = times[0];
+        var max: f64 = times[0];
+        var sum: f64 = 0;
+        for (times) |t| {
+            if (t < min) min = t;
+            if (t > max) max = t;
+            sum += t;
+        }
+        const avg = sum / @as(f64, @floatFromInt(n));
+
+        std.mem.sort(f64, times, {}, std.sort.asc(f64));
+        const p50 = times[n / 2];
+        const p95 = times[n - 1 - n / 20];
+        const p99 = times[n - 1 - n / 100];
+
+        const avgFps = if (avg > 0) 1000.0 / avg else 0;
+
+        var stutterCount: usize = 0;
+        const stutterThreshold = p50 * 2.0;
+        for (times) |t| {
+            if (t > stutterThreshold) stutterCount += 1;
+        }
+
+        std.debug.print(
+            \\
+            \\--- Frame Benchmark Report ---
+            \\  frames recorded: {d}{s}
+            \\  total time:      {d:.2}s
+            \\  avg FPS:         {d:.1}
+            \\
+            \\  frame time (ms):
+            \\    min:  {d:.2}
+            \\    avg:  {d:.2}
+            \\    max:  {d:.2}
+            \\    p50:  {d:.2}
+            \\    p95:  {d:.2}
+            \\    p99:  {d:.2}
+            \\
+            \\  stutters (>{d:.2}ms): {d} ({d:.1}%)
+            \\-----------------------------
+            \\
+        , .{
+            n,
+            if (self.count > max_samples) @as([]const u8, " (capped)") else "",
+            self.totalElapsed / 1000.0,
+            avgFps,
+            min,
+            avg,
+            max,
+            p50,
+            p95,
+            p99,
+            stutterThreshold,
+            stutterCount,
+            @as(f64, @floatFromInt(stutterCount)) / @as(f64, @floatFromInt(n)) * 100.0,
+        });
+    }
+};
+
+var benchmark = FrameBenchmark{};
+
 fn TextLine(key: []const u8, text: []const u8, fontSize: f32) void {
     forbear.element(.{
         .key = key,
@@ -78,7 +160,7 @@ fn renderingMain(
 
     try forbear.registerFont("Inter", @embedFile("inter_font"));
 
-    _ = io;
+    var frameStart = std.Io.Clock.awake.now(io);
 
     while (window.running) {
         defer _ = arenaAllocator.reset(.retain_capacity);
@@ -110,9 +192,16 @@ fn renderingMain(
             try forbear.update();
         });
 
+        const frameEnd = std.Io.Clock.awake.now(io);
+        const dtNs = frameEnd.toNanoseconds() - frameStart.toNanoseconds();
+        const dtMs = @as(f64, @floatFromInt(dtNs)) / @as(f64, std.time.ns_per_ms);
+        benchmark.recordFrame(dtMs);
+        frameStart = frameEnd;
+
         frameCount += 1;
     }
     try renderer.waitIdle();
+    benchmark.report();
 }
 
 pub fn main(init: std.process.Init) !void {
