@@ -2693,6 +2693,7 @@ const TextPipeline = struct {
     fontTextureAtlas: FontTextureAtlas,
     allocator: std.mem.Allocator,
     glyphPageCache: GlyphPageCache,
+    needsAtlasReset: bool = false,
     sampler: c.VkSampler,
 
     glyphs: ResizableStorageBuffer(GlypRenderingShaderData),
@@ -3863,6 +3864,15 @@ pub const Renderer = struct {
 
         try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0));
 
+        if (self.textPipeline.needsAtlasReset) {
+            self.textPipeline.fontTextureAtlas.reset();
+            var cacheIterator = self.textPipeline.glyphPageCache.iterator();
+            while (cacheIterator.next()) |entry| {
+                entry.value_ptr.clear();
+            }
+            self.textPipeline.needsAtlasReset = false;
+        }
+
         var start = @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms);
         var imageIndex: u32 = undefined;
         ensureNoError(c.vkAcquireNextImageKHR(
@@ -4091,18 +4101,9 @@ pub const Renderer = struct {
                                 @intCast(rasterizedGlyph.height),
                                 @intCast(@abs(rasterizedGlyph.pitch)),
                             ) catch |err| switch (err) {
-                                error.MaximumTextureAtlasSizeReached => blk2: {
-                                    self.textPipeline.fontTextureAtlas.reset();
-                                    var cacheIterator = self.textPipeline.glyphPageCache.iterator();
-                                    while (cacheIterator.next()) |entry| {
-                                        entry.value_ptr.clear();
-                                    }
-                                    break :blk2 try self.textPipeline.fontTextureAtlas.upload(
-                                        rasterizedGlyph.bitmap,
-                                        @intCast(rasterizedGlyph.width),
-                                        @intCast(rasterizedGlyph.height),
-                                        @intCast(@abs(rasterizedGlyph.pitch)),
-                                    );
+                                error.MaximumTextureAtlasSizeReached => {
+                                    self.textPipeline.needsAtlasReset = true;
+                                    continue;
                                 },
                                 else => return err,
                             };
