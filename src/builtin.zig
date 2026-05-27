@@ -91,14 +91,6 @@ const MachTaskBasicInfo = extern struct {
 };
 const MACH_TASK_BASIC_INFO: u32 = 20;
 
-extern fn mach_task_self() u32;
-extern fn task_info(
-    targetTask: u32,
-    flavor: u32,
-    taskInfoOut: *anyopaque,
-    taskInfoCount: *u32,
-) c_int;
-
 fn processResidentBytes() u64 {
     switch (builtin.os.tag) {
         .linux => {
@@ -118,9 +110,8 @@ fn processResidentBytes() u64 {
             return rssPages * std.heap.pageSize();
         },
         .windows => {
-            const win32 = @import("windows/win32.zig");
-            var counters: win32.PROCESS_MEMORY_COUNTERS = .{};
-            if (win32.GetProcessMemoryInfo(win32.GetCurrentProcess(), &counters, @sizeOf(win32.PROCESS_MEMORY_COUNTERS)) == 0) {
+            var counters: PROCESS_MEMORY_COUNTERS = .{};
+            if (GetProcessMemoryInfo(GetCurrentProcess(), &counters, @sizeOf(PROCESS_MEMORY_COUNTERS)) == 0) {
                 return 0;
             }
             return counters.WorkingSetSize;
@@ -136,6 +127,41 @@ fn processResidentBytes() u64 {
         else => @compileError("memory watching is unsupported for " ++ @tagName(builtin.os.tag)),
     }
 }
+
+// win32 internals required to get memory information
+extern fn mach_task_self() u32;
+extern fn task_info(
+    targetTask: u32,
+    flavor: u32,
+    taskInfoOut: *anyopaque,
+    taskInfoCount: *u32,
+) c_int;
+
+const DWORD = u32;
+const SIZE_T = usize;
+const HANDLE = *anyopaque;
+const BOOL = c_int;
+
+const PROCESS_MEMORY_COUNTERS = extern struct {
+    cb: DWORD = @sizeOf(PROCESS_MEMORY_COUNTERS),
+    PageFaultCount: DWORD = 0,
+    PeakWorkingSetSize: SIZE_T = 0,
+    WorkingSetSize: SIZE_T = 0,
+    QuotaPeakPagedPoolUsage: SIZE_T = 0,
+    QuotaPagedPoolUsage: SIZE_T = 0,
+    QuotaPeakNonPagedPoolUsage: SIZE_T = 0,
+    QuotaNonPagedPoolUsage: SIZE_T = 0,
+    PagefileUsage: SIZE_T = 0,
+    PeakPagefileUsage: SIZE_T = 0,
+};
+
+extern "user32" fn GetCurrentProcess() callconv(.c) HANDLE;
+
+extern "psapi" fn GetProcessMemoryInfo(
+    Process: HANDLE,
+    ppsmemCounters: *PROCESS_MEMORY_COUNTERS,
+    cb: DWORD,
+) callconv(.c) BOOL;
 
 const ScrollingState = struct {
     offset: Vec2,
