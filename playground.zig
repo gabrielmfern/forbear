@@ -261,6 +261,7 @@ fn renderingMain(
 ) !void {
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
     defer arenaAllocator.deinit();
+    errdefer window.running = false;
 
     const arena = arenaAllocator.allocator();
 
