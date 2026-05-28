@@ -399,10 +399,8 @@ pub fn build(b: *std.Build) void {
                 .root_module = mod,
                 .use_llvm = true,
             });
-            b.installArtifact(exe);
 
             const runCmd = b.addRunArtifact(exe);
-            runCmd.step.dependOn(b.getInstallStep());
 
             const step = b.step(t.name, t.desc);
             step.dependOn(&runCmd.step);
