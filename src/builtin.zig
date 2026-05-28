@@ -99,6 +99,8 @@ fn processResidentBytes() u64 {
                 forbear.handleFrameError(err);
                 return 0;
             };
+            defer file.close(io);
+
             var buffer: [64]u8 = undefined;
             const bytesRead = file.readPositionalAll(io, &buffer, 0) catch |err| {
                 forbear.handleFrameError(err);
