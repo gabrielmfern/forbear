@@ -204,14 +204,34 @@ fn ensureNoError(errorCode: c.FT_Error) FreetypeError!void {
 var freetypeLibrary: c.FT_Library = null;
 
 handle: c.FT_Face,
-allocator: std.mem.Allocator,
+arena: std.mem.Allocator,
 kbtsContext: *c.kbts_shape_context,
 kbtsFont: *c.kbts_font,
 key: u64,
 
 shapingCache: ShapingCache,
+/// Buffers freed by the most recent cache eviction, held for the next
+/// `shape` to reuse instead of allocating fresh. The cache is a bounded
+/// LRU, so at most one eviction is ever in flight — a single slot suffices.
+/// `arena` never reclaims individual frees, so without this every distinct
+/// string (per-frame counters, clocks, ...) would leak a buffer into it.
+recycledShaping: ?ReuseBuffers = null,
 
-const ShapingCache = LRU([]const u8, []ShapedGlyph, 256, std.hash_map.StringContext);
+const ShapingCache = LRU([]const u8, CachedShaping, 256, std.hash_map.StringContext);
+
+/// A cached shaping result. `glyphs` is the full backing buffer (its length
+/// is the buffer capacity); only the first `count` glyphs are valid. The key
+/// buffer is always grown alongside it to the same element count, so
+/// `glyphs.len` doubles as the key buffer's capacity when reusing.
+const CachedShaping = struct {
+    glyphs: []ShapedGlyph,
+    count: usize,
+};
+
+const ReuseBuffers = struct {
+    key: []u8,
+    glyphs: []ShapedGlyph,
+};
 
 pub fn LRU(
     comptime Key: type,
@@ -425,7 +445,7 @@ pub fn init(allocator: std.mem.Allocator, name: []const u8, memory: []const u8) 
     wyHash.update(name);
 
     return @This(){
-        .allocator = allocator,
+        .arena = allocator,
         .shapingCache = try ShapingCache.init(allocator),
         .handle = face,
         .kbtsContext = kbtsContext.?,
@@ -435,10 +455,8 @@ pub fn init(allocator: std.mem.Allocator, name: []const u8, memory: []const u8) 
 }
 
 pub fn deinit(self: *@This()) void {
-    for (self.shapingCache.entries[0..self.shapingCache.length]) |entry| {
-        self.allocator.free(entry.key);
-        self.allocator.free(entry.value);
-    }
+    // Cache key/glyph buffers live in `arena`; the caller reclaims them
+    // wholesale on arena deinit, so there's nothing to free per entry.
     self.shapingCache.deinit();
     c.kbts_DestroyShapeContext(self.kbtsContext);
     ensureNoError(c.FT_Done_Face(self.handle)) catch @panic("Failed to done FT_Face");
@@ -497,7 +515,7 @@ pub const ShapingIterator = struct {
 
 pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
     if (self.shapingCache.get(text)) |cache| {
-        return cache.value;
+        return cache.value.glyphs[0..cache.value.count];
     }
 
     // TODO: pass the language and direction down as styles
@@ -505,27 +523,47 @@ pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
     c.kbts_ShapeUtf8(self.kbtsContext, text.ptr, @intCast(text.len), c.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX);
     c.kbts_ShapeEnd(self.kbtsContext);
 
-    var glyphs = try self.allocator.alloc(ShapedGlyph, text.len); // worst case for all glyphs
-    errdefer self.allocator.free(glyphs);
-    var glyphCount: usize = 0;
+    // Reuse the buffers the last eviction freed (or start empty). Both only
+    // ever grow — to the longest string this slot has held — so churning
+    // equal-length strings allocates nothing instead of leaking into `arena`.
+    var reuse = self.recycledShaping orelse ReuseBuffers{ .key = &.{}, .glyphs = &.{} };
+    self.recycledShaping = null;
+    if (reuse.glyphs.len < text.len) {
+        if (reuse.glyphs.len == 0) {
+            reuse.key = try self.arena.alloc(u8, text.len);
+            reuse.glyphs = try self.arena.alloc(ShapedGlyph, text.len); // worst case: one glyph per byte
+        } else {
+            reuse.key = try self.arena.realloc(reuse.key, text.len);
+            reuse.glyphs = try self.arena.realloc(reuse.glyphs, text.len);
+        }
+    }
+    @memcpy(reuse.key[0..text.len], text);
 
+    var glyphCount: usize = 0;
     var iterator = ShapingIterator{
         .run = null,
         .glyph = undefined,
         .kbtsContext = self.kbtsContext,
     };
     while (iterator.next()) |shapedGlyph| {
-        glyphs[glyphCount] = shapedGlyph;
+        reuse.glyphs[glyphCount] = shapedGlyph;
         glyphCount += 1;
     }
 
-    glyphs = try self.allocator.realloc(glyphs, glyphCount);
-    const putResult = self.shapingCache.put(try self.allocator.dupe(u8, text), glyphs);
+    const putResult = self.shapingCache.put(
+        reuse.key[0..text.len],
+        .{ .glyphs = reuse.glyphs, .count = glyphCount },
+    );
     if (putResult.evicted) |evicted| {
-        self.allocator.free(evicted.key);
-        self.allocator.free(evicted.value);
+        // The stored slices are trimmed to their used length; recover the
+        // full buffers (key capacity equals `glyphs.len`) and stash them for
+        // the next `shape` to reuse.
+        self.recycledShaping = .{
+            .key = @constCast(evicted.key.ptr)[0..evicted.value.glyphs.len],
+            .glyphs = evicted.value.glyphs,
+        };
     }
-    return glyphs;
+    return reuse.glyphs[0..glyphCount];
 }
 
 pub fn unitsPerEm(self: @This()) c_ushort {
