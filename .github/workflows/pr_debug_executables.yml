@@ -46,7 +46,7 @@ jobs:
             wayland-protocols
 
       - name: Package debug executables
-        run: zig build package
+        run: zig build package -Dcpu=baseline
 
       - name: Verify both debug executables exist
         run: |
