@@ -3914,7 +3914,6 @@ pub const Renderer = struct {
             c.VK_TRUE,
             std.math.maxInt(u64),
         ));
-        try ensureNoError(c.vkResetFences(self.logicalDevice, 1, &self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight]));
 
         try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0));
 
@@ -4339,6 +4338,11 @@ pub const Renderer = struct {
         const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphores[swapchainImageIndex]};
         const waitStages: []const c.VkPipelineStageFlags = &.{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
+        try ensureNoError(c.vkResetFences(
+            self.logicalDevice,
+            1,
+            &self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight],
+        ));
         try ensureNoError(c.vkQueueSubmit(
             self.graphicsQueue,
             1,
