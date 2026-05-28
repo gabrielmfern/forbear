@@ -122,10 +122,11 @@ fn renderingMain(
     allocator: std.mem.Allocator,
     io: std.Io,
     renderer: *forbear.Graphics.Renderer,
-    window: *const forbear.Window,
+    window: *forbear.Window,
 ) !void {
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
     defer arenaAllocator.deinit();
+    errdefer window.running = false;
 
     const arena = arenaAllocator.allocator();
 
