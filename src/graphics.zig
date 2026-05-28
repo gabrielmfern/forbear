@@ -3832,6 +3832,49 @@ pub const Renderer = struct {
         c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{scissor});
     }
 
+    fn transitionSwapchainImage(
+        self: *Self,
+        commandBuffer: c.VkCommandBuffer,
+        imageIndex: usize,
+        oldLayout: c.VkImageLayout,
+        newLayout: c.VkImageLayout,
+        srcAccessMask: c.VkAccessFlags,
+        dstAccessMask: c.VkAccessFlags,
+        srcStageMask: c.VkPipelineStageFlags,
+        dstStageMask: c.VkPipelineStageFlags,
+    ) void {
+        const barrier = c.VkImageMemoryBarrier{
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .pNext = null,
+            .srcAccessMask = srcAccessMask,
+            .dstAccessMask = dstAccessMask,
+            .oldLayout = oldLayout,
+            .newLayout = newLayout,
+            .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+            .image = self.swapchain.images[imageIndex],
+            .subresourceRange = .{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        };
+        c.vkCmdPipelineBarrier(
+            commandBuffer,
+            srcStageMask,
+            dstStageMask,
+            0,
+            0,
+            null,
+            0,
+            null,
+            1,
+            &barrier,
+        );
+    }
+
     fn handleResizeMidFrame(self: *Self) !void {
         std.log.debug("image acquring errored with out of date, this means we need to recreate the swapchain", .{});
         try self.stallForFrames();
