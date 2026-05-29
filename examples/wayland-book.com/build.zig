@@ -23,6 +23,13 @@ pub fn build(b: *std.Build) void {
     });
     waylandBook.addImport("tree-sitter", tree_sitter.module("tree-sitter"));
 
+    const tree_sitter_c = b.dependency("tree_sitter_c", .{
+        .target = target,
+        .optimize = optimize,
+        .@"build-shared" = false,
+    });
+    waylandBook.addImport("tree-sitter-c", tree_sitter_c.module("tree-sitter-c"));
+
     const exe = b.addExecutable(.{
         .name = "wayland-book.com",
         .root_module = waylandBook,

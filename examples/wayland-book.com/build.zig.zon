@@ -14,6 +14,9 @@
         .tree_sitter = .{
             .path = "vendor/tree-sitter",
         },
+        .tree_sitter_c = .{
+            .path = "vendor/tree-sitter-c",
+        },
     },
     .fingerprint = 0xd1ca667f36feb0e2,
 }
