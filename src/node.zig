@@ -318,16 +318,22 @@ pub const Placement = union(enum) {
     relative: Vec2,
 };
 
-=
-
 pub const TextStyle = struct {
-    font: ?*Font,
-    backgroundColor: ?Vec4,
-    color: ?Vec4,
-    fontSize: ?f32,
-    fontWeight: ?u32,
-    lineHeight: ?f32,
-    textWrapping: ?TextWrapping,
+    font: ?*Font = null,
+    color: ?Vec4 = null,
+    fontSize: ?f32 = null,
+    fontWeight: ?u32 = null,
+    lineHeight: ?f32 = null,
+
+    pub fn complete(self: @This(), base: CompleteTextStyle) CompleteTextStyle {
+        return .{
+            .font = self.font orelse base.font,
+            .color = self.color orelse base.color,
+            .fontSize = self.fontSize orelse base.fontSize,
+            .fontWeight = self.fontWeight orelse base.fontWeight,
+            .lineHeight = self.lineHeight orelse base.lineHeight,
+        };
+    }
 };
 
 pub const CompleteTextStyle = struct {
@@ -336,16 +342,16 @@ pub const CompleteTextStyle = struct {
     fontSize: f32,
     fontWeight: u32,
     lineHeight: f32,
-    textWrapping: TextWrapping,
-};
 
-pub const BaseTextStyle = struct {
-    font: *Font,
-    color: Vec4,
-    fontSize: f32,
-    fontWeight: u32,
-    lineHeight: f32,
-    textWrapping: TextWrapping,
+    pub fn from(base: BaseStyle) @This() {
+        return .{
+            .font = base.font,
+            .color = base.color,
+            .fontSize = base.fontSize,
+            .fontWeight = base.fontWeight,
+            .lineHeight = base.lineHeight,
+        };
+    }
 };
 
 pub const Style = struct {
@@ -488,10 +494,20 @@ pub const LayoutGlyph = struct {
     /// Meant for the recalculation of the glyphs position if that's required
     /// at some other layouting step
     offset: Vec2,
+
+    /// Run style this glyph was shaped with, for `composeText` nodes where a
+    /// single wrapped block mixes fonts/weights/sizes/colors. `null` for plain
+    /// `text()` nodes, where every glyph uses the node's own style. Points into
+    /// frame-arena memory, stable for the frame the glyph is drawn in.
+    style: ?*const CompleteTextStyle = null,
 };
 
 pub const Glyphs = struct {
     lineHeight: f32,
+    /// Distance from line top to the shared baseline, in pixels. The max ascent
+    /// across runs, so mixed-size runs in a `composeText` block sit on one
+    /// baseline. Drawing offsets every glyph down by this.
+    ascent: f32,
     slice: []LayoutGlyph,
     /// Indices into `slice` where a manual line break was requested before the
     /// glyph at that index. Ascending; may contain duplicates for consecutive

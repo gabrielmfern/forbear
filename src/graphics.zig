@@ -7,6 +7,7 @@ const BlendMode = @import("node.zig").BlendMode;
 const GradientStop = @import("node.zig").GradientStop;
 const Node = @import("node.zig").Node;
 const NodeTree = @import("node.zig").NodeTree;
+const CompleteTextStyle = @import("node.zig").CompleteTextStyle;
 const c = @import("c");
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
@@ -4118,33 +4119,59 @@ pub const Renderer = struct {
             }
 
             if (node.glyphs) |glyphs| {
-                const linearColor = srgbToLinearColor(node.style.color);
-                const unitsPerEm: f32 = @floatFromInt(node.style.font.unitsPerEm());
-                const pixelAscent = (node.style.font.ascent() / unitsPerEm) * node.style.fontSize;
+                const pixelAscent = glyphs.ascent;
 
-                // Outer lookup: once per layout box (per font/size/weight/dpi combo)
-                const glyphPageKey = TextPipeline.GlyphPageKey{
-                    .fontKey = node.style.font.key,
-                    .fontSize = node.style.fontSize,
-                    .fontWeight = node.style.fontWeight,
-                };
-                const glyphPageGetResult = try self.textPipeline.glyphPageCache.getOrPut(glyphPageKey);
-                if (!glyphPageGetResult.found_existing) {
-                    glyphPageGetResult.value_ptr.* = try TextPipeline.GlyphPage.init(self.textPipeline.allocator);
-                }
-                const glyphPage = glyphPageGetResult.value_ptr;
+                // Per-run style resolution. Plain `text()` nodes leave
+                // `glyph.style` null and fall back to the node's style;
+                // `composeText` nodes point each glyph at its run. Glyphs of a
+                // run are contiguous, so the page/color lookup only refreshes
+                // when the run changes.
+                var activeStyle: ?*const CompleteTextStyle = undefined;
+                var styleInitialized = false;
+                var glyphFont: *Font = undefined;
+                var glyphFontSize: f32 = undefined;
+                var glyphFontWeight: u32 = undefined;
+                var linearColor: Vec4 = undefined;
+                var glyphPage: *TextPipeline.GlyphPage = undefined;
 
                 for (glyphs.slice) |glyph| {
-                    // Inner lookup: LRU per glyph index (no hashing of the full key)
+                    if (!styleInitialized or glyph.style != activeStyle) {
+                        activeStyle = glyph.style;
+                        if (glyph.style) |runStyle| {
+                            glyphFont = runStyle.font;
+                            glyphFontSize = runStyle.fontSize;
+                            glyphFontWeight = runStyle.fontWeight;
+                            linearColor = srgbToLinearColor(runStyle.color);
+                        } else {
+                            glyphFont = node.style.font;
+                            glyphFontSize = node.style.fontSize;
+                            glyphFontWeight = node.style.fontWeight;
+                            linearColor = srgbToLinearColor(node.style.color);
+                        }
+
+                        // Outer lookup: once per run (per font/size/weight/dpi combo)
+                        const glyphPageKey = TextPipeline.GlyphPageKey{
+                            .fontKey = glyphFont.key,
+                            .fontSize = glyphFontSize,
+                            .fontWeight = glyphFontWeight,
+                        };
+                        const glyphPageGetResult = try self.textPipeline.glyphPageCache.getOrPut(glyphPageKey);
+                        if (!glyphPageGetResult.found_existing) {
+                            glyphPageGetResult.value_ptr.* = try TextPipeline.GlyphPage.init(self.textPipeline.allocator);
+                        }
+                        glyphPage = glyphPageGetResult.value_ptr;
+                        styleInitialized = true;
+                    }
+
                     const glyphRenderingData = blk: {
                         // TODO: render glyphs in the GPU using the font texture atlas as frame buffer
                         if (glyphPage.get(glyph.index)) |entry| {
                             break :blk entry.value;
                         } else {
-                            try node.style.font.setWeight(node.style.fontWeight, arena);
-                            const rasterizedGlyph = try node.style.font.rasterize(
+                            try glyphFont.setWeight(glyphFontWeight, arena);
+                            const rasterizedGlyph = try glyphFont.rasterize(
                                 glyph.index,
-                                node.style.fontSize,
+                                glyphFontSize,
                             );
 
                             const textureCoordinates = self.textPipeline.fontTextureAtlas.upload(
@@ -4213,7 +4240,15 @@ pub const Renderer = struct {
         }
 
         if (@divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_us) - start > 1000) {
-            std.log.warn("prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs", .{ totalShadowCount, totalElementCount, totalGlyphCount, @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_us) - start });
+            std.log.warn(
+                "prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs",
+                .{
+                    totalShadowCount,
+                    totalElementCount,
+                    totalGlyphCount,
+                    @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_us) - start,
+                },
+            );
         }
 
         try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], &c.VkCommandBufferBeginInfo{

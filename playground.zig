@@ -37,6 +37,44 @@ fn CounterExample() void {
     });
 }
 
+fn Strong() *const fn (void) void {
+    return forbear.textStyle(.{ .fontWeight = 700 });
+}
+
+fn Accent() *const fn (void) void {
+    return forbear.textStyle(.{ .color = forbear.hex("#7dd3fc") });
+}
+
+fn RichTextExample() void {
+    forbear.element(.{
+        .style = .{
+            .margin = .top(12.0),
+            .width = .{ .fixed = 420 },
+            .textWrapping = .word,
+        },
+    })({
+        forbear.composeText(.{})({
+            forbear.textStyle(.{ .fontSize = 128.0, })({
+                forbear.write("Wayland is a ");
+            });
+            Strong()({
+                forbear.write("display server protocol");
+            });
+            forbear.write(", successor to ");
+            Accent()({
+                forbear.write("X.Org");
+            });
+            forbear.write(", and forbear can ");
+            Strong()({
+                Accent()({
+                    forbear.write("mix styles");
+                });
+            });
+            forbear.write(" inside one wrapped paragraph.");
+        });
+    });
+}
+
 fn App() void {
     forbear.component(.{})({
         const viewportSize = forbear.useViewportSize();
@@ -62,6 +100,9 @@ fn App() void {
                 forbear.ProfilingMetrics(.{});
 
                 forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
+
+                RichTextExample();
+
                 forbear.element(.{
                     .style = .{
                         .margin = forbear.Margin.top(12.0),
