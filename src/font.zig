@@ -515,17 +515,10 @@ pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
                 continue;
             }
 
-            std.log.debug("glyph id {}", .{glyph.*.Id});
-            const utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint);
-            reuse.glyphs[glyphCount] = ShapedGlyph{
-                .index = glyph.*.Id,
-                .advance = .{ @floatFromInt(glyph.*.AdvanceX), @floatFromInt(glyph.*.AdvanceY) },
-                .offset = .{ @floatFromInt(glyph.*.OffsetX), @floatFromInt(glyph.*.OffsetY) },
-                // When not using llvm, if we don't set this in a variable,
-                // the index in ShapedGlyph becomes 0 because of some Zig bug
-                .utf8 = utf8,
-            };
-            std.log.debug("glyph index from shaped glyph {}", .{reuse.glyphs[glyphCount].index});
+            reuse.glyphs[glyphCount].index = glyph.*.Id;
+            reuse.glyphs[glyphCount].advance = .{ @floatFromInt(glyph.*.AdvanceX), @floatFromInt(glyph.*.AdvanceY) };
+            reuse.glyphs[glyphCount].offset = .{ @floatFromInt(glyph.*.OffsetX), @floatFromInt(glyph.*.OffsetY) };
+            reuse.glyphs[glyphCount].utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint);
             glyphCount += 1;
         }
     }
