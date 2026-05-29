@@ -515,6 +515,13 @@ pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
                 continue;
             }
 
+            // Field-by-field, NOT a `ShapedGlyph{ ... }` literal: the x86_64
+            // self-hosted backend miscompiles a struct literal whose field is
+            // initialized from a C-ABI function returning a 12-byte aggregate
+            // (kbts_EncodeUtf8). It stores the high return register as a full
+            // 8 bytes, overshooting the 12-byte value by 4 and zeroing
+            // whatever is packed next (here `index`). Keep these as separate
+            // stores.
             reuse.glyphs[glyphCount].index = glyph.*.Id;
             reuse.glyphs[glyphCount].advance = .{ @floatFromInt(glyph.*.AdvanceX), @floatFromInt(glyph.*.AdvanceY) };
             reuse.glyphs[glyphCount].offset = .{ @floatFromInt(glyph.*.OffsetX), @floatFromInt(glyph.*.OffsetY) };

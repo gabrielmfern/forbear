@@ -42,18 +42,6 @@ pub fn frameMeta(arena: std.mem.Allocator) !forbear.FrameMeta {
     };
 }
 
-test "ZZZ shape glyph indices are nonzero" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
-    defer forbear.deinit();
-    try forbear.registerFont("Inter", @embedFile("inter_font"));
-    const font = try forbear.useFont("Inter");
-    const glyphs = try font.shape("Hello");
-    for (glyphs) |g| {
-        std.debug.print("index={} \n", .{g.index});
-    }
-    for (glyphs) |g| try std.testing.expect(g.index != 0);
-}
-
 // forbear.layouting.zig tests
 test "2.0 grow factor against 1.0 grow factor on fixed height parent" {
     try forbear.init(std.testing.allocator, std.testing.io, undefined);
