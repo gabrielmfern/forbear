@@ -1205,12 +1205,18 @@ pub noinline fn composeText(style: TextStyle) *const fn (void) void {
 
 /// Appends a run inside a `composeText` block, styled by the innermost
 /// enclosing `textStyle` (or the block's base style if there is none).
+///
+/// Assumed that memory content refers to is going to live in memory until the
+/// end of composeText
 pub fn write(content: []const u8) void {
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) return;
-    // `write` is only valid inside a `composeText` block.
-    std.debug.assert(self.frameMeta.?.textBuilder != null);
+    if (self.frameMeta.?.textBuilder == null) {
+        std.log.err("forbear.write can only be used inside of forbear.composeText", .{});
+        handleFrameError(error.NestedComposeText);
+        return;
+    }
     if (content.len == 0) return;
 
     const builder = &self.frameMeta.?.textBuilder.?;
