@@ -649,6 +649,221 @@ test "text with \\r\\n produces same size as with \\n" {
     try std.testing.expectApproxEqAbs(nl.maxSize[1], crlf.maxSize[1], 0.0001);
 }
 
+fn previousIndex() usize {
+    return forbear.getForbear().frameMeta.?.previousPushedNodeIndex.?;
+}
+
+fn nodeAt(index: usize) *forbear.Node {
+    return forbear.getForbear().nodeTree.at(index);
+}
+
+const textColumn = forbear.Style{
+    .width = .fit,
+    .height = .fit,
+    .direction = .vertical,
+    .textWrapping = .word,
+};
+
+test "composeText with one run matches text()" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        var plainIndex: usize = undefined;
+        var composedIndex: usize = undefined;
+        forbear.element(.{ .style = .{ .direction = .vertical } })({
+            forbear.element(.{ .style = textColumn })({
+                forbear.text("Hello world");
+                plainIndex = previousIndex();
+            });
+            forbear.element(.{ .style = textColumn })({
+                forbear.composeText(.{})({
+                    forbear.write("Hello world");
+                });
+                composedIndex = previousIndex();
+            });
+        });
+        _ = try forbear.layout();
+
+        const plain = nodeAt(plainIndex);
+        const composed = nodeAt(composedIndex);
+        try std.testing.expectEqual(plain.glyphs.?.slice.len, composed.glyphs.?.slice.len);
+        try std.testing.expectApproxEqAbs(plain.glyphs.?.lineHeight, composed.glyphs.?.lineHeight, 0.0001);
+        try std.testing.expectApproxEqAbs(plain.size[0], composed.size[0], 0.0001);
+        try std.testing.expectApproxEqAbs(plain.size[1], composed.size[1], 0.0001);
+        // Glyph positions are world-space; compare them relative to each text
+        // node's own origin since the two columns sit at different offsets.
+        for (plain.glyphs.?.slice, composed.glyphs.?.slice) |p, c| {
+            try std.testing.expectEqual(p.index, c.index);
+            try std.testing.expectApproxEqAbs(p.position[0] - plain.position[0], c.position[0] - composed.position[0], 0.0001);
+            try std.testing.expectApproxEqAbs(p.position[1] - plain.position[1], c.position[1] - composed.position[1], 0.0001);
+        }
+    });
+}
+
+test "composeText concatenates same-styled runs into one block" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        var plainIndex: usize = undefined;
+        var composedIndex: usize = undefined;
+        forbear.element(.{ .style = .{ .direction = .vertical } })({
+            forbear.element(.{ .style = textColumn })({
+                forbear.text("Hello world");
+                plainIndex = previousIndex();
+            });
+            forbear.element(.{ .style = textColumn })({
+                forbear.composeText(.{})({
+                    forbear.write("Hel");
+                    forbear.write("lo wor");
+                    forbear.write("ld");
+                });
+                composedIndex = previousIndex();
+            });
+        });
+        _ = try forbear.layout();
+
+        const plain = nodeAt(plainIndex);
+        const composed = nodeAt(composedIndex);
+        // Three runs hold the same characters as the one string, so the glyph
+        // count matches and the block stays one line tall. Width is within a
+        // pixel rather than exact: runs shape independently, so the kerning
+        // across the run boundaries is lost.
+        try std.testing.expectEqual(plain.glyphs.?.slice.len, composed.glyphs.?.slice.len);
+        try std.testing.expectApproxEqAbs(plain.size[1], composed.size[1], 0.0001);
+        try std.testing.expectApproxEqAbs(plain.size[0], composed.size[0], 1.0);
+        // The runs are placed sequentially on the one shared line.
+        var previousX: f32 = -1.0;
+        for (composed.glyphs.?.slice) |glyph| {
+            const localX = glyph.position[0] - composed.position[0];
+            const localY = glyph.position[1] - composed.position[1];
+            try std.testing.expectApproxEqAbs(@as(f32, 0.0), localY, 0.0001);
+            try std.testing.expect(localX >= previousX);
+            previousX = localX;
+        }
+    });
+}
+
+test "composeText runs carry their own resolved style" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        var index: usize = undefined;
+        forbear.element(.{ .style = textColumn })({
+            forbear.composeText(.{})({
+                forbear.write("normal ");
+                forbear.textStyle(.{ .fontWeight = 700 })({
+                    forbear.write("bold");
+                });
+            });
+            index = previousIndex();
+        });
+        _ = try forbear.layout();
+
+        var normalCount: usize = 0;
+        var boldCount: usize = 0;
+        for (nodeAt(index).glyphs.?.slice) |glyph| {
+            const style = glyph.style;
+            switch (style.fontWeight) {
+                400 => normalCount += 1,
+                700 => boldCount += 1,
+                else => return error.UnexpectedWeight,
+            }
+        }
+        // "normal " is base weight (400 from frameMeta), "bold" is the override.
+        try std.testing.expectEqual(@as(usize, 7), normalCount);
+        try std.testing.expectEqual(@as(usize, 4), boldCount);
+    });
+}
+
+test "composeText wraps across run boundaries" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        var index: usize = undefined;
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 80 },
+                .height = .fit,
+                .direction = .vertical,
+                .textWrapping = .word,
+            },
+        })({
+            forbear.composeText(.{})({
+                forbear.write("aaaa ");
+                forbear.textStyle(.{ .fontWeight = 700 })({
+                    forbear.write("bbbb cccc dddd");
+                });
+            });
+            index = previousIndex();
+        });
+        _ = try forbear.layout();
+
+        const glyphs = nodeAt(index).glyphs.?;
+        var maxLine: usize = 0;
+        for (glyphs.slice) |glyph| {
+            const line: usize = @intFromFloat(@round(glyph.position[1] / glyphs.lineHeight));
+            if (line > maxLine) maxLine = line;
+        }
+        // The block is far wider than 80px, so it must wrap; the wrap falls
+        // inside the bold run, proving wrapping crosses the style boundary.
+        try std.testing.expect(maxLine >= 1);
+    });
+}
+
+test "composeText line height and baseline follow the tallest run" {
+    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    defer forbear.deinit();
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        var smallIndex: usize = undefined;
+        var mixedIndex: usize = undefined;
+        forbear.element(.{ .style = .{ .direction = .vertical } })({
+            forbear.element(.{ .style = textColumn })({
+                forbear.composeText(.{})({
+                    forbear.write("x");
+                });
+                smallIndex = previousIndex();
+            });
+            forbear.element(.{ .style = textColumn })({
+                forbear.composeText(.{})({
+                    forbear.write("x");
+                    forbear.textStyle(.{ .fontSize = 32 })({
+                        forbear.write("Y");
+                    });
+                });
+                mixedIndex = previousIndex();
+            });
+        });
+        _ = try forbear.layout();
+
+        const small = nodeAt(smallIndex).glyphs.?;
+        const mixed = nodeAt(mixedIndex).glyphs.?;
+        // base fontSize is 16; the 32px run doubles both metrics.
+        try std.testing.expect(mixed.lineHeight > small.lineHeight);
+        try std.testing.expectApproxEqAbs(2 * small.lineHeight, mixed.lineHeight, 0.0001);
+        try std.testing.expectApproxEqAbs(2 * small.ascent, mixed.ascent, 0.0001);
+    });
+}
+
 const LaidOutText = struct {
     size: Vec2,
     lineHeight: f32,
