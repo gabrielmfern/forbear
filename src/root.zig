@@ -1353,20 +1353,26 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
         var effectiveContent: []const u8 = run.content;
         if (std.mem.containsAtLeast(u8, run.content, 1, "\r")) {
             const owned = try arena.alloc(u8, run.content.len);
-            var i: usize = 0;
-            while (i < run.content.len) : (i += 1) {
-                const character = run.content[i];
+            var readIndex: usize = 0;
+            var writeIndex: usize = 0;
+            while (readIndex < run.content.len) : (readIndex += 1) {
+                const character = run.content[readIndex];
                 if (character == '\r') {
-                    if (i + 1 < run.content.len and run.content[i + 1] == '\n') i += 1;
-                    owned[i] = '\n';
+                    if (readIndex + 1 < run.content.len and run.content[readIndex + 1] == '\n') {
+                        readIndex += 1;
+                    }
+                    owned[writeIndex] = '\n';
                 } else if (character == '\n') {
-                    if (i + 1 < run.content.len and run.content[i + 1] == '\r') i += 1;
-                    owned[i] = '\n';
+                    if (readIndex + 1 < run.content.len and run.content[readIndex + 1] == '\r') {
+                        readIndex += 1;
+                    }
+                    owned[writeIndex] = '\n';
                 } else {
-                    owned[i] = character;
+                    owned[writeIndex] = character;
                 }
+                writeIndex += 1;
             }
-            effectiveContent = owned[0..i];
+            effectiveContent = owned[0..writeIndex];
         }
 
         const shaped = try run.style.font.shape(effectiveContent);
