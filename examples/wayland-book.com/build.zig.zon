@@ -11,6 +11,9 @@
         .forbear = .{
             .path = "../..",
         },
+        .tree_sitter = .{
+            .path = "vendor/tree-sitter",
+        },
     },
     .fingerprint = 0xd1ca667f36feb0e2,
 }

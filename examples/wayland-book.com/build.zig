@@ -17,6 +17,12 @@ pub fn build(b: *std.Build) void {
     });
     waylandBook.addImport("forbear", forbear.module("forbear"));
 
+    const tree_sitter = b.dependency("tree_sitter", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    waylandBook.addImport("tree-sitter", tree_sitter.module("tree-sitter"));
+
     const exe = b.addExecutable(.{
         .name = "wayland-book.com",
         .root_module = waylandBook,
