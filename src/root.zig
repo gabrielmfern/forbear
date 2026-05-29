@@ -30,6 +30,8 @@ pub const Shadow = nodeImport.Shadow;
 pub const Offset = nodeImport.Shadow.Offset;
 pub const CompleteStyle = nodeImport.CompleteStyle;
 pub const Style = nodeImport.Style;
+pub const TextStyle = nodeImport.TextStyle;
+pub const CompleteTextStyle = nodeImport.CompleteTextStyle;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("window.zig").Window;
@@ -132,6 +134,17 @@ pub const Event = enum {
     keyUp,
 };
 
+const TextRun = struct {
+    content: []const u8,
+    style: CompleteTextStyle,
+};
+
+const TextBuilder = struct {
+    runs: std.ArrayList(TextRun) = .empty,
+    styleStack: std.ArrayList(CompleteTextStyle) = .empty,
+    base: CompleteTextStyle,
+};
+
 pub const FrameMeta = struct {
     arena: std.mem.Allocator,
 
@@ -142,6 +155,9 @@ pub const FrameMeta = struct {
 
     previousPushedNodeIndex: ?usize = null,
     componentChildrenSlotStates: std.ArrayList(ComponentChildrenSlotState) = .empty,
+    /// Non-null only between `composeText` and its end function. `composeText`
+    /// does not nest, so a single slot suffices.
+    textBuilder: ?TextBuilder = null,
 };
 
 // Hot fields kept at the front of the struct so they sit at low,
@@ -917,6 +933,12 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     if (self.frameMeta.?.err != null) return &noopEnd;
 
+    if (self.frameMeta.?.textBuilder != null) {
+        std.log.err("forbear.element, or forbear.text cannot be called from inside forbear.composeText. You can only use forbear.textStyle and forbear.write.", .{});
+        handleFrameError(error.ElementInsideTextCompose);
+        return &noopEnd;
+    }
+
     const parentIndexOptional = self.nodeStack.getLastOrNull();
 
     const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
@@ -1152,23 +1174,136 @@ pub fn BreakLine() void {
     });
 }
 
-pub noinline fn text(content: []const u8) void {
-    if (content.len == 0) {
-        return;
+pub noinline fn composeText(style: TextStyle) *const fn (void) void {
+    const self = getForbear();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) return &noopEnd;
+
+    if (self.frameMeta.?.textBuilder != null) {
+        std.log.err("Found multiple instances of composeText being used. You only need one, and then you can nest forbear.textStyle alongside forbear.text.", .{});
+        handleFrameError(error.NestedComposeText);
+        return &noopEnd;
     }
 
+    const parentIndexOptional = self.nodeStack.getLastOrNull();
+    const baseStyle = if (parentIndexOptional) |parentIndex|
+        BaseStyle.from(self.nodeTree.at(parentIndex).style)
+    else
+        self.frameMeta.?.baseStyle;
+    const base = style.complete(CompleteTextStyle.from(baseStyle));
+
+    const arena = self.frameMeta.?.arena;
+    var builder = TextBuilder{ .base = base };
+    builder.styleStack.append(arena, base) catch |err| {
+        handleFrameError(err);
+        return &noopEnd;
+    };
+    self.frameMeta.?.textBuilder = builder;
+
+    return &composeTextEnd;
+}
+
+/// Appends a run inside a `composeText` block, styled by the innermost
+/// enclosing `textStyle` (or the block's base style if there is none).
+///
+/// Assumed that memory content refers to is going to live in memory until the
+/// end of composeText
+pub fn write(content: []const u8) void {
+    const self = getForbear();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) return;
+    if (self.frameMeta.?.textBuilder == null) {
+        std.log.err("forbear.write can only be used inside of forbear.composeText", .{});
+        handleFrameError(error.NestedComposeText);
+        return;
+    }
+    if (content.len == 0) return;
+
+    const builder = &self.frameMeta.?.textBuilder.?;
+    builder.runs.append(self.frameMeta.?.arena, .{
+        .content = content,
+        .style = builder.styleStack.getLast(),
+    }) catch |err| {
+        handleFrameError(err);
+    };
+}
+
+/// Layers a style override over the runs written inside its block. Nestable,
+/// which is what lets reusable helpers compose, e.g.
+/// `fn Strong() { return forbear.textStyle(.{ .fontWeight = 700 }); }`.
+pub noinline fn textStyle(style: TextStyle) *const fn (void) void {
+    const self = getForbear();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) return &noopEnd;
+    // `textStyle` is only valid inside a `composeText` block.
+    std.debug.assert(self.frameMeta.?.textBuilder != null);
+
+    const builder = &self.frameMeta.?.textBuilder.?;
+    const resolved = style.complete(builder.styleStack.getLast());
+    builder.styleStack.append(self.frameMeta.?.arena, resolved) catch |err| {
+        handleFrameError(err);
+        return &noopEnd;
+    };
+    return &textStyleEnd;
+}
+
+fn textStyleEnd(block: void) void {
+    _ = block;
+    const self = getForbear();
+    if (self.frameMeta.?.err != null) return;
+    if (self.frameMeta.?.textBuilder) |*builder| {
+        _ = builder.styleStack.pop();
+    }
+}
+
+noinline fn composeTextEnd(block: void) void {
+    _ = block;
+    const returnAddress = @returnAddress();
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
 
+    const builder = self.frameMeta.?.textBuilder orelse return;
+    self.frameMeta.?.textBuilder = null;
+    if (self.frameMeta.?.err != null) return;
+    if (builder.runs.items.len == 0) return;
+
+    buildText(builder.runs.items, builder.base, returnAddress) catch |err| {
+        handleFrameError(err);
+    };
+}
+
+pub noinline fn text(content: []const u8) void {
+    if (content.len == 0) return;
+    const returnAddress = @returnAddress();
+
+    const self = getForbear();
+    std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) return;
 
-    const parentIndexOptional = self.nodeStack.getLastOrNull();
-
-    const arena = self.frameMeta.?.arena;
-    const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
-        handleFrameError(err);
+    if (self.frameMeta.?.textBuilder != null) {
+        std.log.err("forbear.text, or forbear.element cannot be called from inside forbear.composeText. You can only use forbear.textStyle and forbear.write.", .{});
+        handleFrameError(error.ElementInsideTextCompose);
         return;
+    }
+
+    const parentIndexOptional = self.nodeStack.getLastOrNull();
+    const baseStyle = if (parentIndexOptional) |parentIndex|
+        BaseStyle.from(self.nodeTree.at(parentIndex).style)
+    else
+        self.frameMeta.?.baseStyle;
+    const base = CompleteTextStyle.from(baseStyle);
+
+    buildText(&[_]TextRun{.{ .content = content, .style = base }}, base, returnAddress) catch |err| {
+        handleFrameError(err);
     };
+}
+
+fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usize) !void {
+    const self = getForbear();
+    const arena = self.frameMeta.?.arena;
+
+    const parentIndexOptional = self.nodeStack.getLastOrNull();
+    const result = try self.nodeTree.putNode(self.allocator, parentIndexOptional);
 
     const parentOptional = if (parentIndexOptional) |parentIndex|
         self.nodeTree.at(parentIndex)
@@ -1187,104 +1322,130 @@ pub noinline fn text(content: []const u8) void {
             baseStyle.cursor,
         .xJustification = if (parentOptional) |parent| parent.style.xJustification else null,
         .yJustification = .start,
+        .font = base.font,
+        .color = base.color,
+        .fontSize = base.fontSize,
+        .fontWeight = base.fontWeight,
+        .lineHeight = base.lineHeight,
     }).completeWith(baseStyle, &result.ptr.style);
 
-    const unitsPerEm: f32 = @floatFromInt(result.ptr.style.font.unitsPerEm());
-    const unitsPerEmVec2: Vec2 = @splat(unitsPerEm);
-    const lineHeight = result.ptr.style.font.lineHeight() * result.ptr.style.lineHeight / unitsPerEm * result.ptr.style.fontSize;
+    // Stable per-frame style copies for glyphs to point at; the builder's run
+    // list is cleared the moment `composeText` ends.
+    const runStyles = try arena.alloc(CompleteTextStyle, runs.len);
 
-    var effectiveContent = content;
-    // converts \r\n, and \n\r, or just \r to \n for simplicity later on
-    if (std.mem.containsAtLeast(u8, content, 1, "\r")) {
-        var ownedContent = arena.alloc(u8, content.len) catch |err| {
-            handleFrameError(err);
-            return;
-        };
-        var i: usize = 0;
-        while (i < content.len) {
-            const character = content[i];
-            if (character == '\r') {
-                if (i + 1 < content.len and content[i + 1] == '\n') {
-                    ownedContent[i] = '\n';
-                    i += 1;
+    const RunShaping = struct {
+        glyphs: []const Font.ShapedGlyph,
+        unitsPerEm: f32,
+        fontSize: f32,
+        styleIndex: usize,
+    };
+    const shapings = try arena.alloc(RunShaping, runs.len);
+
+    // Pass 1: shape every run and find the shared line metrics. Shaped glyphs
+    // are duped because `font.shape` reuses and evicts its cache across calls,
+    // so a slice from an earlier run can be clobbered by a later one.
+    var lineHeight: f32 = 0.0;
+    var ascent: f32 = 0.0;
+    var totalGlyphCount: usize = 0;
+    for (runs, 0..) |run, runIndex| {
+        runStyles[runIndex] = run.style;
+
+        var effectiveContent: []const u8 = run.content;
+        if (std.mem.containsAtLeast(u8, run.content, 1, "\r")) {
+            const owned = try arena.alloc(u8, run.content.len);
+            var readIndex: usize = 0;
+            var writeIndex: usize = 0;
+            while (readIndex < run.content.len) : (readIndex += 1) {
+                const character = run.content[readIndex];
+                if (character == '\r') {
+                    if (readIndex + 1 < run.content.len and run.content[readIndex + 1] == '\n') {
+                        readIndex += 1;
+                    }
+                    owned[writeIndex] = '\n';
+                } else if (character == '\n') {
+                    if (readIndex + 1 < run.content.len and run.content[readIndex + 1] == '\r') {
+                        readIndex += 1;
+                    }
+                    owned[writeIndex] = '\n';
                 } else {
-                    ownedContent[i] = '\n';
+                    owned[writeIndex] = character;
                 }
-            } else if (character == '\n') {
-                if (i + 1 < content.len and content[i + 1] == '\r') {
-                    ownedContent[i] = '\n';
-                    i += 1;
-                } else {
-                    ownedContent[i] = '\n';
-                }
-            } else {
-                ownedContent[i] = character;
+                writeIndex += 1;
             }
-            i += 1;
+            effectiveContent = owned[0..writeIndex];
         }
-        effectiveContent = ownedContent;
+
+        const shaped = try run.style.font.shape(effectiveContent);
+        const owned = try arena.dupe(Font.ShapedGlyph, shaped);
+
+        const unitsPerEm: f32 = @floatFromInt(run.style.font.unitsPerEm());
+        const runLineHeight = run.style.font.lineHeight() * run.style.lineHeight / unitsPerEm * run.style.fontSize;
+        const runAscent = run.style.font.ascent() / unitsPerEm * run.style.fontSize;
+        lineHeight = @max(lineHeight, runLineHeight);
+        ascent = @max(ascent, runAscent);
+
+        shapings[runIndex] = .{
+            .glyphs = owned,
+            .unitsPerEm = unitsPerEm,
+            .fontSize = run.style.fontSize,
+            .styleIndex = runIndex,
+        };
+        totalGlyphCount += owned.len;
     }
 
-    const shapedGlyphs = result.ptr.style.font.shape(effectiveContent) catch |err| {
-        handleFrameError(err);
-        return;
-    };
-    var layoutGlyphs = arena.alloc(LayoutGlyph, shapedGlyphs.len) catch |err| {
-        handleFrameError(err);
-        return;
-    };
+    var layoutGlyphs = try arena.alloc(LayoutGlyph, totalGlyphCount);
     errdefer arena.free(layoutGlyphs);
-    var cursor: Vec2 = @splat(0.0);
 
+    var cursor: Vec2 = @splat(0.0);
     var minSize: Vec2 = .{ 0.0, lineHeight };
     var maxSize: Vec2 = .{ 0.0, lineHeight };
-
-    var linebreakCount: usize = 0;
     var preBreakIndices: std.ArrayList(usize) = .empty;
-
     var wordAdvance: Vec2 = @splat(0.0);
-    var glyphIndex: usize = 0;
-    while (glyphIndex < shapedGlyphs.len) {
-        defer glyphIndex += 1;
-        const shapedGlyph = shapedGlyphs[glyphIndex];
-        var advance = shapedGlyph.advance / unitsPerEmVec2 * @as(Vec2, @splat(result.ptr.style.fontSize));
-        const offset = shapedGlyph.offset / unitsPerEmVec2 * @as(Vec2, @splat(result.ptr.style.fontSize));
-        const isLinebreak = std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, "\n");
-        if (isLinebreak) {
-            advance[0] = -cursor[0];
-            advance[1] += lineHeight;
-            preBreakIndices.append(arena, glyphIndex - linebreakCount) catch |err| {
-                handleFrameError(err);
-                return;
-            };
-            linebreakCount += 1;
-        } else {
-            layoutGlyphs[glyphIndex - linebreakCount] = LayoutGlyph{
-                .index = @intCast(shapedGlyph.index),
-                .position = cursor + offset,
+    var writeIndex: usize = 0;
 
-                .textBuf = shapedGlyph.utf8.Encoded,
-
-                .advance = advance,
-                .offset = offset,
-            };
-        }
-
-        cursor += advance;
-        maxSize[0] = @max(maxSize[0], cursor[0]);
-        if (result.ptr.style.textWrapping == .word) {
-            if (std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, " ") or isLinebreak) {
-                wordAdvance = @splat(0.0);
-                maxSize[1] += lineHeight;
+    // Pass 2: place glyphs into the one shared line box, using each run's own
+    // advances but the block's shared line height.
+    for (shapings) |shaping| {
+        const unitsPerEmVec2: Vec2 = @splat(shaping.unitsPerEm);
+        const fontSizeVec2: Vec2 = @splat(shaping.fontSize);
+        for (shaping.glyphs) |shapedGlyph| {
+            var advance = shapedGlyph.advance / unitsPerEmVec2 * fontSizeVec2;
+            const offset = shapedGlyph.offset / unitsPerEmVec2 * fontSizeVec2;
+            const isLinebreak = std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, "\n");
+            if (isLinebreak) {
+                advance[0] = -cursor[0];
+                advance[1] += lineHeight;
+                try preBreakIndices.append(arena, writeIndex);
             } else {
-                wordAdvance += advance;
+                layoutGlyphs[writeIndex] = LayoutGlyph{
+                    .index = @intCast(shapedGlyph.index),
+                    .position = cursor + offset,
+
+                    .textBuf = shapedGlyph.utf8.Encoded,
+
+                    .advance = advance,
+                    .offset = offset,
+                    .style = &runStyles[shaping.styleIndex],
+                };
+                writeIndex += 1;
             }
-            minSize[0] = @max(minSize[0], wordAdvance[0]);
-        } else if (result.ptr.style.textWrapping == .character) {
-            minSize[0] = @max(minSize[0], advance[0]);
-            maxSize[1] += lineHeight;
-        } else if (result.ptr.style.textWrapping == .none) {
-            minSize[0] = @max(minSize[0], cursor[0]);
+
+            cursor += advance;
+            maxSize[0] = @max(maxSize[0], cursor[0]);
+            if (result.ptr.style.textWrapping == .word) {
+                if (std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, " ") or isLinebreak) {
+                    wordAdvance = @splat(0.0);
+                    maxSize[1] += lineHeight;
+                } else {
+                    wordAdvance += advance;
+                }
+                minSize[0] = @max(minSize[0], wordAdvance[0]);
+            } else if (result.ptr.style.textWrapping == .character) {
+                minSize[0] = @max(minSize[0], advance[0]);
+                maxSize[1] += lineHeight;
+            } else if (result.ptr.style.textWrapping == .none) {
+                minSize[0] = @max(minSize[0], cursor[0]);
+            }
         }
     }
     minSize[1] = cursor[1] + lineHeight;
@@ -1303,7 +1464,7 @@ pub noinline fn text(content: []const u8) void {
     // to work even with text changing
     //
     // k = mixU64(k, std.hash.Wyhash.hash(0, effectiveContent));
-    k = mixU64(k, @returnAddress());
+    k = mixU64(k, returnAddress);
 
     result.ptr.key = k;
     result.ptr.position = @splat(0.0);
@@ -1315,8 +1476,9 @@ pub noinline fn text(content: []const u8) void {
     result.ptr.minSize = minSize;
     result.ptr.maxSize = maxSize;
     result.ptr.glyphs = Glyphs{
-        .slice = layoutGlyphs[0 .. layoutGlyphs.len - linebreakCount],
+        .slice = layoutGlyphs[0..writeIndex],
         .lineHeight = lineHeight,
+        .ascent = ascent,
         .preBreakIndices = preBreakIndices.items,
     };
 
@@ -1329,16 +1491,10 @@ pub noinline fn text(content: []const u8) void {
     // Push self onto the parent stack so `on(.mouseOver)` resolves the
     // text node's own measurement, then pop. The text node itself is not
     // a scope and has no children, so this is purely for hit-testing.
-    self.nodeStack.append(self.allocator, result.index) catch |err| {
-        handleFrameError(err);
-        return;
-    };
+    try self.nodeStack.append(self.allocator, result.index);
     defer _ = self.nodeStack.pop();
 
-    pushScope(result.ptr.key) catch |err| {
-        handleFrameError(err);
-        return;
-    };
+    try pushScope(result.ptr.key);
     defer popScope();
 
     if (on(.mouseEnter)) {
