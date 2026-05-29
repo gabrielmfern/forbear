@@ -499,7 +499,7 @@ pub const LayoutGlyph = struct {
     /// single wrapped block mixes fonts/weights/sizes/colors. `null` for plain
     /// `text()` nodes, where every glyph uses the node's own style. Points into
     /// frame-arena memory, stable for the frame the glyph is drawn in.
-    style: ?*const CompleteTextStyle = null,
+    style: *const CompleteTextStyle,
 };
 
 pub const Glyphs = struct {

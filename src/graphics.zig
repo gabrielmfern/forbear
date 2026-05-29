@@ -4137,17 +4137,10 @@ pub const Renderer = struct {
                 for (glyphs.slice) |glyph| {
                     if (!styleInitialized or glyph.style != activeStyle) {
                         activeStyle = glyph.style;
-                        if (glyph.style) |runStyle| {
-                            glyphFont = runStyle.font;
-                            glyphFontSize = runStyle.fontSize;
-                            glyphFontWeight = runStyle.fontWeight;
-                            linearColor = srgbToLinearColor(runStyle.color);
-                        } else {
-                            glyphFont = node.style.font;
-                            glyphFontSize = node.style.fontSize;
-                            glyphFontWeight = node.style.fontWeight;
-                            linearColor = srgbToLinearColor(node.style.color);
-                        }
+                        glyphFont = glyph.style.font;
+                        glyphFontSize = glyph.style.fontSize;
+                        glyphFontWeight = glyph.style.fontWeight;
+                        linearColor = srgbToLinearColor(glyph.style.color);
 
                         // Outer lookup: once per run (per font/size/weight/dpi combo)
                         const glyphPageKey = TextPipeline.GlyphPageKey{

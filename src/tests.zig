@@ -774,7 +774,7 @@ test "composeText runs carry their own resolved style" {
         var normalCount: usize = 0;
         var boldCount: usize = 0;
         for (nodeAt(index).glyphs.?.slice) |glyph| {
-            const style = glyph.style.?;
+            const style = glyph.style;
             switch (style.fontWeight) {
                 400 => normalCount += 1,
                 700 => boldCount += 1,
