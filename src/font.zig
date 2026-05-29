@@ -478,41 +478,6 @@ pub const ShapedGlyph = struct {
     offset: Vec2,
 };
 
-pub const ShapingIterator = struct {
-    run: ?c.kbts_run,
-    glyph: [*c]c.kbts_glyph,
-    kbtsContext: *c.kbts_shape_context,
-
-    pub fn next(self: *@This()) ?ShapedGlyph {
-        if (self.run) |*run| {
-            if (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&self.glyph)) != 0) {
-                var shapeCodepoint: c.kbts_shape_codepoint = undefined;
-                if (c.kbts_ShapeGetShapeCodepoint(self.kbtsContext, self.glyph.*.UserIdOrCodepointIndex, &shapeCodepoint) == 0) {
-                    std.log.err("Could not get original codeopint for glyph with user id {}", .{self.glyph.*.UserIdOrCodepointIndex});
-                    return self.next();
-                }
-
-                const utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint);
-                return ShapedGlyph{
-                    .index = self.glyph.*.Id,
-                    .advance = .{ @floatFromInt(self.glyph.*.AdvanceX), @floatFromInt(self.glyph.*.AdvanceY) },
-                    .offset = .{ @floatFromInt(self.glyph.*.OffsetX), @floatFromInt(self.glyph.*.OffsetY) },
-                    // When not using llvm, if we don't set this in a variable,
-                    // the index in ShapedGlyph becomes 0 because of some Zig bug
-                    .utf8 = utf8,
-                };
-            }
-        }
-        var run: c.kbts_run = undefined;
-        if (c.kbts_ShapeRun(self.kbtsContext, &run) != 0) {
-            self.run = run;
-            return self.next();
-        }
-
-        return null;
-    }
-};
-
 pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
     if (self.shapingCache.get(text)) |cache| {
         return cache.value.glyphs[0..cache.value.count];
@@ -540,14 +505,29 @@ pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
     @memcpy(reuse.key[0..text.len], text);
 
     var glyphCount: usize = 0;
-    var iterator = ShapingIterator{
-        .run = null,
-        .glyph = undefined,
-        .kbtsContext = self.kbtsContext,
-    };
-    while (iterator.next()) |shapedGlyph| {
-        reuse.glyphs[glyphCount] = shapedGlyph;
-        glyphCount += 1;
+    var run: c.kbts_run = undefined;
+    while (c.kbts_ShapeRun(self.kbtsContext, &run) != 0) {
+        var glyph: *c.kbts_glyph = undefined;
+        while (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&glyph)) != 0) {
+            var shapeCodepoint: c.kbts_shape_codepoint = undefined;
+            if (c.kbts_ShapeGetShapeCodepoint(self.kbtsContext, glyph.*.UserIdOrCodepointIndex, &shapeCodepoint) == 0) {
+                std.log.err("Could not get original codeopint for glyph with user id {}", .{glyph.*.UserIdOrCodepointIndex});
+                continue;
+            }
+
+            std.log.debug("glyph id {}", .{glyph.*.Id});
+            const utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint);
+            reuse.glyphs[glyphCount] = ShapedGlyph{
+                .index = glyph.*.Id,
+                .advance = .{ @floatFromInt(glyph.*.AdvanceX), @floatFromInt(glyph.*.AdvanceY) },
+                .offset = .{ @floatFromInt(glyph.*.OffsetX), @floatFromInt(glyph.*.OffsetY) },
+                // When not using llvm, if we don't set this in a variable,
+                // the index in ShapedGlyph becomes 0 because of some Zig bug
+                .utf8 = utf8,
+            };
+            std.log.debug("glyph index from shaped glyph {}", .{reuse.glyphs[glyphCount].index});
+            glyphCount += 1;
+        }
     }
 
     const putResult = self.shapingCache.put(
