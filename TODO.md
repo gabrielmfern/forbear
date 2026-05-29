@@ -61,6 +61,7 @@
     - Another option is a useScrolling
 - [x] scroll bar 🤔
 - [x] add back and forward buttons
+- [x] being able to style the same text in different ways for separate parts
 - [ ] add code blocks
 - [ ] finishg bringing over all of the content into the app
 - [ ] add svg rendering
