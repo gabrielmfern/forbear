@@ -478,41 +478,6 @@ pub const ShapedGlyph = struct {
     offset: Vec2,
 };
 
-pub const ShapingIterator = struct {
-    run: ?c.kbts_run,
-    glyph: [*c]c.kbts_glyph,
-    kbtsContext: *c.kbts_shape_context,
-
-    pub fn next(self: *@This()) ?ShapedGlyph {
-        if (self.run) |*run| {
-            if (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&self.glyph)) != 0) {
-                var shapeCodepoint: c.kbts_shape_codepoint = undefined;
-                if (c.kbts_ShapeGetShapeCodepoint(self.kbtsContext, self.glyph.*.UserIdOrCodepointIndex, &shapeCodepoint) == 0) {
-                    std.log.err("Could not get original codeopint for glyph with user id {}", .{self.glyph.*.UserIdOrCodepointIndex});
-                    return self.next();
-                }
-
-                const utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint);
-                return ShapedGlyph{
-                    .index = self.glyph.*.Id,
-                    .advance = .{ @floatFromInt(self.glyph.*.AdvanceX), @floatFromInt(self.glyph.*.AdvanceY) },
-                    .offset = .{ @floatFromInt(self.glyph.*.OffsetX), @floatFromInt(self.glyph.*.OffsetY) },
-                    // When not using llvm, if we don't set this in a variable,
-                    // the index in ShapedGlyph becomes 0 because of some Zig bug
-                    .utf8 = utf8,
-                };
-            }
-        }
-        var run: c.kbts_run = undefined;
-        if (c.kbts_ShapeRun(self.kbtsContext, &run) != 0) {
-            self.run = run;
-            return self.next();
-        }
-
-        return null;
-    }
-};
-
 pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
     if (self.shapingCache.get(text)) |cache| {
         return cache.value.glyphs[0..cache.value.count];
@@ -540,14 +505,29 @@ pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
     @memcpy(reuse.key[0..text.len], text);
 
     var glyphCount: usize = 0;
-    var iterator = ShapingIterator{
-        .run = null,
-        .glyph = undefined,
-        .kbtsContext = self.kbtsContext,
-    };
-    while (iterator.next()) |shapedGlyph| {
-        reuse.glyphs[glyphCount] = shapedGlyph;
-        glyphCount += 1;
+    var run: c.kbts_run = undefined;
+    while (c.kbts_ShapeRun(self.kbtsContext, &run) != 0) {
+        var glyph: *c.kbts_glyph = undefined;
+        while (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&glyph)) != 0) {
+            var shapeCodepoint: c.kbts_shape_codepoint = undefined;
+            if (c.kbts_ShapeGetShapeCodepoint(self.kbtsContext, glyph.*.UserIdOrCodepointIndex, &shapeCodepoint) == 0) {
+                std.log.err("Could not get original codeopint for glyph with user id {}", .{glyph.*.UserIdOrCodepointIndex});
+                continue;
+            }
+
+            // Field-by-field, NOT a `ShapedGlyph{ ... }` literal: the x86_64
+            // self-hosted backend miscompiles a struct literal whose field is
+            // initialized from a C-ABI function returning a 12-byte aggregate
+            // (kbts_EncodeUtf8). It stores the high return register as a full
+            // 8 bytes, overshooting the 12-byte value by 4 and zeroing
+            // whatever is packed next (here `index`). Keep these as separate
+            // stores.
+            reuse.glyphs[glyphCount].index = glyph.*.Id;
+            reuse.glyphs[glyphCount].advance = .{ @floatFromInt(glyph.*.AdvanceX), @floatFromInt(glyph.*.AdvanceY) };
+            reuse.glyphs[glyphCount].offset = .{ @floatFromInt(glyph.*.OffsetX), @floatFromInt(glyph.*.OffsetY) };
+            reuse.glyphs[glyphCount].utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint);
+            glyphCount += 1;
+        }
     }
 
     const putResult = self.shapingCache.put(

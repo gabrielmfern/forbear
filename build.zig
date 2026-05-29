@@ -257,7 +257,6 @@ fn addPlaygroundExecutable(
     return b.addExecutable(.{
         .name = executableName,
         .root_module = playground,
-        .use_llvm = true,
     });
 }
 
@@ -280,7 +279,6 @@ fn addUhohExecutable(
     return b.addExecutable(.{
         .name = executableName,
         .root_module = uhoh,
-        .use_llvm = true,
     });
 }
 
@@ -303,7 +301,6 @@ fn addWaylandBookExecutable(
     return b.addExecutable(.{
         .name = executableName,
         .root_module = waylandBook,
-        .use_llvm = true,
     });
 }
 
@@ -397,7 +394,6 @@ pub fn build(b: *std.Build) void {
             const exe = b.addExecutable(.{
                 .name = t.name,
                 .root_module = mod,
-                .use_llvm = true,
             });
 
             const runCmd = b.addRunArtifact(exe);

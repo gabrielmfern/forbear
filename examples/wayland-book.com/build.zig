@@ -20,7 +20,6 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "wayland-book.com",
         .root_module = waylandBook,
-        .use_llvm = true,
     });
     b.installArtifact(exe);
 
