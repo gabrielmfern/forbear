@@ -54,11 +54,7 @@ fn RichTextExample() void {
         },
     })({
         forbear.composeText(.{})({
-            forbear.textStyle(.{
-                .fontSize = 128.0,
-            })({
-                forbear.write("Wayland is a ");
-            });
+            forbear.write("Wayland is a ");
             Strong()({
                 forbear.write("display server protocol");
             });
