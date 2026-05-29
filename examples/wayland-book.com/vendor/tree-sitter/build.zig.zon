@@ -1,0 +1,13 @@
+.{
+    .name = .tree_sitter,
+    .version = "0.25.0",
+    .minimum_zig_version = "0.15.2",
+    .fingerprint = 0x841224b46cb12c72,
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "include",
+    },
+}
