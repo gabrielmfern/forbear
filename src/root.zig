@@ -1344,7 +1344,7 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
     for (runs, 0..) |run, runIndex| {
         runStyles[runIndex] = run.style;
 
-        var effectiveContent: []u8 = undefined;
+        var effectiveContent: []const u8 = run.content;
         if (std.mem.containsAtLeast(u8, run.content, 1, "\r")) {
             const owned = try arena.alloc(u8, run.content.len);
             var i: usize = 0;
