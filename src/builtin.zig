@@ -295,7 +295,6 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         .zIndex = 10,
                     },
                 })({
-
                     // thumb
                     forbear.element(.{
                         .style = .{
@@ -349,4 +348,129 @@ pub fn ScrollBar(state: *ScrollingState) void {
             });
         }
     }
+}
+
+/// Runtime-tagged form of an event + its result. Mirrors `forbear.Event`
+/// one-for-one, with each variant carrying the payload type that
+/// `forbear.OnResult(tag)` returns for the matching event.
+pub const EventPayload = union(forbear.Event) {
+    mouseEnter: bool,
+    mouseLeave: bool,
+    mouseDown: bool,
+    mouseDownOutside: bool,
+    mouseUp: bool,
+    mouseMove: ?Vec2,
+    click: bool,
+    scroll: ?Vec2,
+    keyDown: forbear.Keys,
+    keyUp: forbear.Keys,
+};
+
+pub const FocusConsumes = *const fn (payload: EventPayload) bool;
+
+pub const Focus = struct {
+    key: u64,
+    consumes: FocusConsumes,
+};
+
+pub const FocusContext = forbear.createContext(opaque {}, struct {
+    focused: ?Focus,
+    focusable: std.ArrayList(Focus),
+    scopeKey: u64,
+
+    pub fn register(self: *@This(), consumesFn: FocusConsumes) void {
+        const node = forbear.getParentNode() orelse {
+            forbear.handleFrameError(error.NoParentForFocusRegistration);
+            return;
+        };
+        const arena = forbear.getScopeArenaBy(self.scopeKey) orelse unreachable;
+        self.focusable.append(arena, .{
+            .key = node.key,
+            .consumes = consumesFn,
+        }) catch |err| forbear.handleFrameError(err);
+        if (self.focused != null and self.focused.?.key == node.key and forbear.on(.mouseDownOutside)) {
+            self.focused = null;
+        }
+    }
+
+    pub fn focus(self: *@This()) void {
+        const node = forbear.getParentNode() orelse return;
+        for (self.focusable.items) |f| {
+            if (f.key == node.key) {
+                self.focused = f;
+                return;
+            }
+        }
+    }
+
+    pub fn hasFocus(self: *const @This()) bool {
+        // TODO(footgun): I can't call this inside of a style definition,
+        // because the parent node is not yet defined. it's only defined after
+        // the body of element function runs, which is after the style paramter
+        // "runs"
+        const node = forbear.getParentNode() orelse return false;
+        const f = self.focused orelse return false;
+        return f.key == node.key;
+    }
+
+    pub fn consumes(
+        self: *const @This(),
+        comptime eventTag: forbear.Event,
+        result: forbear.OnResult(eventTag),
+    ) bool {
+        const f = self.focused orelse return false;
+        const payload = @unionInit(EventPayload, @tagName(eventTag), result);
+        return f.consumes(payload);
+    }
+
+    pub fn handleEvents(self: *@This()) void {
+        defer self.focusable.clearRetainingCapacity();
+
+        if (self.focused) |f| validate: {
+            for (self.focusable.items) |item| {
+                if (item.key == f.key) {
+                    break :validate;
+                }
+            }
+            self.focused = null;
+        }
+
+        const pressed = forbear.on(.keyDown);
+        const items = self.focusable.items;
+        if (pressed.tab and items.len > 0) {
+            const shift = forbear.keysHeld().shift;
+            if (self.focused) |current| {
+                var idx: usize = 0;
+                for (items, 0..) |item, i| {
+                    if (item.key == current.key) {
+                        idx = i;
+                        break;
+                    }
+                }
+                const newIdx = if (shift)
+                    (idx + items.len - 1) % items.len
+                else
+                    (idx + 1) % items.len;
+                self.focused = items[newIdx];
+            } else {
+                self.focused = items[0];
+            }
+        }
+        if (pressed.escape) {
+            self.focused = null;
+        }
+    }
+});
+
+pub fn FocusProvider() *const fn (void) void {
+    forbear.component(.{})({
+        FocusContext.Provider(.{
+            .focused = null,
+            .focusable = .empty,
+            .scopeKey = forbear.useScopeKey(),
+        })({
+            forbear.componentChildrenSlot();
+        });
+    });
+    return forbear.componentChildrenSlotEnd();
 }
