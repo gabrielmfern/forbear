@@ -295,7 +295,6 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         .zIndex = 10,
                     },
                 })({
-
                     // thumb
                     forbear.element(.{
                         .style = .{
@@ -377,14 +376,8 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     focused: ?Focus,
     focusable: std.ArrayList(Focus),
     scopeKey: u64,
-    listFrame: u32,
 
     pub fn register(self: *@This(), consumesFn: FocusConsumes) void {
-        const fb = forbear.getForbear();
-        if (self.listFrame != fb.frameCounter) {
-            self.focusable.clearRetainingCapacity();
-            self.listFrame = fb.frameCounter;
-        }
         const node = forbear.getParentNode() orelse {
             forbear.handleFrameError(error.NoParentForFocusRegistration);
             return;
@@ -407,6 +400,10 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     }
 
     pub fn hasFocus(self: *const @This()) bool {
+        // TODO(footgun): I can't call this inside of a style definition,
+        // because the parent node is not yet defined. it's only defined after
+        // the body of element function runs, which is after the style paramter
+        // "runs"
         const node = forbear.getParentNode() orelse return false;
         const f = self.focused orelse return false;
         return f.key == node.key;
@@ -423,15 +420,13 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     }
 
     pub fn handleEvents(self: *@This()) void {
-        const fb = forbear.getForbear();
+        defer self.focusable.clearRetainingCapacity();
 
         if (self.focused) |f| validate: {
-            if (self.listFrame == fb.frameCounter) {
-                for (self.focusable.items) |item| {
-                    if (item.key == f.key) break :validate;
-                }
-                self.focused = null;
+            for (self.focusable.items) |item| {
+                if (item.key == f.key) break :validate;
             }
+            self.focused = null;
         }
 
         const pressed = forbear.on(.keyDown);
@@ -465,7 +460,6 @@ pub fn FocusProvider() *const fn (void) void {
             .focused = null,
             .focusable = .empty,
             .scopeKey = forbear.useScopeKey(),
-            .listFrame = 0,
         })({
             forbear.componentChildrenSlot();
         });
