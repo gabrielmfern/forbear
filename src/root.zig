@@ -1694,7 +1694,6 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
     return &componentEnd;
 }
 
-
 pub fn componentChildrenSlot() void {
     const self = getForbear();
 
