@@ -1670,6 +1670,7 @@ pub inline fn component(props: ComponentProps) *const fn (void) void {
     return &componentEnd;
 }
 
+
 pub fn componentChildrenSlot() void {
     const self = getForbear();
 
@@ -1758,10 +1759,8 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
     if (fm.err != null) return &noopEnd;
 
     const states = &fm.componentChildrenSlotStates;
-    if (states.items.len == 0) {
-        handleFrameError(error.NoMatchingSlotBegin);
-        return &noopEnd;
-    }
+    std.debug.assert(states.items.len > 0);
+
     const slotState = &states.items[states.items.len - 1];
     const parent = self.nodeTree.at(slotState.parentIndex);
 
@@ -1801,20 +1800,11 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
         return &noopEnd;
     };
     self.nodeStack.clearRetainingCapacity();
-    self.nodeStack.appendSlice(self.allocator, slotState.savedSlotParentStack) catch |err| {
-        handleFrameError(err);
-        return &noopEnd;
-    };
+    self.nodeStack.appendSliceAssumeCapacity(slotState.savedSlotParentStack);
     self.scopeStack.clearRetainingCapacity();
-    self.scopeStack.appendSlice(self.allocator, slotState.savedSlotScopeStack) catch |err| {
-        handleFrameError(err);
-        return &noopEnd;
-    };
+    self.scopeStack.appendSliceAssumeCapacity(slotState.savedSlotScopeStack);
     self.contextStack.clearRetainingCapacity();
-    self.contextStack.appendSlice(self.allocator, slotState.savedSlotContextStack) catch |err| {
-        handleFrameError(err);
-        return &noopEnd;
-    };
+    self.contextStack.appendSliceAssumeCapacity(slotState.savedSlotContextStack);
 
     return &componentChildrenSlotEndFn;
 }
