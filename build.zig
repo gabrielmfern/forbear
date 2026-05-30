@@ -370,8 +370,22 @@ pub fn build(b: *std.Build) void {
         const runPlaygroundCommand = b.addRunArtifact(playgroundExe);
         runPlaygroundCommand.step.dependOn(b.getInstallStep());
 
-        const runPlaygroundStep = b.step("run", "Run the playground");
-        runPlaygroundStep.dependOn(&runPlaygroundCommand.step);
+        const playgroundStep = b.step("playground", "Build and run the playground");
+        playgroundStep.dependOn(&runPlaygroundCommand.step);
+    }
+
+    // Per-example run steps — `zig build <name>` (an optional trailing `run` is a no-op, so `zig build playground run` reads naturally)
+    {
+        const uhohExe = addUhohExecutable(b, "uhoh_run", "uhoh.com", target, optimize, forbear);
+        const runUhoh = b.addRunArtifact(uhohExe);
+        b.step("uhoh", "Build and run the uhoh.com example").dependOn(&runUhoh.step);
+
+        const waylandBookExe = addWaylandBookExecutable(b, "wayland_book_run", "wayland-book.com", target, optimize, forbear);
+        const runWaylandBook = b.addRunArtifact(waylandBookExe);
+        b.step("wayland-book", "Build and run the wayland-book.com example").dependOn(&runWaylandBook.step);
+
+        // Top-level steps can't share which example was selected, so `run` alone can't pick one — it's a no-op verb token.
+        _ = b.step("run", "No-op — name an example: playground, uhoh, wayland-book");
     }
 
     // Stress tests — `zig build stress-<name>`
@@ -407,7 +421,6 @@ pub fn build(b: *std.Build) void {
     {
         const checkStep = b.step("check", "Build all examples and playground");
 
-        // Build playground
         const playgroundExe = addPlaygroundExecutable(
             b,
             "playground_check",
@@ -419,39 +432,25 @@ pub fn build(b: *std.Build) void {
         );
         checkStep.dependOn(&playgroundExe.step);
 
-        // Build uhoh.com and wayland-book.com examples.
-        // On non-Windows, run standalone builds to exercise each example's own build.zig.
-        // On Windows, Vulkan SDK import library resolution fails inside child zig-build
-        // processes, so compile the example sources directly through the root build instead.
-        if (target.result.os.tag != .windows) {
-            const uhohBuild = b.addSystemCommand(&.{ "zig", "build" });
-            uhohBuild.setCwd(b.path("examples/uhoh.com"));
-            checkStep.dependOn(&uhohBuild.step);
+        const uhohCheck = addUhohExecutable(
+            b,
+            "uhoh_check",
+            "uhoh_check",
+            target,
+            optimize,
+            forbear,
+        );
+        checkStep.dependOn(&uhohCheck.step);
 
-            const waylandBookBuild = b.addSystemCommand(&.{ "zig", "build" });
-            waylandBookBuild.setCwd(b.path("examples/wayland-book.com"));
-            checkStep.dependOn(&waylandBookBuild.step);
-        } else {
-            const uhohCheck = addUhohExecutable(
-                b,
-                "uhoh_check",
-                "uhoh_check",
-                target,
-                optimize,
-                forbear,
-            );
-            checkStep.dependOn(&uhohCheck.step);
-
-            const waylandBookCheck = addWaylandBookExecutable(
-                b,
-                "wayland_book_check",
-                "wayland_book_check",
-                target,
-                optimize,
-                forbear,
-            );
-            checkStep.dependOn(&waylandBookCheck.step);
-        }
+        const waylandBookCheck = addWaylandBookExecutable(
+            b,
+            "wayland_book_check",
+            "wayland_book_check",
+            target,
+            optimize,
+            forbear,
+        );
+        checkStep.dependOn(&waylandBookCheck.step);
     }
 
     // Package step - builds debug executables and copies them for CI upload
