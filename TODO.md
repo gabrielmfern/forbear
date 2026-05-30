@@ -9,6 +9,7 @@
 
 - [x] keying is not really stable for elements that can be removed or added back in
   - we need manual keying for loops of children
+- [ ] error handling is very bad. current treatment makes all user code for UI run when there was an error, which is basically having to deal with two things at once in one place, which is very difficult. Ideally we should have someting similar to React with error boundaries, but that requires a lot of thought to adapt to Zig's API
 - [ ] stutters drops when images load in
     - we should decompress images async, across frames to avoid this
         - is stb_image enough for this?

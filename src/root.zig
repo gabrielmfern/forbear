@@ -9,6 +9,11 @@ const forbearBuiltin = @import("builtin.zig");
 pub const ProfilingMetrics = forbearBuiltin.ProfilingMetrics;
 pub const useScrolling = forbearBuiltin.useScrolling;
 pub const ScrollBar = forbearBuiltin.ScrollBar;
+pub const FocusContext = forbearBuiltin.FocusContext;
+pub const FocusProvider = forbearBuiltin.FocusProvider;
+pub const Focus = forbearBuiltin.Focus;
+pub const FocusConsumes = forbearBuiltin.FocusConsumes;
+pub const EventPayload = forbearBuiltin.EventPayload;
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
 pub const Keys = @import("window.zig").Keys;
@@ -35,6 +40,7 @@ pub const CompleteTextStyle = nodeImport.CompleteTextStyle;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("window.zig").Window;
+pub const Color = Vec4;
 
 pub var traceWriter: ?*std.Io.Writer = null;
 pub fn setTraceWriter(writer: *std.Io.Writer) void {
@@ -122,6 +128,7 @@ pub const Event = enum {
     mouseEnter,
     mouseLeave,
     mouseDown,
+    mouseDownOutside,
     mouseUp,
     mouseMove,
     click,
@@ -649,6 +656,57 @@ pub fn useArena() std.mem.Allocator {
     return self.frameMeta.?.arena;
 }
 
+pub fn useScopeKey() u64 {
+    const self = getForbear();
+    const scopeKey = self.scopeStack.getLastOrNull() orelse {
+        if (!builtin.is_test) {
+            std.log.err(
+                "useScopeKey called outside of a component / element / hook scope",
+                .{},
+            );
+        }
+        @panic("Invalid hook usage");
+    };
+    return scopeKey;
+}
+
+pub fn getScopeArenaBy(key: u64) ?std.mem.Allocator {
+    const self = getForbear();
+    const scope = self.scopes.getPtr(key) orelse return null;
+    return scope.arenaAllocator.allocator();
+}
+
+/// Returns the arena allocator owned by the current scope (the topmost
+/// component / element / hook scope on the stack). Allocations live as
+/// long as the scope keeps re-rendering; the arena is released wholesale
+/// once the scope is missed for a frame.
+///
+/// Use this for state that must outlive the frame but die with the scope
+/// — context value backing storage, long-lived `ArrayList`s owned by a
+/// hook, anything you'd otherwise stash in a `useState`-allocated pointer
+/// and never free by hand.
+///
+/// Can, conceptually, completely replace useState and be more performant with
+/// the same exact result and more clearer design.
+///
+/// The allocator vtable pointer into the Scope's arena might be invalidated
+/// once you leave/enter a new scope. You can use useScopeKey and
+/// getScopeArenaBy(key) to avoid having to avoid this.
+pub fn useScopeArena() std.mem.Allocator {
+    const self = getForbear();
+    const scopeKey = self.scopeStack.getLastOrNull() orelse {
+        if (!builtin.is_test) {
+            std.log.err(
+                "useScopeArena called outside of a component / element / hook scope",
+                .{},
+            );
+        }
+        @panic("Invalid hook usage");
+    };
+    const scope = self.scopes.getPtr(scopeKey) orelse unreachable;
+    return scope.arenaAllocator.allocator();
+}
+
 pub fn useIo() std.Io {
     const self = getForbear();
     return self.io;
@@ -1104,6 +1162,20 @@ pub inline fn createContext(
         pub const key: u64 = contextKey;
         pub const ValueType = T;
 
+        pub fn use() ?*ValueType {
+            const self = getForbear();
+            var i = self.contextStack.items.len;
+            while (i > 0) {
+                i -= 1;
+                const contextEntry = self.contextStack.items[i];
+                if (contextEntry.contextKey == key) {
+                    const valueEntry = self.contextValues.getPtr(contextEntry.valueKey) orelse unreachable;
+                    return @ptrCast(@alignCast(valueEntry.contents));
+                }
+            }
+            return null;
+        }
+
         pub noinline fn Provider(initialValue: T) *const fn (void) void {
             const self = getForbear();
 
@@ -1150,22 +1222,6 @@ fn contextEnd(block: void) void {
     _ = block;
     const self = getForbear();
     _ = self.contextStack.pop();
-}
-
-pub fn useContext(
-    comptime Context: type,
-) ?*Context.ValueType {
-    const self = getForbear();
-    var i = self.contextStack.items.len;
-    while (i > 0) {
-        i -= 1;
-        const contextEntry = self.contextStack.items[i];
-        if (contextEntry.contextKey == Context.key) {
-            const valueEntry = self.contextValues.getPtr(contextEntry.valueKey) orelse unreachable;
-            return @ptrCast(@alignCast(valueEntry.contents));
-        }
-    }
-    return null;
 }
 
 pub fn BreakLine() void {
@@ -1730,6 +1786,7 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
         handleFrameError(error.NoMatchingSlotBegin);
         return &noopEnd;
     }
+
     const slotState = &states.items[states.items.len - 1];
     const parent = self.nodeTree.at(slotState.parentIndex);
 
@@ -1769,20 +1826,11 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
         return &noopEnd;
     };
     self.nodeStack.clearRetainingCapacity();
-    self.nodeStack.appendSlice(self.allocator, slotState.savedSlotParentStack) catch |err| {
-        handleFrameError(err);
-        return &noopEnd;
-    };
+    self.nodeStack.appendSliceAssumeCapacity(slotState.savedSlotParentStack);
     self.scopeStack.clearRetainingCapacity();
-    self.scopeStack.appendSlice(self.allocator, slotState.savedSlotScopeStack) catch |err| {
-        handleFrameError(err);
-        return &noopEnd;
-    };
+    self.scopeStack.appendSliceAssumeCapacity(slotState.savedSlotScopeStack);
     self.contextStack.clearRetainingCapacity();
-    self.contextStack.appendSlice(self.allocator, slotState.savedSlotContextStack) catch |err| {
-        handleFrameError(err);
-        return &noopEnd;
-    };
+    self.contextStack.appendSliceAssumeCapacity(slotState.savedSlotContextStack);
 
     return &componentChildrenSlotEndFn;
 }
@@ -1842,7 +1890,7 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     // and a conditional useState would shift every later slot once the
     // measurement starts existing.
     const slot: ?*bool = switch (eventTag) {
-        .mouseEnter, .mouseLeave, .mouseDown, .mouseUp => useState(bool, false),
+        .mouseEnter, .mouseLeave, .mouseDown, .mouseUp, .mouseDownOutside => useState(bool, false),
         .scroll, .mouseMove => null,
         // Keyboard tags + `.click` returned earlier.
         .click, .keyDown, .keyUp => unreachable,
@@ -1875,6 +1923,11 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
                 else => unreachable,
             }
             unreachable;
+        },
+        .mouseDownOutside => {
+            const wasPressedLastFrame = slot.?;
+            defer wasPressedLastFrame.* = self.mouseButtonPressed;
+            return self.mouseButtonPressed and !wasPressedLastFrame.* and !inside;
         },
         .mouseDown => {
             const wasPressedLastFrame = slot.?;
