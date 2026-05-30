@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 
@@ -26,80 +25,92 @@ pub fn LinuxDmabuf() void {
 
         List()({
             ListItem()({
-                forbear.text("Use ");
-                Strong()({
-                    forbear.text("eglGetPlatformDisplayEXT");
+                forbear.composeText(.{})({
+                    forbear.write("Use ");
+                    forbear.Strong()({
+                        forbear.write("eglGetPlatformDisplayEXT");
+                    });
+                    forbear.write(" in concert with ");
+                    forbear.Strong()({
+                        forbear.write("EGL_PLATFORM_WAYLAND_KHR");
+                    });
+                    forbear.write(" to create an EGL display.");
                 });
-                forbear.text(" in concert with ");
-                Strong()({
-                    forbear.text("EGL_PLATFORM_WAYLAND_KHR");
-                });
-                forbear.text(" to create an EGL display.");
             });
             ListItem()({
-                forbear.text("Configure the display normally, choosing a config appropriate to your circumstances with ");
-                Strong()({
-                    forbear.text("EGL_SURFACE_TYPE");
+                forbear.composeText(.{})({
+                    forbear.write("Configure the display normally, choosing a config appropriate to your circumstances with ");
+                    forbear.Strong()({
+                        forbear.write("EGL_SURFACE_TYPE");
+                    });
+                    forbear.write(" set to ");
+                    forbear.Strong()({
+                        forbear.write("EGL_WINDOW_BIT");
+                    });
+                    forbear.write(".");
                 });
-                forbear.text(" set to ");
-                Strong()({
-                    forbear.text("EGL_WINDOW_BIT");
-                });
-                forbear.text(".");
             });
             ListItem()({
-                forbear.text("Use ");
-                Strong()({
-                    forbear.text("wl_egl_window_create");
+                forbear.composeText(.{})({
+                    forbear.write("Use ");
+                    forbear.Strong()({
+                        forbear.write("wl_egl_window_create");
+                    });
+                    forbear.write(" to create a ");
+                    forbear.Strong()({
+                        forbear.write("wl_egl_window");
+                    });
+                    forbear.write(" for a given ");
+                    forbear.Strong()({
+                        forbear.write("wl_surface");
+                    });
+                    forbear.write(".");
                 });
-                forbear.text(" to create a ");
-                Strong()({
-                    forbear.text("wl_egl_window");
-                });
-                forbear.text(" for a given ");
-                Strong()({
-                    forbear.text("wl_surface");
-                });
-                forbear.text(".");
             });
             ListItem()({
-                forbear.text("Use ");
-                Strong()({
-                    forbear.text("eglCreatePlatformWindowSurfaceEXT");
+                forbear.composeText(.{})({
+                    forbear.write("Use ");
+                    forbear.Strong()({
+                        forbear.write("eglCreatePlatformWindowSurfaceEXT");
+                    });
+                    forbear.write(" to create an ");
+                    forbear.Strong()({
+                        forbear.write("EGLSurface");
+                    });
+                    forbear.write(" for a ");
+                    forbear.Strong()({
+                        forbear.write("wl_egl_window");
+                    });
+                    forbear.write(".");
                 });
-                forbear.text(" to create an ");
-                Strong()({
-                    forbear.text("EGLSurface");
-                });
-                forbear.text(" for a ");
-                Strong()({
-                    forbear.text("wl_egl_window");
-                });
-                forbear.text(".");
             });
             ListItem()({
-                forbear.text("Proceed using EGL normally, e.g. ");
-                Strong()({
-                    forbear.text("eglMakeCurrent");
+                forbear.composeText(.{})({
+                    forbear.write("Proceed using EGL normally, e.g. ");
+                    forbear.Strong()({
+                        forbear.write("eglMakeCurrent");
+                    });
+                    forbear.write(" to make current the EGL context for your surface and ");
+                    forbear.Strong()({
+                        forbear.write("eglSwapBuffers");
+                    });
+                    forbear.write(" to send an up-to-date buffer to the compositor and commit the surface.");
                 });
-                forbear.text(" to make current the EGL context for your surface and ");
-                Strong()({
-                    forbear.text("eglSwapBuffers");
-                });
-                forbear.text(" to send an up-to-date buffer to the compositor and commit the surface.");
             });
         });
 
         Paragraph(.{})({
-            forbear.text("Should you need to change the size of the ");
-            Strong()({
-                forbear.text("wl_egl_window");
+            forbear.composeText(.{})({
+                forbear.write("Should you need to change the size of the ");
+                forbear.Strong()({
+                    forbear.write("wl_egl_window");
+                });
+                forbear.write(" later, use ");
+                forbear.Strong()({
+                    forbear.write("wl_egl_window_resize");
+                });
+                forbear.write(".");
             });
-            forbear.text(" later, use ");
-            Strong()({
-                forbear.text("wl_egl_window_resize");
-            });
-            forbear.text(".");
         });
 
         Heading(.{ .level = 2 })({
@@ -107,15 +118,17 @@ pub fn LinuxDmabuf() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Some Wayland programmers who don't use libwayland complain that this approach ties Mesa and libwayland tightly together, which is true. However, untangling them is not impossible — it just requires a lot of work for you in the form of implementing ");
-            Strong()({
-                forbear.text("linux-dmabuf");
+            forbear.composeText(.{})({
+                forbear.write("Some Wayland programmers who don't use libwayland complain that this approach ties Mesa and libwayland tightly together, which is true. However, untangling them is not impossible — it just requires a lot of work for you in the form of implementing ");
+                forbear.Strong()({
+                    forbear.write("linux-dmabuf");
+                });
+                forbear.write(" yourself. Consult the Wayland extension XML for details on the protocol, and Mesa's implementation at ");
+                forbear.Strong()({
+                    forbear.write("src/egl/drivers/dri2/platform_wayland.c");
+                });
+                forbear.write(" (at the time of writing). Good luck and godspeed.");
             });
-            forbear.text(" yourself. Consult the Wayland extension XML for details on the protocol, and Mesa's implementation at ");
-            Strong()({
-                forbear.text("src/egl/drivers/dri2/platform_wayland.c");
-            });
-            forbear.text(" (at the time of writing). Good luck and godspeed.");
         });
 
         Heading(.{ .level = 2 })({
@@ -123,11 +136,13 @@ pub fn LinuxDmabuf() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Unfortunately, the details for the compositor are both complicated and out-of-scope for this book. I can point you in the right direction, however: the wlroots implementation (found at ");
-            Strong()({
-                forbear.text("types/wlr_linux_dmabuf_v1.c");
+            forbear.composeText(.{})({
+                forbear.write("Unfortunately, the details for the compositor are both complicated and out-of-scope for this book. I can point you in the right direction, however: the wlroots implementation (found at ");
+                forbear.Strong()({
+                    forbear.write("types/wlr_linux_dmabuf_v1.c");
+                });
+                forbear.write(" at the time of writing) is straightforward and should set you on the right path.");
             });
-            forbear.text(" at the time of writing) is straightforward and should set you on the right path.");
         });
     });
 }

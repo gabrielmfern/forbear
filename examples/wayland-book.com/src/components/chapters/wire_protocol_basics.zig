@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 
@@ -13,10 +12,12 @@ pub fn WireProtocolBasics() void {
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("Note");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("Note");
+                });
+                forbear.write(": If you're just going to use libwayland, this chapter is optional - feel free to skip to chapter 2.2.");
             });
-            forbear.text(": If you're just going to use libwayland, this chapter is optional - feel free to skip to chapter 2.2.");
         });
 
         Paragraph(.{})({
@@ -24,31 +25,39 @@ pub fn WireProtocolBasics() void {
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("int, uint");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("int, uint");
+                });
+                forbear.write(": 32-bit signed or unsigned integer.");
             });
-            forbear.text(": 32-bit signed or unsigned integer.");
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("fixed");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("fixed");
+                });
+                forbear.write(": 24.8 bit signed fixed-point numbers.");
             });
-            forbear.text(": 24.8 bit signed fixed-point numbers.");
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("object");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("object");
+                });
+                forbear.write(": 32-bit object ID.");
             });
-            forbear.text(": 32-bit object ID.");
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("new_id");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("new_id");
+                });
+                forbear.write(": 32-bit object ID which allocates that object when received.");
             });
-            forbear.text(": 32-bit object ID which allocates that object when received.");
         });
 
         Paragraph(.{})({
@@ -56,31 +65,39 @@ pub fn WireProtocolBasics() void {
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("string");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("string");
+                });
+                forbear.write(": A string, prefixed with a 32-bit integer specifying its length (in bytes), followed by the string contents and a NUL terminator, padded to 32 bits with undefined data. The encoding is not specified, but in practice UTF-8 is used.");
             });
-            forbear.text(": A string, prefixed with a 32-bit integer specifying its length (in bytes), followed by the string contents and a NUL terminator, padded to 32 bits with undefined data. The encoding is not specified, but in practice UTF-8 is used.");
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("array");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("array");
+                });
+                forbear.write(": A blob of arbitrary data, prefixed with a 32-bit integer specifying its length (in bytes), then the verbatim contents of the array, padded to 32 bits with undefined data.");
             });
-            forbear.text(": A blob of arbitrary data, prefixed with a 32-bit integer specifying its length (in bytes), then the verbatim contents of the array, padded to 32 bits with undefined data.");
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("fd");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("fd");
+                });
+                forbear.write(": 0-bit value on the primary transport, but transfers a file descriptor to the other end using the ancillary data in the Unix domain socket message (msg_control).");
             });
-            forbear.text(": 0-bit value on the primary transport, but transfers a file descriptor to the other end using the ancillary data in the Unix domain socket message (msg_control).");
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("enum");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("enum");
+                });
+                forbear.write(": A single value (or bitmap) from an enumeration of known constants, encoded into a 32-bit integer.");
             });
-            forbear.text(": A single value (or bitmap) from an enumeration of known constants, encoded into a 32-bit integer.");
         });
 
         Heading(.{ .level = 2 })({

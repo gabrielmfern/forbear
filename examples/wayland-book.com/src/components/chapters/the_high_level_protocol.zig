@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 
 pub fn TheHighLevelProtocol() void {
     forbear.component(.{})({
@@ -23,10 +22,12 @@ pub fn TheHighLevelProtocol() void {
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("Note");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("Note");
+                });
+                forbear.write(": I've trimmed this snippet for brevity, but if you have the wayland.xml file in front of you, seek out this interface and examine it yourself — included is additional documentation explaining the purpose and precise semantics of each request and event.");
             });
-            forbear.text(": I've trimmed this snippet for brevity, but if you have the wayland.xml file in front of you, seek out this interface and examine it yourself — included is additional documentation explaining the purpose and precise semantics of each request and event.");
         });
 
         Paragraph(.{})({

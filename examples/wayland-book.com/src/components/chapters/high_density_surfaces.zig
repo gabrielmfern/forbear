@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 
 pub fn HighDensitySurfaces() void {
     forbear.component(.{})({
@@ -19,23 +18,25 @@ pub fn HighDensitySurfaces() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Note that this was added in version 2, so when binding to the ");
-            Strong()({
-                forbear.text("wl_output");
+            forbear.composeText(.{})({
+                forbear.write("Note that this was added in version 2, so when binding to the ");
+                forbear.Strong()({
+                    forbear.write("wl_output");
+                });
+                forbear.write(" global you must set the version to at least 2 to receive these events. This is ");
+                forbear.Strong()({
+                    forbear.write("not");
+                });
+                forbear.write(" enough to decide to use HiDPI in your clients, however. In order to make that call, the compositor must also send ");
+                forbear.Strong()({
+                    forbear.write("enter");
+                });
+                forbear.write(" events for your ");
+                forbear.Strong()({
+                    forbear.write("wl_surface");
+                });
+                forbear.write(" to indicate that it has \"entered\" (is being shown on) a particular output or outputs: [code block omitted]");
             });
-            forbear.text(" global you must set the version to at least 2 to receive these events. This is ");
-            Strong()({
-                forbear.text("not");
-            });
-            forbear.text(" enough to decide to use HiDPI in your clients, however. In order to make that call, the compositor must also send ");
-            Strong()({
-                forbear.text("enter");
-            });
-            forbear.text(" events for your ");
-            Strong()({
-                forbear.text("wl_surface");
-            });
-            forbear.text(" to indicate that it has \"entered\" (is being shown on) a particular output or outputs: [code block omitted]");
         });
 
         Paragraph(.{})({
@@ -43,30 +44,34 @@ pub fn HighDensitySurfaces() void {
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("Note");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("Note");
+                });
+                forbear.write(": this requires version 3 or newer of ");
+                forbear.Strong()({
+                    forbear.write("wl_surface");
+                });
+                forbear.write(". This is the version number you should pass to the ");
+                forbear.Strong()({
+                    forbear.write("wl_registry");
+                });
+                forbear.write(" when you bind to ");
+                forbear.Strong()({
+                    forbear.write("wl_compositor");
+                });
+                forbear.write(".");
             });
-            forbear.text(": this requires version 3 or newer of ");
-            Strong()({
-                forbear.text("wl_surface");
-            });
-            forbear.text(". This is the version number you should pass to the ");
-            Strong()({
-                forbear.text("wl_registry");
-            });
-            forbear.text(" when you bind to ");
-            Strong()({
-                forbear.text("wl_compositor");
-            });
-            forbear.text(".");
         });
 
         Paragraph(.{})({
-            forbear.text("Upon the next ");
-            Strong()({
-                forbear.text("wl_surface.commit");
+            forbear.composeText(.{})({
+                forbear.write("Upon the next ");
+                forbear.Strong()({
+                    forbear.write("wl_surface.commit");
+                });
+                forbear.write(", your surface will assume this scale factor. If it's greater than the scale factor of an output the surface is shown on, the compositor will scale it down. If it's less than the scale factor of an output, the compositor will scale it up.");
             });
-            forbear.text(", your surface will assume this scale factor. If it's greater than the scale factor of an output the surface is shown on, the compositor will scale it down. If it's less than the scale factor of an output, the compositor will scale it up.");
         });
     });
 }

@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 
 pub fn InteractiveMoveAndResize() void {
     forbear.component(.{})({
@@ -59,11 +58,13 @@ pub fn InteractiveMoveAndResize() void {
         });
 
         Paragraph(.{})({
-            forbear.text("The last detail which bears mentioning when discussing the behavior of client-side decorations is the protocol which governs the negotiation of their use in the first place. Different Wayland clients and servers may have different preferences about the use of server-side or client-side window decorations. To express these intentions, a protocol extension is used: ");
-            Strong()({
-                forbear.text("xdg-decoration");
+            forbear.composeText(.{})({
+                forbear.write("The last detail which bears mentioning when discussing the behavior of client-side decorations is the protocol which governs the negotiation of their use in the first place. Different Wayland clients and servers may have different preferences about the use of server-side or client-side window decorations. To express these intentions, a protocol extension is used: ");
+                forbear.Strong()({
+                    forbear.write("xdg-decoration");
+                });
+                forbear.write(". It can be found in wayland-protocols. The protocol provides a global:");
             });
-            forbear.text(". It can be found in wayland-protocols. The protocol provides a global:");
         });
 
         Paragraph(.{})({
@@ -71,11 +72,13 @@ pub fn InteractiveMoveAndResize() void {
         });
 
         Paragraph(.{})({
-            forbear.text("You may pass your xdg_toplevel object into the ");
-            Strong()({
-                forbear.text("get_toplevel_decoration");
+            forbear.composeText(.{})({
+                forbear.write("You may pass your xdg_toplevel object into the ");
+                forbear.Strong()({
+                    forbear.write("get_toplevel_decoration");
+                });
+                forbear.write(" request to obtain an object with the following interface:");
             });
-            forbear.text(" request to obtain an object with the following interface:");
         });
 
         Paragraph(.{})({
@@ -83,19 +86,21 @@ pub fn InteractiveMoveAndResize() void {
         });
 
         Paragraph(.{})({
-            forbear.text("The ");
-            Strong()({
-                forbear.text("set_mode");
+            forbear.composeText(.{})({
+                forbear.write("The ");
+                forbear.Strong()({
+                    forbear.write("set_mode");
+                });
+                forbear.write(" request is used to express a preference from the client, and ");
+                forbear.Strong()({
+                    forbear.write("unset_mode");
+                });
+                forbear.write(" is used to express no preference. The compositor will then use the ");
+                forbear.Strong()({
+                    forbear.write("configure");
+                });
+                forbear.write(" event to tell the client whether or not to use client-side decorations. For more details, consult the full XML.");
             });
-            forbear.text(" request is used to express a preference from the client, and ");
-            Strong()({
-                forbear.text("unset_mode");
-            });
-            forbear.text(" is used to express no preference. The compositor will then use the ");
-            Strong()({
-                forbear.text("configure");
-            });
-            forbear.text(" event to tell the client whether or not to use client-side decorations. For more details, consult the full XML.");
         });
     });
 }

@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 
 pub fn DamagingSurfaces() void {
     forbear.component(.{})({
@@ -19,11 +18,13 @@ pub fn DamagingSurfaces() void {
         });
 
         Paragraph(.{})({
-            forbear.text("If so, sharp eye! This code ");
-            Strong()({
-                forbear.text("damages");
+            forbear.composeText(.{})({
+                forbear.write("If so, sharp eye! This code ");
+                forbear.Strong()({
+                    forbear.write("damages");
+                });
+                forbear.write(" our surface, indicating to the compositor that it needs to be redrawn. Here we damage the entire surface (and well beyond it), but we could instead only damage part of it.");
             });
-            forbear.text(" our surface, indicating to the compositor that it needs to be redrawn. Here we damage the entire surface (and well beyond it), but we could instead only damage part of it.");
         });
 
         Paragraph(.{})({
@@ -31,22 +32,24 @@ pub fn DamagingSurfaces() void {
         });
 
         Paragraph(.{})({
-            Strong()({
-                forbear.text("Note");
+            forbear.composeText(.{})({
+                forbear.Strong()({
+                    forbear.write("Note");
+                });
+                forbear.write(": The Wayland protocol provides two requests for damaging surfaces: ");
+                forbear.Strong()({
+                    forbear.write("damage");
+                });
+                forbear.write(" and ");
+                forbear.Strong()({
+                    forbear.write("damage_buffer");
+                });
+                forbear.write(". The former is effectively deprecated, and you should only use the latter. The difference between them is that ");
+                forbear.Strong()({
+                    forbear.write("damage");
+                });
+                forbear.write(" takes into account all of the transforms affecting the surface, such as rotations, scale factor, and buffer position and clipping. The latter instead applies damage relative to the buffer, which is generally easier to reason about.");
             });
-            forbear.text(": The Wayland protocol provides two requests for damaging surfaces: ");
-            Strong()({
-                forbear.text("damage");
-            });
-            forbear.text(" and ");
-            Strong()({
-                forbear.text("damage_buffer");
-            });
-            forbear.text(". The former is effectively deprecated, and you should only use the latter. The difference between them is that ");
-            Strong()({
-                forbear.text("damage");
-            });
-            forbear.text(" takes into account all of the transforms affecting the surface, such as rotations, scale factor, and buffer position and clipping. The latter instead applies damage relative to the buffer, which is generally easier to reason about.");
         });
     });
 }

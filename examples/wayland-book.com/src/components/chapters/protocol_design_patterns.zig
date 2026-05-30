@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 
@@ -21,15 +20,17 @@ pub fn ProtocolDesignPatterns() void {
         });
 
         Paragraph(.{})({
-            forbear.text("The most important of the Wayland protocol design patterns is ");
-            Strong()({
-                forbear.text("atomicity");
+            forbear.composeText(.{})({
+                forbear.write("The most important of the Wayland protocol design patterns is ");
+                forbear.Strong()({
+                    forbear.write("atomicity");
+                });
+                forbear.write(". A stated goal of Wayland is \"every frame is perfect\". To this end, most interfaces allow you to update them transactionally, using several requests to build up a new representation of its state, then committing them all at once. For example, there are several properties that may be configured on a ");
+                forbear.Strong()({
+                    forbear.write("wl_surface");
+                });
+                forbear.write(":");
             });
-            forbear.text(". A stated goal of Wayland is \"every frame is perfect\". To this end, most interfaces allow you to update them transactionally, using several requests to build up a new representation of its state, then committing them all at once. For example, there are several properties that may be configured on a ");
-            Strong()({
-                forbear.text("wl_surface");
-            });
-            forbear.text(":");
         });
 
         List()({
@@ -54,19 +55,21 @@ pub fn ProtocolDesignPatterns() void {
         });
 
         Paragraph(.{})({
-            forbear.text("The interface includes separate requests for configuring each of these, but these are applied to a ");
-            Strong()({
-                forbear.text("pending");
+            forbear.composeText(.{})({
+                forbear.write("The interface includes separate requests for configuring each of these, but these are applied to a ");
+                forbear.Strong()({
+                    forbear.write("pending");
+                });
+                forbear.write(" state. Only when the ");
+                forbear.Strong()({
+                    forbear.write("commit");
+                });
+                forbear.write(" request is sent does the pending state get merged into the ");
+                forbear.Strong()({
+                    forbear.write("current");
+                });
+                forbear.write(" state, allowing you to atomically update all of these properties within a single frame. Combined with a few other key design decisions, this allows Wayland compositors to render everything perfectly in every frame — no tearing or partially updated windows, just every pixel in its place and every place in its pixel.");
             });
-            forbear.text(" state. Only when the ");
-            Strong()({
-                forbear.text("commit");
-            });
-            forbear.text(" request is sent does the pending state get merged into the ");
-            Strong()({
-                forbear.text("current");
-            });
-            forbear.text(" state, allowing you to atomically update all of these properties within a single frame. Combined with a few other key design decisions, this allows Wayland compositors to render everything perfectly in every frame — no tearing or partially updated windows, just every pixel in its place and every place in its pixel.");
         });
 
         Heading(.{ .level = 2 })({
