@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 
@@ -17,19 +16,21 @@ pub fn ApplicationWindow() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Based on our knowledge from the last chapter, we know that we can obtain an ");
-            Strong()({
-                forbear.text("xdg_surface");
+            forbear.composeText(.{})({
+                forbear.write("Based on our knowledge from the last chapter, we know that we can obtain an ");
+                forbear.Strong()({
+                    forbear.write("xdg_surface");
+                });
+                forbear.write(" from a ");
+                forbear.Strong()({
+                    forbear.write("wl_surface");
+                });
+                forbear.write(", but that it only constitutes the first step: bringing a surface into the fold of XDG shell. The next step is to turn that XDG surface into an XDG toplevel — a \"top-level\" application window, so named for its top-level position in the hierarchy of windows and popup menus we will eventually create with XDG shell. To create one of these, we can use the appropriate request from the ");
+                forbear.Strong()({
+                    forbear.write("xdg_surface");
+                });
+                forbear.write(" interface:");
             });
-            forbear.text(" from a ");
-            Strong()({
-                forbear.text("wl_surface");
-            });
-            forbear.text(", but that it only constitutes the first step: bringing a surface into the fold of XDG shell. The next step is to turn that XDG surface into an XDG toplevel — a \"top-level\" application window, so named for its top-level position in the hierarchy of windows and popup menus we will eventually create with XDG shell. To create one of these, we can use the appropriate request from the ");
-            Strong()({
-                forbear.text("xdg_surface");
-            });
-            forbear.text(" interface:");
         });
 
         Paragraph(.{})({
@@ -37,27 +38,29 @@ pub fn ApplicationWindow() void {
         });
 
         Paragraph(.{})({
-            forbear.text("This new ");
-            Strong()({
-                forbear.text("xdg_toplevel");
+            forbear.composeText(.{})({
+                forbear.write("This new ");
+                forbear.Strong()({
+                    forbear.write("xdg_toplevel");
+                });
+                forbear.write(" interface puts many requests and events at our disposal for managing the lifecycle of application windows. Chapter 10 explores these in depth, but I know you're itching to get something on-screen. If you follow these steps, handling the ");
+                forbear.Strong()({
+                    forbear.write("configure");
+                });
+                forbear.write(" and ");
+                forbear.Strong()({
+                    forbear.write("ack_configure");
+                });
+                forbear.write(" riggings for XDG surface discussed in the previous chapter, and attach and commit a ");
+                forbear.Strong()({
+                    forbear.write("wl_buffer");
+                });
+                forbear.write(" to our ");
+                forbear.Strong()({
+                    forbear.write("wl_surface");
+                });
+                forbear.write(", an application window will appear and present your buffer's contents to the user. Example code which does just this is provided in the next chapter. It also leverages one additional XDG toplevel request which we haven't covered yet:");
             });
-            forbear.text(" interface puts many requests and events at our disposal for managing the lifecycle of application windows. Chapter 10 explores these in depth, but I know you're itching to get something on-screen. If you follow these steps, handling the ");
-            Strong()({
-                forbear.text("configure");
-            });
-            forbear.text(" and ");
-            Strong()({
-                forbear.text("ack_configure");
-            });
-            forbear.text(" riggings for XDG surface discussed in the previous chapter, and attach and commit a ");
-            Strong()({
-                forbear.text("wl_buffer");
-            });
-            forbear.text(" to our ");
-            Strong()({
-                forbear.text("wl_surface");
-            });
-            forbear.text(", an application window will appear and present your buffer's contents to the user. Example code which does just this is provided in the next chapter. It also leverages one additional XDG toplevel request which we haven't covered yet:");
         });
 
         Paragraph(.{})({
@@ -82,103 +85,119 @@ pub fn ApplicationWindow() void {
 
         List()({
             ListItem()({
-                forbear.text("Bind to ");
-                Strong()({
-                    forbear.text("wl_compositor");
+                forbear.composeText(.{})({
+                    forbear.write("Bind to ");
+                    forbear.Strong()({
+                        forbear.write("wl_compositor");
+                    });
+                    forbear.write(" and use it to create a ");
+                    forbear.Strong()({
+                        forbear.write("wl_surface");
+                    });
+                    forbear.write(".");
                 });
-                forbear.text(" and use it to create a ");
-                Strong()({
-                    forbear.text("wl_surface");
-                });
-                forbear.text(".");
             });
 
             ListItem()({
-                forbear.text("Bind to ");
-                Strong()({
-                    forbear.text("xdg_wm_base");
+                forbear.composeText(.{})({
+                    forbear.write("Bind to ");
+                    forbear.Strong()({
+                        forbear.write("xdg_wm_base");
+                    });
+                    forbear.write(" and use it to create an ");
+                    forbear.Strong()({
+                        forbear.write("xdg_surface");
+                    });
+                    forbear.write(" with your ");
+                    forbear.Strong()({
+                        forbear.write("wl_surface");
+                    });
+                    forbear.write(".");
                 });
-                forbear.text(" and use it to create an ");
-                Strong()({
-                    forbear.text("xdg_surface");
-                });
-                forbear.text(" with your ");
-                Strong()({
-                    forbear.text("wl_surface");
-                });
-                forbear.text(".");
             });
 
             ListItem()({
-                forbear.text("Create an ");
-                Strong()({
-                    forbear.text("xdg_toplevel");
+                forbear.composeText(.{})({
+                    forbear.write("Create an ");
+                    forbear.Strong()({
+                        forbear.write("xdg_toplevel");
+                    });
+                    forbear.write(" from the ");
+                    forbear.Strong()({
+                        forbear.write("xdg_surface");
+                    });
+                    forbear.write(" with ");
+                    forbear.Strong()({
+                        forbear.write("xdg_surface.get_toplevel");
+                    });
+                    forbear.write(".");
                 });
-                forbear.text(" from the ");
-                Strong()({
-                    forbear.text("xdg_surface");
-                });
-                forbear.text(" with ");
-                Strong()({
-                    forbear.text("xdg_surface.get_toplevel");
-                });
-                forbear.text(".");
             });
 
             ListItem()({
-                forbear.text("Configure a listener for the ");
-                Strong()({
-                    forbear.text("xdg_surface");
+                forbear.composeText(.{})({
+                    forbear.write("Configure a listener for the ");
+                    forbear.Strong()({
+                        forbear.write("xdg_surface");
+                    });
+                    forbear.write(" and await the ");
+                    forbear.Strong()({
+                        forbear.write("configure");
+                    });
+                    forbear.write(" event.");
                 });
-                forbear.text(" and await the ");
-                Strong()({
-                    forbear.text("configure");
-                });
-                forbear.text(" event.");
             });
 
             ListItem()({
-                forbear.text("Bind to the buffer allocation mechanism of your choosing (such as ");
-                Strong()({
-                    forbear.text("wl_shm");
+                forbear.composeText(.{})({
+                    forbear.write("Bind to the buffer allocation mechanism of your choosing (such as ");
+                    forbear.Strong()({
+                        forbear.write("wl_shm");
+                    });
+                    forbear.write(") and allocate a shared buffer, then render your content to it.");
                 });
-                forbear.text(") and allocate a shared buffer, then render your content to it.");
             });
 
             ListItem()({
-                forbear.text("Use ");
-                Strong()({
-                    forbear.text("wl_surface.attach");
+                forbear.composeText(.{})({
+                    forbear.write("Use ");
+                    forbear.Strong()({
+                        forbear.write("wl_surface.attach");
+                    });
+                    forbear.write(" to attach the ");
+                    forbear.Strong()({
+                        forbear.write("wl_buffer");
+                    });
+                    forbear.write(" to the ");
+                    forbear.Strong()({
+                        forbear.write("wl_surface");
+                    });
+                    forbear.write(".");
                 });
-                forbear.text(" to attach the ");
-                Strong()({
-                    forbear.text("wl_buffer");
-                });
-                forbear.text(" to the ");
-                Strong()({
-                    forbear.text("wl_surface");
-                });
-                forbear.text(".");
             });
 
             ListItem()({
-                forbear.text("Use ");
-                Strong()({
-                    forbear.text("xdg_surface.ack_configure");
+                forbear.composeText(.{})({
+                    forbear.write("Use ");
+                    forbear.Strong()({
+                        forbear.write("xdg_surface.ack_configure");
+                    });
+                    forbear.write(", passing it the serial from ");
+                    forbear.Strong()({
+                        forbear.write("configure");
+                    });
+                    forbear.write(", acknowledging that you have prepared a suitable frame.");
                 });
-                forbear.text(", passing it the serial from ");
-                Strong()({
-                    forbear.text("configure");
-                });
-                forbear.text(", acknowledging that you have prepared a suitable frame.");
             });
 
             ListItem()({
-                forbear.text("Send a ");
-                Strong()({
-                    forbear.text("wl_surface.commit");
+                forbear.composeText(.{})({
+                    forbear.write("Send a ");
+                    forbear.Strong()({
+                        forbear.write("wl_surface.commit");
+                    });
+                    forbear.write(" request.");
                 });
-                forbear.text(" request.");
             });
         });
 

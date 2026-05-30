@@ -10,7 +10,6 @@ const SidebarItem = sidebar.SidebarItem;
 const SidebarDivider = sidebar.SidebarDivider;
 const Paragraph = @import("components/paragraph.zig").Paragraph;
 const Heading = @import("components/heading.zig").Heading;
-const Strong = @import("components/strong.zig").Strong;
 const list = @import("components/list.zig");
 const List = list.List;
 const ListItem = list.ListItem;
@@ -104,11 +103,13 @@ fn App() !void {
                             activeChapter.* = i;
                         }
 
-                        Strong()({
-                            forbear.text(chapter.chapter);
-                            forbear.text(" ");
+                        forbear.composeText(.{})({
+                            forbear.Strong()({
+                                forbear.write(chapter.chapter);
+                                forbear.write(" ");
+                            });
+                            forbear.write(chapter.title);
                         });
-                        forbear.text(chapter.title);
                     });
                 }
             });

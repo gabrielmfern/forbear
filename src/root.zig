@@ -1229,8 +1229,7 @@ pub fn write(content: []const u8) void {
 }
 
 /// Layers a style override over the runs written inside its block. Nestable,
-/// which is what lets reusable helpers compose, e.g.
-/// `fn Strong() { return forbear.textStyle(.{ .fontWeight = 700 }); }`.
+/// which is what lets reusable helpers compose, e.g. the built-in `Strong`.
 pub noinline fn textStyle(style: TextStyle) *const fn (void) void {
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
@@ -1254,6 +1253,13 @@ fn textStyleEnd(block: void) void {
     if (self.frameMeta.?.textBuilder) |*builder| {
         _ = builder.styleStack.pop();
     }
+}
+
+/// Bold (`fontWeight = 700`) text run, the inline-text analog of HTML's
+/// `<strong>`. A thin `textStyle` helper, so it is only valid inside a
+/// `composeText` block: `Strong()({ write("important"); });`.
+pub fn Strong() *const fn (void) void {
+    return textStyle(.{ .fontWeight = 700 });
 }
 
 noinline fn composeTextEnd(block: void) void {

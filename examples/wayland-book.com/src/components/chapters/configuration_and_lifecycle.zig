@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 
 pub fn ConfigurationAndLifecycle() void {
     forbear.component(.{})({
@@ -15,15 +14,17 @@ pub fn ConfigurationAndLifecycle() void {
         });
 
         Paragraph(.{})({
-            forbear.text("The compositor can offer additional clues to the application about the context in which it's being shown. It can let you know if your application is maximized or fullscreen, tiled on one or more sides against other windows or the edge of the display, focused or idle, and so on. As ");
-            Strong()({
-                forbear.text("wl_surface");
+            forbear.composeText(.{})({
+                forbear.write("The compositor can offer additional clues to the application about the context in which it's being shown. It can let you know if your application is maximized or fullscreen, tiled on one or more sides against other windows or the edge of the display, focused or idle, and so on. As ");
+                forbear.Strong()({
+                    forbear.write("wl_surface");
+                });
+                forbear.write(" is used to atomically communicate surface changes from client to server, the ");
+                forbear.Strong()({
+                    forbear.write("xdg_surface");
+                });
+                forbear.write(" interface provides the following two messages for the compositor to suggest changes and the client to acknowledge them:");
             });
-            forbear.text(" is used to atomically communicate surface changes from client to server, the ");
-            Strong()({
-                forbear.text("xdg_surface");
-            });
-            forbear.text(" interface provides the following two messages for the compositor to suggest changes and the client to acknowledge them:");
         });
 
         Paragraph(.{})({
@@ -31,31 +32,33 @@ pub fn ConfigurationAndLifecycle() void {
         });
 
         Paragraph(.{})({
-            forbear.text("On their own, these messages carry little meaning. However, each subclass of ");
-            Strong()({
-                forbear.text("xdg_surface");
+            forbear.composeText(.{})({
+                forbear.write("On their own, these messages carry little meaning. However, each subclass of ");
+                forbear.Strong()({
+                    forbear.write("xdg_surface");
+                });
+                forbear.write(" (");
+                forbear.Strong()({
+                    forbear.write("xdg_toplevel");
+                });
+                forbear.write(" and ");
+                forbear.Strong()({
+                    forbear.write("xdg_popup");
+                });
+                forbear.write(") have additional events that the server can send ahead of \"configure\", to make each of the suggestions we've mentioned so far. The server will send all of this state; maximized, focused, a suggested size; then a ");
+                forbear.Strong()({
+                    forbear.write("configure");
+                });
+                forbear.write(" event with a serial. When the client has assumed a state consistent with these suggestions, it sends an ");
+                forbear.Strong()({
+                    forbear.write("ack_configure");
+                });
+                forbear.write(" request with the same serial to indicate this. Upon the next commit to the associated ");
+                forbear.Strong()({
+                    forbear.write("wl_surface");
+                });
+                forbear.write(", the compositor will consider the state consistent.");
             });
-            forbear.text(" (");
-            Strong()({
-                forbear.text("xdg_toplevel");
-            });
-            forbear.text(" and ");
-            Strong()({
-                forbear.text("xdg_popup");
-            });
-            forbear.text(") have additional events that the server can send ahead of \"configure\", to make each of the suggestions we've mentioned so far. The server will send all of this state; maximized, focused, a suggested size; then a ");
-            Strong()({
-                forbear.text("configure");
-            });
-            forbear.text(" event with a serial. When the client has assumed a state consistent with these suggestions, it sends an ");
-            Strong()({
-                forbear.text("ack_configure");
-            });
-            forbear.text(" request with the same serial to indicate this. Upon the next commit to the associated ");
-            Strong()({
-                forbear.text("wl_surface");
-            });
-            forbear.text(", the compositor will consider the state consistent.");
         });
 
         Heading(.{ .level = 2 })({
@@ -63,15 +66,17 @@ pub fn ConfigurationAndLifecycle() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Our example code from chapter 7 works, but it's not the best citizen of the desktop right now. It does not assume the compositor's recommended size, and if the user tries to close the window, it won't go away. Responding to these compositor-supplied events implicates two Wayland events: ");
-            Strong()({
-                forbear.text("configure");
+            forbear.composeText(.{})({
+                forbear.write("Our example code from chapter 7 works, but it's not the best citizen of the desktop right now. It does not assume the compositor's recommended size, and if the user tries to close the window, it won't go away. Responding to these compositor-supplied events implicates two Wayland events: ");
+                forbear.Strong()({
+                    forbear.write("configure");
+                });
+                forbear.write(" and ");
+                forbear.Strong()({
+                    forbear.write("close");
+                });
+                forbear.write(".");
             });
-            forbear.text(" and ");
-            Strong()({
-                forbear.text("close");
-            });
-            forbear.text(".");
         });
 
         Paragraph(.{})({

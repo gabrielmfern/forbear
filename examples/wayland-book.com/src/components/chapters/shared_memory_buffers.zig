@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 

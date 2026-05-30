@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 
 pub fn ExtendedExampleCode() void {
     forbear.component(.{})({
@@ -19,15 +18,17 @@ pub fn ExtendedExampleCode() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Then run ");
-            Strong()({
-                forbear.text("./client");
+            forbear.composeText(.{})({
+                forbear.write("Then run ");
+                forbear.Strong()({
+                    forbear.write("./client");
+                });
+                forbear.write(" to see it in action, or ");
+                forbear.Strong()({
+                    forbear.write("WAYLAND_DEBUG=1 ./client");
+                });
+                forbear.write(" to include a bunch of useful debugging information. Tada! In future chapters we will be building upon this client, so stow this code away somewhere safe.");
             });
-            forbear.text(" to see it in action, or ");
-            Strong()({
-                forbear.text("WAYLAND_DEBUG=1 ./client");
-            });
-            forbear.text(" to include a bunch of useful debugging information. Tada! In future chapters we will be building upon this client, so stow this code away somewhere safe.");
         });
 
         Paragraph(.{})({

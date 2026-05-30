@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 
@@ -17,39 +16,45 @@ pub fn XkbBriefly() void {
         });
 
         Paragraph(.{})({
-            forbear.text("When you press a key on your keyboard, it sends a ");
-            Strong()({
-                forbear.text("scancode");
+            forbear.composeText(.{})({
+                forbear.write("When you press a key on your keyboard, it sends a ");
+                forbear.Strong()({
+                    forbear.write("scancode");
+                });
+                forbear.write(" to the computer, which is simply a number assigned to that physical key. On my keyboard, scancode 1 is the Escape key, the '1' key is scancode 2, 'a' is 30, Shift is 42, and so on. I use a US ANSI keyboard layout, but there are many other layouts, and their scancodes differ. On my friend's German keyboard, scancode 12 produces 'ß', while mine produces '-'.");
             });
-            forbear.text(" to the computer, which is simply a number assigned to that physical key. On my keyboard, scancode 1 is the Escape key, the '1' key is scancode 2, 'a' is 30, Shift is 42, and so on. I use a US ANSI keyboard layout, but there are many other layouts, and their scancodes differ. On my friend's German keyboard, scancode 12 produces 'ß', while mine produces '-'.");
         });
 
         Paragraph(.{})({
-            forbear.text("To solve this problem, we use a library called \"xkbcommon\", which is named for its role as the common code from XKB (X KeyBoard) extracted into a standalone library. XKB defines a huge number of key ");
-            Strong()({
-                forbear.text("symbols");
+            forbear.composeText(.{})({
+                forbear.write("To solve this problem, we use a library called \"xkbcommon\", which is named for its role as the common code from XKB (X KeyBoard) extracted into a standalone library. XKB defines a huge number of key ");
+                forbear.Strong()({
+                    forbear.write("symbols");
+                });
+                forbear.write(", such as XKB_KEY_A, and XKB_KEY_ssharp (ß, from German), and XKB_KEY_kana_WO (を, from Japanese).");
             });
-            forbear.text(", such as XKB_KEY_A, and XKB_KEY_ssharp (ß, from German), and XKB_KEY_kana_WO (を, from Japanese).");
         });
 
         Paragraph(.{})({
-            forbear.text("Identifying these keys and correlating them with key symbols like this is only part of the problem, however. 'a' can produce 'A' if the shift key is held down, 'を' is written as 'ヲ' in Katakana mode, and while there is strictly speaking an uppercase version of 'ß', it's hardly ever used and certainly never typed. Keys like Shift are called ");
-            Strong()({
-                forbear.text("modifiers");
+            forbear.composeText(.{})({
+                forbear.write("Identifying these keys and correlating them with key symbols like this is only part of the problem, however. 'a' can produce 'A' if the shift key is held down, 'を' is written as 'ヲ' in Katakana mode, and while there is strictly speaking an uppercase version of 'ß', it's hardly ever used and certainly never typed. Keys like Shift are called ");
+                forbear.Strong()({
+                    forbear.write("modifiers");
+                });
+                forbear.write(", and groups like Hiragana and Katakana are called ");
+                forbear.Strong()({
+                    forbear.write("groups");
+                });
+                forbear.write(". Some modifiers can ");
+                forbear.Strong()({
+                    forbear.write("latch");
+                });
+                forbear.write(", like Caps Lock. XKB has primitives for dealing with all of these cases, and maintains a state machine which tracks what your keyboard is doing and figures out exactly which ");
+                forbear.Strong()({
+                    forbear.write("Unicode codepoints");
+                });
+                forbear.write(" the user is trying to type.");
             });
-            forbear.text(", and groups like Hiragana and Katakana are called ");
-            Strong()({
-                forbear.text("groups");
-            });
-            forbear.text(". Some modifiers can ");
-            Strong()({
-                forbear.text("latch");
-            });
-            forbear.text(", like Caps Lock. XKB has primitives for dealing with all of these cases, and maintains a state machine which tracks what your keyboard is doing and figures out exactly which ");
-            Strong()({
-                forbear.text("Unicode codepoints");
-            });
-            forbear.text(" the user is trying to type.");
         });
 
         Heading(.{ .level = 2 })({
@@ -57,11 +62,13 @@ pub fn XkbBriefly() void {
         });
 
         Paragraph(.{})({
-            forbear.text("So how is xkbcommon actually used? Well, the first step is to link to it and grab the header, ");
-            Strong()({
-                forbear.text("xkbcommon/xkbcommon.h");
+            forbear.composeText(.{})({
+                forbear.write("So how is xkbcommon actually used? Well, the first step is to link to it and grab the header, ");
+                forbear.Strong()({
+                    forbear.write("xkbcommon/xkbcommon.h");
+                });
+                forbear.write(". Most programs which utilize xkbcommon will have to manage three objects:");
             });
-            forbear.text(". Most programs which utilize xkbcommon will have to manage three objects:");
         });
 
         List()({

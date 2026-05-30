@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 
 pub fn TouchInput() void {
     forbear.component(.{})({
@@ -15,23 +14,27 @@ pub fn TouchInput() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Most touch-screen devices support ");
-            Strong()({
-                forbear.text("multitouch");
+            forbear.composeText(.{})({
+                forbear.write("Most touch-screen devices support ");
+                forbear.Strong()({
+                    forbear.write("multitouch");
+                });
+                forbear.write(": they can track multiple locations where the screen has been touched. Each of these \"touch points\" is assigned an ID which is unique among all currently active points where the screen is being touched, but might be reused if you lift your finger and press again.");
             });
-            forbear.text(": they can track multiple locations where the screen has been touched. Each of these \"touch points\" is assigned an ID which is unique among all currently active points where the screen is being touched, but might be reused if you lift your finger and press again.");
         });
 
         Paragraph(.{})({
-            forbear.text("Similarly to other input devices, you may obtain a ");
-            Strong()({
-                forbear.text("wl_touch");
+            forbear.composeText(.{})({
+                forbear.write("Similarly to other input devices, you may obtain a ");
+                forbear.Strong()({
+                    forbear.write("wl_touch");
+                });
+                forbear.write(" resource with ");
+                forbear.Strong()({
+                    forbear.write("wl_seat.get_touch");
+                });
+                forbear.write(", and you should send a \"release\" request when you're finished with it.");
             });
-            forbear.text(" resource with ");
-            Strong()({
-                forbear.text("wl_seat.get_touch");
-            });
-            forbear.text(", and you should send a \"release\" request when you're finished with it.");
         });
 
         Heading(.{ .level = 2 })({
@@ -39,19 +42,23 @@ pub fn TouchInput() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Like pointers, a single frame of touch processing on the server might carry information about many changes, but the server sends these as discrete Wayland events. The ");
-            Strong()({
-                forbear.text("wl_touch.frame");
+            forbear.composeText(.{})({
+                forbear.write("Like pointers, a single frame of touch processing on the server might carry information about many changes, but the server sends these as discrete Wayland events. The ");
+                forbear.Strong()({
+                    forbear.write("wl_touch.frame");
+                });
+                forbear.write(" event is used to group these together.");
             });
-            forbear.text(" event is used to group these together.");
         });
 
         Paragraph(.{})({
-            forbear.text("Clients should accumulate all ");
-            Strong()({
-                forbear.text("wl_touch");
+            forbear.composeText(.{})({
+                forbear.write("Clients should accumulate all ");
+                forbear.Strong()({
+                    forbear.write("wl_touch");
+                });
+                forbear.write(" events as they're received, then process pending inputs as a single touch event when the \"frame\" event is received.");
             });
-            forbear.text(" events as they're received, then process pending inputs as a single touch event when the \"frame\" event is received.");
         });
 
         Heading(.{ .level = 2 })({

@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 
@@ -17,15 +16,17 @@ pub fn PopupsAndParentWindows() void {
         });
 
         Paragraph(.{})({
-            forbear.text("For Wayland, the XDG shell provides facilities for managing these windows: popups. We looked at ");
-            Strong()({
-                forbear.text("get_toplevel");
+            forbear.composeText(.{})({
+                forbear.write("For Wayland, the XDG shell provides facilities for managing these windows: popups. We looked at ");
+                forbear.Strong()({
+                    forbear.write("get_toplevel");
+                });
+                forbear.write(" for creating top-level application windows earlier. In the case of popups, the ");
+                forbear.Strong()({
+                    forbear.write("get_popup");
+                });
+                forbear.write(" request is used instead.");
             });
-            forbear.text(" for creating top-level application windows earlier. In the case of popups, the ");
-            Strong()({
-                forbear.text("get_popup");
-            });
-            forbear.text(" request is used instead.");
         });
 
         Paragraph(.{})({
@@ -33,11 +34,13 @@ pub fn PopupsAndParentWindows() void {
         });
 
         Paragraph(.{})({
-            forbear.text("The first and second arguments are reasonably self-explanatory, but the third one introduces a new concept: positioners. The purpose of the positioner is, as the name might suggest, to position the new popup. This is used to allow the compositor to participate in the positioning of popups using its privileged information, for example to avoid having the popup extend past the edge of the display. We'll discuss positioners in chapter 10.4, for now you can simply create one and pass it in without further configuration to achieve reasonably sane default behavior, utilizing the appropriate ");
-            Strong()({
-                forbear.text("create_positioner");
+            forbear.composeText(.{})({
+                forbear.write("The first and second arguments are reasonably self-explanatory, but the third one introduces a new concept: positioners. The purpose of the positioner is, as the name might suggest, to position the new popup. This is used to allow the compositor to participate in the positioning of popups using its privileged information, for example to avoid having the popup extend past the edge of the display. We'll discuss positioners in chapter 10.4, for now you can simply create one and pass it in without further configuration to achieve reasonably sane default behavior, utilizing the appropriate ");
+                forbear.Strong()({
+                    forbear.write("create_positioner");
+                });
+                forbear.write(" request:");
             });
-            forbear.text(" request:");
         });
 
         Paragraph(.{})({
@@ -50,35 +53,43 @@ pub fn PopupsAndParentWindows() void {
 
         List()({
             ListItem()({
-                forbear.text("Create a new ");
-                Strong()({
-                    forbear.text("wl_surface");
+                forbear.composeText(.{})({
+                    forbear.write("Create a new ");
+                    forbear.Strong()({
+                        forbear.write("wl_surface");
+                    });
                 });
             });
             ListItem()({
-                forbear.text("Obtain an ");
-                Strong()({
-                    forbear.text("xdg_surface");
+                forbear.composeText(.{})({
+                    forbear.write("Obtain an ");
+                    forbear.Strong()({
+                        forbear.write("xdg_surface");
+                    });
+                    forbear.write(" for it");
                 });
-                forbear.text(" for it");
             });
             ListItem()({
-                forbear.text("Create a new ");
-                Strong()({
-                    forbear.text("xdg_positioner");
+                forbear.composeText(.{})({
+                    forbear.write("Create a new ");
+                    forbear.Strong()({
+                        forbear.write("xdg_positioner");
+                    });
+                    forbear.write(", saving its configuration for chapter 10.4");
                 });
-                forbear.text(", saving its configuration for chapter 10.4");
             });
             ListItem()({
-                forbear.text("Create an ");
-                Strong()({
-                    forbear.text("xdg_popup");
+                forbear.composeText(.{})({
+                    forbear.write("Create an ");
+                    forbear.Strong()({
+                        forbear.write("xdg_popup");
+                    });
+                    forbear.write(" from our XDG surface and XDG positioner, assigning its parent to the ");
+                    forbear.Strong()({
+                        forbear.write("xdg_toplevel");
+                    });
+                    forbear.write(" we created earlier.");
                 });
-                forbear.text(" from our XDG surface and XDG positioner, assigning its parent to the ");
-                Strong()({
-                    forbear.text("xdg_toplevel");
-                });
-                forbear.text(" we created earlier.");
             });
         });
 

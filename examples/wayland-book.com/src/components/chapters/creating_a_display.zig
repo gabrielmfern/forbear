@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
-const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 
@@ -21,11 +20,13 @@ pub fn CreatingADisplay() void {
         });
 
         Paragraph(.{})({
-            forbear.text("Connecting to a Wayland server and creating a ");
-            Strong()({
-                forbear.text("wl_display");
+            forbear.composeText(.{})({
+                forbear.write("Connecting to a Wayland server and creating a ");
+                forbear.Strong()({
+                    forbear.write("wl_display");
+                });
+                forbear.write(" to manage the connection's state is quite easy:");
             });
-            forbear.text(" to manage the connection's state is quite easy:");
         });
 
         Paragraph(.{})({

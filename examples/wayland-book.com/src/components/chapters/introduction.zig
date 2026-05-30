@@ -2,7 +2,6 @@ const forbear = @import("forbear");
 
 const Heading = @import("../heading.zig").Heading;
 const list = @import("../list.zig");
-const Strong = @import("../strong.zig").Strong;
 const List = @import("../list.zig").List;
 const ListItem = @import("../list.zig").ListItem;
 const Paragraph = @import("../paragraph.zig").Paragraph;
@@ -43,11 +42,13 @@ pub fn Introduction() !void {
         });
 
         Paragraph(.{})({
-            // TODO: the text for the actual notice should wrap around this
-            Strong()({
-                forbear.text("Notice: ");
+            forbear.composeText(.{})({
+                // TODO: the text for the actual notice should wrap around this
+                forbear.Strong()({
+                    forbear.write("Notice: ");
+                });
+                forbear.write("this is a draft. Chapters 1-10 are more or less complete, but may be updated later. Chapters 11 forward in large part remain to be written.");
             });
-            forbear.text("this is a draft. Chapters 1-10 are more or less complete, but may be updated later. Chapters 11 forward in large part remain to be written.");
         });
 
         forbear.element(.{
