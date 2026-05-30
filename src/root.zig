@@ -661,7 +661,7 @@ pub fn useScopeKey() u64 {
     const scopeKey = self.scopeStack.getLastOrNull() orelse {
         if (!builtin.is_test) {
             std.log.err(
-                "useScopeArena called outside of a component / element / hook scope",
+                "useScopeKey called outside of a component / element / hook scope",
                 .{},
             );
         }
