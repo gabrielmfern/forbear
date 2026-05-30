@@ -40,6 +40,7 @@ pub const CompleteTextStyle = nodeImport.CompleteTextStyle;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("window.zig").Window;
+pub const Color = Vec4;
 
 pub var traceWriter: ?*std.Io.Writer = null;
 pub fn setTraceWriter(writer: *std.Io.Writer) void {
@@ -632,13 +633,6 @@ pub fn useDeltaTime() f64 {
 pub fn useLastUpdateTime() f64 {
     const self = getForbear();
     return self.lastUpdateTime orelse self.startTime;
-}
-
-/// Overwrites the parent style with the given style.
-pub fn overwriteStyle(style: Style) void {
-    if (getParentNode()) |parentNode| {
-        parentNode.style = style.overwrite(parentNode.style);
-    }
 }
 
 pub fn getParentNode() ?*Node {
