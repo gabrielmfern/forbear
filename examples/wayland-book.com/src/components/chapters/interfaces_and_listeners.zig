@@ -3,6 +3,21 @@ const forbear = @import("forbear");
 const Heading = @import("../heading.zig").Heading;
 const Paragraph = @import("../paragraph.zig").Paragraph;
 const Strong = @import("../strong.zig").Strong;
+const CodeBlockForC = @import("../code_block_for_c.zig").CodeBlockForC;
+
+const wl_surface_listener =
+    \\struct wl_surface_listener {
+    \\        /** surface enters an output */
+    \\        void (*enter)(void *data,
+    \\                      struct wl_surface *wl_surface,
+    \\                      struct wl_output *output);
+    \\
+    \\        /** surface leaves an output */
+    \\        void (*leave)(void *data,
+    \\                      struct wl_surface *wl_surface,
+    \\                      struct wl_output *output);
+    \\};
+;
 
 pub fn InterfacesAndListeners() void {
     forbear.component(.{})({
@@ -38,9 +53,7 @@ pub fn InterfacesAndListeners() void {
             forbear.text(". Here's an example of this interface:");
         });
 
-        Paragraph(.{})({
-            forbear.text("[code block omitted]");
-        });
+        CodeBlockForC(wl_surface_listener);
 
         Paragraph(.{})({
             forbear.text("This is a client-side listener for a ");
