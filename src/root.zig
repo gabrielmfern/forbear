@@ -1782,7 +1782,10 @@ pub fn componentChildrenSlotEnd() *const fn (void) void {
     if (fm.err != null) return &noopEnd;
 
     const states = &fm.componentChildrenSlotStates;
-    std.debug.assert(states.items.len > 0);
+    if (states.items.len == 0) {
+        handleFrameError(error.NoMatchingSlotBegin);
+        return &noopEnd;
+    }
 
     const slotState = &states.items[states.items.len - 1];
     const parent = self.nodeTree.at(slotState.parentIndex);
