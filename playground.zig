@@ -15,24 +15,9 @@ fn CounterExample() void {
         })({
             forbear.printText("Count: {d}", .{count.*});
 
-            forbear.element(.{
-                .style = .{
-                    .margin = .top(12.0),
-                    .padding = forbear.Padding.block(10.0).withInLine(16.0),
-                    .background = .{ .color = .{ 0.0, 0.0, 0.0, 1.0 } },
-                    .borderRadius = 8.0,
-                    .cursor = .pointer,
-                },
-            })({
-                if (forbear.on(.mouseEnter)) {
-                    forbear.setCursor(.pointer);
-                }
-                if (forbear.on(.click)) {
-                    count.* += 1;
-                }
-
-                forbear.text("Increment");
-            });
+            if (Button("Increment")) {
+                count.* += 1;
+            }
         });
     });
 }
@@ -71,6 +56,99 @@ fn RichTextExample() void {
             forbear.write(" inside one wrapped paragraph.");
         });
     });
+}
+
+fn timingFunction(progress: f32) f32 {
+    return forbear.cubicBezier(0.4, 0, 0.2, 1, progress);
+}
+
+fn Button(text: []const u8) bool {
+    var activated = false;
+    forbear.component(.{})({
+        const isHovering = forbear.useState(bool, false);
+        const isPressed = forbear.useState(bool, false);
+
+        forbear.element(.{
+            .style = .{
+                .height = .{ .fixed = 32.0 },
+                .padding = .inLine(10.0),
+                .background = .{
+                    .color = forbear.useTransition(
+                        @Vector(4, f32),
+                        if (isHovering.*) forbear.hex("#1C1C1C") else forbear.hex("#151515"),
+                        0.15,
+                        timingFunction,
+                    ),
+                },
+                .color = forbear.hex("#fafafa"),
+                .translate = .{
+                    0.0,
+                    forbear.useTransition(f32, if (isPressed.*) 1.0 else 0.0, 0.15, timingFunction),
+                },
+                .cursor = .default,
+                .borderRadius = 10.0,
+                .borderWidth = .all(2.0),
+                .fontSize = 14.0,
+                .fontWeight = 500,
+                .textWrapping = .none,
+                .xJustification = .center,
+                .yJustification = .center,
+                .direction = .vertical,
+            },
+        })({
+            const focusContext = forbear.FocusContext.use().?;
+            focusContext.register(&(struct {
+                fn consume(payload: forbear.EventPayload) bool {
+                    return payload == .keyDown and (payload.keyDown.enter or payload.keyDown.space);
+                }
+            }).consume);
+
+            const parentNode = forbear.getParentNode().?;
+            parentNode.style.shadow = .{
+                .color = forbear.hex("#3F3F3F"),
+                .offset = .all(0.0),
+                .blurRadius = 0.0,
+                .spread = forbear.useTransition(
+                    f32,
+                    if (focusContext.hasFocus()) 3.0 else 0.0,
+                    0.15,
+                    timingFunction,
+                ),
+            };
+            parentNode.style.borderColor = forbear.useTransition(
+                forbear.Color,
+                if (focusContext.hasFocus()) forbear.hex("#3F3F3F") else forbear.hex("#2F2F2F"),
+                0.15,
+                timingFunction,
+            );
+
+            if (forbear.on(.mouseEnter)) {
+                isHovering.* = true;
+            }
+            if (forbear.on(.mouseLeave)) {
+                isHovering.* = false;
+                isPressed.* = false;
+            }
+            if (forbear.on(.mouseDown)) {
+                isPressed.* = true;
+            }
+            if (forbear.on(.mouseUp)) {
+                isPressed.* = false;
+            }
+
+            const keysDown = forbear.on(.keyDown);
+            if (keysDown.space or keysDown.enter) {
+                activated = true;
+            }
+            if (forbear.on(.click)) {
+                activated = true;
+            }
+
+            forbear.text(text);
+        });
+    });
+
+    return activated;
 }
 
 fn App() void {
@@ -289,6 +367,8 @@ fn App() void {
                         });
                     });
                 });
+
+                forbear.FocusContext.use().?.handleEvents();
             });
         });
     });
