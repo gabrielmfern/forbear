@@ -7954,32 +7954,32 @@ test "FocusContext: shift+tab cycles focus backward" {
     defer arenaAllocator.deinit();
     const arena = arenaAllocator.allocator();
 
-    var secondKey: ?u64 = null;
+    var thirdKey: ?u64 = null;
     var focusedKey: ?u64 = null;
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = FocusContext.use().?;
+                    const focusContext = FocusContext.use().?;
 
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        focusContext.register(&consumesNothing);
                         // Focus the first element
-                        ctx.focus();
+                        focusContext.focus();
                     });
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
-                        secondKey = forbear.getParentNode().?.key;
+                        focusContext.register(&consumesNothing);
                     });
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        focusContext.register(&consumesNothing);
+                        thirdKey = forbear.getParentNode().?.key;
                     });
 
                     // Simulate shift+tab
                     forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
                     forbear.getForbear().keysHeldSnapshot = .{ .shift = true };
-                    ctx.handleEvents();
-                    focusedKey = if (ctx.focused) |f| f.key else null;
+                    focusContext.handleEvents();
+                    focusedKey = if (focusContext.focused) |f| f.key else null;
                 });
             });
         });
@@ -7991,7 +7991,7 @@ test "FocusContext: shift+tab cycles focus backward" {
     // Let me verify by checking the third key instead
     try std.testing.expect(focusedKey != null);
     // Should NOT be the second element (index 1), should be last (index 2)
-    try std.testing.expect(focusedKey.? != secondKey.?);
+    try std.testing.expect(focusedKey.? == thirdKey.?);
 }
 
 test "FocusContext: escape clears focus" {
