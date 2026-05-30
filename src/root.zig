@@ -1160,6 +1160,20 @@ pub inline fn createContext(
         pub const key: u64 = contextKey;
         pub const ValueType = T;
 
+        pub fn use() ?*ValueType {
+            const self = getForbear();
+            var i = self.contextStack.items.len;
+            while (i > 0) {
+                i -= 1;
+                const contextEntry = self.contextStack.items[i];
+                if (contextEntry.contextKey == key) {
+                    const valueEntry = self.contextValues.getPtr(contextEntry.valueKey) orelse unreachable;
+                    return @ptrCast(@alignCast(valueEntry.contents));
+                }
+            }
+            return null;
+        }
+
         pub noinline fn Provider(initialValue: T) *const fn (void) void {
             const self = getForbear();
 
@@ -1206,22 +1220,6 @@ fn contextEnd(block: void) void {
     _ = block;
     const self = getForbear();
     _ = self.contextStack.pop();
-}
-
-pub fn useContext(
-    comptime Context: type,
-) ?*Context.ValueType {
-    const self = getForbear();
-    var i = self.contextStack.items.len;
-    while (i > 0) {
-        i -= 1;
-        const contextEntry = self.contextStack.items[i];
-        if (contextEntry.contextKey == Context.key) {
-            const valueEntry = self.contextValues.getPtr(contextEntry.valueKey) orelse unreachable;
-            return @ptrCast(@alignCast(valueEntry.contents));
-        }
-    }
-    return null;
 }
 
 pub fn BreakLine() void {

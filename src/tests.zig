@@ -7426,7 +7426,7 @@ test "context value is visible to a descendant via useContext" {
     var observed: ?u32 = null;
     var observedAtRoot: ?u32 = null;
     try forbear.frame(try frameMeta(arena))({
-        if (forbear.useContext(SimpleCtx)) |v| observedAtRoot = v.*;
+        if (SimpleCtx.use()) |v| observedAtRoot = v.*;
         forbear.element(.{
             .style = .{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 100.0 } },
         })({
@@ -7434,7 +7434,7 @@ test "context value is visible to a descendant via useContext" {
                 forbear.element(.{
                     .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                 })({
-                    if (forbear.useContext(SimpleCtx)) |v| observed = v.*;
+                    if (SimpleCtx.use()) |v| observed = v.*;
                 });
             });
         });
@@ -7461,17 +7461,17 @@ test "same context nested with different values resolves to nearest provider" {
             forbear.element(.{
                 .style = .{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 100.0 } },
             })({
-                if (forbear.useContext(NestedCtx)) |v| outerObserved = v.*;
+                if (NestedCtx.use()) |v| outerObserved = v.*;
                 NestedCtx.Provider(@as(u32, 2))({
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 50.0 } },
                     })({
-                        if (forbear.useContext(NestedCtx)) |v| middleObserved = v.*;
+                        if (NestedCtx.use()) |v| middleObserved = v.*;
                         NestedCtx.Provider(@as(u32, 3))({
                             forbear.element(.{
                                 .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                             })({
-                                if (forbear.useContext(NestedCtx)) |v| innermostObserved = v.*;
+                                if (NestedCtx.use()) |v| innermostObserved = v.*;
                             });
                         });
                     });
@@ -7502,8 +7502,8 @@ test "two different contexts at the same scope each resolve to their own value" 
                 forbear.element(.{
                     .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                 })({
-                    if (forbear.useContext(SimpleCtx)) |v| observedSimple = v.*;
-                    if (forbear.useContext(ThemeCtx)) |v| observedTheme = v.*;
+                    if (SimpleCtx.use()) |v| observedSimple = v.*;
+                    if (ThemeCtx.use()) |v| observedTheme = v.*;
                 });
             });
         });
@@ -7525,14 +7525,14 @@ test "useContext returns null when no provider has been mounted" {
     var atTopLevel: ?u32 = 999;
     var insideNestedElement: ?u32 = 999;
     try forbear.frame(try frameMeta(arena))({
-        if (forbear.useContext(SimpleCtx)) |v| atTopLevel = v.* else atTopLevel = null;
+        if (SimpleCtx.use()) |v| atTopLevel = v.* else atTopLevel = null;
         forbear.element(.{
             .style = .{ .width = .{ .fixed = 50.0 }, .height = .{ .fixed = 50.0 } },
         })({
             forbear.element(.{
                 .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
             })({
-                if (forbear.useContext(SimpleCtx)) |v| insideNestedElement = v.* else insideNestedElement = null;
+                if (SimpleCtx.use()) |v| insideNestedElement = v.* else insideNestedElement = null;
             });
         });
         _ = try forbear.layout();
@@ -7556,13 +7556,13 @@ test "provider value does not leak to siblings after its block ends" {
     var afterSecond: ?u32 = 999;
     try forbear.frame(try frameMeta(arena))({
         SiblingCtx.Provider(@as(u32, 7))({
-            if (forbear.useContext(SiblingCtx)) |v| insideFirst = v.*;
+            if (SiblingCtx.use()) |v| insideFirst = v.*;
         });
-        if (forbear.useContext(SiblingCtx)) |v| betweenProviders = v.* else betweenProviders = null;
+        if (SiblingCtx.use()) |v| betweenProviders = v.* else betweenProviders = null;
         SiblingCtx.Provider(@as(u32, 9))({
-            if (forbear.useContext(SiblingCtx)) |v| insideSecond = v.*;
+            if (SiblingCtx.use()) |v| insideSecond = v.*;
         });
-        if (forbear.useContext(SiblingCtx)) |v| afterSecond = v.* else afterSecond = null;
+        if (SiblingCtx.use()) |v| afterSecond = v.* else afterSecond = null;
         _ = try forbear.layout();
     });
 
@@ -7574,7 +7574,7 @@ test "provider value does not leak to siblings after its block ends" {
 
 fn PersistComponent(observed: *?u32, writeBack: ?u32) void {
     PersistCtx.Provider(@as(u32, 10))({
-        if (forbear.useContext(PersistCtx)) |v| {
+        if (PersistCtx.use()) |v| {
             observed.* = v.*;
             if (writeBack) |w| v.* = w;
         }
@@ -7629,7 +7629,7 @@ test "provider round-trips a non-trivial struct value" {
             forbear.element(.{
                 .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
             })({
-                if (forbear.useContext(StructCtx)) |v| observed = v.*;
+                if (StructCtx.use()) |v| observed = v.*;
             });
         });
         _ = try forbear.layout();
@@ -7671,7 +7671,7 @@ test "context provided inside a component is visible to slotted children" {
                         .height = .{ .fixed = 50 },
                     },
                 })({
-                    if (forbear.useContext(SlotCtx)) |v| observed = v.*;
+                    if (SlotCtx.use()) |v| observed = v.*;
                 });
             });
         });
@@ -7712,7 +7712,7 @@ test "FocusContext: register and hasFocus are false when nothing is focused" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                     })({
@@ -7742,7 +7742,7 @@ test "FocusContext: focus gives hasFocus to the registered element" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
 
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
@@ -7782,7 +7782,7 @@ test "FocusContext: consumes delegates to the focused widget predicate" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
 
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
@@ -7816,7 +7816,7 @@ test "FocusContext: consumes returns false when nothing is focused" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
 
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
@@ -7847,7 +7847,7 @@ test "FocusContext: tab cycles focus forward through registered elements" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
                         ctx.register(&consumesNothing);
                     });
@@ -7884,7 +7884,7 @@ test "FocusContext: tab with no focus starts at first element" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
 
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
                         ctx.register(&consumesNothing);
@@ -7921,7 +7921,7 @@ test "FocusContext: tab wraps from last to first element" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
 
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
                         ctx.register(&consumesNothing);
@@ -7960,7 +7960,7 @@ test "FocusContext: shift+tab cycles focus backward" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
 
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
                         ctx.register(&consumesNothing);
@@ -8007,7 +8007,7 @@ test "FocusContext: escape clears focus" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
 
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
                         ctx.register(&consumesNothing);
@@ -8043,7 +8043,7 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
                         ctx.register(&consumesNothing);
                     });
@@ -8065,7 +8065,7 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
         forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
-                    const ctx = forbear.useContext(FocusContext).?;
+                    const ctx = FocusContext.use().?;
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
                         ctx.register(&consumesNothing);
                     });
@@ -8095,7 +8095,7 @@ test "FocusContext: register clears focusable list on new frame" {
                 forbear.component(.{ .key = "test" })({
                     FocusProvider()({
                         if (frame == 0) {
-                            const focus = forbear.useContext(FocusContext).?;
+                            const focus = FocusContext.use().?;
                             forbear.element(.{ .key = "element-1" })({
                                 focus.register(&consumesNothing);
                             });
@@ -8107,7 +8107,7 @@ test "FocusContext: register clears focusable list on new frame" {
                             });
                             focusableCount = focus.focusable.items.len;
                         } else if (frame == 1) {
-                            const focus = forbear.useContext(FocusContext).?;
+                            const focus = FocusContext.use().?;
                             forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
                                 focus.register(&consumesNothing);
                             });
