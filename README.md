@@ -27,7 +27,7 @@ fn App() void {
     })({
       const count = forbear.useState(u32, 0);
 
-      forbear.printText("Count: {d}", .{count.value.*});
+      forbear.printText("Count: {d}", .{count.*});
       
       forbear.element(.{ 
         .style = .{
@@ -35,7 +35,7 @@ fn App() void {
           .borderRadius = 8.0,
         },
       })({
-        if (forbear.on(.click)) {
+        if (forbear.onClick()) {
           count.* += 1;
         }
 
@@ -48,7 +48,7 @@ fn App() void {
 
 Layout is flexbox-inspired: elements either **grow** to fill available space or **fit** to their content. You compose layouts by nesting elements with alignment and padding. Layouting is heavily inspired by [Clay](https://github.com/nicbarker/clay).
 
-State is managed through hooks (`useState`, `useEvent`) that persist across frames, similar to React hooks.
+State is managed through hooks (`useState`, `useTransition`, `useAnimation`, ...) that persist across frames, similar to React hooks. Events are read inline with handlers like `onClick()`, `onMouseEnter()`, and `onKeyDown()` that report on the current element.
 
 This doesn't include the current setup code you have to write, which I plan on improving with time as I find better APIs that still allow for the flexibility I want, but is currently mostly garbage.
 
@@ -67,7 +67,10 @@ Most of everything is still incomplete, needs a lot of work, and looks ugly. Tha
 - Rendering pipeline with text, border radius, solid/dashed borders, shadows, linear gradients, blend modes (multiply, darken), proper z-ordering, and other stuff
 - A flexbox-inspired layout system with grow/fit, alignment, padding heavily inspired by [Clay](https://github.com/nicbarker/clay)
 - A good starting point for element creation, including component children slotting, that I don't think is going to change much
-- An event system with `mouseDown`/`mouseUp`/`click`, though still missing a lot
+- An event system with mouse (`onMouseDown`/`onMouseUp`/`onClick`/`onMouseEnter`/`onMouseLeave`/`onScroll`) and keyboard (`onKeyDown`/`onKeyUp`) handlers, though still missing a lot
+- Keyboard focus scopes with tab / shift-tab / escape navigation through `FocusProvider`, completely built on top of the existing primitives
+- Rich inline text: mix bold, color, and other styles inside a single wrapped paragraph with `composeText`, `write`, `textStyle`, and the built-in `Strong`
+- Contexts for passing data down the tree without prop drilling (`createContext`/`useContext`)
 - Per-element scrolling and clipping
 - Stable keying for elements that get added/removed across frames
 - Some starting points for animation through `useAnimation`, `useTransition` and `useSpringTransition`
