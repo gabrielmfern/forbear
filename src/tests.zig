@@ -8079,4 +8079,3 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
 
     try std.testing.expectEqual(false, focusedAfterDrop.?);
 }
-
