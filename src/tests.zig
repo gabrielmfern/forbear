@@ -8004,7 +8004,7 @@ test "FocusContext: escape clears focus" {
 
     var hasFocusAfterEscape: ?bool = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.element({
+        forbear.element(.{})({
             forbear.component(.{})({
                 FocusProvider()({
                     const ctx = forbear.useContext(FocusContext).?;
