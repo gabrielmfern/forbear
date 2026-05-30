@@ -122,25 +122,25 @@ fn Button(text: []const u8) bool {
                 timingFunction,
             );
 
-            if (forbear.on(.mouseEnter)) {
+            if (forbear.onMouseEnter()) {
                 isHovering.* = true;
             }
-            if (forbear.on(.mouseLeave)) {
+            if (forbear.onMouseLeave()) {
                 isHovering.* = false;
                 isPressed.* = false;
             }
-            if (forbear.on(.mouseDown)) {
+            if (forbear.onMouseDown()) {
                 isPressed.* = true;
             }
-            if (forbear.on(.mouseUp)) {
+            if (forbear.onMouseUp()) {
                 isPressed.* = false;
             }
 
-            const keysDown = forbear.on(.keyDown);
+            const keysDown = forbear.onKeyDown();
             if (focusContext.hasFocus() and (keysDown.space or keysDown.enter)) {
                 activated = true;
             }
-            if (forbear.on(.click)) {
+            if (forbear.onClick()) {
                 activated = true;
             }
 
@@ -196,10 +196,10 @@ fn App() void {
                             .borderRadius = 20,
                         },
                     })({
-                        if (forbear.on(.mouseEnter)) {
+                        if (forbear.onMouseEnter()) {
                             isHovering.* = true;
                         }
-                        if (forbear.on(.mouseLeave)) {
+                        if (forbear.onMouseLeave()) {
                             isHovering.* = false;
                         }
                     });

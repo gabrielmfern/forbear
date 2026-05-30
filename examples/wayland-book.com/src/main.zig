@@ -99,7 +99,7 @@ fn App() !void {
                         .key = chapter.chapter,
                         .depth = chapter.depth,
                     })({
-                        if (forbear.on(.click)) {
+                        if (forbear.onClick()) {
                             activeChapter.* = i;
                         }
 

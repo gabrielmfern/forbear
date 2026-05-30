@@ -134,7 +134,7 @@ pub const Event = enum {
     click,
     scroll,
     /// Keys that transitioned to "down" since the previous frame's sample.
-    /// Returned as a `Keys` set: `if (forbear.on(.keyDown).tab) ...`.
+    /// Returned as a `Keys` set: `if (forbear.onKeyDown().tab) ...`.
     /// Each press fires exactly once — held keys do *not* re-appear here.
     keyDown,
     /// Keys that transitioned to "up" since the previous frame's sample.
@@ -1124,10 +1124,10 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     // over to the other one. If the element I hovered is later on the tree,
     // its mouseLeave will happen at the end, meaning the cursor will be set to
     // the baseStyle cursor instead of the former element's cursor.
-    if (on(.mouseEnter)) {
+    if (onMouseEnter()) {
         setCursor(result.ptr.style.cursor);
     }
-    if (on(.mouseLeave)) {
+    if (onMouseLeave()) {
         setCursor(baseStyle.cursor);
     }
 
@@ -1559,16 +1559,16 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
     try pushScope(result.ptr.key);
     defer popScope();
 
-    if (on(.mouseEnter)) {
+    if (onMouseEnter()) {
         setCursor(result.ptr.style.cursor);
     }
-    if (on(.mouseLeave)) {
+    if (onMouseLeave()) {
         setCursor(baseStyle.cursor);
     }
 }
 
 /// Sets the OS-level mouse cursor for the current frame. Called per-frame
-/// (typically from a `forbear.on(.mouseOver)` branch) — the last call wins,
+/// (typically from a `forbear.onMouseEnter()` branch) — the last call wins,
 /// so deeper/later mounted elements take precedence.
 pub fn setCursor(cursor: Cursor) void {
     const self = getForbear();
@@ -1843,118 +1843,138 @@ pub fn OnResult(comptime eventTag: Event) type {
     };
 }
 
-/// Inline hit test against previous-frame measurement. No event queue —
-/// every caller sees the same raw input state each frame.
-///
-/// Keyboard events (`.keyDown` / `.keyUp`) are **global** for now: every
-/// caller sees every key edge that occurred since the last frame,
-/// regardless of which element invoked `on()`. Focus scoping is a
-/// separate concern layered on top.
-pub fn on(comptime eventTag: Event) OnResult(eventTag) {
-    if (comptime eventTag == .keyDown or eventTag == .keyUp) {
-        const self = getForbear();
-        return switch (eventTag) {
-            .keyDown => self.keysPressedThisFrame,
-            .keyUp => self.keysReleasedThisFrame,
-            else => unreachable,
-        };
-    }
-
+pub fn isMouseInside() bool {
     hook();
     defer hookEnd();
-    const self = getForbear();
-    std.debug.assert(self.frameMeta != null);
-
-    if (comptime eventTag == .click) {
-        // This is not exactly the same as mouseUp, since mouseUp doesn't
-        // require that the mouse was down inside of the element before, while
-        // click does.
-        const wasMouseDown = useState(bool, false);
-        if (on(.mouseDown)) {
-            wasMouseDown.* = true;
-        }
-        if (on(.mouseLeave)) {
-            wasMouseDown.* = false;
-        }
-        if (on(.mouseUp)) {
-            if (wasMouseDown.*) {
-                wasMouseDown.* = false;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Reserve hook slots before the measurement guard so that slot indices
-    // are stable across frames — on the first frame there's no measurement,
-    // and a conditional useState would shift every later slot once the
-    // measurement starts existing.
-    const slot: ?*bool = switch (eventTag) {
-        .mouseEnter, .mouseLeave, .mouseDown, .mouseUp, .mouseDownOutside => useState(bool, false),
-        .scroll, .mouseMove => null,
-        // Keyboard tags + `.click` returned earlier.
-        .click, .keyDown, .keyUp => unreachable,
-    };
-    const lastMousePositionSlot: ?*Vec2 = if (eventTag == .mouseMove)
-        useState(Vec2, self.mousePosition)
-    else
-        null;
 
     const measurement = useNodeMeasurement() orelse {
-        if (comptime eventTag == .scroll or eventTag == .mouseMove) return null;
         return false;
     };
 
+    const mousePosition = useMousePosition();
     const pos = measurement.position;
     const size = measurement.size;
-    const inside = self.mousePosition[0] >= pos[0] and
-        self.mousePosition[1] >= pos[1] and
-        self.mousePosition[0] <= pos[0] + size[0] and
-        self.mousePosition[1] <= pos[1] + size[1];
+    return mousePosition[0] >= pos[0] and
+        mousePosition[1] >= pos[1] and
+        mousePosition[0] <= pos[0] + size[0] and
+        mousePosition[1] <= pos[1] + size[1];
+}
 
-    switch (eventTag) {
-        .mouseEnter, .mouseLeave => {
-            const wasMouseInside = slot.?;
-            defer wasMouseInside.* = inside;
+/// Fired once on the frame the mouse crosses into the current element's bounds.
+pub fn onMouseEnter() bool {
+    hook();
+    defer hookEnd();
 
-            switch (eventTag) {
-                .mouseEnter => return inside and !wasMouseInside.*,
-                .mouseLeave => return !inside and wasMouseInside.*,
-                else => unreachable,
-            }
-            unreachable;
-        },
-        .mouseDownOutside => {
-            const wasPressedLastFrame = slot.?;
-            defer wasPressedLastFrame.* = self.mouseButtonPressed;
-            return self.mouseButtonPressed and !wasPressedLastFrame.* and !inside;
-        },
-        .mouseDown => {
-            const wasPressedLastFrame = slot.?;
-            defer wasPressedLastFrame.* = self.mouseButtonPressed;
-            return self.mouseButtonPressed and !wasPressedLastFrame.* and inside;
-        },
-        .mouseUp => {
-            const wasPressedLastFrame = slot.?;
-            defer wasPressedLastFrame.* = self.mouseButtonPressed;
-            return !self.mouseButtonPressed and wasPressedLastFrame.* and inside;
-        },
-        .click, .keyDown, .keyUp => unreachable,
-        .scroll => {
-            if (!inside) return null;
-            if (self.scrollDelta[0] != 0.0 or self.scrollDelta[1] != 0.0)
-                return self.scrollDelta;
-            return null;
-        },
-        .mouseMove => {
-            const lastMousePosition = lastMousePositionSlot.?;
-            defer lastMousePosition.* = self.mousePosition;
-            if (!inside) return null;
-            const delta = self.mousePosition - lastMousePosition.*;
-            if (delta[0] != 0.0 or delta[1] != 0.0) return delta;
-            return null;
-        },
+    const inside = isMouseInside();
+
+    const wasMouseInside = useState(bool, false);
+    defer wasMouseInside.* = inside;
+
+    return inside and !wasMouseInside.*;
+}
+
+/// Fired once on the frame the mouse crosses out of the current element's bounds.
+pub fn onMouseLeave() bool {
+    hook();
+    defer hookEnd();
+
+    const inside = isMouseInside();
+
+    const wasMouseInsideLastFrame = useState(bool, false);
+    defer wasMouseInsideLastFrame.* = inside;
+
+    return !inside and wasMouseInsideLastFrame.*;
+}
+
+/// True on the frame the mouse button goes down inside the current element.
+pub fn onMouseDown() bool {
+    hook();
+    defer hookEnd();
+
+    const inside = isMouseInside();
+    const wasPressedLastFrame = useState(bool, false);
+    defer wasPressedLastFrame.* = isMouseButtonPressed();
+    return isMouseButtonPressed() and !wasPressedLastFrame.* and inside;
+}
+
+/// True on the frame the mouse button is released inside the current element.
+pub fn onMouseUp() bool {
+    hook();
+    defer hookEnd();
+
+    const inside = isMouseInside();
+    const wasPressedLastFrame = useState(bool, false);
+    defer wasPressedLastFrame.* = isMouseButtonPressed();
+    return !isMouseButtonPressed() and wasPressedLastFrame.* and inside;
+}
+
+/// Mouse movement delta while the cursor is inside the current element, else null.
+pub fn onMouseMove() ?Vec2 {
+    hook();
+    defer hookEnd();
+
+    const mousePosition = useMousePosition();
+    const lastMousePosition = useState(Vec2, mousePosition);
+    defer lastMousePosition.* = mousePosition;
+    const delta = mousePosition - lastMousePosition.*;
+
+    if (isMouseInside() and (delta[0] != 0.0 or delta[1] != 0.0)) {
+        return delta;
+    } else {
+        return null;
     }
+}
+
+/// True on a full press-and-release cycle that both started and ended inside
+/// the current element.
+///
+/// This is not exactly the same as mouseUp, since mouseUp doesn't require that
+/// the mouse was down inside of the element before, while click does.
+pub fn onClick() bool {
+    hook();
+    defer hookEnd();
+
+    const wasMouseDown = useState(bool, false);
+    if (onMouseDown()) {
+        wasMouseDown.* = true;
+    }
+    if (onMouseLeave()) {
+        wasMouseDown.* = false;
+    }
+
+    if (onMouseUp() and wasMouseDown.*) {
+        wasMouseDown.* = false;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+/// Wheel/trackpad scroll delta while the cursor is inside the current element,
+/// else null.
+pub fn onScroll() ?Vec2 {
+    hook();
+    defer hookEnd();
+
+    const self = getForbear();
+    if (isMouseInside() and (self.scrollDelta[0] != 0.0 or self.scrollDelta[1] != 0.0)) {
+        return self.scrollDelta;
+    } else {
+        return null;
+    }
+}
+
+/// Keys that transitioned to "down" since the previous frame's sample.
+/// Global for now: `if (forbear.onKeyDown().tab) ...`.
+pub fn onKeyDown() Keys {
+    const self = getForbear();
+    return self.keysPressedThisFrame;
+}
+
+/// Keys that transitioned to "up" since the previous frame's sample.
+pub fn onKeyUp() Keys {
+    const self = getForbear();
+    return self.keysReleasedThisFrame;
 }
 
 pub fn update() !void {
@@ -2099,7 +2119,7 @@ pub fn setWindowHandlers(window: *Window) void {
 /// All keys currently held, sampled at frame start. Stable for the
 /// duration of the frame. Read individual keys as fields:
 ///   const held = forbear.keysHeld();
-///   if (held.controlLeft and forbear.on(.keyDown).z) undo();
+///   if (held.controlLeft and forbear.onKeyDown().z) undo();
 ///   if (held.shiftLeft or held.shiftRight) doShifty();
 pub fn keysHeld() Keys {
     return getForbear().keysHeldSnapshot;
