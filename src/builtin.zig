@@ -357,6 +357,7 @@ pub const EventPayload = union(forbear.Event) {
     mouseEnter: bool,
     mouseLeave: bool,
     mouseDown: bool,
+    mouseDownOutside: bool,
     mouseUp: bool,
     mouseMove: ?Vec2,
     click: bool,
@@ -387,6 +388,9 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
             .key = node.key,
             .consumes = consumesFn,
         }) catch |err| forbear.handleFrameError(err);
+        if (self.focused != null and self.focused.?.key == node.key and forbear.on(.mouseDownOutside)) {
+            self.focused = null;
+        }
     }
 
     pub fn focus(self: *@This()) void {
@@ -424,7 +428,9 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
 
         if (self.focused) |f| validate: {
             for (self.focusable.items) |item| {
-                if (item.key == f.key) break :validate;
+                if (item.key == f.key) {
+                    break :validate;
+                }
             }
             self.focused = null;
         }
@@ -450,7 +456,9 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
                 self.focused = items[0];
             }
         }
-        if (pressed.escape) self.focused = null;
+        if (pressed.escape) {
+            self.focused = null;
+        }
     }
 });
 

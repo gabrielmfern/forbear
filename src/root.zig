@@ -128,6 +128,7 @@ pub const Event = enum {
     mouseEnter,
     mouseLeave,
     mouseDown,
+    mouseDownOutside,
     mouseUp,
     mouseMove,
     click,
@@ -1886,7 +1887,7 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
     // and a conditional useState would shift every later slot once the
     // measurement starts existing.
     const slot: ?*bool = switch (eventTag) {
-        .mouseEnter, .mouseLeave, .mouseDown, .mouseUp => useState(bool, false),
+        .mouseEnter, .mouseLeave, .mouseDown, .mouseUp, .mouseDownOutside => useState(bool, false),
         .scroll, .mouseMove => null,
         // Keyboard tags + `.click` returned earlier.
         .click, .keyDown, .keyUp => unreachable,
@@ -1919,6 +1920,11 @@ pub fn on(comptime eventTag: Event) OnResult(eventTag) {
                 else => unreachable,
             }
             unreachable;
+        },
+        .mouseDownOutside => {
+            const wasPressedLastFrame = slot.?;
+            defer wasPressedLastFrame.* = self.mouseButtonPressed;
+            return self.mouseButtonPressed and !wasPressedLastFrame.* and !inside;
         },
         .mouseDown => {
             const wasPressedLastFrame = slot.?;
