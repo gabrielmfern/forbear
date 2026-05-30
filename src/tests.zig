@@ -7709,14 +7709,16 @@ test "FocusContext: register and hasFocus are false when nothing is focused" {
 
     var observed: ?bool = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
-                forbear.element(.{
-                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
-                })({
-                    ctx.register(&consumesKeyDown);
-                    observed = ctx.hasFocus();
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
+                    forbear.element(.{
+                        .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                    })({
+                        ctx.register(&consumesKeyDown);
+                        observed = ctx.hasFocus();
+                    });
                 });
             });
         });
@@ -7737,23 +7739,25 @@ test "FocusContext: focus gives hasFocus to the registered element" {
     var hasFocusA: ?bool = null;
     var hasFocusB: ?bool = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
 
-                forbear.element(.{
-                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
-                })({
-                    ctx.register(&consumesKeyDown);
-                    ctx.focus();
-                    hasFocusA = ctx.hasFocus();
-                });
+                    forbear.element(.{
+                        .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                    })({
+                        ctx.register(&consumesKeyDown);
+                        ctx.focus();
+                        hasFocusA = ctx.hasFocus();
+                    });
 
-                forbear.element(.{
-                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
-                })({
-                    ctx.register(&consumesNothing);
-                    hasFocusB = ctx.hasFocus();
+                    forbear.element(.{
+                        .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                    })({
+                        ctx.register(&consumesNothing);
+                        hasFocusB = ctx.hasFocus();
+                    });
                 });
             });
         });
@@ -7775,19 +7779,21 @@ test "FocusContext: consumes delegates to the focused widget predicate" {
     var consumesKeyDownResult: ?bool = null;
     var consumesClickResult: ?bool = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
 
-                forbear.element(.{
-                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
-                })({
-                    ctx.register(&consumesKeyDown);
-                    ctx.focus();
+                    forbear.element(.{
+                        .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                    })({
+                        ctx.register(&consumesKeyDown);
+                        ctx.focus();
+                    });
+
+                    consumesKeyDownResult = ctx.consumes(.keyDown, .{ .tab = true });
+                    consumesClickResult = ctx.consumes(.click, true);
                 });
-
-                consumesKeyDownResult = ctx.consumes(.keyDown, .{ .tab = true });
-                consumesClickResult = ctx.consumes(.click, true);
             });
         });
         _ = try forbear.layout();
@@ -7807,17 +7813,19 @@ test "FocusContext: consumes returns false when nothing is focused" {
 
     var result: ?bool = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
 
-                forbear.element(.{
-                    .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
-                })({
-                    ctx.register(&consumesEverything);
+                    forbear.element(.{
+                        .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
+                    })({
+                        ctx.register(&consumesEverything);
+                    });
+
+                    result = ctx.consumes(.keyDown, .{ .a = true });
                 });
-
-                result = ctx.consumes(.keyDown, .{ .a = true });
             });
         });
         _ = try forbear.layout();
@@ -7836,24 +7844,26 @@ test "FocusContext: tab cycles focus forward through registered elements" {
 
     // Frame 1: register three focusables, none focused
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                });
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                });
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                });
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                    });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                    });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                    });
 
-                // Simulate tab press
-                forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
-                ctx.handleEvents();
+                    // Simulate tab press
+                    forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                    ctx.handleEvents();
 
-                try std.testing.expect(ctx.focused != null);
+                    try std.testing.expect(ctx.focused != null);
+                });
             });
         });
         _ = try forbear.layout();
@@ -7871,21 +7881,23 @@ test "FocusContext: tab with no focus starts at first element" {
     var focusedKey: ?u64 = null;
     var firstKey: ?u64 = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
 
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                    firstKey = forbear.getParentNode().?.key;
-                });
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                        firstKey = forbear.getParentNode().?.key;
+                    });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                    });
 
-                forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
-                ctx.handleEvents();
-                focusedKey = if (ctx.focused) |f| f.key else null;
+                    forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                    ctx.handleEvents();
+                    focusedKey = if (ctx.focused) |f| f.key else null;
+                });
             });
         });
         _ = try forbear.layout();
@@ -7906,23 +7918,25 @@ test "FocusContext: tab wraps from last to first element" {
     var firstKey: ?u64 = null;
     var focusedKey: ?u64 = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
 
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                    firstKey = forbear.getParentNode().?.key;
-                });
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                    // Focus the last element so tab wraps around
-                    ctx.focus();
-                });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                        firstKey = forbear.getParentNode().?.key;
+                    });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                        // Focus the last element so tab wraps around
+                        ctx.focus();
+                    });
 
-                forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
-                ctx.handleEvents();
-                focusedKey = if (ctx.focused) |f| f.key else null;
+                    forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                    ctx.handleEvents();
+                    focusedKey = if (ctx.focused) |f| f.key else null;
+                });
             });
         });
         _ = try forbear.layout();
@@ -7943,28 +7957,30 @@ test "FocusContext: shift+tab cycles focus backward" {
     var secondKey: ?u64 = null;
     var focusedKey: ?u64 = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
 
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                    // Focus the first element
-                    ctx.focus();
-                });
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                    secondKey = forbear.getParentNode().?.key;
-                });
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                        // Focus the first element
+                        ctx.focus();
+                    });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                        secondKey = forbear.getParentNode().?.key;
+                    });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                    });
 
-                // Simulate shift+tab
-                forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
-                forbear.getForbear().keysHeldSnapshot = .{ .shift = true };
-                ctx.handleEvents();
-                focusedKey = if (ctx.focused) |f| f.key else null;
+                    // Simulate shift+tab
+                    forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                    forbear.getForbear().keysHeldSnapshot = .{ .shift = true };
+                    ctx.handleEvents();
+                    focusedKey = if (ctx.focused) |f| f.key else null;
+                });
             });
         });
         _ = try forbear.layout();
@@ -7988,22 +8004,24 @@ test "FocusContext: escape clears focus" {
 
     var hasFocusAfterEscape: ?bool = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
+        forbear.element({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
 
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                    ctx.focus();
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                        ctx.focus();
+                    });
+
+                    // Verify focus is set
+                    try std.testing.expect(ctx.focused != null);
+
+                    // Simulate escape
+                    forbear.getForbear().keysPressedThisFrame = .{ .escape = true };
+                    ctx.handleEvents();
+                    hasFocusAfterEscape = ctx.focused != null;
                 });
-
-                // Verify focus is set
-                try std.testing.expect(ctx.focused != null);
-
-                // Simulate escape
-                forbear.getForbear().keysPressedThisFrame = .{ .escape = true };
-                ctx.handleEvents();
-                hasFocusAfterEscape = ctx.focused != null;
             });
         });
         _ = try forbear.layout();
@@ -8022,17 +8040,19 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
 
     // Frame 1: register two elements, focus the second
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                    });
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                        ctx.focus();
+                    });
+                    try std.testing.expect(ctx.focused != null);
                 });
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
-                    ctx.focus();
-                });
-                try std.testing.expect(ctx.focused != null);
             });
         });
         _ = try forbear.layout();
@@ -8042,14 +8062,16 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
     // handleEvents should drop the stale focus.
     var focusedAfterDrop: ?bool = null;
     try forbear.frame(try frameMeta(arena))({
-        forbear.component(.{})({
-            FocusProvider()({
-                const ctx = forbear.useContext(FocusContext).?;
-                forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                    ctx.register(&consumesNothing);
+        forbear.element(.{})({
+            forbear.component(.{})({
+                FocusProvider()({
+                    const ctx = forbear.useContext(FocusContext).?;
+                    forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                        ctx.register(&consumesNothing);
+                    });
+                    ctx.handleEvents();
+                    focusedAfterDrop = ctx.focused != null;
                 });
-                ctx.handleEvents();
-                focusedAfterDrop = ctx.focused != null;
             });
         });
         _ = try forbear.layout();
@@ -8069,27 +8091,29 @@ test "FocusContext: register clears focusable list on new frame" {
     const app = (struct {
         fn app(frame: usize) usize {
             var focusableCount: usize = 0;
-            forbear.component(.{ .key = "test" })({
-                FocusProvider()({
-                    if (frame == 0) {
-                        const ctx = forbear.useContext(FocusContext).?;
-                        forbear.element(.{ .key = "element-1" })({
-                            ctx.register(&consumesNothing);
-                        });
-                        forbear.element(.{})({
-                            ctx.register(&consumesNothing);
-                        });
-                        forbear.element(.{})({
-                            ctx.register(&consumesNothing);
-                        });
-                        focusableCount = ctx.focusable.items.len;
-                    } else if (frame == 1) {
-                        const ctx = forbear.useContext(FocusContext).?;
-                        forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                            ctx.register(&consumesNothing);
-                        });
-                        focusableCount = ctx.focusable.items.len;
-                    }
+            forbear.element(.{})({
+                forbear.component(.{ .key = "test" })({
+                    FocusProvider()({
+                        if (frame == 0) {
+                            const focus = forbear.useContext(FocusContext).?;
+                            forbear.element(.{ .key = "element-1" })({
+                                focus.register(&consumesNothing);
+                            });
+                            forbear.element(.{})({
+                                focus.register(&consumesNothing);
+                            });
+                            forbear.element(.{})({
+                                focus.register(&consumesNothing);
+                            });
+                            focusableCount = focus.focusable.items.len;
+                        } else if (frame == 1) {
+                            const focus = forbear.useContext(FocusContext).?;
+                            forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
+                                focus.register(&consumesNothing);
+                            });
+                            focusableCount = focus.focusable.items.len;
+                        }
+                    });
                 });
             });
             return focusableCount;
