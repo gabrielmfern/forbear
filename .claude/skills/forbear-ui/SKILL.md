@@ -78,7 +78,7 @@ Without children — return `void`, skip slots:
 pub fn Counter() void {
     forbear.component(.{})({
         const count = forbear.useState(u32, 0);
-        if (forbear.on(.click)) count.* += 1;
+        if (forbear.onClick()) count.* += 1;
         forbear.printText("Count: {d}", .{count.*});
     });
 }
@@ -137,23 +137,36 @@ The existing ones are:
 - `forbear.useScrolling()` - pair with `forbear.ScrollBar(forbear.useScrolling())`
 - `forbear.ScrollBar()` - pair with `forbear.useScrolling()`
 - `forbear.ProfilingMetrics()`
+- `forbear.FocusProvider()` - children slot that hosts keyboard focus (see Focus)
 
 ## Events
 
-All events should be handled through `forbear.on(event)`. For each given even type being listened to there may be a different return type. The function determines what element to check for the event at the exact moment of calling is the current parenting node.
+Each event is its own handler function, read inline inside an element's block. Mouse handlers report on the **current parenting node** (the element whose block you're in) at the moment of the call — call them inside the element you care about. They are hooks, so they can be called conditionally.
 
-All events and their respective return types:
-- mouse
-    - mouseEnter: `bool`
-    - mouseLeave: `bool`
-    - mouseDown: `bool`
-    - mouseMove: `?Vec2`
-    - mouseUp: `bool`
-    - click: `bool`
-- keyboard
-    - keyDown: `Keys`
-    - keyUp: `Keys`
-- scroll: `?Vec2`
+```zig
+forbear.element(.{ .style = ... })({
+    if (forbear.onClick()) { ... }
+    if (forbear.onMouseEnter()) { ... }
+    if (forbear.onScroll()) |delta| { ... }
+});
+```
+
+Mouse (scoped to the current element):
+- `onMouseEnter() bool` — true on the frame the cursor crosses in
+- `onMouseLeave() bool` — true on the frame the cursor crosses out
+- `onMouseDown() bool` — true on the frame the button goes down inside
+- `onMouseUp() bool` — true on the frame the button releases inside
+- `onMouseMove() ?Vec2` — movement delta while inside, else null
+- `onClick() bool` — full press-and-release that both started and ended inside
+- `onScroll() ?Vec2` — wheel/trackpad delta while inside, else null
+- `isMouseInside() bool` — raw hit test against the current element's bounds
+
+Keyboard (global for now, not element-scoped — `Keys` is a packed struct of bools like `.tab`, `.enter`, `.space`, `.escape`, `.shift`):
+- `onKeyDown() Keys` — keys that transitioned to down since last frame: `if (forbear.onKeyDown().enter) ...`
+- `onKeyUp() Keys` — keys that transitioned to up since last frame
+- `keysHeld() Keys` — keys currently held down
+
+To scope keyboard input to a specific element, pair it with focus (see below).
 
 ## Contexts
 
@@ -170,4 +183,52 @@ if (forbear.useContext(ThemeCtx)) |theme| {
   forbear.printText("theme accent: {}", .{theme.accent});
 }
 ```
+
+## Rich text
+
+`text`/`printText` render a single style. To style different runs within one wrapped paragraph, open a `composeText` block and emit runs with `write`. The active style is the innermost enclosing `textStyle` (a nestable override layered over the block's base style); `Strong` is just `textStyle(.{ .fontWeight = 700 })`.
+
+```zig
+forbear.element(.{ .style = .{ .width = .{ .fixed = 420 }, .textWrapping = .word } })({
+    forbear.composeText(.{})({           // .{} is the base TextStyle for the block
+        forbear.write("Wayland is a ");
+        forbear.Strong()({ forbear.write("display server protocol"); });
+        forbear.write(", and you can ");
+        forbear.textStyle(.{ .color = forbear.hex("#7dd3fc") })({
+            forbear.Strong()({ forbear.write("nest styles"); });   // bold + color
+        });
+        forbear.write(" inside one paragraph.");
+    });
+});
+```
+
+Rules: one `composeText` per paragraph (nesting them errors), `write`/`textStyle`/`Strong` are only valid inside it, and don't call `text`/`element` inside a `composeText` block. `forbear.BreakLine()` inserts a hard line break.
+
+## Focus
+
+Keyboard focus is a builtin built on the primitives. Wrap focusable UI in `FocusProvider()` (a children slot). Inside, each focusable element grabs the context with `FocusContext.use().?` and `register`s a `consumes` function — a predicate over an `EventPayload` that says which key events this element acts on. The provider handles tab / shift-tab cycling and escape-to-blur; query `hasFocus()` to drive focus styling.
+
+```zig
+forbear.FocusProvider()({
+    forbear.element(.{ .style = ... })({
+        const focus = forbear.FocusContext.use().?;
+        focus.register(&(struct {
+            fn consume(payload: forbear.EventPayload) bool {
+                return payload == .keyDown and (payload.keyDown.enter or payload.keyDown.space);
+            }
+        }).consume);
+
+        // style on focus
+        const node = forbear.getParentNode().?;
+        node.style.borderColor = if (focus.hasFocus()) forbear.hex("#3F3F3F") else forbear.hex("#2F2F2F");
+
+        // act on the key while focused
+        const keys = forbear.onKeyDown();
+        if (focus.hasFocus() and (keys.enter or keys.space)) { ... }
+        if (forbear.onClick()) { ... }   // mouse still works independently
+    });
+});
+```
+
+`hasFocus()` reads the parent node, so it can't be called inside a `.style` definition (the node doesn't exist yet) — read it in the element body and assign onto `getParentNode().?.style`.
 
