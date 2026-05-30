@@ -137,7 +137,7 @@ fn Button(text: []const u8) bool {
             }
 
             const keysDown = forbear.on(.keyDown);
-            if (keysDown.space or keysDown.enter) {
+            if (focusContext.hasFocus() and (keysDown.space or keysDown.enter)) {
                 activated = true;
             }
             if (forbear.on(.click)) {
