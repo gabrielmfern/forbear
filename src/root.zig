@@ -634,6 +634,13 @@ pub fn useLastUpdateTime() f64 {
     return self.lastUpdateTime orelse self.startTime;
 }
 
+/// Overwrites the parent style with the given style.
+pub fn overwriteStyle(style: Style) void {
+    if (getParentNode()) |parentNode| {
+        parentNode.style = style.overwrite(parentNode.style);
+    }
+}
+
 pub fn getParentNode() ?*Node {
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
