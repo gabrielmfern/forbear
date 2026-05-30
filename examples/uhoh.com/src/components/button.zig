@@ -11,10 +11,10 @@ pub fn Button(props: ButtonProps) *const fn (void) void {
         const isHovering = forbear.useState(bool, false);
 
         forbear.element(.{})({
-            if (forbear.on(.mouseEnter)) {
+            if (forbear.onMouseEnter()) {
                 isHovering.* = true;
             }
-            if (forbear.on(.mouseLeave)) {
+            if (forbear.onMouseLeave()) {
                 isHovering.* = false;
             }
 

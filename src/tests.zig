@@ -4428,8 +4428,8 @@ fn HoverFirst(observed: *HoverObservation) void {
             .height = .{ .fixed = 100 },
         },
     })({
-        observed.enter = forbear.on(.mouseEnter);
-        observed.leave = forbear.on(.mouseLeave);
+        observed.enter = forbear.onMouseEnter();
+        observed.leave = forbear.onMouseLeave();
     });
 }
 
@@ -4441,8 +4441,8 @@ fn HoverSecond(observed: *HoverObservation) void {
             .placement = .{ .absolute = .{ 200.0, 0.0 } },
         },
     })({
-        observed.enter = forbear.on(.mouseEnter);
-        observed.leave = forbear.on(.mouseLeave);
+        observed.enter = forbear.onMouseEnter();
+        observed.leave = forbear.onMouseLeave();
     });
 }
 
@@ -4510,8 +4510,8 @@ fn EdgeTriggeredBox(observed: *HoverObservation) void {
             .height = .{ .fixed = 100 },
         },
     })({
-        observed.enter = forbear.on(.mouseEnter);
-        observed.leave = forbear.on(.mouseLeave);
+        observed.enter = forbear.onMouseEnter();
+        observed.leave = forbear.onMouseLeave();
     });
 }
 
@@ -4750,7 +4750,7 @@ test "mouseDown dispatches on button press" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.component(.{ .key = "component" })({
             box()({
-                _ = forbear.on(.mouseDown);
+                _ = forbear.onMouseDown();
             });
         });
         _ = try forbear.layout();
@@ -4762,7 +4762,7 @@ test "mouseDown dispatches on button press" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.component(.{ .key = "component" })({
             box()({
-                try std.testing.expect(forbear.on(.mouseDown));
+                try std.testing.expect(forbear.onMouseDown());
             });
         });
     });
@@ -4793,7 +4793,7 @@ test "scroll dispatches to hovered element with accumulated delta" {
     // Frame 1: prime measurement
     try forbear.frame(try frameMeta(arenaAllocator))({
         el()({
-            _ = forbear.on(.scroll);
+            _ = forbear.onScroll();
         });
         _ = try forbear.layout();
         self.mousePosition = .{ 50.0, 50.0 };
@@ -4805,7 +4805,7 @@ test "scroll dispatches to hovered element with accumulated delta" {
     // Frame 2: scroll delta dispatched
     try forbear.frame(try frameMeta(arenaAllocator))({
         el()({
-            const delta = forbear.on(.scroll);
+            const delta = forbear.onScroll();
             try std.testing.expect(delta != null);
             try std.testing.expectApproxEqAbs(@as(f32, 0.0), delta.?[0], 0.001);
             try std.testing.expectApproxEqAbs(@as(f32, 30.0), delta.?[1], 0.001);
@@ -4837,7 +4837,7 @@ test "scroll is not dispatched to unhovered elements" {
     // Frame 1: prime measurement; mouse outside
     try forbear.frame(try frameMeta(arenaAllocator))({
         el()({
-            _ = forbear.on(.scroll);
+            _ = forbear.onScroll();
         });
         _ = try forbear.layout();
         self.mousePosition = .{ 500.0, 500.0 };
@@ -4849,7 +4849,7 @@ test "scroll is not dispatched to unhovered elements" {
     // Frame 2: scroll not dispatched to unhovered element
     try forbear.frame(try frameMeta(arenaAllocator))({
         el()({
-            try std.testing.expectEqual(@as(?@Vector(2, f32), null), forbear.on(.scroll));
+            try std.testing.expectEqual(@as(?@Vector(2, f32), null), forbear.onScroll());
         });
     });
 }
@@ -4888,9 +4888,9 @@ test "scroll reaches every hovered ancestor" {
     // Frame 1: prime measurements
     try forbear.frame(try frameMeta(arenaAllocator))({
         outer()({
-            _ = forbear.on(.scroll);
+            _ = forbear.onScroll();
             inner()({
-                _ = forbear.on(.scroll);
+                _ = forbear.onScroll();
             });
         });
         _ = try forbear.layout();
@@ -4903,13 +4903,13 @@ test "scroll reaches every hovered ancestor" {
     // Frame 2: scroll reaches both ancestor and inner
     try forbear.frame(try frameMeta(arenaAllocator))({
         outer()({
-            const outerDelta = forbear.on(.scroll);
+            const outerDelta = forbear.onScroll();
             try std.testing.expect(outerDelta != null);
             try std.testing.expectApproxEqAbs(@as(f32, -5.0), outerDelta.?[0], 0.001);
             try std.testing.expectApproxEqAbs(@as(f32, 12.0), outerDelta.?[1], 0.001);
 
             inner()({
-                const innerDelta = forbear.on(.scroll);
+                const innerDelta = forbear.onScroll();
                 try std.testing.expect(innerDelta != null);
                 try std.testing.expectApproxEqAbs(@as(f32, -5.0), innerDelta.?[0], 0.001);
                 try std.testing.expectApproxEqAbs(@as(f32, 12.0), innerDelta.?[1], 0.001);
@@ -4962,7 +4962,7 @@ fn MouseUpButton(observedMouseUp: *bool) void {
                 .height = .{ .fixed = 100 },
             },
         })({
-            observedMouseUp.* = forbear.on(.mouseUp);
+            observedMouseUp.* = forbear.onMouseUp();
         });
     });
 }
@@ -5018,8 +5018,8 @@ fn ClickButton(observed: *ClickObservation) void {
                 .height = .{ .fixed = 100 },
             },
         })({
-            observed.click = forbear.on(.click);
-            observed.mouseUp = forbear.on(.mouseUp);
+            observed.click = forbear.onClick();
+            observed.mouseUp = forbear.onMouseUp();
         });
     });
 }
@@ -5091,8 +5091,8 @@ test "no click when mouse moves away between mouseDown and mouseUp" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.component(.{})({
             box()({
-                _ = forbear.on(.click);
-                _ = forbear.on(.mouseUp);
+                _ = forbear.onClick();
+                _ = forbear.onMouseUp();
             });
         });
         _ = try forbear.layout();
@@ -5104,8 +5104,8 @@ test "no click when mouse moves away between mouseDown and mouseUp" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.component(.{})({
             box()({
-                _ = forbear.on(.click);
-                _ = forbear.on(.mouseUp);
+                _ = forbear.onClick();
+                _ = forbear.onMouseUp();
             });
         });
         _ = try forbear.layout();
@@ -5118,8 +5118,8 @@ test "no click when mouse moves away between mouseDown and mouseUp" {
     try forbear.frame(try frameMeta(arenaAllocator))({
         forbear.component(.{})({
             box()({
-                try std.testing.expect(!forbear.on(.click));
-                try std.testing.expect(!forbear.on(.mouseUp));
+                try std.testing.expect(!forbear.onClick());
+                try std.testing.expect(!forbear.onMouseUp());
             });
         });
     });
@@ -5515,7 +5515,7 @@ test "Component children slotting: element children in slot" {
 
 // Mirrors examples/wayland-book.com/src/main.zig: a SidebarItem-style component
 // that exposes its inner element via a children slot, and the caller puts an
-// `if (forbear.on(.click))` handler inside that slot. Each instance is
+// `if (forbear.onClick())` handler inside that slot. Each instance is
 // disambiguated by `props.key`. The click must fire on the instance the mouse
 // is actually over, not on a sibling, even when several instances are rendered
 // in a loop from a single source line.
@@ -5544,7 +5544,7 @@ fn SlotClickListApp(itemKeys: []const []const u8, observedClicks: []bool) void {
         for (itemKeys, 0..) |key, i| {
             const yPos: f32 = @as(f32, @floatFromInt(i)) * 60.0;
             SlotItem(.{ .key = key, .position = yPos })({
-                if (forbear.on(.click)) observedClicks[i] = true;
+                if (forbear.onClick()) observedClicks[i] = true;
             });
         }
     });

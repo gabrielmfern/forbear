@@ -188,7 +188,7 @@ pub fn useScrolling() *ScrollingState {
         .animate = if (builtin.os.tag == .macos) false else true,
     });
 
-    if (forbear.on(.scroll)) |delta| {
+    if (forbear.onScroll()) |delta| {
         state.offset += delta;
     }
 
@@ -323,13 +323,13 @@ pub fn ScrollBar(state: *ScrollingState) void {
                         },
                     })({});
 
-                    if (forbear.on(.mouseEnter)) {
+                    if (forbear.onMouseEnter()) {
                         isHovered.* = true;
                     }
-                    if (forbear.on(.mouseLeave)) {
+                    if (forbear.onMouseLeave()) {
                         isHovered.* = false;
                     }
-                    if (forbear.on(.mouseDown)) {
+                    if (forbear.onMouseDown()) {
                         isDragging.* = true;
                     }
                     if (!forbear.isMouseButtonPressed()) {
@@ -388,7 +388,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
             .key = node.key,
             .consumes = consumesFn,
         }) catch |err| forbear.handleFrameError(err);
-        if (self.focused != null and self.focused.?.key == node.key and forbear.on(.mouseDownOutside)) {
+        if (self.focused != null and self.focused.?.key == node.key and forbear.isMouseButtonPressed() and !forbear.isMouseInside()) {
             self.focused = null;
         }
     }
@@ -435,7 +435,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
             self.focused = null;
         }
 
-        const pressed = forbear.on(.keyDown);
+        const pressed = forbear.onKeyDown();
         const items = self.focusable.items;
         if (pressed.tab and items.len > 0) {
             const shift = forbear.keysHeld().shift;

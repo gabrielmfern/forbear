@@ -113,10 +113,10 @@ fn SectionButton(style: forbear.Style) *const fn (void) void {
                 },
             }),
         })({
-            if (forbear.on(.mouseEnter)) {
+            if (forbear.onMouseEnter()) {
                 isHovering.* = true;
             }
-            if (forbear.on(.mouseLeave)) {
+            if (forbear.onMouseLeave()) {
                 isHovering.* = false;
             }
             forbear.componentChildrenSlot();
@@ -156,7 +156,7 @@ pub fn Content(activeChapter: *usize) !void {
                         .placement = .{ .relative = @splat(0.0) },
                         .height = .{ .grow = 1.0 },
                     })({
-                        if (forbear.on(.click)) {
+                        if (forbear.onClick()) {
                             activeChapter.* = activeChapter.* - 1;
                         }
                         forbear.text("previous");
@@ -257,7 +257,7 @@ pub fn Content(activeChapter: *usize) !void {
                         },
                         .height = .{ .grow = 1.0 },
                     })({
-                        if (forbear.on(.click)) {
+                        if (forbear.onClick()) {
                             activeChapter.* = activeChapter.* + 1;
                         }
                         forbear.text("next");
