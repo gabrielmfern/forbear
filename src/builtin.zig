@@ -376,7 +376,7 @@ pub const Focus = struct {
 pub const FocusContext = forbear.createContext(opaque {}, struct {
     focused: ?Focus,
     focusable: std.ArrayList(Focus),
-    arena: std.mem.Allocator,
+    scopeKey: u64,
     listFrame: u32,
 
     pub fn register(self: *@This(), consumesFn: FocusConsumes) void {
@@ -389,7 +389,8 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
             forbear.handleFrameError(error.NoParentForFocusRegistration);
             return;
         };
-        self.focusable.append(self.arena, .{
+        const arena = forbear.getScopeArenaBy(self.scopeKey) orelse unreachable;
+        self.focusable.append(arena, .{
             .key = node.key,
             .consumes = consumesFn,
         }) catch |err| forbear.handleFrameError(err);
@@ -463,7 +464,7 @@ pub fn FocusProvider() *const fn (void) void {
         FocusContext.Provider(.{
             .focused = null,
             .focusable = .empty,
-            .arena = forbear.useScopeArena(),
+            .scopeKey = forbear.useScopeKey(),
             .listFrame = 0,
         })({
             forbear.componentChildrenSlot();

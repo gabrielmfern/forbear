@@ -654,6 +654,26 @@ pub fn useArena() std.mem.Allocator {
     return self.frameMeta.?.arena;
 }
 
+pub fn useScopeKey() u64 {
+    const self = getForbear();
+    const scopeKey = self.scopeStack.getLastOrNull() orelse {
+        if (!builtin.is_test) {
+            std.log.err(
+                "useScopeArena called outside of a component / element / hook scope",
+                .{},
+            );
+        }
+        @panic("Invalid hook usage");
+    };
+    return scopeKey;
+}
+
+pub fn getScopeArenaBy(key: u64) ?std.mem.Allocator {
+    const self = getForbear();
+    const scope = self.scopes.getPtr(key) orelse return null;
+    return scope.arenaAllocator.allocator();
+}
+
 /// Returns the arena allocator owned by the current scope (the topmost
 /// component / element / hook scope on the stack). Allocations live as
 /// long as the scope keeps re-rendering; the arena is released wholesale
@@ -666,6 +686,10 @@ pub fn useArena() std.mem.Allocator {
 ///
 /// Can, conceptually, completely replace useState and be more performant with
 /// the same exact result and more clearer design.
+///
+/// The allocator vtable pointer into the Scope's arena might be invalidated
+/// once you leave/enter a new scope. You can use useScopeKey and
+/// getScopeArenaBy(key) to avoid having to avoid this.
 pub fn useScopeArena() std.mem.Allocator {
     const self = getForbear();
     const scopeKey = self.scopeStack.getLastOrNull() orelse {
