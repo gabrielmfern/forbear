@@ -1054,14 +1054,20 @@ pub const Window = struct {
                 &window.activeInput.?.characterBuffer,
                 window.activeInput.?.characterBuffer.len,
             ));
-            window.eventQueue.push(Event{
-                .input = .{
-                    .characterBuffer = window.activeInput.?.characterBuffer,
-                    .characterLength = window.activeInput.?.characterLength,
-                    .repeats = 1,
-                },
-            });
             std.debug.assert(window.activeInput.?.characterLength <= window.activeInput.?.characterBuffer.len);
+            if (window.activeInput.?.characterLength > 0) {
+                window.eventQueue.push(Event{
+                    .input = .{
+                        .characterBuffer = window.activeInput.?.characterBuffer,
+                        .characterLength = window.activeInput.?.characterLength,
+                        .repeats = 1,
+                    },
+                });
+            } else {
+                // it could be a modifier character that we don't need to take
+                // into account as input
+                window.activeInput = null;
+            }
 
             window.pendingPressed = window.pendingPressed.with(mapped);
             window.keysHeld = window.keysHeld.with(mapped);
