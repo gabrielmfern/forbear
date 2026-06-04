@@ -24,6 +24,25 @@ fn totalStateCount() u32 {
     return n;
 }
 
+/// A stub window for tests. The only field `frame()` touches is the event
+/// queue, which it drains each frame; everything else stays undefined since
+/// tests never reach the platform/cursor code paths. Reset to empty on every
+/// `initTest` so events don't leak across tests.
+var testWindow: forbear.Window = undefined;
+
+fn initTest(allocator: std.mem.Allocator) !void {
+    testWindow.eventQueue = .empty;
+    // No pointer serial means `setCursor` no-ops instead of dereferencing the
+    // undefined Wayland cursor state when tests trigger onMouseEnter/Leave.
+    // `pointerSerial` only exists on the Wayland backend; other platforms'
+    // `setCursor` doesn't touch undefined window state, so the guard is moot.
+    if (@hasField(forbear.Window, "pointerSerial")) {
+        testWindow.pointerSerial = null;
+    }
+    const renderer: *forbear.Graphics.Renderer = undefined;
+    try forbear.init(allocator, std.testing.io, &testWindow, renderer);
+}
+
 pub fn frameMeta(arena: std.mem.Allocator) !forbear.FrameMeta {
     try forbear.registerFont("Inter", @embedFile("inter_font"));
     return forbear.FrameMeta{
@@ -44,7 +63,7 @@ pub fn frameMeta(arena: std.mem.Allocator) !forbear.FrameMeta {
 
 // forbear.layouting.zig tests
 test "2.0 grow factor against 1.0 grow factor on fixed height parent" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -91,7 +110,7 @@ test "2.0 grow factor against 1.0 grow factor on fixed height parent" {
 }
 
 test "grow factor 0.0 does not participate in grow distribution" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -147,7 +166,7 @@ test "grow factor 0.0 does not participate in grow distribution" {
 }
 
 test "negative grow factor does not participate in grow distribution" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -203,7 +222,7 @@ test "negative grow factor does not participate in grow distribution" {
 }
 
 test "fit height parent, with grow height child containing wrapping text" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -283,7 +302,7 @@ test "fit height parent, with grow height child containing wrapping text" {
 }
 
 test "cross-axis grow siblings match height after text wrapping" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -338,7 +357,7 @@ test "cross-axis grow siblings match height after text wrapping" {
 }
 
 test "wrapped text propagates height upward" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -383,7 +402,7 @@ test "wrapped text propagates height upward" {
 }
 
 fn expectTextLineCount(content: []const u8, expectedLines: usize) !void {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -531,7 +550,7 @@ fn measurePrelayoutText(
     content: []const u8,
     wrapping: forbear.TextWrapping,
 ) !TextMeasurements {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -665,7 +684,7 @@ const textColumn = forbear.Style{
 };
 
 test "composeText with one run matches text()" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arenaAllocator.deinit();
@@ -705,7 +724,7 @@ test "composeText with one run matches text()" {
 }
 
 test "composeText concatenates same-styled runs into one block" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arenaAllocator.deinit();
@@ -752,7 +771,7 @@ test "composeText concatenates same-styled runs into one block" {
 }
 
 test "composeText runs carry their own resolved style" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arenaAllocator.deinit();
@@ -788,7 +807,7 @@ test "composeText runs carry their own resolved style" {
 }
 
 test "composeText wraps across run boundaries" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arenaAllocator.deinit();
@@ -827,7 +846,7 @@ test "composeText wraps across run boundaries" {
 }
 
 test "composeText line height and baseline follow the tallest run" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arenaAllocator.deinit();
@@ -875,7 +894,7 @@ fn measureLaidOutText(
     wrapping: forbear.TextWrapping,
     width: f32,
 ) !LaidOutText {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -993,7 +1012,7 @@ test ".character wrap stacks wrap-induced breaks with manual breaks" {
 }
 
 test "wrapped text simple ancestry stays at origin" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1040,7 +1059,7 @@ test "wrapped text simple ancestry stays at origin" {
 // `updateFittingForAncestorsInDirection` (same machinery as wrapped text). Same flex
 // shape as examples/uhoh.com (hero block + text + sibling section).
 test "uhoh-shaped grow-width ratio hero does not overlap following sibling section" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1125,7 +1144,7 @@ test "uhoh-shaped grow-width ratio hero does not overlap following sibling secti
 }
 
 test "wrapped text propagates height upward with siblings" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1175,7 +1194,7 @@ test "wrapped text propagates height upward with siblings" {
 }
 
 test "wrapped text stacks siblings after wrapping" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1224,7 +1243,7 @@ test "wrapped text stacks siblings after wrapping" {
 }
 
 test "cross-axis fit row height reflects full column height after text wrapping" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1315,7 +1334,7 @@ test "cross-axis fit row height reflects full column height after text wrapping"
 // from a word-wrapped text column; that height updates during `wrapGlyphs`. Using
 // the pre-update main-axis size for the ratio left `width` too small (stale h × r).
 test "ratio width tracks fit height after propagated text wrap" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1363,7 +1382,7 @@ test "ratio width tracks fit height after propagated text wrap" {
 }
 
 test "ratio height resolves after grow distributes width" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1399,7 +1418,7 @@ test "ratio height resolves after grow distributes width" {
 }
 
 test "ratio width resolves after grow distributes height" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1435,7 +1454,7 @@ test "ratio width resolves after grow distributes height" {
 }
 
 test "wrapAndPlace offsets standard children by border plus padding" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1471,7 +1490,7 @@ test "wrapAndPlace offsets standard children by border plus padding" {
 }
 
 test "overflow wrap places children on new lines and grows parent height" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1537,7 +1556,7 @@ test "overflow wrap places children on new lines and grows parent height" {
 }
 
 test "overflow wrap line ranges start at the wrapping child for cross-axis justification" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1599,7 +1618,7 @@ test "overflow wrap line ranges start at the wrapping child for cross-axis justi
 }
 
 test "overflow wrap with grow-width parent wraps against resolved size" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1679,7 +1698,7 @@ test "overflow wrap with grow-width parent wraps against resolved size" {
 }
 
 test "grow children split remaining space and stretch cross-axis" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1743,7 +1762,7 @@ test "grow children split remaining space and stretch cross-axis" {
 }
 
 test "perpendicular clamping respects parent padding" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1779,7 +1798,7 @@ test "perpendicular clamping respects parent padding" {
 }
 
 test "relative-placed elements are positioned from parent origin" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1836,7 +1855,7 @@ test "relative-placed elements are positioned from parent origin" {
 }
 
 test "relative-placed child is offset by parent border" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1876,7 +1895,7 @@ test "relative-placed child is offset by parent border" {
 }
 
 test "relative-placed child does not contribute to parent's fit" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1907,7 +1926,7 @@ test "relative-placed child does not contribute to parent's fit" {
 }
 
 test "grow child inside relative-placed fixed-size parent fills the parent" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1953,7 +1972,7 @@ test "grow child inside relative-placed fixed-size parent fills the parent" {
 }
 
 test "grow on a relative-placed child fills the parent on both axes" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -1988,7 +2007,7 @@ test "grow on a relative-placed child fills the parent on both axes" {
 }
 
 test "fixed-width ratio-height children with maxSize don't inflate parent cross-axis" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2055,7 +2074,7 @@ test "fixed-width ratio-height children with maxSize don't inflate parent cross-
 }
 
 test "ltr row with fixed height centers children vertically" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2127,7 +2146,7 @@ test "ltr row with fixed height centers children vertically" {
 }
 
 test "slotted component children propagate size to fit ancestors" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2184,7 +2203,7 @@ test "slotted component children propagate size to fit ancestors" {
 }
 
 test "slotted component with before/after content sizes correctly" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2253,7 +2272,7 @@ test "slotted component with before/after content sizes correctly" {
 }
 
 test "nested slotted components propagate sizes correctly" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2330,7 +2349,7 @@ test "nested slotted components propagate sizes correctly" {
 // (longest word) prevents this. Without this, grow containers with maxWidth would
 // have minSize > maxSize, breaking forbear.layout.
 test "horizontal minSize uses child.minSize to avoid unwrapped text width bloat" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2367,7 +2386,7 @@ test "horizontal minSize uses child.minSize to avoid unwrapped text width bloat"
 }
 
 test "vertical spacing elements with grow height works properly" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2422,7 +2441,7 @@ test "vertical spacing elements with grow height works properly" {
 // still single line height. Using size[1] ensures fit parents pick up the actual
 // content height, allowing grow siblings to stretch correctly.
 test "vertical minSize uses child.size to capture wrapped text height" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2481,7 +2500,7 @@ test "vertical minSize uses child.size to capture wrapped text height" {
 }
 
 test "horizontal non-wrap container grows height to fit wrapped text child" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2515,7 +2534,7 @@ test "horizontal non-wrap container grows height to fit wrapped text child" {
 }
 
 test "nested containers propagate wrapped text height through multiple levels" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2569,7 +2588,7 @@ test "nested containers propagate wrapped text height through multiple levels" {
 }
 
 test "mixed fit and grow siblings match height after text wrapping" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2627,7 +2646,7 @@ test "mixed fit and grow siblings match height after text wrapping" {
 }
 
 test "slotted children propagate size to fit ancestors" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2738,7 +2757,7 @@ test "slotted children propagate size to fit ancestors" {
 test "element fitting - fit parent with padding accumulates fixed child inline" {
     // A vertical fit parent with padding should grow its height by the
     // child's height plus margins, plus its own padding/border.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2773,7 +2792,7 @@ test "element fitting - fit parent with padding accumulates fixed child inline" 
 test "element fitting - fit parent cross-axis takes max child height" {
     // A horizontal fit parent fitting height should use the tallest child
     // contribution plus its own vertical padding.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2813,7 +2832,7 @@ test "element fitting - fit parent cross-axis takes max child height" {
 test "element fitting - fit parent with padding accumulates fixed child inline width" {
     // A horizontal fit parent should sum child widths plus margins plus its
     // own horizontal padding.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2855,7 +2874,7 @@ test "element fitting - fit parent with padding accumulates fixed child inline w
 test "element fitting - nested fit parents propagate size upward" {
     // Inner fit parent should size to its child, outer fit parent should size
     // to the inner parent.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2899,7 +2918,7 @@ test "element fitting - first child margin contributes to fit parent size" {
     // fit size, not skipped. A vertical fit parent with a single child that
     // has top+bottom margins should size to padding + margin_top + child +
     // margin_bottom.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2939,7 +2958,7 @@ test "element fitting - first child margin contributes to fit parent size" {
 test "element fitting - first child top margin offsets position in horizontal parent" {
     // In a horizontal container the y-axis is the cross axis. A child with a
     // top margin must be placed at parent_y + margin_top, not at parent_y.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -2976,7 +2995,7 @@ test "element fitting - first child top margin offsets position in horizontal pa
 
 // root.zig tests
 test "Element tree stack stability" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3042,7 +3061,7 @@ test "Element tree stack stability" {
 }
 
 test "Element key stability across frames" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3130,7 +3149,7 @@ fn SiblingAddedApp(includeB: bool, initialA: u32, out: *u32) void {
 }
 
 test "Component state preserved when sibling is added" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3173,7 +3192,7 @@ fn SiblingRemovedApp(includeA: bool, initialB: u32, out: *u32) void {
 }
 
 test "Component state preserved when sibling is removed" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3198,7 +3217,7 @@ test "Component state preserved when sibling is removed" {
 }
 
 test "Sibling components at same call site get unique keys" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3249,7 +3268,7 @@ fn LoopApp(items: []const []const u8, fallbackInitial: u32, observed: *std.Strin
 }
 
 test "Component state in a loop with manual keys" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3292,7 +3311,7 @@ fn ConditionalElementApp(condition: bool, capturedKey: ?*u64) void {
 }
 
 test "Element keys stable inside if statements" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3342,7 +3361,7 @@ fn ForLoopKeyApp(items: []const []const u8, observedKeys: *std.StringHashMap(u64
 }
 
 test "Element keys stable in for-loop with manual keys" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3390,7 +3409,7 @@ test "Element keys stable in for-loop with manual keys" {
 }
 
 test "Element keys stable for siblings around a conditional element" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3445,7 +3464,7 @@ test "Element keys stable for siblings around a conditional element" {
 }
 
 test "Component state preserved through if statement toggling" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3495,7 +3514,7 @@ test "Component state preserved through if statement toggling" {
 }
 
 test "Wrapper components produce unique keys from different parent components" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3564,7 +3583,7 @@ fn ComponentResolutionApp(props: ComponentResolutionProps) !void {
 }
 
 test "Component resolution" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3611,8 +3630,7 @@ fn resolveSpringTransition(
 }
 
 test "useSpringTransition - basic convergence" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3653,8 +3671,7 @@ test "useSpringTransition - basic convergence" {
 }
 
 test "useSpringTransition - zero delta time" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3684,8 +3701,7 @@ test "useSpringTransition - zero delta time" {
 }
 
 test "useSpringTransition - null delta time" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3709,8 +3725,7 @@ test "useSpringTransition - null delta time" {
 }
 
 test "useSpringTransition - small delta time" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3746,8 +3761,7 @@ test "useSpringTransition - small delta time" {
 }
 
 test "useSpringTransition - large delta time" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3780,8 +3794,7 @@ test "useSpringTransition - large delta time" {
 }
 
 test "useSpringTransition - convergence threshold" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3823,8 +3836,7 @@ test "useSpringTransition - convergence threshold" {
 }
 
 test "useSpringTransition - different spring configurations" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3882,8 +3894,7 @@ test "useSpringTransition - different spring configurations" {
 }
 
 test "useSpringTransition - heavy mass" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3913,8 +3924,7 @@ test "useSpringTransition - heavy mass" {
 }
 
 test "useSpringTransition - target changes during animation" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3955,8 +3965,7 @@ test "useSpringTransition - target changes during animation" {
 }
 
 test "useSpringTransition - negative values" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -3990,8 +3999,7 @@ test "useSpringTransition - negative values" {
 }
 
 test "useSpringTransition - state persistence across frames" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -4042,8 +4050,7 @@ fn StateCreationCounter(observed1: *i32, observed2: *f32, mutate: bool) void {
 }
 
 test "State creation with manual handling" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4080,8 +4087,7 @@ fn ConditionalState(callSecond: bool) void {
 }
 
 test "useState entry is reaped when its call site is skipped" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4125,8 +4131,7 @@ fn ParentWithChildren(includeB: bool) void {
 test "unmounted scope is removed and its states are reaped" {
     // Relies on `std.testing.allocator` to leak-fail at deinit if any
     // unmounted scope's arena was not freed.
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -4185,8 +4190,7 @@ test "Multiple useState pointers remain valid after realloc (useTransition patte
     // This test reproduces the useTransition scenario: three sequential useState
     // calls in the same component on the first frame. If realloc moves the buffer,
     // earlier pointers would be invalidated causing a segfault.
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4232,8 +4236,7 @@ fn StateIsolationApp(leftMutateTo: ?i32, rightMutateTo: ?i32, leftObserved: *i32
 }
 
 test "useState in element scope isolates state per element" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4259,8 +4262,7 @@ test "useState in element scope isolates state per element" {
 }
 
 test "useState binds to nearest scope: element preferred, component inside element wins" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     const self = forbear.getForbear();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -4327,8 +4329,7 @@ fn ReallocApp(observedA: *f32, observedB: *f32, observedC: *?forbear.AnimationSt
 }
 
 test "useState in element scope persists multiple slots across realloc" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4357,8 +4358,7 @@ test "useState in element scope persists multiple slots across realloc" {
 }
 
 test "stale scope state is pruned at frame end (element)" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4388,8 +4388,7 @@ test "stale scope state is pruned at frame end (element)" {
 }
 
 test "stale scope state is pruned at frame end (component)" {
-    const renderer: *forbear.Graphics.Renderer = undefined;
-    try forbear.init(std.testing.allocator, std.testing.io, renderer);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -4459,7 +4458,7 @@ fn HoverApp(firstObserved: *HoverObservation, secondObserved: *HoverObservation)
 }
 
 test "on() mouseEnter and mouseLeave fire on the correct element" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -4516,7 +4515,7 @@ fn EdgeTriggeredBox(observed: *HoverObservation) void {
 }
 
 test "on() mouseEnter and mouseLeave are edge-triggered" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -4578,7 +4577,7 @@ fn testCreateElementConfiguration(configuration: struct {
     expectedSize: Vec2,
 }) !void {
     const allocator = std.testing.allocator;
-    try forbear.init(allocator, std.testing.io, undefined);
+    try initTest(allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -4626,7 +4625,7 @@ test "element - ratio without opposite fixed axis starts at zero" {
 test "element fitting - fixed child does not contribute to fit parent" {
     // A fixed-placed child should be excluded from the parent's fit
     // calculation.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -4659,7 +4658,7 @@ test "element fitting - fixed child does not contribute to fit parent" {
 test "element fitting - text child inflates fit parent inline" {
     // A fit parent whose only child is a text node should grow to contain the
     // text's full single-line width and height before forbear.layout() runs.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -4692,7 +4691,7 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
     // When textWrapping = .word, the text node's size[0] is the full unwrapped
     // width. A fit parent must pick that up during definition so it is not
     // collapsed to the minimum-word width before forbear.layout runs.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -4722,7 +4721,7 @@ test "element fitting - word-wrapped text child inflates fit parent to full text
 }
 
 test "mouseDown dispatches on button press" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -4769,7 +4768,7 @@ test "mouseDown dispatches on button press" {
 }
 
 test "scroll dispatches to hovered element with accumulated delta" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -4814,7 +4813,7 @@ test "scroll dispatches to hovered element with accumulated delta" {
 }
 
 test "scroll is not dispatched to unhovered elements" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -4855,7 +4854,7 @@ test "scroll is not dispatched to unhovered elements" {
 }
 
 test "scroll reaches every hovered ancestor" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -4919,7 +4918,7 @@ test "scroll reaches every hovered ancestor" {
 }
 
 test "scrollDeltaAccumulator transfers to scrollDelta at frame start" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -4968,7 +4967,7 @@ fn MouseUpButton(observedMouseUp: *bool) void {
 }
 
 test "mouseUp dispatches on button release" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -5025,7 +5024,7 @@ fn ClickButton(observed: *ClickObservation) void {
 }
 
 test "click fires when mouseDown and mouseUp on same element" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -5064,7 +5063,7 @@ test "click fires when mouseDown and mouseUp on same element" {
 }
 
 test "no click when mouse moves away between mouseDown and mouseUp" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -5141,7 +5140,7 @@ fn collectChildIndices(tree: *const forbear.NodeTree, parentIndex: usize, buf: [
 }
 
 test "Component children slotting: basic before + children + after" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5189,7 +5188,7 @@ test "Component children slotting: basic before + children + after" {
 }
 
 test "Component children slotting: empty slot (no children passed)" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5226,7 +5225,7 @@ test "Component children slotting: empty slot (no children passed)" {
 }
 
 test "Component children slotting: slot at beginning (no before-content)" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5264,7 +5263,7 @@ test "Component children slotting: slot at beginning (no before-content)" {
 }
 
 test "Component children slotting: slot at end (no after-content)" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5302,7 +5301,7 @@ test "Component children slotting: slot at end (no after-content)" {
 }
 
 test "Component children slotting: multiple instances with different children" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5360,7 +5359,7 @@ test "Component children slotting: multiple instances with different children" {
 }
 
 test "Component children slotting: nested slotted components" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5417,7 +5416,7 @@ test "Component children slotting: nested slotted components" {
 }
 
 test "Component children slotting: parent stack stability" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5466,7 +5465,7 @@ test "Component children slotting: parent stack stability" {
 }
 
 test "Component children slotting: element children in slot" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5551,7 +5550,7 @@ fn SlotClickListApp(itemKeys: []const []const u8, observedClicks: []bool) void {
 }
 
 test "Component children slotting: on(.click) inside a slot fires on the right instance in a loop" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     const self = forbear.getForbear();
@@ -5835,7 +5834,7 @@ test "LRU cache - eviction order with mixed access" {
 // buildDrawCommands tests
 
 test "buildDrawCommands emits one element command per visible node" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5868,7 +5867,7 @@ test "buildDrawCommands emits one element command per visible node" {
 }
 
 test "buildDrawCommands emits element + text for a text node" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5907,7 +5906,7 @@ test "buildDrawCommands emits element + text for a text node" {
 }
 
 test "buildDrawCommands sorts by z with shadow before element before text" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5948,7 +5947,7 @@ test "buildDrawCommands sorts by z with shadow before element before text" {
 }
 
 test "buildDrawCommands culls nodes outside viewport" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -5978,7 +5977,7 @@ test "buildDrawCommands culls nodes outside viewport" {
 }
 
 test "buildDrawCommands propagates clipRect from layout" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6023,7 +6022,7 @@ test "buildDrawCommands propagates clipRect from layout" {
 // --- Z-ordering tests ---
 
 test "buildDrawCommands respects explicit zIndex overrides" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6066,7 +6065,7 @@ test "buildDrawCommands respects explicit zIndex overrides" {
 }
 
 test "buildDrawCommands: nested children have z greater than parent" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6106,7 +6105,7 @@ test "buildDrawCommands: nested children have z greater than parent" {
 }
 
 test "buildDrawCommands: siblings at same z remain in document order" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6150,7 +6149,7 @@ test "buildDrawCommands: siblings at same z remain in document order" {
 // --- Index correctness tests ---
 
 test "buildDrawCommands: elementIndex is unique and covers 0..N-1" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6198,7 +6197,7 @@ test "buildDrawCommands: elementIndex is unique and covers 0..N-1" {
 }
 
 test "buildDrawCommands: shadowIndex is sequential starting at 0" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6264,7 +6263,7 @@ test "buildDrawCommands: shadowIndex is sequential starting at 0" {
 }
 
 test "buildDrawCommands: text command range matches glyph count" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6309,7 +6308,7 @@ test "buildDrawCommands: text command range matches glyph count" {
 // --- Regression guards ---
 
 test "buildDrawCommands: total count equals elements + shadows + nonEmptyText" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6369,7 +6368,7 @@ test "buildDrawCommands: total count equals elements + shadows + nonEmptyText" {
 }
 
 test "buildDrawCommands: empty text does not emit a text command" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6396,7 +6395,7 @@ test "buildDrawCommands: empty text does not emit a text command" {
 }
 
 test "buildDrawCommands: each visible node produces exactly one element command" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6434,7 +6433,7 @@ test "buildDrawCommands: each visible node produces exactly one element command"
 // --- Deeply nested clips ---
 
 test "buildDrawCommands: nested clips intersect correctly" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6491,7 +6490,7 @@ test "buildDrawCommands: nested clips intersect correctly" {
 }
 
 test "buildDrawCommands: three-level clip stack produces monotonically tighter bounds" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6558,7 +6557,7 @@ test "buildDrawCommands: three-level clip stack produces monotonically tighter b
 // useNodeMeasurement tests
 
 test "useNodeMeasurement returns null on first frame" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6584,7 +6583,7 @@ test "useNodeMeasurement returns null on first frame" {
 }
 
 test "useNodeMeasurement returns previous frame's resolved size" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6648,7 +6647,7 @@ fn MeasuredPositionApp(observed: *Vec2) void {
 }
 
 test "useNodeMeasurement returns previous frame's resolved position" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6675,7 +6674,7 @@ test "useNodeMeasurement returns previous frame's resolved position" {
 }
 
 test "useNodeMeasurement reflects most recent completed frame across three frames" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6764,7 +6763,7 @@ fn SiblingMeasurementApp(firstObserved: *Vec2, secondObserved: *Vec2) void {
 }
 
 test "useNodeMeasurement tracks sibling elements independently" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6797,7 +6796,7 @@ test "useNodeMeasurement does not crash when tracked element disappears in next 
     // entry.value_ptr.index into the current tree. If a tracked node is not
     // remounted this frame, that index may be out of bounds (or point at an
     // unrelated node). This test asserts the API survives the removal.
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6855,7 +6854,7 @@ test "useNodeMeasurement does not crash when tracked element disappears in next 
 }
 
 test "contentSize equals size when children fit" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6893,7 +6892,7 @@ test "contentSize equals size when children fit" {
 }
 
 test "contentSize exceeds size when children overflow horizontally" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6925,7 +6924,7 @@ test "contentSize exceeds size when children overflow horizontally" {
 }
 
 test "contentSize exceeds size when children overflow vertically" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -6963,7 +6962,7 @@ test "contentSize exceeds size when children overflow vertically" {
 }
 
 test "contentSize ignores fixed-placement children" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7003,7 +7002,7 @@ test "contentSize ignores fixed-placement children" {
 }
 
 test "contentSize is exposed through useNodeMeasurement" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7056,7 +7055,7 @@ test "contentSize is exposed through useNodeMeasurement" {
 }
 
 test "contentSize ignores relative-placement children" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7097,7 +7096,7 @@ test "contentSize ignores relative-placement children" {
 }
 
 test "childrenOffset shifts flow children by the offset" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7144,7 +7143,7 @@ test "childrenOffset shifts flow children by the offset" {
 }
 
 test "childrenOffset does not shift relative children" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7182,7 +7181,7 @@ test "childrenOffset does not shift relative children" {
 }
 
 test "childrenOffset does not shift fixed children" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7219,7 +7218,7 @@ test "childrenOffset does not shift fixed children" {
 }
 
 test "childrenOffset does not shift absolute children" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7257,7 +7256,7 @@ test "childrenOffset does not shift absolute children" {
 }
 
 test "childrenOffset does not change contentSize" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7294,7 +7293,7 @@ test "childrenOffset does not change contentSize" {
 }
 
 test "childrenOffset propagates through descendants via ancestor positions" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7342,7 +7341,7 @@ test "childrenOffset propagates through descendants via ancestor positions" {
 }
 
 test "root translate offsets the root's position" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7378,7 +7377,7 @@ test "root translate offsets the root's position" {
 }
 
 test "contentSize for a leaf element is zero" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7416,7 +7415,7 @@ const StructValue = struct {
 const StructCtx = forbear.createContext(opaque {}, StructValue);
 
 test "context value is visible to a descendant via useContext" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7446,7 +7445,7 @@ test "context value is visible to a descendant via useContext" {
 }
 
 test "same context nested with different values resolves to nearest provider" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7487,7 +7486,7 @@ test "same context nested with different values resolves to nearest provider" {
 }
 
 test "two different contexts at the same scope each resolve to their own value" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7515,7 +7514,7 @@ test "two different contexts at the same scope each resolve to their own value" 
 }
 
 test "useContext returns null when no provider has been mounted" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7543,7 +7542,7 @@ test "useContext returns null when no provider has been mounted" {
 }
 
 test "provider value does not leak to siblings after its block ends" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7582,7 +7581,7 @@ fn PersistComponent(observed: *?u32, writeBack: ?u32) void {
 }
 
 test "provider value persists and is mutable across frames" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7611,7 +7610,7 @@ test "provider value persists and is mutable across frames" {
 }
 
 test "provider round-trips a non-trivial struct value" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7643,7 +7642,7 @@ test "provider round-trips a non-trivial struct value" {
 const SlotCtx = forbear.createContext(opaque {}, u32);
 
 test "context provided inside a component is visible to slotted children" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7700,7 +7699,7 @@ fn consumesEverything(_: EventPayload) bool {
 }
 
 test "FocusContext: register and hasFocus are false when nothing is focused" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7729,7 +7728,7 @@ test "FocusContext: register and hasFocus are false when nothing is focused" {
 }
 
 test "FocusContext: focus gives hasFocus to the registered element" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7769,7 +7768,7 @@ test "FocusContext: focus gives hasFocus to the registered element" {
 }
 
 test "FocusContext: consumes delegates to the focused widget predicate" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7804,7 +7803,7 @@ test "FocusContext: consumes delegates to the focused widget predicate" {
 }
 
 test "FocusContext: consumes returns false when nothing is focused" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7835,7 +7834,7 @@ test "FocusContext: consumes returns false when nothing is focused" {
 }
 
 test "FocusContext: tab cycles focus forward through registered elements" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7871,7 +7870,7 @@ test "FocusContext: tab cycles focus forward through registered elements" {
 }
 
 test "FocusContext: tab with no focus starts at first element" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7908,7 +7907,7 @@ test "FocusContext: tab with no focus starts at first element" {
 }
 
 test "FocusContext: tab wraps from last to first element" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7947,7 +7946,7 @@ test "FocusContext: tab wraps from last to first element" {
 }
 
 test "FocusContext: shift+tab cycles focus backward" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -7995,7 +7994,7 @@ test "FocusContext: shift+tab cycles focus backward" {
 }
 
 test "FocusContext: escape clears focus" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -8031,7 +8030,7 @@ test "FocusContext: escape clears focus" {
 }
 
 test "FocusContext: stale focus is dropped when widget does not re-register" {
-    try forbear.init(std.testing.allocator, std.testing.io, undefined);
+    try initTest(std.testing.allocator);
     defer forbear.deinit();
 
     var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -8078,4 +8077,94 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
     });
 
     try std.testing.expectEqual(false, focusedAfterDrop.?);
+}
+
+// window.zig EventQueue tests
+
+// Mirrors the live setup in playground.zig: the Wayland event thread is the
+// sole producer pushing onto `Window.EventQueue`, and Forbear's render thread
+// is the sole consumer draining it via `iterate()` (see root.zig:942). This
+// stresses that single-producer/single-consumer split — one thread blasts a
+// long, identifiable sequence of events while the other drains and asserts
+// each one arrives intact and in order.
+test "EventQueue: SPSC producer/consumer round-trips every event in order" {
+    const Event = @import("window.zig").Event;
+    const EventQueue = @import("window.zig").EventQueue;
+
+    // "lots of events" — far more than the 256-slot ring, so the buffer wraps
+    // thousands of times and the head/tail acquire-release handshake is what
+    // keeps producer and consumer in sync.
+    const total: u32 = 200_000;
+
+    var queue: EventQueue = .empty;
+
+    const Producer = struct {
+        // Even indices ride a `pointerMotion`, odd indices a `scroll`, so the
+        // consumer verifies the union *tag* round-trips too, not just payloads.
+        fn eventFor(i: u32) Event {
+            if (i % 2 == 0) {
+                return .{ .pointerMotion = .{
+                    .time = i,
+                    .x = @floatFromInt(i),
+                    .y = @floatFromInt(i),
+                } };
+            } else {
+                return .{ .scroll = .{
+                    .axis = .vertical,
+                    .offset = @floatFromInt(i),
+                } };
+            }
+        }
+
+        fn run(q: *EventQueue, count: u32, cancel: *std.atomic.Value(bool)) void {
+            var i: u32 = 0;
+            while (i < count) : (i += 1) {
+                // `push` drops silently when the ring is full. As the lone
+                // producer, `tail.raw` is stable and `head` only advances, so
+                // spinning until there's a free slot guarantees no drops and
+                // lets us assert *every* event is delivered. `cancel` is the
+                // escape hatch: if the consumer bails out early (e.g. a failed
+                // assertion stops draining `head`), we'd otherwise spin here
+                // forever and hang `thread.join()`, so check it each spin.
+                while (q.tail.raw - q.head.load(.acquire) >= q.buffer.len) {
+                    if (cancel.load(.acquire)) return;
+                    std.atomic.spinLoopHint();
+                }
+                q.push(eventFor(i));
+            }
+        }
+    };
+
+    var cancel: std.atomic.Value(bool) = .init(false);
+    const thread = try std.Thread.spawn(.{}, Producer.run, .{ &queue, total, &cancel });
+    // Defers run LIFO: raise `cancel` *before* joining so a consumer-side
+    // assertion failure unblocks the producer instead of deadlocking the test.
+    defer thread.join();
+    defer cancel.store(true, .release);
+
+    var received: u32 = 0;
+    while (received < total) {
+        var iterator = queue.iterate();
+        while (iterator.next()) |event| {
+            const expected = Producer.eventFor(received);
+            switch (expected) {
+                .pointerMotion => |want| {
+                    try std.testing.expect(event == .pointerMotion);
+                    try std.testing.expectEqual(want.time, event.pointerMotion.time);
+                    try std.testing.expectEqual(want.x, event.pointerMotion.x);
+                    try std.testing.expectEqual(want.y, event.pointerMotion.y);
+                },
+                .scroll => |want| {
+                    try std.testing.expect(event == .scroll);
+                    try std.testing.expectEqual(want.axis, event.scroll.axis);
+                    try std.testing.expectEqual(want.offset, event.scroll.offset);
+                },
+                else => unreachable,
+            }
+            received += 1;
+        }
+        std.atomic.spinLoopHint();
+    }
+
+    try std.testing.expectEqual(total, received);
 }

@@ -181,6 +181,7 @@ pub fn main(init: std.process.Init) !void {
 
     const window = try forbear.Window.init(
         allocator,
+        init.io,
         1280,
         800,
         "wayland-book.com",
@@ -191,10 +192,8 @@ pub fn main(init: std.process.Init) !void {
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
 
-    try forbear.init(allocator, init.io, &renderer);
+    try forbear.init(allocator, init.io, window, &renderer);
     defer forbear.deinit();
-
-    forbear.setWindowHandlers(window);
 
     const renderingThread = try std.Thread.spawn(
         .{ .allocator = allocator },

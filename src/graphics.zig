@@ -516,7 +516,9 @@ const VkWin32SurfaceCreateInfoKHR = extern struct {
     hinstance: HINSTANCE,
     hwnd: HWND,
 };
-extern "vulkan" fn vkCreateWin32SurfaceKHR(
+// The Windows Vulkan SDK ships the import library as vulkan-1.lib (not vulkan.lib),
+// so the extern library name must match what build.zig links (`vulkan-1`).
+extern "vulkan-1" fn vkCreateWin32SurfaceKHR(
     instance: c.VkInstance,
     pCreateInfo: ?*const VkWin32SurfaceCreateInfoKHR,
     pAllocator: ?*c.VkAllocationCallbacks,
@@ -4536,7 +4538,7 @@ pub const Renderer = struct {
                 }
             }
 
-            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
+            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_IMMEDIATE_KHR;
 
             var swapchainExtent: c.VkExtent2D = swapchainSupportDetails.capabilities.currentExtent;
             if (swapchainExtent.width == std.math.maxInt(u32)) {

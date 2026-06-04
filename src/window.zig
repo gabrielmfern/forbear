@@ -1,64 +1,6 @@
-//! Exports the Window struct fit for the target OS being built for.
-//!
-//! Currently, what is actually used from the Window is:
-//!
-//! ```zig
-//! width: u32
-//! height: u32
-//! running: bool
-//! dpi: [2]u32
-//!
-//! fn init(allocator: std.mem.Allocator, width: u32, height: u32, title: [:0]const u8, app_id: [:0]const u8) void
-//!
-//! fn targetFrameTimeNs() u64;
-//!
-//! const Cursor = enum {
-//!     default,
-//!     text,
-//!     pointer,
-//! };
-//!
-//! fn setCursor(self: *@This(), cursor: Cursor, serial: u32) !void
-//!
-//! fn setResizeHandler(
-//!     self: *@This(),
-//!     handler: *const fn (
-//!         window: *@This(),
-//!         newWidth: u32,
-//!         newHeight: u32,
-//!         newDpi: [2]u32,
-//!         data: *anyopaque,
-//!     ) void,
-//!     data: *anyopaque,
-//! ) void
-//!
-//! fn handleEvents(self: *@This()) !void
-//!
-//! fn deinit(self: *@This()) void
-//! ```
-//!
-//! So making this cross platform, is still quite easy.
 const std = @import("std");
 const builtin = @import("builtin");
 const c = @import("c");
-
-/// Tiny spin-lock used by Window backends to guard the keyboard
-/// snapshot fields between the input thread and Forbear's render thread.
-/// Critical sections are sub-microsecond (a few bit ops + a memcpy
-/// bounded by `textInputBuf.len`), so spinning beats parking — and
-/// Zig 0.16's blocking `std.Io.Mutex` would force us to thread `Io`
-/// down into the windowing backends.
-pub const SpinLock = struct {
-    inner: std.atomic.Mutex = .unlocked,
-
-    pub fn lock(self: *SpinLock) void {
-        while (!self.inner.tryLock()) std.atomic.spinLoopHint();
-    }
-
-    pub fn unlock(self: *SpinLock) void {
-        self.inner.unlock();
-    }
-};
 
 pub const Cursor = enum {
     default,
@@ -175,27 +117,130 @@ pub const Keys = packed struct {
         return @bitCast(@as(Backing, @bitCast(self)) & ~@as(Backing, @bitCast(other)));
     }
 
+    pub fn has(self: Keys, other: Keys) bool {
+        return @as(Backing, @bitCast(self)) & @as(Backing, @bitCast(other)) == @as(Backing, @bitCast(other));
+    }
+
     /// True if no bit is set.
     pub fn isEmpty(self: Keys) bool {
         return @as(Backing, @bitCast(self)) == 0;
     }
 };
 
-/// Cross-platform per-frame keyboard snapshot. Each backend produces one of
-/// these inside `Window.snapshotKeyboard()` so Forbear can sample input
-/// state at frame start without going through callbacks or holding the
-/// window's lock during mounting.
-///
-/// All three fields are u128 bitsets where each `Key` variant owns one bit:
-/// `@intFromEnum(Key.tab)` is *the bit*, not an index. `.unknown = 0` is
-/// the no-op identity for `|`.
-pub const KeyboardSnapshot = struct {
-    /// Currently-held keys at the moment of sample.
-    held: Keys = .{},
-    /// Keys that transitioned to down since the previous snapshot.
-    pressed: Keys = .{},
-    /// Keys that transitioned to up since the previous snapshot.
-    released: Keys = .{},
+pub const ScrollAxis = enum(u32) {
+    vertical = 0,
+    horizontal = 1,
+};
+
+pub const EventQueue = struct {
+    buffer: [256]Event,
+    head: std.atomic.Value(usize),
+    tail: std.atomic.Value(usize),
+
+    pub const empty: @This() = .{
+        .buffer = undefined,
+        .head = .init(0),
+        .tail = .init(0),
+    };
+
+    pub fn push(self: *@This(), event: Event) void {
+        const t = self.tail.raw;
+        if (t - self.head.load(.acquire) < self.buffer.len) {
+            self.buffer[t % self.buffer.len] = event;
+            self.tail.store(t + 1, .release);
+        } else {
+            std.log.warn("event queue full; dropping {s}", .{@tagName(event)});
+        }
+    }
+
+    const EventIterator = struct {
+        queue: *EventQueue,
+        tail: usize,
+        head: usize,
+
+        pub fn next(self: *@This()) ?Event {
+            if (self.head < self.tail) {
+                defer self.head += 1;
+                return self.queue.buffer[self.head % self.queue.buffer.len];
+            } else {
+                self.queue.head.store(self.head, .release);
+                return null;
+            }
+        }
+    };
+
+    pub fn iterate(self: *@This()) EventIterator {
+        const tailLocal = self.tail.load(.acquire);
+        return EventIterator{
+            .queue = self,
+            .tail = tailLocal,
+            .head = self.head.raw,
+        };
+    }
+};
+
+pub const Event = union(enum) {
+    pointerEnter: PointerEnter,
+    pointerLeave: PointerLeave,
+    pointerMotion: PointerMotion,
+    pointerButton: PointerButton,
+    scroll: Scroll,
+    resize: Resize,
+    keysHeld: Keys,
+    keysPressed: Keys,
+    keysReleased: Keys,
+    input: Input,
+
+    pub const PointerEnter = struct {
+        serial: u32,
+        x: i32,
+        y: i32,
+    };
+
+    pub const PointerLeave = struct {
+        serial: u32,
+    };
+
+    pub const PointerMotion = struct {
+        time: u32,
+        x: f32,
+        y: f32,
+    };
+
+    pub const PointerButton = struct {
+        serial: u32,
+        time: u32,
+        button: u32,
+        state: u32,
+    };
+
+    pub const Scroll = struct {
+        axis: ScrollAxis,
+        offset: f32,
+    };
+
+    pub const Resize = struct {
+        width: u32,
+        height: u32,
+        dpi: [2]u32,
+    };
+
+    pub const Input = struct {
+        characterBuffer: [7]u8,
+        characterLength: usize,
+        repeats: usize,
+
+        pub fn text(self: @This(), arena: std.mem.Allocator) ![]u8 {
+            var repeatedBuffer = try arena.alloc(u8, self.repeats * self.characterLength);
+            for (0..self.repeats) |i| {
+                @memcpy(
+                    repeatedBuffer[i * self.characterLength .. (i + 1) * self.characterLength],
+                    self.characterBuffer[0..self.characterLength],
+                );
+            }
+            return repeatedBuffer;
+        }
+    };
 };
 
 pub const Window = switch (builtin.os.tag) {
@@ -204,44 +249,6 @@ pub const Window = switch (builtin.os.tag) {
         const os = std.os;
 
         const Self = @This();
-
-        pub const ScrollAxis = enum(u32) {
-            vertical = 0,
-            horizontal = 1,
-        };
-
-        pub const Handlers = struct {
-            pointerEnter: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, serial: u32, x: i32, y: i32, data: *anyopaque) void,
-            } = null,
-            pointerLeave: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, serial: u32, data: *anyopaque) void,
-            } = null,
-            pointerMotion: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
-            } = null,
-            pointerButton: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, serial: u32, time: u32, button: u32, state: u32, data: *anyopaque) void,
-            } = null,
-            scroll: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, axis: ScrollAxis, offset: f32, data: *anyopaque) void,
-            } = null,
-            resize: ?struct {
-                data: *anyopaque,
-                function: *const fn (
-                    window: *Self,
-                    newWidth: u32,
-                    newHeight: u32,
-                    newDpi: [2]u32,
-                    data: *anyopaque,
-                ) void,
-            } = null,
-        };
 
         // Everything native that is contextual
         wlDisplay: *c.wl_display,
@@ -257,14 +264,29 @@ pub const Window = switch (builtin.os.tag) {
         xkbContext: *c.xkb_context,
         xkbKeymap: ?*c.xkb_keymap,
         xkbState: ?*c.xkb_state,
+        repeatInfo: struct {
+            /// the rate of repeating keys in characters per second
+            rate: i32,
+            /// delay in milliseconds since key down until repeating starts
+            delay: i32,
+        },
         wlKeyboard: *c.wl_keyboard,
 
         /// Keyboard state. The Wayland event thread writes; Forbear's render
         /// thread drains via `snapshotKeyboard()` at frame start.
-        keysMutex: SpinLock = .{},
-        keysDown: Keys = .{},
-        pendingPressed: Keys = .{},
-        pendingReleased: Keys = .{},
+        keysHeld: Keys,
+        pendingPressed: Keys,
+        pendingReleased: Keys,
+        activeInput: ?struct {
+            characterBuffer: [7:0]u8,
+            characterLength: usize,
+            /// Does not count the first character from the initial key event
+            totalRepeats: usize,
+            startTime: std.Io.Timestamp,
+            key: Keys,
+        },
+
+        eventQueue: EventQueue = .empty,
 
         // cursor
         wlPointer: *c.wl_pointer,
@@ -301,8 +323,7 @@ pub const Window = switch (builtin.os.tag) {
         refreshRate: u32 = 60000, // in millihertz (mHz), default 60Hz
 
         allocator: std.mem.Allocator,
-
-        handlers: Handlers,
+        io: std.Io,
 
         fn BindingInfo(T: type) type {
             return struct {
@@ -408,9 +429,13 @@ pub const Window = switch (builtin.os.tag) {
             if (window.wpFractionalScale != null) return;
             window.scale = @floatFromInt(scale);
             window.updateDpi();
-            if (window.handlers.resize) |handler| {
-                handler.function(window, window.width, window.height, window.dpi, handler.data);
-            }
+            window.eventQueue.push(Event{
+                .resize = .{
+                    .width = window.width,
+                    .height = window.height,
+                    .dpi = window.dpi,
+                },
+            });
             std.log.debug("Monitor scale changed to: {}", .{scale});
         }
 
@@ -453,9 +478,13 @@ pub const Window = switch (builtin.os.tag) {
             const window: *Self = @ptrCast(@alignCast(data));
             window.scale = @as(f32, @floatFromInt(scale)) / 120.0;
             window.updateDpi();
-            if (window.handlers.resize) |handler| {
-                handler.function(window, window.width, window.height, window.dpi, handler.data);
-            }
+            window.eventQueue.push(Event{
+                .resize = .{
+                    .width = window.width,
+                    .height = window.height,
+                    .dpi = window.dpi,
+                },
+            });
             std.log.debug("Fractional scale changed to: {d}", .{@as(f32, @floatFromInt(scale)) / 120.0});
         }
 
@@ -584,9 +613,13 @@ pub const Window = switch (builtin.os.tag) {
                 if (window.wpViewport) |viewport| {
                     c.wp_viewport_set_destination(viewport, @intCast(window.width), @intCast(window.height));
                 }
-                if (window.handlers.resize) |handler| {
-                    handler.function(window, window.width, window.height, window.dpi, handler.data);
-                }
+                window.eventQueue.push(Event{
+                    .resize = .{
+                        .width = window.width,
+                        .height = window.height,
+                        .dpi = window.dpi,
+                    },
+                });
             }
         }
 
@@ -657,9 +690,13 @@ pub const Window = switch (builtin.os.tag) {
             window.setCursor(.default, serial) catch |err| {
                 std.log.err("failed to set cursor: {}", .{err});
             };
-            if (window.handlers.pointerEnter) |handler| {
-                handler.function(window, serial, surfaceX, surfaceY, handler.data);
-            }
+            window.eventQueue.push(Event{
+                .pointerEnter = .{
+                    .serial = serial,
+                    .x = surfaceX,
+                    .y = surfaceY,
+                },
+            });
         }
 
         fn pointerHandleLeave(
@@ -670,9 +707,9 @@ pub const Window = switch (builtin.os.tag) {
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
             window.pointerSerial = null;
-            if (window.handlers.pointerLeave) |handler| {
-                handler.function(window, serial, handler.data);
-            }
+            window.eventQueue.push(Event{
+                .pointerLeave = .{ .serial = serial },
+            });
             _ = wlPointer;
             _ = surface;
         }
@@ -685,15 +722,13 @@ pub const Window = switch (builtin.os.tag) {
             surfaceY: c.wl_fixed_t,
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
-            if (window.handlers.pointerMotion) |handler| {
-                handler.function(
-                    window,
-                    @floatCast(c.wl_fixed_to_double(surfaceX)),
-                    @floatCast(c.wl_fixed_to_double(surfaceY)),
-                    handler.data,
-                );
-            }
-            _ = time;
+            window.eventQueue.push(Event{
+                .pointerMotion = .{
+                    .time = time,
+                    .x = @floatCast(c.wl_fixed_to_double(surfaceX)),
+                    .y = @floatCast(c.wl_fixed_to_double(surfaceY)),
+                },
+            });
             _ = wlPointer;
         }
 
@@ -706,9 +741,14 @@ pub const Window = switch (builtin.os.tag) {
             state: u32,
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
-            if (window.handlers.pointerButton) |handler| {
-                handler.function(window, serial, time, button, state, handler.data);
-            }
+            window.eventQueue.push(Event{
+                .pointerButton = .{
+                    .serial = serial,
+                    .time = time,
+                    .button = button,
+                    .state = state,
+                },
+            });
             _ = wlPointer;
         }
 
@@ -720,14 +760,9 @@ pub const Window = switch (builtin.os.tag) {
             value: c.wl_fixed_t,
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
-            if (window.handlers.scroll) |handler| {
-                handler.function(
-                    window,
-                    @enumFromInt(axis),
-                    @floatCast(c.wl_fixed_to_double(value)),
-                    handler.data,
-                );
-            }
+            window.eventQueue.push(Event{
+                .scroll = .{ .axis = @enumFromInt(axis), .offset = @floatCast(c.wl_fixed_to_double(value)) },
+            });
             _ = time;
             _ = wlPointer;
         }
@@ -976,10 +1011,9 @@ pub const Window = switch (builtin.os.tag) {
 
             // Focus is gone: mark every held key as released this frame so edge
             // consumers see the transition, then clear the held set.
-            window.keysMutex.lock();
-            window.pendingReleased = window.pendingReleased.with(window.keysDown);
-            window.keysDown = .{};
-            window.keysMutex.unlock();
+            window.activeInput = null;
+            window.pendingReleased = window.pendingReleased.with(window.keysHeld);
+            window.keysHeld = .{};
         }
 
         fn keyboardHandleKey(
@@ -1006,15 +1040,54 @@ pub const Window = switch (builtin.os.tag) {
             const keysym: u32 = baseKeysymForKeycode(window, xkbKeycode);
             const mapped: Keys = keysymToKeys(keysym);
 
-            window.keysMutex.lock();
             if (state == c.WL_KEYBOARD_KEY_STATE_PRESSED) {
+                std.debug.assert(window.xkbState != null);
+                window.activeInput = .{
+                    .characterBuffer = undefined,
+                    .characterLength = undefined,
+                    .totalRepeats = 0,
+                    .startTime = std.Io.Clock.now(.awake, window.io),
+                    .key = mapped,
+                };
+                window.activeInput.?.characterLength = @intCast(c.xkb_state_key_get_utf8(
+                    window.xkbState,
+                    xkbKeycode,
+                    &window.activeInput.?.characterBuffer,
+                    window.activeInput.?.characterBuffer.len,
+                ));
+                std.debug.assert(window.activeInput.?.characterLength <= window.activeInput.?.characterBuffer.len);
+                const buffer = window.activeInput.?.characterBuffer;
+                const length = window.activeInput.?.characterLength;
+                // Control codepoints (C0, DEL, C1) aren't text; route them through
+                // `Keys` only. Decode the one character and range-check it.
+                const codepoint = if (length > 0) std.unicode.utf8Decode(buffer[0..length]) catch null else null;
+                const isControl = if (codepoint) |cp| cp < 0x20 or (cp >= 0x7f and cp <= 0x9f) else false;
+                if (length > 0 and !isControl) {
+                    window.eventQueue.push(Event{
+                        .input = .{
+                            .characterBuffer = buffer,
+                            .characterLength = length,
+                            .repeats = 1,
+                        },
+                    });
+                } else {
+                    // it could be a modifier character that we don't need to take
+                    // into account as input
+                    window.activeInput = null;
+                }
+
                 window.pendingPressed = window.pendingPressed.with(mapped);
-                window.keysDown = window.keysDown.with(mapped);
+                window.keysHeld = window.keysHeld.with(mapped);
             } else if (state == c.WL_KEYBOARD_KEY_STATE_RELEASED) {
+                if (window.activeInput) |activeInput| {
+                    if (activeInput.key.has(mapped)) {
+                        window.activeInput = null;
+                    }
+                }
+
                 window.pendingReleased = window.pendingReleased.with(mapped);
-                window.keysDown = window.keysDown.without(mapped);
+                window.keysHeld = window.keysHeld.without(mapped);
             }
-            window.keysMutex.unlock();
         }
 
         fn keyboardHandleModifiers(
@@ -1045,37 +1118,42 @@ pub const Window = switch (builtin.os.tag) {
             newMods.alt = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_ALT, effective) > 0;
             newMods.super = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_LOGO, effective) > 0;
 
-            window.keysMutex.lock();
-            defer window.keysMutex.unlock();
-
             var oldMods: Keys = .{};
-            oldMods.shift = window.keysDown.shift;
-            oldMods.control = window.keysDown.control;
-            oldMods.alt = window.keysDown.alt;
-            oldMods.super = window.keysDown.super;
+            oldMods.shift = window.keysHeld.shift;
+            oldMods.control = window.keysHeld.control;
+            oldMods.alt = window.keysHeld.alt;
+            oldMods.super = window.keysHeld.super;
 
             // Edge events for modifiers that flipped this notification.
             window.pendingPressed = window.pendingPressed.with(newMods.without(oldMods));
             window.pendingReleased = window.pendingReleased.with(oldMods.without(newMods));
 
-            window.keysDown.shift = newMods.shift;
-            window.keysDown.control = newMods.control;
-            window.keysDown.alt = newMods.alt;
-            window.keysDown.super = newMods.super;
+            window.keysHeld.shift = newMods.shift;
+            window.keysHeld.control = newMods.control;
+            window.keysHeld.alt = newMods.alt;
+            window.keysHeld.super = newMods.super;
         }
 
         fn keyboardHandleRepeatInfo(
-            _: ?*anyopaque,
+            data: ?*anyopaque,
             _: ?*c.wl_keyboard,
-            _: i32,
-            _: i32,
+            // the rate of repeating keys in characters per second
+            rate: i32,
+            // delay in milliseconds since key down until repeating starts
+            delay: i32,
         ) callconv(.c) void {
-            // The held-state model doesn't need OS repeat info — consumers do
-            // their own hold-to-act timing from `dt` and `isKeyDown(...)`.
+            const window: *Self = @ptrCast(@alignCast(data));
+
+            window.repeatInfo = .{
+                .rate = rate,
+                .delay = delay,
+            };
         }
 
         const wlKeyboardListener: c.wl_keyboard_listener = .{
             .keymap = keyboardHandleKeymap,
+            // TODO: should we be tracking some state based on enter and leave here?
+            // Does not doing this introduce some kind of bug?
             .enter = keyboardHandleEnter,
             .leave = keyboardHandleLeave,
             .key = keyboardHandleKey,
@@ -1107,6 +1185,7 @@ pub const Window = switch (builtin.os.tag) {
 
         pub fn init(
             allocator: std.mem.Allocator,
+            io: std.Io,
             width: u32,
             height: u32,
             title: [:0]const u8,
@@ -1118,6 +1197,7 @@ pub const Window = switch (builtin.os.tag) {
             const window = try allocator.create(Self);
             errdefer allocator.destroy(window);
             window.allocator = allocator;
+            window.io = io;
 
             window.width = width;
             window.height = height;
@@ -1127,17 +1207,17 @@ pub const Window = switch (builtin.os.tag) {
             window.app_id = app_id;
             window.running = true;
 
-            window.handlers = .{};
-
             window.xkbContext = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse return error.FailedToCreateXkbContext;
             errdefer c.xkb_context_unref(window.xkbContext);
             window.xkbKeymap = null;
             window.xkbState = null;
 
-            window.keysMutex = .{};
-            window.keysDown = .{};
+            window.keysHeld = .{};
             window.pendingPressed = .{};
             window.pendingReleased = .{};
+            window.activeInput = null;
+            // Some setups never emit repeat_info; default to typical X11 values.
+            window.repeatInfo = .{ .rate = 25, .delay = 600 };
 
             // Initialize optional fields to null before the registry roundtrip,
             // since allocator.create does not zero-initialize memory.
@@ -1246,22 +1326,6 @@ pub const Window = switch (builtin.os.tag) {
             };
         }
 
-        /// Drain the keyboard state for the current frame. Holds the keys mutex
-        /// just long enough to copy the bitsets and reset the pending fields.
-        pub fn snapshotKeyboard(self: *Self) KeyboardSnapshot {
-            self.keysMutex.lock();
-            defer self.keysMutex.unlock();
-
-            const snap: KeyboardSnapshot = .{
-                .held = self.keysDown,
-                .pressed = self.pendingPressed,
-                .released = self.pendingReleased,
-            };
-            self.pendingPressed = .{};
-            self.pendingReleased = .{};
-            return snap;
-        }
-
         pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
             const effectiveSerial = if (serial != 0)
                 serial
@@ -1291,14 +1355,41 @@ pub const Window = switch (builtin.os.tag) {
                 if (c.wl_display_dispatch(self.wlDisplay) == -1) {
                     return error.WaylandDispatchFailed;
                 }
-            }
-        }
 
-        pub fn isHoldingShift(self: *const Self) bool {
-            if (self.xkbState) |xkbState| {
-                return c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_SHIFT, c.XKB_STATE_MODS_EFFECTIVE) != 0;
+                if (self.activeInput) |*activeInput| {
+                    const elapsedMilliseconds: f64 = @floatFromInt(activeInput.startTime.untilNow(self.io, .awake).toMilliseconds());
+                    const delay: f64 = @floatFromInt(self.repeatInfo.delay);
+                    const rate: f64 = @floatFromInt(self.repeatInfo.rate);
+                    if (elapsedMilliseconds >= delay) {
+                        const due: usize = @trunc((elapsedMilliseconds - delay) * rate / 1000);
+                        const new = due - activeInput.totalRepeats;
+                        if (new > 0) {
+                            self.activeInput.?.totalRepeats += new;
+                            self.eventQueue.push(Event{
+                                .input = Event.Input{
+                                    .characterBuffer = activeInput.characterBuffer,
+                                    .characterLength = activeInput.characterLength,
+                                    .repeats = new,
+                                },
+                            });
+                        }
+                    }
+                }
+
+                if (!self.keysHeld.isEmpty()) {
+                    self.eventQueue.push(Event{ .keysHeld = self.keysHeld });
+                }
+
+                if (!self.pendingPressed.isEmpty()) {
+                    self.eventQueue.push(Event{ .keysPressed = self.pendingPressed });
+                    self.pendingPressed = .{};
+                }
+
+                if (!self.pendingReleased.isEmpty()) {
+                    self.eventQueue.push(Event{ .keysReleased = self.pendingReleased });
+                    self.pendingReleased = .{};
+                }
             }
-            return false;
         }
 
         /// Returns the target frame time in nanoseconds based on the monitor's refresh rate.
@@ -1368,48 +1459,23 @@ pub const Window = switch (builtin.os.tag) {
         running: bool,
         dpi: [2]u32,
 
-        /// Keyboard state. The wndProc thread writes; Forbear's render thread drains
-        /// via `snapshotKeyboard()`. Held bitset + edge bitsets, all `Key`-typed.
-        keysMutex: SpinLock = .{},
-        keysDown: Keys = .{},
+        /// Keyboard state. `wndProc` runs synchronously inside `DispatchMessageW`
+        /// on the event thread, so it shares a thread with `handleEvents` and needs
+        /// no lock; `handleEvents` drains these into `eventQueue` each iteration so
+        /// the render thread only ever observes pushed events.
+        keysHeld: Keys = .{},
         pendingPressed: Keys = .{},
         pendingReleased: Keys = .{},
+        /// A WM_CHAR carrying a UTF-16 high surrogate is held here until its paired
+        /// low-surrogate WM_CHAR arrives, so astral-plane codepoints survive.
+        pendingHighSurrogate: ?u16 = null,
 
-        handlers: Handlers,
+        eventQueue: EventQueue = .empty,
 
         allocator: std.mem.Allocator,
+        io: std.Io,
 
         const Self = @This();
-
-        pub const ScrollAxis = enum {
-            vertical,
-            horizontal,
-        };
-
-        pub const Handlers = struct {
-            pointerMotion: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
-            } = null,
-            pointerButton: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, serial: u32, time: u32, button: u32, state: u32, data: *anyopaque) void,
-            } = null,
-            scroll: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, axis: ScrollAxis, offset: f32, data: *anyopaque) void,
-            } = null,
-            resize: ?struct {
-                data: *anyopaque,
-                function: *const fn (
-                    window: *Self,
-                    newWidth: u32,
-                    newHeight: u32,
-                    newDpi: [2]u32,
-                    data: *anyopaque,
-                ) void,
-            } = null,
-        };
 
         fn virtualKeyToKeys(vk: WPARAM) Keys {
             return switch (vk) {
@@ -1488,11 +1554,9 @@ pub const Window = switch (builtin.os.tag) {
         }
 
         /// Sample the OS's effective modifier state via `GetKeyState` and reconcile
-        /// it with `self.keysDown`'s modifier bits. Whatever bits flipped this call
+        /// it with `self.keysHeld`'s modifier bits. Whatever bits flipped this call
         /// also get appended to `pendingPressed` / `pendingReleased` so consumers
-        /// of `on(.keyDown)` / `on(.keyUp)` see modifier edges as expected.
-        ///
-        /// Caller holds `keysMutex`.
+        /// of `onKeyDown()` / `onKeyUp()` see modifier edges as expected.
         fn refreshModifiersFromOS(self: *Self) void {
             const down = struct {
                 fn f(vk: c_int) bool {
@@ -1509,28 +1573,29 @@ pub const Window = switch (builtin.os.tag) {
             current.super = down(VK_LWIN) or down(VK_RWIN);
 
             var oldMods: Keys = .{};
-            oldMods.shift = self.keysDown.shift;
-            oldMods.control = self.keysDown.control;
-            oldMods.alt = self.keysDown.alt;
-            oldMods.super = self.keysDown.super;
+            oldMods.shift = self.keysHeld.shift;
+            oldMods.control = self.keysHeld.control;
+            oldMods.alt = self.keysHeld.alt;
+            oldMods.super = self.keysHeld.super;
 
             self.pendingPressed = self.pendingPressed.with(current.without(oldMods));
             self.pendingReleased = self.pendingReleased.with(oldMods.without(current));
 
-            self.keysDown.shift = current.shift;
-            self.keysDown.control = current.control;
-            self.keysDown.alt = current.alt;
-            self.keysDown.super = current.super;
+            self.keysHeld.shift = current.shift;
+            self.keysHeld.control = current.control;
+            self.keysHeld.alt = current.alt;
+            self.keysHeld.super = current.super;
         }
 
         pub fn init(
             allocator: std.mem.Allocator,
+            io: std.Io,
             width: u32,
             height: u32,
             title: [:0]const u8,
             app_id: [:0]const u8,
-        ) !*@This() {
-            const window = try allocator.create(@This());
+        ) !*Self {
+            const window = try allocator.create(Self);
             errdefer allocator.destroy(window);
 
             window.width = width;
@@ -1541,13 +1606,14 @@ pub const Window = switch (builtin.os.tag) {
             errdefer allocator.free(window.className);
             window.running = true;
 
-            window.keysMutex = .{};
-            window.keysDown = .{};
+            window.keysHeld = .{};
             window.pendingPressed = .{};
             window.pendingReleased = .{};
-            window.handlers = .{};
+            window.pendingHighSurrogate = null;
+            window.eventQueue = .empty;
 
             window.allocator = allocator;
+            window.io = io;
 
             window.hInstance = GetModuleHandleW(null);
             if (window.hInstance == null) {
@@ -1594,12 +1660,12 @@ pub const Window = switch (builtin.os.tag) {
             return window;
         }
 
-        fn updateDpi(self: *@This()) void {
+        fn updateDpi(self: *Self) void {
             const dpi = GetDpiForWindow(self.handle);
             self.dpi = .{ dpi, dpi };
         }
 
-        fn updateClientSize(self: *@This()) void {
+        fn updateClientSize(self: *Self) void {
             var rect: RECT = undefined;
             if (GetClientRect(self.handle, &rect) == 0) {
                 std.log.err("failed to query window client size", .{});
@@ -1609,7 +1675,7 @@ pub const Window = switch (builtin.os.tag) {
             self.height = @intCast(rect.bottom - rect.top);
         }
 
-        fn emitResizeIfNeeded(self: *@This(), hwnd: HWND, force: bool) void {
+        fn emitResizeIfNeeded(self: *Self, hwnd: HWND, force: bool) void {
             var rect: RECT = undefined;
             if (GetClientRect(hwnd, &rect) == 0) {
                 std.log.err("failed to get new window size, ignoring event", .{});
@@ -1622,13 +1688,15 @@ pub const Window = switch (builtin.os.tag) {
             if (force or self.width != newWidth or self.height != newHeight) {
                 self.width = newWidth;
                 self.height = newHeight;
-                if (self.handlers.resize) |handler| {
-                    handler.function(self, self.width, self.height, self.dpi, handler.data);
-                }
+                self.eventQueue.push(Event{ .resize = .{
+                    .width = self.width,
+                    .height = self.height,
+                    .dpi = self.dpi,
+                } });
             }
         }
 
-        pub fn deinit(self: *@This()) void {
+        pub fn deinit(self: *Self) void {
             _ = DestroyWindow(self.handle);
             _ = UnregisterClassW(self.className.ptr, self.hInstance);
             self.allocator.free(self.className);
@@ -1636,17 +1704,57 @@ pub const Window = switch (builtin.os.tag) {
             self.allocator.destroy(self);
         }
 
+        /// Decode a WM_CHAR code unit into a `.input` event, joining UTF-16
+        /// surrogate pairs (which arrive as two consecutive WM_CHARs) and dropping
+        /// control codepoints — those reach the app through `Keys` instead.
+        fn handleChar(self: *Self, wParam: WPARAM, lParam: LPARAM) void {
+            const codeUnit: u16 = @truncate(wParam);
+
+            const codepoint: u21 = blk: {
+                if (codeUnit >= 0xD800 and codeUnit <= 0xDBFF) {
+                    self.pendingHighSurrogate = codeUnit;
+                    return;
+                } else if (codeUnit >= 0xDC00 and codeUnit <= 0xDFFF) {
+                    const high = self.pendingHighSurrogate orelse return;
+                    self.pendingHighSurrogate = null;
+                    break :blk 0x10000 +
+                        (@as(u21, high - 0xD800) << 10) +
+                        (codeUnit - 0xDC00);
+                } else {
+                    self.pendingHighSurrogate = null;
+                    break :blk codeUnit;
+                }
+            };
+
+            // Control codepoints (C0, DEL, C1) aren't text.
+            if (codepoint < 0x20 or (codepoint >= 0x7f and codepoint <= 0x9f)) return;
+
+            var buffer: [7]u8 = undefined;
+            const length = std.unicode.utf8Encode(codepoint, &buffer) catch return;
+
+            // lParam bits 0..15 are the OS auto-repeat count, so a held key coalesces
+            // into a single event carrying its repeat multiplier.
+            const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
+            const repeats: usize = @max(1, lp & 0xFFFF);
+
+            self.eventQueue.push(Event{ .input = .{
+                .characterBuffer = buffer,
+                .characterLength = length,
+                .repeats = repeats,
+            } });
+        }
+
         fn wndProc(hwnd: HWND, message: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT {
             // Handle WM_NCCREATE to store the window pointer
             if (message == WM_NCCREATE) {
                 const createStruct: *CREATESTRUCTW = @ptrFromInt(@as(usize, @bitCast(lParam)));
-                const window: *@This() = @ptrCast(@alignCast(createStruct.lpCreateParams));
+                const window: *Self = @ptrCast(@alignCast(createStruct.lpCreateParams));
                 _ = SetWindowLongPtrW(hwnd, GWLP_USERDATA, @bitCast(@intFromPtr(window)));
                 return DefWindowProcW(hwnd, message, wParam, lParam);
             }
 
             // Retrieve the window pointer for all other messages
-            const window: ?*@This() = blk: {
+            const window: ?*Self = blk: {
                 const ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
                 break :blk if (ptr == 0) null else @ptrFromInt(@as(usize, @bitCast(ptr)));
             };
@@ -1664,23 +1772,31 @@ pub const Window = switch (builtin.os.tag) {
                     if (window) |self| {
                         const mouseX: u16 = @truncate(@as(u32, @intCast(lParam)));
                         const mouseY: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
-                        if (self.handlers.pointerMotion) |handler| {
-                            handler.function(self, @floatFromInt(mouseX), @floatFromInt(mouseY), handler.data);
-                        }
+                        self.eventQueue.push(Event{ .pointerMotion = .{
+                            .time = 0,
+                            .x = @floatFromInt(mouseX),
+                            .y = @floatFromInt(mouseY),
+                        } });
                     }
                 },
                 WM_LBUTTONDOWN => {
                     if (window) |self| {
-                        if (self.handlers.pointerButton) |handler| {
-                            handler.function(self, 0, 0, linuxLeftMouseButton, buttonPressed, handler.data);
-                        }
+                        self.eventQueue.push(Event{ .pointerButton = .{
+                            .serial = 0,
+                            .time = 0,
+                            .button = linuxLeftMouseButton,
+                            .state = buttonPressed,
+                        } });
                     }
                 },
                 WM_LBUTTONUP => {
                     if (window) |self| {
-                        if (self.handlers.pointerButton) |handler| {
-                            handler.function(self, 0, 0, linuxLeftMouseButton, buttonReleased, handler.data);
-                        }
+                        self.eventQueue.push(Event{ .pointerButton = .{
+                            .serial = 0,
+                            .time = 0,
+                            .button = linuxLeftMouseButton,
+                            .state = buttonReleased,
+                        } });
                     }
                 },
                 WM_MOUSEWHEEL => {
@@ -1688,10 +1804,14 @@ pub const Window = switch (builtin.os.tag) {
                         // this value is positive when going up and negative going down
                         // see https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mousewheel
                         const offset: i16 = @bitCast(@as(u16, @truncate(wParam >> 16)));
-                        if (self.handlers.scroll) |handler| {
-                            handler.function(self, .vertical, @floatFromInt(-1 * offset), handler.data);
-                        }
+                        self.eventQueue.push(Event{ .scroll = .{
+                            .axis = .vertical,
+                            .offset = @floatFromInt(-1 * offset),
+                        } });
                     }
+                },
+                WM_CHAR => {
+                    if (window) |self| self.handleChar(wParam, lParam);
                 },
                 WM_KEYDOWN => {
                     if (window) |self| {
@@ -1703,23 +1823,19 @@ pub const Window = switch (builtin.os.tag) {
                         const wasAlreadyDown: bool = (lp & (1 << 30)) != 0;
                         const key = virtualKeyToKeys(wParam);
 
-                        self.keysMutex.lock();
                         if (!wasAlreadyDown) {
                             self.pendingPressed = self.pendingPressed.with(key);
-                            self.keysDown = self.keysDown.with(key);
+                            self.keysHeld = self.keysHeld.with(key);
                         }
                         refreshModifiersFromOS(self);
-                        self.keysMutex.unlock();
                     }
                 },
                 WM_KEYUP => {
                     if (window) |self| {
                         const key = virtualKeyToKeys(wParam);
-                        self.keysMutex.lock();
                         self.pendingReleased = self.pendingReleased.with(key);
-                        self.keysDown = self.keysDown.without(key);
+                        self.keysHeld = self.keysHeld.without(key);
                         refreshModifiersFromOS(self);
-                        self.keysMutex.unlock();
                     }
                 },
                 WM_DPICHANGED => {
@@ -1766,7 +1882,7 @@ pub const Window = switch (builtin.os.tag) {
             return 0;
         }
 
-        pub fn targetFrameTimeNs(self: *const @This()) u64 {
+        pub fn targetFrameTimeNs(self: *const Self) u64 {
             const fallback60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
 
             // Get the monitor that contains most of this window
@@ -1796,28 +1912,6 @@ pub const Window = switch (builtin.os.tag) {
             return @divTrunc(1_000_000_000, @as(u64, refreshRate));
         }
 
-        pub fn isHoldingShift(self: *Self) bool {
-            self.keysMutex.lock();
-            defer self.keysMutex.unlock();
-            return self.keysDown.shift;
-        }
-
-        /// Drain the keyboard state for the current frame. Holds `keysMutex` just
-        /// long enough to copy the bitsets and reset the pending fields.
-        pub fn snapshotKeyboard(self: *Self) KeyboardSnapshot {
-            self.keysMutex.lock();
-            defer self.keysMutex.unlock();
-
-            const snap: KeyboardSnapshot = .{
-                .held = self.keysDown,
-                .pressed = self.pendingPressed,
-                .released = self.pendingReleased,
-            };
-            self.pendingPressed = .{};
-            self.pendingReleased = .{};
-            return snap;
-        }
-
         pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
             _ = self;
             _ = serial;
@@ -1831,14 +1925,36 @@ pub const Window = switch (builtin.os.tag) {
             _ = SetCursor(nativeCursor);
         }
 
-        pub fn handleEvents(self: *@This()) !void {
+        pub fn handleEvents(self: *Self) !void {
             while (self.running) {
                 var message: MSG = undefined;
-                if (GetMessageW(&message, self.handle, 0, 0) != 0) {
-                    _ = TranslateMessage(&message);
-                    _ = DispatchMessageW(&message);
-                } else {
+                // `TranslateMessage` turns WM_KEYDOWN into WM_CHAR for text input;
+                // `DispatchMessageW` then calls `wndProc` synchronously on this
+                // thread, which is the sole producer pushing onto `eventQueue`.
+                const result = GetMessageW(&message, null, 0, 0);
+                if (result == 0) {
+                    // WM_QUIT
                     self.running = false;
+                    break;
+                }
+                if (result == -1) {
+                    return error.FailedToGetMessage;
+                }
+                _ = TranslateMessage(&message);
+                _ = DispatchMessageW(&message);
+
+                // Mirror the keyboard edges accumulated by `wndProc` into the queue,
+                // matching the Linux backend's per-iteration snapshot.
+                if (!self.keysHeld.isEmpty()) {
+                    self.eventQueue.push(Event{ .keysHeld = self.keysHeld });
+                }
+                if (!self.pendingPressed.isEmpty()) {
+                    self.eventQueue.push(Event{ .keysPressed = self.pendingPressed });
+                    self.pendingPressed = .{};
+                }
+                if (!self.pendingReleased.isEmpty()) {
+                    self.eventQueue.push(Event{ .keysReleased = self.pendingReleased });
+                    self.pendingReleased = .{};
                 }
             }
         }
@@ -2056,44 +2172,18 @@ pub const Window = switch (builtin.os.tag) {
         const SW_RESTORE: c_int = 9;
 
         // WINDOWPOS flags
-        /// Draws a frame (defined in the window's class description) around the
-        /// window. Same as the SWP_FRAMECHANGED flag.
         const SWP_DRAWFRAME = 0x0020;
-        /// Sends a WM_NCCALCSIZE message to the window, even if the window's size is
-        /// not being changed. If this flag is not specified, WM_NCCALCSIZE is sent only
-        /// when the window's size is being changed.
         const SWP_FRAMECHANGED = 0x0020;
-        /// Hides the window.
         const SWP_HIDEWINDOW = 0x0080;
-        /// Does not activate the window. If this flag is not set, the window is
-        /// activated and moved to the top of either the topmost or non-topmost group
-        /// (depending on the setting of the hwndInsertAfter member).
         const SWP_NOACTIVATE = 0x0010;
-        /// Discards the entire contents of the client area. If this flag is not
-        /// specified, the valid contents of the client area are saved and copied back
-        /// into the client area after the window is sized or repositioned.
         const SWP_NOCOPYBITS = 0x0100;
-        /// Retains the current position (ignores the x and y members).
         const SWP_NOMOVE = 0x0002;
-        /// Does not change the owner window's position in the Z order.
         const SWP_NOOWNERZORDER = 0x0200;
-        /// Does not redraw changes. If this flag is set, no repainting of any kind
-        /// occurs. This applies to the client area, the nonclient area (including the
-        /// title bar and scroll bars), and any part of the parent window uncovered as
-        /// a result of the window being moved. When this flag is set, the application
-        /// must explicitly invalidate or redraw any parts of the window and parent
-        /// window that need redrawing.
         const SWP_NOREDRAW = 0x0008;
-        /// Does not change the owner window's position in the Z order. Same as the
-        /// SWP_NOOWNERZORDER flag.
         const SWP_NOREPOSITION = 0x0200;
-        /// Prevents the window from receiving the WM_WINDOWPOSCHANGING message.
         const SWP_NOSENDCHANGING = 0x0400;
-        /// Retains the current size (ignores the cx and cy members).
         const SWP_NOSIZE = 0x0001;
-        /// Retains the current Z order (ignores the hwndInsertAfter member).
         const SWP_NOZORDER = 0x0004;
-        /// Displays the window.
         const SWP_SHOWWINDOW = 0x0040;
 
         // External function declarations
@@ -2246,853 +2336,5 @@ pub const Window = switch (builtin.os.tag) {
         extern "user32" fn GetMonitorInfoW(hMonitor: HMONITOR, lpmi: *MONITORINFOEXW) callconv(.c) BOOL;
         extern "user32" fn EnumDisplaySettingsW(lpszDeviceName: [*:0]const u16, iModeNum: DWORD, lpDevMode: *DEVMODEW) callconv(.c) BOOL;
     },
-    .macos => struct {
-        extern fn objc_autoreleasePoolPush() ?*anyopaque;
-        extern fn objc_autoreleasePoolPop(pool: ?*anyopaque) void;
-
-        const Self = @This();
-
-        const linuxLeftMouseButton: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
-        const buttonPressed: u32 = 1;
-        const buttonReleased: u32 = 0;
-
-        pub const ScrollAxis = enum(u32) {
-            vertical = 0,
-            horizontal = 1,
-        };
-
-        // Global variable to hold the current window instance for delegate callbacks
-        var gCurrentWindow: ?*Self = null;
-
-        pub const Handlers = struct {
-            pointerMotion: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
-            } = null,
-            pointerButton: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, serial: u32, time: u32, button: u32, state: u32, data: *anyopaque) void,
-            } = null,
-            scroll: ?struct {
-                data: *anyopaque,
-                function: *const fn (window: *Self, axis: ScrollAxis, offset: f32, data: *anyopaque) void,
-            } = null,
-            resize: ?struct {
-                data: *anyopaque,
-                function: *const fn (
-                    window: *Self,
-                    newWidth: u32,
-                    newHeight: u32,
-                    newDpi: [2]u32,
-                    data: *anyopaque,
-                ) void,
-            } = null,
-        };
-
-        // Objective-C / Cocoa types we need.
-        const BOOL = c.BOOL;
-        const NSInteger = c_long;
-        const NSUInteger = c_ulong;
-
-        const NSPoint = extern struct {
-            x: f64,
-            y: f64,
-        };
-
-        const NSSize = extern struct {
-            width: f64,
-            height: f64,
-        };
-
-        const NSRect = extern struct {
-            origin: NSPoint,
-            size: NSSize,
-        };
-
-        fn NSMakeRect(x: f64, y: f64, w: f64, h: f64) NSRect {
-            return .{
-                .origin = .{ .x = x, .y = y },
-                .size = .{ .width = w, .height = h },
-            };
-        }
-
-        const NSApplicationActivationPolicyRegular: NSInteger = 0;
-        const NSBackingStoreBuffered: NSUInteger = 2;
-
-        // NSEventType constants
-        const NSEventTypeLeftMouseDown: NSUInteger = 1;
-        const NSEventTypeLeftMouseUp: NSUInteger = 2;
-        const NSEventTypeMouseMoved: NSUInteger = 5;
-        const NSEventTypeLeftMouseDragged: NSUInteger = 6;
-        const NSEventTypeRightMouseDragged: NSUInteger = 7;
-        const NSEventTypeOtherMouseDragged: NSUInteger = 27;
-        const NSEventTypeScrollWheel: NSUInteger = 22;
-        const NSEventTypeKeyDown: NSUInteger = 10;
-        const NSEventTypeKeyUp: NSUInteger = 11;
-        /// Fired when *any* modifier key's state changes (Shift/Ctrl/Alt/Cmd/Caps).
-        /// Pure modifier-key transitions on macOS never come through keyDown/keyUp.
-        const NSEventTypeFlagsChanged: NSUInteger = 12;
-
-        const NSEventModifierFlagCapsLock: NSUInteger = 1 << 16;
-        const NSEventModifierFlagControl: NSUInteger = 1 << 18;
-        const NSEventModifierFlagOption: NSUInteger = 1 << 19;
-        const NSEventModifierFlagCommand: NSUInteger = 1 << 20;
-
-        // kVK_* virtual key codes (HIToolbox/Events.h). Hardware-independent —
-        // the same physical key reports the same kVK regardless of layout.
-        fn macosKeycodeToKeys(code: u16) Keys {
-            return switch (code) {
-                0x00 => .{ .a = true },
-                0x0B => .{ .b = true },
-                0x08 => .{ .c = true },
-                0x02 => .{ .d = true },
-                0x0E => .{ .e = true },
-                0x03 => .{ .f = true },
-                0x05 => .{ .g = true },
-                0x04 => .{ .h = true },
-                0x22 => .{ .i = true },
-                0x26 => .{ .j = true },
-                0x28 => .{ .k = true },
-                0x25 => .{ .l = true },
-                0x2E => .{ .m = true },
-                0x2D => .{ .n = true },
-                0x1F => .{ .o = true },
-                0x23 => .{ .p = true },
-                0x0C => .{ .q = true },
-                0x0F => .{ .r = true },
-                0x01 => .{ .s = true },
-                0x11 => .{ .t = true },
-                0x20 => .{ .u = true },
-                0x09 => .{ .v = true },
-                0x0D => .{ .w = true },
-                0x07 => .{ .x = true },
-                0x10 => .{ .y = true },
-                0x06 => .{ .z = true },
-                0x1D => .{ .digit0 = true },
-                0x12 => .{ .digit1 = true },
-                0x13 => .{ .digit2 = true },
-                0x14 => .{ .digit3 = true },
-                0x15 => .{ .digit4 = true },
-                0x17 => .{ .digit5 = true },
-                0x16 => .{ .digit6 = true },
-                0x1A => .{ .digit7 = true },
-                0x1C => .{ .digit8 = true },
-                0x19 => .{ .digit9 = true },
-                0x7A => .{ .f1 = true },
-                0x78 => .{ .f2 = true },
-                0x63 => .{ .f3 = true },
-                0x76 => .{ .f4 = true },
-                0x60 => .{ .f5 = true },
-                0x61 => .{ .f6 = true },
-                0x62 => .{ .f7 = true },
-                0x64 => .{ .f8 = true },
-                0x65 => .{ .f9 = true },
-                0x6D => .{ .f10 = true },
-                0x67 => .{ .f11 = true },
-                0x6F => .{ .f12 = true },
-                // Modifier kVK codes (Shift L/R, Control L/R, Option L/R,
-                // Command L/R, CapsLock) are intentionally not mapped here —
-                // those transitions arrive as `NSEventTypeFlagsChanged`, not
-                // keyDown/keyUp, and the unified `.shift/.control/.alt/.super/
-                // .capsLock` flags are populated from `NSEvent.modifierFlags`
-                // there.
-                0x7B => .{ .arrowLeft = true },
-                0x7C => .{ .arrowRight = true },
-                0x7E => .{ .arrowUp = true },
-                0x7D => .{ .arrowDown = true },
-                0x73 => .{ .home = true },
-                0x77 => .{ .end = true },
-                0x74 => .{ .pageUp = true },
-                0x79 => .{ .pageDown = true },
-                0x30 => .{ .tab = true },
-                0x35 => .{ .escape = true },
-                0x24 => .{ .enter = true },
-                0x31 => .{ .space = true },
-                0x33 => .{ .backspace = true },
-                0x75 => .{ .delete = true },
-                0x72 => .{ .insert = true },
-                else => .{},
-            };
-        }
-
-        // NSEventModifierFlags
-        const NSEventModifierFlagShift: NSUInteger = 1 << 17;
-
-        const NSWindowStyleMaskTitled: NSUInteger = 1 << 0;
-        const NSWindowStyleMaskClosable: NSUInteger = 1 << 1;
-        const NSWindowStyleMaskMiniaturizable: NSUInteger = 1 << 2;
-        const NSWindowStyleMaskResizable: NSUInteger = 1 << 3;
-
-        fn msgSend(comptime FnPtr: type) FnPtr {
-            return @ptrCast(&c.objc_msgSend);
-        }
-
-        fn sel(name: [*:0]const u8) c.SEL {
-            return c.sel_registerName(name);
-        }
-
-        fn getClass(name: [*:0]const u8) c.Class {
-            return @ptrCast(c.objc_getClass(name));
-        }
-
-        fn nsstring(cstr: [*:0]const u8) c.id {
-            const NSString = getClass("NSString");
-            const fnPtr = msgSend(*const fn (c.Class, c.SEL, [*:0]const u8) callconv(.c) c.id);
-            return fnPtr(NSString, sel("stringWithUTF8String:"), cstr);
-        }
-
-        fn applicationShouldTerminateAfterLastWindowClosed(self: c.id, _cmd: c.SEL, application: c.id) callconv(.c) BOOL {
-            _ = self;
-            _ = _cmd;
-            _ = application;
-            return 1; // YES
-        }
-
-        fn windowDidResize(selfObj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
-            _ = selfObj;
-            _ = _cmd;
-            _ = notification;
-
-            // Get the window instance from the global variable
-            if (gCurrentWindow) |window| {
-                // Get current window size
-                const frame = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSRect);
-                const windowFrame = frame(window.window, sel("frame"));
-
-                const newWidth: u32 = @intFromFloat(windowFrame.size.width);
-                const newHeight: u32 = @intFromFloat(windowFrame.size.height);
-
-                // Update window dimensions
-                window.width = newWidth;
-                window.height = newHeight;
-
-                // Update DPI and scale (window may have moved to a different screen)
-                window.updateDpiAndScale();
-
-                // Call the resize handler if it exists
-                if (window.handlers.resize) |handler| {
-                    handler.function(window, newWidth, newHeight, window.dpi, handler.data);
-                }
-            }
-        }
-
-        fn windowDidChangeScreen(selfObj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
-            _ = selfObj;
-            _ = _cmd;
-            _ = notification;
-
-            // When window moves to a different screen, update DPI and scale
-            if (gCurrentWindow) |window| {
-                window.updateDpiAndScale();
-
-                // Notify via resize handler since DPI/scale may have changed
-                if (window.handlers.resize) |handler| {
-                    handler.function(window, window.width, window.height, window.dpi, handler.data);
-                }
-            }
-        }
-
-        fn windowDidChangeBackingProperties(selfObj: c.id, _cmd: c.SEL, notification: c.id) callconv(.c) void {
-            _ = selfObj;
-            _ = _cmd;
-            _ = notification;
-
-            // Called when backing scale factor changes (e.g., moving between Retina and non-Retina displays)
-            if (gCurrentWindow) |window| {
-                window.updateDpiAndScale();
-
-                // Notify via resize handler since scale may have changed
-                if (window.handlers.resize) |handler| {
-                    handler.function(window, window.width, window.height, window.dpi, handler.data);
-                }
-            }
-        }
-
-        fn createMenuBar(app: c.id) void {
-            const NSMenu = getClass("NSMenu");
-            const NSMenuItem = getClass("NSMenuItem");
-
-            const newId = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-            const addItem = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-            const setMainMenu = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-            const setSubmenu = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-
-            const menubar = newId(NSMenu, sel("new"));
-            const appMenuItem = newId(NSMenuItem, sel("new"));
-
-            addItem(menubar, sel("addItem:"), appMenuItem);
-            setMainMenu(app, sel("setMainMenu:"), menubar);
-
-            const appMenu = newId(NSMenu, sel("new"));
-            setSubmenu(appMenuItem, sel("setSubmenu:"), appMenu);
-
-            const quitTitle = nsstring("Quit");
-            const keyEquivalent = nsstring("q");
-
-            const allocId = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-            const initQuit = msgSend(*const fn (c.id, c.SEL, c.id, c.SEL, c.id) callconv(.c) c.id);
-            const setTarget = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-
-            var quitItem = allocId(NSMenuItem, sel("alloc"));
-            quitItem = initQuit(
-                quitItem,
-                sel("initWithTitle:action:keyEquivalent:"),
-                quitTitle,
-                sel("terminate:"),
-                keyEquivalent,
-            );
-
-            setTarget(quitItem, sel("setTarget:"), app);
-            addItem(appMenu, sel("addItem:"), quitItem);
-        }
-
-        // Everything native related to the window itself
-        pool: ?*anyopaque,
-        app: c.id,
-        window: c.id,
-        content_view: c.id,
-        metal_layer: c.id,
-
-        // Window state
-        width: u32,
-        height: u32,
-        dpi: [2]u32,
-        title: [:0]const u8,
-        app_id: [:0]const u8,
-        running: bool,
-
-        allocator: std.mem.Allocator,
-
-        handlers: Handlers,
-
-        /// Guards `keysDown` / `pendingPressed` / `pendingReleased` between the
-        /// input thread (where NSEvent callbacks fire) and Forbear's render thread
-        /// (which drains via `snapshotKeyboard`).
-        keysMutex: SpinLock = .{},
-        keysDown: Keys = .{},
-        pendingPressed: Keys = .{},
-        pendingReleased: Keys = .{},
-
-        pub fn init(
-            allocator: std.mem.Allocator,
-            width: u32,
-            height: u32,
-            title: [:0]const u8,
-            app_id: [:0]const u8,
-        ) !*Self {
-            const self = try allocator.create(Self);
-            errdefer allocator.destroy(self);
-
-            self.allocator = allocator;
-            self.width = width;
-            self.height = height;
-            self.dpi = .{ 96, 96 };
-            self.title = title;
-            self.app_id = app_id;
-            self.running = true;
-
-            self.handlers = .{};
-            self.keysMutex = .{};
-            self.keysDown = .{};
-            self.pendingPressed = .{};
-            self.pendingReleased = .{};
-
-            self.pool = objc_autoreleasePoolPush();
-
-            const NSApplication = getClass("NSApplication");
-            const sharedApplication = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-            self.app = sharedApplication(NSApplication, sel("sharedApplication"));
-
-            const setActivationPolicy = msgSend(*const fn (c.id, c.SEL, NSInteger) callconv(.c) BOOL);
-            _ = setActivationPolicy(self.app, sel("setActivationPolicy:"), NSApplicationActivationPolicyRegular);
-
-            // Create an application delegate at runtime.
-            const NSObject = getClass("NSObject");
-            const AppDelegate = c.objc_allocateClassPair(NSObject, "MinimalAppDelegate", 0);
-            if (AppDelegate != null) {
-                _ = c.class_addMethod(
-                    AppDelegate,
-                    sel("applicationShouldTerminateAfterLastWindowClosed:"),
-                    @ptrCast(&applicationShouldTerminateAfterLastWindowClosed),
-                    "c@:@",
-                );
-                c.objc_registerClassPair(AppDelegate);
-            }
-
-            const newId = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-            const setDelegate = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-            const delegateClass = getClass("MinimalAppDelegate");
-            const delegate = newId(delegateClass, sel("new"));
-            setDelegate(self.app, sel("setDelegate:"), delegate);
-
-            createMenuBar(self.app);
-
-            const NSWindow = getClass("NSWindow");
-
-            const contentRect = NSMakeRect(0, 0, @floatFromInt(width), @floatFromInt(height));
-            const styleMask: NSUInteger = NSWindowStyleMaskTitled |
-                NSWindowStyleMaskClosable |
-                NSWindowStyleMaskMiniaturizable |
-                NSWindowStyleMaskResizable;
-
-            const alloc = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-            var windowObj = alloc(NSWindow, sel("alloc"));
-
-            const initWithContentRect = msgSend(*const fn (c.id, c.SEL, NSRect, NSUInteger, NSUInteger, BOOL) callconv(.c) c.id);
-            windowObj = initWithContentRect(
-                windowObj,
-                sel("initWithContentRect:styleMask:backing:defer:"),
-                contentRect,
-                styleMask,
-                NSBackingStoreBuffered,
-                0, // NO
-            );
-            if (windowObj == null) return error.WindowCreationFailed;
-
-            self.window = windowObj;
-
-            const setTitle = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-            setTitle(self.window, sel("setTitle:"), nsstring(title.ptr));
-
-            const center = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
-            center(self.window, sel("center"));
-
-            // Create a window delegate to handle resize and screen change events
-            const WindowDelegate = c.objc_allocateClassPair(NSObject, "MinimalWindowDelegate", 0);
-            if (WindowDelegate != null) {
-                _ = c.class_addMethod(
-                    WindowDelegate,
-                    sel("windowDidResize:"),
-                    @ptrCast(&windowDidResize),
-                    "v@:@",
-                );
-                _ = c.class_addMethod(
-                    WindowDelegate,
-                    sel("windowDidChangeScreen:"),
-                    @ptrCast(&windowDidChangeScreen),
-                    "v@:@",
-                );
-                _ = c.class_addMethod(
-                    WindowDelegate,
-                    sel("windowDidChangeBackingProperties:"),
-                    @ptrCast(&windowDidChangeBackingProperties),
-                    "v@:@",
-                );
-
-                c.objc_registerClassPair(WindowDelegate);
-
-                const windowDelegate = newId(@ptrCast(WindowDelegate), sel("new"));
-
-                // Set the global window instance for delegate callbacks
-                gCurrentWindow = self;
-
-                setDelegate(self.window, sel("setDelegate:"), windowDelegate);
-            }
-
-            const contentView = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
-            self.content_view = contentView(self.window, sel("contentView"));
-
-            self.metal_layer = null;
-            if (self.content_view != null) {
-                const setWantsLayer = msgSend(*const fn (c.id, c.SEL, BOOL) callconv(.c) void);
-                setWantsLayer(self.content_view, sel("setWantsLayer:"), 1);
-
-                // MoltenVK expects a CAMetalLayer for presentation.
-                const CAMetalLayer = getClass("CAMetalLayer");
-                const newIdObj = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-                self.metal_layer = newIdObj(CAMetalLayer, sel("new"));
-
-                const setLayer = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-                setLayer(self.content_view, sel("setLayer:"), self.metal_layer);
-            }
-
-            const makeKeyAndOrderFront = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-            makeKeyAndOrderFront(self.window, sel("makeKeyAndOrderFront:"), null);
-
-            const activateIgnoringOtherApps = msgSend(*const fn (c.id, c.SEL, BOOL) callconv(.c) void);
-            activateIgnoringOtherApps(self.app, sel("activateIgnoringOtherApps:"), 1);
-
-            const finishLaunching = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
-            finishLaunching(self.app, sel("finishLaunching"));
-
-            // Get proper DPI and scale from the screen
-            self.updateDpiAndScale();
-
-            return self;
-        }
-
-        pub fn updateDpiAndScale(self: *Self) void {
-            // Get the screen that the window is currently on
-            const getScreen = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
-            const screen = getScreen(self.window, sel("screen"));
-
-            if (screen == null) {
-                // Fallback to main screen if window's screen is not available
-                const NSScreen = getClass("NSScreen");
-                const mainScreen = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-                const main = mainScreen(NSScreen, sel("mainScreen"));
-                if (main == null) return;
-                self.updateDpiFromScreen(main);
-            } else {
-                self.updateDpiFromScreen(screen);
-            }
-        }
-
-        fn updateDpiFromScreen(self: *Self, screen: c.id) void {
-            // Get the backing scale factor (1.0 for standard displays, 2.0 for Retina)
-            // const backingScaleFactor = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
-            // const scale_factor = backingScaleFactor(screen, sel("backingScaleFactor"));
-
-            // Update scale (using the same 120-based scale as Linux for consistency)
-            // scale = 120 means 1.0x, scale = 240 means 2.0x (Retina)
-            // self.scale = @intFromFloat(@round(scale_factor * 120.0));
-
-            // Get the NSDeviceDescription dictionary to access display ID
-            const deviceDescription = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
-            const deviceDesc = deviceDescription(screen, sel("deviceDescription"));
-
-            if (deviceDesc == null) {
-                // Fallback to 96 DPI if we can't get device description
-                self.dpi = .{ 96, 96 };
-                return;
-            }
-
-            // Get the NSScreenNumber (CGDirectDisplayID) from the device description
-            const NSScreenNumber = nsstring("NSScreenNumber");
-            const objectForKey = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) c.id);
-            const screenNumberValue = objectForKey(deviceDesc, sel("objectForKey:"), NSScreenNumber);
-
-            if (screenNumberValue == null) {
-                self.dpi = .{ 96, 96 };
-                return;
-            }
-
-            const unsignedIntValue = msgSend(*const fn (c.id, c.SEL) callconv(.c) c_uint);
-            const displayId = unsignedIntValue(screenNumberValue, sel("unsignedIntValue"));
-
-            // Get physical screen size in millimeters using CoreGraphics
-            const physicalSizeMm = c.CGDisplayScreenSize(displayId);
-
-            // Get pixel dimensions of the display
-            const pixelWidth = c.CGDisplayPixelsWide(displayId);
-            const pixelHeight = c.CGDisplayPixelsHigh(displayId);
-
-            if (physicalSizeMm.width <= 0 or physicalSizeMm.height <= 0) {
-                // Fallback if physical dimensions unavailable
-                self.dpi = .{ 96, 96 };
-                return;
-            }
-
-            // Calculate physical DPI (pixels per inch), similar to Linux Wayland implementation
-            const millimetersPerInch: f64 = 25.4;
-            const physicalDpiX = @as(f64, @floatFromInt(pixelWidth)) / (physicalSizeMm.width / millimetersPerInch);
-            const physicalDpiY = @as(f64, @floatFromInt(pixelHeight)) / (physicalSizeMm.height / millimetersPerInch);
-
-            // Apply backing scale factor (like Linux applies fractional scale)
-            self.dpi = .{
-                @intFromFloat(@round(physicalDpiX)),
-                @intFromFloat(@round(physicalDpiY)),
-            };
-
-            std.log.debug(
-                "macOS screen DPI: {d}x{d}, physical size: {d:.1}x{d:.1}mm, pixels: {d}x{d}",
-                .{ self.dpi[0], self.dpi[1], physicalSizeMm.width, physicalSizeMm.height, pixelWidth, pixelHeight },
-            );
-        }
-
-        pub fn nativeView(self: *Self) ?*anyopaque {
-            if (self.content_view == null) return null;
-            return @ptrCast(self.content_view);
-        }
-
-        pub fn nativeMetalLayer(self: *const Self) ?*anyopaque {
-            if (self.metal_layer == null) return null;
-            return @ptrCast(self.metal_layer);
-        }
-
-        pub fn isHoldingShift(_: *const Self) bool {
-            const NSEvent = getClass("NSEvent");
-            const modifierFlags = msgSend(*const fn (c.Class, c.SEL) callconv(.c) NSUInteger);
-            const flags = modifierFlags(NSEvent, sel("modifierFlags"));
-            return (flags & NSEventModifierFlagShift) != 0;
-        }
-
-        pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
-            _ = self;
-            _ = serial;
-
-            const NSCursor = getClass("NSCursor");
-            const getCursor = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-            const set = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
-
-            const nsCursor = switch (cursor) {
-                .default => getCursor(NSCursor, sel("arrowCursor")),
-                .text => getCursor(NSCursor, sel("IBeamCursor")),
-                .pointer => getCursor(NSCursor, sel("pointingHandCursor")),
-            };
-
-            if (nsCursor != null) {
-                set(nsCursor, sel("set"));
-            }
-        }
-
-        /// Returns the target frame time in nanoseconds based on the display's refresh rate.
-        /// Falls back to 60Hz (~16.67ms) if the refresh rate cannot be determined.
-        pub fn targetFrameTimeNs(self: *const Self) u64 {
-            const fallback60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
-
-            // Get the screen that the window is currently on
-            const getScreen = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
-            var screen = getScreen(self.window, sel("screen"));
-
-            if (screen == null) {
-                // Fallback to main screen if window's screen is not available
-                const NSScreen = getClass("NSScreen");
-                const mainScreen = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-                screen = mainScreen(NSScreen, sel("mainScreen"));
-                if (screen == null) return fallback60hz;
-            }
-
-            // Get the display ID for this screen
-            const deviceDescription = msgSend(*const fn (c.id, c.SEL) callconv(.c) c.id);
-            const deviceDesc = deviceDescription(screen, sel("deviceDescription"));
-            if (deviceDesc == null) return fallback60hz;
-
-            // Get the NSScreenNumber (CGDirectDisplayID) from the device description
-            const NSScreenNumber = nsstring("NSScreenNumber");
-            const objectForKey = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) c.id);
-            const screenNumberValue = objectForKey(deviceDesc, sel("objectForKey:"), NSScreenNumber);
-            if (screenNumberValue == null) return fallback60hz;
-
-            // Get the unsigned int value (CGDirectDisplayID)
-            const unsignedIntValue = msgSend(*const fn (c.id, c.SEL) callconv(.c) c_uint);
-            const displayId = unsignedIntValue(screenNumberValue, sel("unsignedIntValue"));
-
-            // Use Core Graphics to get the display mode and refresh rate
-            const displayMode = c.CGDisplayCopyDisplayMode(displayId);
-            if (displayMode == null) return fallback60hz;
-            defer c.CGDisplayModeRelease(displayMode);
-
-            const refreshRate = c.CGDisplayModeGetRefreshRate(displayMode);
-
-            // Some displays (especially built-in Retina displays) report 0 refresh rate
-            // In that case, fall back to 60Hz
-            if (refreshRate <= 0) return fallback60hz;
-
-            // Convert refresh rate (Hz) to frame time (nanoseconds)
-            return @intFromFloat(@round(1_000_000_000.0 / refreshRate));
-        }
-
-        fn processEvent(self: *Self, event: c.id) void {
-            // Get event type
-            const getType = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSUInteger);
-            const eventType = getType(event, sel("type"));
-
-            // Handle mouse motion events
-            if (eventType == NSEventTypeMouseMoved or
-                eventType == NSEventTypeLeftMouseDragged or
-                eventType == NSEventTypeRightMouseDragged or
-                eventType == NSEventTypeOtherMouseDragged)
-            {
-                if (self.handlers.pointerMotion) |handler| {
-                    // Get the mouse location in window coordinates (relative to content view, origin at bottom-left)
-                    const locationInWindow = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSPoint);
-                    const location = locationInWindow(event, sel("locationInWindow"));
-
-                    // Get the content view's bounds to get the correct height for coordinate conversion
-                    const getBounds = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSRect);
-                    const contentBounds = getBounds(self.content_view, sel("bounds"));
-
-                    // macOS has origin at bottom-left, convert to top-left origin using content view height
-                    const x: f32 = @floatCast(location.x);
-                    const y: f32 = @as(f32, @floatCast(contentBounds.size.height)) - @as(f32, @floatCast(location.y));
-
-                    handler.function(self, x, y, handler.data);
-                }
-            }
-
-            if (eventType == NSEventTypeLeftMouseDown or eventType == NSEventTypeLeftMouseUp) {
-                if (self.handlers.pointerButton) |handler| {
-                    const state = if (eventType == NSEventTypeLeftMouseDown)
-                        buttonPressed
-                    else
-                        buttonReleased;
-                    handler.function(self, 0, 0, linuxLeftMouseButton, state, handler.data);
-                }
-            }
-
-            if (eventType == NSEventTypeFlagsChanged) {
-                const modifierFlagsFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) NSUInteger);
-                const flags = modifierFlagsFn(event, sel("modifierFlags"));
-
-                var current: Keys = .{};
-                current.shift = (flags & NSEventModifierFlagShift) != 0;
-                current.control = (flags & NSEventModifierFlagControl) != 0;
-                current.alt = (flags & NSEventModifierFlagOption) != 0;
-                current.super = (flags & NSEventModifierFlagCommand) != 0;
-                current.capsLock = (flags & NSEventModifierFlagCapsLock) != 0;
-
-                self.keysMutex.lock();
-                defer self.keysMutex.unlock();
-
-                var oldMods: Keys = .{};
-                oldMods.shift = self.keysDown.shift;
-                oldMods.control = self.keysDown.control;
-                oldMods.alt = self.keysDown.alt;
-                oldMods.super = self.keysDown.super;
-                oldMods.capsLock = self.keysDown.capsLock;
-
-                self.pendingPressed = self.pendingPressed.with(current.without(oldMods));
-                self.pendingReleased = self.pendingReleased.with(oldMods.without(current));
-
-                self.keysDown.shift = current.shift;
-                self.keysDown.control = current.control;
-                self.keysDown.alt = current.alt;
-                self.keysDown.super = current.super;
-                self.keysDown.capsLock = current.capsLock;
-                return;
-            }
-
-            if (eventType == NSEventTypeKeyDown or eventType == NSEventTypeKeyUp) {
-                const keyCodeFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) u16);
-                const isARepeatFn = msgSend(*const fn (c.id, c.SEL) callconv(.c) BOOL);
-
-                const code = keyCodeFn(event, sel("keyCode"));
-                const key = macosKeycodeToKeys(code);
-                const isRepeat = isARepeatFn(event, sel("isARepeat")) != 0;
-
-                self.keysMutex.lock();
-                if (eventType == NSEventTypeKeyDown) {
-                    // Only fresh press transitions flip the edge bit; OS-driven
-                    // repeats just keep the held bit set (already set).
-                    if (!isRepeat) {
-                        self.pendingPressed = self.pendingPressed.with(key);
-                        self.keysDown = self.keysDown.with(key);
-                    }
-                } else {
-                    self.pendingReleased = self.pendingReleased.with(key);
-                    self.keysDown = self.keysDown.without(key);
-                }
-                self.keysMutex.unlock();
-            }
-
-            // Handle scroll wheel events
-            if (eventType == NSEventTypeScrollWheel) {
-                if (self.handlers.scroll) |handler| {
-                    const scrollingDeltaY = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
-                    const deltaY: f32 = @floatCast(scrollingDeltaY(event, sel("scrollingDeltaY")));
-
-                    const scrollingDeltaX = msgSend(*const fn (c.id, c.SEL) callconv(.c) f64);
-                    const deltaX: f32 = @floatCast(scrollingDeltaX(event, sel("scrollingDeltaX")));
-
-                    // macOS already applies the user's scroll direction preference
-                    // (natural scrolling, Mac Mouse Fix reversal, etc.) to the delta
-                    // values. We negate unconditionally to convert from macOS convention
-                    // (positive deltaY = traditional scroll-up / content-down) to
-                    // Forbear's convention (positive offset = scroll position increases
-                    // = viewport moves down).
-                    if (deltaY != 0) {
-                        handler.function(self, .vertical, -deltaY, handler.data);
-                    }
-                    if (deltaX != 0) {
-                        handler.function(self, .horizontal, -deltaX, handler.data);
-                    }
-                }
-            }
-        }
-
-        /// Drain the keyboard state for the current frame. Holds the keys mutex
-        /// just long enough to copy the bitsets and reset the pending fields.
-        pub fn snapshotKeyboard(self: *Self) KeyboardSnapshot {
-            self.keysMutex.lock();
-            defer self.keysMutex.unlock();
-
-            const snap: KeyboardSnapshot = .{
-                .held = self.keysDown,
-                .pressed = self.pendingPressed,
-                .released = self.pendingReleased,
-            };
-            self.pendingPressed = .{};
-            self.pendingReleased = .{};
-            return snap;
-        }
-
-        pub fn handleEvents(self: *Self) !void {
-            const NSDate = getClass("NSDate");
-            const distantFuture = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-            const distantPast = msgSend(*const fn (c.Class, c.SEL) callconv(.c) c.id);
-
-            const maskAny: NSUInteger = std.math.maxInt(NSUInteger);
-            const mode = nsstring("kCFRunLoopDefaultMode");
-
-            const nextEvent = msgSend(*const fn (c.id, c.SEL, NSUInteger, c.id, c.id, BOOL) callconv(.c) c.id);
-            const sendEvent = msgSend(*const fn (c.id, c.SEL, c.id) callconv(.c) void);
-            const updateWindows = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
-            const isVisible = msgSend(*const fn (c.id, c.SEL) callconv(.c) BOOL);
-
-            // Enable mouse moved events for our window
-            const setAcceptsMouseMovedEvents = msgSend(*const fn (c.id, c.SEL, BOOL) callconv(.c) void);
-            setAcceptsMouseMovedEvents(self.window, sel("setAcceptsMouseMovedEvents:"), 1);
-
-            while (self.running) {
-                // Block waiting for the next event (like GetMessageW on Windows or wl_display_dispatch on Linux)
-                const blockingDate = distantFuture(NSDate, sel("distantFuture"));
-                const event = nextEvent(
-                    self.app,
-                    sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
-                    maskAny,
-                    blockingDate,
-                    mode,
-                    1, // YES
-                );
-
-                if (event != null) {
-                    // Process event for our handlers first
-                    self.processEvent(event);
-
-                    // Then let the system handle it
-                    sendEvent(self.app, sel("sendEvent:"), event);
-
-                    // Process any additional pending events without blocking
-                    const nonBlockingDate = distantPast(NSDate, sel("distantPast"));
-                    while (true) {
-                        const pendingEvent = nextEvent(
-                            self.app,
-                            sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
-                            maskAny,
-                            nonBlockingDate,
-                            mode,
-                            1,
-                        );
-                        if (pendingEvent == null) break;
-                        self.processEvent(pendingEvent);
-                        sendEvent(self.app, sel("sendEvent:"), pendingEvent);
-                    }
-
-                    updateWindows(self.app, sel("updateWindows"));
-                }
-
-                // Check if window was closed
-                if (isVisible(self.window, sel("isVisible")) == 0) {
-                    self.running = false;
-                }
-            }
-        }
-
-        pub fn deinit(self: *Self) void {
-            // Clear the global window reference
-            if (gCurrentWindow == self) {
-                gCurrentWindow = null;
-            }
-
-            if (self.window != null) {
-                const close = msgSend(*const fn (c.id, c.SEL) callconv(.c) void);
-                close(self.window, sel("close"));
-            }
-
-            objc_autoreleasePoolPop(self.pool);
-            self.allocator.destroy(self);
-        }
-    },
-    else => @compileError("Unsupported OS"),
+    else => @compileError("unsupported platform: " ++ @tagName(builtin.os.tag)),
 };
