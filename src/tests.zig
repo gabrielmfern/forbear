@@ -8084,8 +8084,8 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
 // long, identifiable sequence of events while the other drains and asserts
 // each one arrives intact and in order.
 test "EventQueue: SPSC producer/consumer round-trips every event in order" {
-    const Event = forbear.Window.Event;
-    const EventQueue = forbear.Window.EventQueue;
+    const Event = @import("window.zig").Event;
+    const EventQueue = @import("window.zig").EventQueue;
 
     // "lots of events" — far more than the 256-slot ring, so the buffer wraps
     // thousands of times and the head/tail acquire-release handshake is what
