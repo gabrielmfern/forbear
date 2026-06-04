@@ -224,6 +224,9 @@ keysReleasedThisFrame: Keys = .{},
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 
 renderer: *Graphics.Renderer,
+/// Optional so the framework can run headless (e.g. benchmarks), where there
+/// is no OS window to pull events from. When null, `frame()` skips event
+/// processing and `setCursor()` is a no-op.
 window: ?*Window,
 
 /// Seconds
@@ -240,7 +243,7 @@ viewportSize: Vec2,
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
 
-pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Renderer) !void {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, window: ?*Window, renderer: *Graphics.Renderer) !void {
     if (forbear != null) {
         return error.AlreadyInitialized;
     }
@@ -260,7 +263,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .previousFrameNodeMeasurements = undefined,
 
         .renderer = renderer,
-        .window = null,
+        .window = window,
 
         .startTime = timestampSeconds(io),
         .deltaTime = null,
@@ -932,26 +935,84 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.scrollDelta = self.scrollDeltaAccumulator;
     self.scrollDeltaAccumulator = @splat(0.0);
 
-    self.snapshotKeyboard();
-
-    self.frameCounter +%= 1;
-    self.frameMeta = meta;
-    return &frameEnd;
-}
-
-/// Pull the window's keyboard snapshot for this frame: the held set + the
-/// per-frame edge sets. All three are `Keys` values (packed u128) — no
-/// allocations, no iteration; consumers read individual keys as fields.
-fn snapshotKeyboard(self: *Forbear) void {
     self.keysHeldSnapshot = .{};
     self.keysPressedThisFrame = .{};
     self.keysReleasedThisFrame = .{};
 
-    const window = self.window orelse return;
-    const snap = window.snapshotKeyboard();
-    self.keysHeldSnapshot = snap.held;
-    self.keysPressedThisFrame = snap.pressed;
-    self.keysReleasedThisFrame = snap.released;
+    self.frameCounter +%= 1;
+    self.frameMeta = meta;
+
+    // No window means headless (e.g. benchmarks): there is no event queue to
+    // drain, so skip straight to returning the frame-end handle. The per-frame
+    // input/scroll resets above still run unconditionally.
+    if (self.window == null) return &frameEnd;
+    const window = self.window.?;
+
+    var eventIterator = window.eventQueue.iterate();
+    while (eventIterator.next()) |event| {
+        switch (event) {
+            .input => |input| {
+                std.log.debug("input text {s}", .{input.text(meta.arena) catch unreachable});
+            },
+            .keysHeld => |keys| {
+                self.keysHeldSnapshot = keys;
+            },
+            .keysPressed => |keys| {
+                self.keysPressedThisFrame = self.keysPressedThisFrame.with(keys);
+            },
+            .keysReleased => |keys| {
+                self.keysReleasedThisFrame = self.keysReleasedThisFrame.with(keys);
+            },
+            .resize => |resize| {
+                self.renderer.handleResize(resize.width, resize.height) catch |err| {
+                    handleFrameError(err);
+                };
+            },
+            .scroll => |scroll| {
+                // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
+                // values from the trackpad/mouse, so we use them directly.
+                // On other platforms, the native offset is a raw axis value where
+                // only the direction matters, so we use a fixed step size.
+                const offset = if (builtin.os.tag == .macos)
+                    scroll.offset
+                else
+                    100.0 * @as(f32, @floatFromInt(std.math.sign(scroll.offset)));
+
+                // Browser-like behavior: Shift + vertical scroll = horizontal scroll
+                const shiftAccordingAxis = if (self.keysHeldSnapshot.shift and scroll.axis == .vertical)
+                    .horizontal
+                else if (self.keysHeldSnapshot.shift and scroll.axis == .horizontal)
+                    .vertical
+                else
+                    scroll.axis;
+
+                switch (shiftAccordingAxis) {
+                    .horizontal => {
+                        self.scrollDeltaAccumulator[0] += offset;
+                    },
+                    .vertical => {
+                        self.scrollDeltaAccumulator[1] += offset;
+                    },
+                }
+            },
+            .pointerMotion => |pointerMotion| {
+                self.mousePosition = .{ pointerMotion.x, pointerMotion.y };
+            },
+            .pointerButton => |pointerButton| {
+                // TODO: we're not really handling the other platforms here now are we?
+                // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
+                if (pointerButton.button == 272) {
+                    if (pointerButton.state == 1) {
+                        self.mouseButtonPressed = true;
+                    } else {
+                        self.mouseButtonPressed = false;
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return &frameEnd;
 }
 
 /// TODO: share the github of the person I got the trick of using an end
@@ -1572,11 +1633,10 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
 /// so deeper/later mounted elements take precedence.
 pub fn setCursor(cursor: Cursor) void {
     const self = getForbear();
-    if (self.window) |window| {
-        window.setCursor(cursor, 0) catch |err| {
-            std.log.err("Failed to set cursor: {}", .{err});
-        };
-    }
+    const window = self.window orelse return;
+    window.setCursor(cursor, 0) catch |err| {
+        std.log.err("Failed to set cursor: {}", .{err});
+    };
 }
 
 inline fn ReturnType(comptime function: anytype) type {
@@ -2035,85 +2095,6 @@ pub fn useNodeMeasurement() ?Node.Measurement {
 fn timestampSeconds(io: std.Io) f64 {
     const ts = std.Io.Clock.awake.now(io);
     return @as(f64, @floatFromInt(ts.toNanoseconds())) / std.time.ns_per_s;
-}
-
-pub fn setWindowHandlers(window: *Window) void {
-    const self = getForbear();
-    self.window = window;
-
-    window.handlers.resize = .{
-        .function = &(struct {
-            fn handler(_: *Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
-                _ = dpi;
-                const ctx: *Forbear = @ptrCast(@alignCast(data));
-                ctx.renderer.handleResize(width, height) catch |err| {
-                    std.log.err("Renderer failed to handle resize: {}", .{err});
-                };
-            }
-        }).handler,
-        .data = @ptrCast(@alignCast(self)),
-    };
-    window.handlers.scroll = .{
-        .function = &(struct {
-            fn handler(wnd: *Window, axis: Window.ScrollAxis, nativeOffset: f32, data: *anyopaque) void {
-                const ctx: *Forbear = @ptrCast(@alignCast(data));
-                // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
-                // values from the trackpad/mouse, so we use them directly.
-                // On other platforms, the native offset is a raw axis value where
-                // only the direction matters, so we use a fixed step size.
-                const offset = if (builtin.os.tag == .macos)
-                    nativeOffset
-                else
-                    100.0 * @as(f32, @floatFromInt(std.math.sign(nativeOffset)));
-
-                // Browser-like behavior: Shift + vertical scroll = horizontal scroll
-                const shiftAccordingAxis = if (wnd.isHoldingShift() and axis == .vertical)
-                    .horizontal
-                else if (wnd.isHoldingShift() and axis == .horizontal)
-                    .vertical
-                else
-                    axis;
-
-                switch (shiftAccordingAxis) {
-                    .horizontal => {
-                        ctx.scrollDeltaAccumulator[0] += offset;
-                    },
-                    .vertical => {
-                        ctx.scrollDeltaAccumulator[1] += offset;
-                    },
-                }
-            }
-        }).handler,
-        .data = @ptrCast(@alignCast(self)),
-    };
-    window.handlers.pointerMotion = .{
-        .function = &(struct {
-            fn handler(_: *Window, x: f32, y: f32, data: *anyopaque) void {
-                const ctx: *Forbear = @ptrCast(@alignCast(data));
-                ctx.mousePosition = .{ x, y };
-            }
-        }).handler,
-        .data = @ptrCast(@alignCast(self)),
-    };
-    window.handlers.pointerButton = .{
-        .function = &(struct {
-            fn handler(_: *Window, _: u32, _: u32, button: u32, state: u32, data: *anyopaque) void {
-                const ctx: *Forbear = @ptrCast(@alignCast(data));
-                // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
-                if (button == 272) {
-                    if (state == 1) {
-                        ctx.mouseButtonPressed = true;
-                    } else {
-                        ctx.mouseButtonPressed = false;
-                    }
-                }
-            }
-        }).handler,
-        .data = @ptrCast(@alignCast(self)),
-    };
-    // Keyboard state is owned by the Window backend (atomic bitsets +
-    // text buffer behind a SpinLock) and sampled by `snapshotKeyboard`
-    // every frame. No handler registration needed.
 }
 
 /// All keys currently held, sampled at frame start. Stable for the
