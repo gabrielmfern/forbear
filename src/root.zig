@@ -949,10 +949,10 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
                 self.keysHeldSnapshot = keys;
             },
             .keysPressed => |keys| {
-                self.keysPressedThisFrame = keys;
+                self.keysPressedThisFrame = self.keysPressedThisFrame.with(keys);
             },
             .keysReleased => |keys| {
-                self.keysReleasedThisFrame = keys;
+                self.keysReleasedThisFrame = self.keysReleasedThisFrame.with(keys);
             },
             .resize => |resize| {
                 self.renderer.handleResize(resize.width, resize.height) catch |err| {
