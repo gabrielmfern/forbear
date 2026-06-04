@@ -760,10 +760,7 @@ pub const Window = struct {
     ) callconv(.c) void {
         const window: *Self = @ptrCast(@alignCast(data));
         window.eventQueue.push(Event{
-            .scroll = .{
-                .axis = @enumFromInt(axis),
-                .offset = @floatCast(c.wl_fixed_to_double(value))
-            },
+            .scroll = .{ .axis = @enumFromInt(axis), .offset = @floatCast(c.wl_fixed_to_double(value)) },
         });
         _ = time;
         _ = wlPointer;
