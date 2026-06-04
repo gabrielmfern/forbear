@@ -181,6 +181,7 @@ pub fn main(init: std.process.Init) !void {
 
     const window = try forbear.Window.init(
         allocator,
+        init.io,
         1280,
         800,
         "wayland-book.com",

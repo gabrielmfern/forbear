@@ -932,26 +932,27 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.scrollDelta = self.scrollDeltaAccumulator;
     self.scrollDeltaAccumulator = @splat(0.0);
 
-    self.snapshotKeyboard();
-
-    self.frameCounter +%= 1;
-    self.frameMeta = meta;
-    return &frameEnd;
-}
-
-/// Pull the window's keyboard snapshot for this frame: the held set + the
-/// per-frame edge sets. All three are `Keys` values (packed u128) — no
-/// allocations, no iteration; consumers read individual keys as fields.
-fn snapshotKeyboard(self: *Forbear) void {
     self.keysHeldSnapshot = .{};
     self.keysPressedThisFrame = .{};
     self.keysReleasedThisFrame = .{};
 
-    const window = self.window orelse return;
-    const snap = window.snapshotKeyboard();
-    self.keysHeldSnapshot = snap.held;
-    self.keysPressedThisFrame = snap.pressed;
-    self.keysReleasedThisFrame = snap.released;
+    self.frameCounter +%= 1;
+    self.frameMeta = meta;
+
+    if (self.window) |window| {
+        const snap = window.snapshotKeyboard(meta.arena) catch |err| {
+            handleFrameError(err);
+            return &frameEnd;
+        };
+
+        if (snap.input.len > 0) {
+            std.log.debug("input text len={d} bytes={x} str={s}", .{ snap.input.len, snap.input, snap.input });
+        }
+        self.keysHeldSnapshot = snap.held;
+        self.keysPressedThisFrame = snap.pressed;
+        self.keysReleasedThisFrame = snap.released;
+    }
+    return &frameEnd;
 }
 
 /// TODO: share the github of the person I got the trick of using an end

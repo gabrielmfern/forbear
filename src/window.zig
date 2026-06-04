@@ -175,6 +175,10 @@ pub const Keys = packed struct {
         return @bitCast(@as(Backing, @bitCast(self)) & ~@as(Backing, @bitCast(other)));
     }
 
+    pub fn has(self: Keys, other: Keys) bool {
+        return @as(Backing, @bitCast(self)) & @as(Backing, @bitCast(other)) == @as(Backing, @bitCast(other));
+    }
+
     /// True if no bit is set.
     pub fn isEmpty(self: Keys) bool {
         return @as(Backing, @bitCast(self)) == 0;
@@ -190,6 +194,7 @@ pub const Keys = packed struct {
 /// `@intFromEnum(Key.tab)` is *the bit*, not an index. `.unknown = 0` is
 /// the no-op identity for `|`.
 pub const KeyboardSnapshot = struct {
+    input: []const u8 = &.{},
     /// Currently-held keys at the moment of sample.
     held: Keys = .{},
     /// Keys that transitioned to down since the previous snapshot.
@@ -257,14 +262,28 @@ pub const Window = switch (builtin.os.tag) {
         xkbContext: *c.xkb_context,
         xkbKeymap: ?*c.xkb_keymap,
         xkbState: ?*c.xkb_state,
+        repeatInfo: struct {
+            /// the rate of repeating keys in characters per second
+            rate: i32,
+            /// delay in milliseconds since key down until repeating starts
+            delay: i32,
+        },
         wlKeyboard: *c.wl_keyboard,
 
         /// Keyboard state. The Wayland event thread writes; Forbear's render
         /// thread drains via `snapshotKeyboard()` at frame start.
-        keysMutex: SpinLock = .{},
+        keyboardMutex: SpinLock = .{},
         keysDown: Keys = .{},
         pendingPressed: Keys = .{},
         pendingReleased: Keys = .{},
+
+        // this fits into a single struct together
+        keyHeldInput: [7]u8 = undefined,
+        inputKey: Keys = .{},
+        inputLength: usize = 0,
+        inputSink: std.ArrayList(u8) = .empty,
+        repeatsEmitted: usize = 0,
+        inputStartTime: std.Io.Timestamp,
 
         // cursor
         wlPointer: *c.wl_pointer,
@@ -301,6 +320,7 @@ pub const Window = switch (builtin.os.tag) {
         refreshRate: u32 = 60000, // in millihertz (mHz), default 60Hz
 
         allocator: std.mem.Allocator,
+        io: std.Io,
 
         handlers: Handlers,
 
@@ -976,10 +996,10 @@ pub const Window = switch (builtin.os.tag) {
 
             // Focus is gone: mark every held key as released this frame so edge
             // consumers see the transition, then clear the held set.
-            window.keysMutex.lock();
+            window.keyboardMutex.lock();
             window.pendingReleased = window.pendingReleased.with(window.keysDown);
             window.keysDown = .{};
-            window.keysMutex.unlock();
+            window.keyboardMutex.unlock();
         }
 
         fn keyboardHandleKey(
@@ -1006,15 +1026,36 @@ pub const Window = switch (builtin.os.tag) {
             const keysym: u32 = baseKeysymForKeycode(window, xkbKeycode);
             const mapped: Keys = keysymToKeys(keysym);
 
-            window.keysMutex.lock();
+            window.keyboardMutex.lock();
             if (state == c.WL_KEYBOARD_KEY_STATE_PRESSED) {
+                std.debug.assert(window.xkbState != null);
+                window.inputKey = mapped;
+                window.inputLength = @intCast(c.xkb_state_key_get_utf8(
+                    window.xkbState,
+                    xkbKeycode,
+                    &window.keyHeldInput[0],
+                    window.keyHeldInput.len,
+                ));
+                window.inputSink.appendSlice(window.allocator, window.keyHeldInput[0..window.inputLength]) catch {
+                    @panic("could not append initial values to input sink");
+                };
+                window.inputStartTime = std.Io.Clock.now(.awake, window.io);
+                window.repeatsEmitted = 0;
+                std.debug.assert(window.inputLength <= window.keyHeldInput.len);
+
                 window.pendingPressed = window.pendingPressed.with(mapped);
                 window.keysDown = window.keysDown.with(mapped);
             } else if (state == c.WL_KEYBOARD_KEY_STATE_RELEASED) {
+                if (window.inputKey.has(mapped)) {
+                    window.inputKey = .{};
+                    window.repeatsEmitted = 0;
+                    window.inputLength = 0;
+                }
+
                 window.pendingReleased = window.pendingReleased.with(mapped);
                 window.keysDown = window.keysDown.without(mapped);
             }
-            window.keysMutex.unlock();
+            window.keyboardMutex.unlock();
         }
 
         fn keyboardHandleModifiers(
@@ -1045,8 +1086,8 @@ pub const Window = switch (builtin.os.tag) {
             newMods.alt = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_ALT, effective) > 0;
             newMods.super = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_LOGO, effective) > 0;
 
-            window.keysMutex.lock();
-            defer window.keysMutex.unlock();
+            window.keyboardMutex.lock();
+            defer window.keyboardMutex.unlock();
 
             var oldMods: Keys = .{};
             oldMods.shift = window.keysDown.shift;
@@ -1065,17 +1106,25 @@ pub const Window = switch (builtin.os.tag) {
         }
 
         fn keyboardHandleRepeatInfo(
-            _: ?*anyopaque,
+            data: ?*anyopaque,
             _: ?*c.wl_keyboard,
-            _: i32,
-            _: i32,
+            // the rate of repeating keys in characters per second
+            rate: i32,
+            // delay in milliseconds since key down until repeating starts
+            delay: i32,
         ) callconv(.c) void {
-            // The held-state model doesn't need OS repeat info — consumers do
-            // their own hold-to-act timing from `dt` and `isKeyDown(...)`.
+            const window: *Self = @ptrCast(@alignCast(data));
+
+            window.repeatInfo = .{
+                .rate = rate,
+                .delay = delay,
+            };
         }
 
         const wlKeyboardListener: c.wl_keyboard_listener = .{
             .keymap = keyboardHandleKeymap,
+            // TODO: should we be tracking some state based on enter and leave here?
+            // Does not doing this introduce some kind of bug?
             .enter = keyboardHandleEnter,
             .leave = keyboardHandleLeave,
             .key = keyboardHandleKey,
@@ -1107,6 +1156,7 @@ pub const Window = switch (builtin.os.tag) {
 
         pub fn init(
             allocator: std.mem.Allocator,
+            io: std.Io,
             width: u32,
             height: u32,
             title: [:0]const u8,
@@ -1118,6 +1168,7 @@ pub const Window = switch (builtin.os.tag) {
             const window = try allocator.create(Self);
             errdefer allocator.destroy(window);
             window.allocator = allocator;
+            window.io = io;
 
             window.width = width;
             window.height = height;
@@ -1134,10 +1185,17 @@ pub const Window = switch (builtin.os.tag) {
             window.xkbKeymap = null;
             window.xkbState = null;
 
-            window.keysMutex = .{};
+            window.keyboardMutex = .{};
             window.keysDown = .{};
             window.pendingPressed = .{};
             window.pendingReleased = .{};
+            window.inputKey = .{};
+            window.inputLength = 0;
+            window.repeatsEmitted = 0;
+            window.inputSink = .empty;
+            window.inputStartTime = undefined; // only read after a press sets it; guarded by inputLength
+            // Some setups never emit repeat_info; default to typical X11 values.
+            window.repeatInfo = .{ .rate = 25, .delay = 600 };
 
             // Initialize optional fields to null before the registry roundtrip,
             // since allocator.create does not zero-initialize memory.
@@ -1248,17 +1306,35 @@ pub const Window = switch (builtin.os.tag) {
 
         /// Drain the keyboard state for the current frame. Holds the keys mutex
         /// just long enough to copy the bitsets and reset the pending fields.
-        pub fn snapshotKeyboard(self: *Self) KeyboardSnapshot {
-            self.keysMutex.lock();
-            defer self.keysMutex.unlock();
+        pub fn snapshotKeyboard(self: *Self, arena: std.mem.Allocator) !KeyboardSnapshot {
+            self.keyboardMutex.lock();
+            defer self.keyboardMutex.unlock();
+
+            if (self.inputLength > 0) {
+                const elapsedMilliseconds: f64 = @floatFromInt(self.inputStartTime.untilNow(self.io, .awake).toMilliseconds());
+                const delay: f64 = @floatFromInt(self.repeatInfo.delay);
+                const rate: f64 = @floatFromInt(self.repeatInfo.rate);
+                if (elapsedMilliseconds >= delay) {
+                    const due: usize = @trunc((elapsedMilliseconds - delay) * rate / 1000);
+                    const newlyRepeatedCount = due - self.repeatsEmitted;
+                    self.repeatsEmitted += newlyRepeatedCount;
+
+                    try self.inputSink.ensureUnusedCapacity(self.allocator, self.inputLength * newlyRepeatedCount);
+                    for (0..newlyRepeatedCount) |_| {
+                        self.inputSink.appendSliceAssumeCapacity(self.keyHeldInput[0..self.inputLength]);
+                    }
+                }
+            }
 
             const snap: KeyboardSnapshot = .{
+                .input = try arena.dupe(u8, self.inputSink.items),
                 .held = self.keysDown,
                 .pressed = self.pendingPressed,
                 .released = self.pendingReleased,
             };
             self.pendingPressed = .{};
             self.pendingReleased = .{};
+            self.inputSink.clearRetainingCapacity();
             return snap;
         }
 
