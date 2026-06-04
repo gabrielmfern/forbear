@@ -449,7 +449,7 @@ pub fn main(init: std.process.Init) !void {
     var renderer = try graphics.initRenderer(window);
     defer renderer.deinit();
 
-    try forbear.init(allocator, init.io, &renderer);
+    try forbear.init(allocator, init.io, window, &renderer);
     defer forbear.deinit();
 
     const renderingThread = try std.Thread.spawn(

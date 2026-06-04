@@ -224,7 +224,7 @@ keysReleasedThisFrame: Keys = .{},
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 
 renderer: *Graphics.Renderer,
-window: ?*Window,
+window: *Window,
 
 /// Seconds
 startTime: f64,
@@ -240,7 +240,7 @@ viewportSize: Vec2,
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
 
-pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Renderer) !void {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, window: *Window, renderer: *Graphics.Renderer) !void {
     if (forbear != null) {
         return error.AlreadyInitialized;
     }
@@ -260,7 +260,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, renderer: *Graphics.Render
         .previousFrameNodeMeasurements = undefined,
 
         .renderer = renderer,
-        .window = null,
+        .window = window,
 
         .startTime = timestampSeconds(io),
         .deltaTime = null,
@@ -939,70 +939,68 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.frameCounter +%= 1;
     self.frameMeta = meta;
 
-    if (self.window) |window| {
-        var eventIterator = window.eventQueue.iterate();
-        while (eventIterator.next()) |event| {
-            switch (event) {
-                .input => |input| {
-                    std.log.debug("input text {s}", .{input.text(meta.arena) catch unreachable});
-                },
-                .keysHeld => |keys| {
-                    self.keysHeldSnapshot = keys;
-                },
-                .keysPressed => |keys| {
-                    self.keysPressedThisFrame = keys;
-                },
-                .keysReleased => |keys| {
-                    self.keysReleasedThisFrame = keys;
-                },
-                .resize => |resize| {
-                    self.renderer.handleResize(resize.width, resize.height) catch |err| {
-                        handleFrameError(err);
-                    };
-                },
-                .scroll => |scroll| {
-                    // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
-                    // values from the trackpad/mouse, so we use them directly.
-                    // On other platforms, the native offset is a raw axis value where
-                    // only the direction matters, so we use a fixed step size.
-                    const offset = if (builtin.os.tag == .macos)
-                        scroll.offset
-                    else
-                        100.0 * @as(f32, @floatFromInt(std.math.sign(scroll.offset)));
+    var eventIterator = self.window.eventQueue.iterate();
+    while (eventIterator.next()) |event| {
+        switch (event) {
+            .input => |input| {
+                std.log.debug("input text {s}", .{input.text(meta.arena) catch unreachable});
+            },
+            .keysHeld => |keys| {
+                self.keysHeldSnapshot = keys;
+            },
+            .keysPressed => |keys| {
+                self.keysPressedThisFrame = keys;
+            },
+            .keysReleased => |keys| {
+                self.keysReleasedThisFrame = keys;
+            },
+            .resize => |resize| {
+                self.renderer.handleResize(resize.width, resize.height) catch |err| {
+                    handleFrameError(err);
+                };
+            },
+            .scroll => |scroll| {
+                // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
+                // values from the trackpad/mouse, so we use them directly.
+                // On other platforms, the native offset is a raw axis value where
+                // only the direction matters, so we use a fixed step size.
+                const offset = if (builtin.os.tag == .macos)
+                    scroll.offset
+                else
+                    100.0 * @as(f32, @floatFromInt(std.math.sign(scroll.offset)));
 
-                    // Browser-like behavior: Shift + vertical scroll = horizontal scroll
-                    const shiftAccordingAxis = if (self.keysHeldSnapshot.shift and scroll.axis == .vertical)
-                        .horizontal
-                    else if (self.keysHeldSnapshot.shift and scroll.axis == .horizontal)
-                        .vertical
-                    else
-                        scroll.axis;
+                // Browser-like behavior: Shift + vertical scroll = horizontal scroll
+                const shiftAccordingAxis = if (self.keysHeldSnapshot.shift and scroll.axis == .vertical)
+                    .horizontal
+                else if (self.keysHeldSnapshot.shift and scroll.axis == .horizontal)
+                    .vertical
+                else
+                    scroll.axis;
 
-                    switch (shiftAccordingAxis) {
-                        .horizontal => {
-                            self.scrollDeltaAccumulator[0] += offset;
-                        },
-                        .vertical => {
-                            self.scrollDeltaAccumulator[1] += offset;
-                        },
+                switch (shiftAccordingAxis) {
+                    .horizontal => {
+                        self.scrollDeltaAccumulator[0] += offset;
+                    },
+                    .vertical => {
+                        self.scrollDeltaAccumulator[1] += offset;
+                    },
+                }
+            },
+            .pointerMotion => |pointerMotion| {
+                self.mousePosition = .{ pointerMotion.x, pointerMotion.y };
+            },
+            .pointerButton => |pointerButton| {
+                // TODO: we're not really handling the other platforms here now are we?
+                // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
+                if (pointerButton.button == 272) {
+                    if (pointerButton.state == 1) {
+                        self.mouseButtonPressed = true;
+                    } else {
+                        self.mouseButtonPressed = false;
                     }
-                },
-                .pointerMotion => |pointerMotion| {
-                    self.mousePosition = .{ pointerMotion.x, pointerMotion.y };
-                },
-                .pointerButton => |pointerButton| {
-                    // TODO: we're not really handling the other platforms here now are we?
-                    // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
-                    if (pointerButton.button == 272) {
-                        if (pointerButton.state == 1) {
-                            self.mouseButtonPressed = true;
-                        } else {
-                            self.mouseButtonPressed = false;
-                        }
-                    }
-                },
-                else => {},
-            }
+                }
+            },
+            else => {},
         }
     }
     return &frameEnd;
@@ -1626,11 +1624,9 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
 /// so deeper/later mounted elements take precedence.
 pub fn setCursor(cursor: Cursor) void {
     const self = getForbear();
-    if (self.window) |window| {
-        window.setCursor(cursor, 0) catch |err| {
-            std.log.err("Failed to set cursor: {}", .{err});
-        };
-    }
+    self.window.setCursor(cursor, 0) catch |err| {
+        std.log.err("Failed to set cursor: {}", .{err});
+    };
 }
 
 inline fn ReturnType(comptime function: anytype) type {
