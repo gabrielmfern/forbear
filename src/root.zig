@@ -940,17 +940,70 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.frameMeta = meta;
 
     if (self.window) |window| {
-        const snap = window.snapshotKeyboard(meta.arena) catch |err| {
-            handleFrameError(err);
-            return &frameEnd;
-        };
+        var eventIterator = window.eventQueue.iterate();
+        while (eventIterator.next()) |event| {
+            switch (event) {
+                .input => |input| {
+                    std.log.debug("input text {s}", .{input.text(meta.arena) catch unreachable});
+                },
+                .keysHeld => |keys| {
+                    self.keysHeldSnapshot = keys;
+                },
+                .keysPressed => |keys| {
+                    self.keysPressedThisFrame = keys;
+                },
+                .keysReleased => |keys| {
+                    self.keysReleasedThisFrame = keys;
+                },
+                .resize => |resize| {
+                    self.renderer.handleResize(resize.width, resize.height) catch |err| {
+                        handleFrameError(err);
+                    };
+                },
+                .scroll => |scroll| {
+                    // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
+                    // values from the trackpad/mouse, so we use them directly.
+                    // On other platforms, the native offset is a raw axis value where
+                    // only the direction matters, so we use a fixed step size.
+                    const offset = if (builtin.os.tag == .macos)
+                        scroll.offset
+                    else
+                        100.0 * @as(f32, @floatFromInt(std.math.sign(scroll.offset)));
 
-        if (snap.input.len > 0) {
-            std.log.debug("input text len={d} bytes={x} str={s}", .{ snap.input.len, snap.input, snap.input });
+                    // Browser-like behavior: Shift + vertical scroll = horizontal scroll
+                    const shiftAccordingAxis = if (self.keysHeldSnapshot.shift and scroll.axis == .vertical)
+                        .horizontal
+                    else if (self.keysHeldSnapshot.shift and scroll.axis == .horizontal)
+                        .vertical
+                    else
+                        scroll.axis;
+
+                    switch (shiftAccordingAxis) {
+                        .horizontal => {
+                            self.scrollDeltaAccumulator[0] += offset;
+                        },
+                        .vertical => {
+                            self.scrollDeltaAccumulator[1] += offset;
+                        },
+                    }
+                },
+                .pointerMotion => |pointerMotion| {
+                    self.mousePosition = .{ pointerMotion.x, pointerMotion.y };
+                },
+                .pointerButton => |pointerButton| {
+                    // TODO: we're not really handling the other platforms here now are we?
+                    // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
+                    if (pointerButton.button == 272) {
+                        if (pointerButton.state == 1) {
+                            self.mouseButtonPressed = true;
+                        } else {
+                            self.mouseButtonPressed = false;
+                        }
+                    }
+                },
+                else => {},
+            }
         }
-        self.keysHeldSnapshot = snap.held;
-        self.keysPressedThisFrame = snap.pressed;
-        self.keysReleasedThisFrame = snap.released;
     }
     return &frameEnd;
 }
@@ -2036,85 +2089,6 @@ pub fn useNodeMeasurement() ?Node.Measurement {
 fn timestampSeconds(io: std.Io) f64 {
     const ts = std.Io.Clock.awake.now(io);
     return @as(f64, @floatFromInt(ts.toNanoseconds())) / std.time.ns_per_s;
-}
-
-pub fn setWindowHandlers(window: *Window) void {
-    const self = getForbear();
-    self.window = window;
-
-    window.handlers.resize = .{
-        .function = &(struct {
-            fn handler(_: *Window, width: u32, height: u32, dpi: [2]u32, data: *anyopaque) void {
-                _ = dpi;
-                const ctx: *Forbear = @ptrCast(@alignCast(data));
-                ctx.renderer.handleResize(width, height) catch |err| {
-                    std.log.err("Renderer failed to handle resize: {}", .{err});
-                };
-            }
-        }).handler,
-        .data = @ptrCast(@alignCast(self)),
-    };
-    window.handlers.scroll = .{
-        .function = &(struct {
-            fn handler(wnd: *Window, axis: Window.ScrollAxis, nativeOffset: f32, data: *anyopaque) void {
-                const ctx: *Forbear = @ptrCast(@alignCast(data));
-                // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
-                // values from the trackpad/mouse, so we use them directly.
-                // On other platforms, the native offset is a raw axis value where
-                // only the direction matters, so we use a fixed step size.
-                const offset = if (builtin.os.tag == .macos)
-                    nativeOffset
-                else
-                    100.0 * @as(f32, @floatFromInt(std.math.sign(nativeOffset)));
-
-                // Browser-like behavior: Shift + vertical scroll = horizontal scroll
-                const shiftAccordingAxis = if (wnd.isHoldingShift() and axis == .vertical)
-                    .horizontal
-                else if (wnd.isHoldingShift() and axis == .horizontal)
-                    .vertical
-                else
-                    axis;
-
-                switch (shiftAccordingAxis) {
-                    .horizontal => {
-                        ctx.scrollDeltaAccumulator[0] += offset;
-                    },
-                    .vertical => {
-                        ctx.scrollDeltaAccumulator[1] += offset;
-                    },
-                }
-            }
-        }).handler,
-        .data = @ptrCast(@alignCast(self)),
-    };
-    window.handlers.pointerMotion = .{
-        .function = &(struct {
-            fn handler(_: *Window, x: f32, y: f32, data: *anyopaque) void {
-                const ctx: *Forbear = @ptrCast(@alignCast(data));
-                ctx.mousePosition = .{ x, y };
-            }
-        }).handler,
-        .data = @ptrCast(@alignCast(self)),
-    };
-    window.handlers.pointerButton = .{
-        .function = &(struct {
-            fn handler(_: *Window, _: u32, _: u32, button: u32, state: u32, data: *anyopaque) void {
-                const ctx: *Forbear = @ptrCast(@alignCast(data));
-                // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
-                if (button == 272) {
-                    if (state == 1) {
-                        ctx.mouseButtonPressed = true;
-                    } else {
-                        ctx.mouseButtonPressed = false;
-                    }
-                }
-            }
-        }).handler,
-        .data = @ptrCast(@alignCast(self)),
-    };
-    // Keyboard state is owned by the Window backend (atomic bitsets +
-    // text buffer behind a SpinLock) and sampled by `snapshotKeyboard`
-    // every frame. No handler registration needed.
 }
 
 /// All keys currently held, sampled at frame start. Stable for the

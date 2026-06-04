@@ -451,7 +451,6 @@ pub fn main(init: std.process.Init) !void {
 
     try forbear.init(allocator, init.io, &renderer);
     defer forbear.deinit();
-    forbear.setWindowHandlers(window);
 
     const renderingThread = try std.Thread.spawn(
         .{ .allocator = allocator },

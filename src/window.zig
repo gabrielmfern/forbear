@@ -2,24 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const c = @import("c");
 
-/// Tiny spin-lock used by Window backends to guard the keyboard
-/// snapshot fields between the input thread and Forbear's render thread.
-/// Critical sections are sub-microsecond (a few bit ops + a memcpy
-/// bounded by `textInputBuf.len`), so spinning beats parking — and
-/// Zig 0.16's blocking `std.Io.Mutex` would force us to thread `Io`
-/// down into the windowing backends.
-pub const SpinLock = struct {
-    inner: std.atomic.Mutex = .unlocked,
-
-    pub fn lock(self: *SpinLock) void {
-        while (!self.inner.tryLock()) std.atomic.spinLoopHint();
-    }
-
-    pub fn unlock(self: *SpinLock) void {
-        self.inner.unlock();
-    }
-};
-
 pub const Cursor = enum {
     default,
     text,
@@ -145,24 +127,6 @@ pub const Keys = packed struct {
     }
 };
 
-/// Cross-platform per-frame keyboard snapshot. Each backend produces one of
-/// these inside `Window.snapshotKeyboard()` so Forbear can sample input
-/// state at frame start without going through callbacks or holding the
-/// window's lock during mounting.
-///
-/// All three fields are u128 bitsets where each `Key` variant owns one bit:
-/// `@intFromEnum(Key.tab)` is *the bit*, not an index. `.unknown = 0` is
-/// the no-op identity for `|`.
-pub const KeyboardSnapshot = struct {
-    input: []const u8 = &.{},
-    /// Currently-held keys at the moment of sample.
-    held: Keys = .{},
-    /// Keys that transitioned to down since the previous snapshot.
-    pressed: Keys = .{},
-    /// Keys that transitioned to up since the previous snapshot.
-    released: Keys = .{},
-};
-
 pub const Window = struct {
     const posix = std.posix;
     const os = std.os;
@@ -174,37 +138,115 @@ pub const Window = struct {
         horizontal = 1,
     };
 
-    pub const Handlers = struct {
-        pointerEnter: ?struct {
-            data: *anyopaque,
-            function: *const fn (window: *Self, serial: u32, x: i32, y: i32, data: *anyopaque) void,
-        } = null,
-        pointerLeave: ?struct {
-            data: *anyopaque,
-            function: *const fn (window: *Self, serial: u32, data: *anyopaque) void,
-        } = null,
-        pointerMotion: ?struct {
-            data: *anyopaque,
-            function: *const fn (window: *Self, x: f32, y: f32, data: *anyopaque) void,
-        } = null,
-        pointerButton: ?struct {
-            data: *anyopaque,
-            function: *const fn (window: *Self, serial: u32, time: u32, button: u32, state: u32, data: *anyopaque) void,
-        } = null,
-        scroll: ?struct {
-            data: *anyopaque,
-            function: *const fn (window: *Self, axis: ScrollAxis, offset: f32, data: *anyopaque) void,
-        } = null,
-        resize: ?struct {
-            data: *anyopaque,
-            function: *const fn (
-                window: *Self,
-                newWidth: u32,
-                newHeight: u32,
-                newDpi: [2]u32,
-                data: *anyopaque,
-            ) void,
-        } = null,
+    pub const EventQueue = struct {
+        buffer: [256]Event,
+        head: std.atomic.Value(usize),
+        tail: std.atomic.Value(usize),
+
+        pub const empty: @This() = .{
+            .buffer = undefined,
+            .head = .init(0),
+            .tail = .init(0),
+        };
+
+        pub fn push(self: *@This(), event: Event) void {
+            const t = self.tail.raw;
+            if (t - self.head.load(.acquire) < self.buffer.len) {
+                self.buffer[t % self.buffer.len] = event;
+                self.tail.store(t + 1, .release);
+            } else {
+                std.log.warn("event queue full; dropping {s}", .{@tagName(event)});
+            }
+        }
+
+        const EventIterator = struct {
+            queue: *EventQueue,
+            tail: usize,
+            head: usize,
+
+            pub fn next(self: *@This()) ?Event {
+                if (self.head < self.tail) {
+                    defer self.head += 1;
+                    return self.queue.buffer[self.head % self.queue.buffer.len];
+                } else {
+                    self.queue.head.store(self.head, .release);
+                    return null;
+                }
+            }
+        };
+
+        pub fn iterate(self: *@This()) EventIterator {
+            const tailLocal = self.tail.load(.acquire);
+            return EventIterator{
+                .queue = self,
+                .tail = tailLocal,
+                .head = self.head.raw,
+            };
+        }
+    };
+
+    pub const Event = union(enum) {
+        pointerEnter: PointerEnter,
+        pointerLeave: PointerLeave,
+        pointerMotion: PointerMotion,
+        pointerButton: PointerButton,
+        scroll: Scroll,
+        resize: Resize,
+        keysHeld: Keys,
+        keysPressed: Keys,
+        keysReleased: Keys,
+        input: Input,
+
+        pub const PointerEnter = struct {
+            serial: u32,
+            x: i32,
+            y: i32,
+        };
+
+        pub const PointerLeave = struct {
+            serial: u32,
+        };
+
+        pub const PointerMotion = struct {
+            time: u32,
+            x: f32,
+            y: f32,
+        };
+
+        pub const PointerButton = struct {
+            serial: u32,
+            time: u32,
+            button: u32,
+            state: u32,
+        };
+
+        pub const Scroll = struct {
+            axis: ScrollAxis,
+            offset: f32,
+        };
+
+        pub const Resize = struct {
+            width: u32,
+            height: u32,
+            dpi: [2]u32,
+        };
+
+        pub const Input = struct {
+            characterBuffer: [7]u8,
+            characterLength: usize,
+            repeats: usize,
+
+            pub fn text(self: @This(), arena: std.mem.Allocator) ![]u8 {
+                var repeatedBuffer = try arena.alloc(u8, self.repeats * self.characterLength);
+                for (0..self.repeats) |i| {
+                    @memcpy(
+                        repeatedBuffer[i * self.characterLength .. (i + 1) * self.characterLength],
+                        self.characterBuffer[0..self.characterLength],
+                    );
+                }
+                return repeatedBuffer;
+            }
+        };
     };
 
     // Everything native that is contextual
@@ -231,18 +273,19 @@ pub const Window = struct {
 
     /// Keyboard state. The Wayland event thread writes; Forbear's render
     /// thread drains via `snapshotKeyboard()` at frame start.
-    keyboardMutex: SpinLock = .{},
-    keysDown: Keys = .{},
-    pendingPressed: Keys = .{},
-    pendingReleased: Keys = .{},
+    keysHeld: Keys,
+    pendingPressed: Keys,
+    pendingReleased: Keys,
+    activeInput: ?struct {
+        characterBuffer: [7]u8,
+        characterLength: usize,
+        /// Does not count the first character from the initial key event
+        totalRepeats: usize,
+        startTime: std.Io.Timestamp,
+        key: Keys,
+    },
 
-    // this fits into a single struct together
-    keyHeldInput: [7]u8 = undefined,
-    inputKey: Keys = .{},
-    inputLength: usize = 0,
-    inputSink: std.ArrayList(u8) = .empty,
-    repeatsEmitted: usize = 0,
-    inputStartTime: std.Io.Timestamp,
+    eventQueue: EventQueue = .empty,
 
     // cursor
     wlPointer: *c.wl_pointer,
@@ -280,8 +323,6 @@ pub const Window = struct {
 
     allocator: std.mem.Allocator,
     io: std.Io,
-
-    handlers: Handlers,
 
     fn BindingInfo(T: type) type {
         return struct {
@@ -387,9 +428,13 @@ pub const Window = struct {
         if (window.wpFractionalScale != null) return;
         window.scale = @floatFromInt(scale);
         window.updateDpi();
-        if (window.handlers.resize) |handler| {
-            handler.function(window, window.width, window.height, window.dpi, handler.data);
-        }
+        window.eventQueue.push(Event{
+            .resize = .{
+                .width = window.width,
+                .height = window.height,
+                .dpi = window.dpi,
+            },
+        });
         std.log.debug("Monitor scale changed to: {}", .{scale});
     }
 
@@ -432,9 +477,13 @@ pub const Window = struct {
         const window: *Self = @ptrCast(@alignCast(data));
         window.scale = @as(f32, @floatFromInt(scale)) / 120.0;
         window.updateDpi();
-        if (window.handlers.resize) |handler| {
-            handler.function(window, window.width, window.height, window.dpi, handler.data);
-        }
+        window.eventQueue.push(Event{
+            .resize = .{
+                .width = window.width,
+                .height = window.height,
+                .dpi = window.dpi,
+            },
+        });
         std.log.debug("Fractional scale changed to: {d}", .{@as(f32, @floatFromInt(scale)) / 120.0});
     }
 
@@ -563,9 +612,13 @@ pub const Window = struct {
             if (window.wpViewport) |viewport| {
                 c.wp_viewport_set_destination(viewport, @intCast(window.width), @intCast(window.height));
             }
-            if (window.handlers.resize) |handler| {
-                handler.function(window, window.width, window.height, window.dpi, handler.data);
-            }
+            window.eventQueue.push(Event{
+                .resize = .{
+                    .width = window.width,
+                    .height = window.height,
+                    .dpi = window.dpi,
+                },
+            });
         }
     }
 
@@ -636,9 +689,13 @@ pub const Window = struct {
         window.setCursor(.default, serial) catch |err| {
             std.log.err("failed to set cursor: {}", .{err});
         };
-        if (window.handlers.pointerEnter) |handler| {
-            handler.function(window, serial, surfaceX, surfaceY, handler.data);
-        }
+        window.eventQueue.push(Event{
+            .pointerEnter = .{
+                .serial = serial,
+                .x = surfaceX,
+                .y = surfaceY,
+            },
+        });
     }
 
     fn pointerHandleLeave(
@@ -649,9 +706,9 @@ pub const Window = struct {
     ) callconv(.c) void {
         const window: *Self = @ptrCast(@alignCast(data));
         window.pointerSerial = null;
-        if (window.handlers.pointerLeave) |handler| {
-            handler.function(window, serial, handler.data);
-        }
+        window.eventQueue.push(Event{
+            .pointerLeave = .{ .serial = serial },
+        });
         _ = wlPointer;
         _ = surface;
     }
@@ -664,15 +721,13 @@ pub const Window = struct {
         surfaceY: c.wl_fixed_t,
     ) callconv(.c) void {
         const window: *Self = @ptrCast(@alignCast(data));
-        if (window.handlers.pointerMotion) |handler| {
-            handler.function(
-                window,
-                @floatCast(c.wl_fixed_to_double(surfaceX)),
-                @floatCast(c.wl_fixed_to_double(surfaceY)),
-                handler.data,
-            );
-        }
-        _ = time;
+        window.eventQueue.push(Event{
+            .pointerMotion = .{
+                .time = time,
+                .x = @floatCast(c.wl_fixed_to_double(surfaceX)),
+                .y = @floatCast(c.wl_fixed_to_double(surfaceY)),
+            },
+        });
         _ = wlPointer;
     }
 
@@ -685,9 +740,14 @@ pub const Window = struct {
         state: u32,
     ) callconv(.c) void {
         const window: *Self = @ptrCast(@alignCast(data));
-        if (window.handlers.pointerButton) |handler| {
-            handler.function(window, serial, time, button, state, handler.data);
-        }
+        window.eventQueue.push(Event{
+            .pointerButton = .{
+                .serial = serial,
+                .time = time,
+                .button = button,
+                .state = state,
+            },
+        });
         _ = wlPointer;
     }
 
@@ -699,14 +759,12 @@ pub const Window = struct {
         value: c.wl_fixed_t,
     ) callconv(.c) void {
         const window: *Self = @ptrCast(@alignCast(data));
-        if (window.handlers.scroll) |handler| {
-            handler.function(
-                window,
-                @enumFromInt(axis),
-                @floatCast(c.wl_fixed_to_double(value)),
-                handler.data,
-            );
-        }
+        window.eventQueue.push(Event{
+            .scroll = .{
+                .axis = @enumFromInt(axis),
+                .offset = @floatCast(c.wl_fixed_to_double(value))
+            },
+        });
         _ = time;
         _ = wlPointer;
     }
@@ -955,10 +1013,9 @@ pub const Window = struct {
 
         // Focus is gone: mark every held key as released this frame so edge
         // consumers see the transition, then clear the held set.
-        window.keyboardMutex.lock();
-        window.pendingReleased = window.pendingReleased.with(window.keysDown);
-        window.keysDown = .{};
-        window.keyboardMutex.unlock();
+        window.activeInput = null;
+        window.pendingReleased = window.pendingReleased.with(window.keysHeld);
+        window.keysHeld = .{};
     }
 
     fn keyboardHandleKey(
@@ -985,36 +1042,35 @@ pub const Window = struct {
         const keysym: u32 = baseKeysymForKeycode(window, xkbKeycode);
         const mapped: Keys = keysymToKeys(keysym);
 
-        window.keyboardMutex.lock();
         if (state == c.WL_KEYBOARD_KEY_STATE_PRESSED) {
             std.debug.assert(window.xkbState != null);
-            window.inputKey = mapped;
-            window.inputLength = @intCast(c.xkb_state_key_get_utf8(
+            window.activeInput = .{
+                .characterBuffer = undefined,
+                .characterLength = undefined,
+                .totalRepeats = 0,
+                .startTime = std.Io.Clock.now(.awake, window.io),
+                .key = mapped,
+            };
+            window.activeInput.?.characterLength = @intCast(c.xkb_state_key_get_utf8(
                 window.xkbState,
                 xkbKeycode,
-                &window.keyHeldInput[0],
-                window.keyHeldInput.len,
+                &window.activeInput.?.characterBuffer,
+                window.activeInput.?.characterBuffer.len,
             ));
-            window.inputSink.appendSlice(window.allocator, window.keyHeldInput[0..window.inputLength]) catch {
-                @panic("could not append initial values to input sink");
-            };
-            window.inputStartTime = std.Io.Clock.now(.awake, window.io);
-            window.repeatsEmitted = 0;
-            std.debug.assert(window.inputLength <= window.keyHeldInput.len);
+            std.debug.assert(window.activeInput.?.characterLength <= window.activeInput.?.characterBuffer.len);
 
             window.pendingPressed = window.pendingPressed.with(mapped);
-            window.keysDown = window.keysDown.with(mapped);
+            window.keysHeld = window.keysHeld.with(mapped);
         } else if (state == c.WL_KEYBOARD_KEY_STATE_RELEASED) {
-            if (window.inputKey.has(mapped)) {
-                window.inputKey = .{};
-                window.repeatsEmitted = 0;
-                window.inputLength = 0;
+            if (window.activeInput) |activeInput| {
+                if (activeInput.key.has(mapped)) {
+                    window.activeInput = null;
+                }
             }
 
             window.pendingReleased = window.pendingReleased.with(mapped);
-            window.keysDown = window.keysDown.without(mapped);
+            window.keysHeld = window.keysHeld.without(mapped);
         }
-        window.keyboardMutex.unlock();
     }
 
     fn keyboardHandleModifiers(
@@ -1045,23 +1101,20 @@ pub const Window = struct {
         newMods.alt = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_ALT, effective) > 0;
         newMods.super = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_LOGO, effective) > 0;
 
-        window.keyboardMutex.lock();
-        defer window.keyboardMutex.unlock();
-
         var oldMods: Keys = .{};
-        oldMods.shift = window.keysDown.shift;
-        oldMods.control = window.keysDown.control;
-        oldMods.alt = window.keysDown.alt;
-        oldMods.super = window.keysDown.super;
+        oldMods.shift = window.keysHeld.shift;
+        oldMods.control = window.keysHeld.control;
+        oldMods.alt = window.keysHeld.alt;
+        oldMods.super = window.keysHeld.super;
 
         // Edge events for modifiers that flipped this notification.
         window.pendingPressed = window.pendingPressed.with(newMods.without(oldMods));
         window.pendingReleased = window.pendingReleased.with(oldMods.without(newMods));
 
-        window.keysDown.shift = newMods.shift;
-        window.keysDown.control = newMods.control;
-        window.keysDown.alt = newMods.alt;
-        window.keysDown.super = newMods.super;
+        window.keysHeld.shift = newMods.shift;
+        window.keysHeld.control = newMods.control;
+        window.keysHeld.alt = newMods.alt;
+        window.keysHeld.super = newMods.super;
     }
 
     fn keyboardHandleRepeatInfo(
@@ -1137,22 +1190,15 @@ pub const Window = struct {
         window.app_id = app_id;
         window.running = true;
 
-        window.handlers = .{};
-
         window.xkbContext = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse return error.FailedToCreateXkbContext;
         errdefer c.xkb_context_unref(window.xkbContext);
         window.xkbKeymap = null;
         window.xkbState = null;
 
-        window.keyboardMutex = .{};
-        window.keysDown = .{};
+        window.keysHeld = .{};
         window.pendingPressed = .{};
         window.pendingReleased = .{};
-        window.inputKey = .{};
-        window.inputLength = 0;
-        window.repeatsEmitted = 0;
-        window.inputSink = .empty;
-        window.inputStartTime = undefined; // only read after a press sets it; guarded by inputLength
+        window.activeInput = null;
         // Some setups never emit repeat_info; default to typical X11 values.
         window.repeatInfo = .{ .rate = 25, .delay = 600 };
 
@@ -1263,40 +1309,6 @@ pub const Window = struct {
         };
     }
 
-    /// Drain the keyboard state for the current frame. Holds the keys mutex
-    /// just long enough to copy the bitsets and reset the pending fields.
-    pub fn snapshotKeyboard(self: *Self, arena: std.mem.Allocator) !KeyboardSnapshot {
-        self.keyboardMutex.lock();
-        defer self.keyboardMutex.unlock();
-
-        if (self.inputLength > 0) {
-            const elapsedMilliseconds: f64 = @floatFromInt(self.inputStartTime.untilNow(self.io, .awake).toMilliseconds());
-            const delay: f64 = @floatFromInt(self.repeatInfo.delay);
-            const rate: f64 = @floatFromInt(self.repeatInfo.rate);
-            if (elapsedMilliseconds >= delay) {
-                const due: usize = @trunc((elapsedMilliseconds - delay) * rate / 1000);
-                const newlyRepeatedCount = due - self.repeatsEmitted;
-                self.repeatsEmitted += newlyRepeatedCount;
-
-                try self.inputSink.ensureUnusedCapacity(self.allocator, self.inputLength * newlyRepeatedCount);
-                for (0..newlyRepeatedCount) |_| {
-                    self.inputSink.appendSliceAssumeCapacity(self.keyHeldInput[0..self.inputLength]);
-                }
-            }
-        }
-
-        const snap: KeyboardSnapshot = .{
-            .input = try arena.dupe(u8, self.inputSink.items),
-            .held = self.keysDown,
-            .pressed = self.pendingPressed,
-            .released = self.pendingReleased,
-        };
-        self.pendingPressed = .{};
-        self.pendingReleased = .{};
-        self.inputSink.clearRetainingCapacity();
-        return snap;
-    }
-
     pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
         const effectiveSerial = if (serial != 0)
             serial
@@ -1326,14 +1338,39 @@ pub const Window = struct {
             if (c.wl_display_dispatch(self.wlDisplay) == -1) {
                 return error.WaylandDispatchFailed;
             }
-        }
-    }
 
-    pub fn isHoldingShift(self: *const Self) bool {
-        if (self.xkbState) |xkbState| {
-            return c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_SHIFT, c.XKB_STATE_MODS_EFFECTIVE) != 0;
+            if (self.activeInput) |*activeInput| {
+                const elapsedMilliseconds: f64 = @floatFromInt(activeInput.startTime.untilNow(self.io, .awake).toMilliseconds());
+                const delay: f64 = @floatFromInt(self.repeatInfo.delay);
+                const rate: f64 = @floatFromInt(self.repeatInfo.rate);
+                if (elapsedMilliseconds >= delay) {
+                    const due: usize = @trunc((elapsedMilliseconds - delay) * rate / 1000);
+                    const new = due - activeInput.totalRepeats;
+                    self.activeInput.?.totalRepeats += new;
+                    self.eventQueue.push(Event{
+                        .input = Event.Input{
+                            .characterBuffer = activeInput.characterBuffer,
+                            .characterLength = activeInput.characterLength,
+                            .repeats = new,
+                        },
+                    });
+                }
+            }
+
+            if (!self.keysHeld.isEmpty()) {
+                self.eventQueue.push(Event{ .keysHeld = self.keysHeld });
+            }
+
+            if (!self.pendingPressed.isEmpty()) {
+                self.eventQueue.push(Event{ .keysPressed = self.pendingPressed });
+                self.pendingPressed = .{};
+            }
+
+            if (!self.pendingReleased.isEmpty()) {
+                self.eventQueue.push(Event{ .keysPressed = self.pendingReleased });
+                self.pendingReleased = .{};
+            }
         }
-        return false;
     }
 
     /// Returns the target frame time in nanoseconds based on the monitor's refresh rate.
