@@ -1350,14 +1350,16 @@ pub const Window = struct {
                 if (elapsedMilliseconds >= delay) {
                     const due: usize = @trunc((elapsedMilliseconds - delay) * rate / 1000);
                     const new = due - activeInput.totalRepeats;
-                    self.activeInput.?.totalRepeats += new;
-                    self.eventQueue.push(Event{
-                        .input = Event.Input{
-                            .characterBuffer = activeInput.characterBuffer,
-                            .characterLength = activeInput.characterLength,
-                            .repeats = new,
-                        },
-                    });
+                    if (new > 0) {
+                        self.activeInput.?.totalRepeats += new;
+                        self.eventQueue.push(Event{
+                            .input = Event.Input{
+                                .characterBuffer = activeInput.characterBuffer,
+                                .characterLength = activeInput.characterLength,
+                                .repeats = new,
+                            },
+                        });
+                    }
                 }
             }
 
