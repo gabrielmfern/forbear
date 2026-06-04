@@ -8112,14 +8112,18 @@ test "EventQueue: SPSC producer/consumer round-trips every event in order" {
             }
         }
 
-        fn run(q: *EventQueue, count: u32) void {
+        fn run(q: *EventQueue, count: u32, cancel: *std.atomic.Value(bool)) void {
             var i: u32 = 0;
             while (i < count) : (i += 1) {
                 // `push` drops silently when the ring is full. As the lone
                 // producer, `tail.raw` is stable and `head` only advances, so
                 // spinning until there's a free slot guarantees no drops and
-                // lets us assert *every* event is delivered.
+                // lets us assert *every* event is delivered. `cancel` is the
+                // escape hatch: if the consumer bails out early (e.g. a failed
+                // assertion stops draining `head`), we'd otherwise spin here
+                // forever and hang `thread.join()`, so check it each spin.
                 while (q.tail.raw - q.head.load(.acquire) >= q.buffer.len) {
+                    if (cancel.load(.acquire)) return;
                     std.atomic.spinLoopHint();
                 }
                 q.push(eventFor(i));
@@ -8127,8 +8131,12 @@ test "EventQueue: SPSC producer/consumer round-trips every event in order" {
         }
     };
 
-    const thread = try std.Thread.spawn(.{}, Producer.run, .{ &queue, total });
+    var cancel: std.atomic.Value(bool) = .init(false);
+    const thread = try std.Thread.spawn(.{}, Producer.run, .{ &queue, total, &cancel });
+    // Defers run LIFO: raise `cancel` *before* joining so a consumer-side
+    // assertion failure unblocks the producer instead of deadlocking the test.
     defer thread.join();
+    defer cancel.store(true, .release);
 
     var received: u32 = 0;
     while (received < total) {
