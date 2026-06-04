@@ -8079,3 +8079,85 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
 
     try std.testing.expectEqual(false, focusedAfterDrop.?);
 }
+
+// window.zig EventQueue tests
+
+// Mirrors the live setup in playground.zig: the Wayland event thread is the
+// sole producer pushing onto `Window.EventQueue`, and Forbear's render thread
+// is the sole consumer draining it via `iterate()` (see root.zig:942). This
+// stresses that single-producer/single-consumer split — one thread blasts a
+// long, identifiable sequence of events while the other drains and asserts
+// each one arrives intact and in order.
+test "EventQueue: SPSC producer/consumer round-trips every event in order" {
+    const Event = forbear.Window.Event;
+    const EventQueue = forbear.Window.EventQueue;
+
+    // "lots of events" — far more than the 256-slot ring, so the buffer wraps
+    // thousands of times and the head/tail acquire-release handshake is what
+    // keeps producer and consumer in sync.
+    const total: u32 = 200_000;
+
+    var queue: EventQueue = .empty;
+
+    const Producer = struct {
+        // Even indices ride a `pointerMotion`, odd indices a `scroll`, so the
+        // consumer verifies the union *tag* round-trips too, not just payloads.
+        fn eventFor(i: u32) Event {
+            if (i % 2 == 0) {
+                return .{ .pointerMotion = .{
+                    .time = i,
+                    .x = @floatFromInt(i),
+                    .y = @floatFromInt(i),
+                } };
+            } else {
+                return .{ .scroll = .{
+                    .axis = .vertical,
+                    .offset = @floatFromInt(i),
+                } };
+            }
+        }
+
+        fn run(q: *EventQueue, count: u32) void {
+            var i: u32 = 0;
+            while (i < count) : (i += 1) {
+                // `push` drops silently when the ring is full. As the lone
+                // producer, `tail.raw` is stable and `head` only advances, so
+                // spinning until there's a free slot guarantees no drops and
+                // lets us assert *every* event is delivered.
+                while (q.tail.raw - q.head.load(.acquire) >= q.buffer.len) {
+                    std.atomic.spinLoopHint();
+                }
+                q.push(eventFor(i));
+            }
+        }
+    };
+
+    const thread = try std.Thread.spawn(.{}, Producer.run, .{ &queue, total });
+    defer thread.join();
+
+    var received: u32 = 0;
+    while (received < total) {
+        var iterator = queue.iterate();
+        while (iterator.next()) |event| {
+            const expected = Producer.eventFor(received);
+            switch (expected) {
+                .pointerMotion => |want| {
+                    try std.testing.expect(event == .pointerMotion);
+                    try std.testing.expectEqual(want.time, event.pointerMotion.time);
+                    try std.testing.expectEqual(want.x, event.pointerMotion.x);
+                    try std.testing.expectEqual(want.y, event.pointerMotion.y);
+                },
+                .scroll => |want| {
+                    try std.testing.expect(event == .scroll);
+                    try std.testing.expectEqual(want.axis, event.scroll.axis);
+                    try std.testing.expectEqual(want.offset, event.scroll.offset);
+                },
+                else => unreachable,
+            }
+            received += 1;
+        }
+        std.atomic.spinLoopHint();
+    }
+
+    try std.testing.expectEqual(total, received);
+}
