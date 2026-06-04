@@ -410,7 +410,10 @@ pub fn main(init: std.process.Init) !void {
     // multi-GB. `smp_allocator` actually frees on `rawFree`.
     const allocator = std.heap.smp_allocator;
 
-    try forbear.init(allocator, init.io, undefined, undefined);
+    // Headless: no OS window (forbear skips event processing when null) and no
+    // renderer — benchmarks only exercise frame/layout/state, never drawing, so
+    // the renderer is never dereferenced.
+    try forbear.init(allocator, init.io, null, undefined);
     defer forbear.deinit();
     try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
 

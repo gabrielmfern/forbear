@@ -224,7 +224,10 @@ keysReleasedThisFrame: Keys = .{},
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 
 renderer: *Graphics.Renderer,
-window: *Window,
+/// Optional so the framework can run headless (e.g. benchmarks), where there
+/// is no OS window to pull events from. When null, `frame()` skips event
+/// processing and `setCursor()` is a no-op.
+window: ?*Window,
 
 /// Seconds
 startTime: f64,
@@ -240,7 +243,7 @@ viewportSize: Vec2,
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
 
-pub fn init(allocator: std.mem.Allocator, io: std.Io, window: *Window, renderer: *Graphics.Renderer) !void {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, window: ?*Window, renderer: *Graphics.Renderer) !void {
     if (forbear != null) {
         return error.AlreadyInitialized;
     }
@@ -939,7 +942,13 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.frameCounter +%= 1;
     self.frameMeta = meta;
 
-    var eventIterator = self.window.eventQueue.iterate();
+    // No window means headless (e.g. benchmarks): there is no event queue to
+    // drain, so skip straight to returning the frame-end handle. The per-frame
+    // input/scroll resets above still run unconditionally.
+    if (self.window == null) return &frameEnd;
+    const window = self.window.?;
+
+    var eventIterator = window.eventQueue.iterate();
     while (eventIterator.next()) |event| {
         switch (event) {
             .input => |input| {
@@ -1624,7 +1633,8 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
 /// so deeper/later mounted elements take precedence.
 pub fn setCursor(cursor: Cursor) void {
     const self = getForbear();
-    self.window.setCursor(cursor, 0) catch |err| {
+    const window = self.window orelse return;
+    window.setCursor(cursor, 0) catch |err| {
         std.log.err("Failed to set cursor: {}", .{err});
     };
 }
