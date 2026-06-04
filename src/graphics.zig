@@ -516,7 +516,9 @@ const VkWin32SurfaceCreateInfoKHR = extern struct {
     hinstance: HINSTANCE,
     hwnd: HWND,
 };
-extern "vulkan" fn vkCreateWin32SurfaceKHR(
+// The Windows Vulkan SDK ships the import library as vulkan-1.lib (not vulkan.lib),
+// so the extern library name must match what build.zig links (`vulkan-1`).
+extern "vulkan-1" fn vkCreateWin32SurfaceKHR(
     instance: c.VkInstance,
     pCreateInfo: ?*const VkWin32SurfaceCreateInfoKHR,
     pAllocator: ?*c.VkAllocationCallbacks,
