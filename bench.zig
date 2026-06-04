@@ -410,7 +410,7 @@ pub fn main(init: std.process.Init) !void {
     // multi-GB. `smp_allocator` actually frees on `rawFree`.
     const allocator = std.heap.smp_allocator;
 
-    try forbear.init(allocator, init.io, undefined);
+    try forbear.init(allocator, init.io, undefined, undefined);
     defer forbear.deinit();
     try forbear.registerFont("Inter", @embedFile("Inter.ttf"));
 
