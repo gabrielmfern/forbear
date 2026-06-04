@@ -1055,11 +1055,17 @@ pub const Window = struct {
                 window.activeInput.?.characterBuffer.len,
             ));
             std.debug.assert(window.activeInput.?.characterLength <= window.activeInput.?.characterBuffer.len);
-            if (window.activeInput.?.characterLength > 0) {
+            const buffer = window.activeInput.?.characterBuffer;
+            const length = window.activeInput.?.characterLength;
+            // Control codepoints (C0, DEL, C1) aren't text; route them through
+            // `Keys` only. Decode the one character and range-check it.
+            const codepoint = if (length > 0) std.unicode.utf8Decode(buffer[0..length]) catch null else null;
+            const isControl = if (codepoint) |cp| cp < 0x20 or (cp >= 0x7f and cp <= 0x9f) else false;
+            if (length > 0 and !isControl) {
                 window.eventQueue.push(Event{
                     .input = .{
-                        .characterBuffer = window.activeInput.?.characterBuffer,
-                        .characterLength = window.activeInput.?.characterLength,
+                        .characterBuffer = buffer,
+                        .characterLength = length,
                         .repeats = 1,
                     },
                 });
