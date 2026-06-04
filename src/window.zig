@@ -1054,6 +1054,13 @@ pub const Window = struct {
                 &window.activeInput.?.characterBuffer,
                 window.activeInput.?.characterBuffer.len,
             ));
+            window.eventQueue.push(Event{
+                .input = .{
+                    .characterBuffer = window.activeInput.?.characterBuffer,
+                    .characterLength = window.activeInput.?.characterLength,
+                    .repeats = 1,
+                },
+            });
             std.debug.assert(window.activeInput.?.characterLength <= window.activeInput.?.characterBuffer.len);
 
             window.pendingPressed = window.pendingPressed.with(mapped);
