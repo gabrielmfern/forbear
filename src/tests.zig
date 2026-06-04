@@ -34,7 +34,11 @@ fn initTest(allocator: std.mem.Allocator) !void {
     testWindow.eventQueue = .empty;
     // No pointer serial means `setCursor` no-ops instead of dereferencing the
     // undefined Wayland cursor state when tests trigger onMouseEnter/Leave.
-    testWindow.pointerSerial = null;
+    // `pointerSerial` only exists on the Wayland backend; other platforms'
+    // `setCursor` doesn't touch undefined window state, so the guard is moot.
+    if (@hasField(forbear.Window, "pointerSerial")) {
+        testWindow.pointerSerial = null;
+    }
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(allocator, std.testing.io, &testWindow, renderer);
 }
