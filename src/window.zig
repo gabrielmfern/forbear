@@ -277,7 +277,7 @@ pub const Window = struct {
     pendingPressed: Keys,
     pendingReleased: Keys,
     activeInput: ?struct {
-        characterBuffer: [7]u8,
+        characterBuffer: [7:0]u8,
         characterLength: usize,
         /// Does not count the first character from the initial key event
         totalRepeats: usize,
