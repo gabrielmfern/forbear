@@ -1409,14 +1409,11 @@ pub const LinuxWindow = struct {
             return @divFloor(@as(u64, 1_000_000_000_000), @as(u64, self.refreshRate));
         }
 
-        // pub fn swapBuffers(self: *Self) !void {
-        //     if (c.eglSwapBuffers(
-        //         self.egl_display,
-        //         self.egl_surface,
-        //     ) == c.EGL_FALSE) {
-        //         return error.FailedToSwapBuffers;
-        //     }
-        // }
+        /// The native handles the renderer needs to create its Vulkan surface.
+        /// Hand this to `Graphics.initRenderer`.
+        pub fn nativeSurface(self: *const Self) NativeSurface {
+            return .{ .display = self.wlDisplay, .surface = self.wlSurface };
+        }
 
         pub fn deinit(self: *Self) void {
             if (self.xdgToplevelDecoration) |decoration| c.zxdg_toplevel_decoration_v1_destroy(decoration);
@@ -1920,6 +1917,12 @@ pub const WindowsWindow = struct {
         }
 
         return @divTrunc(1_000_000_000, @as(u64, refreshRate));
+    }
+
+    /// The native handles the renderer needs to create its Vulkan surface.
+    /// Hand this to `Graphics.initRenderer`.
+    pub fn nativeSurface(self: *const Self) NativeSurface {
+        return .{ .hinstance = @ptrCast(self.hInstance), .hwnd = @ptrCast(self.handle) };
     }
 
     pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {

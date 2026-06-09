@@ -41,6 +41,7 @@ pub const GradientStop = nodeImport.GradientStop;
 pub const LinuxWindow = @import("platform.zig").LinuxWindow;
 pub const WindowsWindow = @import("platform.zig").WindowsWindow;
 pub const EventQueue = @import("platform.zig").EventQueue;
+pub const NativeSurface = @import("platform.zig").NativeSurface;
 pub const Color = Vec4;
 
 pub var traceWriter: ?*std.Io.Writer = null;
