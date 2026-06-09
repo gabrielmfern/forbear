@@ -208,13 +208,12 @@ io: std.Io,
 
 mousePosition: Vec2,
 mouseButtonPressed: bool,
-/// Accumulated wheel/trackpad delta from window events. Snapshotted
-/// into `scrollDelta` at frame start, then reset.
+/// Accumulated wheel/trackpad delta from events. Snapshotted into
+/// `scrollDelta` at frame start, then reset.
 scrollDeltaAccumulator: Vec2,
 /// Stable snapshot of scroll delta for the current frame.
 scrollDelta: Vec2,
-/// Currently-held keys, sampled at frame start. Read via `keysHeld()` or
-/// `isKeyDown(key)`. Updated inside `frame()` by polling the window.
+/// Currently-held keys, sampled at frame start
 keysHeldSnapshot: Keys = .{},
 /// Keys that transitioned to down between the previous frame and this one.
 /// Returned by `on(.keyDown)`.
@@ -240,7 +239,12 @@ viewportSize: Vec2,
 images: std.StringHashMap(ImageType),
 fonts: std.StringHashMap(Font),
 
-pub fn init(allocator: std.mem.Allocator, io: std.Io, window: ?*Window, renderer: *Graphics.Renderer) !void {
+pub fn init(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    eventQueue: *EventQueue,
+    renderer: *Graphics.Renderer,
+) !void {
     if (forbear != null) {
         return error.AlreadyInitialized;
     }
@@ -260,7 +264,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, window: ?*Window, renderer
         .previousFrameNodeMeasurements = undefined,
 
         .renderer = renderer,
-        .window = window,
+        .eventQueue = eventQueue,
 
         .startTime = timestampSeconds(io),
         .deltaTime = null,
@@ -939,13 +943,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.frameCounter +%= 1;
     self.frameMeta = meta;
 
-    // No window means headless (e.g. benchmarks): there is no event queue to
-    // drain, so skip straight to returning the frame-end handle. The per-frame
-    // input/scroll resets above still run unconditionally.
-    if (self.window == null) return &frameEnd;
-    const window = self.window.?;
-
-    var eventIterator = window.eventQueue.iterate();
+    var eventIterator = self.eventQueue.iterate();
     while (eventIterator.next()) |event| {
         switch (event) {
             .input => |input| {

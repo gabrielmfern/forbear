@@ -12,7 +12,7 @@ const c = @import("c");
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const countTreeSize = layouting.countTreeSize;
-const Window = @import("platform.zig").Window;
+const NativeSurface = @import("platform.zig").NativeSurface;
 const root = @import("root.zig");
 
 const LayerInterval = struct {
@@ -529,7 +529,7 @@ extern "user32" fn GetCurrentProcess() callconv(.c) HANDLE;
 
 pub fn initRenderer(
     self: *Graphics,
-    window: *const Window,
+    nativeSurface: *const NativeSurface,
 ) !Renderer {
     var vulkanSurface: c.VkSurfaceKHR = undefined;
     switch (builtin.os.tag) {
@@ -540,23 +540,21 @@ pub fn initRenderer(
                     .sType = c.VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
                     .pNext = null,
                     .flags = 0,
-                    .display = window.wlDisplay,
-                    .surface = window.wlSurface,
+                    .display = nativeSurface.display,
+                    .surface = nativeSurface.surface,
                 },
                 null,
                 &vulkanSurface,
             ));
         },
         .macos => {
-            const caMetalLayer = window.nativeMetalLayer();
-            if (caMetalLayer == null) return error.NullNativeView;
             try ensureNoError(c.vkCreateMetalSurfaceEXT(
                 self.vulkanInstance,
                 &c.VkMetalSurfaceCreateInfoEXT{
                     .sType = c.VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
                     .pNext = null,
                     .flags = 0,
-                    .pLayer = caMetalLayer,
+                    .pLayer = nativeSurface.layer,
                 },
                 null,
                 &vulkanSurface,
@@ -569,8 +567,8 @@ pub fn initRenderer(
                     .sType = c.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
                     .pNext = null,
                     .flags = 0,
-                    .hinstance = window.hInstance,
-                    .hwnd = window.handle,
+                    .hinstance = nativeSurface.hinstance,
+                    .hwnd = nativeSurface.hwnd,
                 },
                 null,
                 &vulkanSurface,
@@ -581,7 +579,7 @@ pub fn initRenderer(
     std.debug.assert(vulkanSurface != null);
     errdefer c.vkDestroySurfaceKHR(self.vulkanInstance, vulkanSurface, null);
 
-    return try Renderer.init(vulkanSurface, window, self);
+    return try Renderer.init(vulkanSurface, nativeSurface, self);
 }
 
 fn findMemoryType(
@@ -3198,7 +3196,7 @@ pub const Renderer = struct {
     presentationQueueFamilyIndex: u32,
 
     surface: c.VkSurfaceKHR,
-    window: *const Window,
+    nativeSurface: *const NativeSurface,
     swapchain: Swapchain,
 
     elementsPipeline: ElementsPipeline,
@@ -3238,8 +3236,8 @@ pub const Renderer = struct {
                     .sType = c.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
                     .pNext = null,
                     .flags = 0,
-                    .hinstance = self.window.hInstance,
-                    .hwnd = self.window.handle,
+                    .hinstance = self.nativeSurface.hInstance,
+                    .hwnd = self.nativeSurface.handle,
                 },
                 null,
                 &self.surface,
@@ -3331,7 +3329,7 @@ pub const Renderer = struct {
 
     fn init(
         surface: c.VkSurfaceKHR,
-        window: *const Window,
+        nativeSurface: *const NativeSurface,
         graphics: *const Graphics,
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
@@ -3563,8 +3561,8 @@ pub const Renderer = struct {
             physicalDevice,
             logicalDevice,
             surface,
-            window.width,
-            window.height,
+            nativeSurface.width,
+            nativeSurface.height,
             null,
         );
         errdefer swapchain.deinit(logicalDevice);
@@ -3694,7 +3692,7 @@ pub const Renderer = struct {
         return Renderer{
             .allocator = graphics.allocator,
             .graphics = graphics,
-            .window = window,
+            .nativeSurface = nativeSurface,
             .mutex = std.Io.Mutex.init,
 
             .physicalDevice = physicalDevice,

@@ -127,11 +127,21 @@ pub const Keys = packed struct {
     }
 };
 
+pub const NativeSurface = switch (builtin.os.tag) {
+    .linux => struct { display: *c.wl_display, surface: *c.wl_surface },
+    .macos => struct { layer: *c.CAMetalLayer },
+    .windows => struct { hinstance: c.HINSTANCE, hwnd: c.HWND },
+    else => @compileError("unsupported platform: " ++ @tagName(builtin.os.tag)),
+};
+
 pub const ScrollAxis = enum(u32) {
     vertical = 0,
     horizontal = 1,
 };
 
+/// A single producer, single consumer queue that is thread-safe. It's assumed
+/// that the producer is the main thread, and that the consumer is an auxiliary
+/// thread, such as a rendering thread.
 pub const EventQueue = struct {
     buffer: [256]Event,
     head: std.atomic.Value(usize),
@@ -243,8 +253,7 @@ pub const Event = union(enum) {
     };
 };
 
-pub const Window = switch (builtin.os.tag) {
-    .linux => struct {
+pub const LinuxWindow = struct {
         const posix = std.posix;
         const os = std.os;
 
@@ -1443,901 +1452,898 @@ pub const Window = switch (builtin.os.tag) {
 
             self.allocator.destroy(self);
         }
-    },
-    .windows => struct {
-        const linuxLeftMouseButton: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
-        const buttonPressed: u32 = 1;
-        const buttonReleased: u32 = 0;
+};
 
-        handle: HWND,
-        hInstance: HINSTANCE,
+pub const WindowsWindow = struct {
+    const linuxLeftMouseButton: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
+    const buttonPressed: u32 = 1;
+    const buttonReleased: u32 = 0;
 
-        width: u32,
-        height: u32,
-        title: [:0]const u16,
-        className: [:0]const u16,
-        running: bool,
-        dpi: [2]u32,
+    handle: HWND,
+    hInstance: HINSTANCE,
 
-        /// Keyboard state. `wndProc` runs synchronously inside `DispatchMessageW`
-        /// on the event thread, so it shares a thread with `handleEvents` and needs
-        /// no lock; `handleEvents` drains these into `eventQueue` each iteration so
-        /// the render thread only ever observes pushed events.
-        keysHeld: Keys = .{},
-        pendingPressed: Keys = .{},
-        pendingReleased: Keys = .{},
-        /// A WM_CHAR carrying a UTF-16 high surrogate is held here until its paired
-        /// low-surrogate WM_CHAR arrives, so astral-plane codepoints survive.
-        pendingHighSurrogate: ?u16 = null,
+    width: u32,
+    height: u32,
+    title: [:0]const u16,
+    className: [:0]const u16,
+    running: bool,
+    dpi: [2]u32,
 
-        eventQueue: EventQueue = .empty,
+    /// Keyboard state. `wndProc` runs synchronously inside `DispatchMessageW`
+    /// on the event thread, so it shares a thread with `handleEvents` and needs
+    /// no lock; `handleEvents` drains these into `eventQueue` each iteration so
+    /// the render thread only ever observes pushed events.
+    keysHeld: Keys = .{},
+    pendingPressed: Keys = .{},
+    pendingReleased: Keys = .{},
+    /// A WM_CHAR carrying a UTF-16 high surrogate is held here until its paired
+    /// low-surrogate WM_CHAR arrives, so astral-plane codepoints survive.
+    pendingHighSurrogate: ?u16 = null,
 
+    eventQueue: EventQueue = .empty,
+
+    allocator: std.mem.Allocator,
+    io: std.Io,
+
+    const Self = @This();
+
+    fn virtualKeyToKeys(vk: WPARAM) Keys {
+        return switch (vk) {
+            0x08 => .{ .backspace = true },
+            0x09 => .{ .tab = true },
+            0x0D => .{ .enter = true },
+            0x14 => .{ .capsLock = true },
+            0x1B => .{ .escape = true },
+            0x20 => .{ .space = true },
+            0x21 => .{ .pageUp = true },
+            0x22 => .{ .pageDown = true },
+            0x23 => .{ .end = true },
+            0x24 => .{ .home = true },
+            0x25 => .{ .arrowLeft = true },
+            0x26 => .{ .arrowUp = true },
+            0x27 => .{ .arrowRight = true },
+            0x28 => .{ .arrowDown = true },
+            0x2D => .{ .insert = true },
+            0x2E => .{ .delete = true },
+            '0' => .{ .digit0 = true },
+            '1' => .{ .digit1 = true },
+            '2' => .{ .digit2 = true },
+            '3' => .{ .digit3 = true },
+            '4' => .{ .digit4 = true },
+            '5' => .{ .digit5 = true },
+            '6' => .{ .digit6 = true },
+            '7' => .{ .digit7 = true },
+            '8' => .{ .digit8 = true },
+            '9' => .{ .digit9 = true },
+            'A' => .{ .a = true },
+            'B' => .{ .b = true },
+            'C' => .{ .c = true },
+            'D' => .{ .d = true },
+            'E' => .{ .e = true },
+            'F' => .{ .f = true },
+            'G' => .{ .g = true },
+            'H' => .{ .h = true },
+            'I' => .{ .i = true },
+            'J' => .{ .j = true },
+            'K' => .{ .k = true },
+            'L' => .{ .l = true },
+            'M' => .{ .m = true },
+            'N' => .{ .n = true },
+            'O' => .{ .o = true },
+            'P' => .{ .p = true },
+            'Q' => .{ .q = true },
+            'R' => .{ .r = true },
+            'S' => .{ .s = true },
+            'T' => .{ .t = true },
+            'U' => .{ .u = true },
+            'V' => .{ .v = true },
+            'W' => .{ .w = true },
+            'X' => .{ .x = true },
+            'Y' => .{ .y = true },
+            'Z' => .{ .z = true },
+            0x5B, 0x5C => .{ .super = true },
+            0x70 => .{ .f1 = true },
+            0x71 => .{ .f2 = true },
+            0x72 => .{ .f3 = true },
+            0x73 => .{ .f4 = true },
+            0x74 => .{ .f5 = true },
+            0x75 => .{ .f6 = true },
+            0x76 => .{ .f7 = true },
+            0x77 => .{ .f8 = true },
+            0x78 => .{ .f9 = true },
+            0x79 => .{ .f10 = true },
+            0x7A => .{ .f11 = true },
+            0x7B => .{ .f12 = true },
+            // Modifier VKs (`VK_*SHIFT/CONTROL/MENU/LWIN/RWIN`) are
+            // intentionally not mapped here — `refreshModifiersFromOS`
+            // samples the OS's combined state on every key event so the
+            // collapsed `.shift/.control/.alt/.super` flags stay correct
+            // when one side is released while the other is still held.
+            else => .{},
+        };
+    }
+
+    /// Sample the OS's effective modifier state via `GetKeyState` and reconcile
+    /// it with `self.keysHeld`'s modifier bits. Whatever bits flipped this call
+    /// also get appended to `pendingPressed` / `pendingReleased` so consumers
+    /// of `onKeyDown()` / `onKeyUp()` see modifier edges as expected.
+    fn refreshModifiersFromOS(self: *Self) void {
+        const down = struct {
+            fn f(vk: c_int) bool {
+                return (GetKeyState(vk) & @as(i16, @bitCast(@as(u16, 0x8000)))) != 0;
+            }
+        }.f;
+
+        var current: Keys = .{};
+        // `VK_SHIFT/CONTROL/MENU` themselves report the OR of L/R state.
+        current.shift = down(VK_SHIFT);
+        current.control = down(VK_CONTROL);
+        current.alt = down(VK_MENU);
+        // No combined "Windows key" VK — OR the two sides explicitly.
+        current.super = down(VK_LWIN) or down(VK_RWIN);
+
+        var oldMods: Keys = .{};
+        oldMods.shift = self.keysHeld.shift;
+        oldMods.control = self.keysHeld.control;
+        oldMods.alt = self.keysHeld.alt;
+        oldMods.super = self.keysHeld.super;
+
+        self.pendingPressed = self.pendingPressed.with(current.without(oldMods));
+        self.pendingReleased = self.pendingReleased.with(oldMods.without(current));
+
+        self.keysHeld.shift = current.shift;
+        self.keysHeld.control = current.control;
+        self.keysHeld.alt = current.alt;
+        self.keysHeld.super = current.super;
+    }
+
+    pub fn init(
         allocator: std.mem.Allocator,
         io: std.Io,
+        width: u32,
+        height: u32,
+        title: [:0]const u8,
+        app_id: [:0]const u8,
+    ) !*Self {
+        const window = try allocator.create(Self);
+        errdefer allocator.destroy(window);
 
-        const Self = @This();
+        window.width = width;
+        window.height = height;
+        window.title = try std.unicode.utf8ToUtf16LeAllocZ(allocator, title);
+        errdefer allocator.free(window.title);
+        window.className = try std.unicode.utf8ToUtf16LeAllocZ(allocator, app_id);
+        errdefer allocator.free(window.className);
+        window.running = true;
 
-        fn virtualKeyToKeys(vk: WPARAM) Keys {
-            return switch (vk) {
-                0x08 => .{ .backspace = true },
-                0x09 => .{ .tab = true },
-                0x0D => .{ .enter = true },
-                0x14 => .{ .capsLock = true },
-                0x1B => .{ .escape = true },
-                0x20 => .{ .space = true },
-                0x21 => .{ .pageUp = true },
-                0x22 => .{ .pageDown = true },
-                0x23 => .{ .end = true },
-                0x24 => .{ .home = true },
-                0x25 => .{ .arrowLeft = true },
-                0x26 => .{ .arrowUp = true },
-                0x27 => .{ .arrowRight = true },
-                0x28 => .{ .arrowDown = true },
-                0x2D => .{ .insert = true },
-                0x2E => .{ .delete = true },
-                '0' => .{ .digit0 = true },
-                '1' => .{ .digit1 = true },
-                '2' => .{ .digit2 = true },
-                '3' => .{ .digit3 = true },
-                '4' => .{ .digit4 = true },
-                '5' => .{ .digit5 = true },
-                '6' => .{ .digit6 = true },
-                '7' => .{ .digit7 = true },
-                '8' => .{ .digit8 = true },
-                '9' => .{ .digit9 = true },
-                'A' => .{ .a = true },
-                'B' => .{ .b = true },
-                'C' => .{ .c = true },
-                'D' => .{ .d = true },
-                'E' => .{ .e = true },
-                'F' => .{ .f = true },
-                'G' => .{ .g = true },
-                'H' => .{ .h = true },
-                'I' => .{ .i = true },
-                'J' => .{ .j = true },
-                'K' => .{ .k = true },
-                'L' => .{ .l = true },
-                'M' => .{ .m = true },
-                'N' => .{ .n = true },
-                'O' => .{ .o = true },
-                'P' => .{ .p = true },
-                'Q' => .{ .q = true },
-                'R' => .{ .r = true },
-                'S' => .{ .s = true },
-                'T' => .{ .t = true },
-                'U' => .{ .u = true },
-                'V' => .{ .v = true },
-                'W' => .{ .w = true },
-                'X' => .{ .x = true },
-                'Y' => .{ .y = true },
-                'Z' => .{ .z = true },
-                0x5B, 0x5C => .{ .super = true },
-                0x70 => .{ .f1 = true },
-                0x71 => .{ .f2 = true },
-                0x72 => .{ .f3 = true },
-                0x73 => .{ .f4 = true },
-                0x74 => .{ .f5 = true },
-                0x75 => .{ .f6 = true },
-                0x76 => .{ .f7 = true },
-                0x77 => .{ .f8 = true },
-                0x78 => .{ .f9 = true },
-                0x79 => .{ .f10 = true },
-                0x7A => .{ .f11 = true },
-                0x7B => .{ .f12 = true },
-                // Modifier VKs (`VK_*SHIFT/CONTROL/MENU/LWIN/RWIN`) are
-                // intentionally not mapped here — `refreshModifiersFromOS`
-                // samples the OS's combined state on every key event so the
-                // collapsed `.shift/.control/.alt/.super` flags stay correct
-                // when one side is released while the other is still held.
-                else => .{},
-            };
+        window.keysHeld = .{};
+        window.pendingPressed = .{};
+        window.pendingReleased = .{};
+        window.pendingHighSurrogate = null;
+        window.eventQueue = .empty;
+
+        window.allocator = allocator;
+        window.io = io;
+
+        window.hInstance = GetModuleHandleW(null);
+        if (window.hInstance == null) {
+            return error.CouldNotFindHInstance;
         }
 
-        /// Sample the OS's effective modifier state via `GetKeyState` and reconcile
-        /// it with `self.keysHeld`'s modifier bits. Whatever bits flipped this call
-        /// also get appended to `pendingPressed` / `pendingReleased` so consumers
-        /// of `onKeyDown()` / `onKeyUp()` see modifier edges as expected.
-        fn refreshModifiersFromOS(self: *Self) void {
-            const down = struct {
-                fn f(vk: c_int) bool {
-                    return (GetKeyState(vk) & @as(i16, @bitCast(@as(u16, 0x8000)))) != 0;
-                }
-            }.f;
+        const windowClass = WNDCLASSEXW{
+            .hInstance = window.hInstance,
+            .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
+            .lpfnWndProc = wndProc,
+            .hCursor = LoadCursorW(null, IDC_ARROW),
+            .lpszClassName = window.className.ptr,
+        };
 
-            var current: Keys = .{};
-            // `VK_SHIFT/CONTROL/MENU` themselves report the OR of L/R state.
-            current.shift = down(VK_SHIFT);
-            current.control = down(VK_CONTROL);
-            current.alt = down(VK_MENU);
-            // No combined "Windows key" VK — OR the two sides explicitly.
-            current.super = down(VK_LWIN) or down(VK_RWIN);
-
-            var oldMods: Keys = .{};
-            oldMods.shift = self.keysHeld.shift;
-            oldMods.control = self.keysHeld.control;
-            oldMods.alt = self.keysHeld.alt;
-            oldMods.super = self.keysHeld.super;
-
-            self.pendingPressed = self.pendingPressed.with(current.without(oldMods));
-            self.pendingReleased = self.pendingReleased.with(oldMods.without(current));
-
-            self.keysHeld.shift = current.shift;
-            self.keysHeld.control = current.control;
-            self.keysHeld.alt = current.alt;
-            self.keysHeld.super = current.super;
+        if (RegisterClassExW(&windowClass) == 0) {
+            return error.FailedToRegisterWindowClass;
         }
 
-        pub fn init(
-            allocator: std.mem.Allocator,
-            io: std.Io,
-            width: u32,
-            height: u32,
-            title: [:0]const u8,
-            app_id: [:0]const u8,
-        ) !*Self {
-            const window = try allocator.create(Self);
-            errdefer allocator.destroy(window);
+        _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-            window.width = width;
-            window.height = height;
-            window.title = try std.unicode.utf8ToUtf16LeAllocZ(allocator, title);
-            errdefer allocator.free(window.title);
-            window.className = try std.unicode.utf8ToUtf16LeAllocZ(allocator, app_id);
-            errdefer allocator.free(window.className);
-            window.running = true;
+        var rect = RECT{ .left = 0, .top = 0, .right = @intCast(width), .bottom = @intCast(height) };
+        const style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+        _ = AdjustWindowRectEx(&rect, style, 0, 0);
 
-            window.keysHeld = .{};
-            window.pendingPressed = .{};
-            window.pendingReleased = .{};
-            window.pendingHighSurrogate = null;
-            window.eventQueue = .empty;
+        window.handle = CreateWindowExW(
+            0,
+            window.className.ptr,
+            window.title.ptr,
+            style,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
+            null,
+            null,
+            window.hInstance,
+            window,
+        ) orelse return error.FailedToCreateWindow;
 
-            window.allocator = allocator;
-            window.io = io;
+        window.updateDpi();
+        window.updateClientSize();
 
-            window.hInstance = GetModuleHandleW(null);
-            if (window.hInstance == null) {
-                return error.CouldNotFindHInstance;
-            }
+        return window;
+    }
 
-            const windowClass = WNDCLASSEXW{
-                .hInstance = window.hInstance,
-                .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
-                .lpfnWndProc = wndProc,
-                .hCursor = LoadCursorW(null, IDC_ARROW),
-                .lpszClassName = window.className.ptr,
-            };
+    fn updateDpi(self: *Self) void {
+        const dpi = GetDpiForWindow(self.handle);
+        self.dpi = .{ dpi, dpi };
+    }
 
-            if (RegisterClassExW(&windowClass) == 0) {
-                return error.FailedToRegisterWindowClass;
-            }
+    fn updateClientSize(self: *Self) void {
+        var rect: RECT = undefined;
+        if (GetClientRect(self.handle, &rect) == 0) {
+            std.log.err("failed to query window client size", .{});
+            return;
+        }
+        self.width = @intCast(rect.right - rect.left);
+        self.height = @intCast(rect.bottom - rect.top);
+    }
 
-            _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-            _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
-            var rect = RECT{ .left = 0, .top = 0, .right = @intCast(width), .bottom = @intCast(height) };
-            const style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
-            _ = AdjustWindowRectEx(&rect, style, 0, 0);
-
-            window.handle = CreateWindowExW(
-                0,
-                window.className.ptr,
-                window.title.ptr,
-                style,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                rect.right - rect.left,
-                rect.bottom - rect.top,
-                null,
-                null,
-                window.hInstance,
-                window,
-            ) orelse return error.FailedToCreateWindow;
-
-            window.updateDpi();
-            window.updateClientSize();
-
-            return window;
+    fn emitResizeIfNeeded(self: *Self, hwnd: HWND, force: bool) void {
+        var rect: RECT = undefined;
+        if (GetClientRect(hwnd, &rect) == 0) {
+            std.log.err("failed to get new window size, ignoring event", .{});
+            return;
         }
 
-        fn updateDpi(self: *Self) void {
-            const dpi = GetDpiForWindow(self.handle);
-            self.dpi = .{ dpi, dpi };
-        }
+        const newWidth: u32 = @intCast(rect.right - rect.left);
+        const newHeight: u32 = @intCast(rect.bottom - rect.top);
 
-        fn updateClientSize(self: *Self) void {
-            var rect: RECT = undefined;
-            if (GetClientRect(self.handle, &rect) == 0) {
-                std.log.err("failed to query window client size", .{});
-                return;
-            }
-            self.width = @intCast(rect.right - rect.left);
-            self.height = @intCast(rect.bottom - rect.top);
-        }
-
-        fn emitResizeIfNeeded(self: *Self, hwnd: HWND, force: bool) void {
-            var rect: RECT = undefined;
-            if (GetClientRect(hwnd, &rect) == 0) {
-                std.log.err("failed to get new window size, ignoring event", .{});
-                return;
-            }
-
-            const newWidth: u32 = @intCast(rect.right - rect.left);
-            const newHeight: u32 = @intCast(rect.bottom - rect.top);
-
-            if (force or self.width != newWidth or self.height != newHeight) {
-                self.width = newWidth;
-                self.height = newHeight;
-                self.eventQueue.push(Event{ .resize = .{
-                    .width = self.width,
-                    .height = self.height,
-                    .dpi = self.dpi,
-                } });
-            }
-        }
-
-        pub fn deinit(self: *Self) void {
-            _ = DestroyWindow(self.handle);
-            _ = UnregisterClassW(self.className.ptr, self.hInstance);
-            self.allocator.free(self.className);
-            self.allocator.free(self.title);
-            self.allocator.destroy(self);
-        }
-
-        /// Decode a WM_CHAR code unit into a `.input` event, joining UTF-16
-        /// surrogate pairs (which arrive as two consecutive WM_CHARs) and dropping
-        /// control codepoints — those reach the app through `Keys` instead.
-        fn handleChar(self: *Self, wParam: WPARAM, lParam: LPARAM) void {
-            const codeUnit: u16 = @truncate(wParam);
-
-            const codepoint: u21 = blk: {
-                if (codeUnit >= 0xD800 and codeUnit <= 0xDBFF) {
-                    self.pendingHighSurrogate = codeUnit;
-                    return;
-                } else if (codeUnit >= 0xDC00 and codeUnit <= 0xDFFF) {
-                    const high = self.pendingHighSurrogate orelse return;
-                    self.pendingHighSurrogate = null;
-                    break :blk 0x10000 +
-                        (@as(u21, high - 0xD800) << 10) +
-                        (codeUnit - 0xDC00);
-                } else {
-                    self.pendingHighSurrogate = null;
-                    break :blk codeUnit;
-                }
-            };
-
-            // Control codepoints (C0, DEL, C1) aren't text.
-            if (codepoint < 0x20 or (codepoint >= 0x7f and codepoint <= 0x9f)) return;
-
-            var buffer: [7]u8 = undefined;
-            const length = std.unicode.utf8Encode(codepoint, &buffer) catch return;
-
-            // lParam bits 0..15 are the OS auto-repeat count, so a held key coalesces
-            // into a single event carrying its repeat multiplier.
-            const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
-            const repeats: usize = @max(1, lp & 0xFFFF);
-
-            self.eventQueue.push(Event{ .input = .{
-                .characterBuffer = buffer,
-                .characterLength = length,
-                .repeats = repeats,
+        if (force or self.width != newWidth or self.height != newHeight) {
+            self.width = newWidth;
+            self.height = newHeight;
+            self.eventQueue.push(Event{ .resize = .{
+                .width = self.width,
+                .height = self.height,
+                .dpi = self.dpi,
             } });
         }
+    }
 
-        fn wndProc(hwnd: HWND, message: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT {
-            // Handle WM_NCCREATE to store the window pointer
-            if (message == WM_NCCREATE) {
-                const createStruct: *CREATESTRUCTW = @ptrFromInt(@as(usize, @bitCast(lParam)));
-                const window: *Self = @ptrCast(@alignCast(createStruct.lpCreateParams));
-                _ = SetWindowLongPtrW(hwnd, GWLP_USERDATA, @bitCast(@intFromPtr(window)));
-                return DefWindowProcW(hwnd, message, wParam, lParam);
+    pub fn deinit(self: *Self) void {
+        _ = DestroyWindow(self.handle);
+        _ = UnregisterClassW(self.className.ptr, self.hInstance);
+        self.allocator.free(self.className);
+        self.allocator.free(self.title);
+        self.allocator.destroy(self);
+    }
+
+    /// Decode a WM_CHAR code unit into a `.input` event, joining UTF-16
+    /// surrogate pairs (which arrive as two consecutive WM_CHARs) and dropping
+    /// control codepoints — those reach the app through `Keys` instead.
+    fn handleChar(self: *Self, wParam: WPARAM, lParam: LPARAM) void {
+        const codeUnit: u16 = @truncate(wParam);
+
+        const codepoint: u21 = blk: {
+            if (codeUnit >= 0xD800 and codeUnit <= 0xDBFF) {
+                self.pendingHighSurrogate = codeUnit;
+                return;
+            } else if (codeUnit >= 0xDC00 and codeUnit <= 0xDFFF) {
+                const high = self.pendingHighSurrogate orelse return;
+                self.pendingHighSurrogate = null;
+                break :blk 0x10000 +
+                    (@as(u21, high - 0xD800) << 10) +
+                    (codeUnit - 0xDC00);
+            } else {
+                self.pendingHighSurrogate = null;
+                break :blk codeUnit;
             }
+        };
 
-            // Retrieve the window pointer for all other messages
-            const window: ?*Self = blk: {
-                const ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-                break :blk if (ptr == 0) null else @ptrFromInt(@as(usize, @bitCast(ptr)));
-            };
+        // Control codepoints (C0, DEL, C1) aren't text.
+        if (codepoint < 0x20 or (codepoint >= 0x7f and codepoint <= 0x9f)) return;
 
-            switch (message) {
-                WM_WINDOWPOSCHANGED => {
-                    if (window) |self| {
-                        const windowpos: *WINDOWPOS = @ptrFromInt(@as(usize, @intCast(lParam)));
-                        if ((windowpos.flags & SWP_NOSIZE) == 0) {
-                            self.emitResizeIfNeeded(hwnd, false);
-                        }
-                    }
-                },
-                WM_MOUSEMOVE => {
-                    if (window) |self| {
-                        const mouseX: u16 = @truncate(@as(u32, @intCast(lParam)));
-                        const mouseY: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
-                        self.eventQueue.push(Event{ .pointerMotion = .{
-                            .time = 0,
-                            .x = @floatFromInt(mouseX),
-                            .y = @floatFromInt(mouseY),
-                        } });
-                    }
-                },
-                WM_LBUTTONDOWN => {
-                    if (window) |self| {
-                        self.eventQueue.push(Event{ .pointerButton = .{
-                            .serial = 0,
-                            .time = 0,
-                            .button = linuxLeftMouseButton,
-                            .state = buttonPressed,
-                        } });
-                    }
-                },
-                WM_LBUTTONUP => {
-                    if (window) |self| {
-                        self.eventQueue.push(Event{ .pointerButton = .{
-                            .serial = 0,
-                            .time = 0,
-                            .button = linuxLeftMouseButton,
-                            .state = buttonReleased,
-                        } });
-                    }
-                },
-                WM_MOUSEWHEEL => {
-                    if (window) |self| {
-                        // this value is positive when going up and negative going down
-                        // see https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mousewheel
-                        const offset: i16 = @bitCast(@as(u16, @truncate(wParam >> 16)));
-                        self.eventQueue.push(Event{ .scroll = .{
-                            .axis = .vertical,
-                            .offset = @floatFromInt(-1 * offset),
-                        } });
-                    }
-                },
-                WM_CHAR => {
-                    if (window) |self| self.handleChar(wParam, lParam);
-                },
-                WM_KEYDOWN => {
-                    if (window) |self| {
-                        // lParam bit 30 is "previous key state": 1 = OS repeat,
-                        // 0 = fresh press. Only fresh presses flip the edge bit.
-                        // Coalesce count (bits 0..15) and scan code (bits 16..23)
-                        // are intentionally ignored.
-                        const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
-                        const wasAlreadyDown: bool = (lp & (1 << 30)) != 0;
-                        const key = virtualKeyToKeys(wParam);
+        var buffer: [7]u8 = undefined;
+        const length = std.unicode.utf8Encode(codepoint, &buffer) catch return;
 
-                        if (!wasAlreadyDown) {
-                            self.pendingPressed = self.pendingPressed.with(key);
-                            self.keysHeld = self.keysHeld.with(key);
-                        }
-                        refreshModifiersFromOS(self);
-                    }
-                },
-                WM_KEYUP => {
-                    if (window) |self| {
-                        const key = virtualKeyToKeys(wParam);
-                        self.pendingReleased = self.pendingReleased.with(key);
-                        self.keysHeld = self.keysHeld.without(key);
-                        refreshModifiersFromOS(self);
-                    }
-                },
-                WM_DPICHANGED => {
-                    if (window) |self| {
-                        const previousDpi = self.dpi;
-                        const wParam32: u32 = @truncate(wParam);
-                        const dpiX: u16 = @truncate(wParam32);
-                        const dpiY: u16 = @truncate(wParam32 >> 16);
-                        self.dpi = .{ @intCast(dpiX), @intCast(dpiY) };
+        // lParam bits 0..15 are the OS auto-repeat count, so a held key coalesces
+        // into a single event carrying its repeat multiplier.
+        const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
+        const repeats: usize = @max(1, lp & 0xFFFF);
 
-                        const suggestedRect: *const RECT = @ptrFromInt(@as(usize, @bitCast(lParam)));
-                        _ = SetWindowPos(
-                            hwnd,
-                            null,
-                            @intCast(suggestedRect.left),
-                            @intCast(suggestedRect.top),
-                            @intCast(suggestedRect.right - suggestedRect.left),
-                            @intCast(suggestedRect.bottom - suggestedRect.top),
-                            SWP_NOZORDER | SWP_NOACTIVATE,
-                        );
+        self.eventQueue.push(Event{ .input = .{
+            .characterBuffer = buffer,
+            .characterLength = length,
+            .repeats = repeats,
+        } });
+    }
 
-                        const dpiChanged = self.dpi[0] != previousDpi[0] or self.dpi[1] != previousDpi[1];
-                        self.emitResizeIfNeeded(hwnd, dpiChanged);
-                    }
-                },
-                WM_DESTROY => {
-                    if (window) |self| {
-                        self.running = false;
-                    }
-                },
-                WM_CLOSE => {
-                    if (window) |self| {
-                        self.running = false;
-                    }
-                },
-                WM_ACTIVATEAPP => {
-                    std.log.debug("activate app", .{});
-                },
-                else => {
-                    return DefWindowProcW(hwnd, message, wParam, lParam);
-                },
-            }
-
-            return 0;
+    fn wndProc(hwnd: HWND, message: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT {
+        // Handle WM_NCCREATE to store the window pointer
+        if (message == WM_NCCREATE) {
+            const createStruct: *CREATESTRUCTW = @ptrFromInt(@as(usize, @bitCast(lParam)));
+            const window: *Self = @ptrCast(@alignCast(createStruct.lpCreateParams));
+            _ = SetWindowLongPtrW(hwnd, GWLP_USERDATA, @bitCast(@intFromPtr(window)));
+            return DefWindowProcW(hwnd, message, wParam, lParam);
         }
 
-        pub fn targetFrameTimeNs(self: *const Self) u64 {
-            const fallback60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
+        // Retrieve the window pointer for all other messages
+        const window: ?*Self = blk: {
+            const ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+            break :blk if (ptr == 0) null else @ptrFromInt(@as(usize, @bitCast(ptr)));
+        };
 
-            // Get the monitor that contains most of this window
-            const monitor = MonitorFromWindow(self.handle, MONITOR_DEFAULTTONEAREST);
-            if (monitor == null) {
-                return fallback60hz;
-            }
+        switch (message) {
+            WM_WINDOWPOSCHANGED => {
+                if (window) |self| {
+                    const windowpos: *WINDOWPOS = @ptrFromInt(@as(usize, @intCast(lParam)));
+                    if ((windowpos.flags & SWP_NOSIZE) == 0) {
+                        self.emitResizeIfNeeded(hwnd, false);
+                    }
+                }
+            },
+            WM_MOUSEMOVE => {
+                if (window) |self| {
+                    const mouseX: u16 = @truncate(@as(u32, @intCast(lParam)));
+                    const mouseY: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
+                    self.eventQueue.push(Event{ .pointerMotion = .{
+                        .time = 0,
+                        .x = @floatFromInt(mouseX),
+                        .y = @floatFromInt(mouseY),
+                    } });
+                }
+            },
+            WM_LBUTTONDOWN => {
+                if (window) |self| {
+                    self.eventQueue.push(Event{ .pointerButton = .{
+                        .serial = 0,
+                        .time = 0,
+                        .button = linuxLeftMouseButton,
+                        .state = buttonPressed,
+                    } });
+                }
+            },
+            WM_LBUTTONUP => {
+                if (window) |self| {
+                    self.eventQueue.push(Event{ .pointerButton = .{
+                        .serial = 0,
+                        .time = 0,
+                        .button = linuxLeftMouseButton,
+                        .state = buttonReleased,
+                    } });
+                }
+            },
+            WM_MOUSEWHEEL => {
+                if (window) |self| {
+                    // this value is positive when going up and negative going down
+                    // see https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mousewheel
+                    const offset: i16 = @bitCast(@as(u16, @truncate(wParam >> 16)));
+                    self.eventQueue.push(Event{ .scroll = .{
+                        .axis = .vertical,
+                        .offset = @floatFromInt(-1 * offset),
+                    } });
+                }
+            },
+            WM_CHAR => {
+                if (window) |self| self.handleChar(wParam, lParam);
+            },
+            WM_KEYDOWN => {
+                if (window) |self| {
+                    // lParam bit 30 is "previous key state": 1 = OS repeat,
+                    // 0 = fresh press. Only fresh presses flip the edge bit.
+                    // Coalesce count (bits 0..15) and scan code (bits 16..23)
+                    // are intentionally ignored.
+                    const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
+                    const wasAlreadyDown: bool = (lp & (1 << 30)) != 0;
+                    const key = virtualKeyToKeys(wParam);
 
-            // Get monitor info to retrieve the device name
-            var monitorInfo: MONITORINFOEXW = .{};
-            if (GetMonitorInfoW(monitor, &monitorInfo) == 0) {
-                return fallback60hz;
-            }
+                    if (!wasAlreadyDown) {
+                        self.pendingPressed = self.pendingPressed.with(key);
+                        self.keysHeld = self.keysHeld.with(key);
+                    }
+                    refreshModifiersFromOS(self);
+                }
+            },
+            WM_KEYUP => {
+                if (window) |self| {
+                    const key = virtualKeyToKeys(wParam);
+                    self.pendingReleased = self.pendingReleased.with(key);
+                    self.keysHeld = self.keysHeld.without(key);
+                    refreshModifiersFromOS(self);
+                }
+            },
+            WM_DPICHANGED => {
+                if (window) |self| {
+                    const previousDpi = self.dpi;
+                    const wParam32: u32 = @truncate(wParam);
+                    const dpiX: u16 = @truncate(wParam32);
+                    const dpiY: u16 = @truncate(wParam32 >> 16);
+                    self.dpi = .{ @intCast(dpiX), @intCast(dpiY) };
 
-            // Get current display settings for this monitor
-            var devMode: DEVMODEW = .{};
-            if (EnumDisplaySettingsW(@ptrCast(&monitorInfo.szDevice), ENUM_CURRENT_SETTINGS, &devMode) == 0) {
-                return fallback60hz;
-            }
+                    const suggestedRect: *const RECT = @ptrFromInt(@as(usize, @bitCast(lParam)));
+                    _ = SetWindowPos(
+                        hwnd,
+                        null,
+                        @intCast(suggestedRect.left),
+                        @intCast(suggestedRect.top),
+                        @intCast(suggestedRect.right - suggestedRect.left),
+                        @intCast(suggestedRect.bottom - suggestedRect.top),
+                        SWP_NOZORDER | SWP_NOACTIVATE,
+                    );
 
-            const refreshRate = devMode.dmDisplayFrequency;
-            if (refreshRate == 0 or refreshRate == 1) {
-                // 0 or 1 means default/unknown
-                return fallback60hz;
-            }
-
-            return @divTrunc(1_000_000_000, @as(u64, refreshRate));
-        }
-
-        pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
-            _ = self;
-            _ = serial;
-
-            const nativeCursor = switch (cursor) {
-                .default => LoadCursorW(null, IDC_ARROW),
-                .text => LoadCursorW(null, IDC_IBEAM),
-                .pointer => LoadCursorW(null, IDC_HAND),
-            } orelse return error.FailedToLoadCursor;
-
-            _ = SetCursor(nativeCursor);
-        }
-
-        pub fn handleEvents(self: *Self) !void {
-            while (self.running) {
-                var message: MSG = undefined;
-                // `TranslateMessage` turns WM_KEYDOWN into WM_CHAR for text input;
-                // `DispatchMessageW` then calls `wndProc` synchronously on this
-                // thread, which is the sole producer pushing onto `eventQueue`.
-                const result = GetMessageW(&message, null, 0, 0);
-                if (result == 0) {
-                    // WM_QUIT
+                    const dpiChanged = self.dpi[0] != previousDpi[0] or self.dpi[1] != previousDpi[1];
+                    self.emitResizeIfNeeded(hwnd, dpiChanged);
+                }
+            },
+            WM_DESTROY => {
+                if (window) |self| {
                     self.running = false;
-                    break;
                 }
-                if (result == -1) {
-                    return error.FailedToGetMessage;
+            },
+            WM_CLOSE => {
+                if (window) |self| {
+                    self.running = false;
                 }
-                _ = TranslateMessage(&message);
-                _ = DispatchMessageW(&message);
-
-                // Mirror the keyboard edges accumulated by `wndProc` into the queue,
-                // matching the Linux backend's per-iteration snapshot.
-                if (!self.keysHeld.isEmpty()) {
-                    self.eventQueue.push(Event{ .keysHeld = self.keysHeld });
-                }
-                if (!self.pendingPressed.isEmpty()) {
-                    self.eventQueue.push(Event{ .keysPressed = self.pendingPressed });
-                    self.pendingPressed = .{};
-                }
-                if (!self.pendingReleased.isEmpty()) {
-                    self.eventQueue.push(Event{ .keysReleased = self.pendingReleased });
-                    self.pendingReleased = .{};
-                }
-            }
+            },
+            WM_ACTIVATEAPP => {
+                std.log.debug("activate app", .{});
+            },
+            else => {
+                return DefWindowProcW(hwnd, message, wParam, lParam);
+            },
         }
 
-        // Manual Windows API declarations to avoid @cImport macro translation issues
-        // This provides clean Zig bindings for the Windows APIs needed for windowing
-        // Basic Windows types
-        const BOOL = c_int;
-        const WORD = u16;
-        const DWORD = u32;
-        const UINT = c_uint;
-        const INT = c_int;
-        const LONG = c_long;
-        const LONG_PTR = isize;
-        const UINT_PTR = usize;
-        const SIZE_T = usize;
-        const ATOM = WORD;
+        return 0;
+    }
 
-        const LPVOID = ?*anyopaque;
-        const LPCVOID = ?*const anyopaque;
-        const LPWSTR = [*:0]u16;
-        const LPCWSTR = [*:0]const u16;
+    pub fn targetFrameTimeNs(self: *const Self) u64 {
+        const fallback60hz: u64 = 16_666_667; // ~60 Hz in nanoseconds
 
-        const HANDLE = *anyopaque;
-        const HWND = ?HANDLE;
-        const HINSTANCE = ?HANDLE;
-        const HMODULE = ?HANDLE;
-        const HICON = ?HANDLE;
-        const HCURSOR = ?HANDLE;
-        const HBRUSH = ?HANDLE;
-        const HMENU = ?HANDLE;
-        const HDC = ?HANDLE;
+        // Get the monitor that contains most of this window
+        const monitor = MonitorFromWindow(self.handle, MONITOR_DEFAULTTONEAREST);
+        if (monitor == null) {
+            return fallback60hz;
+        }
 
-        const WPARAM = UINT_PTR;
-        const LPARAM = LONG_PTR;
-        const LRESULT = LONG_PTR;
+        // Get monitor info to retrieve the device name
+        var monitorInfo: MONITORINFOEXW = .{};
+        if (GetMonitorInfoW(monitor, &monitorInfo) == 0) {
+            return fallback60hz;
+        }
 
-        // Window procedure callback type
-        const WNDPROC = *const fn (hwnd: HWND, msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT;
+        // Get current display settings for this monitor
+        var devMode: DEVMODEW = .{};
+        if (EnumDisplaySettingsW(@ptrCast(&monitorInfo.szDevice), ENUM_CURRENT_SETTINGS, &devMode) == 0) {
+            return fallback60hz;
+        }
 
-        // WNDCLASSEXW structure
-        const WNDCLASSEXW = extern struct {
-            cbSize: UINT = @sizeOf(WNDCLASSEXW),
-            style: UINT = 0,
-            lpfnWndProc: WNDPROC,
-            cbClsExtra: INT = 0,
-            cbWndExtra: INT = 0,
-            hInstance: HINSTANCE = null,
-            hIcon: HICON = null,
-            hCursor: HCURSOR = null,
-            hbrBackground: HBRUSH = null,
-            lpszMenuName: ?LPCWSTR = null,
-            lpszClassName: LPCWSTR,
-            hIconSm: HICON = null,
-        };
+        const refreshRate = devMode.dmDisplayFrequency;
+        if (refreshRate == 0 or refreshRate == 1) {
+            // 0 or 1 means default/unknown
+            return fallback60hz;
+        }
 
-        const WINDOWPOS = extern struct {
-            hwnd: HWND = null,
-            hwndInsertAfter: HWND = null,
-            x: INT = 0,
-            y: INT = 0,
-            cx: INT = 0,
-            cy: INT = 0,
-            flags: UINT = 0,
-        };
+        return @divTrunc(1_000_000_000, @as(u64, refreshRate));
+    }
 
-        // RECT structure
-        const RECT = extern struct {
-            left: LONG = 0,
-            top: LONG = 0,
-            right: LONG = 0,
-            bottom: LONG = 0,
-        };
+    pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
+        _ = self;
+        _ = serial;
 
-        // POINT structure
-        const POINT = extern struct {
-            x: LONG = 0,
-            y: LONG = 0,
-        };
+        const nativeCursor = switch (cursor) {
+            .default => LoadCursorW(null, IDC_ARROW),
+            .text => LoadCursorW(null, IDC_IBEAM),
+            .pointer => LoadCursorW(null, IDC_HAND),
+        } orelse return error.FailedToLoadCursor;
 
-        // MSG structure
-        const MSG = extern struct {
-            hwnd: HWND = null,
-            message: UINT = 0,
-            wParam: WPARAM = 0,
-            lParam: LPARAM = 0,
-            time: DWORD = 0,
-            pt: POINT = .{},
-        };
+        _ = SetCursor(nativeCursor);
+    }
 
-        // Window styles
-        const WS_OVERLAPPED: DWORD = 0x00000000;
-        const WS_POPUP: DWORD = 0x80000000;
-        const WS_CHILD: DWORD = 0x40000000;
-        const WS_MINIMIZE: DWORD = 0x20000000;
-        const WS_VISIBLE: DWORD = 0x10000000;
-        const WS_DISABLED: DWORD = 0x08000000;
-        const WS_CLIPSIBLINGS: DWORD = 0x04000000;
-        const WS_CLIPCHILDREN: DWORD = 0x02000000;
-        const WS_MAXIMIZE: DWORD = 0x01000000;
-        const WS_CAPTION: DWORD = 0x00C00000;
-        const WS_BORDER: DWORD = 0x00800000;
-        const WS_DLGFRAME: DWORD = 0x00400000;
-        const WS_VSCROLL: DWORD = 0x00200000;
-        const WS_HSCROLL: DWORD = 0x00100000;
-        const WS_SYSMENU: DWORD = 0x00080000;
-        const WS_THICKFRAME: DWORD = 0x00040000;
-        const WS_GROUP: DWORD = 0x00020000;
-        const WS_TABSTOP: DWORD = 0x00010000;
-        const WS_MINIMIZEBOX: DWORD = 0x00020000;
-        const WS_MAXIMIZEBOX: DWORD = 0x00010000;
-        const WS_OVERLAPPEDWINDOW: DWORD = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+    pub fn handleEvents(self: *Self) !void {
+        while (self.running) {
+            var message: MSG = undefined;
+            // `TranslateMessage` turns WM_KEYDOWN into WM_CHAR for text input;
+            // `DispatchMessageW` then calls `wndProc` synchronously on this
+            // thread, which is the sole producer pushing onto `eventQueue`.
+            const result = GetMessageW(&message, null, 0, 0);
+            if (result == 0) {
+                // WM_QUIT
+                self.running = false;
+                break;
+            }
+            if (result == -1) {
+                return error.FailedToGetMessage;
+            }
+            _ = TranslateMessage(&message);
+            _ = DispatchMessageW(&message);
 
-        // Class styles
-        const CS_VREDRAW: UINT = 0x0001;
-        const CS_HREDRAW: UINT = 0x0002;
-        const CS_DBLCLKS: UINT = 0x0008;
-        const CS_OWNDC: UINT = 0x0020;
-        const CS_CLASSDC: UINT = 0x0040;
-        const CS_PARENTDC: UINT = 0x0080;
-        const CS_NOCLOSE: UINT = 0x0200;
-        const CS_SAVEBITS: UINT = 0x0800;
-        const CS_BYTEALIGNCLIENT: UINT = 0x1000;
-        const CS_BYTEALIGNWINDOW: UINT = 0x2000;
-        const CS_GLOBALCLASS: UINT = 0x4000;
+            // Mirror the keyboard edges accumulated by `wndProc` into the queue,
+            // matching the Linux backend's per-iteration snapshot.
+            if (!self.keysHeld.isEmpty()) {
+                self.eventQueue.push(Event{ .keysHeld = self.keysHeld });
+            }
+            if (!self.pendingPressed.isEmpty()) {
+                self.eventQueue.push(Event{ .keysPressed = self.pendingPressed });
+                self.pendingPressed = .{};
+            }
+            if (!self.pendingReleased.isEmpty()) {
+                self.eventQueue.push(Event{ .keysReleased = self.pendingReleased });
+                self.pendingReleased = .{};
+            }
+        }
+    }
 
-        // Window messages
-        const WM_NULL: UINT = 0x0000;
-        const WM_NCCREATE: UINT = 0x0081;
-        const WM_CREATE: UINT = 0x0001;
-        const WM_DESTROY: UINT = 0x0002;
-        const WM_DPICHANGED: UINT = 0x02E0;
-        const WM_WINDOWPOSCHANGED: UINT = 0x0047;
-        const WM_MOVE: UINT = 0x0003;
-        const WM_SIZE: UINT = 0x0005;
-        const WM_EXITSIZEMOVE: UINT = 0x0232;
-        const WM_ENTERSIZEMOVE: UINT = 0x0231;
-        const WM_SIZING: UINT = 0x0214;
-        const WM_ACTIVATE: UINT = 0x0006;
-        const WM_SETFOCUS: UINT = 0x0007;
-        const WM_KILLFOCUS: UINT = 0x0008;
-        const WM_ENABLE: UINT = 0x000A;
-        const WM_SETREDRAW: UINT = 0x000B;
-        const WM_SETTEXT: UINT = 0x000C;
-        const WM_GETTEXT: UINT = 0x000D;
-        const WM_GETTEXTLENGTH: UINT = 0x000E;
-        const WM_PAINT: UINT = 0x000F;
-        const WM_CLOSE: UINT = 0x0010;
-        const WM_QUIT: UINT = 0x0012;
-        const WM_ACTIVATEAPP: UINT = 0x001C;
-        const WM_KEYDOWN: UINT = 0x0100;
-        const WM_KEYUP: UINT = 0x0101;
-        const WM_CHAR: UINT = 0x0102;
-        const WM_SYSKEYDOWN: UINT = 0x0104;
-        const WM_SYSKEYUP: UINT = 0x0105;
-        const WM_SYSCHAR: UINT = 0x0106;
-        const WM_MOUSEMOVE: UINT = 0x0200;
-        const WM_LBUTTONDOWN: UINT = 0x0201;
-        const WM_LBUTTONUP: UINT = 0x0202;
-        const WM_LBUTTONDBLCLK: UINT = 0x0203;
-        const WM_RBUTTONDOWN: UINT = 0x0204;
-        const WM_RBUTTONUP: UINT = 0x0205;
-        const WM_RBUTTONDBLCLK: UINT = 0x0206;
-        const WM_MBUTTONDOWN: UINT = 0x0207;
-        const WM_MBUTTONUP: UINT = 0x0208;
-        const WM_MBUTTONDBLCLK: UINT = 0x0209;
-        const WM_MOUSEWHEEL: UINT = 0x020A;
+    // Manual Windows API declarations to avoid @cImport macro translation issues
+    // This provides clean Zig bindings for the Windows APIs needed for windowing
+    // Basic Windows types
+    const BOOL = c_int;
+    const WORD = u16;
+    const DWORD = u32;
+    const UINT = c_uint;
+    const INT = c_int;
+    const LONG = c_long;
+    const LONG_PTR = isize;
+    const UINT_PTR = usize;
+    const SIZE_T = usize;
+    const ATOM = WORD;
 
-        // Virtual Keycodes https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
-        const VK_SHIFT: c_int = 0x10;
-        const VK_CONTROL: c_int = 0x11;
-        const VK_MENU: c_int = 0x12;
-        const VK_LWIN: c_int = 0x5B;
-        const VK_RWIN: c_int = 0x5C;
+    const LPVOID = ?*anyopaque;
+    const LPCVOID = ?*const anyopaque;
+    const LPWSTR = [*:0]u16;
+    const LPCWSTR = [*:0]const u16;
 
-        /// `GetKeyState(vk)` returns the keyboard state for the calling thread:
-        /// high bit set = key currently down. For `VK_SHIFT/VK_CONTROL/VK_MENU`,
-        /// the result is the OR of the corresponding L/R keys — exactly what we
-        /// need to keep a collapsed `.shift/.control/.alt` flag correct when one
-        /// side is released while the other is still held.
-        extern "user32" fn GetKeyState(nVirtKey: c_int) callconv(.winapi) i16;
+    const HANDLE = *anyopaque;
+    const HWND = ?HANDLE;
+    const HINSTANCE = ?HANDLE;
+    const HMODULE = ?HANDLE;
+    const HICON = ?HANDLE;
+    const HCURSOR = ?HANDLE;
+    const HBRUSH = ?HANDLE;
+    const HMENU = ?HANDLE;
+    const HDC = ?HANDLE;
 
-        // CW_USEDEFAULT
-        const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
+    const WPARAM = UINT_PTR;
+    const LPARAM = LONG_PTR;
+    const LRESULT = LONG_PTR;
 
-        // Standard cursor IDs (these are resource IDs cast to pointers)
-        const IDC_ARROW: ?*const anyopaque = @ptrFromInt(32512);
-        const IDC_IBEAM: ?*const anyopaque = @ptrFromInt(32513);
-        const IDC_WAIT: ?*const anyopaque = @ptrFromInt(32514);
-        const IDC_CROSS: ?*const anyopaque = @ptrFromInt(32515);
-        const IDC_UPARROW: ?*const anyopaque = @ptrFromInt(32516);
-        const IDC_SIZE: ?*const anyopaque = @ptrFromInt(32640);
-        const IDC_ICON: ?*const anyopaque = @ptrFromInt(32641);
-        const IDC_SIZENWSE: ?*const anyopaque = @ptrFromInt(32642);
-        const IDC_SIZENESW: ?*const anyopaque = @ptrFromInt(32643);
-        const IDC_SIZEWE: ?*const anyopaque = @ptrFromInt(32644);
-        const IDC_SIZENS: ?*const anyopaque = @ptrFromInt(32645);
-        const IDC_SIZEALL: ?*const anyopaque = @ptrFromInt(32646);
-        const IDC_NO: ?*const anyopaque = @ptrFromInt(32648);
-        const IDC_HAND: ?*const anyopaque = @ptrFromInt(32649);
-        const IDC_APPSTARTING: ?*const anyopaque = @ptrFromInt(32650);
-        const IDC_HELP: ?*const anyopaque = @ptrFromInt(32651);
+    // Window procedure callback type
+    const WNDPROC = *const fn (hwnd: HWND, msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT;
 
-        // PeekMessage flags
-        const PM_NOREMOVE: UINT = 0x0000;
-        const PM_REMOVE: UINT = 0x0001;
-        const PM_NOYIELD: UINT = 0x0002;
+    // WNDCLASSEXW structure
+    const WNDCLASSEXW = extern struct {
+        cbSize: UINT = @sizeOf(WNDCLASSEXW),
+        style: UINT = 0,
+        lpfnWndProc: WNDPROC,
+        cbClsExtra: INT = 0,
+        cbWndExtra: INT = 0,
+        hInstance: HINSTANCE = null,
+        hIcon: HICON = null,
+        hCursor: HCURSOR = null,
+        hbrBackground: HBRUSH = null,
+        lpszMenuName: ?LPCWSTR = null,
+        lpszClassName: LPCWSTR,
+        hIconSm: HICON = null,
+    };
 
-        // ShowWindow commands
-        const SW_HIDE: c_int = 0;
-        const SW_SHOWNORMAL: c_int = 1;
-        const SW_SHOW: c_int = 5;
-        const SW_MINIMIZE: c_int = 6;
-        const SW_MAXIMIZE: c_int = 3;
-        const SW_RESTORE: c_int = 9;
+    const WINDOWPOS = extern struct {
+        hwnd: HWND = null,
+        hwndInsertAfter: HWND = null,
+        x: INT = 0,
+        y: INT = 0,
+        cx: INT = 0,
+        cy: INT = 0,
+        flags: UINT = 0,
+    };
 
-        // WINDOWPOS flags
-        const SWP_DRAWFRAME = 0x0020;
-        const SWP_FRAMECHANGED = 0x0020;
-        const SWP_HIDEWINDOW = 0x0080;
-        const SWP_NOACTIVATE = 0x0010;
-        const SWP_NOCOPYBITS = 0x0100;
-        const SWP_NOMOVE = 0x0002;
-        const SWP_NOOWNERZORDER = 0x0200;
-        const SWP_NOREDRAW = 0x0008;
-        const SWP_NOREPOSITION = 0x0200;
-        const SWP_NOSENDCHANGING = 0x0400;
-        const SWP_NOSIZE = 0x0001;
-        const SWP_NOZORDER = 0x0004;
-        const SWP_SHOWWINDOW = 0x0040;
+    // RECT structure
+    const RECT = extern struct {
+        left: LONG = 0,
+        top: LONG = 0,
+        right: LONG = 0,
+        bottom: LONG = 0,
+    };
 
-        // External function declarations
-        extern "kernel32" fn GetModuleHandleW(lpModuleName: ?LPCWSTR) callconv(.c) HMODULE;
-        extern "kernel32" fn GetLastError() callconv(.c) DWORD;
+    // POINT structure
+    const POINT = extern struct {
+        x: LONG = 0,
+        y: LONG = 0,
+    };
 
-        extern "user32" fn RegisterClassExW(lpWndClass: *const WNDCLASSEXW) callconv(.c) ATOM;
-        extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: HINSTANCE) callconv(.c) BOOL;
+    // MSG structure
+    const MSG = extern struct {
+        hwnd: HWND = null,
+        message: UINT = 0,
+        wParam: WPARAM = 0,
+        lParam: LPARAM = 0,
+        time: DWORD = 0,
+        pt: POINT = .{},
+    };
 
-        extern "user32" fn CreateWindowExW(
-            dwExStyle: DWORD,
-            lpClassName: LPCWSTR,
-            lpWindowName: LPCWSTR,
-            dwStyle: DWORD,
-            x: c_int,
-            y: c_int,
-            nWidth: c_int,
-            nHeight: c_int,
-            hWndParent: HWND,
-            hMenu: HMENU,
-            hInstance: HINSTANCE,
-            lpParam: LPVOID,
-        ) callconv(.c) HWND;
+    // Window styles
+    const WS_OVERLAPPED: DWORD = 0x00000000;
+    const WS_POPUP: DWORD = 0x80000000;
+    const WS_CHILD: DWORD = 0x40000000;
+    const WS_MINIMIZE: DWORD = 0x20000000;
+    const WS_VISIBLE: DWORD = 0x10000000;
+    const WS_DISABLED: DWORD = 0x08000000;
+    const WS_CLIPSIBLINGS: DWORD = 0x04000000;
+    const WS_CLIPCHILDREN: DWORD = 0x02000000;
+    const WS_MAXIMIZE: DWORD = 0x01000000;
+    const WS_CAPTION: DWORD = 0x00C00000;
+    const WS_BORDER: DWORD = 0x00800000;
+    const WS_DLGFRAME: DWORD = 0x00400000;
+    const WS_VSCROLL: DWORD = 0x00200000;
+    const WS_HSCROLL: DWORD = 0x00100000;
+    const WS_SYSMENU: DWORD = 0x00080000;
+    const WS_THICKFRAME: DWORD = 0x00040000;
+    const WS_GROUP: DWORD = 0x00020000;
+    const WS_TABSTOP: DWORD = 0x00010000;
+    const WS_MINIMIZEBOX: DWORD = 0x00020000;
+    const WS_MAXIMIZEBOX: DWORD = 0x00010000;
+    const WS_OVERLAPPEDWINDOW: DWORD = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
 
-        extern "user32" fn DestroyWindow(hWnd: HWND) callconv(.c) BOOL;
-        extern "user32" fn ShowWindow(hWnd: HWND, nCmdShow: c_int) callconv(.c) BOOL;
-        extern "user32" fn UpdateWindow(hWnd: HWND) callconv(.c) BOOL;
+    // Class styles
+    const CS_VREDRAW: UINT = 0x0001;
+    const CS_HREDRAW: UINT = 0x0002;
+    const CS_DBLCLKS: UINT = 0x0008;
+    const CS_OWNDC: UINT = 0x0020;
+    const CS_CLASSDC: UINT = 0x0040;
+    const CS_PARENTDC: UINT = 0x0080;
+    const CS_NOCLOSE: UINT = 0x0200;
+    const CS_SAVEBITS: UINT = 0x0800;
+    const CS_BYTEALIGNCLIENT: UINT = 0x1000;
+    const CS_BYTEALIGNWINDOW: UINT = 0x2000;
+    const CS_GLOBALCLASS: UINT = 0x4000;
 
-        extern "user32" fn DefWindowProcW(hWnd: HWND, msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT;
+    // Window messages
+    const WM_NULL: UINT = 0x0000;
+    const WM_NCCREATE: UINT = 0x0081;
+    const WM_CREATE: UINT = 0x0001;
+    const WM_DESTROY: UINT = 0x0002;
+    const WM_DPICHANGED: UINT = 0x02E0;
+    const WM_WINDOWPOSCHANGED: UINT = 0x0047;
+    const WM_MOVE: UINT = 0x0003;
+    const WM_SIZE: UINT = 0x0005;
+    const WM_EXITSIZEMOVE: UINT = 0x0232;
+    const WM_ENTERSIZEMOVE: UINT = 0x0231;
+    const WM_SIZING: UINT = 0x0214;
+    const WM_ACTIVATE: UINT = 0x0006;
+    const WM_SETFOCUS: UINT = 0x0007;
+    const WM_KILLFOCUS: UINT = 0x0008;
+    const WM_ENABLE: UINT = 0x000A;
+    const WM_SETREDRAW: UINT = 0x000B;
+    const WM_SETTEXT: UINT = 0x000C;
+    const WM_GETTEXT: UINT = 0x000D;
+    const WM_GETTEXTLENGTH: UINT = 0x000E;
+    const WM_PAINT: UINT = 0x000F;
+    const WM_CLOSE: UINT = 0x0010;
+    const WM_QUIT: UINT = 0x0012;
+    const WM_ACTIVATEAPP: UINT = 0x001C;
+    const WM_KEYDOWN: UINT = 0x0100;
+    const WM_KEYUP: UINT = 0x0101;
+    const WM_CHAR: UINT = 0x0102;
+    const WM_SYSKEYDOWN: UINT = 0x0104;
+    const WM_SYSKEYUP: UINT = 0x0105;
+    const WM_SYSCHAR: UINT = 0x0106;
+    const WM_MOUSEMOVE: UINT = 0x0200;
+    const WM_LBUTTONDOWN: UINT = 0x0201;
+    const WM_LBUTTONUP: UINT = 0x0202;
+    const WM_LBUTTONDBLCLK: UINT = 0x0203;
+    const WM_RBUTTONDOWN: UINT = 0x0204;
+    const WM_RBUTTONUP: UINT = 0x0205;
+    const WM_RBUTTONDBLCLK: UINT = 0x0206;
+    const WM_MBUTTONDOWN: UINT = 0x0207;
+    const WM_MBUTTONUP: UINT = 0x0208;
+    const WM_MBUTTONDBLCLK: UINT = 0x0209;
+    const WM_MOUSEWHEEL: UINT = 0x020A;
 
-        extern "user32" fn GetMessageW(lpMsg: *MSG, hWnd: HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT) callconv(.c) BOOL;
-        extern "user32" fn PeekMessageW(lpMsg: *MSG, hWnd: HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT, wRemoveMsg: UINT) callconv(.c) BOOL;
-        extern "user32" fn TranslateMessage(lpMsg: *const MSG) callconv(.c) BOOL;
-        extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(.c) LRESULT;
-        extern "user32" fn PostQuitMessage(nExitCode: c_int) callconv(.c) void;
+    // Virtual Keycodes https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+    const VK_SHIFT: c_int = 0x10;
+    const VK_CONTROL: c_int = 0x11;
+    const VK_MENU: c_int = 0x12;
+    const VK_LWIN: c_int = 0x5B;
+    const VK_RWIN: c_int = 0x5C;
 
-        extern "user32" fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: ?*const anyopaque) callconv(.c) HCURSOR;
-        extern "user32" fn SetCursor(hCursor: HCURSOR) callconv(.c) HCURSOR;
+    /// `GetKeyState(vk)` returns the keyboard state for the calling thread:
+    /// high bit set = key currently down. For `VK_SHIFT/VK_CONTROL/VK_MENU`,
+    /// the result is the OR of the corresponding L/R keys — exactly what we
+    /// need to keep a collapsed `.shift/.control/.alt` flag correct when one
+    /// side is released while the other is still held.
+    extern "user32" fn GetKeyState(nVirtKey: c_int) callconv(.winapi) i16;
 
-        extern "user32" fn AdjustWindowRectEx(lpRect: *RECT, dwStyle: DWORD, bMenu: BOOL, dwExStyle: DWORD) callconv(.c) BOOL;
-        extern "user32" fn SetWindowPos(
-            hWnd: HWND,
-            hWndInsertAfter: HWND,
-            X: c_int,
-            Y: c_int,
-            cx: c_int,
-            cy: c_int,
-            uFlags: UINT,
-        ) callconv(.c) BOOL;
-        extern "user32" fn GetClientRect(hWnd: HWND, lpRect: *RECT) callconv(.c) BOOL;
-        extern "user32" fn GetWindowRect(hWnd: HWND, lpRect: *RECT) callconv(.c) BOOL;
+    // CW_USEDEFAULT
+    const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
 
-        extern "user32" fn SetWindowTextW(hWnd: HWND, lpString: LPCWSTR) callconv(.c) BOOL;
-        extern "user32" fn GetWindowTextW(hWnd: HWND, lpString: LPWSTR, nMaxCount: c_int) callconv(.c) c_int;
+    // Standard cursor IDs (these are resource IDs cast to pointers)
+    const IDC_ARROW: ?*const anyopaque = @ptrFromInt(32512);
+    const IDC_IBEAM: ?*const anyopaque = @ptrFromInt(32513);
+    const IDC_WAIT: ?*const anyopaque = @ptrFromInt(32514);
+    const IDC_CROSS: ?*const anyopaque = @ptrFromInt(32515);
+    const IDC_UPARROW: ?*const anyopaque = @ptrFromInt(32516);
+    const IDC_SIZE: ?*const anyopaque = @ptrFromInt(32640);
+    const IDC_ICON: ?*const anyopaque = @ptrFromInt(32641);
+    const IDC_SIZENWSE: ?*const anyopaque = @ptrFromInt(32642);
+    const IDC_SIZENESW: ?*const anyopaque = @ptrFromInt(32643);
+    const IDC_SIZEWE: ?*const anyopaque = @ptrFromInt(32644);
+    const IDC_SIZENS: ?*const anyopaque = @ptrFromInt(32645);
+    const IDC_SIZEALL: ?*const anyopaque = @ptrFromInt(32646);
+    const IDC_NO: ?*const anyopaque = @ptrFromInt(32648);
+    const IDC_HAND: ?*const anyopaque = @ptrFromInt(32649);
+    const IDC_APPSTARTING: ?*const anyopaque = @ptrFromInt(32650);
+    const IDC_HELP: ?*const anyopaque = @ptrFromInt(32651);
 
-        extern "user32" fn InvalidateRect(hWnd: HWND, lpRect: ?*const RECT, bErase: BOOL) callconv(.c) BOOL;
+    // PeekMessage flags
+    const PM_NOREMOVE: UINT = 0x0000;
+    const PM_REMOVE: UINT = 0x0001;
+    const PM_NOYIELD: UINT = 0x0002;
 
-        extern "user32" fn GetDC(hWnd: HWND) callconv(.c) HDC;
-        extern "user32" fn ReleaseDC(hWnd: HWND, hDC: HDC) callconv(.c) c_int;
+    // ShowWindow commands
+    const SW_HIDE: c_int = 0;
+    const SW_SHOWNORMAL: c_int = 1;
+    const SW_SHOW: c_int = 5;
+    const SW_MINIMIZE: c_int = 6;
+    const SW_MAXIMIZE: c_int = 3;
+    const SW_RESTORE: c_int = 9;
 
-        // DPI awareness
-        const DPI_AWARENESS_CONTEXT = ?HANDLE;
-        const DPI_AWARENESS_CONTEXT_UNAWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))));
-        const DPI_AWARENESS_CONTEXT_SYSTEM_AWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -2))));
-        const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -3))));
-        const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -4))));
-        const DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -5))));
+    // WINDOWPOS flags
+    const SWP_DRAWFRAME = 0x0020;
+    const SWP_FRAMECHANGED = 0x0020;
+    const SWP_HIDEWINDOW = 0x0080;
+    const SWP_NOACTIVATE = 0x0010;
+    const SWP_NOCOPYBITS = 0x0100;
+    const SWP_NOMOVE = 0x0002;
+    const SWP_NOOWNERZORDER = 0x0200;
+    const SWP_NOREDRAW = 0x0008;
+    const SWP_NOREPOSITION = 0x0200;
+    const SWP_NOSENDCHANGING = 0x0400;
+    const SWP_NOSIZE = 0x0001;
+    const SWP_NOZORDER = 0x0004;
+    const SWP_SHOWWINDOW = 0x0040;
 
-        extern "user32" fn GetDpiForWindow(hwnd: HWND) callconv(.c) UINT;
-        extern "user32" fn SetThreadDpiAwarenessContext(dpiContext: DPI_AWARENESS_CONTEXT) callconv(.c) DPI_AWARENESS_CONTEXT;
-        extern "user32" fn SetProcessDpiAwarenessContext(value: DPI_AWARENESS_CONTEXT) callconv(.c) BOOL;
+    // External function declarations
+    extern "kernel32" fn GetModuleHandleW(lpModuleName: ?LPCWSTR) callconv(.c) HMODULE;
+    extern "kernel32" fn GetLastError() callconv(.c) DWORD;
 
-        // Window long ptr indices
-        const GWLP_WNDPROC: c_int = -4;
-        const GWLP_HINSTANCE: c_int = -6;
-        const GWLP_HWNDPARENT: c_int = -8;
-        const GWLP_USERDATA: c_int = -21;
-        const GWLP_ID: c_int = -12;
+    extern "user32" fn RegisterClassExW(lpWndClass: *const WNDCLASSEXW) callconv(.c) ATOM;
+    extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: HINSTANCE) callconv(.c) BOOL;
 
-        extern "user32" fn SetWindowLongPtrW(hWnd: HWND, nIndex: c_int, dwNewLong: LONG_PTR) callconv(.c) LONG_PTR;
-        extern "user32" fn GetWindowLongPtrW(hWnd: HWND, nIndex: c_int) callconv(.c) LONG_PTR;
+    extern "user32" fn CreateWindowExW(
+        dwExStyle: DWORD,
+        lpClassName: LPCWSTR,
+        lpWindowName: LPCWSTR,
+        dwStyle: DWORD,
+        x: c_int,
+        y: c_int,
+        nWidth: c_int,
+        nHeight: c_int,
+        hWndParent: HWND,
+        hMenu: HMENU,
+        hInstance: HINSTANCE,
+        lpParam: LPVOID,
+    ) callconv(.c) HWND;
 
-        // CREATESTRUCT for WM_CREATE/WM_NCCREATE
-        const CREATESTRUCTW = extern struct {
-            lpCreateParams: LPVOID,
-            hInstance: HINSTANCE,
-            hMenu: HMENU,
-            hwndParent: HWND,
-            cy: c_int,
-            cx: c_int,
-            y: c_int,
-            x: c_int,
-            style: LONG,
-            lpszName: ?LPCWSTR,
-            lpszClass: ?LPCWSTR,
-            dwExStyle: DWORD,
-        };
+    extern "user32" fn DestroyWindow(hWnd: HWND) callconv(.c) BOOL;
+    extern "user32" fn ShowWindow(hWnd: HWND, nCmdShow: c_int) callconv(.c) BOOL;
+    extern "user32" fn UpdateWindow(hWnd: HWND) callconv(.c) BOOL;
 
-        // Monitor functions
-        const HMONITOR = ?HANDLE;
+    extern "user32" fn DefWindowProcW(hWnd: HWND, msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT;
 
-        const MONITOR_DEFAULTTONULL: DWORD = 0x00000000;
-        const MONITOR_DEFAULTTOPRIMARY: DWORD = 0x00000001;
-        const MONITOR_DEFAULTTONEAREST: DWORD = 0x00000002;
+    extern "user32" fn GetMessageW(lpMsg: *MSG, hWnd: HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT) callconv(.c) BOOL;
+    extern "user32" fn PeekMessageW(lpMsg: *MSG, hWnd: HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT, wRemoveMsg: UINT) callconv(.c) BOOL;
+    extern "user32" fn TranslateMessage(lpMsg: *const MSG) callconv(.c) BOOL;
+    extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(.c) LRESULT;
+    extern "user32" fn PostQuitMessage(nExitCode: c_int) callconv(.c) void;
 
-        const MONITORINFOEXW = extern struct {
-            cbSize: DWORD = @sizeOf(MONITORINFOEXW),
-            rcMonitor: RECT = .{},
-            rcWork: RECT = .{},
-            dwFlags: DWORD = 0,
-            szDevice: [32]u16 = [_]u16{0} ** 32,
-        };
+    extern "user32" fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: ?*const anyopaque) callconv(.c) HCURSOR;
+    extern "user32" fn SetCursor(hCursor: HCURSOR) callconv(.c) HCURSOR;
 
-        const DEVMODEW = extern struct {
-            dmDeviceName: [32]u16 = [_]u16{0} ** 32,
-            dmSpecVersion: WORD = 0,
-            dmDriverVersion: WORD = 0,
-            dmSize: WORD = @sizeOf(DEVMODEW),
-            dmDriverExtra: WORD = 0,
-            dmFields: DWORD = 0,
-            // Union of POINTL/display settings - using anonymous struct for display settings
-            dmPosition: POINT = .{},
-            dmDisplayOrientation: DWORD = 0,
-            dmDisplayFixedOutput: DWORD = 0,
-            dmColor: i16 = 0,
-            dmDuplex: i16 = 0,
-            dmYResolution: i16 = 0,
-            dmTTOption: i16 = 0,
-            dmCollate: i16 = 0,
-            dmFormName: [32]u16 = [_]u16{0} ** 32,
-            dmLogPixels: WORD = 0,
-            dmBitsPerPel: DWORD = 0,
-            dmPelsWidth: DWORD = 0,
-            dmPelsHeight: DWORD = 0,
-            dmDisplayFlags: DWORD = 0,
-            dmDisplayFrequency: DWORD = 0,
-            dmICMMethod: DWORD = 0,
-            dmICMIntent: DWORD = 0,
-            dmMediaType: DWORD = 0,
-            dmDitherType: DWORD = 0,
-            dmReserved1: DWORD = 0,
-            dmReserved2: DWORD = 0,
-            dmPanningWidth: DWORD = 0,
-            dmPanningHeight: DWORD = 0,
-        };
+    extern "user32" fn AdjustWindowRectEx(lpRect: *RECT, dwStyle: DWORD, bMenu: BOOL, dwExStyle: DWORD) callconv(.c) BOOL;
+    extern "user32" fn SetWindowPos(
+        hWnd: HWND,
+        hWndInsertAfter: HWND,
+        X: c_int,
+        Y: c_int,
+        cx: c_int,
+        cy: c_int,
+        uFlags: UINT,
+    ) callconv(.c) BOOL;
+    extern "user32" fn GetClientRect(hWnd: HWND, lpRect: *RECT) callconv(.c) BOOL;
+    extern "user32" fn GetWindowRect(hWnd: HWND, lpRect: *RECT) callconv(.c) BOOL;
 
-        const ENUM_CURRENT_SETTINGS: DWORD = 0xFFFFFFFF;
+    extern "user32" fn SetWindowTextW(hWnd: HWND, lpString: LPCWSTR) callconv(.c) BOOL;
+    extern "user32" fn GetWindowTextW(hWnd: HWND, lpString: LPWSTR, nMaxCount: c_int) callconv(.c) c_int;
 
-        extern "user32" fn MonitorFromWindow(hwnd: HWND, dwFlags: DWORD) callconv(.c) HMONITOR;
-        extern "user32" fn GetMonitorInfoW(hMonitor: HMONITOR, lpmi: *MONITORINFOEXW) callconv(.c) BOOL;
-        extern "user32" fn EnumDisplaySettingsW(lpszDeviceName: [*:0]const u16, iModeNum: DWORD, lpDevMode: *DEVMODEW) callconv(.c) BOOL;
-    },
-    .macos => {
-        fn init() void {}
-    },
-    else => @compileError("unsupported platform: " ++ @tagName(builtin.os.tag)),
+    extern "user32" fn InvalidateRect(hWnd: HWND, lpRect: ?*const RECT, bErase: BOOL) callconv(.c) BOOL;
+
+    extern "user32" fn GetDC(hWnd: HWND) callconv(.c) HDC;
+    extern "user32" fn ReleaseDC(hWnd: HWND, hDC: HDC) callconv(.c) c_int;
+
+    // DPI awareness
+    const DPI_AWARENESS_CONTEXT = ?HANDLE;
+    const DPI_AWARENESS_CONTEXT_UNAWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))));
+    const DPI_AWARENESS_CONTEXT_SYSTEM_AWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -2))));
+    const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -3))));
+    const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -4))));
+    const DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED: DPI_AWARENESS_CONTEXT = @ptrFromInt(@as(usize, @bitCast(@as(isize, -5))));
+
+    extern "user32" fn GetDpiForWindow(hwnd: HWND) callconv(.c) UINT;
+    extern "user32" fn SetThreadDpiAwarenessContext(dpiContext: DPI_AWARENESS_CONTEXT) callconv(.c) DPI_AWARENESS_CONTEXT;
+    extern "user32" fn SetProcessDpiAwarenessContext(value: DPI_AWARENESS_CONTEXT) callconv(.c) BOOL;
+
+    // Window long ptr indices
+    const GWLP_WNDPROC: c_int = -4;
+    const GWLP_HINSTANCE: c_int = -6;
+    const GWLP_HWNDPARENT: c_int = -8;
+    const GWLP_USERDATA: c_int = -21;
+    const GWLP_ID: c_int = -12;
+
+    extern "user32" fn SetWindowLongPtrW(hWnd: HWND, nIndex: c_int, dwNewLong: LONG_PTR) callconv(.c) LONG_PTR;
+    extern "user32" fn GetWindowLongPtrW(hWnd: HWND, nIndex: c_int) callconv(.c) LONG_PTR;
+
+    // CREATESTRUCT for WM_CREATE/WM_NCCREATE
+    const CREATESTRUCTW = extern struct {
+        lpCreateParams: LPVOID,
+        hInstance: HINSTANCE,
+        hMenu: HMENU,
+        hwndParent: HWND,
+        cy: c_int,
+        cx: c_int,
+        y: c_int,
+        x: c_int,
+        style: LONG,
+        lpszName: ?LPCWSTR,
+        lpszClass: ?LPCWSTR,
+        dwExStyle: DWORD,
+    };
+
+    // Monitor functions
+    const HMONITOR = ?HANDLE;
+
+    const MONITOR_DEFAULTTONULL: DWORD = 0x00000000;
+    const MONITOR_DEFAULTTOPRIMARY: DWORD = 0x00000001;
+    const MONITOR_DEFAULTTONEAREST: DWORD = 0x00000002;
+
+    const MONITORINFOEXW = extern struct {
+        cbSize: DWORD = @sizeOf(MONITORINFOEXW),
+        rcMonitor: RECT = .{},
+        rcWork: RECT = .{},
+        dwFlags: DWORD = 0,
+        szDevice: [32]u16 = [_]u16{0} ** 32,
+    };
+
+    const DEVMODEW = extern struct {
+        dmDeviceName: [32]u16 = [_]u16{0} ** 32,
+        dmSpecVersion: WORD = 0,
+        dmDriverVersion: WORD = 0,
+        dmSize: WORD = @sizeOf(DEVMODEW),
+        dmDriverExtra: WORD = 0,
+        dmFields: DWORD = 0,
+        // Union of POINTL/display settings - using anonymous struct for display settings
+        dmPosition: POINT = .{},
+        dmDisplayOrientation: DWORD = 0,
+        dmDisplayFixedOutput: DWORD = 0,
+        dmColor: i16 = 0,
+        dmDuplex: i16 = 0,
+        dmYResolution: i16 = 0,
+        dmTTOption: i16 = 0,
+        dmCollate: i16 = 0,
+        dmFormName: [32]u16 = [_]u16{0} ** 32,
+        dmLogPixels: WORD = 0,
+        dmBitsPerPel: DWORD = 0,
+        dmPelsWidth: DWORD = 0,
+        dmPelsHeight: DWORD = 0,
+        dmDisplayFlags: DWORD = 0,
+        dmDisplayFrequency: DWORD = 0,
+        dmICMMethod: DWORD = 0,
+        dmICMIntent: DWORD = 0,
+        dmMediaType: DWORD = 0,
+        dmDitherType: DWORD = 0,
+        dmReserved1: DWORD = 0,
+        dmReserved2: DWORD = 0,
+        dmPanningWidth: DWORD = 0,
+        dmPanningHeight: DWORD = 0,
+    };
+
+    const ENUM_CURRENT_SETTINGS: DWORD = 0xFFFFFFFF;
+
+    extern "user32" fn MonitorFromWindow(hwnd: HWND, dwFlags: DWORD) callconv(.c) HMONITOR;
+    extern "user32" fn GetMonitorInfoW(hMonitor: HMONITOR, lpmi: *MONITORINFOEXW) callconv(.c) BOOL;
+    extern "user32" fn EnumDisplaySettingsW(lpszDeviceName: [*:0]const u16, iModeNum: DWORD, lpDevMode: *DEVMODEW) callconv(.c) BOOL;
 };
+
