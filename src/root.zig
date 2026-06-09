@@ -3,7 +3,6 @@ const builtin = @import("builtin");
 
 pub const c = @import("c");
 
-pub const Cursor = @import("platform.zig").Cursor;
 pub const Font = @import("font.zig");
 const forbearBuiltin = @import("builtin.zig");
 pub const ProfilingMetrics = forbearBuiltin.ProfilingMetrics;
