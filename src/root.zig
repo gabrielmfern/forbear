@@ -40,6 +40,7 @@ pub const CompleteTextStyle = nodeImport.CompleteTextStyle;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
 pub const Window = @import("platform.zig").Window;
+pub const EventQueue = @import("platform.zig").EventQueue;
 pub const Color = Vec4;
 
 pub var traceWriter: ?*std.Io.Writer = null;
@@ -224,10 +225,7 @@ keysReleasedThisFrame: Keys = .{},
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 
 renderer: *Graphics.Renderer,
-/// Optional so the framework can run headless (e.g. benchmarks), where there
-/// is no OS window to pull events from. When null, `frame()` skips event
-/// processing and `setCursor()` is a no-op.
-window: ?*Window,
+eventQueue: *EventQueue,
 
 /// Seconds
 startTime: f64,
@@ -1179,19 +1177,6 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;
 
-    // TODO: this does not seem to work with when I have two elements one
-    // beside the other, both have the cursor setup to something other than the
-    // one in the baseStyle here, then, I hover one of them, and move my mouse
-    // over to the other one. If the element I hovered is later on the tree,
-    // its mouseLeave will happen at the end, meaning the cursor will be set to
-    // the baseStyle cursor instead of the former element's cursor.
-    if (onMouseEnter()) {
-        setCursor(result.ptr.style.cursor);
-    }
-    if (onMouseLeave()) {
-        setCursor(baseStyle.cursor);
-    }
-
     return &elementEnd;
 }
 
@@ -1619,24 +1604,6 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
 
     try pushScope(result.ptr.key);
     defer popScope();
-
-    if (onMouseEnter()) {
-        setCursor(result.ptr.style.cursor);
-    }
-    if (onMouseLeave()) {
-        setCursor(baseStyle.cursor);
-    }
-}
-
-/// Sets the OS-level mouse cursor for the current frame. Called per-frame
-/// (typically from a `forbear.onMouseEnter()` branch) — the last call wins,
-/// so deeper/later mounted elements take precedence.
-pub fn setCursor(cursor: Cursor) void {
-    const self = getForbear();
-    const window = self.window orelse return;
-    window.setCursor(cursor, 0) catch |err| {
-        std.log.err("Failed to set cursor: {}", .{err});
-    };
 }
 
 inline fn ReturnType(comptime function: anytype) type {
