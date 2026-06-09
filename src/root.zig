@@ -38,7 +38,8 @@ pub const TextStyle = nodeImport.TextStyle;
 pub const CompleteTextStyle = nodeImport.CompleteTextStyle;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
-pub const Window = @import("platform.zig").Window;
+pub const LinuxWindow = @import("platform.zig").LinuxWindow;
+pub const WindowsWindow = @import("platform.zig").WindowsWindow;
 pub const EventQueue = @import("platform.zig").EventQueue;
 pub const Color = Vec4;
 
