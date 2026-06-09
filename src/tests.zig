@@ -8079,7 +8079,7 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
     try std.testing.expectEqual(false, focusedAfterDrop.?);
 }
 
-// window.zig EventQueue tests
+// platform.zig EventQueue tests
 
 // Mirrors the live setup in playground.zig: the Wayland event thread is the
 // sole producer pushing onto `Window.EventQueue`, and Forbear's render thread
@@ -8088,8 +8088,8 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
 // long, identifiable sequence of events while the other drains and asserts
 // each one arrives intact and in order.
 test "EventQueue: SPSC producer/consumer round-trips every event in order" {
-    const Event = @import("window.zig").Event;
-    const EventQueue = @import("window.zig").EventQueue;
+    const Event = @import("platform.zig").Event;
+    const EventQueue = @import("platform.zig").EventQueue;
 
     // "lots of events" — far more than the 256-slot ring, so the buffer wraps
     // thousands of times and the head/tail acquire-release handshake is what

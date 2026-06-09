@@ -2336,5 +2336,8 @@ pub const Window = switch (builtin.os.tag) {
         extern "user32" fn GetMonitorInfoW(hMonitor: HMONITOR, lpmi: *MONITORINFOEXW) callconv(.c) BOOL;
         extern "user32" fn EnumDisplaySettingsW(lpszDeviceName: [*:0]const u16, iModeNum: DWORD, lpDevMode: *DEVMODEW) callconv(.c) BOOL;
     },
+    .macos => {
+        fn init() void {}
+    },
     else => @compileError("unsupported platform: " ++ @tagName(builtin.os.tag)),
 };

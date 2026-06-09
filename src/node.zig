@@ -3,7 +3,7 @@ const std = @import("std");
 const forbear = @import("root.zig");
 const Font = @import("font.zig");
 const Graphics = @import("graphics.zig");
-const Cursor = @import("window.zig").Cursor;
+const Cursor = @import("platform.zig").Cursor;
 const layouting = @import("layouting.zig");
 
 const Vec4 = @Vector(4, f32);

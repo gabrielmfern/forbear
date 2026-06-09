@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 
 pub const c = @import("c");
 
-pub const Cursor = @import("window.zig").Cursor;
+pub const Cursor = @import("platform.zig").Cursor;
 pub const Font = @import("font.zig");
 const forbearBuiltin = @import("builtin.zig");
 pub const ProfilingMetrics = forbearBuiltin.ProfilingMetrics;
@@ -16,7 +16,7 @@ pub const FocusConsumes = forbearBuiltin.FocusConsumes;
 pub const EventPayload = forbearBuiltin.EventPayload;
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
-pub const Keys = @import("window.zig").Keys;
+pub const Keys = @import("platform.zig").Keys;
 const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
 const nodeImport = @import("node.zig");
@@ -39,7 +39,7 @@ pub const TextStyle = nodeImport.TextStyle;
 pub const CompleteTextStyle = nodeImport.CompleteTextStyle;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
-pub const Window = @import("window.zig").Window;
+pub const Window = @import("platform.zig").Window;
 pub const Color = Vec4;
 
 pub var traceWriter: ?*std.Io.Writer = null;

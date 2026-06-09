@@ -12,7 +12,7 @@ const c = @import("c");
 const Font = @import("font.zig");
 const layouting = @import("layouting.zig");
 const countTreeSize = layouting.countTreeSize;
-const Window = @import("window.zig").Window;
+const Window = @import("platform.zig").Window;
 const root = @import("root.zig");
 
 const LayerInterval = struct {
