@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const forbear = @import("forbear");
 
 fn CounterExample() void {
@@ -436,20 +437,31 @@ pub fn main(init: std.process.Init) !void {
     );
     defer graphics.deinit();
 
-    const window = try forbear.Window.init(
-        allocator,
-        init.io,
-        800,
-        600,
-        "forbear playground",
-        "forbear.playground",
-    );
+    const window = switch (builtin.os.tag) {
+        .linux => try forbear.Linux.Window.init(
+            allocator,
+            init.io,
+            800,
+            600,
+            "forbear playground",
+            "forbear.playground",
+        ),
+        .windows => try forbear.Windows.Window.init(
+            allocator,
+            init.io,
+            800, 
+            600,
+            "forbear playground",
+            "forbear.playground",
+        ),
+        else => @compileError("unsupported operating system"),
+    };
     defer window.deinit();
 
-    var renderer = try graphics.initRenderer(window);
+    var renderer = try graphics.initRenderer(&window.nativeSurface());
     defer renderer.deinit();
 
-    try forbear.init(allocator, init.io, window, &renderer);
+    try forbear.init(allocator, init.io, &window.eventQueue, &renderer);
     defer forbear.deinit();
 
     const renderingThread = try std.Thread.spawn(
