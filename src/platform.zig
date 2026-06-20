@@ -131,19 +131,19 @@ pub const NativeSurface = switch (builtin.os.tag) {
     .linux => struct {
         display: *c.wl_display,
         surface: *c.wl_surface,
-        width: *u32,
-        height: *u32,
+        width: *const u32,
+        height: *const u32,
     },
     .macos => struct {
         layer: *c.CAMetalLayer,
-        width: *u32,
-        height: *u32,
+        width: *const u32,
+        height: *const u32,
     },
     .windows => struct {
         hinstance: c.HINSTANCE,
         hwnd: c.HWND,
-        width: *u32,
-        height: *u32,
+        width: *const u32,
+        height: *const u32,
     },
     else => @compileError("unsupported platform: " ++ @tagName(builtin.os.tag)),
 };
