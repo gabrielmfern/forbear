@@ -4538,7 +4538,7 @@ pub const Renderer = struct {
                 }
             }
 
-            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_IMMEDIATE_KHR;
+            const presentMode: c.VkPresentModeKHR = c.VK_PRESENT_MODE_FIFO_KHR;
 
             var swapchainExtent: c.VkExtent2D = swapchainSupportDetails.capabilities.currentExtent;
             if (swapchainExtent.width == std.math.maxInt(u32)) {
