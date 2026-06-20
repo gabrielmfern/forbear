@@ -3561,8 +3561,8 @@ pub const Renderer = struct {
             physicalDevice,
             logicalDevice,
             surface,
-            nativeSurface.width,
-            nativeSurface.height,
+            nativeSurface.width.*,
+            nativeSurface.height.*,
             null,
         );
         errdefer swapchain.deinit(logicalDevice);
