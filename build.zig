@@ -43,8 +43,11 @@ const Dependencies = struct {
                 module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
             },
             .windows => {
-                const vulkanSdk = module.owner.graph.environ_map.get("VULKAN_SDK") orelse
-                    @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
+                // VULKAN_WINDOWS_SDK wins so a Linux/macOS host can cross-compile for Windows without
+                // VULKAN_SDK (which points at the host SDK) clobbering the path.
+                const env = &module.owner.graph.environ_map;
+                const vulkanSdk = env.get("VULKAN_WINDOWS_SDK") orelse env.get("VULKAN_SDK") orelse
+                    @panic("Neither VULKAN_WINDOWS_SDK nor VULKAN_SDK set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
                 module.addIncludePath(.{ .cwd_relative = module.owner.fmt("{s}/Include", .{vulkanSdk}) });
                 module.addLibraryPath(.{ .cwd_relative = module.owner.fmt("{s}/Lib", .{vulkanSdk}) });
             },
@@ -159,8 +162,8 @@ fn createForbearModule(
         },
         .macos => translateC.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" }),
         .windows => {
-            const vulkanSdk = b.graph.environ_map.get("VULKAN_SDK") orelse
-                @panic("VULKAN_SDK environment variable not set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
+            const vulkanSdk = b.graph.environ_map.get("VULKAN_WINDOWS_SDK") orelse b.graph.environ_map.get("VULKAN_SDK") orelse
+                @panic("Neither VULKAN_WINDOWS_SDK nor VULKAN_SDK set. Install the Vulkan SDK from https://vulkan.lunarg.com/");
             translateC.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/Include", .{vulkanSdk}) });
         },
         else => {},

@@ -311,7 +311,7 @@ pub const Window = switch (builtin.os.tag) {
         width: u32,
         height: u32,
         title: [:0]const u8,
-        app_id: [:0]const u8,
+        appId: [:0]const u8,
         running: bool,
         dpi: [2]u32,
 
@@ -1189,7 +1189,7 @@ pub const Window = switch (builtin.os.tag) {
             width: u32,
             height: u32,
             title: [:0]const u8,
-            app_id: [:0]const u8,
+            appId: [:0]const u8,
         ) !*Self {
             // I really dislike that we need to keep this in the heap, I feel like this
             // is an artifact from libwayland and might not really be a problem if we
@@ -1204,7 +1204,7 @@ pub const Window = switch (builtin.os.tag) {
             window.scale = 1.0;
             window.dpi = .{ 96, 96 };
             window.title = title;
-            window.app_id = app_id;
+            window.appId = appId;
             window.running = true;
 
             window.xkbContext = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse return error.FailedToCreateXkbContext;
@@ -1267,7 +1267,7 @@ pub const Window = switch (builtin.os.tag) {
                 @ptrCast(@alignCast(window)),
             );
             c.xdg_toplevel_set_title(window.xdgToplevel, title.ptr);
-            c.xdg_toplevel_set_app_id(window.xdgToplevel, app_id.ptr);
+            c.xdg_toplevel_set_app_id(window.xdgToplevel, appId.ptr);
 
             if (window.xdgDecorationManager) |manager| {
                 window.xdgToplevelDecoration = c.zxdg_decoration_manager_v1_get_toplevel_decoration(manager, window.xdgToplevel);
@@ -1593,7 +1593,7 @@ pub const Window = switch (builtin.os.tag) {
             width: u32,
             height: u32,
             title: [:0]const u8,
-            app_id: [:0]const u8,
+            className: [:0]const u8,
         ) !*Self {
             const window = try allocator.create(Self);
             errdefer allocator.destroy(window);
@@ -1602,7 +1602,7 @@ pub const Window = switch (builtin.os.tag) {
             window.height = height;
             window.title = try std.unicode.utf8ToUtf16LeAllocZ(allocator, title);
             errdefer allocator.free(window.title);
-            window.className = try std.unicode.utf8ToUtf16LeAllocZ(allocator, app_id);
+            window.className = try std.unicode.utf8ToUtf16LeAllocZ(allocator, className);
             errdefer allocator.free(window.className);
             window.running = true;
 
@@ -1688,11 +1688,13 @@ pub const Window = switch (builtin.os.tag) {
             if (force or self.width != newWidth or self.height != newHeight) {
                 self.width = newWidth;
                 self.height = newHeight;
-                self.eventQueue.push(Event{ .resize = .{
-                    .width = self.width,
-                    .height = self.height,
-                    .dpi = self.dpi,
-                } });
+                self.eventQueue.push(Event{
+                    .resize = .{
+                        .width = self.width,
+                        .height = self.height,
+                        .dpi = self.dpi,
+                    },
+                });
             }
         }
 
@@ -1772,31 +1774,37 @@ pub const Window = switch (builtin.os.tag) {
                     if (window) |self| {
                         const mouseX: u16 = @truncate(@as(u32, @intCast(lParam)));
                         const mouseY: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
-                        self.eventQueue.push(Event{ .pointerMotion = .{
-                            .time = 0,
-                            .x = @floatFromInt(mouseX),
-                            .y = @floatFromInt(mouseY),
-                        } });
+                        self.eventQueue.push(Event{
+                            .pointerMotion = .{
+                                .time = 0,
+                                .x = @floatFromInt(mouseX),
+                                .y = @floatFromInt(mouseY),
+                            },
+                        });
                     }
                 },
                 WM_LBUTTONDOWN => {
                     if (window) |self| {
-                        self.eventQueue.push(Event{ .pointerButton = .{
-                            .serial = 0,
-                            .time = 0,
-                            .button = linuxLeftMouseButton,
-                            .state = buttonPressed,
-                        } });
+                        self.eventQueue.push(Event{
+                            .pointerButton = .{
+                                .serial = 0,
+                                .time = 0,
+                                .button = linuxLeftMouseButton,
+                                .state = buttonPressed,
+                            },
+                        });
                     }
                 },
                 WM_LBUTTONUP => {
                     if (window) |self| {
-                        self.eventQueue.push(Event{ .pointerButton = .{
-                            .serial = 0,
-                            .time = 0,
-                            .button = linuxLeftMouseButton,
-                            .state = buttonReleased,
-                        } });
+                        self.eventQueue.push(Event{
+                            .pointerButton = .{
+                                .serial = 0,
+                                .time = 0,
+                                .button = linuxLeftMouseButton,
+                                .state = buttonReleased,
+                            },
+                        });
                     }
                 },
                 WM_MOUSEWHEEL => {
@@ -1804,10 +1812,12 @@ pub const Window = switch (builtin.os.tag) {
                         // this value is positive when going up and negative going down
                         // see https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mousewheel
                         const offset: i16 = @bitCast(@as(u16, @truncate(wParam >> 16)));
-                        self.eventQueue.push(Event{ .scroll = .{
-                            .axis = .vertical,
-                            .offset = @floatFromInt(-1 * offset),
-                        } });
+                        self.eventQueue.push(Event{
+                            .scroll = .{
+                                .axis = .vertical,
+                                .offset = @floatFromInt(-1 * offset),
+                            },
+                        });
                     }
                 },
                 WM_CHAR => {
