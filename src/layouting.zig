@@ -372,7 +372,7 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
                     if (index > lineStartIndex) {
                         try lines.append(arena, .{
                             .start = lineStartIndex,
-                            .end = index - 1,
+                            .end = if (index == 0) index else index - 1,
                         });
                     }
                     lineStartIndex = index;
@@ -383,7 +383,7 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
                 if (cursor[0] + glyph.advance[0] > lineEnd) {
                     try lines.append(arena, .{
                         .start = lineStartIndex,
-                        .end = index - 1,
+                        .end = if (index == 0) index else index - 1,
                     });
                     lineStartIndex = index;
                     cursor[0] = 0.0;
@@ -404,7 +404,7 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
                     if (index > lineStartIndex) {
                         try lines.append(arena, .{
                             .start = lineStartIndex,
-                            .end = index - 1,
+                            .end = if (index == 0) index else index - 1,
                         });
                     }
                     lineStartIndex = index;
