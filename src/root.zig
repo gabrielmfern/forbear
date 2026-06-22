@@ -7,6 +7,7 @@ pub const Cursor = @import("window.zig").Cursor;
 pub const Font = @import("font.zig");
 const forbearBuiltin = @import("builtin.zig");
 pub const ProfilingMetrics = forbearBuiltin.ProfilingMetrics;
+pub const ScrollingState = forbearBuiltin.ScrollingState;
 pub const useScrolling = forbearBuiltin.useScrolling;
 pub const ScrollBar = forbearBuiltin.ScrollBar;
 pub const FocusContext = forbearBuiltin.FocusContext;

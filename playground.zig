@@ -162,7 +162,9 @@ fn App() void {
             },
         })({
             forbear.FocusProvider()({
-                forbear.ScrollBar(forbear.useScrolling());
+                const scrolling = forbear.useState(forbear.ScrollingState, .{});
+                forbear.useScrolling(scrolling);
+                forbear.ScrollBar(scrolling);
 
                 forbear.element(.{
                     .style = .{
@@ -310,7 +312,9 @@ fn App() void {
                             .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
                         },
                     })({
-                        forbear.ScrollBar(forbear.useScrolling());
+                        const clipScrolling = forbear.useState(forbear.ScrollingState, .{});
+                        forbear.useScrolling(clipScrolling);
+                        forbear.ScrollBar(clipScrolling);
 
                         forbear.text("Line 1");
                         forbear.text("Line 2");
@@ -339,7 +343,9 @@ fn App() void {
                                 .padding = .all(8),
                             },
                         })({
-                            forbear.ScrollBar(forbear.useScrolling());
+                            const leftScrolling = forbear.useState(forbear.ScrollingState, .{});
+                            forbear.useScrolling(leftScrolling);
+                            forbear.ScrollBar(leftScrolling);
                             forbear.text("Left A");
                             forbear.text("Left B");
                             forbear.text("Left C");
@@ -358,7 +364,9 @@ fn App() void {
                                 .padding = .all(8),
                             },
                         })({
-                            forbear.ScrollBar(forbear.useScrolling());
+                            const rightScrolling = forbear.useState(forbear.ScrollingState, .{});
+                            forbear.useScrolling(rightScrolling);
+                            forbear.ScrollBar(rightScrolling);
                             forbear.text("Right 1");
                             forbear.text("Right 2");
                             forbear.text("Right 3");

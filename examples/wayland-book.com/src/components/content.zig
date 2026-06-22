@@ -145,9 +145,10 @@ pub fn Content(activeChapter: *usize) !void {
                     .xJustification = .center,
                 },
             })({
-                const scrollingOffset = forbear.useScrolling();
+                const scrolling = forbear.useState(forbear.ScrollingState, .{});
+                forbear.useScrolling(scrolling);
 
-                forbear.ScrollBar(scrollingOffset);
+                forbear.ScrollBar(scrolling);
 
                 const measurement = forbear.useNodeMeasurement();
 
