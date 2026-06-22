@@ -165,28 +165,25 @@ extern "psapi" fn GetProcessMemoryInfo(
     cb: DWORD,
 ) callconv(.c) BOOL;
 
-const ScrollingState = struct {
-    offset: Vec2,
-    effectiveOffset: Vec2,
-    animate: bool,
+const identity: Vec2 = @splat(0.0);
+pub const ScrollingState = struct {
+    offset: Vec2 = identity,
+    /// The animated offset, if no animation, the same as offset.
+    ///
+    /// It should not be manipulated directly.
+    _effectiveOffset: Vec2 = identity,
+    animate: bool = if (builtin.os.tag == .macos) false else true,
 };
 
-pub fn useScrolling() *ScrollingState {
+pub fn useScrolling(state: *ScrollingState) void {
     forbear.hook();
     defer forbear.hookEnd();
 
     const node = forbear.getParentNode() orelse {
         std.log.err("useScrolling must be used within a node, that's within component", .{});
         forbear.handleFrameError(error.NoParentForScrollingHook);
-        return @constCast(&std.mem.zeroes(ScrollingState));
+        return;
     };
-    const identity: Vec2 = @splat(0.0);
-
-    const state = forbear.useState(ScrollingState, .{
-        .offset = identity,
-        .effectiveOffset = identity,
-        .animate = if (builtin.os.tag == .macos) false else true,
-    });
 
     if (forbear.onScroll()) |delta| {
         state.offset += delta;
@@ -223,13 +220,12 @@ pub fn useScrolling() *ScrollingState {
         ),
     );
     if (state.animate) {
-        state.effectiveOffset = animated;
+        state._effectiveOffset = animated;
     } else {
-        state.effectiveOffset = state.offset;
+        state._effectiveOffset = state.offset;
     }
 
-    node.childrenOffset = -state.effectiveOffset;
-    return state;
+    node.childrenOffset = -state._effectiveOffset;
 }
 
 pub fn ScrollBar(state: *ScrollingState) void {
@@ -305,10 +301,10 @@ pub fn ScrollBar(state: *ScrollingState) void {
                             .placement = .{
                                 .relative = Vec2{
                                     0,
-                                    if (state.effectiveOffset[1] == 0)
+                                    if (state._effectiveOffset[1] == 0)
                                         0.0
                                     else
-                                        trackHeight * (state.effectiveOffset[1] / parentMeasurement.contentSize[1]),
+                                        trackHeight * (state._effectiveOffset[1] / parentMeasurement.contentSize[1]),
                                 },
                             },
                             .borderRadius = 6.0,

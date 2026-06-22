@@ -38,7 +38,9 @@ fn App() !void {
                 .yJustification = .start,
             },
         })({
-            forbear.ScrollBar(forbear.useScrolling());
+            const scrolling = forbear.useState(forbear.ScrollingState, .{});
+            forbear.useScrolling(scrolling);
+            forbear.ScrollBar(scrolling);
 
             forbear.ProfilingMetrics(.{});
 
