@@ -4230,10 +4230,8 @@ pub const Renderer = struct {
                     const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
 
                     self.textPipeline.glyphs.mapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
-                        // Store the glyph's pixel rect; the unit quad is scaled and
-                        // placed in the vertex shader, and the orthographic
-                        // projection is applied there via push constant. No per-glyph
-                        // matrix multiply on the CPU anymore.
+                        // Pixel rect only; the vertex shader scales the unit quad
+                        // to it and applies the projection (push constant).
                         .position = .{
                             @round(glyph.position[0] + left),
                             @round(glyph.position[1] + pixelAscent - top),
