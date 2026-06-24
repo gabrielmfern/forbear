@@ -2759,7 +2759,12 @@ const TextPipeline = struct {
     const GlyphPage = Font.LRU(c_uint, GlyphRenderingData, 256, std.hash_map.AutoContext(c_uint));
 
     const GlypRenderingShaderData = extern struct {
-        modelViewProjectionMatrix: zmath.Mat,
+        // std430 layout (must match shaders/text/vertex.vert):
+        // position @0, size @8, color @16, uvOffset @32, uvSize @40, stride 48.
+        // The orthographic projection is no longer baked per glyph; it is applied
+        // in the vertex shader via a push constant. See TextPipeline.draw.
+        position: [2]f32,
+        size: [2]f32,
         color: Vec4,
         uvOffset: [2]f32,
         uvSize: [2]f32,
@@ -2863,6 +2868,13 @@ const TextPipeline = struct {
             &descriptorSetLayout,
         ));
 
+        // The vertex shader reads the frame-constant projection matrix from a
+        // push constant rather than a baked per-glyph mat4.
+        const pushConstantRange = c.VkPushConstantRange{
+            .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+            .offset = 0,
+            .size = @sizeOf(zmath.Mat),
+        };
         var pipelineLayout: c.VkPipelineLayout = undefined;
         try ensureNoError(c.vkCreatePipelineLayout(
             logicalDevice,
@@ -2872,8 +2884,8 @@ const TextPipeline = struct {
                 .flags = 0,
                 .setLayoutCount = 1,
                 .pSetLayouts = &descriptorSetLayout,
-                .pushConstantRangeCount = 0,
-                .pPushConstantRanges = null,
+                .pushConstantRangeCount = 1,
+                .pPushConstantRanges = &pushConstantRange,
             },
             null,
             &pipelineLayout,
@@ -3111,11 +3123,21 @@ const TextPipeline = struct {
         frameIndex: usize,
         commandBuffer: c.VkCommandBuffer,
         rectangleModel: *Model,
+        projection: zmath.Mat,
     ) void {
         c.vkCmdBindPipeline(
             commandBuffer,
             c.VK_PIPELINE_BIND_POINT_GRAPHICS,
             self.graphicsPipeline,
+        );
+
+        c.vkCmdPushConstants(
+            commandBuffer,
+            self.pipelineLayout,
+            c.VK_SHADER_STAGE_VERTEX_BIT,
+            0,
+            @sizeOf(zmath.Mat),
+            @ptrCast(&projection),
         );
 
         c.vkCmdBindDescriptorSets(
@@ -4208,17 +4230,15 @@ pub const Renderer = struct {
                     const height: f32 = @floatFromInt(glyphRenderingData.bitmapHeight);
 
                     self.textPipeline.glyphs.mapped[frameIndex][glyphIndex] = TextPipeline.GlypRenderingShaderData{
-                        .modelViewProjectionMatrix = zmath.mul(
-                            zmath.mul(
-                                zmath.scaling(width, height, 1.0),
-                                zmath.translation(
-                                    @round(glyph.position[0] + left),
-                                    @round(glyph.position[1] + pixelAscent - top),
-                                    0.0,
-                                ),
-                            ),
-                            projectionMatrix,
-                        ),
+                        // Store the glyph's pixel rect; the unit quad is scaled and
+                        // placed in the vertex shader, and the orthographic
+                        // projection is applied there via push constant. No per-glyph
+                        // matrix multiply on the CPU anymore.
+                        .position = .{
+                            @round(glyph.position[0] + left),
+                            @round(glyph.position[1] + pixelAscent - top),
+                        },
+                        .size = .{ width, height },
                         .color = linearColor,
                         .uvOffset = .{
                             glyphRenderingData.textureCoordinates.u * atlasWidthInv,
@@ -4346,6 +4366,7 @@ pub const Renderer = struct {
                     frameIndex,
                     self.commandBuffers[frameIndex],
                     &self.rectangleModel,
+                    projectionMatrix,
                 ),
             }
         }
