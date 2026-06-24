@@ -443,6 +443,8 @@ pub const SpringConfig = struct {
     stiffness: f32,
     damping: f32,
     mass: f32,
+
+    current: ?*f32 = null,
 };
 
 pub fn useSpringTransition(target: f32, config: SpringConfig) f32 {
@@ -450,7 +452,7 @@ pub fn useSpringTransition(target: f32, config: SpringConfig) f32 {
     defer hookEnd();
 
     const self = getForbear();
-    const value = useState(f32, target);
+    const value = config.current orelse useState(f32, target);
     const velocity = useState(f32, 0.0);
 
     const dt: f32 = @floatCast(self.cappedDeltaTime orelse 0.0);
