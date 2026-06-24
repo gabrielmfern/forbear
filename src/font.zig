@@ -388,7 +388,13 @@ pub fn LRU(
         fn get_index(self: *@This(), key: Key) ?usize {
             if (self.entries_map.get(key)) |entryIndex| {
                 std.debug.assert(self.first != null);
-                if (entryIndex != self.first.?) {
+                // Recency only matters once the cache is full and can start
+                // evicting (see `put`, which only drops an entry when
+                // `length >= capacity`). While it isn't full nothing is ever
+                // dropped, so the linked-list reorder is pure waste on the hot
+                // glyph-lookup path. `put` still calls set_first on insert, so
+                // `last` stays valid and true-LRU resumes once full.
+                if (self.length >= capacity and entryIndex != self.first.?) {
                     self.set_first(entryIndex);
                 }
                 return entryIndex;
