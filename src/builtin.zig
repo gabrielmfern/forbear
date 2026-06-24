@@ -200,14 +200,25 @@ pub fn useScrolling(state: *ScrollingState) void {
         ),
     );
 
-    const spring = forbear.SpringConfig{
-        .stiffness = 320.0,
-        .damping = 32.0,
-        .mass = 1.0,
-    };
     var animated = Vec2{
-        forbear.useSpringTransition(state.offset[0], spring),
-        forbear.useSpringTransition(state.offset[1], spring),
+        forbear.useSpringTransition(
+            state.offset[0],
+            forbear.SpringConfig{
+                .stiffness = 320.0,
+                .damping = 32.0,
+                .mass = 1.0,
+                .current = &state._effectiveOffset[0],
+            },
+        ),
+        forbear.useSpringTransition(
+            state.offset[1],
+            forbear.SpringConfig{
+                .stiffness = 320.0,
+                .damping = 32.0,
+                .mass = 1.0,
+                .current = &state._effectiveOffset[1],
+            },
+        ),
     };
     animated = @min(
         @max(animated, identity),
