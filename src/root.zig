@@ -203,8 +203,9 @@ nodeStack: std.ArrayList(usize) = .empty,
 /// for one extra frame, which is harmless.
 frameCounter: u32 = 0,
 
-arena: std.heap.ArenaAllocator,
 allocator: std.mem.Allocator,
+arenaAllocator: std.heap.ArenaAllocator,
+arena: std.mem.Allocator,
 io: std.Io,
 
 mousePosition: Vec2,
@@ -250,8 +251,9 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, window: ?*Window, renderer
     }
 
     forbear = @This(){
-        .arena = std.heap.ArenaAllocator.init(allocator),
-        .allocator = undefined,
+        .arenaAllocator = std.heap.ArenaAllocator.init(allocator),
+        .arena = undefined,
+        .allocator = allocator,
         .io = io,
 
         .mousePosition = @splat(0.0),
@@ -284,13 +286,13 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, window: ?*Window, renderer
         .images = undefined,
         .fonts = undefined,
     };
-    forbear.?.allocator = forbear.?.arena.allocator();
+    forbear.?.arena = forbear.?.arenaAllocator.allocator();
     forbear.?.previousFrameNodeMeasurements = std.AutoHashMap(
         u64,
         Node.Measurement,
-    ).init(forbear.?.allocator);
-    forbear.?.images = std.StringHashMap(ImageType).init(forbear.?.allocator);
-    forbear.?.fonts = std.StringHashMap(Font).init(forbear.?.allocator);
+    ).init(forbear.?.arena);
+    forbear.?.images = std.StringHashMap(ImageType).init(forbear.?.arena);
+    forbear.?.fonts = std.StringHashMap(Font).init(forbear.?.arena);
 }
 
 /// Registers a font from the given embedded byte contents. The font is associated with
@@ -299,7 +301,7 @@ pub fn registerFont(uniqueIdentifier: []const u8, comptime contents: []const u8)
     const self = getForbear();
     const result = try self.fonts.getOrPut(uniqueIdentifier);
     if (!result.found_existing) {
-        result.value_ptr.* = try Font.init(self.allocator, uniqueIdentifier, contents);
+        result.value_ptr.* = try Font.init(self.arena, uniqueIdentifier, contents);
     }
 }
 
@@ -720,7 +722,7 @@ pub fn useIo() std.Io {
 
 fn pushScope(key: u64) error{OutOfMemory}!void {
     const self = getForbear();
-    const result = try self.scopes.getOrPut(self.allocator, key);
+    const result = try self.scopes.getOrPut(self.arena, key);
     if (result.found_existing) {
         result.value_ptr.lastFrame = self.frameCounter;
     } else {
@@ -729,11 +731,11 @@ fn pushScope(key: u64) error{OutOfMemory}!void {
             // the latter is itself an arena, so a reaped scope's
             // arenaAllocator.deinit() would free into it as a no-op and every
             // scope's memory would leak until program exit.
-            .arenaAllocator = std.heap.ArenaAllocator.init(self.arena.child_allocator),
+            .arenaAllocator = std.heap.ArenaAllocator.init(self.allocator),
             .lastFrame = self.frameCounter,
         };
     }
-    try self.scopeStack.append(self.allocator, key);
+    try self.scopeStack.append(self.arena, key);
 }
 
 fn popScope() void {
@@ -1070,7 +1072,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     const parentIndexOptional = self.nodeStack.getLastOrNull();
 
-    const result = self.nodeTree.putNode(self.allocator, parentIndexOptional) catch |err| {
+    const result = self.nodeTree.putNode(self.arena, parentIndexOptional) catch |err| {
         handleFrameError(err);
         return &noopEnd;
     };
@@ -1168,7 +1170,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     result.ptr.size[0] = @min(@max(result.ptr.size[0], result.ptr.minSize[0]), result.ptr.maxSize[0]);
     result.ptr.size[1] = @min(@max(result.ptr.size[1], result.ptr.minSize[1]), result.ptr.maxSize[1]);
 
-    self.nodeStack.append(self.allocator, result.index) catch |err| {
+    self.nodeStack.append(self.arena, result.index) catch |err| {
         handleFrameError(err);
         return &noopEnd;
     };
@@ -1261,13 +1263,15 @@ pub inline fn createContext(
             if (self.contextValues.getPtr(valueKey)) |existing| {
                 existing.lastFrame = self.frameCounter;
             } else {
+                // Real allocator, not self.allocator (an arena): this arena is
+                // reaped on staleness in frameEnd, so it must free for real.
                 var arena = std.heap.ArenaAllocator.init(self.allocator);
                 const value = arena.allocator().create(T) catch |err| {
                     handleFrameError(err);
                     return &noopEnd;
                 };
                 value.* = initialValue;
-                self.contextValues.put(self.allocator, valueKey, .{
+                self.contextValues.put(self.arena, valueKey, .{
                     .arenaAllocator = arena,
                     .contents = @ptrCast(@alignCast(value)),
                     .lastFrame = self.frameCounter,
@@ -1276,7 +1280,7 @@ pub inline fn createContext(
                     return &noopEnd;
                 };
             }
-            self.contextStack.append(self.allocator, .{
+            self.contextStack.append(self.arena, .{
                 .contextKey = contextKey,
                 .valueKey = valueKey,
             }) catch |err| {
@@ -1436,7 +1440,7 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
     const arena = self.frameMeta.?.arena;
 
     const parentIndexOptional = self.nodeStack.getLastOrNull();
-    const result = try self.nodeTree.putNode(self.allocator, parentIndexOptional);
+    const result = try self.nodeTree.putNode(self.arena, parentIndexOptional);
 
     const parentOptional = if (parentIndexOptional) |parentIndex|
         self.nodeTree.at(parentIndex)
@@ -1624,7 +1628,7 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
     // Push self onto the parent stack so `on(.mouseOver)` resolves the
     // text node's own measurement, then pop. The text node itself is not
     // a scope and has no children, so this is purely for hit-testing.
-    try self.nodeStack.append(self.allocator, result.index);
+    try self.nodeStack.append(self.arena, result.index);
     defer _ = self.nodeStack.pop();
 
     try pushScope(result.ptr.key);
@@ -1831,15 +1835,15 @@ fn componentChildrenSlotEndFn(block: void) void {
 
     // Restore parent stack and scope stack to pre-slotEnd state
     self.nodeStack.clearRetainingCapacity();
-    self.nodeStack.appendSlice(self.allocator, slotState.savedPreEndParentStack) catch |err| {
+    self.nodeStack.appendSlice(self.arena, slotState.savedPreEndParentStack) catch |err| {
         handleFrameError(err);
     };
     self.scopeStack.clearRetainingCapacity();
-    self.scopeStack.appendSlice(self.allocator, slotState.savedPreEndScopeStack) catch |err| {
+    self.scopeStack.appendSlice(self.arena, slotState.savedPreEndScopeStack) catch |err| {
         handleFrameError(err);
     };
     self.contextStack.clearRetainingCapacity();
-    self.contextStack.appendSlice(self.allocator, slotState.savedPreEndContextStack) catch |err| {
+    self.contextStack.appendSlice(self.arena, slotState.savedPreEndContextStack) catch |err| {
         handleFrameError(err);
     };
 }
@@ -2126,11 +2130,14 @@ pub fn deinit() void {
     while (imagesIterator.next()) |img| {
         img.deinit();
     }
-    // Scope arenas are backed by the real allocator (see pushScope), so free
-    // them explicitly before tearing down the arena that holds everything else.
+    // Scope and context arenas are backed by the real allocator (see pushScope
+    // / createContext), so free them explicitly before tearing down the arena
+    // that holds everything else.
     var scopeIterator = self.scopes.valueIterator();
     while (scopeIterator.next()) |scope| scope.arenaAllocator.deinit();
-    self.arena.deinit();
+    var contextIterator = self.contextValues.valueIterator();
+    while (contextIterator.next()) |valueEntry| valueEntry.arenaAllocator.deinit();
+    self.arenaAllocator.deinit();
     forbear = null;
 }
 
