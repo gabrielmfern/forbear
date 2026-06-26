@@ -437,7 +437,7 @@ fn renderingMain(
 }
 
 pub fn main(init: std.process.Init) !void {
-    const allocator = init.arena.allocator();
+    const allocator = init.gpa;
     var graphics = try forbear.Graphics.init(
         allocator,
         "forbear playground",
