@@ -727,10 +727,10 @@ fn pushScope(key: u64) error{OutOfMemory}!void {
         result.value_ptr.lastFrame = self.frameCounter;
     } else {
         result.value_ptr.* = Scope{
-            // Back scope arenas with the real allocator, not self.allocator:
-            // the latter is itself an arena, so a reaped scope's
-            // arenaAllocator.deinit() would free into it as a no-op and every
-            // scope's memory would leak until program exit.
+            // Back scope arenas with self.allocator (the real freeing
+            // allocator), not self.arena: the latter never frees, so a reaped
+            // scope's arenaAllocator.deinit() would be a no-op and every scope
+            // would leak until program exit.
             .arenaAllocator = std.heap.ArenaAllocator.init(self.allocator),
             .lastFrame = self.frameCounter,
         };
@@ -1263,8 +1263,8 @@ pub inline fn createContext(
             if (self.contextValues.getPtr(valueKey)) |existing| {
                 existing.lastFrame = self.frameCounter;
             } else {
-                // Real allocator, not self.allocator (an arena): this arena is
-                // reaped on staleness in frameEnd, so it must free for real.
+                // self.allocator (real), not self.arena: this arena is reaped
+                // on staleness in frameEnd, so it must actually free.
                 var arena = std.heap.ArenaAllocator.init(self.allocator);
                 const value = arena.allocator().create(T) catch |err| {
                     handleFrameError(err);
