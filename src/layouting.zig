@@ -714,7 +714,7 @@ pub fn layout() !*NodeTree {
                     // position already contains `-scrollPosition` plus the
                     // root's own translate, so adding it gives document-space
                     // placement that scrolls with the page.
-                    .absolute => child.position += root.position + child.style.translate,
+                    .absolute => child.position += root.position + node.childrenOffset + child.style.translate,
                     // Parent-relative: the user-supplied Vec2 is an offset
                     // from the parent's content-box top-left (i.e. inside
                     // the parent's border + padding), matching how `grow`
