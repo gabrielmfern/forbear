@@ -725,7 +725,11 @@ fn pushScope(key: u64) error{OutOfMemory}!void {
         result.value_ptr.lastFrame = self.frameCounter;
     } else {
         result.value_ptr.* = Scope{
-            .arenaAllocator = std.heap.ArenaAllocator.init(self.allocator),
+            // Back scope arenas with the real allocator, not self.allocator:
+            // the latter is itself an arena, so a reaped scope's
+            // arenaAllocator.deinit() would free into it as a no-op and every
+            // scope's memory would leak until program exit.
+            .arenaAllocator = std.heap.ArenaAllocator.init(self.arena.child_allocator),
             .lastFrame = self.frameCounter,
         };
     }
@@ -846,9 +850,12 @@ fn frameEnd(block: void) anyerror!void {
     defer self.frameMeta = null;
     if (frameMeta.err) |err| return err;
 
-    // Reap unmounted scopes (and prune stale states from the survivors)
-    // in a single pass. Collect-then-remove so we don't mutate either
-    // map mid-iteration. Scope keys are u64; state keys are usize.
+    // Reap unmounted scopes only. We deliberately do NOT prune stale state
+    // entries from surviving scopes: `states` is backed by the scope's arena,
+    // so removing entries churns the map into tombstone-driven regrowth whose
+    // orphaned backing arrays can never be freed from an arena — an unbounded
+    // leak. A state's storage lives as long as its scope and is released in one
+    // shot when the scope is reaped below.
     var staleScopeKeys: std.ArrayList(u64) = .empty;
     defer staleScopeKeys.deinit(frameMeta.arena);
     var staleStateKeys: std.ArrayList(usize) = .empty;
@@ -2119,6 +2126,10 @@ pub fn deinit() void {
     while (imagesIterator.next()) |img| {
         img.deinit();
     }
+    // Scope arenas are backed by the real allocator (see pushScope), so free
+    // them explicitly before tearing down the arena that holds everything else.
+    var scopeIterator = self.scopes.valueIterator();
+    while (scopeIterator.next()) |scope| scope.arenaAllocator.deinit();
     self.arena.deinit();
     forbear = null;
 }
