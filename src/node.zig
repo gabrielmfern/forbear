@@ -725,6 +725,10 @@ pub const Node = struct {
         size: Vec2,
         maxSize: Vec2,
         minSize: Vec2,
+        /// Bounding extent of this node's flowing descendants relative to
+        /// `position`. Useful for clamping scroll offsets: scrollable range is
+        /// `max(0, contentSize - size)`. For leaf nodes (or nodes without flow
+        /// children), this remains zero.
         contentSize: Vec2,
         z: u16,
     };
