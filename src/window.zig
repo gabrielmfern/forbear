@@ -171,11 +171,10 @@ pub const EventQueue = struct {
 
     pub fn iterate(self: *@This()) EventIterator {
         const tailLocal = self.tail.load(.acquire);
-        const headLocal = self.head.load(.acquire);
         return EventIterator{
             .queue = self,
             .tail = tailLocal,
-            .head = headLocal,
+            .head = self.head.raw,
         };
     }
 };
@@ -1207,6 +1206,7 @@ pub const Window = switch (builtin.os.tag) {
             window.title = title;
             window.appId = appId;
             window.running = true;
+            window.eventQueue = .empty;
 
             window.xkbContext = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse return error.FailedToCreateXkbContext;
             errdefer c.xkb_context_unref(window.xkbContext);
@@ -1606,6 +1606,7 @@ pub const Window = switch (builtin.os.tag) {
             window.className = try std.unicode.utf8ToUtf16LeAllocZ(allocator, className);
             errdefer allocator.free(window.className);
             window.running = true;
+            window.eventQueue = .empty;
 
             window.keysHeld = .{};
             window.pendingPressed = .{};
