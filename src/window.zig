@@ -171,10 +171,11 @@ pub const EventQueue = struct {
 
     pub fn iterate(self: *@This()) EventIterator {
         const tailLocal = self.tail.load(.acquire);
+        const headLocal = self.head.load(.acquire);
         return EventIterator{
             .queue = self,
             .tail = tailLocal,
-            .head = self.head.raw,
+            .head = headLocal,
         };
     }
 };
