@@ -755,7 +755,7 @@ pub noinline fn useState(comptime T: type, initialValue: T) *T {
         // Return a pointer to valid (but dummy) storage to avoid crashes
         // when error handling continues to evaluate the rest of the frame
         const Static = struct {
-            var dummy: T = std.mem.zeroes(T);
+            var dummy: T = undefined;
         };
         return &Static.dummy;
     }
