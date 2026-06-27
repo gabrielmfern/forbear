@@ -189,16 +189,17 @@ pub fn useScrolling(state: *ScrollingState) void {
         state.offset += delta;
     }
 
-    state.offset = @min(
-        @max(state.offset, identity),
-        @max(
-            if (forbear.useNodeMeasurement()) |measurement|
-                measurement.contentSize - measurement.size
-            else
-                identity,
-            identity,
-        ),
-    );
+    state.offset =
+        if (forbear.useNodeMeasurement()) |measurement|
+            @min(
+                @max(state.offset, identity),
+                @max(
+                    measurement.contentSize - measurement.size,
+                    identity,
+                ),
+            )
+        else
+            @max(state.offset, identity);
 
     var animated = Vec2{
         forbear.useSpringTransition(
@@ -220,16 +221,17 @@ pub fn useScrolling(state: *ScrollingState) void {
             },
         ),
     };
-    animated = @min(
-        @max(animated, identity),
-        @max(
-            if (forbear.useNodeMeasurement()) |measurement|
-                measurement.contentSize - measurement.size
-            else
-                identity,
-            identity,
-        ),
-    );
+    animated =
+        if (forbear.useNodeMeasurement()) |measurement|
+            @min(
+                @max(animated, identity),
+                @max(
+                    measurement.contentSize - measurement.size,
+                    identity,
+                ),
+            )
+        else
+            @max(animated, identity);
     if (state.animate) {
         state._effectiveOffset = animated;
     } else {
