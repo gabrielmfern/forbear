@@ -710,11 +710,6 @@ pub fn layout() !*NodeTree {
                 switch (child.style.placement) {
                     // Viewport-pinned: ignore scroll and ancestor offsets.
                     .fixed => child.position += child.style.translate,
-                    // Viewport-space but scroll-aware: the root's resolved
-                    // position already contains `-scrollPosition` plus the
-                    // root's own translate, so adding it gives document-space
-                    // placement that scrolls with the page.
-                    .absolute => child.position += root.position + node.childrenOffset + child.style.translate,
                     // Parent-relative: the user-supplied Vec2 is an offset
                     // from the parent's content-box top-left (i.e. inside
                     // the parent's border + padding), matching how `grow`

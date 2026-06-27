@@ -1113,7 +1113,6 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         parentZ;
     result.ptr.position = switch (result.ptr.style.placement) {
         .fixed => |v| v,
-        .absolute => |v| v,
         .relative => |v| v,
         .flow => @splat(0.0),
     };

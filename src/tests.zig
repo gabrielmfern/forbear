@@ -4437,7 +4437,7 @@ fn HoverSecond(observed: *HoverObservation) void {
         .style = .{
             .width = .{ .fixed = 100 },
             .height = .{ .fixed = 100 },
-            .placement = .{ .absolute = .{ 200.0, 0.0 } },
+            .placement = .{ .fixed = .{ 200.0, 0.0 } },
         },
     })({
         observed.enter = forbear.onMouseEnter();
@@ -5524,7 +5524,7 @@ fn SlotItem(props: struct { key: []const u8, position: f32 }) *const fn (void) v
             .style = .{
                 .width = .{ .fixed = 100.0 },
                 .height = .{ .fixed = 50.0 },
-                .placement = .{ .absolute = .{ 0.0, props.position } },
+                .placement = .{ .fixed = .{ 0.0, props.position } },
             },
         })({
             forbear.componentChildrenSlot();
@@ -7203,43 +7203,6 @@ test "childrenOffset does not shift fixed children" {
                     .width = .{ .fixed = 50.0 },
                     .height = .{ .fixed = 50.0 },
                     .placement = .{ .fixed = .{ 70, 80 } },
-                },
-            })({});
-        });
-
-        const tree = try forbear.layout();
-        const root = tree.at(0);
-        const child = tree.at(root.firstChild.?);
-
-        // Viewport-pinned: ignores parent's childrenOffset entirely.
-        try std.testing.expectApproxEqAbs(@as(f32, 70.0), child.position[0], 0.001);
-        try std.testing.expectApproxEqAbs(@as(f32, 80.0), child.position[1], 0.001);
-    });
-}
-
-test "childrenOffset does not shift absolute children" {
-    try initTest(std.testing.allocator);
-    defer forbear.deinit();
-
-    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arenaAllocator.deinit();
-    const arena = arenaAllocator.allocator();
-
-    try forbear.frame(try frameMeta(arena))({
-        forbear.element(.{
-            .style = .{
-                .width = .{ .fixed = 300.0 },
-                .height = .{ .fixed = 200.0 },
-            },
-        })({
-            if (forbear.getParentNode()) |parent| {
-                parent.childrenOffset = .{ 500, 500 };
-            }
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 50.0 },
-                    .height = .{ .fixed = 50.0 },
-                    .placement = .{ .absolute = .{ 70, 80 } },
                 },
             })({});
         });
