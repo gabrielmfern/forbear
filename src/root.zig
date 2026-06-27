@@ -1537,7 +1537,7 @@ fn shapeRuns(arena: std.mem.Allocator, runs: []const TextRun, textWrapping: Text
         const owned = try arena.dupe(Font.ShapedGlyph, shaped);
 
         const unitsPerEm: f32 = @floatFromInt(run.style.font.unitsPerEm());
-        const runLineHeight = run.style.font.lineHeight() * run.style.lineHeight / unitsPerEm * run.style.fontSize;
+        const runLineHeight = run.style.font.lineHeight(run.style.fontSize) * run.style.lineHeight;
         const runAscent = run.style.font.ascent() / unitsPerEm * run.style.fontSize;
         lineHeight = @max(lineHeight, runLineHeight);
         ascent = @max(ascent, runAscent);

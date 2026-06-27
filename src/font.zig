@@ -564,11 +564,9 @@ pub fn descent(self: @This()) f32 {
     return @floatFromInt(self.handle.*.descender);
 }
 
-/// Teturns line height in points coordinates, that is multiples of unitsPerEm.
-///
-/// It can simply be multiplied by the font size divided by unitsPerEm to get the line height in pixels.
-pub fn lineHeight(self: @This()) f32 {
-    return self.ascent() - self.descent();
+/// Returns the line height in pixels for the given font size in pixels.
+pub fn lineHeight(self: @This(), size: f32) f32 {
+    return (self.ascent() - self.descent()) / @as(f32, @floatFromInt(self.unitsPerEm())) * size;
 }
 
 /// Weight can go from 100 to 900 like CSS, but it can be higher or lower. Note
