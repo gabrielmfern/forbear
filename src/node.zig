@@ -304,13 +304,9 @@ pub const Placement = union(enum) {
     /// The default: the node participates in its parent's layout flow and
     /// contributes to the parent's fit size and sibling positioning.
     flow,
-    /// Pinned to the viewport at the given coordinates. Unaffected by
-    /// scrolling. Does not participate in the parent's layout flow.
+    /// Pinned to the viewport at the given coordinates. Unaffected by children
+    /// offset (scrolling). Does not participate in the parent's layout flow.
     fixed: Vec2,
-    /// Positioned in the viewport's coordinate space like `fixed`, but
-    /// respects the root scroll offset (so it moves with the document as the
-    /// user scrolls). Does not participate in the parent's layout flow.
-    absolute: Vec2,
     /// Positioned relative to the parent's top-left corner. Inherits scroll
     /// via the parent's resolved position. Does not participate in the
     /// parent's layout flow, but is useful for anchoring overlays, tooltips,
