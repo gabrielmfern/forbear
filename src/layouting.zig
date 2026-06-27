@@ -344,28 +344,30 @@ pub fn growAndShrink(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
     }
 }
 
-fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
-    std.debug.assert(node.glyphs != null);
-    if (node.style.textWrapping == .none) {
-        return;
-    }
-
-    const glyphs = node.glyphs.?;
-
+/// Wrap `glyphs` to `lineEnd` (content width, padding/border already excluded),
+/// repositioning each glyph from `base` and returning the laid-out height.
+/// `.none` is handled by the caller and never reaches here.
+pub fn wrapGlyphs(
+    arena: std.mem.Allocator,
+    glyphs: *Glyphs,
+    lineEnd: f32,
+    textWrapping: TextWrapping,
+    xJustification: Alignment,
+    base: Vec2,
+) !f32 {
     const Line = struct {
         start: usize,
         end: usize,
     };
     var lines = try std.ArrayList(Line).initCapacity(arena, 4);
 
-    const lineEnd = node.size[0] - node.fittingBase(.horizontal);
     var cursor: Vec2 = @splat(0.0);
     var lineStartIndex: usize = 0;
 
     const breaks = glyphs.preBreakIndices;
     var breakCursor: usize = 0;
 
-    switch (node.style.textWrapping) {
+    switch (textWrapping) {
         .character => {
             for (glyphs.slice, 0..) |*glyph, index| {
                 while (breakCursor < breaks.len and breaks[breakCursor] == index) : (breakCursor += 1) {
@@ -474,7 +476,7 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
         const endX = glyphs.slice[line.end].position[0] + glyphs.slice[line.end].advance[0];
         const width = endX - startX;
         for (glyphs.slice[line.start .. line.end + 1]) |*glyph| {
-            switch (node.style.xJustification) {
+            switch (xJustification) {
                 .start => {},
                 .center => glyph.position[0] += (lineEnd - width) / 2.0,
                 .end => glyph.position[0] += lineEnd - width,
@@ -482,10 +484,7 @@ fn wrapGlyphs(arena: std.mem.Allocator, node: *Node, base: Vec2) !void {
         }
     }
 
-    node.size[1] = cursor[1] + glyphs.lineHeight;
-    if (node.style.width == .ratio) {
-        node.size[0] = node.size[1] * node.style.width.ratio;
-    }
+    return cursor[1] + glyphs.lineHeight;
 }
 
 /// Wrap text, place children in parent-local coordinates, and expand
@@ -516,12 +515,25 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
         };
 
         // TODO: find a way to not have duplicate code between children and glyphs
-        if (node.glyphs != null) {
-            try wrapGlyphs(arena, node, base);
+        if (node.glyphs) |*glyphs| {
+            if (node.style.textWrapping != .none) {
+                node.size[1] = try wrapGlyphs(
+                    arena,
+                    glyphs,
+                    node.size[0] - node.fittingBase(.horizontal),
+                    node.style.textWrapping,
+                    node.style.xJustification,
+                    base,
+                );
+                if (node.style.width == .ratio) {
+                    node.size[0] = node.size[1] * node.style.width.ratio;
+                }
+            }
             continue;
         }
         if (node.firstChild == null) continue;
 
+        // TODO: should we remove this? there seems to be no real use case at this point
         if (node.style.direction == .horizontal) {
             const Line = struct {
                 start: usize,
