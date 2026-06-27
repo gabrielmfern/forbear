@@ -142,7 +142,9 @@ pub const Event = enum {
     keyUp,
 };
 
-const TextRun = struct {
+/// A run of text sharing one resolved style. The unit `composeText` appends to
+/// and `measureText` lays out; `text` is a single run spanning all its content.
+pub const TextRun = struct {
     content: []const u8,
     style: CompleteTextStyle,
 };
@@ -495,6 +497,43 @@ pub fn useAnimation(duration: f32) Animation {
         .state = state,
         .duration = duration,
     };
+}
+
+/// Lays out `runs` at `width` without mounting anything, reporting how tall the
+/// text wraps and how many lines it spans. Runs the same shaping and wrapping
+/// the layout pass uses, so the result matches what `text`/`composeText` would
+/// render at that width and `textWrapping`. `.none` ignores `width`. Must be
+/// called inside a frame; scratch goes on the frame arena.
+pub fn measureText(runs: []const TextRun, width: f32, textWrapping: TextWrapping) struct { height: f32, lines: usize } {
+    const self = getForbear();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) return .{ .height = 0, .lines = 0 };
+
+    const arena = self.frameMeta.?.arena;
+    const shaped = shapeRuns(arena, runs, textWrapping) catch |err| {
+        handleFrameError(err);
+        return .{ .height = 0, .lines = 0 };
+    };
+
+    var glyphs = Glyphs{
+        .slice = shaped.glyphs,
+        .lineHeight = shaped.lineHeight,
+        .ascent = shaped.ascent,
+        .preBreakIndices = shaped.preBreakIndices,
+    };
+    const height = if (textWrapping == .none)
+        shaped.minSize[1]
+    else
+        layouting.wrapGlyphs(arena, &glyphs, width, textWrapping, .start, @splat(0.0)) catch |err| {
+            handleFrameError(err);
+            return .{ .height = 0, .lines = 0 };
+        };
+
+    const lines: usize = if (shaped.lineHeight > 0)
+        @intFromFloat(@round(height / shaped.lineHeight))
+    else
+        0;
+    return .{ .height = height, .lines = lines };
 }
 
 pub fn linear(time: f32) f32 {
@@ -1434,37 +1473,20 @@ pub noinline fn text(content: []const u8) void {
     };
 }
 
-fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usize) !void {
-    const self = getForbear();
-    const arena = self.frameMeta.?.arena;
+const ShapedRuns = struct {
+    glyphs: []LayoutGlyph,
+    lineHeight: f32,
+    ascent: f32,
+    preBreakIndices: []usize,
+    minSize: Vec2,
+    maxSize: Vec2,
+};
 
-    const parentIndexOptional = self.nodeStack.getLastOrNull();
-    const result = try self.nodeTree.putNode(self.arena, parentIndexOptional);
-
-    const parentOptional = if (parentIndexOptional) |parentIndex|
-        self.nodeTree.at(parentIndex)
-    else
-        null;
-
-    const baseStyle = if (parentOptional) |parent|
-        BaseStyle.from(parent.style)
-    else
-        self.frameMeta.?.baseStyle;
-
-    (Style{
-        .cursor = if (baseStyle.cursor == .default)
-            .text
-        else
-            baseStyle.cursor,
-        .xJustification = if (parentOptional) |parent| parent.style.xJustification else null,
-        .yJustification = .start,
-        .font = base.font,
-        .color = base.color,
-        .fontSize = base.fontSize,
-        .fontWeight = base.fontWeight,
-        .lineHeight = base.lineHeight,
-    }).completeWith(baseStyle, &result.ptr.style);
-
+/// Shape `runs` into one shared line box and compute the intrinsic min/max
+/// sizing for `textWrapping`. Glyphs, styles, and scratch live on `arena` (the
+/// frame arena); `minSize`/`maxSize` are only meaningful while `textWrapping`
+/// holds, since each mode accumulates them differently.
+fn shapeRuns(arena: std.mem.Allocator, runs: []const TextRun, textWrapping: TextWrapping) !ShapedRuns {
     // Stable per-frame style copies for glyphs to point at; the builder's run
     // list is cleared the moment `composeText` ends.
     const runStyles = try arena.alloc(CompleteTextStyle, runs.len);
@@ -1568,7 +1590,7 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
 
             cursor += advance;
             maxSize[0] = @max(maxSize[0], cursor[0]);
-            if (result.ptr.style.textWrapping == .word) {
+            if (textWrapping == .word) {
                 if (std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, " ") or isLinebreak) {
                     wordAdvance = @splat(0.0);
                     maxSize[1] += lineHeight;
@@ -1576,15 +1598,58 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
                     wordAdvance += advance;
                 }
                 minSize[0] = @max(minSize[0], wordAdvance[0]);
-            } else if (result.ptr.style.textWrapping == .character) {
+            } else if (textWrapping == .character) {
                 minSize[0] = @max(minSize[0], advance[0]);
                 maxSize[1] += lineHeight;
-            } else if (result.ptr.style.textWrapping == .none) {
+            } else if (textWrapping == .none) {
                 minSize[0] = @max(minSize[0], cursor[0]);
             }
         }
     }
     minSize[1] = cursor[1] + lineHeight;
+
+    return .{
+        .glyphs = layoutGlyphs[0..writeIndex],
+        .lineHeight = lineHeight,
+        .ascent = ascent,
+        .preBreakIndices = preBreakIndices.items,
+        .minSize = minSize,
+        .maxSize = maxSize,
+    };
+}
+
+fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usize) !void {
+    const self = getForbear();
+    const arena = self.frameMeta.?.arena;
+
+    const parentIndexOptional = self.nodeStack.getLastOrNull();
+    const result = try self.nodeTree.putNode(self.arena, parentIndexOptional);
+
+    const parentOptional = if (parentIndexOptional) |parentIndex|
+        self.nodeTree.at(parentIndex)
+    else
+        null;
+
+    const baseStyle = if (parentOptional) |parent|
+        BaseStyle.from(parent.style)
+    else
+        self.frameMeta.?.baseStyle;
+
+    (Style{
+        .cursor = if (baseStyle.cursor == .default)
+            .text
+        else
+            baseStyle.cursor,
+        .xJustification = if (parentOptional) |parent| parent.style.xJustification else null,
+        .yJustification = .start,
+        .font = base.font,
+        .color = base.color,
+        .fontSize = base.fontSize,
+        .fontWeight = base.fontWeight,
+        .lineHeight = base.lineHeight,
+    }).completeWith(baseStyle, &result.ptr.style);
+
+    const shaped = try shapeRuns(arena, runs, result.ptr.style.textWrapping);
 
     const parentZ = if (parentOptional) |parent|
         parent.z
@@ -1608,14 +1673,14 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
         parentZ + 1
     else
         parentZ;
-    result.ptr.size = .{ maxSize[0], minSize[1] };
-    result.ptr.minSize = minSize;
-    result.ptr.maxSize = maxSize;
+    result.ptr.size = .{ shaped.maxSize[0], shaped.minSize[1] };
+    result.ptr.minSize = shaped.minSize;
+    result.ptr.maxSize = shaped.maxSize;
     result.ptr.glyphs = Glyphs{
-        .slice = layoutGlyphs[0..writeIndex],
-        .lineHeight = lineHeight,
-        .ascent = ascent,
-        .preBreakIndices = preBreakIndices.items,
+        .slice = shaped.glyphs,
+        .lineHeight = shaped.lineHeight,
+        .ascent = shaped.ascent,
+        .preBreakIndices = shaped.preBreakIndices,
     };
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;
