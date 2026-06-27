@@ -72,12 +72,10 @@
 
 ## problems
 
-- elements cannot be hovered only when they're not fully clipped
+- elements can be hovered where they have been clipped
 - nested scrolling is not supported (i.e., nested elements all with scrolling)
 - when there's scaling in linux, the scale only drops in after some frames
 - new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
     - is having lots of them bad? I understand having no type-safety though
-- AI
-    - created a utilty for px so that it didn't have to calculate the proper value
-        - should we maybe have px as the default value? I've noticed that the DPI isn't as reliable as I thought, as it can be used for scaling for example
-- grow parent, one fit child and one grow child, the grow doesn't behave as expected
+- useState with primitive values required dereferencing pointers all the time, which is commonly forgotten and therefore reduces development speeds
+- 
