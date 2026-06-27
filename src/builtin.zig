@@ -379,7 +379,7 @@ pub const FocusConsumes = *const fn (payload: EventPayload) bool;
 
 pub const Focus = struct {
     key: u64,
-    consumes: FocusConsumes,
+    consumes: ?FocusConsumes,
 };
 
 pub const FocusContext = forbear.createContext(opaque {}, struct {
@@ -387,7 +387,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     focusable: std.ArrayList(Focus),
     scopeKey: u64,
 
-    pub fn register(self: *@This(), consumesFn: FocusConsumes) void {
+    pub fn register(self: *@This(), consumesFn: ?FocusConsumes) void {
         const node = forbear.getParentNode() orelse {
             forbear.handleFrameError(error.NoParentForFocusRegistration);
             return;
@@ -429,7 +429,11 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     ) bool {
         const f = self.focused orelse return false;
         const payload = @unionInit(EventPayload, @tagName(eventTag), result);
-        return f.consumes(payload);
+        if (f.consumes) |func| {
+            return func(payload);
+        } else {
+            return false;
+        }
     }
 
     pub fn handleEvents(self: *@This()) void {
