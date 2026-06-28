@@ -353,7 +353,7 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
                 .applicationVersion = c.VK_MAKE_VERSION(1, 0, 0),
                 .pEngineName = "forbear",
                 .engineVersion = c.VK_MAKE_VERSION(1, 0, 0),
-                .apiVersion = c.VK_API_VERSION_1_2,
+                .apiVersion = c.VK_API_VERSION_1_1,
             },
             .enabledLayerCount = @intCast(instanceLayers.len),
             .ppEnabledLayerNames = instanceLayers.ptr,
@@ -3370,9 +3370,13 @@ pub const Renderer = struct {
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-            // Dynamic rendering is core in 1.3; on 1.2 devices we pull it in as an extension so
-            // we keep the render-pass-free draw path without requiring a 1.3 driver.
+            // We target Vulkan 1.1 and pull everything newer in as extensions:
+            //   - dynamic rendering (core 1.3) keeps the render-pass-free draw path
+            //   - descriptor indexing (core 1.2) gives the bindless sampled-image array
+            //   - shader_float16_int8 (core 1.2) gives shaderInt8 for the shaders
             c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+            c.VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+            c.VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
         } ++ switch (builtin.os.tag) {
             .macos => .{
                 "VK_KHR_portability_subset",
@@ -3387,8 +3391,8 @@ pub const Renderer = struct {
             score: usize,
         } = null;
         blk: for (graphics.devices) |device| {
-            if (device.deviceProperties.apiVersion < c.VK_API_VERSION_1_2) {
-                std.log.info("Skipping device '{s}': Vulkan 1.2 is required", .{
+            if (device.deviceProperties.apiVersion < c.VK_API_VERSION_1_1) {
+                std.log.info("Skipping device '{s}': Vulkan 1.1 is required", .{
                     std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
                 });
                 continue :blk;
@@ -3416,25 +3420,30 @@ pub const Renderer = struct {
             var dynamicRenderingFeatures = c.VkPhysicalDeviceDynamicRenderingFeaturesKHR{
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
             };
-            var vulkan12Features = c.VkPhysicalDeviceVulkan12Features{
-                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+            var shaderFloat16Int8Features = c.VkPhysicalDeviceShaderFloat16Int8FeaturesKHR{
+                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR,
                 .pNext = &dynamicRenderingFeatures,
+            };
+            var descriptorIndexingFeatures = c.VkPhysicalDeviceDescriptorIndexingFeaturesEXT{
+                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+                .pNext = &shaderFloat16Int8Features,
             };
             var deviceFeatures2 = c.VkPhysicalDeviceFeatures2{
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                .pNext = &vulkan12Features,
+                .pNext = &descriptorIndexingFeatures,
             };
             c.vkGetPhysicalDeviceFeatures2(device.physicalDevice, &deviceFeatures2);
 
-            if (vulkan12Features.shaderInt8 != c.VK_TRUE or
-                vulkan12Features.descriptorIndexing != c.VK_TRUE or
-                vulkan12Features.shaderSampledImageArrayNonUniformIndexing != c.VK_TRUE or
-                vulkan12Features.descriptorBindingPartiallyBound != c.VK_TRUE or
-                vulkan12Features.descriptorBindingSampledImageUpdateAfterBind != c.VK_TRUE or
-                vulkan12Features.descriptorBindingUpdateUnusedWhilePending != c.VK_TRUE or
-                vulkan12Features.runtimeDescriptorArray != c.VK_TRUE)
+            // There is no aggregate `descriptorIndexing` bit in the EXT struct; the extension being
+            // present (checked above) is what stands in for it, then we verify the specific bits we use.
+            if (shaderFloat16Int8Features.shaderInt8 != c.VK_TRUE or
+                descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing != c.VK_TRUE or
+                descriptorIndexingFeatures.descriptorBindingPartiallyBound != c.VK_TRUE or
+                descriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind != c.VK_TRUE or
+                descriptorIndexingFeatures.descriptorBindingUpdateUnusedWhilePending != c.VK_TRUE or
+                descriptorIndexingFeatures.runtimeDescriptorArray != c.VK_TRUE)
             {
-                std.log.info("Skipping device '{s}': missing required Vulkan 1.2 descriptor indexing features", .{
+                std.log.info("Skipping device '{s}': missing required descriptor indexing features", .{
                     std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
                 });
                 continue :blk;
@@ -3555,11 +3564,14 @@ pub const Renderer = struct {
             .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
             .dynamicRendering = c.VK_TRUE,
         };
-        var vulkan12Features = c.VkPhysicalDeviceVulkan12Features{
-            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        var shaderFloat16Int8Features = c.VkPhysicalDeviceShaderFloat16Int8FeaturesKHR{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR,
             .pNext = &dynamicRenderingFeatures,
             .shaderInt8 = c.VK_TRUE,
-            .descriptorIndexing = c.VK_TRUE,
+        };
+        var descriptorIndexingFeatures = c.VkPhysicalDeviceDescriptorIndexingFeaturesEXT{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+            .pNext = &shaderFloat16Int8Features,
             .shaderSampledImageArrayNonUniformIndexing = c.VK_TRUE,
             .descriptorBindingPartiallyBound = c.VK_TRUE,
             .descriptorBindingSampledImageUpdateAfterBind = c.VK_TRUE,
@@ -3570,7 +3582,7 @@ pub const Renderer = struct {
             physicalDevice,
             &c.VkDeviceCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-                .pNext = &vulkan12Features,
+                .pNext = &descriptorIndexingFeatures,
                 .flags = 0,
                 .queueCreateInfoCount = @intCast(queueCreateInfos.len),
                 .pQueueCreateInfos = queueCreateInfos.ptr,
