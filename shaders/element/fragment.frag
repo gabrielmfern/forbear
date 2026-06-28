@@ -13,6 +13,7 @@ layout(location = 8) in flat uint filterType;
 layout(location = 9) in flat int gradientStart;
 layout(location = 10) in flat int gradientEnd;
 layout(location = 11) in flat uint borderStyle;
+layout(location = 12) in vec2 gradientDirection;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 1) uniform sampler2D textures[];
@@ -60,7 +61,13 @@ void main() {
 
     vec4 color = vertexColor;
     if (gradientStart >= 0) {
-        color = sampleGradient(localPos.x);
+        // Project this pixel onto the gradient direction (in pixel space, so
+        // the angle reads correctly on non-square boxes) and normalise so t
+        // spans [0, 1] across the element's extent along that direction.
+        vec2 centered = (localPos.xy - 0.5) * size;
+        float halfLen = 0.5 * (abs(size.x * gradientDirection.x) + abs(size.y * gradientDirection.y));
+        float t = 0.5 + dot(centered, gradientDirection) / (2.0 * max(halfLen, 1e-6));
+        color = sampleGradient(t);
     }
     if (imageIndex >= 0) {
         color *= texture(textures[nonuniformEXT(imageIndex)], localPos.xy);

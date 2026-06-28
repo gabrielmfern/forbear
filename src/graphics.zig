@@ -2049,6 +2049,7 @@ const ElementRenderingData = extern struct {
     borderStyle: u32,
     modelViewProjectionMatrix: zmath.Mat,
     size: [2]f32,
+    gradientDirection: [2]f32,
 };
 
 const ElementsPipeline = struct {
@@ -4016,7 +4017,7 @@ pub const Renderer = struct {
                 totalGlyphCount += glyphs.slice.len;
             }
             if (node.style.background == .gradient) {
-                totalGradientStopCount += node.style.background.gradient.len;
+                totalGradientStopCount += node.style.background.gradient.stops.len;
             }
         }
 
@@ -4068,8 +4069,10 @@ pub const Renderer = struct {
             };
             var gradientStart: i32 = -1;
             var gradientEnd: i32 = -1;
-            if (node.style.background == .gradient and node.style.background.gradient.len > 0) {
-                const stops = node.style.background.gradient;
+            var gradientDirection: [2]f32 = .{ 1.0, 0.0 };
+            if (node.style.background == .gradient and node.style.background.gradient.stops.len > 0) {
+                const stops = node.style.background.gradient.stops;
+                gradientDirection = node.style.background.gradient.direction.vector();
                 gradientStart = @intCast(gradientStopIndex);
                 for (stops) |stop| {
                     self.elementsPipeline.gradientStops.mapped[frameIndex][gradientStopIndex] = GradientStop{
@@ -4105,6 +4108,7 @@ pub const Renderer = struct {
                 .imageIndex = textureIndex,
                 .gradientStart = gradientStart,
                 .gradientEnd = gradientEnd,
+                .gradientDirection = gradientDirection,
                 .blendMode = @intCast(@intFromEnum(node.style.blendMode)),
                 .filterType = @intCast(@intFromEnum(node.style.filter)),
                 .borderStyle = @intCast(@intFromEnum(node.style.borderStyle)),

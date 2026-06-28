@@ -291,13 +291,59 @@ pub const GradientStop = extern struct {
     position: f32,
 };
 
+/// Which way a linear gradient flows. Mirrors CSS `linear-gradient`
+/// direction keywords and angles.
+pub const GradientDirection = union(enum) {
+    /// Angle in degrees, CSS-style: 0 points toward the top and increases
+    /// clockwise (90 toward the right, 180 toward the bottom, 270 toward the
+    /// left).
+    angle: f32,
+    toTop,
+    toBottom,
+    toLeft,
+    toRight,
+    toTopLeft,
+    toTopRight,
+    toBottomLeft,
+    toBottomRight,
+
+    /// The unit vector the gradient flows toward, in screen space (the y axis
+    /// points down). The first stop sits at the opposite edge, the last stop
+    /// at the edge this points to. Corner directions are a flat 45°, not
+    /// adjusted for the element's aspect ratio.
+    pub fn vector(self: GradientDirection) Vec2 {
+        const d: f32 = std.math.sqrt1_2; // 1/sqrt(2), the diagonal components
+        return switch (self) {
+            .angle => |degrees| blk: {
+                const radians = degrees * std.math.pi / 180.0;
+                break :blk .{ @sin(radians), -@cos(radians) };
+            },
+            .toTop => .{ 0, -1 },
+            .toBottom => .{ 0, 1 },
+            .toLeft => .{ -1, 0 },
+            .toRight => .{ 1, 0 },
+            .toTopLeft => .{ -d, -d },
+            .toTopRight => .{ d, -d },
+            .toBottomLeft => .{ -d, d },
+            .toBottomRight => .{ d, d },
+        };
+    }
+};
+
+pub const LinearGradient = struct {
+    /// Stops define where each color sits along the gradient; positions are
+    /// expected to be monotonically increasing within the [0, 1] range.
+    stops: []const GradientStop,
+    /// Which way the gradient flows. Defaults to left-to-right.
+    direction: GradientDirection = .toRight,
+};
+
 pub const Background = union(enum) {
     image: *Graphics.Image,
     color: Vec4,
-    /// A linear gradient from the left to the right of the element. Stops
-    /// define where each color sits along the gradient; positions are
-    /// expected to be monotonically increasing within the [0, 1] range.
-    gradient: []const GradientStop,
+    /// A linear gradient across the element. Defaults to flowing left-to-right;
+    /// set `direction` to change which way it runs. See `LinearGradient`.
+    gradient: LinearGradient,
 };
 
 pub const Placement = union(enum) {

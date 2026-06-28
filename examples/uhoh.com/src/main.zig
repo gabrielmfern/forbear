@@ -47,7 +47,7 @@ fn App() !void {
             forbear.element(.{
                 .style = .{
                     .width = .{ .grow = 1.0 },
-                    .background = .{ .gradient = &rainbowBar },
+                    .background = .{ .gradient = .{ .stops = &rainbowBar } },
                     .padding = .all(15.0),
                     .xJustification = .center,
                     .yJustification = .center,

@@ -40,6 +40,8 @@ pub const TextStyle = nodeImport.TextStyle;
 pub const CompleteTextStyle = nodeImport.CompleteTextStyle;
 pub const Element = nodeImport.Element;
 pub const GradientStop = nodeImport.GradientStop;
+pub const LinearGradient = nodeImport.LinearGradient;
+pub const GradientDirection = nodeImport.GradientDirection;
 pub const Window = @import("window.zig").Window;
 pub const Color = Vec4;
 

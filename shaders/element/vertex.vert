@@ -14,6 +14,7 @@ layout(location = 8) out flat uint filterType;
 layout(location = 9) out flat int gradientStart;
 layout(location = 10) out flat int gradientEnd;
 layout(location = 11) out flat uint borderStyle;
+layout(location = 12) out vec2 gradientDirection;
 
 struct ElementRenderingData {
     vec4 backgroundColor;
@@ -28,6 +29,7 @@ struct ElementRenderingData {
     uint borderStyle;
     mat4 modelViewProjectionMatrix;
     vec2 size;
+    vec2 gradientDirection;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer RenderingData {
@@ -50,4 +52,5 @@ void main() {
     gradientStart = d.gradientStart;
     gradientEnd = d.gradientEnd;
     borderStyle = d.borderStyle;
+    gradientDirection = d.gradientDirection;
 }
