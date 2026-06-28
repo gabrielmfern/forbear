@@ -353,7 +353,7 @@ pub fn init(allocator: std.mem.Allocator, application_name: [:0]const u8) !Graph
                 .applicationVersion = c.VK_MAKE_VERSION(1, 0, 0),
                 .pEngineName = "forbear",
                 .engineVersion = c.VK_MAKE_VERSION(1, 0, 0),
-                .apiVersion = c.VK_API_VERSION_1_3,
+                .apiVersion = c.VK_API_VERSION_1_2,
             },
             .enabledLayerCount = @intCast(instanceLayers.len),
             .ppEnabledLayerNames = instanceLayers.ptr,
@@ -3245,6 +3245,12 @@ pub const Renderer = struct {
     executingFrame: bool,
     framesRenderedInSwapchain: usize,
 
+    // Dynamic rendering is used through the KHR extension so we can target Vulkan 1.2 devices.
+    // The core 1.3 symbols have null driver dispatch on a 1.2 device, so we load the *KHR entry
+    // points explicitly and call through these.
+    cmdBeginRendering: c.PFN_vkCmdBeginRenderingKHR,
+    cmdEndRendering: c.PFN_vkCmdEndRenderingKHR,
+
     fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
         std.log.debug("swapchain recreation has began", .{});
         const timestamp = @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms);
@@ -3364,6 +3370,9 @@ pub const Renderer = struct {
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            // Dynamic rendering is core in 1.3; on 1.2 devices we pull it in as an extension so
+            // we keep the render-pass-free draw path without requiring a 1.3 driver.
+            c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
         } ++ switch (builtin.os.tag) {
             .macos => .{
                 "VK_KHR_portability_subset",
@@ -3378,8 +3387,8 @@ pub const Renderer = struct {
             score: usize,
         } = null;
         blk: for (graphics.devices) |device| {
-            if (device.deviceProperties.apiVersion < c.VK_API_VERSION_1_3) {
-                std.log.info("Skipping device '{s}': Vulkan 1.3 is required", .{
+            if (device.deviceProperties.apiVersion < c.VK_API_VERSION_1_2) {
+                std.log.info("Skipping device '{s}': Vulkan 1.2 is required", .{
                     std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
                 });
                 continue :blk;
@@ -3404,12 +3413,12 @@ pub const Renderer = struct {
                 }
             }
 
-            var vulkan13Features = c.VkPhysicalDeviceVulkan13Features{
-                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            var dynamicRenderingFeatures = c.VkPhysicalDeviceDynamicRenderingFeaturesKHR{
+                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
             };
             var vulkan12Features = c.VkPhysicalDeviceVulkan12Features{
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-                .pNext = &vulkan13Features,
+                .pNext = &dynamicRenderingFeatures,
             };
             var deviceFeatures2 = c.VkPhysicalDeviceFeatures2{
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -3431,8 +3440,8 @@ pub const Renderer = struct {
                 continue :blk;
             }
 
-            if (vulkan13Features.dynamicRendering != c.VK_TRUE) {
-                std.log.info("Skipping device '{s}': missing Vulkan 1.3 dynamic rendering", .{
+            if (dynamicRenderingFeatures.dynamicRendering != c.VK_TRUE) {
+                std.log.info("Skipping device '{s}': missing dynamic rendering support", .{
                     std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
                 });
                 continue :blk;
@@ -3542,13 +3551,13 @@ pub const Renderer = struct {
         };
 
         var logicalDevice: c.VkDevice = undefined;
-        var vulkan13Features = c.VkPhysicalDeviceVulkan13Features{
-            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+        var dynamicRenderingFeatures = c.VkPhysicalDeviceDynamicRenderingFeaturesKHR{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
             .dynamicRendering = c.VK_TRUE,
         };
         var vulkan12Features = c.VkPhysicalDeviceVulkan12Features{
             .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-            .pNext = &vulkan13Features,
+            .pNext = &dynamicRenderingFeatures,
             .shaderInt8 = c.VK_TRUE,
             .descriptorIndexing = c.VK_TRUE,
             .shaderSampledImageArrayNonUniformIndexing = c.VK_TRUE,
@@ -3580,6 +3589,13 @@ pub const Renderer = struct {
             &logicalDevice,
         ));
         errdefer c.vkDestroyDevice(logicalDevice, null);
+
+        const cmdBeginRendering: c.PFN_vkCmdBeginRenderingKHR = @ptrCast(c.vkGetDeviceProcAddr(logicalDevice, "vkCmdBeginRenderingKHR"));
+        const cmdEndRendering: c.PFN_vkCmdEndRenderingKHR = @ptrCast(c.vkGetDeviceProcAddr(logicalDevice, "vkCmdEndRenderingKHR"));
+        if (cmdBeginRendering == null or cmdEndRendering == null) {
+            std.log.err("Driver advertised dynamic rendering but did not expose the KHR entry points", .{});
+            return error.MissingRequiredExtension;
+        }
 
         var graphicsQueue: c.VkQueue = undefined;
         c.vkGetDeviceQueue(logicalDevice, graphicsQueueFamilyIndex, 0, &graphicsQueue);
@@ -3727,6 +3743,8 @@ pub const Renderer = struct {
 
             .physicalDevice = physicalDevice,
             .logicalDevice = logicalDevice,
+            .cmdBeginRendering = cmdBeginRendering,
+            .cmdEndRendering = cmdEndRendering,
             .graphicsQueue = graphicsQueue,
             .graphicsQueueFamilyIndex = graphicsQueueFamilyIndex,
             .presentationQueue = presentationQueue,
@@ -4329,7 +4347,7 @@ pub const Renderer = struct {
             },
         };
 
-        c.vkCmdBeginRendering(
+        self.cmdBeginRendering.?(
             self.commandBuffers[frameIndex],
             &c.VkRenderingInfo{
                 .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -4398,7 +4416,7 @@ pub const Renderer = struct {
             }
         }
 
-        c.vkCmdEndRendering(self.commandBuffers[frameIndex]);
+        self.cmdEndRendering.?(self.commandBuffers[frameIndex]);
         self.transitionSwapchainImage(
             self.commandBuffers[frameIndex],
             swapchainImageIndex,
