@@ -4177,7 +4177,11 @@ pub const Renderer = struct {
                         // Outer lookup: once per run (per font/size/weight/dpi combo)
                         const glyphPageKey = TextPipeline.GlyphPageKey{
                             .fontKey = glyphFont.key,
-                            .fontSize = glyphFontSize,
+                            // `rasterize` already rounds to integer pixels, so an
+                            // animated size keyed raw mints a fresh ~18KB page per
+                            // intermediate frame for an identical bitmap, churning
+                            // the heap until lookups go cold.
+                            .fontSize = @round(glyphFontSize),
                             .fontWeight = glyphFontWeight,
                         };
                         if (self.textPipeline.glyphPageCache.getMut(glyphPageKey)) |entry| {
