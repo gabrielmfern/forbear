@@ -527,6 +527,64 @@ extern "vulkan-1" fn vkCreateWin32SurfaceKHR(
 extern "user32" fn SetProcessWorkingSetSize(hProcess: HANDLE, dwMinimumWorkingSetSize: SIZE_T, dwMaximumWorkingSetSize: SIZE_T) callconv(.c) BOOL;
 extern "user32" fn GetCurrentProcess() callconv(.c) HANDLE;
 
+// Single-subpass, single-color-attachment render pass that draws straight into the swapchain image.
+// This is the render-pass form of what the renderer used to do with dynamic rendering; it exists so
+// we don't depend on VK_KHR_dynamic_rendering, which old/legacy drivers may not expose. The attachment
+// clears on load, stores on completion, and the render pass transitions UNDEFINED -> PRESENT_SRC for us
+// (replacing the manual image barriers the dynamic-rendering path needed).
+fn createRenderPass(logicalDevice: c.VkDevice, format: c.VkFormat) !c.VkRenderPass {
+    const colorAttachment = c.VkAttachmentDescription{
+        .flags = 0,
+        .format = format,
+        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    };
+    const colorAttachmentRef = c.VkAttachmentReference{
+        .attachment = 0,
+        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+    // Wait for the acquired image (signalled at COLOR_ATTACHMENT_OUTPUT via the imageAvailable
+    // semaphore, see drawFrame's waitStages) before the subpass writes color.
+    const dependency = c.VkSubpassDependency{
+        .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = 0,
+    };
+    var renderPass: c.VkRenderPass = undefined;
+    try ensureNoError(c.vkCreateRenderPass(logicalDevice, &c.VkRenderPassCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext = null,
+        .flags = 0,
+        .attachmentCount = 1,
+        .pAttachments = &colorAttachment,
+        .subpassCount = 1,
+        .pSubpasses = &c.VkSubpassDescription{
+            .flags = 0,
+            .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            .inputAttachmentCount = 0,
+            .pInputAttachments = null,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &colorAttachmentRef,
+            .pResolveAttachments = null,
+            .pDepthStencilAttachment = null,
+            .preserveAttachmentCount = 0,
+            .pPreserveAttachments = null,
+        },
+        .dependencyCount = 1,
+        .pDependencies = &dependency,
+    }, null, &renderPass));
+    return renderPass;
+}
+
 pub fn initRenderer(
     self: *Graphics,
     window: *const Window,
@@ -1732,7 +1790,7 @@ const ShadowsPipeline = struct {
     fn init(
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-        colorAttachmentFormat: c.VkFormat,
+        renderPass: c.VkRenderPass,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
         try ensureNoError(c.vkCreateShaderModule(
@@ -1833,16 +1891,6 @@ const ShadowsPipeline = struct {
 
         const bindingDescription = Vertex.getBindingDescription();
         const attributeDescriptions = Vertex.getAttributeDescriptions();
-        const colorAttachmentFormats = [_]c.VkFormat{colorAttachmentFormat};
-        const renderingCreateInfo = c.VkPipelineRenderingCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .pNext = null,
-            .viewMask = 0,
-            .colorAttachmentCount = colorAttachmentFormats.len,
-            .pColorAttachmentFormats = &colorAttachmentFormats,
-            .depthAttachmentFormat = c.VK_FORMAT_UNDEFINED,
-            .stencilAttachmentFormat = c.VK_FORMAT_UNDEFINED,
-        };
 
         var graphicsPipeline: c.VkPipeline = undefined;
         try ensureNoError(c.vkCreateGraphicsPipelines(
@@ -1851,7 +1899,7 @@ const ShadowsPipeline = struct {
             1,
             &c.VkGraphicsPipelineCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                .pNext = &renderingCreateInfo,
+                .pNext = null,
                 .stageCount = @intCast(shaderStages.len),
                 .pStages = shaderStages.ptr,
                 .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
@@ -1930,6 +1978,7 @@ const ShadowsPipeline = struct {
                     .pDynamicStates = dynamicStates.ptr,
                 },
                 .layout = pipelineLayout,
+                .renderPass = renderPass,
                 .subpass = 0,
                 .basePipelineHandle = null,
                 .basePipelineIndex = -1,
@@ -2079,7 +2128,7 @@ const ElementsPipeline = struct {
         allocator: std.mem.Allocator,
         logicalDevice: c.VkDevice,
         physicalDevice: c.VkPhysicalDevice,
-        colorAttachmentFormat: c.VkFormat,
+        renderPass: c.VkRenderPass,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
         try ensureNoError(c.vkCreateShaderModule(
@@ -2209,16 +2258,6 @@ const ElementsPipeline = struct {
 
         const bindingDescription = Vertex.getBindingDescription();
         const attributeDescriptions = Vertex.getAttributeDescriptions();
-        const colorAttachmentFormats = [_]c.VkFormat{colorAttachmentFormat};
-        const renderingCreateInfo = c.VkPipelineRenderingCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .pNext = null,
-            .viewMask = 0,
-            .colorAttachmentCount = colorAttachmentFormats.len,
-            .pColorAttachmentFormats = &colorAttachmentFormats,
-            .depthAttachmentFormat = c.VK_FORMAT_UNDEFINED,
-            .stencilAttachmentFormat = c.VK_FORMAT_UNDEFINED,
-        };
 
         var blendAddGraphicsPipeline: c.VkPipeline = undefined;
         try ensureNoError(c.vkCreateGraphicsPipelines(
@@ -2227,7 +2266,7 @@ const ElementsPipeline = struct {
             1,
             &c.VkGraphicsPipelineCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                .pNext = &renderingCreateInfo,
+                .pNext = null,
                 .stageCount = @intCast(shaderStages.len),
                 .pStages = shaderStages.ptr,
                 .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
@@ -2306,6 +2345,7 @@ const ElementsPipeline = struct {
                     .pDynamicStates = dynamicStates.ptr,
                 },
                 .layout = pipelineLayout,
+                .renderPass = renderPass,
                 .subpass = 0,
                 .basePipelineHandle = null,
                 .basePipelineIndex = -1,
@@ -2322,7 +2362,7 @@ const ElementsPipeline = struct {
             1,
             &c.VkGraphicsPipelineCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                .pNext = &renderingCreateInfo,
+                .pNext = null,
                 .stageCount = @intCast(shaderStages.len),
                 .pStages = shaderStages.ptr,
                 .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
@@ -2407,6 +2447,7 @@ const ElementsPipeline = struct {
                     .pDynamicStates = dynamicStates.ptr,
                 },
                 .layout = pipelineLayout,
+                .renderPass = renderPass,
                 .subpass = 0,
                 .basePipelineHandle = null,
                 .basePipelineIndex = -1,
@@ -2423,7 +2464,7 @@ const ElementsPipeline = struct {
             1,
             &c.VkGraphicsPipelineCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                .pNext = &renderingCreateInfo,
+                .pNext = null,
                 .stageCount = @intCast(shaderStages.len),
                 .pStages = shaderStages.ptr,
                 .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
@@ -2505,6 +2546,7 @@ const ElementsPipeline = struct {
                     .pDynamicStates = dynamicStates.ptr,
                 },
                 .layout = pipelineLayout,
+                .renderPass = renderPass,
                 .subpass = 0,
                 .basePipelineHandle = null,
                 .basePipelineIndex = -1,
@@ -2785,7 +2827,7 @@ const TextPipeline = struct {
         physicalDevice: c.VkPhysicalDevice,
         graphicsQueue: c.VkQueue,
         commandPool: c.VkCommandPool,
-        colorAttachmentFormat: c.VkFormat,
+        renderPass: c.VkRenderPass,
     ) !@This() {
         var vertexShaderModule: c.VkShaderModule = undefined;
         try ensureNoError(c.vkCreateShaderModule(
@@ -2900,16 +2942,6 @@ const TextPipeline = struct {
 
         const bindingDescription = Vertex.getBindingDescription();
         const attributeDescriptions = Vertex.getAttributeDescriptions();
-        const colorAttachmentFormats = [_]c.VkFormat{colorAttachmentFormat};
-        const renderingCreateInfo = c.VkPipelineRenderingCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .pNext = null,
-            .viewMask = 0,
-            .colorAttachmentCount = colorAttachmentFormats.len,
-            .pColorAttachmentFormats = &colorAttachmentFormats,
-            .depthAttachmentFormat = c.VK_FORMAT_UNDEFINED,
-            .stencilAttachmentFormat = c.VK_FORMAT_UNDEFINED,
-        };
 
         var graphicsPipeline: c.VkPipeline = undefined;
         try ensureNoError(c.vkCreateGraphicsPipelines(
@@ -2918,7 +2950,7 @@ const TextPipeline = struct {
             1,
             &c.VkGraphicsPipelineCreateInfo{
                 .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                .pNext = &renderingCreateInfo,
+                .pNext = null,
                 .stageCount = @intCast(shaderStages.len),
                 .pStages = shaderStages.ptr,
                 .pVertexInputState = &c.VkPipelineVertexInputStateCreateInfo{
@@ -3003,6 +3035,7 @@ const TextPipeline = struct {
                     .pDynamicStates = dynamicStates.ptr,
                 },
                 .layout = pipelineLayout,
+                .renderPass = renderPass,
                 .subpass = 0,
                 .basePipelineHandle = null,
                 .basePipelineIndex = -1,
@@ -3245,11 +3278,9 @@ pub const Renderer = struct {
     executingFrame: bool,
     framesRenderedInSwapchain: usize,
 
-    // Dynamic rendering is used through the KHR extension so we can target Vulkan 1.2 devices.
-    // The core 1.3 symbols have null driver dispatch on a 1.2 device, so we load the *KHR entry
-    // points explicitly and call through these.
-    cmdBeginRendering: c.PFN_vkCmdBeginRenderingKHR,
-    cmdEndRendering: c.PFN_vkCmdEndRenderingKHR,
+    // Single-subpass render pass the swapchain framebuffers and all three pipelines are built against.
+    // Stable across resizes (depends only on the surface format), so it is created once.
+    renderPass: c.VkRenderPass,
 
     fn recreateSwapchain(self: *Self, width: u32, height: u32) !void {
         std.log.debug("swapchain recreation has began", .{});
@@ -3300,6 +3331,7 @@ pub const Renderer = struct {
             previousSwapchain.deinit(self.logicalDevice);
         }
         errdefer self.swapchain.deinit(self.logicalDevice);
+        try self.swapchain.createFramebuffers(self.logicalDevice, self.renderPass);
         std.log.debug("spent {d}ms just recreating swapchain", .{@divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms) - recreateStart});
 
         std.log.debug("swapchain recreation took {d}ms", .{@divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms) - timestamp});
@@ -3370,15 +3402,9 @@ pub const Renderer = struct {
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
             c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-            // We target Vulkan 1.1 and pull everything newer in as extensions:
-            //   - dynamic rendering (core 1.3) keeps the render-pass-free draw path
-            //   - descriptor indexing (core 1.2) gives the bindless sampled-image array
-            // The shaders are all 32-bit, so no shaderInt8/16/64 dependency.
-            // dynamic_rendering's dep chain (create_renderpass2, depth_stencil_resolve) was core in
-            // 1.2 but must be listed explicitly at 1.1; multiview/maintenance2 are already core 1.1.
-            c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-            c.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME,
-            c.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
+            // We target Vulkan 1.1. Drawing goes through a classic VkRenderPass (core 1.0), so the only
+            // thing we pull in as an extension is descriptor indexing (core 1.2) for the bindless
+            // sampled-image array. The shaders are all 32-bit, so no shaderInt8/16/64 dependency.
             c.VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
         } ++ switch (builtin.os.tag) {
             .macos => .{
@@ -3420,12 +3446,8 @@ pub const Renderer = struct {
                 }
             }
 
-            var dynamicRenderingFeatures = c.VkPhysicalDeviceDynamicRenderingFeaturesKHR{
-                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
-            };
             var descriptorIndexingFeatures = c.VkPhysicalDeviceDescriptorIndexingFeaturesEXT{
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
-                .pNext = &dynamicRenderingFeatures,
             };
             var deviceFeatures2 = c.VkPhysicalDeviceFeatures2{
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -3442,13 +3464,6 @@ pub const Renderer = struct {
                 descriptorIndexingFeatures.runtimeDescriptorArray != c.VK_TRUE)
             {
                 std.log.info("Skipping device '{s}': missing required descriptor indexing features", .{
-                    std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
-                });
-                continue :blk;
-            }
-
-            if (dynamicRenderingFeatures.dynamicRendering != c.VK_TRUE) {
-                std.log.info("Skipping device '{s}': missing dynamic rendering support", .{
                     std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
                 });
                 continue :blk;
@@ -3555,13 +3570,8 @@ pub const Renderer = struct {
         };
 
         var logicalDevice: c.VkDevice = undefined;
-        var dynamicRenderingFeatures = c.VkPhysicalDeviceDynamicRenderingFeaturesKHR{
-            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
-            .dynamicRendering = c.VK_TRUE,
-        };
         var descriptorIndexingFeatures = c.VkPhysicalDeviceDescriptorIndexingFeaturesEXT{
             .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
-            .pNext = &dynamicRenderingFeatures,
             .shaderSampledImageArrayNonUniformIndexing = c.VK_TRUE,
             .descriptorBindingPartiallyBound = c.VK_TRUE,
             .descriptorBindingSampledImageUpdateAfterBind = c.VK_TRUE,
@@ -3590,19 +3600,12 @@ pub const Renderer = struct {
         ));
         errdefer c.vkDestroyDevice(logicalDevice, null);
 
-        const cmdBeginRendering: c.PFN_vkCmdBeginRenderingKHR = @ptrCast(c.vkGetDeviceProcAddr(logicalDevice, "vkCmdBeginRenderingKHR"));
-        const cmdEndRendering: c.PFN_vkCmdEndRenderingKHR = @ptrCast(c.vkGetDeviceProcAddr(logicalDevice, "vkCmdEndRenderingKHR"));
-        if (cmdBeginRendering == null or cmdEndRendering == null) {
-            std.log.err("Driver advertised dynamic rendering but did not expose the KHR entry points", .{});
-            return error.MissingRequiredExtension;
-        }
-
         var graphicsQueue: c.VkQueue = undefined;
         c.vkGetDeviceQueue(logicalDevice, graphicsQueueFamilyIndex, 0, &graphicsQueue);
         var presentationQueue: c.VkQueue = undefined;
         c.vkGetDeviceQueue(logicalDevice, presentationQueueFamilyIndex, 0, &presentationQueue);
 
-        const swapchain = try Swapchain.init(
+        var swapchain = try Swapchain.init(
             graphics.allocator,
             physicalDevice,
             logicalDevice,
@@ -3612,6 +3615,10 @@ pub const Renderer = struct {
             null,
         );
         errdefer swapchain.deinit(logicalDevice);
+
+        const renderPass = try createRenderPass(logicalDevice, swapchain.surfaceFormat.format);
+        errdefer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
+        try swapchain.createFramebuffers(logicalDevice, renderPass);
 
         var commandPool: c.VkCommandPool = undefined;
         try ensureNoError(c.vkCreateCommandPool(
@@ -3647,7 +3654,7 @@ pub const Renderer = struct {
             graphics.allocator,
             logicalDevice,
             physicalDevice,
-            swapchain.surfaceFormat.format,
+            renderPass,
         );
         errdefer elementsPipeline.deinit(logicalDevice);
 
@@ -3657,14 +3664,14 @@ pub const Renderer = struct {
             physicalDevice,
             graphicsQueue,
             commandPool,
-            swapchain.surfaceFormat.format,
+            renderPass,
         );
         errdefer textPipeline.deinit(logicalDevice, graphics.allocator);
 
         var shadowsPipeline = try ShadowsPipeline.init(
             logicalDevice,
             physicalDevice,
-            swapchain.surfaceFormat.format,
+            renderPass,
         );
         errdefer shadowsPipeline.deinit(logicalDevice);
 
@@ -3743,8 +3750,7 @@ pub const Renderer = struct {
 
             .physicalDevice = physicalDevice,
             .logicalDevice = logicalDevice,
-            .cmdBeginRendering = cmdBeginRendering,
-            .cmdEndRendering = cmdEndRendering,
+            .renderPass = renderPass,
             .graphicsQueue = graphicsQueue,
             .graphicsQueueFamilyIndex = graphicsQueueFamilyIndex,
             .presentationQueue = presentationQueue,
@@ -3857,6 +3863,7 @@ pub const Renderer = struct {
         self.shadowsPipeline.deinit(self.logicalDevice);
         self.rectangleModel.deinit(self.logicalDevice);
         self.swapchain.deinit(self.logicalDevice);
+        c.vkDestroyRenderPass(self.logicalDevice, self.renderPass, null);
         c.vkDestroyDevice(self.logicalDevice, null);
         c.vkDestroySurfaceKHR(self.graphics.vulkanInstance, self.surface, null);
     }
@@ -3879,49 +3886,6 @@ pub const Renderer = struct {
             };
         } else fullViewport;
         c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{scissor});
-    }
-
-    fn transitionSwapchainImage(
-        self: *Self,
-        commandBuffer: c.VkCommandBuffer,
-        imageIndex: usize,
-        oldLayout: c.VkImageLayout,
-        newLayout: c.VkImageLayout,
-        srcAccessMask: c.VkAccessFlags,
-        dstAccessMask: c.VkAccessFlags,
-        srcStageMask: c.VkPipelineStageFlags,
-        dstStageMask: c.VkPipelineStageFlags,
-    ) void {
-        const barrier = c.VkImageMemoryBarrier{
-            .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .pNext = null,
-            .srcAccessMask = srcAccessMask,
-            .dstAccessMask = dstAccessMask,
-            .oldLayout = oldLayout,
-            .newLayout = newLayout,
-            .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
-            .image = self.swapchain.images[imageIndex],
-            .subresourceRange = .{
-                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-        };
-        c.vkCmdPipelineBarrier(
-            commandBuffer,
-            srcStageMask,
-            dstStageMask,
-            0,
-            0,
-            null,
-            0,
-            null,
-            1,
-            &barrier,
-        );
     }
 
     fn handleResizeMidFrame(self: *Self) !void {
@@ -4319,51 +4283,27 @@ pub const Renderer = struct {
         }));
         self.executingFrame = true;
 
-        self.transitionSwapchainImage(
+        // The render pass handles the UNDEFINED -> COLOR_ATTACHMENT_OPTIMAL -> PRESENT_SRC layout
+        // transitions for us (see createRenderPass), so no manual image barriers are needed here.
+        c.vkCmdBeginRenderPass(
             self.commandBuffers[frameIndex],
-            swapchainImageIndex,
-            c.VK_IMAGE_LAYOUT_UNDEFINED,
-            c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            0,
-            c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        );
-
-        const colorAttachment = c.VkRenderingAttachmentInfo{
-            .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .pNext = null,
-            .imageView = self.swapchain.imageViews[swapchainImageIndex],
-            .imageLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .resolveMode = c.VK_RESOLVE_MODE_NONE,
-            .resolveImageView = null,
-            .resolveImageLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-            .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = c.VkClearValue{
-                .color = c.VkClearColorValue{
-                    .float32 = srgbToLinearColor(clearColor),
-                },
-            },
-        };
-
-        self.cmdBeginRendering.?(
-            self.commandBuffers[frameIndex],
-            &c.VkRenderingInfo{
-                .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
+            &c.VkRenderPassBeginInfo{
+                .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = null,
-                .flags = 0,
+                .renderPass = self.renderPass,
+                .framebuffer = self.swapchain.framebuffers[swapchainImageIndex],
                 .renderArea = c.VkRect2D{
                     .offset = c.VkOffset2D{ .x = 0, .y = 0 },
                     .extent = self.swapchain.extent,
                 },
-                .layerCount = 1,
-                .viewMask = 0,
-                .colorAttachmentCount = 1,
-                .pColorAttachments = &colorAttachment,
-                .pDepthAttachment = null,
-                .pStencilAttachment = null,
+                .clearValueCount = 1,
+                .pClearValues = &c.VkClearValue{
+                    .color = c.VkClearColorValue{
+                        .float32 = srgbToLinearColor(clearColor),
+                    },
+                },
             },
+            c.VK_SUBPASS_CONTENTS_INLINE,
         );
 
         c.vkCmdSetViewport(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkViewport{c.VkViewport{
@@ -4416,17 +4356,7 @@ pub const Renderer = struct {
             }
         }
 
-        self.cmdEndRendering.?(self.commandBuffers[frameIndex]);
-        self.transitionSwapchainImage(
-            self.commandBuffers[frameIndex],
-            swapchainImageIndex,
-            c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            0,
-            c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-        );
+        c.vkCmdEndRenderPass(self.commandBuffers[frameIndex]);
         try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]));
 
         const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight]};
@@ -4528,6 +4458,9 @@ pub const Renderer = struct {
 
         images: []c.VkImage,
         imageViews: []c.VkImageView,
+        // One framebuffer per swapchain image view, bound to the renderer's render pass. Created by
+        // createFramebuffers() after the render pass exists, and recreated alongside the swapchain on resize.
+        framebuffers: []c.VkFramebuffer,
 
         allocator: std.mem.Allocator,
 
@@ -4716,11 +4649,37 @@ pub const Renderer = struct {
                 .extent = swapchainExtent,
                 .images = swapChainImages,
                 .imageViews = imageViews,
+                // Filled in by createFramebuffers() once the render pass is available.
+                .framebuffers = &.{},
                 .allocator = allocator,
             };
         }
 
+        fn createFramebuffers(self: *Swapchain, logicalDevice: c.VkDevice, renderPass: c.VkRenderPass) !void {
+            const framebuffers = try self.allocator.alloc(c.VkFramebuffer, self.imageViews.len);
+            errdefer self.allocator.free(framebuffers);
+            for (self.imageViews, 0..) |imageView, i| {
+                errdefer for (framebuffers[0..i]) |fb| c.vkDestroyFramebuffer(logicalDevice, fb, null);
+                try ensureNoError(c.vkCreateFramebuffer(logicalDevice, &c.VkFramebufferCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                    .pNext = null,
+                    .flags = 0,
+                    .renderPass = renderPass,
+                    .attachmentCount = 1,
+                    .pAttachments = &imageView,
+                    .width = self.extent.width,
+                    .height = self.extent.height,
+                    .layers = 1,
+                }, null, &framebuffers[i]));
+            }
+            self.framebuffers = framebuffers;
+        }
+
         fn deinit(self: Swapchain, logicalDevice: c.VkDevice) void {
+            for (self.framebuffers) |framebuffer| {
+                c.vkDestroyFramebuffer(logicalDevice, framebuffer, null);
+            }
+            self.allocator.free(self.framebuffers);
             for (self.imageViews) |imageView| {
                 c.vkDestroyImageView(logicalDevice, imageView, null);
             }
