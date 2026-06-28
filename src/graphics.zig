@@ -2708,25 +2708,30 @@ const ElementsPipeline = struct {
 };
 
 const TextPipeline = struct {
-    const GlyphPageCache = std.HashMap(
-        GlyphPageKey,
-        GlyphPage,
-        struct {
-            pub fn hash(_: @This(), key: GlyphPageKey) u64 {
-                var hasher = std.hash.Wyhash.init(0);
-                // GlyphPageKey uses f32, which doesn't generally have a unique
-                // representation, meaning this hash can be non-unique, but
-                // since the values for font size are always >= 0, we know this
-                // is then unique.
-                hasher.update(std.mem.asBytes(&key));
-                return hasher.final();
-            }
-            pub fn eql(_: @This(), a: GlyphPageKey, b: GlyphPageKey) bool {
-                return std.meta.eql(a, b);
-            }
-        },
-        std.hash_map.default_max_load_percentage,
-    );
+    const GlyphPageKeyContext = struct {
+        pub fn hash(_: @This(), key: GlyphPageKey) u64 {
+            var hasher = std.hash.Wyhash.init(0);
+            // GlyphPageKey uses f32, which doesn't generally have a unique
+            // representation, meaning this hash can be non-unique, but
+            // since the values for font size are always >= 0, we know this
+            // is then unique.
+            hasher.update(std.mem.asBytes(&key));
+            return hasher.final();
+        }
+        pub fn eql(_: @This(), a: GlyphPageKey, b: GlyphPageKey) bool {
+            return std.meta.eql(a, b);
+        }
+    };
+
+    // GlyphPageKey carries the font size as an f32, so an animated size mints a
+    // distinct page every frame. Pages were never evicted, so scrolling text
+    // whose size animates leaked one ~18KB page per intermediate size without
+    // bound. Cap the cache and drop the least-recently-used page (reclaiming its
+    // atlas rectangles) once full, so memory stays flat. Pages are boxed: the
+    // LRU stores pointers, so growth never reallocates a value array of inline
+    // 18KB pages.
+    const pageCacheCapacity = 64;
+    const GlyphPageCache = Font.LRU(GlyphPageKey, *GlyphPage, pageCacheCapacity, GlyphPageKeyContext);
 
     pipelineLayout: c.VkPipelineLayout,
     graphicsPipeline: c.VkPipeline,
@@ -3112,7 +3117,7 @@ const TextPipeline = struct {
             .descriptorPool = descriptorPool,
 
             .allocator = allocator,
-            .glyphPageCache = GlyphPageCache.init(allocator),
+            .glyphPageCache = try GlyphPageCache.init(allocator),
             .fontTextureAtlas = fontTextureAtlas,
             .sampler = sampler,
         };
@@ -3172,9 +3177,9 @@ const TextPipeline = struct {
         c.vkDestroyDescriptorPool(logicalDevice, self.descriptorPool, null);
         self.fontTextureAtlas.deinit(allocator, logicalDevice);
         c.vkDestroySampler(logicalDevice, self.sampler, null);
-        var pageIterator = self.glyphPageCache.valueIterator();
-        while (pageIterator.next()) |page| {
-            page.deinit();
+        for (self.glyphPageCache.entries[0..self.glyphPageCache.length]) |*entry| {
+            entry.value.deinit();
+            allocator.destroy(entry.value);
         }
         self.glyphPageCache.deinit();
 
@@ -3945,9 +3950,8 @@ pub const Renderer = struct {
 
         if (self.textPipeline.needsAtlasReset) {
             self.textPipeline.fontTextureAtlas.reset();
-            var cacheIterator = self.textPipeline.glyphPageCache.iterator();
-            while (cacheIterator.next()) |entry| {
-                entry.value_ptr.clear();
+            for (self.textPipeline.glyphPageCache.entries[0..self.textPipeline.glyphPageCache.length]) |*entry| {
+                entry.value.clear();
             }
             self.textPipeline.needsAtlasReset = false;
         }
@@ -4176,11 +4180,28 @@ pub const Renderer = struct {
                             .fontSize = glyphFontSize,
                             .fontWeight = glyphFontWeight,
                         };
-                        const glyphPageGetResult = try self.textPipeline.glyphPageCache.getOrPut(glyphPageKey);
-                        if (!glyphPageGetResult.found_existing) {
-                            glyphPageGetResult.value_ptr.* = try TextPipeline.GlyphPage.init(self.textPipeline.allocator);
+                        if (self.textPipeline.glyphPageCache.getMut(glyphPageKey)) |entry| {
+                            glyphPage = entry.value;
+                        } else {
+                            const page = try self.textPipeline.allocator.create(TextPipeline.GlyphPage);
+                            page.* = try TextPipeline.GlyphPage.init(self.textPipeline.allocator);
+                            const pagePutResult = self.textPipeline.glyphPageCache.put(glyphPageKey, page);
+                            if (pagePutResult.evicted) |evicted| {
+                                // Hand the evicted page's atlas rectangles back before
+                                // freeing it, otherwise that atlas space leaks.
+                                for (evicted.value.entries[0..evicted.value.length]) |glyphEntry| {
+                                    try self.textPipeline.fontTextureAtlas.reclaim(.{
+                                        .u = @intFromFloat(glyphEntry.value.textureCoordinates.u),
+                                        .v = @intFromFloat(glyphEntry.value.textureCoordinates.v),
+                                        .width = glyphEntry.value.bitmapWidth,
+                                        .height = glyphEntry.value.bitmapHeight,
+                                    });
+                                }
+                                evicted.value.deinit();
+                                self.textPipeline.allocator.destroy(evicted.value);
+                            }
+                            glyphPage = page;
                         }
-                        glyphPage = glyphPageGetResult.value_ptr;
                         styleInitialized = true;
                     }
 
