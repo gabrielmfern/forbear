@@ -3373,10 +3373,13 @@ pub const Renderer = struct {
             // We target Vulkan 1.1 and pull everything newer in as extensions:
             //   - dynamic rendering (core 1.3) keeps the render-pass-free draw path
             //   - descriptor indexing (core 1.2) gives the bindless sampled-image array
-            //   - shader_float16_int8 (core 1.2) gives shaderInt8 for the shaders
+            // The shaders are all 32-bit, so no shaderInt8/16/64 dependency.
+            // dynamic_rendering's dep chain (create_renderpass2, depth_stencil_resolve) was core in
+            // 1.2 but must be listed explicitly at 1.1; multiview/maintenance2 are already core 1.1.
             c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+            c.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME,
+            c.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
             c.VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-            c.VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
         } ++ switch (builtin.os.tag) {
             .macos => .{
                 "VK_KHR_portability_subset",
@@ -3420,13 +3423,9 @@ pub const Renderer = struct {
             var dynamicRenderingFeatures = c.VkPhysicalDeviceDynamicRenderingFeaturesKHR{
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
             };
-            var shaderFloat16Int8Features = c.VkPhysicalDeviceShaderFloat16Int8FeaturesKHR{
-                .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR,
-                .pNext = &dynamicRenderingFeatures,
-            };
             var descriptorIndexingFeatures = c.VkPhysicalDeviceDescriptorIndexingFeaturesEXT{
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
-                .pNext = &shaderFloat16Int8Features,
+                .pNext = &dynamicRenderingFeatures,
             };
             var deviceFeatures2 = c.VkPhysicalDeviceFeatures2{
                 .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -3436,8 +3435,7 @@ pub const Renderer = struct {
 
             // There is no aggregate `descriptorIndexing` bit in the EXT struct; the extension being
             // present (checked above) is what stands in for it, then we verify the specific bits we use.
-            if (shaderFloat16Int8Features.shaderInt8 != c.VK_TRUE or
-                descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing != c.VK_TRUE or
+            if (descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing != c.VK_TRUE or
                 descriptorIndexingFeatures.descriptorBindingPartiallyBound != c.VK_TRUE or
                 descriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind != c.VK_TRUE or
                 descriptorIndexingFeatures.descriptorBindingUpdateUnusedWhilePending != c.VK_TRUE or
@@ -3456,11 +3454,8 @@ pub const Renderer = struct {
                 continue :blk;
             }
 
-            if (deviceFeatures2.features.shaderInt16 != c.VK_TRUE or
-                deviceFeatures2.features.shaderInt64 != c.VK_TRUE or
-                deviceFeatures2.features.dualSrcBlend != c.VK_TRUE)
-            {
-                std.log.info("Skipping device '{s}': missing required base features (shaderInt16, shaderInt64, or dualSrcBlend)", .{
+            if (deviceFeatures2.features.dualSrcBlend != c.VK_TRUE) {
+                std.log.info("Skipping device '{s}': missing required base feature (dualSrcBlend)", .{
                     std.mem.sliceTo(device.deviceProperties.deviceName[0..], 0),
                 });
                 continue :blk;
@@ -3564,14 +3559,9 @@ pub const Renderer = struct {
             .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
             .dynamicRendering = c.VK_TRUE,
         };
-        var shaderFloat16Int8Features = c.VkPhysicalDeviceShaderFloat16Int8FeaturesKHR{
-            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR,
-            .pNext = &dynamicRenderingFeatures,
-            .shaderInt8 = c.VK_TRUE,
-        };
         var descriptorIndexingFeatures = c.VkPhysicalDeviceDescriptorIndexingFeaturesEXT{
             .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
-            .pNext = &shaderFloat16Int8Features,
+            .pNext = &dynamicRenderingFeatures,
             .shaderSampledImageArrayNonUniformIndexing = c.VK_TRUE,
             .descriptorBindingPartiallyBound = c.VK_TRUE,
             .descriptorBindingSampledImageUpdateAfterBind = c.VK_TRUE,
@@ -3587,8 +3577,6 @@ pub const Renderer = struct {
                 .queueCreateInfoCount = @intCast(queueCreateInfos.len),
                 .pQueueCreateInfos = queueCreateInfos.ptr,
                 .pEnabledFeatures = &c.VkPhysicalDeviceFeatures{
-                    .shaderInt16 = c.VK_TRUE,
-                    .shaderInt64 = c.VK_TRUE,
                     .dualSrcBlend = c.VK_TRUE,
                 },
                 .ppEnabledExtensionNames = requiredDeviceExtensions.ptr,
