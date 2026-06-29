@@ -3943,7 +3943,13 @@ pub const Renderer = struct {
         ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
             self.swapchain.handle,
-            std.math.maxInt(u64),
+            // Bounded so a stalled presentation engine (notably the Win32 modal
+            // move/size loop, where DWM only services FIFO presents on size-event
+            // ticks) can't park this thread forever. ~6 vsync intervals: well above
+            // any honest acquire latency, well below a perceptible hang. On timeout
+            // the spec leaves the semaphore unsignaled and writes no index, so we
+            // just skip the frame and let the loop retry.
+            targetFrameTimeNs *| 6,
             self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight],
             null,
             &imageIndex,
@@ -3956,6 +3962,7 @@ pub const Renderer = struct {
                     try self.handleResizeMidFrame();
                     return;
                 },
+                error.Timeout, error.NotReady => return,
                 else => return err,
             }
         };
