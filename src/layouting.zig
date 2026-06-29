@@ -63,7 +63,16 @@ fn growChildren(
         }) catch {};
     }
 
+    // Water-filling needs at most ~one pass per candidate; anything beyond this
+    // bound means the sub-pixel-progress break below has regressed and the loop
+    // is spinning. `std.debug.assert` is a no-op in ReleaseFast, so the counter
+    // is dead-code-eliminated there and this costs nothing in shipping builds.
+    var passes: usize = 0;
+    const maxPasses = activelyModifying.items.len * 4 + 64;
+
     while (remaining.* > 0.001 and activelyModifying.items.len > 0) {
+        passes += 1;
+        std.debug.assert(passes <= maxPasses);
         // Sum factors and find the smallest capacity-per-unit across candidates.
         // "capacity-per-unit" is how much a child can still grow divided by its
         // factor; the minimum across all candidates caps how far we can advance
@@ -154,7 +163,16 @@ fn shrinkChildren(
         }) catch {};
     }
 
+    // Water-filling needs at most ~one pass per candidate; anything beyond this
+    // bound means the sub-pixel-progress break below has regressed and the loop
+    // is spinning. `std.debug.assert` is a no-op in ReleaseFast, so the counter
+    // is dead-code-eliminated there and this costs nothing in shipping builds.
+    var passes: usize = 0;
+    const maxPasses = activelyModifying.items.len * 4 + 64;
+
     while (remaining.* < -0.001 and activelyModifying.items.len > 0) {
+        passes += 1;
+        std.debug.assert(passes <= maxPasses);
         var largest: f32 = activelyModifying.items[0].getSize(direction);
         var secondLargest: f32 = 0.0;
 
