@@ -185,7 +185,6 @@ pub const Event = union(enum) {
     pointerMotion: PointerMotion,
     pointerButton: PointerButton,
     scroll: Scroll,
-    resize: Resize,
     keysHeld: Keys,
     keysPressed: Keys,
     keysReleased: Keys,
@@ -217,12 +216,6 @@ pub const Event = union(enum) {
     pub const Scroll = struct {
         axis: ScrollAxis,
         offset: f32,
-    };
-
-    pub const Resize = struct {
-        width: u32,
-        height: u32,
-        dpi: [2]u32,
     };
 
     pub const Input = struct {
@@ -287,6 +280,17 @@ pub const Window = switch (builtin.os.tag) {
         },
 
         eventQueue: EventQueue = .empty,
+
+        // Resize is delivered as a direct callback on the window thread instead of
+        // through `eventQueue`, so the swapchain is recreated synchronously while
+        // the platform holds this thread mid-resize — letting frames track the
+        // drag rather than stalling until release.
+        handlers: struct {
+            resize: ?struct {
+                data: *anyopaque,
+                function: *const fn (window: *Self, newWidth: u32, newHeight: u32, newDpi: [2]u32, data: *anyopaque) void,
+            } = null,
+        } = .{},
 
         // cursor
         wlPointer: *c.wl_pointer,
@@ -429,13 +433,7 @@ pub const Window = switch (builtin.os.tag) {
             if (window.wpFractionalScale != null) return;
             window.scale = @floatFromInt(scale);
             window.updateDpi();
-            window.eventQueue.push(Event{
-                .resize = .{
-                    .width = window.width,
-                    .height = window.height,
-                    .dpi = window.dpi,
-                },
-            });
+            if (window.handlers.resize) |h| h.function(window, window.width, window.height, window.dpi, h.data);
             std.log.debug("Monitor scale changed to: {}", .{scale});
         }
 
@@ -478,13 +476,7 @@ pub const Window = switch (builtin.os.tag) {
             const window: *Self = @ptrCast(@alignCast(data));
             window.scale = @as(f32, @floatFromInt(scale)) / 120.0;
             window.updateDpi();
-            window.eventQueue.push(Event{
-                .resize = .{
-                    .width = window.width,
-                    .height = window.height,
-                    .dpi = window.dpi,
-                },
-            });
+            if (window.handlers.resize) |h| h.function(window, window.width, window.height, window.dpi, h.data);
             std.log.debug("Fractional scale changed to: {d}", .{@as(f32, @floatFromInt(scale)) / 120.0});
         }
 
@@ -613,13 +605,7 @@ pub const Window = switch (builtin.os.tag) {
                 if (window.wpViewport) |viewport| {
                     c.wp_viewport_set_destination(viewport, @intCast(window.width), @intCast(window.height));
                 }
-                window.eventQueue.push(Event{
-                    .resize = .{
-                        .width = window.width,
-                        .height = window.height,
-                        .dpi = window.dpi,
-                    },
-                });
+                if (window.handlers.resize) |h| h.function(window, window.width, window.height, window.dpi, h.data);
             }
         }
 
@@ -1305,17 +1291,6 @@ pub const Window = switch (builtin.os.tag) {
             self.cursorWlSurface = c.wl_compositor_create_surface(self.wlCompositor) orelse return error.FailedCreatingCursorSurface;
         }
 
-        pub fn setPointerMotionHandler(
-            self: *Self,
-            handler: *const fn (window: *Self, time: u32, x: f32, y: f32, data: *anyopaque) void,
-            data: *anyopaque,
-        ) void {
-            self.handlers.pointerMotion = .{
-                .data = data,
-                .function = handler,
-            };
-        }
-
         pub fn setResizeHandler(
             self: *Self,
             handler: *const fn (window: *Self, newWidth: u32, newHeight: u32, newDpi: [2]u32, data: *anyopaque) void,
@@ -1472,6 +1447,17 @@ pub const Window = switch (builtin.os.tag) {
         pendingHighSurrogate: ?u16 = null,
 
         eventQueue: EventQueue = .empty,
+
+        // Resize is delivered as a direct callback on the window thread instead of
+        // through `eventQueue`, so the swapchain is recreated synchronously while
+        // the Win32 modal move/size loop holds this thread — letting frames track
+        // the drag rather than stalling until release.
+        handlers: struct {
+            resize: ?struct {
+                data: *anyopaque,
+                function: *const fn (window: *Self, newWidth: u32, newHeight: u32, newDpi: [2]u32, data: *anyopaque) void,
+            } = null,
+        } = .{},
 
         allocator: std.mem.Allocator,
         io: std.Io,
@@ -1690,14 +1676,19 @@ pub const Window = switch (builtin.os.tag) {
             if (force or self.width != newWidth or self.height != newHeight) {
                 self.width = newWidth;
                 self.height = newHeight;
-                self.eventQueue.push(Event{
-                    .resize = .{
-                        .width = self.width,
-                        .height = self.height,
-                        .dpi = self.dpi,
-                    },
-                });
+                if (self.handlers.resize) |h| h.function(self, self.width, self.height, self.dpi, h.data);
             }
+        }
+
+        pub fn setResizeHandler(
+            self: *Self,
+            handler: *const fn (window: *Self, newWidth: u32, newHeight: u32, newDpi: [2]u32, data: *anyopaque) void,
+            data: *anyopaque,
+        ) void {
+            self.handlers.resize = .{
+                .data = data,
+                .function = handler,
+            };
         }
 
         pub fn deinit(self: *Self) void {
