@@ -587,7 +587,7 @@ fn createRenderPass(logicalDevice: c.VkDevice, format: c.VkFormat) !c.VkRenderPa
 
 pub fn initRenderer(
     self: *Graphics,
-    window: *const Window,
+    window: *Window,
 ) !Renderer {
     var vulkanSurface: c.VkSurfaceKHR = undefined;
     switch (builtin.os.tag) {
@@ -3259,7 +3259,7 @@ pub const Renderer = struct {
     presentationQueueFamilyIndex: u32,
 
     surface: c.VkSurfaceKHR,
-    window: *const Window,
+    window: *Window,
     swapchain: Swapchain,
 
     elementsPipeline: ElementsPipeline,
@@ -3397,7 +3397,7 @@ pub const Renderer = struct {
 
     fn init(
         surface: c.VkSurfaceKHR,
-        window: *const Window,
+        window: *Window,
         graphics: *const Graphics,
     ) !Renderer {
         const requiredDeviceExtensions: []const [*c]const u8 = &(.{
@@ -3774,6 +3774,15 @@ pub const Renderer = struct {
             .framesRenderedInSwapchain = 0,
             .executingFrame = false,
             .frameRateCapper = FrameRateCapper{},
+        };
+    }
+
+    pub fn onResize(window: *Window, newWidth: u32, newHeight: u32, newDpi: [2]u32, data: *anyopaque) void {
+        _ = window;
+        _ = newDpi;
+        const self: *Self = @ptrCast(@alignCast(data));
+        self.handleResize(newWidth, newHeight) catch |err| {
+            std.log.err("failed to recreate swapchain on resize: {}", .{err});
         };
     }
 

@@ -297,6 +297,11 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, window: ?*Window, renderer
     ).init(forbear.?.arena);
     forbear.?.images = std.StringHashMap(ImageType).init(forbear.?.arena);
     forbear.?.fonts = std.StringHashMap(Font).init(forbear.?.arena);
+
+    // Resize must recreate the swapchain on the window thread synchronously,
+    // before the platform's modal move/size loop hands control back, so register
+    // a direct callback rather than draining a resize event on the render thread.
+    if (window) |w| w.setResizeHandler(Graphics.Renderer.onResize, renderer);
 }
 
 /// Registers a font from the given embedded byte contents. The font is associated with
@@ -1015,11 +1020,6 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
             },
             .keysReleased => |keys| {
                 self.keysReleasedThisFrame = self.keysReleasedThisFrame.with(keys);
-            },
-            .resize => |resize| {
-                self.renderer.handleResize(resize.width, resize.height) catch |err| {
-                    handleFrameError(err);
-                };
             },
             .scroll => |scroll| {
                 // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
