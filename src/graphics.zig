@@ -3261,6 +3261,10 @@ pub const Renderer = struct {
     surface: c.VkSurfaceKHR,
     window: *Window,
     swapchain: Swapchain,
+    // Mirror of `swapchain.extent`, packed as (width << 32 | height), so the
+    // render thread can read the viewport size without contending `mutex` against
+    // a swapchain recreate that may hold it for milliseconds.
+    viewportExtent: std.atomic.Value(u64),
 
     elementsPipeline: ElementsPipeline,
     shadowsPipeline: ShadowsPipeline,
@@ -3386,13 +3390,12 @@ pub const Renderer = struct {
             }
         }
         self.framesRenderedInSwapchain = 0;
+        self.viewportExtent.store((@as(u64, self.swapchain.extent.width) << 32) | self.swapchain.extent.height, .release);
     }
 
     pub fn viewportSize(self: *Self) Vec2 {
-        const io = root.getForbear().io;
-        self.mutex.lockUncancelable(io);
-        defer self.mutex.unlock(io);
-        return .{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
+        const packed_extent = self.viewportExtent.load(.acquire);
+        return .{ @floatFromInt(packed_extent >> 32), @floatFromInt(@as(u32, @truncate(packed_extent))) };
     }
 
     fn init(
@@ -3758,6 +3761,7 @@ pub const Renderer = struct {
 
             .surface = surface,
             .swapchain = swapchain,
+            .viewportExtent = .init((@as(u64, swapchain.extent.width) << 32) | swapchain.extent.height),
 
             .elementsPipeline = elementsPipeline,
             .textPipeline = textPipeline,
