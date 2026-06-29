@@ -115,8 +115,12 @@ fn growChildren(
                 }) catch {};
             }
         }
-        if (remaining.* == remainingBeforeLoop) {
-            // Some constraint is impeding all children; avoid an infinite loop.
+        // Stop once a pass stops making sub-pixel progress. Exact float
+        // equality is not enough: when total grow capacity is within a hair
+        // of `remaining`, each pass keeps shaving an ever-smaller (but
+        // nonzero) sliver, so the loop would spin for millions of iterations
+        // before the difference underflows to exactly zero.
+        if (remainingBeforeLoop - remaining.* < 0.001) {
             break;
         }
     }
@@ -150,10 +154,7 @@ fn shrinkChildren(
         }) catch {};
     }
 
-    var iteration: usize = 0;
     while (remaining.* < -0.001 and activelyModifying.items.len > 0) {
-        iteration += 1;
-
         var largest: f32 = activelyModifying.items[0].getSize(direction);
         var secondLargest: f32 = 0.0;
 
@@ -206,7 +207,12 @@ fn shrinkChildren(
                 }
             }
         }
-        if (remaining.* == remainingBeforeLoop) {
+        // Stop once a pass stops making sub-pixel progress. Exact float
+        // equality is not enough: when the children's total shrink capacity
+        // is within a hair of the overflow, each pass keeps shaving an
+        // ever-smaller (but nonzero) sliver, so the loop would spin for
+        // millions of iterations before the difference underflows to zero.
+        if (remaining.* - remainingBeforeLoop < 0.001) {
             break;
         }
     }
