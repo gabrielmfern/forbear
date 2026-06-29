@@ -1,5 +1,6 @@
 const std = @import("std");
 const forbear = @import("root.zig");
+const layouting = @import("layouting.zig");
 const Vec2 = @Vector(2, f32);
 
 pub const shallowBaseStyle = forbear.BaseStyle{
@@ -2584,6 +2585,83 @@ test "nested containers propagate wrapped text height through multiple levels" {
         try std.testing.expectApproxEqAbs(text.size[1], inner.size[1], 0.0001);
         try std.testing.expectApproxEqAbs(text.size[1], middle.size[1], 0.0001);
         try std.testing.expectApproxEqAbs(text.size[1], outer.size[1], 0.0001);
+    });
+}
+
+// Regression: growAndShrink must not spin when children overflow a container
+// and the two largest differ by a sub-pixel, nonzero amount.
+//
+// This is the exact shape that froze the Bible reader: a vertical container
+// (the reading column) whose height equals the sum of its children's minimum
+// heights, holding chapters whose actual heights overflow it by ~2000px, with
+// two chapters that happened to differ in height by ~0.0001px. The
+// water-filling shrink shaves only `largest - secondLargest` (~0.0001px) per
+// pass, so it needed millions of passes to absorb the overflow. The old
+// `remaining == remainingBeforeLoop` guard (exact float equality) never fired
+// because each pass *did* make nonzero progress — layout took ~44ms (~23fps).
+//
+// The values below are taken straight from that frame. We build three real
+// nodes (for valid styles + tree links) and overwrite their geometry so the
+// trap is reproduced deterministically rather than relying on font metrics
+// landing on the sub-pixel coincidence.
+//
+// With the fix, the sub-pixel-progress break exits after one pass. Without it,
+// shrinkChildren spins and trips its iteration assert (debug) / hangs (release).
+test "growAndShrink does not spin when overflow children differ sub-pixel" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 720 },
+                .height = .fit,
+                .direction = .vertical,
+            },
+        })({
+            // Three flow children; their geometry is overwritten below.
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 720 }, .height = .fit } })({});
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 720 }, .height = .fit } })({});
+            forbear.element(.{ .style = .{ .width = .{ .fixed = 720 }, .height = .fit } })({});
+        });
+
+        const tree = &forbear.getForbear().nodeTree;
+        const parent = tree.at(0);
+        const c0 = tree.at(parent.firstChild.?);
+        const c1 = tree.at(c0.nextSibling.?);
+        const c2 = tree.at(c1.nextSibling.?);
+
+        const inf = std.math.inf(f32);
+        // Parent height == sum of the children's minimum heights (the exact
+        // match that prevents the loop from ever fully resolving the overflow).
+        parent.size = .{ 720, 2246.7606 };
+        parent.minSize = .{ 720, 2246.7606 };
+        parent.maxSize = .{ 720, inf };
+        // Two near-identical tallest children (differ by 0.0001) + a third.
+        c0.size = .{ 720, 1449.5132 };
+        c0.minSize = .{ 720, 778.6202 };
+        c0.maxSize = .{ 720, inf };
+        c1.size = .{ 720, 1449.5133 };
+        c1.minSize = .{ 720, 748.9202 };
+        c1.maxSize = .{ 720, inf };
+        c2.size = .{ 720, 1342.9203 };
+        c2.minSize = .{ 720, 719.2202 };
+        c2.maxSize = .{ 720, inf };
+
+        // The guard: without the sub-pixel-progress break this never returns
+        // (debug: panics in shrinkChildren's iteration assert).
+        try layouting.growAndShrink(arena, tree);
+
+        // It terminated with finite sizes that never grew past their start.
+        for ([_]*forbear.Node{ c0, c1, c2 }) |child| {
+            try std.testing.expect(std.math.isFinite(child.size[1]));
+            try std.testing.expect(child.size[1] >= child.minSize[1] - 0.01);
+        }
     });
 }
 
