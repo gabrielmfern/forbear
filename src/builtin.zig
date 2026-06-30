@@ -436,7 +436,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
         }
     }
 
-    pub fn handleEvents(self: *@This()) void {
+    pub fn resolve(self: *@This()) void {
         defer self.focusable.clearRetainingCapacity();
 
         if (self.focused) |f| validate: {

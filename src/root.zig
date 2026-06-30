@@ -1280,7 +1280,20 @@ pub inline fn createContext(
         pub const key: u64 = contextKey;
         pub const ValueType = T;
 
-        pub fn use() ?*ValueType {
+        /// Panics if no `Provider` for this context is mounted above this
+        /// point in the tree. Use this by default: most consumers know their
+        /// context is always provided, and shouldn't have to re-derive their
+        /// own "unwrap or crash" helper to express that. Reach for
+        /// `useOrNull` instead when a missing provider is an expected,
+        /// handleable case.
+        pub fn use() *ValueType {
+            return useOrNull() orelse {
+                std.log.err("No Provider found for context `{s}` above this point in the tree. Either mount a Provider, or use `.useOrNull()` if a missing provider is expected.", .{@typeName(T)});
+                @panic("Missing context provider");
+            };
+        }
+
+        pub fn useOrNull() ?*ValueType {
             const self = getForbear();
             var i = self.contextStack.items.len;
             while (i > 0) {

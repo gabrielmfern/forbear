@@ -96,7 +96,7 @@ fn Button(text: []const u8) bool {
                 .direction = .vertical,
             },
         })({
-            const focusContext = forbear.FocusContext.use().?;
+            const focusContext = forbear.FocusContext.use();
             focusContext.register(&(struct {
                 fn consume(payload: forbear.EventPayload) bool {
                     return payload == .keyDown and (payload.keyDown.enter or payload.keyDown.space);
@@ -379,7 +379,7 @@ fn App() void {
                     });
                 });
 
-                forbear.FocusContext.use().?.handleEvents();
+                forbear.FocusContext.use().resolve();
             });
         });
     });
