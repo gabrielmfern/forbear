@@ -470,6 +470,11 @@ pub fn useSpringTransition(target: f32, config: SpringConfig) f32 {
     if (dt == 0.0) return value.*;
 
     const displacement = target - value.*;
+    if (displacement > 0.0 and velocity.* < 0.0) {
+        velocity.* = 0;
+    } else if (displacement < 0.0 and velocity.* > 0.0) {
+        velocity.* = 0;
+    }
     const acceleration = (config.stiffness * displacement - config.damping * velocity.*) / config.mass;
     velocity.* += acceleration * dt;
     value.* += velocity.* * dt;
