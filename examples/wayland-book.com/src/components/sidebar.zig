@@ -70,7 +70,6 @@ pub fn SidebarItem(props: SidebarItemProps) *const fn (void) void {
         })({
             if (forbear.onMouseEnter()) {
                 isHovering.* = true;
-                forbear.setCursor(.pointer);
             }
             if (forbear.onMouseLeave()) isHovering.* = false;
 

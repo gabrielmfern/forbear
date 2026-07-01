@@ -31,9 +31,6 @@ pub fn Header() !void {
                     .cursor = .pointer,
                 },
             })({
-                if (forbear.onMouseEnter()) {
-                    forbear.setCursor(.pointer);
-                }
                 forbear.text("Pricing");
             });
             Button(.{})({
