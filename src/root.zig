@@ -2166,10 +2166,10 @@ pub fn update() !void {
             // Important to node that if the z's match here, it means the user
             // defined it themselves, or is placing one of these nodes with
             // .absolute
-            if (mouseInside and highestNode.z <= node.z and !mouseInsideClipped) {
+            if (mouseInside and highestNode.z <= node.z and mouseInsideClipped) {
                 highestNodeOption = node;
             }
-        } else if (mouseInside and !mouseInsideClipped) {
+        } else if (mouseInside and mouseInsideClipped) {
             highestNodeOption = node;
         }
     }
