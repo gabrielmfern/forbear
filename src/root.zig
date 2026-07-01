@@ -2000,10 +2000,17 @@ pub fn isMouseInside() bool {
     const mousePosition = useMousePosition();
     const pos = measurement.position;
     const size = measurement.size;
+    const isInsideClipRect = if (measurement.clipRect) |clipRect|
+        mousePosition[0] >= clipRect[0] and
+            mousePosition[1] >= clipRect[1] and
+            mousePosition[0] <= clipRect[0] + clipRect[2] and
+            mousePosition[1] <= clipRect[1] + clipRect[3]
+    else
+        false;
     return mousePosition[0] >= pos[0] and
         mousePosition[1] >= pos[1] and
         mousePosition[0] <= pos[0] + size[0] and
-        mousePosition[1] <= pos[1] + size[1];
+        mousePosition[1] <= pos[1] + size[1] and isInsideClipRect;
 }
 
 /// Fired once on the frame the mouse crosses into the current element's bounds.
@@ -2160,7 +2167,7 @@ pub fn update() !void {
             self.mousePosition[0] >= clipRect[0] and
                 self.mousePosition[1] >= clipRect[1] and
                 self.mousePosition[0] <= clipRect[0] + clipRect[2] and
-                self.mousePosition[1] <= clipRect[1] + clipRect[3] 
+                self.mousePosition[1] <= clipRect[1] + clipRect[3]
         else
             false;
         if (highestNodeOption) |highestNode| {
