@@ -978,6 +978,7 @@ fn frameEnd(block: void) anyerror!void {
             .done = true,
 
             .size = node.size,
+            .clipRect = node.clipRect,
             .position = node.position,
             .maxSize = node.maxSize,
             .minSize = node.minSize,
@@ -2158,8 +2159,8 @@ pub fn update() !void {
         const mouseInsideClipped = if (node.clipRect) |clipRect|
             self.mousePosition[0] >= clipRect[0] and
                 self.mousePosition[1] >= clipRect[1] and
-                self.mousePosition[0] <= pos[0] + size[0] and
-                self.mousePosition[1] <= pos[1] + size[1]
+                self.mousePosition[0] <= clipRect[0] + clipRect[2] and
+                self.mousePosition[1] <= clipRect[1] + clipRect[3] 
         else
             false;
         if (highestNodeOption) |highestNode| {
@@ -2201,6 +2202,7 @@ pub fn useNodeMeasurement() ?Node.Measurement {
         entry.value_ptr.* = .{
             .index = parentNodeIndex,
             .done = false,
+            .clipRect = parentNode.clipRect,
             .size = parentNode.size,
             .position = parentNode.position,
             .maxSize = parentNode.maxSize,
