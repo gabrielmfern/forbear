@@ -227,6 +227,8 @@ keysHeldSnapshot: Keys = .{},
 keysPressedThisFrame: Keys = .{},
 /// Keys that transitioned to up between the previous frame and this one.
 keysReleasedThisFrame: Keys = .{},
+activeNodeKey: ?u64 = null,
+frameRequestedCursor: Cursor = .default,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
 
 renderer: *Graphics.Renderer,
@@ -1236,17 +1238,8 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
 
     self.frameMeta.?.previousPushedNodeIndex = result.index;
 
-    // TODO: this does not seem to work with when I have two elements one
-    // beside the other, both have the cursor setup to something other than the
-    // one in the baseStyle here, then, I hover one of them, and move my mouse
-    // over to the other one. If the element I hovered is later on the tree,
-    // its mouseLeave will happen at the end, meaning the cursor will be set to
-    // the baseStyle cursor instead of the former element's cursor.
-    if (onMouseEnter()) {
+    if (isNodeActive()) {
         setCursor(result.ptr.style.cursor);
-    }
-    if (onMouseLeave()) {
-        setCursor(baseStyle.cursor);
     }
 
     return &elementEnd;
@@ -1718,23 +1711,17 @@ fn buildText(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usiz
     try pushScope(result.ptr.key);
     defer popScope();
 
-    if (onMouseEnter()) {
+    if (isNodeActive()) {
         setCursor(result.ptr.style.cursor);
-    }
-    if (onMouseLeave()) {
-        setCursor(baseStyle.cursor);
     }
 }
 
 /// Sets the OS-level mouse cursor for the current frame. Called per-frame
-/// (typically from a `forbear.onMouseEnter()` branch) — the last call wins,
-/// so deeper/later mounted elements take precedence.
+/// (typically from a `forbear.isNodeActive()` branch). Last call of this wins,
+/// overwriting the one that came previously.
 pub fn setCursor(cursor: Cursor) void {
     const self = getForbear();
-    const window = self.window orelse return;
-    window.setCursor(cursor, 0) catch |err| {
-        std.log.err("Failed to set cursor: {}", .{err});
-    };
+    self.frameRequestedCursor = cursor;
 }
 
 inline fn ReturnType(comptime function: anytype) type {
@@ -2135,6 +2122,15 @@ pub fn onKeyUp() Keys {
     return self.keysReleasedThisFrame;
 }
 
+pub fn isNodeActive() bool {
+    const self = getForbear();
+    if (getParentNode()) |node| {
+        return node.key == self.activeNodeKey;
+    } else {
+        return false;
+    }
+}
+
 pub fn update() !void {
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
@@ -2150,6 +2146,39 @@ pub fn update() !void {
     self.deltaTime = rawDelta;
     self.cappedDeltaTime = @min(rawDelta, maxCappedDeltaTime);
     self.lastUpdateTime = timestamp;
+
+    var highestNodeOption: ?Node = null;
+    for (self.nodeTree.list.items) |node| {
+        const pos = node.position;
+        const size = node.size;
+        const mouseInside = self.mousePosition[0] >= pos[0] and
+            self.mousePosition[1] >= pos[1] and
+            self.mousePosition[0] <= pos[0] + size[0] and
+            self.mousePosition[1] <= pos[1] + size[1];
+        const mouseInsideClipped = if (node.clipRect) |clipRect|
+            self.mousePosition[0] >= clipRect[0] and
+                self.mousePosition[1] >= clipRect[1] and
+                self.mousePosition[0] <= pos[0] + size[0] and
+                self.mousePosition[1] <= pos[1] + size[1]
+        else
+            false;
+        if (highestNodeOption) |highestNode| {
+            // Important to node that if the z's match here, it means the user
+            // defined it themselves, or is placing one of these nodes with
+            // .absolute
+            if (mouseInside and highestNode.z <= node.z and !mouseInsideClipped) {
+                highestNodeOption = node;
+            }
+        } else if (mouseInside and !mouseInsideClipped) {
+            highestNodeOption = node;
+        }
+    }
+    self.activeNodeKey = if (highestNodeOption) |node| node.key else null;
+
+    const window = self.window orelse return;
+    window.setCursor(self.frameRequestedCursor, 0) catch |err| {
+        std.log.err("Failed to set cursor: {}", .{err});
+    };
 }
 
 pub fn isMouseButtonPressed() bool {
