@@ -2006,7 +2006,7 @@ pub fn isMouseInside() bool {
             mousePosition[0] <= clipRect[0] + clipRect[2] and
             mousePosition[1] <= clipRect[1] + clipRect[3]
     else
-        false;
+        true;
     return mousePosition[0] >= pos[0] and
         mousePosition[1] >= pos[1] and
         mousePosition[0] <= pos[0] + size[0] and
@@ -2169,7 +2169,7 @@ pub fn update() !void {
                 self.mousePosition[0] <= clipRect[0] + clipRect[2] and
                 self.mousePosition[1] <= clipRect[1] + clipRect[3]
         else
-            false;
+            true;
         if (highestNodeOption) |highestNode| {
             // Important to node that if the z's match here, it means the user
             // defined it themselves, or is placing one of these nodes with
