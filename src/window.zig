@@ -1193,6 +1193,7 @@ pub const Window = switch (builtin.os.tag) {
             window.appId = appId;
             window.running = true;
             window.eventQueue = .empty;
+            window.handlers = .{};
 
             window.xkbContext = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS) orelse return error.FailedToCreateXkbContext;
             errdefer c.xkb_context_unref(window.xkbContext);
@@ -1599,6 +1600,7 @@ pub const Window = switch (builtin.os.tag) {
             window.pendingReleased = .{};
             window.pendingHighSurrogate = null;
             window.eventQueue = .empty;
+            window.handlers = .{};
 
             window.allocator = allocator;
             window.io = io;
