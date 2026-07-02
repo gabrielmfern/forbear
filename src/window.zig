@@ -125,6 +125,17 @@ pub const Keys = packed struct {
     pub fn isEmpty(self: Keys) bool {
         return @as(Backing, @bitCast(self)) == 0;
     }
+
+    /// Just the modifier bits of `self`.
+    pub fn modifiers(self: Keys) Keys {
+        return .{
+            .shift = self.shift,
+            .control = self.control,
+            .alt = self.alt,
+            .super = self.super,
+            .capsLock = self.capsLock,
+        };
+    }
 };
 
 pub const ScrollAxis = enum(u32) {
@@ -185,8 +196,12 @@ pub const Event = union(enum) {
     pointerMotion: PointerMotion,
     pointerButton: PointerButton,
     scroll: Scroll,
-    keysHeld: Keys,
-    keysPressed: Keys,
+    /// Keyboard state for this delivery. Non-modifier bits are keys pressed —
+    /// or OS auto-repeated — since the last delivery, like a DOM `keydown`
+    /// with `repeat: true`; modifier bits reflect what is held right now.
+    keys: Keys,
+    /// Keys released since the last delivery — one edge per physical
+    /// release, modifiers included, like a DOM `keyup`. Never repeats.
     keysReleased: Keys,
     input: Input,
 
@@ -266,17 +281,26 @@ pub const Window = switch (builtin.os.tag) {
         wlKeyboard: *c.wl_keyboard,
 
         /// Keyboard state. The Wayland event thread writes; Forbear's render
-        /// thread drains via `snapshotKeyboard()` at frame start.
+        /// thread drains the event queue at frame start.
         keysHeld: Keys,
         pendingPressed: Keys,
         pendingReleased: Keys,
-        activeInput: ?struct {
+        /// The one key currently auto-repeating, per xkb's convention that the
+        /// latest repeatable key owns the repeat timer. `handleEvents` re-fires
+        /// it into `pendingPressed` (and `.input` when it carries text) at the
+        /// compositor-advertised rate.
+        activeRepeat: ?struct {
+            /// Repeat identity: releasing this exact keycode cancels the
+            /// repeat; releasing anything else leaves it running.
+            xkbKeycode: u32,
+            key: Keys,
             characterBuffer: [7:0]u8,
+            /// 0 when the key produces no text (arrows, delete, ...) — the
+            /// repeat then only re-fires the key edge, no `.input` events.
             characterLength: usize,
             /// Does not count the first character from the initial key event
             totalRepeats: usize,
             startTime: std.Io.Timestamp,
-            key: Keys,
         },
 
         eventQueue: EventQueue = .empty,
@@ -995,9 +1019,10 @@ pub const Window = switch (builtin.os.tag) {
             _ = serial;
             const window: *Self = @ptrCast(@alignCast(data));
 
-            // Focus is gone: mark every held key as released this frame so edge
-            // consumers see the transition, then clear the held set.
-            window.activeInput = null;
+            // Focus is gone: stop any repeat and mark every held key as
+            // released so keyup consumers see the transition, then clear the
+            // held set so modifier levels read as released.
+            window.activeRepeat = null;
             window.pendingReleased = window.pendingReleased.with(window.keysHeld);
             window.keysHeld = .{};
         }
@@ -1028,46 +1053,51 @@ pub const Window = switch (builtin.os.tag) {
 
             if (state == c.WL_KEYBOARD_KEY_STATE_PRESSED) {
                 std.debug.assert(window.xkbState != null);
-                window.activeInput = .{
-                    .characterBuffer = undefined,
-                    .characterLength = undefined,
-                    .totalRepeats = 0,
-                    .startTime = std.Io.Clock.now(.awake, window.io),
-                    .key = mapped,
-                };
-                window.activeInput.?.characterLength = @intCast(c.xkb_state_key_get_utf8(
+
+                var characterBuffer: [7:0]u8 = undefined;
+                const characterLength: usize = @intCast(c.xkb_state_key_get_utf8(
                     window.xkbState,
                     xkbKeycode,
-                    &window.activeInput.?.characterBuffer,
-                    window.activeInput.?.characterBuffer.len,
+                    &characterBuffer,
+                    characterBuffer.len,
                 ));
-                std.debug.assert(window.activeInput.?.characterLength <= window.activeInput.?.characterBuffer.len);
-                const buffer = window.activeInput.?.characterBuffer;
-                const length = window.activeInput.?.characterLength;
+                std.debug.assert(characterLength <= characterBuffer.len);
                 // Control codepoints (C0, DEL, C1) aren't text; route them through
                 // `Keys` only. Decode the one character and range-check it.
-                const codepoint = if (length > 0) std.unicode.utf8Decode(buffer[0..length]) catch null else null;
+                const codepoint = if (characterLength > 0) std.unicode.utf8Decode(characterBuffer[0..characterLength]) catch null else null;
                 const isControl = if (codepoint) |cp| cp < 0x20 or (cp >= 0x7f and cp <= 0x9f) else false;
-                if (length > 0 and !isControl) {
+                const hasText = characterLength > 0 and !isControl;
+
+                if (hasText) {
                     window.eventQueue.push(Event{
                         .input = .{
-                            .characterBuffer = buffer,
-                            .characterLength = length,
+                            .characterBuffer = characterBuffer,
+                            .characterLength = characterLength,
                             .repeats = 1,
                         },
                     });
-                } else {
-                    // it could be a modifier character that we don't need to take
-                    // into account as input
-                    window.activeInput = null;
+                }
+
+                // The keymap says which keys auto-repeat: arrows, letters,
+                // backspace do; modifiers don't — so pressing Shift mid-repeat
+                // no longer steals the timer from the repeating key.
+                if (window.xkbKeymap != null and c.xkb_keymap_key_repeats(window.xkbKeymap, xkbKeycode) == 1) {
+                    window.activeRepeat = .{
+                        .xkbKeycode = xkbKeycode,
+                        .key = mapped,
+                        .characterBuffer = characterBuffer,
+                        .characterLength = if (hasText) characterLength else 0,
+                        .totalRepeats = 0,
+                        .startTime = std.Io.Clock.now(.awake, window.io),
+                    };
                 }
 
                 window.pendingPressed = window.pendingPressed.with(mapped);
                 window.keysHeld = window.keysHeld.with(mapped);
             } else if (state == c.WL_KEYBOARD_KEY_STATE_RELEASED) {
-                if (window.activeInput) |activeInput| {
-                    if (activeInput.key.has(mapped)) {
-                        window.activeInput = null;
+                if (window.activeRepeat) |activeRepeat| {
+                    if (activeRepeat.xkbKeycode == xkbKeycode) {
+                        window.activeRepeat = null;
                     }
                 }
 
@@ -1110,8 +1140,10 @@ pub const Window = switch (builtin.os.tag) {
             oldMods.alt = window.keysHeld.alt;
             oldMods.super = window.keysHeld.super;
 
-            // Edge events for modifiers that flipped this notification.
-            window.pendingPressed = window.pendingPressed.with(newMods.without(oldMods));
+            // Modifiers that flipped off this notification are keyup edges;
+            // press edges aren't needed since modifiers are delivered as
+            // level state on every `Event.keys`. CapsLock isn't diffed here —
+            // it gets its edges from `keyboardHandleKey` like a regular key.
             window.pendingReleased = window.pendingReleased.with(oldMods.without(newMods));
 
             window.keysHeld.shift = newMods.shift;
@@ -1203,7 +1235,7 @@ pub const Window = switch (builtin.os.tag) {
             window.keysHeld = .{};
             window.pendingPressed = .{};
             window.pendingReleased = .{};
-            window.activeInput = null;
+            window.activeRepeat = null;
             // Some setups never emit repeat_info; default to typical X11 values.
             window.repeatInfo = .{ .rate = 25, .delay = 600 };
 
@@ -1333,32 +1365,33 @@ pub const Window = switch (builtin.os.tag) {
                     return error.WaylandDispatchFailed;
                 }
 
-                if (self.activeInput) |*activeInput| {
-                    const elapsedMilliseconds: f64 = @floatFromInt(activeInput.startTime.untilNow(self.io, .awake).toMilliseconds());
+                if (self.activeRepeat) |*activeRepeat| {
+                    const elapsedMilliseconds: f64 = @floatFromInt(activeRepeat.startTime.untilNow(self.io, .awake).toMilliseconds());
                     const delay: f64 = @floatFromInt(self.repeatInfo.delay);
                     const rate: f64 = @floatFromInt(self.repeatInfo.rate);
                     if (elapsedMilliseconds >= delay) {
                         const due: usize = @trunc((elapsedMilliseconds - delay) * rate / 1000);
-                        const new = due - activeInput.totalRepeats;
+                        const new = due - activeRepeat.totalRepeats;
                         if (new > 0) {
-                            self.activeInput.?.totalRepeats += new;
-                            self.eventQueue.push(Event{
-                                .input = Event.Input{
-                                    .characterBuffer = activeInput.characterBuffer,
-                                    .characterLength = activeInput.characterLength,
-                                    .repeats = new,
-                                },
-                            });
+                            activeRepeat.totalRepeats += new;
+                            // Reuses the same pendingPressed queue as a fresh press.
+                            self.pendingPressed = self.pendingPressed.with(activeRepeat.key);
+                            if (activeRepeat.characterLength > 0) {
+                                self.eventQueue.push(Event{
+                                    .input = Event.Input{
+                                        .characterBuffer = activeRepeat.characterBuffer,
+                                        .characterLength = activeRepeat.characterLength,
+                                        .repeats = new,
+                                    },
+                                });
+                            }
                         }
                     }
                 }
 
-                if (!self.keysHeld.isEmpty()) {
-                    self.eventQueue.push(Event{ .keysHeld = self.keysHeld });
-                }
-
-                if (!self.pendingPressed.isEmpty()) {
-                    self.eventQueue.push(Event{ .keysPressed = self.pendingPressed });
+                const keys = self.pendingPressed.with(self.keysHeld.modifiers());
+                if (!keys.isEmpty()) {
+                    self.eventQueue.push(Event{ .keys = keys });
                     self.pendingPressed = .{};
                 }
 
@@ -1541,10 +1574,8 @@ pub const Window = switch (builtin.os.tag) {
             };
         }
 
-        /// Sample the OS's effective modifier state via `GetKeyState` and reconcile
-        /// it with `self.keysHeld`'s modifier bits. Whatever bits flipped this call
-        /// also get appended to `pendingPressed` / `pendingReleased` so consumers
-        /// of `onKeyDown()` / `onKeyUp()` see modifier edges as expected.
+        /// Samples the OS's effective modifier state via `GetKeyState` into
+        /// `self.keysHeld`; modifiers that flipped off become keyup edges.
         fn refreshModifiersFromOS(self: *Self) void {
             const down = struct {
                 fn f(vk: c_int) bool {
@@ -1566,7 +1597,6 @@ pub const Window = switch (builtin.os.tag) {
             oldMods.alt = self.keysHeld.alt;
             oldMods.super = self.keysHeld.super;
 
-            self.pendingPressed = self.pendingPressed.with(current.without(oldMods));
             self.pendingReleased = self.pendingReleased.with(oldMods.without(current));
 
             self.keysHeld.shift = current.shift;
@@ -1820,18 +1850,14 @@ pub const Window = switch (builtin.os.tag) {
                 },
                 WM_KEYDOWN => {
                     if (window) |self| {
-                        // lParam bit 30 is "previous key state": 1 = OS repeat,
-                        // 0 = fresh press. Only fresh presses flip the edge bit.
-                        // Coalesce count (bits 0..15) and scan code (bits 16..23)
-                        // are intentionally ignored.
-                        const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
-                        const wasAlreadyDown: bool = (lp & (1 << 30)) != 0;
+                        // WM_KEYDOWN re-fires on OS auto-repeat, so unlike a
+                        // naive port we don't filter it out here — repeats are
+                        // supposed to flow through. Coalesce count (bits
+                        // 0..15) and scan code (bits 16..23) of lParam are
+                        // intentionally ignored.
                         const key = virtualKeyToKeys(wParam);
-
-                        if (!wasAlreadyDown) {
-                            self.pendingPressed = self.pendingPressed.with(key);
-                            self.keysHeld = self.keysHeld.with(key);
-                        }
+                        self.pendingPressed = self.pendingPressed.with(key);
+                        self.keysHeld = self.keysHeld.with(key);
                         refreshModifiersFromOS(self);
                     }
                 },
@@ -1948,15 +1974,14 @@ pub const Window = switch (builtin.os.tag) {
                 _ = TranslateMessage(&message);
                 _ = DispatchMessageW(&message);
 
-                // Mirror the keyboard edges accumulated by `wndProc` into the queue,
-                // matching the Linux backend's per-iteration snapshot.
-                if (!self.keysHeld.isEmpty()) {
-                    self.eventQueue.push(Event{ .keysHeld = self.keysHeld });
-                }
-                if (!self.pendingPressed.isEmpty()) {
-                    self.eventQueue.push(Event{ .keysPressed = self.pendingPressed });
+                // Mirror the keyboard state accumulated by `wndProc` into the
+                // queue, matching the Linux backend's per-iteration snapshot.
+                const keys = self.pendingPressed.with(self.keysHeld.modifiers());
+                if (!keys.isEmpty()) {
+                    self.eventQueue.push(Event{ .keys = keys });
                     self.pendingPressed = .{};
                 }
+
                 if (!self.pendingReleased.isEmpty()) {
                     self.eventQueue.push(Event{ .keysReleased = self.pendingReleased });
                     self.pendingReleased = .{};

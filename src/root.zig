@@ -136,11 +136,9 @@ pub const Event = enum {
     mouseMove,
     click,
     scroll,
-    /// Keys that transitioned to "down" since the previous frame's sample.
-    /// Returned as a `Keys` set: `if (forbear.onKeyDown().tab) ...`.
-    /// Each press fires exactly once — held keys do *not* re-appear here.
+    /// See `onKeyDown()`.
     keyDown,
-    /// Keys that transitioned to "up" since the previous frame's sample.
+    /// See `onKeyUp()`.
     keyUp,
 };
 
@@ -219,13 +217,9 @@ mouseButtonPressed: bool,
 scrollDeltaAccumulator: Vec2,
 /// Stable snapshot of scroll delta for the current frame.
 scrollDelta: Vec2,
-/// Currently-held keys, sampled at frame start. Read via `keysHeld()` or
-/// `isKeyDown(key)`. Updated inside `frame()` by polling the window.
-keysHeldSnapshot: Keys = .{},
-/// Keys that transitioned to down between the previous frame and this one.
-/// Returned by `on(.keyDown)`.
-keysPressedThisFrame: Keys = .{},
-/// Keys that transitioned to up between the previous frame and this one.
+/// Backs `onKeyDown()`.
+keysThisFrame: Keys = .{},
+/// Backs `onKeyUp()`.
 keysReleasedThisFrame: Keys = .{},
 activeNodeKey: ?u64 = null,
 frameRequestedCursor: Cursor = .default,
@@ -266,8 +260,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, window: ?*Window, renderer
         .mouseButtonPressed = false,
         .scrollDeltaAccumulator = @splat(0.0),
         .scrollDelta = @splat(0.0),
-        .keysHeldSnapshot = .{},
-        .keysPressedThisFrame = .{},
+        .keysThisFrame = .{},
         .keysReleasedThisFrame = .{},
         .previousFrameNodeMeasurements = undefined,
 
@@ -1001,8 +994,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.scrollDelta = self.scrollDeltaAccumulator;
     self.scrollDeltaAccumulator = @splat(0.0);
 
-    self.keysHeldSnapshot = .{};
-    self.keysPressedThisFrame = .{};
+    self.keysThisFrame = .{};
     self.keysReleasedThisFrame = .{};
 
     self.frameCounter +%= 1;
@@ -1020,11 +1012,8 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
             .input => |input| {
                 std.log.debug("input text {s}", .{input.text(meta.arena) catch unreachable});
             },
-            .keysHeld => |keys| {
-                self.keysHeldSnapshot = keys;
-            },
-            .keysPressed => |keys| {
-                self.keysPressedThisFrame = self.keysPressedThisFrame.with(keys);
+            .keys => |keys| {
+                self.keysThisFrame = self.keysThisFrame.with(keys);
             },
             .keysReleased => |keys| {
                 self.keysReleasedThisFrame = self.keysReleasedThisFrame.with(keys);
@@ -1040,9 +1029,9 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
                     100.0 * @as(f32, @floatFromInt(std.math.sign(scroll.offset)));
 
                 // Browser-like behavior: Shift + vertical scroll = horizontal scroll
-                const shiftAccordingAxis = if (self.keysHeldSnapshot.shift and scroll.axis == .vertical)
+                const shiftAccordingAxis = if (self.keysThisFrame.shift and scroll.axis == .vertical)
                     .horizontal
-                else if (self.keysHeldSnapshot.shift and scroll.axis == .horizontal)
+                else if (self.keysThisFrame.shift and scroll.axis == .horizontal)
                     .vertical
                 else
                     scroll.axis;
@@ -2117,14 +2106,20 @@ pub fn onScroll() ?Vec2 {
     }
 }
 
-/// Keys that transitioned to "down" since the previous frame's sample.
+/// This frame's keyboard bits. Non-modifier keys appear the frame they are
+/// pressed *and* again on each OS auto-repeat while held, at the user's
+/// configured rate — so `onKeyDown().arrowLeft` steps a caret like a text
+/// field does. Modifier bits (shift/control/alt/super) reflect what is
+/// currently held, so chords read directly:
+///   if (onKeyDown().has(.{ .control = true, .z = true })) undo();
 /// Global for now: `if (forbear.onKeyDown().tab) ...`.
 pub fn onKeyDown() Keys {
     const self = getForbear();
-    return self.keysPressedThisFrame;
+    return self.keysThisFrame;
 }
 
-/// Keys that transitioned to "up" since the previous frame's sample.
+/// Keys released this frame — one edge per physical release, modifiers
+/// included, like a DOM `keyup`. Never repeats. Global like `onKeyDown()`.
 pub fn onKeyUp() Keys {
     const self = getForbear();
     return self.keysReleasedThisFrame;
@@ -2231,15 +2226,6 @@ pub fn useNodeMeasurement() ?Node.Measurement {
 fn timestampSeconds(io: std.Io) f64 {
     const ts = std.Io.Clock.awake.now(io);
     return @as(f64, @floatFromInt(ts.toNanoseconds())) / std.time.ns_per_s;
-}
-
-/// All keys currently held, sampled at frame start. Stable for the
-/// duration of the frame. Read individual keys as fields:
-///   const held = forbear.keysHeld();
-///   if (held.controlLeft and forbear.onKeyDown().z) undo();
-///   if (held.shiftLeft or held.shiftRight) doShifty();
-pub fn keysHeld() Keys {
-    return getForbear().keysHeldSnapshot;
 }
 
 pub fn deinit() void {
