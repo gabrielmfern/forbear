@@ -7899,7 +7899,7 @@ test "FocusContext: tab cycles focus forward through registered elements" {
                     });
 
                     // Simulate tab press
-                    forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                    forbear.getForbear().keysThisFrame = .{ .tab = true };
                     ctx.resolve();
 
                     try std.testing.expect(ctx.focused != null);
@@ -7934,7 +7934,7 @@ test "FocusContext: tab with no focus starts at first element" {
                         ctx.register(&consumesNothing);
                     });
 
-                    forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                    forbear.getForbear().keysThisFrame = .{ .tab = true };
                     ctx.resolve();
                     focusedKey = if (ctx.focused) |f| f.key else null;
                 });
@@ -7973,7 +7973,7 @@ test "FocusContext: tab wraps from last to first element" {
                         ctx.focus();
                     });
 
-                    forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
+                    forbear.getForbear().keysThisFrame = .{ .tab = true };
                     ctx.resolve();
                     focusedKey = if (ctx.focused) |f| f.key else null;
                 });
@@ -8016,8 +8016,7 @@ test "FocusContext: shift+tab cycles focus backward" {
                     });
 
                     // Simulate shift+tab
-                    forbear.getForbear().keysPressedThisFrame = .{ .tab = true };
-                    forbear.getForbear().keysHeldSnapshot = .{ .shift = true };
+                    forbear.getForbear().keysThisFrame = .{ .tab = true, .shift = true };
                     focusContext.resolve();
                     focusedKey = if (focusContext.focused) |f| f.key else null;
                 });
@@ -8058,7 +8057,7 @@ test "FocusContext: escape clears focus" {
                     try std.testing.expect(ctx.focused != null);
 
                     // Simulate escape
-                    forbear.getForbear().keysPressedThisFrame = .{ .escape = true };
+                    forbear.getForbear().keysThisFrame = .{ .escape = true };
                     ctx.resolve();
                     hasFocusAfterEscape = ctx.focused != null;
                 });

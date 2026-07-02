@@ -211,14 +211,15 @@ fn App() void {
                     forbear.element(.{
                         .style = .{},
                     })({
-                        forbear.text("keys held ");
-                        // Sampled held-state: stays visible across frames as
-                        // long as the keys are held, no flickering. We walk
-                        // the struct's bool fields via reflection just to
-                        // render every held key as text.
-                        const held = forbear.keysHeld();
+                        forbear.text("keys ");
+                        // Modifiers read as held state so they stay visible
+                        // while down; every other key pulses on press and
+                        // again on each OS auto-repeat. We walk the struct's
+                        // bool fields via reflection just to render each key
+                        // as text.
+                        const keys = forbear.onKeyDown();
                         inline for (@typeInfo(forbear.Keys).@"struct".fields) |field| {
-                            if (@field(held, field.name)) {
+                            if (@field(keys, field.name)) {
                                 forbear.text(" ");
                                 forbear.text(field.name);
                             }

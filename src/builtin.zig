@@ -451,7 +451,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
         const pressed = forbear.onKeyDown();
         const items = self.focusable.items;
         if (pressed.tab and items.len > 0) {
-            const shift = forbear.keysHeld().shift;
+            const shift = pressed.shift;
             if (self.focused) |current| {
                 var idx: usize = 0;
                 for (items, 0..) |item, i| {
