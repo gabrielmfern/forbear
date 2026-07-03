@@ -1448,13 +1448,41 @@ pub const Window = switch (builtin.os.tag) {
             }
         }
 
+        fn dataSourceTarget(data: ?*anyopaque, source: ?*c.wl_data_source, mimeType: [*c]const u8) callconv(.c) void {
+            _ = data;
+            _ = source;
+            // Meant for drag-and-drop feedback, but a receiving client
+            // calling `wl_data_offer.accept` on our clipboard offer gets
+            // forwarded here too, so it arrives in practice.
+            _ = mimeType;
+        }
+
+        fn dataSourceDndDropPerformed(data: ?*anyopaque, source: ?*c.wl_data_source) callconv(.c) void {
+            _ = data;
+            _ = source;
+        }
+
+        fn dataSourceDndFinished(data: ?*anyopaque, source: ?*c.wl_data_source) callconv(.c) void {
+            _ = data;
+            _ = source;
+        }
+
+        fn dataSourceAction(data: ?*anyopaque, source: ?*c.wl_data_source, dndAction: u32) callconv(.c) void {
+            _ = data;
+            _ = source;
+            _ = dndAction;
+        }
+
+        // Like `wlDataDeviceListener`: every slot needs a function even for
+        // events we ignore, since libwayland aborts on a NULL entry the
+        // moment that event arrives.
         const dataSourceListener: c.wl_data_source_listener = .{
-            .target = null,
+            .target = dataSourceTarget,
             .send = dataSourceSend,
             .cancelled = dataSourceCancelled,
-            .dnd_drop_performed = null,
-            .dnd_finished = null,
-            .action = null,
+            .dnd_drop_performed = dataSourceDndDropPerformed,
+            .dnd_finished = dataSourceDndFinished,
+            .action = dataSourceAction,
         };
 
         fn dataDeviceSelection(data: ?*anyopaque, dataDevice: ?*c.wl_data_device, offer: ?*c.wl_data_offer) callconv(.c) void {
