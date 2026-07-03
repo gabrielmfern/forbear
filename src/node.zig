@@ -367,6 +367,16 @@ pub const TextStyle = struct {
     fontWeight: ?u32 = null,
     lineHeight: ?f32 = null,
 
+    pub fn from(base: CompleteStyle) TextStyle {
+        return .{
+            .font = base.font,
+            .color = base.color,
+            .fontSize = base.fontSize,
+            .fontWeight = base.fontWeight,
+            .lineHeight = base.lineHeight,
+        };
+    }
+
     pub fn complete(self: @This(), base: CompleteTextStyle) CompleteTextStyle {
         return .{
             .font = self.font orelse base.font,
