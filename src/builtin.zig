@@ -412,148 +412,146 @@ pub fn useInput(initialInputState: struct {
 
     const focusContext = FocusContext.use();
 
-    if (forbear.getParentNode()) |_| {
-        focusContext.register(&(struct {
-            fn consumesFn(payload: EventPayload) ?EventPayload {
-                return switch (payload) {
-                    .keyDown => |keys| .{
-                        .keyDown = .{
-                            .arrowLeft = keys.arrowLeft,
-                            .arrowRight = keys.arrowRight,
-                            .home = keys.home,
-                            .end = keys.end,
-                            .backspace = keys.backspace,
-                            .delete = keys.delete,
-                            .control = keys.control,
-                            .c = keys.c,
-                            .v = keys.v,
-                            .x = keys.x,
-                        },
+    focusContext.register(&(struct {
+        fn consumesFn(payload: EventPayload) ?EventPayload {
+            return switch (payload) {
+                .keyDown => |keys| .{
+                    .keyDown = .{
+                        .arrowLeft = keys.arrowLeft,
+                        .arrowRight = keys.arrowRight,
+                        .home = keys.home,
+                        .end = keys.end,
+                        .backspace = keys.backspace,
+                        .delete = keys.delete,
+                        .control = keys.control,
+                        .c = keys.c,
+                        .v = keys.v,
+                        .x = keys.x,
                     },
-                    .input => payload,
-                    else => null,
-                };
-            }
-        }).consumesFn);
+                },
+                .input => payload,
+                else => null,
+            };
+        }
+    }).consumesFn);
 
-        if (focusContext.hasFocus()) {
-            if (inputState.text) |*text| {
-                std.debug.assert(inputState.cursor <= text.items.len);
-                std.debug.assert(inputState.selection[0] <= inputState.selection[1]);
-                std.debug.assert(inputState.selection[0] <= text.items.len);
-                std.debug.assert(inputState.selection[1] <= text.items.len);
+    if (focusContext.hasFocus()) {
+        if (inputState.text) |*text| {
+            std.debug.assert(inputState.cursor <= text.items.len);
+            std.debug.assert(inputState.selection[0] <= inputState.selection[1]);
+            std.debug.assert(inputState.selection[0] <= text.items.len);
+            std.debug.assert(inputState.selection[1] <= text.items.len);
 
-                const keysDown = forbear.onKeyDown();
-                const hasSelection = inputState.selection[0] != inputState.selection[1];
-                // The selection endpoint the cursor is not on. With no selection
-                // both endpoints sit on the cursor, so the anchor is the cursor.
-                const anchor = if (inputState.cursor == inputState.selection[0])
+            const keysDown = forbear.onKeyDown();
+            const hasSelection = inputState.selection[0] != inputState.selection[1];
+            // The selection endpoint the cursor is not on. With no selection
+            // both endpoints sit on the cursor, so the anchor is the cursor.
+            const anchor = if (inputState.cursor == inputState.selection[0])
+                inputState.selection[1]
+            else
+                inputState.selection[0];
+
+            const movedTo: ?usize = if (keysDown.arrowLeft)
+                if (keysDown.control)
+                    previousWordBeginning(text.items, inputState.cursor)
+                else if (hasSelection and !keysDown.shift)
+                    inputState.selection[0]
+                else
+                    inputState.cursor -| 1
+            else if (keysDown.arrowRight)
+                if (keysDown.control)
+                    nextWordBeginning(text.items, inputState.cursor)
+                else if (hasSelection and !keysDown.shift)
                     inputState.selection[1]
                 else
-                    inputState.selection[0];
+                    @min(inputState.cursor + 1, text.items.len)
+            else if (keysDown.home)
+                0
+            else if (keysDown.end)
+                text.items.len
+            else
+                null;
 
-                const movedTo: ?usize = if (keysDown.arrowLeft)
-                    if (keysDown.control)
-                        previousWordBeginning(text.items, inputState.cursor)
-                    else if (hasSelection and !keysDown.shift)
-                        inputState.selection[0]
-                    else
-                        inputState.cursor -| 1
-                else if (keysDown.arrowRight)
-                    if (keysDown.control)
-                        nextWordBeginning(text.items, inputState.cursor)
-                    else if (hasSelection and !keysDown.shift)
-                        inputState.selection[1]
-                    else
-                        @min(inputState.cursor + 1, text.items.len)
-                else if (keysDown.home)
-                    0
-                else if (keysDown.end)
-                    text.items.len
+            if (movedTo) |newCursor| {
+                inputState.cursor = newCursor;
+                inputState.selection = if (keysDown.shift)
+                    .{ @min(anchor, newCursor), @max(anchor, newCursor) }
                 else
-                    null;
+                    .{ newCursor, newCursor };
+            }
 
-                if (movedTo) |newCursor| {
-                    inputState.cursor = newCursor;
-                    inputState.selection = if (keysDown.shift)
-                        .{ @min(anchor, newCursor), @max(anchor, newCursor) }
+            if (keysDown.backspace or keysDown.delete) {
+                if (inputState.selection[0] != inputState.selection[1]) {
+                    text.replaceRangeAssumeCapacity(
+                        inputState.selection[0],
+                        inputState.selection[1] - inputState.selection[0],
+                        &.{},
+                    );
+                    inputState.cursor = inputState.selection[0];
+                } else if (keysDown.backspace and inputState.cursor > 0) {
+                    const start = if (keysDown.control)
+                        previousWordBeginning(text.items, inputState.cursor)
                     else
-                        .{ newCursor, newCursor };
+                        inputState.cursor - 1;
+                    text.replaceRangeAssumeCapacity(start, inputState.cursor - start, &.{});
+                    inputState.cursor = start;
+                } else if (keysDown.delete and inputState.cursor < text.items.len) {
+                    const end = if (keysDown.control)
+                        nextWordBeginning(text.items, inputState.cursor)
+                    else
+                        inputState.cursor + 1;
+                    text.replaceRangeAssumeCapacity(inputState.cursor, end - inputState.cursor, &.{});
                 }
+                inputState.selection = .{ inputState.cursor, inputState.cursor };
+            }
 
-                if (keysDown.backspace or keysDown.delete) {
-                    if (inputState.selection[0] != inputState.selection[1]) {
-                        text.replaceRangeAssumeCapacity(
-                            inputState.selection[0],
-                            inputState.selection[1] - inputState.selection[0],
-                            &.{},
-                        );
-                        inputState.cursor = inputState.selection[0];
-                    } else if (keysDown.backspace and inputState.cursor > 0) {
-                        const start = if (keysDown.control)
-                            previousWordBeginning(text.items, inputState.cursor)
-                        else
-                            inputState.cursor - 1;
-                        text.replaceRangeAssumeCapacity(start, inputState.cursor - start, &.{});
-                        inputState.cursor = start;
-                    } else if (keysDown.delete and inputState.cursor < text.items.len) {
-                        const end = if (keysDown.control)
-                            nextWordBeginning(text.items, inputState.cursor)
-                        else
-                            inputState.cursor + 1;
-                        text.replaceRangeAssumeCapacity(inputState.cursor, end - inputState.cursor, &.{});
-                    }
+            if (keysDown.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
+                forbear.setClipboardText(text.items[inputState.selection[0]..inputState.selection[1]]);
+                if (keysDown.x) {
+                    text.replaceRangeAssumeCapacity(
+                        inputState.selection[0],
+                        inputState.selection[1] - inputState.selection[0],
+                        &.{},
+                    );
+                    inputState.cursor = inputState.selection[0];
                     inputState.selection = .{ inputState.cursor, inputState.cursor };
                 }
+            }
 
-                if (keysDown.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
-                    forbear.setClipboardText(text.items[inputState.selection[0]..inputState.selection[1]]);
-                    if (keysDown.x) {
-                        text.replaceRangeAssumeCapacity(
-                            inputState.selection[0],
-                            inputState.selection[1] - inputState.selection[0],
-                            &.{},
-                        );
-                        inputState.cursor = inputState.selection[0];
-                        inputState.selection = .{ inputState.cursor, inputState.cursor };
-                    }
+            if (keysDown.control and keysDown.v) paste: {
+                const pasted = forbear.getClipboardText() orelse break :paste;
+                if (inputState.selection[0] != inputState.selection[1]) {
+                    text.replaceRangeAssumeCapacity(
+                        inputState.selection[0],
+                        inputState.selection[1] - inputState.selection[0],
+                        &.{},
+                    );
+                    inputState.cursor = inputState.selection[0];
                 }
+                text.insertSlice(arena, inputState.cursor, pasted) catch |err| {
+                    forbear.handleFrameError(err);
+                    break :paste;
+                };
+                inputState.cursor += pasted.len;
+                inputState.selection = .{ inputState.cursor, inputState.cursor };
+            }
 
-                if (keysDown.control and keysDown.v) paste: {
-                    const pasted = forbear.getClipboardText() orelse break :paste;
-                    if (inputState.selection[0] != inputState.selection[1]) {
-                        text.replaceRangeAssumeCapacity(
-                            inputState.selection[0],
-                            inputState.selection[1] - inputState.selection[0],
-                            &.{},
-                        );
-                        inputState.cursor = inputState.selection[0];
-                    }
-                    text.insertSlice(arena, inputState.cursor, pasted) catch |err| {
-                        forbear.handleFrameError(err);
-                        break :paste;
-                    };
-                    inputState.cursor += pasted.len;
+            if (forbear.onInput()) |typed| insert: {
+                if (inputState.selection[0] != inputState.selection[1]) {
+                    text.replaceRangeAssumeCapacity(
+                        inputState.selection[0],
+                        inputState.selection[1] - inputState.selection[0],
+                        &.{},
+                    );
+                    inputState.cursor = inputState.selection[0];
                     inputState.selection = .{ inputState.cursor, inputState.cursor };
                 }
-
-                if (forbear.onInput()) |typed| insert: {
-                    if (inputState.selection[0] != inputState.selection[1]) {
-                        text.replaceRangeAssumeCapacity(
-                            inputState.selection[0],
-                            inputState.selection[1] - inputState.selection[0],
-                            &.{},
-                        );
-                        inputState.cursor = inputState.selection[0];
-                        inputState.selection = .{ inputState.cursor, inputState.cursor };
-                    }
-                    text.insertSlice(arena, inputState.cursor, typed) catch |err| {
-                        forbear.handleFrameError(err);
-                        break :insert;
-                    };
-                    inputState.cursor += typed.len;
-                    inputState.selection = .{ inputState.cursor, inputState.cursor };
-                }
+                text.insertSlice(arena, inputState.cursor, typed) catch |err| {
+                    forbear.handleFrameError(err);
+                    break :insert;
+                };
+                inputState.cursor += typed.len;
+                inputState.selection = .{ inputState.cursor, inputState.cursor };
             }
         }
     }
@@ -562,10 +560,37 @@ pub fn useInput(initialInputState: struct {
 }
 
 pub fn InputCaret(inputState: *const InputState) void {
-    _ = inputState;
     forbear.component(.{})({
-        // we need the width of the text until the cursor here
-        // what are the text styles?
+        const focusContext = FocusContext.use();
+        if (forbear.getParentNode()) |parent| {
+            if (parent.style.textWrapping != .none) {
+                std.log.err("Text wrapping was not none, InputCaret can only work if the input has no text wrapping, for now.", .{});
+                forbear.handleFrameError(error.TextWrappingNotNone);
+                return;
+            }
+            if (inputState.text) |text| {
+                if (focusContext.hasFocus() and inputState.selection[0] == inputState.selection[1]) {
+                    const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
+                    const measured = forbear.measureText(&.{.{
+                        .content = text.items[0..inputState.cursor],
+                        .style = textStyle,
+                    }}, 0.0, .none);
+                    forbear.element(.{
+                        .style = .{
+                            .placement = .{
+                                .relative = .{
+                                    parent.style.padding.x[0] + measured.width,
+                                    parent.style.padding.y[0],
+                                },
+                            },
+                            .width = .{ .fixed = 1.0 },
+                            .height = .{ .fixed = measured.height },
+                            .background = .{ .color = textStyle.color },
+                        },
+                    })({});
+                }
+            }
+        }
     });
 }
 
