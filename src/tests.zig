@@ -8119,6 +8119,94 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
     try std.testing.expectEqual(false, focusedAfterDrop.?);
 }
 
+const scrollDown = @Vector(2, f32){ 0.0, 10.0 };
+const scrollUp = @Vector(2, f32){ 0.0, -10.0 };
+
+const ScrollConsumption = struct {
+    outerDown: @Vector(2, f32) = .{ 0.0, 0.0 },
+    outerUp: @Vector(2, f32) = .{ 0.0, 0.0 },
+    innerDown: @Vector(2, f32) = .{ 0.0, 0.0 },
+    innerUp: @Vector(2, f32) = .{ 0.0, 0.0 },
+};
+
+fn ScrollPriorityApp(innerRoom: forbear.ScrollRoom, observed: *ScrollConsumption) void {
+    forbear.element(.{})({
+        forbear.ScrollProvider()({
+            const ctx = forbear.ScrollingContext.use();
+            forbear.element(.{
+                .style = .{ .width = .{ .fixed = 200.0 }, .height = .{ .fixed = 200.0 } },
+            })({
+                ctx.register(.{});
+                observed.outerDown = ctx.consumes(scrollDown);
+                observed.outerUp = ctx.consumes(scrollUp);
+
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 100.0 } },
+                })({
+                    ctx.register(innerRoom);
+                    observed.innerDown = ctx.consumes(scrollDown);
+                    observed.innerUp = ctx.consumes(scrollUp);
+                });
+            });
+            ctx.resolve();
+        });
+    });
+}
+
+test "ScrollingContext: the innermost hovered scrollable with room takes the wheel" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    const self = forbear.getForbear();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const zero = @Vector(2, f32){ 0.0, 0.0 };
+    var observed: ScrollConsumption = .{};
+
+    // Frame 1: prime measurements; frame 2: registrations see the cursor
+    // inside both and resolve picks targets; frame 3 observes them.
+    self.mousePosition = .{ 50.0, 50.0 };
+    for (0..3) |_| {
+        try forbear.frame(try frameMeta(arena))({
+            ScrollPriorityApp(.{}, &observed);
+            _ = try forbear.layout();
+        });
+    }
+    try std.testing.expectEqual(scrollDown, observed.innerDown);
+    try std.testing.expectEqual(scrollUp, observed.innerUp);
+    try std.testing.expectEqual(zero, observed.outerDown);
+    try std.testing.expectEqual(zero, observed.outerUp);
+
+    // The inner scrollable runs out of room downward: downward wheel chains
+    // to the outer one, upward wheel stays with the inner.
+    for (0..2) |_| {
+        try forbear.frame(try frameMeta(arena))({
+            ScrollPriorityApp(.{ .y = .{ true, false } }, &observed);
+            _ = try forbear.layout();
+        });
+    }
+    try std.testing.expectEqual(zero, observed.innerDown);
+    try std.testing.expectEqual(scrollDown, observed.outerDown);
+    try std.testing.expectEqual(scrollUp, observed.innerUp);
+    try std.testing.expectEqual(zero, observed.outerUp);
+
+    // Cursor over the outer scrollable only: it takes both directions.
+    self.mousePosition = .{ 150.0, 150.0 };
+    for (0..2) |_| {
+        try forbear.frame(try frameMeta(arena))({
+            ScrollPriorityApp(.{}, &observed);
+            _ = try forbear.layout();
+        });
+    }
+    try std.testing.expectEqual(scrollDown, observed.outerDown);
+    try std.testing.expectEqual(scrollUp, observed.outerUp);
+    try std.testing.expectEqual(zero, observed.innerDown);
+    try std.testing.expectEqual(zero, observed.innerUp);
+}
+
 // window.zig EventQueue tests
 
 // Mirrors the live setup in playground.zig: the Wayland event thread is the

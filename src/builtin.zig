@@ -185,10 +185,6 @@ pub fn useScrolling(state: *ScrollingState) void {
         return;
     };
 
-    if (forbear.onScroll()) |delta| {
-        state.offset += delta;
-    }
-
     // `contentSize` runs from the border-box origin (so it already carries
     // the leading border + padding) to the last flow child's far edge. Add
     // the trailing border + padding so a full scroll rests the content end
@@ -204,10 +200,28 @@ pub fn useScrolling(state: *ScrollingState) void {
     else
         null;
 
+    // Inside a `ScrollProvider`, the wheel goes to the innermost hovered
+    // scrollable with room left in the delta's direction; without one, every
+    // hovered scrollable sees the same `onScroll` and they all move together.
+    const scrollingContext = ScrollingContext.useOrNull();
+
+    if (forbear.onScroll()) |delta| {
+        state.offset += if (scrollingContext) |context| context.consumes(delta) else delta;
+    }
+
     state.offset = if (maxOffset) |max|
         @min(@max(state.offset, identity), max)
     else
         @max(state.offset, identity);
+
+    // Register after the clamp so the next frame's resolution judges room
+    // from where this frame actually settled.
+    if (scrollingContext) |context| {
+        context.register(.{
+            .x = .{ state.offset[0] > 0.0, if (maxOffset) |max| state.offset[0] < max[0] else true },
+            .y = .{ state.offset[1] > 0.0, if (maxOffset) |max| state.offset[1] < max[1] else true },
+        });
+    }
 
     var animated = Vec2{
         forbear.useSpringTransition(
@@ -358,6 +372,91 @@ pub fn ScrollBar(state: *ScrollingState) void {
             });
         }
     }
+}
+
+/// Whether a scrollable's offset still has room to move: `[0]` toward the
+/// start (offset decreasing), `[1]` toward the end, per axis.
+pub const ScrollRoom = struct {
+    x: [2]bool = .{ true, true },
+    y: [2]bool = .{ true, true },
+};
+
+pub const Scrollable = struct {
+    key: u64,
+    hovered: bool,
+    room: ScrollRoom,
+};
+
+pub const ScrollingContext = forbear.createContext(opaque {}, struct {
+    /// The innermost hovered scrollable with room, per axis and direction, as
+    /// of the last `resolve()` — the ones `useScrolling` yields the wheel to.
+    targets: [2][2]?u64,
+    scrollable: std.ArrayList(Scrollable),
+    scopeKey: u64,
+
+    pub fn register(self: *@This(), room: ScrollRoom) void {
+        const node = forbear.getParentNode() orelse {
+            forbear.handleFrameError(error.NoParentForScrollableRegistration);
+            return;
+        };
+        const arena = forbear.getScopeArenaBy(self.scopeKey) orelse unreachable;
+        self.scrollable.append(arena, .{
+            .key = node.key,
+            .hovered = forbear.isMouseInside(),
+            .room = room,
+        }) catch |err| forbear.handleFrameError(err);
+    }
+
+    /// The portion of `delta` this node gets to scroll by, trimmed the same
+    /// way `FocusContext.consumes` trims events.
+    pub fn consumes(self: *const @This(), delta: Vec2) Vec2 {
+        const node = forbear.getParentNode() orelse return identity;
+        var consumed: Vec2 = identity;
+        inline for (0..2) |axis| {
+            if (delta[axis] != 0.0) {
+                const direction: usize = if (delta[axis] > 0.0) 1 else 0;
+                if (self.targets[axis][direction]) |targetKey| {
+                    if (targetKey == node.key) {
+                        consumed[axis] = delta[axis];
+                    }
+                }
+            }
+        }
+        return consumed;
+    }
+
+    pub fn resolve(self: *@This()) void {
+        defer self.scrollable.clearRetainingCapacity();
+        self.targets = .{ .{ null, null }, .{ null, null } };
+        // Ancestors mount before their descendants, so the last hovered
+        // registration with room in a direction is the innermost scrollable
+        // that can still move that way — one that's run out hands the wheel
+        // to its nearest scrollable ancestor.
+        for (self.scrollable.items) |scrollable| {
+            if (!scrollable.hovered) continue;
+            for (0..2) |direction| {
+                if (scrollable.room.x[direction]) self.targets[0][direction] = scrollable.key;
+                if (scrollable.room.y[direction]) self.targets[1][direction] = scrollable.key;
+            }
+        }
+    }
+});
+
+/// Children slot that makes nested scrollables take the wheel innermost
+/// first, handing it to the parent when the inner one runs out of room.
+/// Call `ScrollingContext.use().resolve()` at the end of its children,
+/// the same way `FocusProvider` pairs with `FocusContext.use().resolve()`.
+pub fn ScrollProvider() *const fn (void) void {
+    forbear.component(.{})({
+        ScrollingContext.Provider(.{
+            .targets = .{ .{ null, null }, .{ null, null } },
+            .scrollable = .empty,
+            .scopeKey = forbear.useScopeKey(),
+        })({
+            forbear.componentChildrenSlot();
+        });
+    });
+    return forbear.componentChildrenSlotEnd();
 }
 
 const InputState = struct {

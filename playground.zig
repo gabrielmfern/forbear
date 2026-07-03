@@ -224,231 +224,234 @@ fn App() void {
             },
         })({
             forbear.FocusProvider()({
-                const scrolling = forbear.useState(forbear.ScrollingState, .{});
-                forbear.useScrolling(scrolling);
-                forbear.ScrollBar(scrolling);
-
-                forbear.element(.{
-                    .style = .{
-                        .width = .{ .grow = 1.0 },
-                        .direction = .vertical,
-                        .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
-                        .padding = .all(10),
-                    },
-                })({
-                    const isHovering = forbear.useState(bool, false);
-
-                    forbear.ProfilingMetrics(.{});
-
-                    forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
-
-                    RichTextExample();
+                forbear.ScrollProvider()({
+                    const scrolling = forbear.useState(forbear.ScrollingState, .{});
+                    forbear.useScrolling(scrolling);
+                    forbear.ScrollBar(scrolling);
 
                     forbear.element(.{
                         .style = .{
-                            .margin = forbear.Margin.top(12.0),
-                            .width = .{ .fixed = 100 },
-                            .height = .{ .fixed = 100 },
-                            .background = .{
-                                .color = .{
-                                    1.0,
-                                    forbear.useTransition(f32, if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
-                                    0.0,
-                                    1.0,
-                                },
-                            },
-                            .borderRadius = 20,
+                            .width = .{ .grow = 1.0 },
+                            .direction = .vertical,
+                            .background = .{ .color = .{ 0.2, 0.2, 0.2, 1.0 } },
+                            .padding = .all(10),
                         },
                     })({
-                        if (forbear.onMouseEnter()) {
-                            isHovering.* = true;
-                        }
-                        if (forbear.onMouseLeave()) {
-                            isHovering.* = false;
-                        }
-                    });
+                        const isHovering = forbear.useState(bool, false);
 
-                    CounterExample();
+                        forbear.ProfilingMetrics(.{});
 
-                    forbear.element(.{
-                        .style = .{ .margin = .top(12.0) },
-                    })({
-                        TextInput("Type something...");
-                    });
+                        forbear.text("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]]{{}}|;':\",.<>/?`~");
 
-                    forbear.element(.{
-                        .style = .{},
-                    })({
-                        forbear.text("keys ");
-                        // Modifiers read as held state so they stay visible
-                        // while down; every other key pulses on press and
-                        // again on each OS auto-repeat. We walk the struct's
-                        // bool fields via reflection just to render each key
-                        // as text.
-                        const keys = forbear.onKeyDown();
-                        inline for (@typeInfo(forbear.Keys).@"struct".fields) |field| {
-                            if (@field(keys, field.name)) {
-                                forbear.text(" ");
-                                forbear.text(field.name);
-                            }
-                        }
-                    });
-
-                    // Demonstrates `.relative` placement: the badge is offset from
-                    // the card's top-left corner and does not participate in the
-                    // card's layout flow, so the card content below is unaffected.
-                    forbear.element(.{
-                        .style = .{
-                            .margin = forbear.Margin.top(24.0),
-                            .padding = .all(16.0),
-                            .fontSize = 16.0,
-                            .background = .{ .color = .{ 0.15, 0.15, 0.25, 1.0 } },
-                            .borderRadius = 12.0,
-                        },
-                    })({
-                        forbear.text("Card with a relative badge");
+                        RichTextExample();
 
                         forbear.element(.{
                             .style = .{
-                                .placement = .{ .relative = .{ 200.0, -10.0 } },
-                                .background = .{ .color = .{ 0.9, 0.2, 0.3, 1.0 } },
-                                .borderRadius = 12.0,
-                                .xJustification = .center,
-                                .padding = forbear.Padding.block(2.0).withInLine(4.0),
-                                .fontSize = 14,
-                            },
-                        })({
-                            forbear.text("NEW");
-                        });
-                    });
-
-                    // Demonstrates `.darken` blend mode: the dark overlay darkens
-                    // the underlying gradient without affecting lighter areas.
-                    forbear.element(.{
-                        .style = .{
-                            .margin = forbear.Margin.top(24.0),
-                            .width = .{ .fixed = 200 },
-                            .height = .{ .fixed = 100 },
-                            .background = .{
-                                .gradient = .{
-                                    .direction = .toBottomRight,
-                                    .stops = &.{
-                                        .{ .color = .{ 0.2, 0.6, 1.0, 1.0 }, .position = 0.0 },
-                                        .{ .color = .{ 1.0, 0.4, 0.2, 1.0 }, .position = 1.0 },
+                                .margin = forbear.Margin.top(12.0),
+                                .width = .{ .fixed = 100 },
+                                .height = .{ .fixed = 100 },
+                                .background = .{
+                                    .color = .{
+                                        1.0,
+                                        forbear.useTransition(f32, if (isHovering.*) 0.0 else 0.3, 0.1, forbear.linear),
+                                        0.0,
+                                        1.0,
                                     },
                                 },
-                            },
-                            .borderRadius = 12.0,
-                        },
-                    })({
-                        forbear.element(.{
-                            .style = .{
-                                .width = .{ .fixed = 100 },
-                                .height = .{ .fixed = 80 },
-                                .margin = .all(10),
-                                .background = .{ .color = .{ 0.3, 0.3, 0.3, 0.8 } },
-                                .blendMode = .darken,
-                                .borderRadius = 8.0,
-                            },
-                        })({});
-                    });
-
-                    // Dashed border example
-                    forbear.element(.{
-                        .style = .{
-                            .margin = forbear.Margin.top(24.0),
-                            .width = .{ .fixed = 200 },
-                            .height = .{ .fixed = 100 },
-                            .background = .{ .color = .{ 0.1, 0.1, 0.1, 1.0 } },
-                            .borderWidth = .all(3.0),
-                            .borderColor = .{ 0.4, 0.8, 1.0, 1.0 },
-                            .borderStyle = .dashed,
-                            .borderRadius = 8.0,
-                            .xJustification = .center,
-                            .yJustification = .center,
-                        },
-                    })({
-                        forbear.text("Dashed");
-                    });
-
-                    // Scissor clipping test: fixed height container with overflowing children
-                    forbear.element(.{
-                        .style = .{
-                            .margin = forbear.Margin.top(24.0),
-                            .width = .{ .fixed = 200 },
-                            .height = .{ .fixed = 100 },
-                            .direction = .vertical,
-                            .background = .{ .color = .{ 0.1, 0.2, 0.3, 1.0 } },
-                            .borderRadius = 8.0,
-                            .borderWidth = .all(2.0),
-                            .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
-                        },
-                    })({
-                        const clipScrolling = forbear.useState(forbear.ScrollingState, .{});
-                        forbear.useScrolling(clipScrolling);
-                        forbear.ScrollBar(clipScrolling);
-
-                        forbear.text("Line 1");
-                        forbear.text("Line 2");
-                        forbear.text("Line 3 - should clip");
-                        forbear.text("Line 4 - should clip");
-                        forbear.text("Line 5 - should clip");
-                    });
-
-                    // Two scrollable regions in the same component. Each
-                    // `useScrolling` call binds its offset and spring state to
-                    // its enclosing element, so the regions scroll independently
-                    // without needing wrapping components.
-                    forbear.element(.{
-                        .style = .{
-                            .margin = forbear.Margin.top(24.0),
-                            .direction = .horizontal,
-                        },
-                    })({
-                        forbear.element(.{
-                            .style = .{
-                                .width = .{ .fixed = 200 },
-                                .height = .{ .fixed = 120 },
-                                .direction = .vertical,
-                                .background = .{ .color = .{ 0.15, 0.10, 0.20, 1.0 } },
-                                .borderRadius = 8.0,
-                                .padding = .all(8),
+                                .borderRadius = 20,
                             },
                         })({
-                            const leftScrolling = forbear.useState(forbear.ScrollingState, .{});
-                            forbear.useScrolling(leftScrolling);
-                            forbear.ScrollBar(leftScrolling);
-                            forbear.text("Left A");
-                            forbear.text("Left B");
-                            forbear.text("Left C");
-                            forbear.text("Left D");
-                            forbear.text("Left E");
+                            if (forbear.onMouseEnter()) {
+                                isHovering.* = true;
+                            }
+                            if (forbear.onMouseLeave()) {
+                                isHovering.* = false;
+                            }
+                        });
+
+                        CounterExample();
+
+                        forbear.element(.{
+                            .style = .{ .margin = .top(12.0) },
+                        })({
+                            TextInput("Type something...");
                         });
 
                         forbear.element(.{
+                            .style = .{},
+                        })({
+                            forbear.text("keys ");
+                            // Modifiers read as held state so they stay visible
+                            // while down; every other key pulses on press and
+                            // again on each OS auto-repeat. We walk the struct's
+                            // bool fields via reflection just to render each key
+                            // as text.
+                            const keys = forbear.onKeyDown();
+                            inline for (@typeInfo(forbear.Keys).@"struct".fields) |field| {
+                                if (@field(keys, field.name)) {
+                                    forbear.text(" ");
+                                    forbear.text(field.name);
+                                }
+                            }
+                        });
+
+                        // Demonstrates `.relative` placement: the badge is offset from
+                        // the card's top-left corner and does not participate in the
+                        // card's layout flow, so the card content below is unaffected.
+                        forbear.element(.{
                             .style = .{
-                                .margin = forbear.Margin.left(12.0),
-                                .width = .{ .fixed = 200 },
-                                .height = .{ .fixed = 120 },
-                                .direction = .vertical,
-                                .background = .{ .color = .{ 0.10, 0.20, 0.15, 1.0 } },
-                                .borderRadius = 8.0,
-                                .padding = .all(8),
+                                .margin = forbear.Margin.top(24.0),
+                                .padding = .all(16.0),
+                                .fontSize = 16.0,
+                                .background = .{ .color = .{ 0.15, 0.15, 0.25, 1.0 } },
+                                .borderRadius = 12.0,
                             },
                         })({
-                            const rightScrolling = forbear.useState(forbear.ScrollingState, .{});
-                            forbear.useScrolling(rightScrolling);
-                            forbear.ScrollBar(rightScrolling);
-                            forbear.text("Right 1");
-                            forbear.text("Right 2");
-                            forbear.text("Right 3");
-                            forbear.text("Right 4");
-                            forbear.text("Right 5");
+                            forbear.text("Card with a relative badge");
+
+                            forbear.element(.{
+                                .style = .{
+                                    .placement = .{ .relative = .{ 200.0, -10.0 } },
+                                    .background = .{ .color = .{ 0.9, 0.2, 0.3, 1.0 } },
+                                    .borderRadius = 12.0,
+                                    .xJustification = .center,
+                                    .padding = forbear.Padding.block(2.0).withInLine(4.0),
+                                    .fontSize = 14,
+                                },
+                            })({
+                                forbear.text("NEW");
+                            });
+                        });
+
+                        // Demonstrates `.darken` blend mode: the dark overlay darkens
+                        // the underlying gradient without affecting lighter areas.
+                        forbear.element(.{
+                            .style = .{
+                                .margin = forbear.Margin.top(24.0),
+                                .width = .{ .fixed = 200 },
+                                .height = .{ .fixed = 100 },
+                                .background = .{
+                                    .gradient = .{
+                                        .direction = .toBottomRight,
+                                        .stops = &.{
+                                            .{ .color = .{ 0.2, 0.6, 1.0, 1.0 }, .position = 0.0 },
+                                            .{ .color = .{ 1.0, 0.4, 0.2, 1.0 }, .position = 1.0 },
+                                        },
+                                    },
+                                },
+                                .borderRadius = 12.0,
+                            },
+                        })({
+                            forbear.element(.{
+                                .style = .{
+                                    .width = .{ .fixed = 100 },
+                                    .height = .{ .fixed = 80 },
+                                    .margin = .all(10),
+                                    .background = .{ .color = .{ 0.3, 0.3, 0.3, 0.8 } },
+                                    .blendMode = .darken,
+                                    .borderRadius = 8.0,
+                                },
+                            })({});
+                        });
+
+                        // Dashed border example
+                        forbear.element(.{
+                            .style = .{
+                                .margin = forbear.Margin.top(24.0),
+                                .width = .{ .fixed = 200 },
+                                .height = .{ .fixed = 100 },
+                                .background = .{ .color = .{ 0.1, 0.1, 0.1, 1.0 } },
+                                .borderWidth = .all(3.0),
+                                .borderColor = .{ 0.4, 0.8, 1.0, 1.0 },
+                                .borderStyle = .dashed,
+                                .borderRadius = 8.0,
+                                .xJustification = .center,
+                                .yJustification = .center,
+                            },
+                        })({
+                            forbear.text("Dashed");
+                        });
+
+                        // Scissor clipping test: fixed height container with overflowing children
+                        forbear.element(.{
+                            .style = .{
+                                .margin = forbear.Margin.top(24.0),
+                                .width = .{ .fixed = 200 },
+                                .height = .{ .fixed = 100 },
+                                .direction = .vertical,
+                                .background = .{ .color = .{ 0.1, 0.2, 0.3, 1.0 } },
+                                .borderRadius = 8.0,
+                                .borderWidth = .all(2.0),
+                                .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
+                            },
+                        })({
+                            const clipScrolling = forbear.useState(forbear.ScrollingState, .{});
+                            forbear.useScrolling(clipScrolling);
+                            forbear.ScrollBar(clipScrolling);
+
+                            forbear.text("Line 1");
+                            forbear.text("Line 2");
+                            forbear.text("Line 3 - should clip");
+                            forbear.text("Line 4 - should clip");
+                            forbear.text("Line 5 - should clip");
+                        });
+
+                        // Two scrollable regions in the same component. Each
+                        // `useScrolling` call binds its offset and spring state to
+                        // its enclosing element, so the regions scroll independently
+                        // without needing wrapping components.
+                        forbear.element(.{
+                            .style = .{
+                                .margin = forbear.Margin.top(24.0),
+                                .direction = .horizontal,
+                            },
+                        })({
+                            forbear.element(.{
+                                .style = .{
+                                    .width = .{ .fixed = 200 },
+                                    .height = .{ .fixed = 120 },
+                                    .direction = .vertical,
+                                    .background = .{ .color = .{ 0.15, 0.10, 0.20, 1.0 } },
+                                    .borderRadius = 8.0,
+                                    .padding = .all(8),
+                                },
+                            })({
+                                const leftScrolling = forbear.useState(forbear.ScrollingState, .{});
+                                forbear.useScrolling(leftScrolling);
+                                forbear.ScrollBar(leftScrolling);
+                                forbear.text("Left A");
+                                forbear.text("Left B");
+                                forbear.text("Left C");
+                                forbear.text("Left D");
+                                forbear.text("Left E");
+                            });
+
+                            forbear.element(.{
+                                .style = .{
+                                    .margin = forbear.Margin.left(12.0),
+                                    .width = .{ .fixed = 200 },
+                                    .height = .{ .fixed = 120 },
+                                    .direction = .vertical,
+                                    .background = .{ .color = .{ 0.10, 0.20, 0.15, 1.0 } },
+                                    .borderRadius = 8.0,
+                                    .padding = .all(8),
+                                },
+                            })({
+                                const rightScrolling = forbear.useState(forbear.ScrollingState, .{});
+                                forbear.useScrolling(rightScrolling);
+                                forbear.ScrollBar(rightScrolling);
+                                forbear.text("Right 1");
+                                forbear.text("Right 2");
+                                forbear.text("Right 3");
+                                forbear.text("Right 4");
+                                forbear.text("Right 5");
+                            });
                         });
                     });
+
+                    forbear.FocusContext.use().resolve();
+                    forbear.ScrollingContext.use().resolve();
                 });
-
-                forbear.FocusContext.use().resolve();
             });
         });
     });
