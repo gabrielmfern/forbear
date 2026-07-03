@@ -189,17 +189,25 @@ pub fn useScrolling(state: *ScrollingState) void {
         state.offset += delta;
     }
 
-    state.offset =
-        if (forbear.useNodeMeasurement()) |measurement|
-            @min(
-                @max(state.offset, identity),
-                @max(
-                    measurement.contentSize - measurement.size,
-                    identity,
-                ),
-            )
-        else
-            @max(state.offset, identity);
+    // `contentSize` runs from the border-box origin (so it already carries
+    // the leading border + padding) to the last flow child's far edge. Add
+    // the trailing border + padding so a full scroll rests the content end
+    // inside the padding, mirroring how it sits at the start unscrolled.
+    const maxOffset: ?Vec2 = if (forbear.useNodeMeasurement()) |measurement|
+        @max(
+            measurement.contentSize + Vec2{
+                node.style.padding.x[1] + node.style.borderWidth.x[1],
+                node.style.padding.y[1] + node.style.borderWidth.y[1],
+            } - measurement.size,
+            identity,
+        )
+    else
+        null;
+
+    state.offset = if (maxOffset) |max|
+        @min(@max(state.offset, identity), max)
+    else
+        @max(state.offset, identity);
 
     var animated = Vec2{
         forbear.useSpringTransition(
@@ -221,17 +229,10 @@ pub fn useScrolling(state: *ScrollingState) void {
             },
         ),
     };
-    animated =
-        if (forbear.useNodeMeasurement()) |measurement|
-            @min(
-                @max(animated, identity),
-                @max(
-                    measurement.contentSize - measurement.size,
-                    identity,
-                ),
-            )
-        else
-            @max(animated, identity);
+    animated = if (maxOffset) |max|
+        @min(@max(animated, identity), max)
+    else
+        @max(animated, identity);
     if (state.animate) {
         state._effectiveOffset = animated;
     } else {
