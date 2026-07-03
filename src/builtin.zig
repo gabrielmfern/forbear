@@ -615,6 +615,8 @@ pub fn InputCaret(inputState: *const InputState, scrollingState: *ScrollingState
                                 parent.style.padding.x[0] - parent.style.padding.x[1];
                             scrollingState.offset[0] = @min(scrollingState.offset[0], cursorX);
                             scrollingState.offset[0] = @max(scrollingState.offset[0], cursorX - innerWidth + 1.0);
+                            // this avoids the animation from happening
+                            scrollingState._effectiveOffset[0] = scrollingState.offset[0];
                         }
                     }
 
