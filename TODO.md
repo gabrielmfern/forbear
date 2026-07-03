@@ -73,7 +73,6 @@
 ## problems
 
 - elements can be hovered where they have been clipped
-- nested scrolling is not supported (i.e., nested elements all with scrolling)
 - when there's scaling in linux, the scale only drops in after some frames
 - new `registerFont`/`registerImage` functions are now heavily repeated and there's really no type-safety in `useFont`/`useImage` 
     - is having lots of them bad? I understand having no type-safety though
