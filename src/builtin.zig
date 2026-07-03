@@ -569,12 +569,21 @@ pub fn InputCaret(inputState: *const InputState) void {
                 return;
             }
             if (inputState.text) |text| {
-                if (focusContext.hasFocus() and inputState.selection[0] == inputState.selection[1]) {
+                if (focusContext.hasFocus()) {
                     const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
-                    const measured = forbear.measureText(&.{.{
-                        .content = text.items[0..inputState.cursor],
+                    const hasSelection = inputState.selection[0] != inputState.selection[1];
+
+                    const from = forbear.measureText(&.{.{
+                        .content = text.items[0..if (hasSelection) inputState.selection[0] else inputState.cursor],
                         .style = textStyle,
                     }}, 0.0, .none);
+                    const to = if (hasSelection)
+                        forbear.measureText(&.{.{
+                            .content = text.items[0..inputState.selection[1]],
+                            .style = textStyle,
+                        }}, 0.0, .none)
+                    else
+                        from;
 
                     // Follow the parent's vertical justification the same way
                     // layout justifies the flowing text, from the previous
@@ -585,8 +594,8 @@ pub fn InputCaret(inputState: *const InputState) void {
                             parent.style.padding.y[0] - parent.style.padding.y[1];
                         break :blk switch (parent.style.yJustification) {
                             .start => 0.0,
-                            .center => (innerHeight - measured.height) / 2.0,
-                            .end => innerHeight - measured.height,
+                            .center => (innerHeight - from.height) / 2.0,
+                            .end => innerHeight - from.height,
                         };
                     } else 0.0;
 
@@ -596,10 +605,16 @@ pub fn InputCaret(inputState: *const InputState) void {
                             // box (layout adds border + padding to it), which
                             // is also where the text node flows from, so the
                             // prefix width needs no padding on top.
-                            .placement = .{ .relative = .{ measured.width, yOffset } },
-                            .width = .{ .fixed = 1.0 },
-                            .height = .{ .fixed = measured.height },
-                            .background = .{ .color = textStyle.color },
+                            .placement = .{ .relative = .{ from.width, yOffset } },
+                            .width = .{ .fixed = if (hasSelection) to.width - from.width else 1.0 },
+                            .height = .{ .fixed = from.height },
+                            // The selection mounts after the text node, so it
+                            // draws over the glyphs and must stay translucent
+                            // for them to read through.
+                            .background = .{ .color = if (hasSelection)
+                                Vec4{ textStyle.color[0], textStyle.color[1], textStyle.color[2], textStyle.color[3] * 0.3 }
+                            else
+                                textStyle.color },
                         },
                     })({});
                 }
