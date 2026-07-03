@@ -506,6 +506,37 @@ pub fn useInput(initialInputState: struct {
                     inputState.selection = .{ inputState.cursor, inputState.cursor };
                 }
 
+                if (keysDown.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
+                    forbear.setClipboardText(text.items[inputState.selection[0]..inputState.selection[1]]);
+                    if (keysDown.x) {
+                        text.replaceRangeAssumeCapacity(
+                            inputState.selection[0],
+                            inputState.selection[1] - inputState.selection[0],
+                            &.{},
+                        );
+                        inputState.cursor = inputState.selection[0];
+                        inputState.selection = .{ inputState.cursor, inputState.cursor };
+                    }
+                }
+
+                if (keysDown.control and keysDown.v) paste: {
+                    const pasted = forbear.getClipboardText() orelse break :paste;
+                    if (inputState.selection[0] != inputState.selection[1]) {
+                        text.replaceRangeAssumeCapacity(
+                            inputState.selection[0],
+                            inputState.selection[1] - inputState.selection[0],
+                            &.{},
+                        );
+                        inputState.cursor = inputState.selection[0];
+                    }
+                    text.insertSlice(arena, inputState.cursor, pasted) catch |err| {
+                        forbear.handleFrameError(err);
+                        break :paste;
+                    };
+                    inputState.cursor += pasted.len;
+                    inputState.selection = .{ inputState.cursor, inputState.cursor };
+                }
+
                 if (forbear.onInput()) |typed| insert: {
                     if (inputState.selection[0] != inputState.selection[1]) {
                         text.replaceRangeAssumeCapacity(
