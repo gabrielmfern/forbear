@@ -507,6 +507,7 @@ pub const EventPayload = union(forbear.Event) {
     scroll: ?Vec2,
     keyDown: forbear.Keys,
     keyUp: forbear.Keys,
+    input: ?[]const u8,
 };
 
 pub const FocusConsumes = *const fn (payload: EventPayload) bool;
