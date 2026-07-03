@@ -516,15 +516,15 @@ pub fn useAnimation(duration: f32) Animation {
 /// the layout pass uses, so the result matches what `text`/`composeText` would
 /// render at that width and `textWrapping`. `.none` ignores `width`. Must be
 /// called inside a frame; scratch goes on the frame arena.
-pub fn measureText(runs: []const TextRun, width: f32, textWrapping: TextWrapping) struct { height: f32, lines: usize } {
+pub fn measureText(runs: []const TextRun, width: f32, textWrapping: TextWrapping) struct { width: f32, height: f32, lines: usize } {
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
-    if (self.frameMeta.?.err != null) return .{ .height = 0, .lines = 0 };
+    if (self.frameMeta.?.err != null) return .{ .width = 0, .height = 0, .lines = 0 };
 
     const arena = self.frameMeta.?.arena;
     const shaped = shapeRuns(arena, runs, textWrapping) catch |err| {
         handleFrameError(err);
-        return .{ .height = 0, .lines = 0 };
+        return .{ .width = 0, .height = 0, .lines = 0 };
     };
 
     var glyphs = Glyphs{
@@ -538,14 +538,26 @@ pub fn measureText(runs: []const TextRun, width: f32, textWrapping: TextWrapping
     else
         layouting.wrapGlyphs(arena, &glyphs, width, textWrapping, .start, @splat(0.0)) catch |err| {
             handleFrameError(err);
-            return .{ .height = 0, .lines = 0 };
+            return .{ .width = 0, .height = 0, .lines = 0 };
         };
+
+    // Once wrapped, the laid-out width is the widest line, not the `width`
+    // constraint that was passed in.
+    const measuredWidth = if (textWrapping == .none)
+        shaped.minSize[0]
+    else blk: {
+        var maxRight: f32 = 0.0;
+        for (glyphs.slice) |glyph| {
+            maxRight = @max(maxRight, glyph.position[0] + glyph.advance[0]);
+        }
+        break :blk maxRight;
+    };
 
     const lines: usize = if (shaped.lineHeight > 0)
         @intFromFloat(@round(height / shaped.lineHeight))
     else
         0;
-    return .{ .height = height, .lines = lines };
+    return .{ .width = measuredWidth, .height = height, .lines = lines };
 }
 
 pub fn linear(time: f32) f32 {
