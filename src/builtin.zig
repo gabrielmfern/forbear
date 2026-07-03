@@ -532,7 +532,11 @@ pub const EventPayload = union(forbear.Event) {
     input: ?[]const u8,
 };
 
-pub const FocusConsumes = *const fn (payload: EventPayload) bool;
+/// Reports what part of `payload` the element consumes: `null` for none of
+/// it, or the same event tag trimmed down to just what it acts on — e.g. an
+/// input returns only the caret-movement/editing bits of a `keyDown`, leaving
+/// the rest for everyone else.
+pub const FocusConsumes = *const fn (payload: EventPayload) ?EventPayload;
 
 pub const Focus = struct {
     key: u64,
@@ -579,18 +583,23 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
         return f.key == node.key;
     }
 
+    /// The portion of `result` the focused element consumes, so callers can
+    /// trim it away, e.g. `keys.without(ctx.consumes(.keyDown, keys))`.
     pub fn consumes(
         self: *const @This(),
         comptime eventTag: forbear.Event,
         result: forbear.OnResult(eventTag),
-    ) bool {
-        const f = self.focused orelse return false;
+    ) forbear.OnResult(eventTag) {
+        const none: forbear.OnResult(eventTag) = switch (eventTag) {
+            .keyDown, .keyUp => .{},
+            .mouseMove, .scroll, .input => null,
+            else => false,
+        };
+        const f = self.focused orelse return none;
+        const func = f.consumes orelse return none;
         const payload = @unionInit(EventPayload, @tagName(eventTag), result);
-        if (f.consumes) |func| {
-            return func(payload);
-        } else {
-            return false;
-        }
+        const consumed = func(payload) orelse return none;
+        return @field(consumed, @tagName(eventTag));
     }
 
     pub fn resolve(self: *@This()) void {
