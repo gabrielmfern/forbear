@@ -2165,6 +2165,51 @@ pub const Window = switch (builtin.os.tag) {
             _ = SetCursor(nativeCursor);
         }
 
+        /// Sets the OS clipboard to `text`, replacing whatever it held.
+        pub fn setClipboardText(self: *Self, text: []const u8) !void {
+            const wide = try std.unicode.utf8ToUtf16LeAllocZ(self.allocator, text);
+            defer self.allocator.free(wide);
+
+            if (OpenClipboard(self.handle) == 0) return error.FailedToOpenClipboard;
+            defer _ = CloseClipboard();
+
+            if (EmptyClipboard() == 0) return error.FailedToEmptyClipboard;
+
+            const byteLen: SIZE_T = (wide.len + 1) * @sizeOf(u16);
+            const hMem = GlobalAlloc(GMEM_MOVEABLE, byteLen) orelse return error.FailedToAllocateClipboardMemory;
+            const dest = GlobalLock(hMem) orelse {
+                _ = GlobalFree(hMem);
+                return error.FailedToLockClipboardMemory;
+            };
+            const destSlice: [*]u16 = @ptrCast(@alignCast(dest));
+            @memcpy(destSlice[0..wide.len], wide);
+            destSlice[wide.len] = 0;
+            _ = GlobalUnlock(hMem);
+
+            // Ownership of `hMem` transfers to the system on success; freeing
+            // it ourselves afterwards would be a double free.
+            if (SetClipboardData(CF_UNICODETEXT, hMem) == null) {
+                _ = GlobalFree(hMem);
+                return error.FailedToSetClipboardData;
+            }
+        }
+
+        /// Reads the OS clipboard as text, allocated with `allocator`. Returns
+        /// `null` if the clipboard doesn't currently hold text.
+        pub fn getClipboardText(self: *Self, allocator: std.mem.Allocator) !?[]const u8 {
+            if (IsClipboardFormatAvailable(CF_UNICODETEXT) == 0) return null;
+
+            if (OpenClipboard(self.handle) == 0) return error.FailedToOpenClipboard;
+            defer _ = CloseClipboard();
+
+            const hMem = GetClipboardData(CF_UNICODETEXT) orelse return null;
+            const ptr = GlobalLock(hMem) orelse return error.FailedToLockClipboardMemory;
+            defer _ = GlobalUnlock(hMem);
+
+            const wide: [*:0]const u16 = @ptrCast(@alignCast(ptr));
+            return try std.unicode.utf16LeToUtf8Alloc(allocator, std.mem.span(wide));
+        }
+
         pub fn handleEvents(self: *Self) !void {
             while (self.running) {
                 var message: MSG = undefined;
@@ -2461,6 +2506,23 @@ pub const Window = switch (builtin.os.tag) {
 
         extern "user32" fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: ?*const anyopaque) callconv(.c) HCURSOR;
         extern "user32" fn SetCursor(hCursor: HCURSOR) callconv(.c) HCURSOR;
+
+        // Clipboard
+        const HGLOBAL = ?HANDLE;
+        const CF_UNICODETEXT: UINT = 13;
+        const GMEM_MOVEABLE: UINT = 0x0002;
+
+        extern "user32" fn OpenClipboard(hWndNewOwner: HWND) callconv(.c) BOOL;
+        extern "user32" fn CloseClipboard() callconv(.c) BOOL;
+        extern "user32" fn EmptyClipboard() callconv(.c) BOOL;
+        extern "user32" fn SetClipboardData(uFormat: UINT, hMem: HGLOBAL) callconv(.c) HGLOBAL;
+        extern "user32" fn GetClipboardData(uFormat: UINT) callconv(.c) HGLOBAL;
+        extern "user32" fn IsClipboardFormatAvailable(format: UINT) callconv(.c) BOOL;
+
+        extern "kernel32" fn GlobalAlloc(uFlags: UINT, dwBytes: SIZE_T) callconv(.c) HGLOBAL;
+        extern "kernel32" fn GlobalLock(hMem: HGLOBAL) callconv(.c) LPVOID;
+        extern "kernel32" fn GlobalUnlock(hMem: HGLOBAL) callconv(.c) BOOL;
+        extern "kernel32" fn GlobalFree(hMem: HGLOBAL) callconv(.c) HGLOBAL;
 
         extern "user32" fn AdjustWindowRectEx(lpRect: *RECT, dwStyle: DWORD, bMenu: BOOL, dwExStyle: DWORD) callconv(.c) BOOL;
         extern "user32" fn SetWindowPos(
