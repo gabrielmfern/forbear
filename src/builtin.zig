@@ -524,6 +524,7 @@ pub fn useInput(initialInputState: struct {
                         .backspace = keys.backspace,
                         .delete = keys.delete,
                         .control = keys.control,
+                        .a = keys.a,
                         .c = keys.c,
                         .v = keys.v,
                         .x = keys.x,
@@ -605,6 +606,11 @@ pub fn useInput(initialInputState: struct {
                 inputState.selection = .{ inputState.cursor, inputState.cursor };
             }
 
+            if (keysDown.control and keysDown.a) {
+                inputState.cursor = text.items.len;
+                inputState.selection = .{ 0, text.items.len };
+            }
+
             if (keysDown.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
                 forbear.setClipboardText(text.items[inputState.selection[0]..inputState.selection[1]]);
                 if (keysDown.x) {
@@ -636,22 +642,28 @@ pub fn useInput(initialInputState: struct {
                 inputState.selection = .{ inputState.cursor, inputState.cursor };
             }
 
-            if (forbear.onInput()) |typed| insert: {
-                if (inputState.selection[0] != inputState.selection[1]) {
-                    text.replaceRangeAssumeCapacity(
-                        inputState.selection[0],
-                        inputState.selection[1] - inputState.selection[0],
-                        &.{},
-                    );
-                    inputState.cursor = inputState.selection[0];
+            // A chorded press is a command, not text entry (ctrl+a must not
+            // type an "a"). The exception is ctrl+alt, which is how AltGr
+            // chords arrive on Windows keymaps — those do type characters.
+            const isCommandChord = (keysDown.control and !keysDown.alt) or keysDown.super;
+            if (!isCommandChord) {
+                if (forbear.onInput()) |typed| insert: {
+                    if (inputState.selection[0] != inputState.selection[1]) {
+                        text.replaceRangeAssumeCapacity(
+                            inputState.selection[0],
+                            inputState.selection[1] - inputState.selection[0],
+                            &.{},
+                        );
+                        inputState.cursor = inputState.selection[0];
+                        inputState.selection = .{ inputState.cursor, inputState.cursor };
+                    }
+                    text.insertSlice(arena, inputState.cursor, typed) catch |err| {
+                        forbear.handleFrameError(err);
+                        break :insert;
+                    };
+                    inputState.cursor += typed.len;
                     inputState.selection = .{ inputState.cursor, inputState.cursor };
                 }
-                text.insertSlice(arena, inputState.cursor, typed) catch |err| {
-                    forbear.handleFrameError(err);
-                    break :insert;
-                };
-                inputState.cursor += typed.len;
-                inputState.selection = .{ inputState.cursor, inputState.cursor };
             }
         }
     }
