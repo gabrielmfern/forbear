@@ -279,6 +279,32 @@ pub const Window = switch (builtin.os.tag) {
             delay: i32,
         },
         wlKeyboard: *c.wl_keyboard,
+        /// Serial from the most recent key event. `wl_data_device_set_selection`
+        /// requires one to prove the request is tied to real input.
+        keyboardSerial: u32,
+
+        wlDataDeviceManager: ?*c.wl_data_device_manager,
+        wlDataDevice: ?*c.wl_data_device,
+        /// Guards every clipboard field below. `dataSourceSend`,
+        /// `dataSourceCancelled`, and `dataDeviceSelection` run on the Wayland
+        /// event thread (inside `handleEvents`'s `wl_display_dispatch`), while
+        /// `setClipboardText`/`getClipboardText` are called from the render
+        /// thread — same cross-thread split as `keysHeld` below, but these
+        /// fields aren't funneled through `eventQueue` since clipboard access
+        /// is imperative, not a per-frame event. Locking is only ever
+        /// contended by an actual copy/paste, never per-frame, so a single
+        /// coarse mutex costs nothing on the hot path.
+        clipboardMutex: std.Io.Mutex,
+        /// The data source we created last time we set the clipboard. Lives
+        /// until another app takes the selection (`cancelled`) or we replace
+        /// it ourselves.
+        clipboardSource: ?*c.wl_data_source,
+        /// Bytes offered by `clipboardSource`, owned by `allocator`.
+        clipboardText: []const u8,
+        /// The offer backing the current clipboard selection, as announced by
+        /// `wl_data_device`'s `selection` event. Null when nothing is
+        /// selected, or while we're the current owner.
+        selectionOffer: ?*c.wl_data_offer,
 
         /// Keyboard state. The Wayland event thread writes; Forbear's render
         /// thread drains the event queue at frame start.
@@ -549,6 +575,10 @@ pub const Window = switch (builtin.os.tag) {
                 &c.zxdg_decoration_manager_v1_interface,
                 1,
             );
+            const dataDeviceManager = BindingInfo(c.wl_data_device_manager).new(
+                &c.wl_data_device_manager_interface,
+                3,
+            );
 
             const interfaceName: []const u8 = interfacePtr[0..std.mem.len(interfacePtr)];
 
@@ -581,6 +611,8 @@ pub const Window = switch (builtin.os.tag) {
                 window.wpViewporter = viewporter.bind(registry, name, version);
             } else if (decorationManager.is(interfaceName)) {
                 window.xdgDecorationManager = decorationManager.bind(registry, name, version);
+            } else if (dataDeviceManager.is(interfaceName)) {
+                window.wlDataDeviceManager = dataDeviceManager.bind(registry, name, version);
             }
         }
 
@@ -1036,9 +1068,14 @@ pub const Window = switch (builtin.os.tag) {
             state: u32,
         ) callconv(.c) void {
             _ = wlKeyboard;
-            _ = serial;
             _ = time;
             const window: *Self = @ptrCast(@alignCast(data));
+
+            {
+                window.clipboardMutex.lockUncancelable(window.io);
+                defer window.clipboardMutex.unlock(window.io);
+                window.keyboardSerial = serial;
+            }
 
             // wl_keyboard reports evdev keycodes; xkb keycodes are evdev + 8.
             const xkbKeycode: u32 = key + 8;
@@ -1238,6 +1275,12 @@ pub const Window = switch (builtin.os.tag) {
             window.activeRepeat = null;
             // Some setups never emit repeat_info; default to typical X11 values.
             window.repeatInfo = .{ .rate = 25, .delay = 600 };
+            window.keyboardSerial = 0;
+
+            window.clipboardMutex = .init;
+            window.clipboardSource = null;
+            window.clipboardText = &.{};
+            window.selectionOffer = null;
 
             // Initialize optional fields to null before the registry roundtrip,
             // since allocator.create does not zero-initialize memory.
@@ -1246,6 +1289,8 @@ pub const Window = switch (builtin.os.tag) {
             window.wpViewporter = null;
             window.xdgDecorationManager = null;
             window.xdgToplevelDecoration = null;
+            window.wlDataDeviceManager = null;
+            window.wlDataDevice = null;
             window.wpFractionalScale = null;
             window.wpViewport = null;
 
@@ -1307,6 +1352,14 @@ pub const Window = switch (builtin.os.tag) {
                 c.wp_viewport_set_destination(window.wpViewport, @intCast(window.width), @intCast(window.height));
             }
 
+            if (window.wlDataDeviceManager) |manager| {
+                window.wlDataDevice = c.wl_data_device_manager_get_data_device(
+                    manager,
+                    window.wlSeat,
+                ) orelse return error.UnableToGetDataDevice;
+                _ = c.wl_data_device_add_listener(window.wlDataDevice, &wlDataDeviceListener, @ptrCast(@alignCast(window)));
+            }
+
             c.wl_surface_commit(window.wlSurface);
             _ = c.wl_display_roundtrip(window.wlDisplay);
 
@@ -1357,6 +1410,156 @@ pub const Window = switch (builtin.os.tag) {
                 @intCast(wlCursorImage.*.hotspot_x),
                 @intCast(wlCursorImage.*.hotspot_y),
             );
+        }
+
+        /// Mime type we offer and request; effectively universal among apps
+        /// that put text on the clipboard (GTK, Qt, browsers, terminals).
+        const clipboardMimeType = "text/plain;charset=utf-8";
+
+        fn dataSourceSend(
+            data: ?*anyopaque,
+            source: ?*c.wl_data_source,
+            mimeType: [*c]const u8,
+            fd: i32,
+        ) callconv(.c) void {
+            _ = source;
+            _ = mimeType;
+            const window: *Self = @ptrCast(@alignCast(data));
+            const file: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = false } };
+            defer file.close(window.io);
+
+            window.clipboardMutex.lockUncancelable(window.io);
+            const text = window.clipboardText;
+            window.clipboardMutex.unlock(window.io);
+
+            file.writeStreamingAll(window.io, text) catch |err| {
+                std.log.err("clipboard: failed writing selection to requester: {}", .{err});
+            };
+        }
+
+        fn dataSourceCancelled(data: ?*anyopaque, source: ?*c.wl_data_source) callconv(.c) void {
+            const window: *Self = @ptrCast(@alignCast(data));
+
+            window.clipboardMutex.lockUncancelable(window.io);
+            defer window.clipboardMutex.unlock(window.io);
+            // Another app took the selection; only free if `source` is still
+            // the one we last handed to `wl_data_device_set_selection` — a
+            // `setClipboardText` call already destroyed/replaced anything older.
+            if (window.clipboardSource == source) {
+                c.wl_data_source_destroy(source);
+                window.allocator.free(window.clipboardText);
+                window.clipboardText = &.{};
+                window.clipboardSource = null;
+            }
+        }
+
+        const dataSourceListener: c.wl_data_source_listener = .{
+            .target = null,
+            .send = dataSourceSend,
+            .cancelled = dataSourceCancelled,
+            .dnd_drop_performed = null,
+            .dnd_finished = null,
+            .action = null,
+        };
+
+        fn dataDeviceSelection(data: ?*anyopaque, dataDevice: ?*c.wl_data_device, offer: ?*c.wl_data_offer) callconv(.c) void {
+            _ = dataDevice;
+            const window: *Self = @ptrCast(@alignCast(data));
+
+            window.clipboardMutex.lockUncancelable(window.io);
+            defer window.clipboardMutex.unlock(window.io);
+            if (window.selectionOffer) |old| c.wl_data_offer_destroy(old);
+            window.selectionOffer = offer;
+        }
+
+        // We only care about the clipboard, not drag-and-drop, so `enter`/
+        // `leave`/`motion`/`drop` are left unhandled. `data_offer` just
+        // introduces the object — `selection` re-delivers the same pointer
+        // once it's known to be the clipboard offer, which is all we need.
+        const wlDataDeviceListener: c.wl_data_device_listener = .{
+            .data_offer = null,
+            .enter = null,
+            .leave = null,
+            .motion = null,
+            .drop = null,
+            .selection = dataDeviceSelection,
+        };
+
+        /// Takes ownership of the clipboard selection, offering `text`. Copies
+        /// `text` into an `allocator`-owned buffer, since the caller's slice
+        /// (typically frame- or scope-arena-backed) won't outlive this call.
+        pub fn setClipboardText(self: *Self, text: []const u8) !void {
+            const manager = self.wlDataDeviceManager orelse return error.ClipboardUnavailable;
+            const dataDevice = self.wlDataDevice orelse return error.ClipboardUnavailable;
+
+            const owned = try self.allocator.dupe(u8, text);
+            errdefer self.allocator.free(owned);
+
+            const source = c.wl_data_device_manager_create_data_source(manager) orelse
+                return error.FailedToCreateDataSource;
+            _ = c.wl_data_source_add_listener(source, &dataSourceListener, self);
+            _ = c.wl_data_source_offer(source, clipboardMimeType);
+
+            self.clipboardMutex.lockUncancelable(self.io);
+            defer self.clipboardMutex.unlock(self.io);
+
+            c.wl_data_device_set_selection(dataDevice, source, self.keyboardSerial);
+            _ = c.wl_display_flush(self.wlDisplay);
+
+            if (self.clipboardSource) |old| c.wl_data_source_destroy(old);
+            self.allocator.free(self.clipboardText);
+            self.clipboardSource = source;
+            self.clipboardText = owned;
+        }
+
+        /// Reads the current clipboard selection as text, allocated with
+        /// `allocator`. Returns `null` if there's no selection, the source
+        /// doesn't offer `clipboardMimeType`, or it doesn't answer within
+        /// a second — a stuck/dead clipboard owner shouldn't hang the caller.
+        pub fn getClipboardText(self: *Self, allocator: std.mem.Allocator) !?[]const u8 {
+            self.clipboardMutex.lockUncancelable(self.io);
+            const offer = self.selectionOffer;
+            self.clipboardMutex.unlock(self.io);
+            const dataOffer = offer orelse return null;
+
+            // `Io` has no portable pipe-creation primitive (see `Io.File`),
+            // so the pipe itself is the one raw syscall here; the read/close
+            // that follow go through `Io.File` like the rest of this codebase.
+            var pipeFds: [2]std.c.fd_t = undefined;
+            if (std.c.pipe(&pipeFds) != 0) return error.FailedToCreatePipe;
+            const readFile: std.Io.File = .{ .handle = pipeFds[0], .flags = .{ .nonblocking = false } };
+            const writeFile: std.Io.File = .{ .handle = pipeFds[1], .flags = .{ .nonblocking = false } };
+
+            c.wl_data_offer_receive(dataOffer, clipboardMimeType, writeFile.handle);
+            // Our copy of the write end must close before we block on the
+            // read end, so the read observes EOF once the source client
+            // (which got its own copy of the fd via the compositor) closes
+            // its side — otherwise we'd wait on a pipe we're still holding open.
+            writeFile.close(self.io);
+            _ = c.wl_display_flush(self.wlDisplay);
+
+            defer readFile.close(self.io);
+
+            var list = std.ArrayList(u8).empty;
+            errdefer list.deinit(allocator);
+            var buffer: [4096]u8 = undefined;
+            while (true) {
+                // A stuck/dead clipboard owner shouldn't hang the render
+                // thread forever, hence the timeout instead of a plain read.
+                const result = self.io.operateTimeout(
+                    .{ .file_read_streaming = .{ .file = readFile, .data = &.{buffer[0..]} } },
+                    .{ .duration = .fromSeconds(1) },
+                ) catch break; // timed out, or cancelled
+                const n = result.file_read_streaming catch break; // EndOfStream, or a real read error
+                if (n == 0) break;
+                try list.appendSlice(allocator, buffer[0..n]);
+            }
+
+            if (list.items.len == 0) {
+                list.deinit(allocator);
+                return null;
+            }
+            return try list.toOwnedSlice(allocator);
         }
 
         pub fn handleEvents(self: *Self) !void {
@@ -1423,6 +1626,12 @@ pub const Window = switch (builtin.os.tag) {
             if (self.xdgToplevelDecoration) |decoration| c.zxdg_toplevel_decoration_v1_destroy(decoration);
             if (self.wpFractionalScale) |fs| c.wp_fractional_scale_v1_destroy(fs);
             if (self.wpViewport) |vp| c.wp_viewport_destroy(vp);
+
+            if (self.selectionOffer) |offer| c.wl_data_offer_destroy(offer);
+            if (self.clipboardSource) |source| c.wl_data_source_destroy(source);
+            self.allocator.free(self.clipboardText);
+            if (self.wlDataDevice) |dd| c.wl_data_device_release(dd);
+            if (self.wlDataDeviceManager) |ddm| c.wl_data_device_manager_destroy(ddm);
 
             c.xdg_toplevel_destroy(self.xdgToplevel);
             c.xdg_surface_destroy(self.xdgSurface);
