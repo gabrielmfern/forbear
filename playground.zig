@@ -154,6 +154,65 @@ fn Button(text: []const u8) bool {
     return activated;
 }
 
+fn TextInput(placeholder: []const u8) void {
+    forbear.element(.{
+        .style = .{
+            .width = .{ .fixed = 240.0 },
+            .height = .{ .fixed = 32.0 },
+            .padding = .inLine(10.0),
+            .background = .{ .color = forbear.hex("#151515") },
+            .color = forbear.hex("#fafafa"),
+            .cursor = .text,
+            .borderRadius = 10.0,
+            .borderWidth = .all(2.0),
+            .fontSize = 14.0,
+            .textWrapping = .none,
+            .yJustification = .center,
+            .direction = .vertical,
+        },
+    })({
+        const scrollingState = forbear.useState(forbear.ScrollingState, .{});
+        const inputState = forbear.useInput(.{
+            .cursor = 0,
+            .selection = .{ 0, 0 },
+            .text = "",
+        });
+        const focusContext = forbear.FocusContext.use();
+
+        forbear.useScrolling(scrollingState);
+
+        const node = forbear.getParentNode().?;
+        node.style.shadow = .{
+            .color = forbear.hex("#3F3F3F"),
+            .offset = .all(0.0),
+            .blurRadius = 0.0,
+            .spread = forbear.useTransition(
+                f32,
+                if (focusContext.hasFocus()) 3.0 else 0.0,
+                0.15,
+                timingFunction,
+            ),
+        };
+        node.style.borderColor = forbear.useTransition(
+            forbear.Color,
+            if (focusContext.hasFocus()) forbear.hex("#3F3F3F") else forbear.hex("#2F2F2F"),
+            0.15,
+            timingFunction,
+        );
+
+        if (forbear.onMouseDown()) {
+            focusContext.focus();
+        }
+
+        const text = inputState.text.?.items;
+        const showingPlaceholder = text.len == 0;
+        node.style.color = if (showingPlaceholder) forbear.hex("#5F5F5F") else forbear.hex("#fafafa");
+        forbear.text(if (showingPlaceholder) placeholder else text);
+
+        forbear.InputCaret(inputState, scrollingState);
+    });
+}
+
 fn App() void {
     forbear.component(.{})({
         const viewportSize = forbear.useViewportSize();
@@ -210,6 +269,12 @@ fn App() void {
                     });
 
                     CounterExample();
+
+                    forbear.element(.{
+                        .style = .{ .margin = .top(12.0) },
+                    })({
+                        TextInput("Type something...");
+                    });
 
                     forbear.element(.{
                         .style = .{},
