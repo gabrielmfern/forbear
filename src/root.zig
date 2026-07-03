@@ -140,6 +140,8 @@ pub const Event = enum {
     keyDown,
     /// See `onKeyUp()`.
     keyUp,
+    /// See `onInput()`.
+    input,
 };
 
 /// A run of text sharing one resolved style. The unit `composeText` appends to
@@ -221,6 +223,9 @@ scrollDelta: Vec2,
 keysThisFrame: Keys = .{},
 /// Backs `onKeyUp()`.
 keysReleasedThisFrame: Keys = .{},
+/// Backs `onInput()`. This frame's typed text, arena-allocated so frames
+/// with nothing typed cost nothing.
+inputTextThisFrame: []const u8 = &.{},
 activeNodeKey: ?u64 = null,
 frameRequestedCursor: Cursor = .default,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
@@ -996,6 +1001,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
 
     self.keysThisFrame = .{};
     self.keysReleasedThisFrame = .{};
+    self.inputTextThisFrame = &.{};
 
     self.frameCounter +%= 1;
     self.frameMeta = meta;
@@ -1006,11 +1012,16 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     if (self.window == null) return &frameEnd;
     const window = self.window.?;
 
+    var inputText: std.ArrayList(u8) = .empty;
     var eventIterator = window.eventQueue.iterate();
     while (eventIterator.next()) |event| {
         switch (event) {
             .input => |input| {
-                std.log.debug("input text {s}", .{input.text(meta.arena) catch unreachable});
+                const typedText = input.text(meta.arena) catch |err| {
+                    handleFrameError(err);
+                    continue;
+                };
+                inputText.appendSlice(meta.arena, typedText) catch |err| handleFrameError(err);
             },
             .keys => |keys| {
                 self.keysThisFrame = self.keysThisFrame.with(keys);
@@ -1062,6 +1073,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
             else => {},
         }
     }
+    self.inputTextThisFrame = inputText.items;
     return &frameEnd;
 }
 
@@ -1974,6 +1986,7 @@ pub fn OnResult(comptime eventTag: Event) type {
     return switch (eventTag) {
         .scroll, .mouseMove => ?Vec2,
         .keyDown, .keyUp => Keys,
+        .input => ?[]const u8,
         else => bool,
     };
 }
@@ -2123,6 +2136,15 @@ pub fn onKeyDown() Keys {
 pub fn onKeyUp() Keys {
     const self = getForbear();
     return self.keysReleasedThisFrame;
+}
+
+/// Text typed this frame, else `null`. Control codepoints (arrows,
+/// backspace, enter, ...) are filtered out at the window layer, so they
+/// only ever show up through `onKeyDown()`/`onKeyUp()`; OS auto-repeat
+/// expands into repeated characters. Global for now, like `onKeyDown()`.
+pub fn onInput() ?[]const u8 {
+    const self = getForbear();
+    return if (self.inputTextThisFrame.len > 0) self.inputTextThisFrame else null;
 }
 
 pub fn isNodeActive() bool {
