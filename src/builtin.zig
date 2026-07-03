@@ -485,9 +485,8 @@ pub fn useInput(initialInputState: struct {
     return inputState;
 }
 
-pub fn InputCaret(cursor: usize, text: []const u8) void {
-    _ = cursor;
-    _ = text;
+pub fn InputCaret(inputState: *const InputState) void {
+    _ = inputState;
     forbear.component(.{})({
         // we need the width of the text until the cursor here
         // what are the text styles?
