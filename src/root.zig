@@ -1726,6 +1726,32 @@ pub fn setCursor(cursor: Cursor) void {
     self.frameRequestedCursor = cursor;
 }
 
+/// Copies `content` to the OS clipboard. No-op if there's no window
+/// (headless use, e.g. tests) or the platform clipboard is unavailable; a
+/// real failure is captured into the frame's error state like any other
+/// frame-time call.
+pub fn setClipboardText(content: []const u8) void {
+    const self = getForbear();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) return;
+    const window = self.window orelse return;
+    window.setClipboardText(content) catch |err| handleFrameError(err);
+}
+
+/// Reads the OS clipboard as text, copied into this frame's arena — valid
+/// until the frame ends. Returns `null` if there's no window, the clipboard
+/// doesn't hold text, or reading it failed.
+pub fn getClipboardText() ?[]const u8 {
+    const self = getForbear();
+    std.debug.assert(self.frameMeta != null);
+    if (self.frameMeta.?.err != null) return null;
+    const window = self.window orelse return null;
+    return window.getClipboardText(self.frameMeta.?.arena) catch |err| {
+        handleFrameError(err);
+        return null;
+    };
+}
+
 inline fn ReturnType(comptime function: anytype) type {
     const Function = @TypeOf(function);
     const functionTypeInfo = @typeInfo(Function);
