@@ -1467,16 +1467,63 @@ pub const Window = switch (builtin.os.tag) {
             window.selectionOffer = offer;
         }
 
-        // We only care about the clipboard, not drag-and-drop, so `enter`/
-        // `leave`/`motion`/`drop` are left unhandled. `data_offer` just
-        // introduces the object — `selection` re-delivers the same pointer
-        // once it's known to be the clipboard offer, which is all we need.
+        fn dataDeviceDataOffer(data: ?*anyopaque, dataDevice: ?*c.wl_data_device, offer: ?*c.wl_data_offer) callconv(.c) void {
+            _ = data;
+            _ = dataDevice;
+            // Just introduces the object; `selection` re-delivers the same
+            // pointer once it's known to be the clipboard offer, and `enter`
+            // delivers (and destroys) the drag-and-drop ones.
+            _ = offer;
+        }
+
+        fn dataDeviceEnter(
+            data: ?*anyopaque,
+            dataDevice: ?*c.wl_data_device,
+            serial: u32,
+            surface: ?*c.wl_surface,
+            x: c.wl_fixed_t,
+            y: c.wl_fixed_t,
+            offer: ?*c.wl_data_offer,
+        ) callconv(.c) void {
+            _ = data;
+            _ = dataDevice;
+            _ = serial;
+            _ = surface;
+            _ = x;
+            _ = y;
+            // We never accept drops, and drag offers are not re-delivered
+            // through `selection`, so this is the only chance to free them.
+            if (offer) |dragOffer| c.wl_data_offer_destroy(dragOffer);
+        }
+
+        fn dataDeviceLeave(data: ?*anyopaque, dataDevice: ?*c.wl_data_device) callconv(.c) void {
+            _ = data;
+            _ = dataDevice;
+        }
+
+        fn dataDeviceMotion(data: ?*anyopaque, dataDevice: ?*c.wl_data_device, time: u32, x: c.wl_fixed_t, y: c.wl_fixed_t) callconv(.c) void {
+            _ = data;
+            _ = dataDevice;
+            _ = time;
+            _ = x;
+            _ = y;
+        }
+
+        fn dataDeviceDrop(data: ?*anyopaque, dataDevice: ?*c.wl_data_device) callconv(.c) void {
+            _ = data;
+            _ = dataDevice;
+        }
+
+        // We only care about the clipboard, not drag-and-drop, but every slot
+        // still needs a function: libwayland aborts the process on a NULL
+        // listener entry the moment that event arrives ("listener function
+        // for opcode N of wl_data_device is NULL").
         const wlDataDeviceListener: c.wl_data_device_listener = .{
-            .data_offer = null,
-            .enter = null,
-            .leave = null,
-            .motion = null,
-            .drop = null,
+            .data_offer = dataDeviceDataOffer,
+            .enter = dataDeviceEnter,
+            .leave = dataDeviceLeave,
+            .motion = dataDeviceMotion,
+            .drop = dataDeviceDrop,
             .selection = dataDeviceSelection,
         };
 
@@ -1540,7 +1587,7 @@ pub const Window = switch (builtin.os.tag) {
             while (true) {
                 const result = self.io.operateTimeout(
                     .{ .file_read_streaming = .{ .file = readFile, .data = &.{buffer[0..]} } },
-                    .{ .duration = .fromSeconds(1) },
+                    .{ .duration = .{ .raw = .fromSeconds(1), .clock = .awake } },
                 ) catch break; // timed out, or cancelled
                 const n = result.file_read_streaming catch break; // EndOfStream, or a real read error
                 if (n == 0) break;
