@@ -285,15 +285,10 @@ pub const Window = switch (builtin.os.tag) {
 
         wlDataDeviceManager: ?*c.wl_data_device_manager,
         wlDataDevice: ?*c.wl_data_device,
-        /// Guards every clipboard field below. `dataSourceSend`,
-        /// `dataSourceCancelled`, and `dataDeviceSelection` run on the Wayland
-        /// event thread (inside `handleEvents`'s `wl_display_dispatch`), while
-        /// `setClipboardText`/`getClipboardText` are called from the render
-        /// thread — same cross-thread split as `keysHeld` below, but these
-        /// fields aren't funneled through `eventQueue` since clipboard access
-        /// is imperative, not a per-frame event. Locking is only ever
-        /// contended by an actual copy/paste, never per-frame, so a single
-        /// coarse mutex costs nothing on the hot path.
+        /// Guards every clipboard field below: the `dataSource*`/`dataDevice*`
+        /// listeners run on the Wayland event thread while
+        /// `setClipboardText`/`getClipboardText` run on the render thread —
+        /// unlike `keysHeld`, this state isn't funneled through `eventQueue`.
         clipboardMutex: std.Io.Mutex,
         /// The data source we created last time we set the clipboard. Lives
         /// until another app takes the selection (`cancelled`) or we replace
@@ -1485,9 +1480,8 @@ pub const Window = switch (builtin.os.tag) {
             .selection = dataDeviceSelection,
         };
 
-        /// Takes ownership of the clipboard selection, offering `text`. Copies
-        /// `text` into an `allocator`-owned buffer, since the caller's slice
-        /// (typically frame- or scope-arena-backed) won't outlive this call.
+        /// Copies `text` into an `allocator`-owned buffer, since the caller's
+        /// slice (typically frame- or scope-arena-backed) won't outlive this call.
         pub fn setClipboardText(self: *Self, text: []const u8) !void {
             const manager = self.wlDataDeviceManager orelse return error.ClipboardUnavailable;
             const dataDevice = self.wlDataDevice orelse return error.ClipboardUnavailable;
@@ -1544,8 +1538,6 @@ pub const Window = switch (builtin.os.tag) {
             errdefer list.deinit(allocator);
             var buffer: [4096]u8 = undefined;
             while (true) {
-                // A stuck/dead clipboard owner shouldn't hang the render
-                // thread forever, hence the timeout instead of a plain read.
                 const result = self.io.operateTimeout(
                     .{ .file_read_streaming = .{ .file = readFile, .data = &.{buffer[0..]} } },
                     .{ .duration = .fromSeconds(1) },
@@ -2165,7 +2157,6 @@ pub const Window = switch (builtin.os.tag) {
             _ = SetCursor(nativeCursor);
         }
 
-        /// Sets the OS clipboard to `text`, replacing whatever it held.
         pub fn setClipboardText(self: *Self, text: []const u8) !void {
             const wide = try std.unicode.utf8ToUtf16LeAllocZ(self.allocator, text);
             defer self.allocator.free(wide);
