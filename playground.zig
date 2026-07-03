@@ -98,8 +98,11 @@ fn Button(text: []const u8) bool {
         })({
             const focusContext = forbear.FocusContext.use();
             focusContext.register(&(struct {
-                fn consume(payload: forbear.EventPayload) bool {
-                    return payload == .keyDown and (payload.keyDown.enter or payload.keyDown.space);
+                fn consume(payload: forbear.EventPayload) ?forbear.EventPayload {
+                    return switch (payload) {
+                        .keyDown => |keys| .{ .keyDown = .{ .enter = keys.enter, .space = keys.space } },
+                        else => null,
+                    };
                 }
             }).consume);
 

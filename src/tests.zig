@@ -7727,16 +7727,16 @@ const FocusProvider = forbear.FocusProvider;
 const FocusContext = forbear.FocusContext;
 const EventPayload = forbear.EventPayload;
 
-fn consumesKeyDown(payload: EventPayload) bool {
-    return payload == .keyDown;
+fn consumesKeyDown(payload: EventPayload) ?EventPayload {
+    return if (payload == .keyDown) payload else null;
 }
 
-fn consumesNothing(_: EventPayload) bool {
-    return false;
+fn consumesNothing(_: EventPayload) ?EventPayload {
+    return null;
 }
 
-fn consumesEverything(_: EventPayload) bool {
-    return true;
+fn consumesEverything(payload: EventPayload) ?EventPayload {
+    return payload;
 }
 
 test "FocusContext: register and hasFocus are false when nothing is focused" {
@@ -7816,7 +7816,7 @@ test "FocusContext: consumes delegates to the focused widget predicate" {
     defer arenaAllocator.deinit();
     const arena = arenaAllocator.allocator();
 
-    var consumesKeyDownResult: ?bool = null;
+    var consumesKeyDownResult: ?forbear.Keys = null;
     var consumesClickResult: ?bool = null;
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{})({
@@ -7839,11 +7839,11 @@ test "FocusContext: consumes delegates to the focused widget predicate" {
         _ = try forbear.layout();
     });
 
-    try std.testing.expectEqual(true, consumesKeyDownResult.?);
+    try std.testing.expectEqual(forbear.Keys{ .tab = true }, consumesKeyDownResult.?);
     try std.testing.expectEqual(false, consumesClickResult.?);
 }
 
-test "FocusContext: consumes returns false when nothing is focused" {
+test "FocusContext: consumes nothing when nothing is focused" {
     try initTest(std.testing.allocator);
     defer forbear.deinit();
 
@@ -7851,7 +7851,7 @@ test "FocusContext: consumes returns false when nothing is focused" {
     defer arenaAllocator.deinit();
     const arena = arenaAllocator.allocator();
 
-    var result: ?bool = null;
+    var result: ?forbear.Keys = null;
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{})({
             forbear.component(.{})({
@@ -7871,7 +7871,7 @@ test "FocusContext: consumes returns false when nothing is focused" {
         _ = try forbear.layout();
     });
 
-    try std.testing.expectEqual(false, result.?);
+    try std.testing.expectEqual(forbear.Keys{}, result.?);
 }
 
 test "FocusContext: tab cycles focus forward through registered elements" {
