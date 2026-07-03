@@ -363,15 +363,27 @@ const InputState = struct {
     cursor: usize,
     selection: [2]usize,
     text: ?std.ArrayList(u8),
-
-    const @"undefined" = .{
-        .cursor = undefined,
-        .selection = undefined,
-        .text = undefined,
-    };
 };
 
 const wordSeparators = [_]u8{ '_', ' ', '-', '/', '`', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '=', '+', '~', '.', ',', '?', '[', ']', '"', '\'', '{', '}', '\\', '|' };
+
+fn isWordSeparator(char: u8) bool {
+    return std.mem.indexOfScalar(u8, &wordSeparators, char) != null;
+}
+
+fn previousWordBeginning(text: []const u8, from: usize) usize {
+    var position = from;
+    while (position > 0 and isWordSeparator(text[position - 1])) position -= 1;
+    while (position > 0 and !isWordSeparator(text[position - 1])) position -= 1;
+    return position;
+}
+
+fn nextWordBeginning(text: []const u8, from: usize) usize {
+    var position = from;
+    while (position < text.len and !isWordSeparator(text[position])) position += 1;
+    while (position < text.len and isWordSeparator(text[position])) position += 1;
+    return position;
+}
 
 /// Depends on the font styles of the parent to render.
 pub fn useInput(initialInputState: struct {
@@ -389,12 +401,12 @@ pub fn useInput(initialInputState: struct {
         .selection = initialInputState.selection,
         .text = null,
     });
-    if (inputState.text == null) {
-        const textArray = std.ArrayList(u8).initCapacity(arena, initialInputState.text.len) catch |err| {
+    if (inputState.text == null) create: {
+        var textArray = std.ArrayList(u8).initCapacity(arena, initialInputState.text.len) catch |err| {
             forbear.handleFrameError(err);
-            return &InputState.@"undefined";
+            break :create;
         };
-        @memcpy(textArray.items, initialInputState.text);
+        textArray.appendSliceAssumeCapacity(initialInputState.text);
         inputState.text = textArray;
     }
 
@@ -406,67 +418,71 @@ pub fn useInput(initialInputState: struct {
             std.debug.assert(inputState.selection[1] <= text.items.len);
 
             const keys = forbear.onKeyDown();
-            if (keys.shift) {
-                // TODO: handle this
-            } else if (keys.control) {
-                if (keys.arrowLeft and inputState.cursor > 0) {
-                    var possibleCursor = inputState.cursor - 1;
-                    while (!std.mem.containsAtLeast(
-                        u8,
-                        &wordSeparators,
-                        1,
-                        inputState.text[possibleCursor],
-                    ) and possibleCursor > 0) {
-                        possibleCursor -= 1;
-                    }
-                    inputState.cursor = possibleCursor;
-                } else if (keys.arrowRight and inputState.cursor < text.items.len) {
-                    var possibleCursor = inputState.cursor + 1;
-                    while (!std.mem.containsAtLeast(
-                        u8,
-                        &wordSeparators,
-                        1,
-                        inputState.text[possibleCursor],
-                    ) and possibleCursor < text.items.len) {
-                        possibleCursor += 1;
-                    }
-                    inputState.cursor = possibleCursor;
-                }
-            } else if (keys.arrowLeft and inputState.cursor > 0) {
-                inputState.cursor -= 1;
-            } else if (keys.arrowRight and inputState.cursor < text.items.len) {
-                inputState.cursor += 1;
-            }
-            if (keys.arrowLeft) {
-                if (inputState.cursor > 0) {
-                    if (keys.control) {
-                    } else {
-                    }
-                }
-            } else if (keys.arrowRight) {
-                if (inputState.cursor < text.items.len) {
-                    if (keys.control) {
-                    } else {
-                        inputState.cursor += 1;
-                    }
-                }
-            } else if (keys.home) {
-                inputState.cursor = 0;
-            } else if (keys.end) {
-                inputState.cursor = text.items.len;
-            } 
+            const hasSelection = inputState.selection[0] != inputState.selection[1];
+            // The selection endpoint the cursor is not on. With no selection
+            // both endpoints sit on the cursor, so the anchor is the cursor.
+            const anchor = if (inputState.cursor == inputState.selection[0])
+                inputState.selection[1]
+            else
+                inputState.selection[0];
 
-            if (keys.backspace) {
-                if (inputState.cursor > 0) {
-                    text.orderedRemove(inputState.cursor - 1);
+            const movedTo: ?usize = if (keys.arrowLeft)
+                if (keys.control)
+                    previousWordBeginning(text.items, inputState.cursor)
+                else if (hasSelection and !keys.shift)
+                    inputState.selection[0]
+                else
+                    inputState.cursor -| 1
+            else if (keys.arrowRight)
+                if (keys.control)
+                    nextWordBeginning(text.items, inputState.cursor)
+                else if (hasSelection and !keys.shift)
+                    inputState.selection[1]
+                else
+                    @min(inputState.cursor + 1, text.items.len)
+            else if (keys.home)
+                0
+            else if (keys.end)
+                text.items.len
+            else
+                null;
+
+            if (movedTo) |newCursor| {
+                inputState.cursor = newCursor;
+                inputState.selection = if (keys.shift)
+                    .{ @min(anchor, newCursor), @max(anchor, newCursor) }
+                else
+                    .{ newCursor, newCursor };
+            }
+
+            if (keys.backspace or keys.delete) {
+                if (inputState.selection[0] != inputState.selection[1]) {
+                    text.replaceRangeAssumeCapacity(
+                        inputState.selection[0],
+                        inputState.selection[1] - inputState.selection[0],
+                        &.{},
+                    );
+                    inputState.cursor = inputState.selection[0];
+                } else if (keys.backspace and inputState.cursor > 0) {
+                    const start = if (keys.control)
+                        previousWordBeginning(text.items, inputState.cursor)
+                    else
+                        inputState.cursor - 1;
+                    text.replaceRangeAssumeCapacity(start, inputState.cursor - start, &.{});
+                    inputState.cursor = start;
+                } else if (keys.delete and inputState.cursor < text.items.len) {
+                    const end = if (keys.control)
+                        nextWordBeginning(text.items, inputState.cursor)
+                    else
+                        inputState.cursor + 1;
+                    text.replaceRangeAssumeCapacity(inputState.cursor, end - inputState.cursor, &.{});
                 }
-            } else if (keys.delete) {
-                if (inputState.cursor < text.items.len) {
-                    text.orderedRemove(inputState.cursor);
-                }
+                inputState.selection = .{ inputState.cursor, inputState.cursor };
             }
         }
     }
+
+    return inputState;
 }
 
 pub fn InputCaret(cursor: usize, text: []const u8) void {
