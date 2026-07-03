@@ -575,14 +575,28 @@ pub fn InputCaret(inputState: *const InputState) void {
                         .content = text.items[0..inputState.cursor],
                         .style = textStyle,
                     }}, 0.0, .none);
+
+                    // Follow the parent's vertical justification the same way
+                    // layout justifies the flowing text, from the previous
+                    // frame's resolved size.
+                    const yOffset: f32 = if (forbear.useNodeMeasurement()) |measurement| blk: {
+                        const innerHeight = measurement.size[1] -
+                            parent.style.borderWidth.y[0] - parent.style.borderWidth.y[1] -
+                            parent.style.padding.y[0] - parent.style.padding.y[1];
+                        break :blk switch (parent.style.yJustification) {
+                            .start => 0.0,
+                            .center => (innerHeight - measured.height) / 2.0,
+                            .end => innerHeight - measured.height,
+                        };
+                    } else 0.0;
+
                     forbear.element(.{
                         .style = .{
-                            .placement = .{
-                                .relative = .{
-                                    parent.style.padding.x[0] + measured.width,
-                                    parent.style.padding.y[0],
-                                },
-                            },
+                            // `.relative` is anchored at the parent's content
+                            // box (layout adds border + padding to it), which
+                            // is also where the text node flows from, so the
+                            // prefix width needs no padding on top.
+                            .placement = .{ .relative = .{ measured.width, yOffset } },
                             .width = .{ .fixed = 1.0 },
                             .height = .{ .fixed = measured.height },
                             .background = .{ .color = textStyle.color },
