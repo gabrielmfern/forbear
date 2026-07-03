@@ -413,6 +413,29 @@ pub fn useInput(initialInputState: struct {
     const focusContext = FocusContext.use();
 
     if (forbear.getParentNode()) |_| {
+        focusContext.register(&(struct {
+            fn consumesFn(payload: EventPayload) ?EventPayload {
+                return switch (payload) {
+                    .keyDown => |keys| .{
+                        .keyDown = .{
+                            .arrowLeft = keys.arrowLeft,
+                            .arrowRight = keys.arrowRight,
+                            .home = keys.home,
+                            .end = keys.end,
+                            .backspace = keys.backspace,
+                            .delete = keys.delete,
+                            .control = keys.control,
+                            .c = keys.c,
+                            .v = keys.v,
+                            .x = keys.x,
+                        },
+                    },
+                    .input => payload,
+                    else => null,
+                };
+            }
+        }).consumesFn);
+
         if (focusContext.hasFocus()) {
             if (inputState.text) |*text| {
                 std.debug.assert(inputState.cursor <= text.items.len);
