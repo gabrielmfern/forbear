@@ -559,7 +559,7 @@ pub fn useInput(initialInputState: struct {
     return inputState;
 }
 
-pub fn InputCaret(inputState: *const InputState) void {
+pub fn InputCaret(inputState: *const InputState, scrollingState: *ScrollingState) void {
     forbear.component(.{})({
         const focusContext = FocusContext.use();
         if (forbear.getParentNode()) |parent| {
@@ -585,11 +585,13 @@ pub fn InputCaret(inputState: *const InputState) void {
                     else
                         from;
 
+                    const measurement = forbear.useNodeMeasurement();
+
                     // Follow the parent's vertical justification the same way
                     // layout justifies the flowing text, from the previous
                     // frame's resolved size.
-                    const yOffset: f32 = if (forbear.useNodeMeasurement()) |measurement| blk: {
-                        const innerHeight = measurement.size[1] -
+                    const yOffset: f32 = if (measurement) |m| blk: {
+                        const innerHeight = m.size[1] -
                             parent.style.borderWidth.y[0] - parent.style.borderWidth.y[1] -
                             parent.style.padding.y[0] - parent.style.padding.y[1];
                         break :blk switch (parent.style.yJustification) {
@@ -599,13 +601,35 @@ pub fn InputCaret(inputState: *const InputState) void {
                         };
                     } else 0.0;
 
+                    // Keep the cursor in view: when a cursor move lands it
+                    // outside the inner width, pull the scroll target just
+                    // far enough that it's back inside. Only on cursor moves,
+                    // so manual scrolling isn't fought over every frame.
+                    const cursorX = if (inputState.cursor == inputState.selection[0]) from.width else to.width;
+                    const lastCursor = forbear.useState(usize, inputState.cursor);
+                    if (lastCursor.* != inputState.cursor) {
+                        lastCursor.* = inputState.cursor;
+                        if (measurement) |m| {
+                            const innerWidth = m.size[0] -
+                                parent.style.borderWidth.x[0] - parent.style.borderWidth.x[1] -
+                                parent.style.padding.x[0] - parent.style.padding.x[1];
+                            scrollingState.offset[0] = @min(scrollingState.offset[0], cursorX);
+                            scrollingState.offset[0] = @max(scrollingState.offset[0], cursorX - innerWidth + 1.0);
+                        }
+                    }
+
                     forbear.element(.{
                         .style = .{
                             // `.relative` is anchored at the parent's content
                             // box (layout adds border + padding to it), which
                             // is also where the text node flows from, so the
-                            // prefix width needs no padding on top.
-                            .placement = .{ .relative = .{ from.width, yOffset } },
+                            // prefix width needs no padding on top. The text
+                            // shifts by `childrenOffset = -_effectiveOffset`,
+                            // which `.relative` placement doesn't inherit, so
+                            // subtract it to stay glued to the glyphs.
+                            .placement = .{
+                                .relative = Vec2{ from.width, yOffset } - scrollingState._effectiveOffset,
+                            },
                             .width = .{ .fixed = if (hasSelection) to.width - from.width else 1.0 },
                             .height = .{ .fixed = from.height },
                             // The selection mounts after the text node, so it
