@@ -359,6 +359,125 @@ pub fn ScrollBar(state: *ScrollingState) void {
     }
 }
 
+const InputState = struct {
+    cursor: usize,
+    selection: [2]usize,
+    text: ?std.ArrayList(u8),
+
+    const @"undefined" = .{
+        .cursor = undefined,
+        .selection = undefined,
+        .text = undefined,
+    };
+};
+
+const wordSeparators = [_]u8{ '_', ' ', '-', '/', '`', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '=', '+', '~', '.', ',', '?', '[', ']', '"', '\'', '{', '}', '\\', '|' };
+
+/// Depends on the font styles of the parent to render.
+pub fn useInput(initialInputState: struct {
+    cursor: usize,
+    selection: [2]usize,
+    text: []const u8,
+}) *InputState {
+    forbear.hook();
+    defer forbear.hookEnd();
+
+    const arena = forbear.useScopeArena();
+
+    const inputState = forbear.useState(InputState, InputState{
+        .cursor = initialInputState.cursor, 
+        .selection = initialInputState.selection,
+        .text = null,
+    });
+    if (inputState.text == null) {
+        const textArray = std.ArrayList(u8).initCapacity(arena, initialInputState.text.len) catch |err| {
+            forbear.handleFrameError(err);
+            return &InputState.@"undefined";
+        };
+        @memcpy(textArray.items, initialInputState.text);
+        inputState.text = textArray;
+    }
+
+    if (forbear.getParentNode()) |_| {
+        if (inputState.text) |*text| {
+            std.debug.assert(inputState.cursor <= text.items.len);
+            std.debug.assert(inputState.selection[0] <= inputState.selection[1]);
+            std.debug.assert(inputState.selection[0] <= text.items.len);
+            std.debug.assert(inputState.selection[1] <= text.items.len);
+
+            const keys = forbear.onKeyDown();
+            if (keys.shift) {
+                // TODO: handle this
+            } else if (keys.control) {
+                if (keys.arrowLeft and inputState.cursor > 0) {
+                    var possibleCursor = inputState.cursor - 1;
+                    while (!std.mem.containsAtLeast(
+                        u8,
+                        &wordSeparators,
+                        1,
+                        inputState.text[possibleCursor],
+                    ) and possibleCursor > 0) {
+                        possibleCursor -= 1;
+                    }
+                    inputState.cursor = possibleCursor;
+                } else if (keys.arrowRight and inputState.cursor < text.items.len) {
+                    var possibleCursor = inputState.cursor + 1;
+                    while (!std.mem.containsAtLeast(
+                        u8,
+                        &wordSeparators,
+                        1,
+                        inputState.text[possibleCursor],
+                    ) and possibleCursor < text.items.len) {
+                        possibleCursor += 1;
+                    }
+                    inputState.cursor = possibleCursor;
+                }
+            } else if (keys.arrowLeft and inputState.cursor > 0) {
+                inputState.cursor -= 1;
+            } else if (keys.arrowRight and inputState.cursor < text.items.len) {
+                inputState.cursor += 1;
+            }
+            if (keys.arrowLeft) {
+                if (inputState.cursor > 0) {
+                    if (keys.control) {
+                    } else {
+                    }
+                }
+            } else if (keys.arrowRight) {
+                if (inputState.cursor < text.items.len) {
+                    if (keys.control) {
+                    } else {
+                        inputState.cursor += 1;
+                    }
+                }
+            } else if (keys.home) {
+                inputState.cursor = 0;
+            } else if (keys.end) {
+                inputState.cursor = text.items.len;
+            } 
+
+            if (keys.backspace) {
+                if (inputState.cursor > 0) {
+                    text.orderedRemove(inputState.cursor - 1);
+                }
+            } else if (keys.delete) {
+                if (inputState.cursor < text.items.len) {
+                    text.orderedRemove(inputState.cursor);
+                }
+            }
+        }
+    }
+}
+
+pub fn InputCaret(cursor: usize, text: []const u8) void {
+    _ = cursor;
+    _ = text;
+    forbear.component(.{})({
+        // we need the width of the text until the cursor here
+        // what are the text styles?
+    });
+}
+
 /// Runtime-tagged form of an event + its result. Mirrors `forbear.Event`
 /// one-for-one, with each variant carrying the payload type that
 /// `forbear.OnResult(tag)` returns for the matching event.
