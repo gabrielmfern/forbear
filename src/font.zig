@@ -484,7 +484,12 @@ pub const ShapedGlyph = struct {
     offset: Vec2,
 };
 
-pub fn shape(self: *@This(), text: []const u8) ![]ShapedGlyph {
+pub fn shape(self: *@This(), text: []const u8) ![]const ShapedGlyph {
+    // kb_text_shape can't shape zero codepoints: with nothing fed between
+    // ShapeBegin and ShapeEnd, kbts_ShapeEnd dereferences a NULL
+    // Context->LastGraphemeBreak.
+    if (text.len == 0) return &.{};
+
     if (self.shapingCache.get(text)) |cache| {
         return cache.value.glyphs[0..cache.value.count];
     }
