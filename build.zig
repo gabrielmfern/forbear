@@ -196,6 +196,10 @@ fn createForbearModule(
                 .name = "xdg-decoration-unstable-v1",
                 .xmlPath = "/usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml",
             },
+            Protocol{
+                .name = "text-input-unstable-v3",
+                .xmlPath = "/usr/share/wayland-protocols/unstable/text-input/text-input-unstable-v3.xml",
+            },
         };
         const wf = b.addWriteFiles();
         inline for (waylandProtocols) |protocol| {

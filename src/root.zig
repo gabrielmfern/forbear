@@ -242,6 +242,8 @@ inputTextThisFrame: []const u8 = &.{},
 /// Backs `onComposition()`. This frame's IME composition batch, set by the
 /// window layer; arena-copied like `inputTextThisFrame`.
 compositionThisFrame: ?Composition = null,
+/// See `useTextInput()`. Consumed (and reset) by `update()`.
+textInputRequestThisFrame: ?TextInputRequest = null,
 activeNodeKey: ?u64 = null,
 frameRequestedCursor: Cursor = .default,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
@@ -1063,6 +1065,20 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
                     continue;
                 };
                 inputText.appendSlice(meta.arena, typedText) catch |err| handleFrameError(err);
+            },
+            .composition => |composition| {
+                // Two IME batches within one frame would be rare enough that
+                // the last one winning is fine; its commits are all in
+                // `inputText` regardless.
+                self.compositionThisFrame = .{
+                    .preedit = meta.arena.dupe(u8, composition.preeditBuffer[0..composition.preeditLength]) catch |err| blk: {
+                        handleFrameError(err);
+                        break :blk &.{};
+                    },
+                    .cursor = composition.cursor,
+                    .deleteBefore = composition.deleteBefore,
+                    .deleteAfter = composition.deleteAfter,
+                };
             },
             .keys => |keys| {
                 self.keysThisFrame = self.keysThisFrame.with(keys);
@@ -2266,6 +2282,21 @@ pub fn onComposition() ?Composition {
     return self.compositionThisFrame;
 }
 
+pub const TextInputRequest = struct {
+    /// Where the caret sits in surface coordinates — the IME docks its
+    /// candidate window against this rectangle.
+    caretRectangle: Vec4,
+};
+
+/// Declare, for this frame, that a focused text field wants IME input.
+/// The runtime diffs against the previous frame and drives the platform
+/// text-input protocol at `update()`; a frame without a caller disables the
+/// IME. Last caller wins — there is one text input per seat.
+pub fn useTextInput(request: TextInputRequest) void {
+    const self = getForbear();
+    self.textInputRequestThisFrame = request;
+}
+
 /// Text typed this frame, else `null`. Control codepoints (arrows,
 /// backspace, enter, ...) are filtered out at the window layer, so they
 /// only ever show up through `onKeyDown()`/`onKeyUp()`; OS auto-repeat
@@ -2332,6 +2363,16 @@ pub fn update() !void {
     window.setCursor(self.frameRequestedCursor, 0) catch |err| {
         std.log.err("Failed to set cursor: {}", .{err});
     };
+
+    if (@hasDecl(Window, "setTextInput")) {
+        window.setTextInput(if (self.textInputRequestThisFrame) |request| .{
+            .x = @intFromFloat(request.caretRectangle[0]),
+            .y = @intFromFloat(request.caretRectangle[1]),
+            .width = @intFromFloat(@max(request.caretRectangle[2], 1.0)),
+            .height = @intFromFloat(@max(request.caretRectangle[3], 1.0)),
+        } else null);
+    }
+    self.textInputRequestThisFrame = null;
 }
 
 pub fn isMouseButtonPressed() bool {
