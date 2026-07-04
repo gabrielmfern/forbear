@@ -166,11 +166,7 @@ fn TextInput(placeholder: []const u8) void {
     })({
         const scrollingState = forbear.useState(forbear.ScrollingState, .{});
         forbear.useScrolling(scrollingState);
-        const inputState = forbear.useInput(.{
-            .cursor = 0,
-            .selection = .{ 0, 0 },
-            .text = "",
-        }, scrollingState);
+        const inputState = forbear.useInput(.{}, scrollingState);
         const focusContext = forbear.FocusContext.use();
 
         const node = forbear.getParentNode().?;
