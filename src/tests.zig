@@ -7768,19 +7768,6 @@ test "context provided inside a component is visible to slotted children" {
 
 const FocusProvider = forbear.FocusProvider;
 const FocusContext = forbear.FocusContext;
-const EventPayload = forbear.EventPayload;
-
-fn consumesKeyDown(payload: EventPayload) ?EventPayload {
-    return if (payload == .keyDown) payload else null;
-}
-
-fn consumesNothing(_: EventPayload) ?EventPayload {
-    return null;
-}
-
-fn consumesEverything(payload: EventPayload) ?EventPayload {
-    return payload;
-}
 
 test "FocusContext: register and hasFocus are false when nothing is focused" {
     try initTest(std.testing.allocator);
@@ -7799,7 +7786,7 @@ test "FocusContext: register and hasFocus are false when nothing is focused" {
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                     })({
-                        ctx.register(&consumesKeyDown);
+                        ctx.register(.{});
                         observed = ctx.hasFocus();
                     });
                 });
@@ -7830,7 +7817,7 @@ test "FocusContext: focus gives hasFocus to the registered element" {
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                     })({
-                        ctx.register(&consumesKeyDown);
+                        ctx.register(.{});
                         ctx.focus();
                         hasFocusA = ctx.hasFocus();
                     });
@@ -7838,7 +7825,7 @@ test "FocusContext: focus gives hasFocus to the registered element" {
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                     })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                         hasFocusB = ctx.hasFocus();
                     });
                 });
@@ -7851,7 +7838,7 @@ test "FocusContext: focus gives hasFocus to the registered element" {
     try std.testing.expectEqual(false, hasFocusB.?);
 }
 
-test "FocusContext: consumes delegates to the focused widget predicate" {
+test "FocusContext: consumes intersects the query with the focused widget's consumes.keys" {
     try initTest(std.testing.allocator);
     defer forbear.deinit();
 
@@ -7870,11 +7857,15 @@ test "FocusContext: consumes delegates to the focused widget predicate" {
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                     })({
-                        ctx.register(&consumesKeyDown);
+                        ctx.register(.{ .consumes = .{ .keys = .{ .tab = true } } });
                         ctx.focus();
                     });
 
-                    consumesKeyDownResult = ctx.consumes(.keyDown, .{ .tab = true });
+                    // Only `tab` is claimed, so it's the only bit that comes
+                    // back — `a` rides through untouched for anyone else.
+                    consumesKeyDownResult = ctx.consumes(.keyDown, .{ .tab = true, .a = true });
+                    // `.click` has nothing to consume regardless of what's
+                    // focused — only `.keyDown`/`.input` do.
                     consumesClickResult = ctx.consumes(.click, true);
                 });
             });
@@ -7904,7 +7895,9 @@ test "FocusContext: consumes nothing when nothing is focused" {
                     forbear.element(.{
                         .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } },
                     })({
-                        ctx.register(&consumesEverything);
+                        // Registered, but never focused — its consumes.keys
+                        // shouldn't matter.
+                        ctx.register(.{ .consumes = .{ .keys = .{ .a = true } } });
                     });
 
                     result = ctx.consumes(.keyDown, .{ .a = true });
@@ -7932,13 +7925,13 @@ test "FocusContext: tab cycles focus forward through registered elements" {
                 FocusProvider()({
                     const ctx = FocusContext.use();
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                     });
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                     });
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                     });
 
                     // Simulate tab press
@@ -7970,11 +7963,11 @@ test "FocusContext: tab with no focus starts at first element" {
                     const ctx = FocusContext.use();
 
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                         firstKey = forbear.getParentNode().?.key;
                     });
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                     });
 
                     forbear.getForbear().keysThisFrame = .{ .tab = true };
@@ -8007,11 +8000,11 @@ test "FocusContext: tab wraps from last to first element" {
                     const ctx = FocusContext.use();
 
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                         firstKey = forbear.getParentNode().?.key;
                     });
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                         // Focus the last element so tab wraps around
                         ctx.focus();
                     });
@@ -8046,15 +8039,15 @@ test "FocusContext: shift+tab cycles focus backward" {
                     const focusContext = FocusContext.use();
 
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        focusContext.register(&consumesNothing);
+                        focusContext.register(.{});
                         // Focus the first element
                         focusContext.focus();
                     });
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        focusContext.register(&consumesNothing);
+                        focusContext.register(.{});
                     });
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        focusContext.register(&consumesNothing);
+                        focusContext.register(.{});
                         thirdKey = forbear.getParentNode().?.key;
                     });
 
@@ -8093,7 +8086,7 @@ test "FocusContext: escape clears focus" {
                     const ctx = FocusContext.use();
 
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                         ctx.focus();
                     });
 
@@ -8128,10 +8121,10 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
                 FocusProvider()({
                     const ctx = FocusContext.use();
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                     });
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                         ctx.focus();
                     });
                     try std.testing.expect(ctx.focused != null);
@@ -8150,7 +8143,7 @@ test "FocusContext: stale focus is dropped when widget does not re-register" {
                 FocusProvider()({
                     const ctx = FocusContext.use();
                     forbear.element(.{ .style = .{ .width = .{ .fixed = 10.0 }, .height = .{ .fixed = 10.0 } } })({
-                        ctx.register(&consumesNothing);
+                        ctx.register(.{});
                     });
                     ctx.resolve();
                     focusedAfterDrop = ctx.focused != null;
