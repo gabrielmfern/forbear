@@ -476,6 +476,11 @@ const InputState = struct {
     /// `redoStack` and ctrl+shift+z / ctrl+y back. Managed by `useInput`.
     undoStack: std.ArrayList(Edit),
     redoStack: std.ArrayList(Edit),
+
+    /// Byte range of the IME's provisional preedit inside `text`, for
+    /// styling it (typically underlined). Managed by `useInput`: replaced
+    /// wholesale on every composition update and invisible to undo.
+    composition: ?[2]usize,
 };
 
 const Edit = struct {
@@ -572,6 +577,7 @@ pub fn useInput(
 
         .undoStack = .empty,
         .redoStack = .empty,
+        .composition = null,
     });
     if (inputState.text == null) create: {
         var textArray = std.ArrayList(u8).initCapacity(arena, initialInputState.text.len) catch |err| {
@@ -604,7 +610,7 @@ pub fn useInput(
                         .z = keys.z,
                     },
                 },
-                .input => payload,
+                .input, .composition => payload,
                 else => null,
             };
         }
@@ -793,17 +799,61 @@ pub fn useInput(
                 }
             }
 
+            // An IME batch applies in protocol order around the committed
+            // text: drop the previous preedit, apply the batch's deletions
+            // of committed text, let the commit land through `onInput`
+            // below, then lay down the new preedit after it.
+            const compositionEvent = forbear.onComposition();
+            if (compositionEvent != null) {
+                if (inputState.composition) |range| {
+                    // Provisional text comes straight out, invisible to undo.
+                    text.replaceRangeAssumeCapacity(range[0], range[1] - range[0], &.{});
+                    inputState.cursor = range[0];
+                    inputState.selection = .{ range[0], range[0] };
+                    inputState.composition = null;
+                }
+            }
+            if (compositionEvent) |c| {
+                if (c.deleteBefore > 0 or c.deleteAfter > 0) {
+                    splice(
+                        inputState,
+                        text,
+                        arena,
+                        inputState.cursor -| c.deleteBefore,
+                        @min(inputState.cursor + c.deleteAfter, text.items.len),
+                        "",
+                    );
+                }
+            }
+
             // A chorded press is a command, not text entry (ctrl+a must not
             // type an "a"). The exception is ctrl+alt, which is how AltGr
             // chords arrive on Windows keymaps — those do type characters.
             const isCommandChord = (keysDown.control and !keysDown.alt) or keysDown.super;
-            if (!isCommandChord) {
+            if (!isCommandChord or compositionEvent != null) {
                 if (forbear.onInput()) |typed| {
                     const range = if (inputState.selection[0] != inputState.selection[1])
                         inputState.selection
                     else
                         [2]usize{ inputState.cursor, inputState.cursor };
                     splice(inputState, text, arena, range[0], range[1], typed);
+                }
+            }
+
+            if (compositionEvent) |c| {
+                if (c.preedit.len > 0) preedit: {
+                    const start = inputState.cursor;
+                    // Provisional: inserted directly so undo never sees it.
+                    text.insertSlice(arena, start, c.preedit) catch |err| {
+                        forbear.handleFrameError(err);
+                        break :preedit;
+                    };
+                    inputState.composition = .{ start, start + c.preedit.len };
+                    inputState.selection = .{
+                        start + @min(c.cursor[0], c.preedit.len),
+                        start + @min(c.cursor[1], c.preedit.len),
+                    };
+                    inputState.cursor = inputState.selection[1];
                 }
             }
 
@@ -939,6 +989,7 @@ pub const EventPayload = union(forbear.Event) {
     keyDown: forbear.Keys,
     keyUp: forbear.Keys,
     input: ?[]const u8,
+    composition: ?forbear.Composition,
 };
 
 /// Reports what part of `payload` the element consumes: `null` for none of
@@ -1001,7 +1052,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     ) forbear.OnResult(eventTag) {
         const none: forbear.OnResult(eventTag) = switch (eventTag) {
             .keyDown, .keyUp => .{},
-            .mouseMove, .scroll, .input => null,
+            .mouseMove, .scroll, .input, .composition => null,
             else => false,
         };
         const f = self.focused orelse return none;

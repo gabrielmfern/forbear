@@ -149,6 +149,8 @@ pub const Event = enum {
     keyUp,
     /// See `onInput()`.
     input,
+    /// See `onComposition()`.
+    composition,
 };
 
 /// A run of text sharing one resolved style. The unit `composeText` appends to
@@ -233,6 +235,9 @@ keysReleasedThisFrame: Keys = .{},
 /// Backs `onInput()`. This frame's typed text, arena-allocated so frames
 /// with nothing typed cost nothing.
 inputTextThisFrame: []const u8 = &.{},
+/// Backs `onComposition()`. This frame's IME composition batch, set by the
+/// window layer; arena-copied like `inputTextThisFrame`.
+compositionThisFrame: ?Composition = null,
 activeNodeKey: ?u64 = null,
 frameRequestedCursor: Cursor = .default,
 previousFrameNodeMeasurements: std.AutoHashMap(u64, Node.Measurement),
@@ -1033,6 +1038,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
     self.keysThisFrame = .{};
     self.keysReleasedThisFrame = .{};
     self.inputTextThisFrame = &.{};
+    self.compositionThisFrame = null;
 
     self.frameCounter +%= 1;
     self.frameMeta = meta;
@@ -2045,6 +2051,7 @@ pub fn OnResult(comptime eventTag: Event) type {
         .scroll, .mouseMove => ?Vec2,
         .keyDown, .keyUp => Keys,
         .input => ?[]const u8,
+        .composition => ?Composition,
         else => bool,
     };
 }
@@ -2213,6 +2220,28 @@ pub fn onKeyDown() Keys {
 pub fn onKeyUp() Keys {
     const self = getForbear();
     return self.keysReleasedThisFrame;
+}
+
+pub const Composition = struct {
+    /// The provisional text the IME is composing; replaces the previous
+    /// preedit wholesale on every update. Empty means the composition ended.
+    preedit: []const u8 = "",
+    /// Caret range inside `preedit`, in bytes.
+    cursor: [2]usize = .{ 0, 0 },
+    /// Committed bytes around the cursor the IME asked to remove — Hangul
+    /// retractions and reconversion arrive this way.
+    deleteBefore: usize = 0,
+    deleteAfter: usize = 0,
+};
+
+/// This frame's IME composition batch, else `null`. Applies in order:
+/// remove the previous preedit, delete `deleteBefore`/`deleteAfter` committed
+/// bytes around the cursor, insert this frame's committed text (delivered
+/// through `onInput()`, so plain-text consumers get it without knowing the
+/// IME exists), then lay down the new `preedit`. Global like `onKeyDown()`.
+pub fn onComposition() ?Composition {
+    const self = getForbear();
+    return self.compositionThisFrame;
 }
 
 /// Text typed this frame, else `null`. Control codepoints (arrows,
