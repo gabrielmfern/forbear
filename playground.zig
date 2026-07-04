@@ -199,7 +199,7 @@ fn TextInput(placeholder: []const u8) void {
             timingFunction,
         );
 
-        const text = inputState.text.?.items;
+        const text = inputState.display;
         const showingPlaceholder = text.len == 0;
         node.style.color = if (showingPlaceholder) forbear.hex("#5F5F5F") else forbear.hex("#fafafa");
         forbear.text(if (showingPlaceholder) placeholder else text);
