@@ -463,6 +463,14 @@ const InputState = struct {
     cursor: usize,
     selection: [2]usize,
     text: ?std.ArrayList(u8),
+
+    /// Where the caret sits relative to the input's content box, with the
+    /// scroll offset already applied; `height` is the text's line height.
+    /// Only maintained while the input has focus.
+    caret: struct {
+        position: Vec2,
+        height: f32,
+    },
 };
 
 const wordSeparators = [_]u8{ '_', ' ', '-', '/', '`', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '=', '+', '~', '.', ',', '?', '[', ']', '"', '\'', '{', '}', '\\', '|' };
@@ -485,12 +493,18 @@ fn nextWordBeginning(text: []const u8, from: usize) usize {
     return position;
 }
 
-/// Depends on the font styles of the parent to render.
-pub fn useInput(initialInputState: struct {
-    cursor: usize,
-    selection: [2]usize,
-    text: []const u8,
-}) *InputState {
+/// Depends on the font styles of the parent to render. Pass the same
+/// `scrollingState` given to the input's `useScrolling` — called before this
+/// hook, so the caret reads this frame's scroll — and the cursor is kept in
+/// view by moving the scroll offset as it travels.
+pub fn useInput(
+    initialInputState: struct {
+        cursor: usize,
+        selection: [2]usize,
+        text: []const u8,
+    },
+    scrollingState: *ScrollingState,
+) *InputState {
     forbear.hook();
     defer forbear.hookEnd();
 
@@ -500,6 +514,11 @@ pub fn useInput(initialInputState: struct {
         .cursor = initialInputState.cursor,
         .selection = initialInputState.selection,
         .text = null,
+
+        .caret = .{
+            .height = 0.0,
+            .position = @splat(0.0),
+        },
     });
     if (inputState.text == null) create: {
         var textArray = std.ArrayList(u8).initCapacity(arena, initialInputState.text.len) catch |err| {
@@ -665,95 +684,116 @@ pub fn useInput(initialInputState: struct {
                     inputState.selection = .{ inputState.cursor, inputState.cursor };
                 }
             }
+
+            if (forbear.getParentNode()) |parent| caret: {
+                if (parent.style.textWrapping != .none) {
+                    std.log.err("useInput requires the input element to have textWrapping = .none, for now.", .{});
+                    forbear.handleFrameError(error.TextWrappingNotNone);
+                    break :caret;
+                }
+
+                const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
+                const measured = forbear.measureText(&.{.{
+                    .content = text.items[0..inputState.cursor],
+                    .style = textStyle,
+                }}, 0.0, .none);
+
+                const measurement = forbear.useNodeMeasurement();
+
+                // Follow the parent's vertical justification the same way
+                // layout justifies the flowing text, from the previous
+                // frame's resolved size.
+                const yOffset: f32 = if (measurement) |m| blk: {
+                    const innerHeight = m.size[1] -
+                        parent.style.borderWidth.y[0] - parent.style.borderWidth.y[1] -
+                        parent.style.padding.y[0] - parent.style.padding.y[1];
+                    break :blk switch (parent.style.yJustification) {
+                        .start => 0.0,
+                        .center => (innerHeight - measured.height) / 2.0,
+                        .end => innerHeight - measured.height,
+                    };
+                } else 0.0;
+
+                // Keep the cursor in view: when a cursor move lands it
+                // outside the inner width, pull the scroll offset just far
+                // enough that it's back inside. Only on cursor moves, so
+                // manual scrolling isn't fought over every frame.
+                const lastCursor = forbear.useState(usize, inputState.cursor);
+                if (lastCursor.* != inputState.cursor) {
+                    lastCursor.* = inputState.cursor;
+                    if (measurement) |m| {
+                        const innerWidth = m.size[0] -
+                            parent.style.borderWidth.x[0] - parent.style.borderWidth.x[1] -
+                            parent.style.padding.x[0] - parent.style.padding.x[1];
+                        scrollingState.offset[0] = @min(scrollingState.offset[0], measured.width);
+                        scrollingState.offset[0] = @max(scrollingState.offset[0], measured.width - innerWidth + 1.0);
+                        // Snap so following the cursor doesn't animate.
+                        scrollingState._effectiveOffset[0] = scrollingState.offset[0];
+                    }
+                }
+
+                inputState.caret = .{
+                    .position = Vec2{ measured.width, yOffset } - scrollingState._effectiveOffset,
+                    .height = measured.height,
+                };
+            }
         }
     }
 
     return inputState;
 }
 
-pub fn InputCaret(inputState: *const InputState, scrollingState: *ScrollingState) void {
+const InputCaretProps = struct {
+    inputState: *const InputState,
+    style: forbear.Style = .{},
+};
+
+pub fn InputCaret(props: InputCaretProps) void {
     forbear.component(.{})({
         const focusContext = FocusContext.use();
         if (forbear.getParentNode()) |parent| {
-            if (parent.style.textWrapping != .none) {
-                std.log.err("Text wrapping was not none, InputCaret can only work if the input has no text wrapping, for now.", .{});
-                forbear.handleFrameError(error.TextWrappingNotNone);
-                return;
-            }
-            if (inputState.text) |text| {
+            if (props.inputState.text) |text| {
                 if (focusContext.hasFocus()) {
                     const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
-                    const hasSelection = inputState.selection[0] != inputState.selection[1];
+                    const hasSelection = props.inputState.selection[0] != props.inputState.selection[1];
 
-                    const from = forbear.measureText(&.{.{
-                        .content = text.items[0..if (hasSelection) inputState.selection[0] else inputState.cursor],
-                        .style = textStyle,
-                    }}, 0.0, .none);
-                    const to = if (hasSelection)
-                        forbear.measureText(&.{.{
-                            .content = text.items[0..inputState.selection[1]],
+                    // The span between the selection endpoints is independent
+                    // of scrolling, and the cursor sits on one of them, so the
+                    // scroll-adjusted `caret.position` anchors the whole box.
+                    const selectionWidth: f32 = if (hasSelection) blk: {
+                        const from = forbear.measureText(&.{.{
+                            .content = text.items[0..props.inputState.selection[0]],
                             .style = textStyle,
-                        }}, 0.0, .none)
-                    else
-                        from;
-
-                    const measurement = forbear.useNodeMeasurement();
-
-                    // Follow the parent's vertical justification the same way
-                    // layout justifies the flowing text, from the previous
-                    // frame's resolved size.
-                    const yOffset: f32 = if (measurement) |m| blk: {
-                        const innerHeight = m.size[1] -
-                            parent.style.borderWidth.y[0] - parent.style.borderWidth.y[1] -
-                            parent.style.padding.y[0] - parent.style.padding.y[1];
-                        break :blk switch (parent.style.yJustification) {
-                            .start => 0.0,
-                            .center => (innerHeight - from.height) / 2.0,
-                            .end => innerHeight - from.height,
-                        };
+                        }}, 0.0, .none);
+                        const to = forbear.measureText(&.{.{
+                            .content = text.items[0..props.inputState.selection[1]],
+                            .style = textStyle,
+                        }}, 0.0, .none);
+                        break :blk to.width - from.width;
                     } else 0.0;
 
-                    // Keep the cursor in view: when a cursor move lands it
-                    // outside the inner width, pull the scroll target just
-                    // far enough that it's back inside. Only on cursor moves,
-                    // so manual scrolling isn't fought over every frame.
-                    const cursorX = if (inputState.cursor == inputState.selection[0]) from.width else to.width;
-                    const lastCursor = forbear.useState(usize, inputState.cursor);
-                    if (lastCursor.* != inputState.cursor) {
-                        lastCursor.* = inputState.cursor;
-                        if (measurement) |m| {
-                            const innerWidth = m.size[0] -
-                                parent.style.borderWidth.x[0] - parent.style.borderWidth.x[1] -
-                                parent.style.padding.x[0] - parent.style.padding.x[1];
-                            scrollingState.offset[0] = @min(scrollingState.offset[0], cursorX);
-                            scrollingState.offset[0] = @max(scrollingState.offset[0], cursorX - innerWidth + 1.0);
-                            // this avoids the animation from happening
-                            scrollingState._effectiveOffset[0] = scrollingState.offset[0];
-                        }
-                    }
+                    const x = if (hasSelection and props.inputState.cursor == props.inputState.selection[1])
+                        props.inputState.caret.position[0] - selectionWidth
+                    else
+                        props.inputState.caret.position[0];
 
                     forbear.element(.{
-                        .style = .{
-                            // `.relative` is anchored at the parent's content
-                            // box (layout adds border + padding to it), which
-                            // is also where the text node flows from, so the
-                            // prefix width needs no padding on top. The text
-                            // shifts by `childrenOffset = -_effectiveOffset`,
-                            // which `.relative` placement doesn't inherit, so
-                            // subtract it to stay glued to the glyphs.
+                        .style = props.style.overwrite(.{
                             .placement = .{
-                                .relative = Vec2{ from.width, yOffset } - scrollingState._effectiveOffset,
+                                .relative = .{ x, props.inputState.caret.position[1] },
                             },
-                            .width = .{ .fixed = if (hasSelection) to.width - from.width else 1.0 },
-                            .height = .{ .fixed = from.height },
+                            .width = .{ .fixed = if (hasSelection) selectionWidth else 1.0 },
+                            .height = .{ .fixed = props.inputState.caret.height },
                             // The selection mounts after the text node, so it
                             // draws over the glyphs and must stay translucent
                             // for them to read through.
-                            .background = .{ .color = if (hasSelection)
-                                Vec4{ textStyle.color[0], textStyle.color[1], textStyle.color[2], textStyle.color[3] * 0.3 }
-                            else
-                                textStyle.color },
-                        },
+                            .background = .{
+                                .color = if (hasSelection)
+                                    forbear.selectionColor
+                                else
+                                    textStyle.color,
+                            },
+                        }),
                     })({});
                 }
             }
