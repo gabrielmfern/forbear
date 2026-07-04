@@ -130,7 +130,6 @@ fn processResidentBytes() u64 {
     }
 }
 
-// win32 internals required to get memory information
 extern fn mach_task_self() u32;
 extern fn task_info(
     targetTask: u32,
@@ -169,8 +168,6 @@ const identity: Vec2 = @splat(0.0);
 pub const ScrollingState = struct {
     offset: Vec2 = identity,
     /// The animated offset, if no animation, the same as offset.
-    ///
-    /// It should not be manipulated directly.
     _effectiveOffset: Vec2 = identity,
     animate: bool = if (builtin.os.tag == .macos) false else true,
 };
@@ -476,9 +473,7 @@ const InputState = struct {
     },
 
     /// Each stack holds the edits that, applied in pop order, walk the text
-    /// back (undo) or forward (redo) through its history. Managed by
-    /// `useInput`: `splice` records here, ctrl+z / ctrl+shift+z / ctrl+y
-    /// pop one stack and push its inverse onto the other.
+    /// back (undo) or forward (redo) through its history.
     undoStack: std.ArrayList(Edit),
     redoStack: std.ArrayList(Edit),
 
@@ -530,8 +525,7 @@ fn apply(
 
 /// Replace `text[start..end]` with `replacement`: the cursor lands after it,
 /// the selection collapses there, and the edit is recorded for undo. Every
-/// user-visible text edit funnels through here — which is also where IME
-/// composition and undo coalescing would plug in.
+/// user-visible text edit funnels through here.
 fn splice(
     inputState: *InputState,
     text: *std.ArrayList(u8),
@@ -710,9 +704,6 @@ pub fn useInput(
         // committed character.
         const composing = poppedPreedit != null;
 
-        // A press places the cursor at the nearest character boundary and
-        // anchors there; keeping the button held drags a selection out from
-        // that anchor, cursor on the moving end.
         if (forbear.getParentNode()) |parent| {
             const dragging = forbear.useState(bool, false);
 
@@ -755,10 +746,6 @@ pub fn useInput(
                 }
                 index = @min(index, text.items.len);
 
-                // The cursor follows the point; the anchor stays put while
-                // shift is held or a drag is in progress, exactly like
-                // shift+arrows. A plain press collapses onto the point, and
-                // a double press on a collapsed cursor selects everything.
                 if (pressedInside) {
                     const shiftHeld = forbear.getModifiersHeld().shift;
                     const selectAll = doublePressed and !shiftHeld and
@@ -779,9 +766,6 @@ pub fn useInput(
             const keysDown = forbear.onKeyDown();
             const modifiersHeld = forbear.getModifiersHeld();
 
-            // Editing keys stand down mid-composition, like in a browser: the
-            // backspace that cancels a dead key eats the pending accent, not
-            // a committed character.
             if (!composing) {
                 // Selections are re-read per operation (not hoisted) because
                 // each block can change them for the next within the frame.
