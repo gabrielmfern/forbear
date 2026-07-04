@@ -136,6 +136,16 @@ pub const Keys = packed struct {
             .capsLock = self.capsLock,
         };
     }
+
+    /// The single-bit `Keys` value `offset` fields after `firstField` —
+    /// `a..z` and `digit0..9` are declared contiguously, and so are the
+    /// keysym/VK ranges backends map them from, so a letter or digit key can
+    /// be resolved by arithmetic (`Keys.at("a", sym - firstKeysym)`) instead
+    /// of one switch arm per key. Keeps the three tables (this struct, the
+    /// keysym range, the VK range) from being able to drift out of sync.
+    pub fn at(comptime firstField: []const u8, offset: u32) Keys {
+        return @bitCast(@as(Backing, 1) << @intCast(@bitOffsetOf(Keys, firstField) + offset));
+    }
 };
 
 pub const ScrollAxis = enum(u32) {
@@ -999,6 +1009,9 @@ pub const Window = switch (builtin.os.tag) {
         /// Translate an XKB keysym into a single-key `Keys` set.
         /// Returns an empty set for keys not yet covered.
         fn keysymToKeys(sym: u32) Keys {
+            if (sym >= c.XKB_KEY_a and sym <= c.XKB_KEY_z) return .at("a", sym - c.XKB_KEY_a);
+            if (sym >= c.XKB_KEY_A and sym <= c.XKB_KEY_Z) return .at("a", sym - c.XKB_KEY_A);
+            if (sym >= c.XKB_KEY_0 and sym <= c.XKB_KEY_9) return .at("digit0", sym - c.XKB_KEY_0);
             return switch (sym) {
                 c.XKB_KEY_Tab, c.XKB_KEY_ISO_Left_Tab => .{ .tab = true },
                 c.XKB_KEY_Escape => .{ .escape = true },
@@ -1034,42 +1047,6 @@ pub const Window = switch (builtin.os.tag) {
                 c.XKB_KEY_F10 => .{ .f10 = true },
                 c.XKB_KEY_F11 => .{ .f11 = true },
                 c.XKB_KEY_F12 => .{ .f12 = true },
-                c.XKB_KEY_a, c.XKB_KEY_A => .{ .a = true },
-                c.XKB_KEY_b, c.XKB_KEY_B => .{ .b = true },
-                c.XKB_KEY_c, c.XKB_KEY_C => .{ .c = true },
-                c.XKB_KEY_d, c.XKB_KEY_D => .{ .d = true },
-                c.XKB_KEY_e, c.XKB_KEY_E => .{ .e = true },
-                c.XKB_KEY_f, c.XKB_KEY_F => .{ .f = true },
-                c.XKB_KEY_g, c.XKB_KEY_G => .{ .g = true },
-                c.XKB_KEY_h, c.XKB_KEY_H => .{ .h = true },
-                c.XKB_KEY_i, c.XKB_KEY_I => .{ .i = true },
-                c.XKB_KEY_j, c.XKB_KEY_J => .{ .j = true },
-                c.XKB_KEY_k, c.XKB_KEY_K => .{ .k = true },
-                c.XKB_KEY_l, c.XKB_KEY_L => .{ .l = true },
-                c.XKB_KEY_m, c.XKB_KEY_M => .{ .m = true },
-                c.XKB_KEY_n, c.XKB_KEY_N => .{ .n = true },
-                c.XKB_KEY_o, c.XKB_KEY_O => .{ .o = true },
-                c.XKB_KEY_p, c.XKB_KEY_P => .{ .p = true },
-                c.XKB_KEY_q, c.XKB_KEY_Q => .{ .q = true },
-                c.XKB_KEY_r, c.XKB_KEY_R => .{ .r = true },
-                c.XKB_KEY_s, c.XKB_KEY_S => .{ .s = true },
-                c.XKB_KEY_t, c.XKB_KEY_T => .{ .t = true },
-                c.XKB_KEY_u, c.XKB_KEY_U => .{ .u = true },
-                c.XKB_KEY_v, c.XKB_KEY_V => .{ .v = true },
-                c.XKB_KEY_w, c.XKB_KEY_W => .{ .w = true },
-                c.XKB_KEY_x, c.XKB_KEY_X => .{ .x = true },
-                c.XKB_KEY_y, c.XKB_KEY_Y => .{ .y = true },
-                c.XKB_KEY_z, c.XKB_KEY_Z => .{ .z = true },
-                c.XKB_KEY_0 => .{ .digit0 = true },
-                c.XKB_KEY_1 => .{ .digit1 = true },
-                c.XKB_KEY_2 => .{ .digit2 = true },
-                c.XKB_KEY_3 => .{ .digit3 = true },
-                c.XKB_KEY_4 => .{ .digit4 = true },
-                c.XKB_KEY_5 => .{ .digit5 = true },
-                c.XKB_KEY_6 => .{ .digit6 = true },
-                c.XKB_KEY_7 => .{ .digit7 = true },
-                c.XKB_KEY_8 => .{ .digit8 = true },
-                c.XKB_KEY_9 => .{ .digit9 = true },
                 else => .{},
             };
         }
@@ -2139,6 +2116,8 @@ pub const Window = switch (builtin.os.tag) {
         const Self = @This();
 
         fn virtualKeyToKeys(vk: WPARAM) Keys {
+            if (vk >= '0' and vk <= '9') return .at("digit0", @intCast(vk - '0'));
+            if (vk >= 'A' and vk <= 'Z') return .at("a", @intCast(vk - 'A'));
             return switch (vk) {
                 0x08 => .{ .backspace = true },
                 0x09 => .{ .tab = true },
@@ -2156,42 +2135,6 @@ pub const Window = switch (builtin.os.tag) {
                 0x28 => .{ .arrowDown = true },
                 0x2D => .{ .insert = true },
                 0x2E => .{ .delete = true },
-                '0' => .{ .digit0 = true },
-                '1' => .{ .digit1 = true },
-                '2' => .{ .digit2 = true },
-                '3' => .{ .digit3 = true },
-                '4' => .{ .digit4 = true },
-                '5' => .{ .digit5 = true },
-                '6' => .{ .digit6 = true },
-                '7' => .{ .digit7 = true },
-                '8' => .{ .digit8 = true },
-                '9' => .{ .digit9 = true },
-                'A' => .{ .a = true },
-                'B' => .{ .b = true },
-                'C' => .{ .c = true },
-                'D' => .{ .d = true },
-                'E' => .{ .e = true },
-                'F' => .{ .f = true },
-                'G' => .{ .g = true },
-                'H' => .{ .h = true },
-                'I' => .{ .i = true },
-                'J' => .{ .j = true },
-                'K' => .{ .k = true },
-                'L' => .{ .l = true },
-                'M' => .{ .m = true },
-                'N' => .{ .n = true },
-                'O' => .{ .o = true },
-                'P' => .{ .p = true },
-                'Q' => .{ .q = true },
-                'R' => .{ .r = true },
-                'S' => .{ .s = true },
-                'T' => .{ .t = true },
-                'U' => .{ .u = true },
-                'V' => .{ .v = true },
-                'W' => .{ .w = true },
-                'X' => .{ .x = true },
-                'Y' => .{ .y = true },
-                'Z' => .{ .z = true },
                 0x5B, 0x5C => .{ .super = true },
                 0x70 => .{ .f1 = true },
                 0x71 => .{ .f2 = true },
