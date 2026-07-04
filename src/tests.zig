@@ -8827,3 +8827,20 @@ test "EventQueue: SPSC producer/consumer round-trips every event in order" {
 
     try std.testing.expectEqual(total, received);
 }
+
+test "Keys.at resolves to the same bit as the named field, across the run" {
+    const Keys = @import("window.zig").Keys;
+
+    const letters = "abcdefghijklmnopqrstuvwxyz";
+    inline for (letters, 0..) |letter, offset| {
+        var want: Keys = .{};
+        @field(want, &[_]u8{letter}) = true;
+        try std.testing.expectEqual(want, Keys.at("a", offset));
+    }
+
+    inline for (0..10) |digit| {
+        var want: Keys = .{};
+        @field(want, "digit" ++ [_]u8{'0' + digit}) = true;
+        try std.testing.expectEqual(want, Keys.at("digit0", digit));
+    }
+}
