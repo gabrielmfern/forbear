@@ -232,6 +232,10 @@ scrollDelta: Vec2,
 keysThisFrame: Keys = .{},
 /// Backs `onKeyUp()`.
 keysReleasedThisFrame: Keys = .{},
+/// Backs `getModifiersHeld()`. Level state, not per-frame edges: unlike
+/// `keysThisFrame` it survives frames without key events, so it can answer
+/// "is shift still held?" mid-gesture.
+modifiersHeld: Keys = .{},
 /// Backs `onInput()`. This frame's typed text, arena-allocated so frames
 /// with nothing typed cost nothing.
 inputTextThisFrame: []const u8 = &.{},
@@ -1062,9 +1066,15 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
             },
             .keys => |keys| {
                 self.keysThisFrame = self.keysThisFrame.with(keys);
+                // Every `.keys` event carries the full held-modifier level
+                // state (the window flush merges it in), so replace rather
+                // than accumulate — a stale bit self-corrects on the next
+                // key event instead of sticking until its release edge.
+                self.modifiersHeld = keys.modifiers();
             },
             .keysReleased => |keys| {
                 self.keysReleasedThisFrame = self.keysReleasedThisFrame.with(keys);
+                self.modifiersHeld = self.modifiersHeld.without(keys.modifiers());
             },
             .scroll => |scroll| {
                 // On macOS, scrollingDeltaX/Y already provides properly scaled pixel
@@ -1076,10 +1086,13 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
                 else
                     100.0 * @as(f32, @floatFromInt(std.math.sign(scroll.offset)));
 
-                // Browser-like behavior: Shift + vertical scroll = horizontal scroll
-                const shiftAccordingAxis = if (self.keysThisFrame.shift and scroll.axis == .vertical)
+                // Browser-like behavior: Shift + vertical scroll = horizontal
+                // scroll. Reads the held state, not `keysThisFrame`: a shift
+                // held across frames produces no key event on the frames where
+                // the wheel actually ticks.
+                const shiftAccordingAxis = if (self.modifiersHeld.shift and scroll.axis == .vertical)
                     .horizontal
-                else if (self.keysThisFrame.shift and scroll.axis == .horizontal)
+                else if (self.modifiersHeld.shift and scroll.axis == .horizontal)
                     .vertical
                 else
                     scroll.axis;
@@ -2206,9 +2219,9 @@ pub fn onScroll() ?Vec2 {
 /// This frame's keyboard bits. Non-modifier keys appear the frame they are
 /// pressed *and* again on each OS auto-repeat while held, at the user's
 /// configured rate — so `onKeyDown().arrowLeft` steps a caret like a text
-/// field does. Modifier bits (shift/control/alt/super) reflect what is
-/// currently held, so chords read directly:
-///   if (onKeyDown().has(.{ .control = true, .z = true })) undo();
+/// field does. Modifier bits ride along on every key event, but only on
+/// frames where one arrives — for held-modifier state on its own (mid-wheel,
+/// mid-drag), read `getModifiersHeld()` instead.
 /// Global for now: `if (forbear.onKeyDown().tab) ...`.
 pub fn onKeyDown() Keys {
     const self = getForbear();
@@ -2220,6 +2233,15 @@ pub fn onKeyDown() Keys {
 pub fn onKeyUp() Keys {
     const self = getForbear();
     return self.keysReleasedThisFrame;
+}
+
+/// The modifiers (shift/control/alt/super/caps lock) held right now,
+/// whichever frame they went down on. `onKeyDown` only carries modifiers on
+/// frames where a key event arrives, so "is shift still held?" during a
+/// wheel or mouse gesture must be answered here.
+pub fn getModifiersHeld() Keys {
+    const self = getForbear();
+    return self.modifiersHeld;
 }
 
 pub const Composition = struct {
