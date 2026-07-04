@@ -140,6 +140,8 @@ pub const Event = enum {
     mouseUp,
     mouseMove,
     click,
+    /// See `onDoubleClick()`.
+    doubleClick,
     scroll,
     /// See `onKeyDown()`.
     keyDown,
@@ -564,7 +566,6 @@ pub fn measureText(runs: []const TextRun, width: f32, textWrapping: TextWrapping
         0;
     return .{ .width = measuredWidth, .height = height, .lines = lines };
 }
-
 pub fn linear(time: f32) f32 {
     return time;
 }
@@ -2146,6 +2147,25 @@ pub fn onClick() bool {
     } else {
         return false;
     }
+}
+
+const doubleClickSeconds: f64 = 0.4;
+
+/// True on the frame a second press lands inside the current element within
+/// the double-click window — the press itself, not its release, like the
+/// second `mousedown` of a DOM `dblclick`.
+pub fn onDoubleClick() bool {
+    hook();
+    defer hookEnd();
+
+    const timeSinceLastPress = useState(f64, doubleClickSeconds);
+    timeSinceLastPress.* += useDeltaTime();
+    if (onMouseDown()) {
+        const doublePressed = timeSinceLastPress.* < doubleClickSeconds;
+        timeSinceLastPress.* = 0.0;
+        return doublePressed;
+    }
+    return false;
 }
 
 /// Wheel/trackpad scroll delta while the cursor is inside the current element,
