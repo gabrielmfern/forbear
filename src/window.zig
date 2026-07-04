@@ -117,6 +117,11 @@ pub const Keys = packed struct {
         return @bitCast(@as(Backing, @bitCast(self)) & ~@as(Backing, @bitCast(other)));
     }
 
+    /// `self & other` — bits set in both.
+    pub fn intersect(self: Keys, other: Keys) Keys {
+        return @bitCast(@as(Backing, @bitCast(self)) & @as(Backing, @bitCast(other)));
+    }
+
     pub fn has(self: Keys, other: Keys) bool {
         return @as(Backing, @bitCast(self)) & @as(Backing, @bitCast(other)) == @as(Backing, @bitCast(other));
     }

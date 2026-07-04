@@ -707,31 +707,26 @@ pub fn useInput(
 
     const focusContext = FocusContext.use();
 
-    focusContext.register(&(struct {
-        fn consumesFn(payload: EventPayload) ?EventPayload {
-            return switch (payload) {
-                .keyDown => |keys| .{
-                    .keyDown = .{
-                        .arrowLeft = keys.arrowLeft,
-                        .arrowRight = keys.arrowRight,
-                        .home = keys.home,
-                        .end = keys.end,
-                        .backspace = keys.backspace,
-                        .delete = keys.delete,
-                        .control = keys.control,
-                        .a = keys.a,
-                        .c = keys.c,
-                        .v = keys.v,
-                        .x = keys.x,
-                        .y = keys.y,
-                        .z = keys.z,
-                    },
-                },
-                .input => payload,
-                else => null,
-            };
-        }
-    }).consumesFn);
+    focusContext.register(.{
+        .consumes = .{
+            .keys = .{
+                .arrowLeft = true,
+                .arrowRight = true,
+                .home = true,
+                .end = true,
+                .backspace = true,
+                .delete = true,
+                .control = true,
+                .a = true,
+                .c = true,
+                .v = true,
+                .x = true,
+                .y = true,
+                .z = true,
+            },
+            .input = true,
+        },
+    });
 
     if (inputState.text) |*text| {
         std.debug.assert(inputState.cursor <= text.items.len);
@@ -1076,33 +1071,20 @@ pub fn InputCaret(props: InputCaretProps) void {
     });
 }
 
-/// Runtime-tagged form of an event + its result. Mirrors `forbear.Event`
-/// one-for-one, with each variant carrying the payload type that
-/// `forbear.OnResult(tag)` returns for the matching event.
-pub const EventPayload = union(forbear.Event) {
-    mouseEnter: bool,
-    mouseLeave: bool,
-    mouseDown: bool,
-    mouseDownOutside: bool,
-    mouseUp: bool,
-    mouseMove: ?Vec2,
-    click: bool,
-    doubleClick: bool,
-    scroll: ?Vec2,
-    keyDown: forbear.Keys,
-    keyUp: forbear.Keys,
-    input: ?forbear.Input,
+/// What a focused element claims per event, one field per consumable event:
+/// `keys` are bits eaten out of `keyDown` before anything else sees them —
+/// e.g. an input claims arrow/backspace/ctrl+a, leaving the rest (a global
+/// shortcut, say) for other consumers — and `input` claims text-entry input
+/// outright. Add a field here (and a matching branch in `consumes`) for any
+/// future event that needs claiming.
+pub const Consumes = struct {
+    keys: forbear.Keys = .{},
+    input: bool = false,
 };
-
-/// Reports what part of `payload` the element consumes: `null` for none of
-/// it, or the same event tag trimmed down to just what it acts on — e.g. an
-/// input returns only the caret-movement/editing bits of a `keyDown`, leaving
-/// the rest for everyone else.
-pub const FocusConsumes = *const fn (payload: EventPayload) ?EventPayload;
 
 pub const Focus = struct {
     key: u64,
-    consumes: ?FocusConsumes,
+    consumes: Consumes = .{},
 };
 
 pub const FocusContext = forbear.createContext(opaque {}, struct {
@@ -1110,7 +1092,9 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     focusable: std.ArrayList(Focus),
     scopeKey: u64,
 
-    pub fn register(self: *@This(), consumesFn: ?FocusConsumes) void {
+    pub fn register(self: *@This(), data: struct {
+        consumes: Consumes = .{},
+    }) void {
         const node = forbear.getParentNode() orelse {
             forbear.handleFrameError(error.NoParentForFocusRegistration);
             return;
@@ -1118,7 +1102,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
         const arena = forbear.getScopeArenaBy(self.scopeKey) orelse unreachable;
         self.focusable.append(arena, .{
             .key = node.key,
-            .consumes = consumesFn,
+            .consumes = data.consumes,
         }) catch |err| forbear.handleFrameError(err);
         if (self.focused != null and self.focused.?.key == node.key and forbear.isMouseButtonPressed() and !forbear.isMouseInside()) {
             self.focused = null;
@@ -1146,7 +1130,9 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     }
 
     /// The portion of `result` the focused element consumes, so callers can
-    /// trim it away, e.g. `keys.without(ctx.consumes(.keyDown, keys))`.
+    /// trim it away, e.g. `keys.without(ctx.consumes(.keyDown, keys))`. Only
+    /// `.keyDown` and `.input` have anything to consume; every other tag is
+    /// always left untouched.
     pub fn consumes(
         self: *const @This(),
         comptime eventTag: forbear.Event,
@@ -1158,10 +1144,11 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
             else => false,
         };
         const f = self.focused orelse return none;
-        const func = f.consumes orelse return none;
-        const payload = @unionInit(EventPayload, @tagName(eventTag), result);
-        const consumed = func(payload) orelse return none;
-        return @field(consumed, @tagName(eventTag));
+        return switch (eventTag) {
+            .keyDown => result.intersect(f.consumes.keys),
+            .input => if (f.consumes.input) result else none,
+            else => none,
+        };
     }
 
     pub fn resolve(self: *@This()) void {
