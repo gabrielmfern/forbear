@@ -8212,6 +8212,7 @@ test "ScrollingContext: the innermost hovered scrollable with room takes the whe
 const InputObservation = struct {
     cursor: usize = 0,
     selection: [2]usize = .{ 0, 0 },
+    composition: ?[2]usize = null,
     textBuffer: [64]u8 = undefined,
     textLength: usize = 0,
 
@@ -8237,6 +8238,7 @@ fn TextInputApp(observed: *InputObservation) void {
 
                 observed.cursor = inputState.cursor;
                 observed.selection = inputState.selection;
+                observed.composition = inputState.composition;
                 const items = inputState.text.?.items;
                 observed.textLength = items.len;
                 @memcpy(observed.textBuffer[0..items.len], items);
@@ -8249,6 +8251,7 @@ fn TextInputApp(observed: *InputObservation) void {
 const InputFrameOptions = struct {
     keys: forbear.Keys = .{},
     typed: []const u8 = "",
+    composition: ?forbear.Composition = null,
     mousePosition: @Vector(2, f32) = .{ 400.0, 400.0 },
     mousePressed: bool = false,
     /// Drives `useDeltaTime`, which the double-click timer accumulates.
@@ -8260,6 +8263,7 @@ fn inputFrame(arena: std.mem.Allocator, observed: *InputObservation, options: In
         const self = forbear.getForbear();
         self.keysThisFrame = options.keys;
         self.inputTextThisFrame = options.typed;
+        self.compositionThisFrame = options.composition;
         self.mousePosition = options.mousePosition;
         self.mouseButtonPressed = options.mousePressed;
         self.deltaTime = options.secondsSincePrevious;
@@ -8483,6 +8487,93 @@ test "useInput: a double press selects everything, pressing again collapses" {
         .secondsSincePrevious = 0.1,
     });
     try std.testing.expectEqual([2]usize{ 7, 7 }, observed.selection);
+}
+
+test "useInput: IME preedit is provisional and the commit is one undo step" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "ab" });
+
+    // Composing "ni": each update replaces the previous preedit wholesale.
+    try inputFrame(arena, &observed, .{ .composition = .{ .preedit = "n", .cursor = .{ 1, 1 } } });
+    try std.testing.expectEqualStrings("abn", observed.text());
+    try std.testing.expectEqual([2]usize{ 2, 3 }, observed.composition.?);
+    try std.testing.expectEqual(@as(usize, 3), observed.cursor);
+
+    try inputFrame(arena, &observed, .{ .composition = .{ .preedit = "ni", .cursor = .{ 2, 2 } } });
+    try std.testing.expectEqualStrings("abni", observed.text());
+    try std.testing.expectEqual([2]usize{ 2, 4 }, observed.composition.?);
+    try std.testing.expectEqual(@as(usize, 4), observed.cursor);
+
+    // Commit: empty preedit, committed text riding the typed-text channel.
+    try inputFrame(arena, &observed, .{ .composition = .{}, .typed = "NI" });
+    try std.testing.expectEqualStrings("abNI", observed.text());
+    try std.testing.expectEqual(@as(?[2]usize, null), observed.composition);
+    try std.testing.expectEqual(@as(usize, 4), observed.cursor);
+
+    // Undo skips every provisional preedit state: commit, then the typing.
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .z = true } });
+    try std.testing.expectEqualStrings("ab", observed.text());
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .z = true } });
+    try std.testing.expectEqualStrings("", observed.text());
+}
+
+test "useInput: IME delete_surrounding retracts committed text" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "ab" });
+
+    // The IME pulls the committed "b" back into a new composition.
+    try inputFrame(arena, &observed, .{
+        .composition = .{ .preedit = "xy", .cursor = .{ 2, 2 }, .deleteBefore = 1 },
+    });
+    try std.testing.expectEqualStrings("axy", observed.text());
+    try std.testing.expectEqual([2]usize{ 1, 3 }, observed.composition.?);
+    try std.testing.expectEqual(@as(usize, 3), observed.cursor);
+
+    try inputFrame(arena, &observed, .{ .composition = .{}, .typed = "Z" });
+    try std.testing.expectEqualStrings("aZ", observed.text());
+    try std.testing.expectEqual(@as(?[2]usize, null), observed.composition);
+
+    // Undo unwinds commit, retraction, and typing as separate real edits.
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .z = true } });
+    try std.testing.expectEqualStrings("a", observed.text());
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .z = true } });
+    try std.testing.expectEqualStrings("ab", observed.text());
+}
+
+test "useInput: IME commits land even while a modifier chord is held" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "hi" });
+
+    try inputFrame(arena, &observed, .{
+        .keys = .{ .control = true },
+        .typed = "X",
+        .composition = .{},
+    });
+    try std.testing.expectEqualStrings("hiX", observed.text());
 }
 
 // window.zig EventQueue tests
