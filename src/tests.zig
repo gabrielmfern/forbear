@@ -8281,7 +8281,7 @@ fn TextInputApp(observed: *InputObservation) void {
                 forbear.text(inputState.text.?.items);
 
                 observed.cursor = inputState.cursor;
-                observed.selection = inputState.selection;
+                observed.selection = inputState.selection();
                 observed.composition = inputState.composition;
                 const items = inputState.text.?.items;
                 observed.textLength = items.len;
