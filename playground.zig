@@ -208,9 +208,7 @@ fn TextInput(placeholder: []const u8) void {
         node.style.color = if (showingPlaceholder) forbear.hex("#5F5F5F") else forbear.hex("#fafafa");
         forbear.text(if (showingPlaceholder) placeholder else text);
 
-        forbear.InputCaret(.{
-            .inputState = inputState
-        });
+        forbear.InputCaret(.{ .inputState = inputState });
     });
 }
 
