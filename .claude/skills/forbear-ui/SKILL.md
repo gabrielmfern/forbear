@@ -164,7 +164,7 @@ Mouse (scoped to the current element):
 Keyboard (global for now, not element-scoped — `Keys` is a packed struct of bools like `.tab`, `.enter`, `.space`, `.escape`, `.shift`):
 - `onKeyDown() Keys` — keys that transitioned to down since last frame: `if (forbear.onKeyDown().enter) ...`
 - `onKeyUp() Keys` — keys that transitioned to up since last frame
-- `keysHeld() Keys` — keys currently held down
+- `getModifiersHeld() Keys` — the modifiers (shift/control/alt/super/caps lock) held right now, whichever frame they went down on. Use this for "is shift held?" during a wheel or mouse gesture; `onKeyDown` only carries modifiers on frames where a key event arrives
 
 To scope keyboard input to a specific element, pair it with focus (see below).
 

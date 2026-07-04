@@ -5031,6 +5031,44 @@ test "scrollDeltaAccumulator transfers to scrollDelta at frame start" {
     });
 }
 
+test "shift held across frames keeps flipping the wheel axis" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    const self = forbear.getForbear();
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const arenaAllocator = arena.allocator();
+
+    // Non-macOS platforms scroll by a fixed step per tick.
+    const step: f32 = if (@import("builtin").os.tag == .macos) 10.0 else 100.0;
+
+    // Frame 1: the shift press edge arrives, no wheel yet.
+    testWindow.eventQueue.push(.{ .keys = .{ .shift = true } });
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        try std.testing.expect(forbear.getModifiersHeld().shift);
+    });
+
+    // Frame 2: only a wheel tick arrives. Shift is still held but no key
+    // event lands this frame, so only the held state can see it.
+    testWindow.eventQueue.push(.{ .scroll = .{ .axis = .vertical, .offset = 10.0 } });
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        try std.testing.expect(!forbear.onKeyDown().shift);
+    });
+    try std.testing.expectApproxEqAbs(step, self.scrollDeltaAccumulator[0], 0.001);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), self.scrollDeltaAccumulator[1], 0.001);
+
+    // Frame 3: shift releases and the wheel goes back to vertical.
+    testWindow.eventQueue.push(.{ .keysReleased = .{ .shift = true } });
+    testWindow.eventQueue.push(.{ .scroll = .{ .axis = .vertical, .offset = 10.0 } });
+    try forbear.frame(try frameMeta(arenaAllocator))({
+        try std.testing.expect(!forbear.getModifiersHeld().shift);
+    });
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), self.scrollDeltaAccumulator[0], 0.001);
+    try std.testing.expectApproxEqAbs(step, self.scrollDeltaAccumulator[1], 0.001);
+}
+
 fn MouseUpButton(observedMouseUp: *bool) void {
     forbear.component(.{ .key = "component" })({
         forbear.element(.{
@@ -8017,6 +8055,7 @@ test "FocusContext: shift+tab cycles focus backward" {
 
                     // Simulate shift+tab
                     forbear.getForbear().keysThisFrame = .{ .tab = true, .shift = true };
+                    forbear.getForbear().modifiersHeld = .{ .shift = true };
                     focusContext.resolve();
                     focusedKey = if (focusContext.focused) |f| f.key else null;
                 });
@@ -8262,6 +8301,9 @@ fn inputFrame(arena: std.mem.Allocator, observed: *InputObservation, options: In
     try forbear.frame(try frameMeta(arena))({
         const self = forbear.getForbear();
         self.keysThisFrame = options.keys;
+        // Mirrors the event drain: a real key event carries the held-modifier
+        // level state, which the input's chords read via `getModifiersHeld`.
+        self.modifiersHeld = options.keys.modifiers();
         self.inputTextThisFrame = options.typed;
         self.compositionThisFrame = options.composition;
         self.mousePosition = options.mousePosition;
