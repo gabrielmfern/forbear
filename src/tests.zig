@@ -8292,10 +8292,17 @@ fn TextInputApp(observed: *InputObservation) void {
     });
 }
 
+const CompositionOptions = struct {
+    preedit: []const u8 = "",
+    cursor: [2]usize = .{ 0, 0 },
+    deleteBefore: usize = 0,
+    deleteAfter: usize = 0,
+};
+
 const InputFrameOptions = struct {
     keys: forbear.Keys = .{},
     typed: []const u8 = "",
-    composition: ?forbear.Composition = null,
+    composition: ?CompositionOptions = null,
     mousePosition: @Vector(2, f32) = .{ 400.0, 400.0 },
     mousePressed: bool = false,
     /// Drives `useDeltaTime`, which the double-click timer accumulates.
@@ -8309,8 +8316,15 @@ fn inputFrame(arena: std.mem.Allocator, observed: *InputObservation, options: In
         // Mirrors the event drain: a real key event carries the held-modifier
         // level state, which the input's chords read via `getModifiersHeld`.
         self.modifiersHeld = options.keys.modifiers();
-        self.inputTextThisFrame = options.typed;
-        self.compositionThisFrame = options.composition;
+        // Mirrors the drain's merge: nothing typed and no composition means
+        // no input transaction at all this frame.
+        self.inputThisFrame = if (options.typed.len > 0 or options.composition != null) .{
+            .text = options.typed,
+            .preedit = if (options.composition) |composition| composition.preedit else null,
+            .cursor = if (options.composition) |composition| composition.cursor else .{ 0, 0 },
+            .deleteBefore = if (options.composition) |composition| composition.deleteBefore else 0,
+            .deleteAfter = if (options.composition) |composition| composition.deleteAfter else 0,
+        } else null;
         self.mousePosition = options.mousePosition;
         self.mouseButtonPressed = options.mousePressed;
         self.deltaTime = options.secondsSincePrevious;

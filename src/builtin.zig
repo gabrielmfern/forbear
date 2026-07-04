@@ -674,7 +674,7 @@ pub fn useInput(
                         .z = keys.z,
                     },
                 },
-                .input, .composition => payload,
+                .input => payload,
                 else => null,
             };
         }
@@ -853,42 +853,40 @@ pub fn useInput(
                 }
             }
 
-            // An IME batch applies in protocol order around the committed
-            // text: the previous preedit is already popped, so apply the
-            // batch's deletions of committed text, let the commit land
-            // through `onInput` below, then lay down the new preedit.
-            const compositionEvent = forbear.onComposition();
-            if (compositionEvent) |c| {
-                if (c.deleteBefore > 0 or c.deleteAfter > 0) {
+            // The frame's text entry applies in protocol order: the previous
+            // preedit is already popped, so delete committed text the IME
+            // asked to remove, insert the committed text, then lay down the
+            // new preedit. One transaction, one struct, sequential reads.
+            const inputEvent = forbear.onInput();
+            if (inputEvent) |input| {
+                if (input.deleteBefore > 0 or input.deleteAfter > 0) {
                     splice(
                         inputState,
                         text,
                         arena,
-                        inputState.cursor -| c.deleteBefore,
-                        @min(inputState.cursor + c.deleteAfter, text.items.len),
+                        inputState.cursor -| input.deleteBefore,
+                        @min(inputState.cursor + input.deleteAfter, text.items.len),
                         "",
                     );
                 }
-            }
 
-            // A chorded press is a command, not text entry (ctrl+a must not
-            // type an "a"). The exceptions: ctrl+alt, which is how AltGr
-            // chords arrive on Windows keymaps and does type characters, and
-            // IME commits, which can ride on modifier chords.
-            const isCommandChord = (modifiersHeld.control and !modifiersHeld.alt) or modifiersHeld.super;
-            if (!isCommandChord or compositionEvent != null) {
-                if (forbear.onInput()) |typed| {
+                // A chorded press is a command, not text entry (ctrl+a must
+                // not type an "a"). The exceptions: ctrl+alt, which is how
+                // AltGr chords arrive on Windows keymaps and does type
+                // characters, and IME commits (`preedit != null`), which can
+                // ride on modifier chords.
+                const isCommandChord = (modifiersHeld.control and !modifiersHeld.alt) or modifiersHeld.super;
+                if (input.text.len > 0 and (!isCommandChord or input.preedit != null)) {
                     const selection = inputState.selection();
-                    splice(inputState, text, arena, selection[0], selection[1], typed);
+                    splice(inputState, text, arena, selection[0], selection[1], input.text);
                 }
             }
 
-            const newPreedit: []const u8 = if (compositionEvent) |c|
-                c.preedit
-            else
-                // No batch this frame: the popped preedit goes back down
-                // unchanged at the (possibly moved) cursor.
-                poppedPreedit orelse "";
+            const compositionUpdate: ?[]const u8 = if (inputEvent) |input| input.preedit else null;
+            const newPreedit: []const u8 = compositionUpdate orelse
+                // No composition update this frame: the popped preedit goes
+                // back down unchanged at the (possibly moved) cursor.
+                (poppedPreedit orelse "");
             if (newPreedit.len > 0) preedit: {
                 const start = inputState.cursor;
                 // Provisional: inserted directly so undo never sees it.
@@ -897,8 +895,8 @@ pub fn useInput(
                     break :preedit;
                 };
                 inputState.composition = .{ start, start + newPreedit.len };
-                const cursorRange: [2]usize = if (compositionEvent) |c|
-                    c.cursor
+                const cursorRange: [2]usize = if (compositionUpdate != null)
+                    inputEvent.?.cursor
                 else
                     .{ newPreedit.len, newPreedit.len };
                 inputState.anchor = start + @min(cursorRange[0], newPreedit.len);
@@ -1045,8 +1043,7 @@ pub const EventPayload = union(forbear.Event) {
     scroll: ?Vec2,
     keyDown: forbear.Keys,
     keyUp: forbear.Keys,
-    input: ?[]const u8,
-    composition: ?forbear.Composition,
+    input: ?forbear.Input,
 };
 
 /// Reports what part of `payload` the element consumes: `null` for none of
@@ -1109,7 +1106,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     ) forbear.OnResult(eventTag) {
         const none: forbear.OnResult(eventTag) = switch (eventTag) {
             .keyDown, .keyUp => .{},
-            .mouseMove, .scroll, .input, .composition => null,
+            .mouseMove, .scroll, .input => null,
             else => false,
         };
         const f = self.focused orelse return none;
