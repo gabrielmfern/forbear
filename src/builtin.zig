@@ -555,13 +555,89 @@ pub fn useInput(
         }
     }).consumesFn);
 
-    if (focusContext.hasFocus()) {
-        if (inputState.text) |*text| {
-            std.debug.assert(inputState.cursor <= text.items.len);
-            std.debug.assert(inputState.selection[0] <= inputState.selection[1]);
-            std.debug.assert(inputState.selection[0] <= text.items.len);
-            std.debug.assert(inputState.selection[1] <= text.items.len);
+    if (inputState.text) |*text| {
+        std.debug.assert(inputState.cursor <= text.items.len);
+        std.debug.assert(inputState.selection[0] <= inputState.selection[1]);
+        std.debug.assert(inputState.selection[0] <= text.items.len);
+        std.debug.assert(inputState.selection[1] <= text.items.len);
 
+        // A press places the cursor at the nearest character boundary and
+        // anchors there; keeping the button held drags a selection out from
+        // that anchor, cursor on the moving end.
+        if (forbear.getParentNode()) |parent| {
+            const dragging = forbear.useState(bool, false);
+            const dragAnchor = forbear.useState(usize, 0);
+
+            if (!forbear.isMouseButtonPressed()) {
+                dragging.* = false;
+            }
+
+            const pressedInside = forbear.onMouseDown();
+            if (pressedInside) {
+                focusContext.focus();
+            }
+            if (pressedInside or dragging.*) mouse: {
+                const measurement = forbear.useNodeMeasurement() orelse break :mouse;
+                const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
+                const localX = forbear.useMousePosition()[0] - measurement.position[0] -
+                    parent.style.borderWidth.x[0] - parent.style.padding.x[0] +
+                    scrollingState._effectiveOffset[0];
+
+                const shaped = forbear.shapeRuns(forbear.useArena(), &.{.{
+                    .content = text.items,
+                    .style = textStyle,
+                }}, .none) catch |err| {
+                    forbear.handleFrameError(err);
+                    break :mouse;
+                };
+
+                // The character boundary nearest to the press: past a glyph's
+                // horizontal midpoint rounds to the boundary after it. Byte
+                // counting assumes one glyph per codepoint, so the clamp
+                // covers ligature/decomposition drift.
+                var index: usize = 0;
+                var advanceX: f32 = 0.0;
+                for (shaped.glyphs) |glyph| {
+                    if (localX < advanceX + glyph.advance[0] / 2.0) break;
+                    advanceX += glyph.advance[0];
+                    index += std.unicode.utf8ByteSequenceLength(glyph.textBuf[0]) catch 1;
+                }
+                index = @min(index, text.items.len);
+
+                if (pressedInside) {
+                    // `onKeyDown` modifier bits reflect what's held.
+                    if (forbear.onKeyDown().shift) {
+                        // Extend from the endpoint the cursor isn't on, like
+                        // shift+arrows do; dragging on continues from it.
+                        const anchor = if (inputState.cursor == inputState.selection[0])
+                            inputState.selection[1]
+                        else
+                            inputState.selection[0];
+                        dragging.* = true;
+                        dragAnchor.* = anchor;
+                        inputState.cursor = index;
+                        inputState.selection = .{ @min(anchor, index), @max(anchor, index) };
+                    } else if (forbear.onDoubleClick() and inputState.selection[0] == inputState.selection[1]) {
+                        // A double press selects everything, like ctrl+a. With
+                        // a selection already active, a press collapses it
+                        // back to the clicked point instead.
+                        inputState.cursor = text.items.len;
+                        inputState.selection = .{ 0, text.items.len };
+                        dragging.* = false;
+                    } else {
+                        dragging.* = true;
+                        dragAnchor.* = index;
+                        inputState.cursor = index;
+                        inputState.selection = .{ index, index };
+                    }
+                } else {
+                    inputState.cursor = index;
+                    inputState.selection = .{ @min(dragAnchor.*, index), @max(dragAnchor.*, index) };
+                }
+            }
+        }
+
+        if (focusContext.hasFocus()) {
             const keysDown = forbear.onKeyDown();
             const hasSelection = inputState.selection[0] != inputState.selection[1];
             // The selection endpoint the cursor is not on. With no selection
