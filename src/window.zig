@@ -212,10 +212,10 @@ pub const Event = union(enum) {
     /// Keys released since the last delivery — one edge per physical
     /// release, modifiers included, like a DOM `keyup`. Never repeats.
     keysReleased: Keys,
+    /// One text-entry delivery, whole: a typed character, an IME batch, or
+    /// both (a commit that ends a composition). Never split — the frame
+    /// layer reads the entire transaction from a single event.
     input: Input,
-    /// One IME batch, applied atomically: the committed text of the same
-    /// batch rides separate `.input` events pushed just before this one.
-    composition: Composition,
 
     pub const PointerEnter = struct {
         serial: u32,
@@ -245,26 +245,29 @@ pub const Event = union(enum) {
         offset: f32,
     };
 
-    pub const Composition = struct {
-        preeditBuffer: [120]u8,
-        preeditLength: usize,
-        /// Caret range inside the preedit, in bytes.
-        cursor: [2]usize,
-        deleteBefore: usize,
-        deleteAfter: usize,
-    };
-
     pub const Input = struct {
-        characterBuffer: [7]u8,
-        characterLength: usize,
-        repeats: usize,
+        /// Committed text: a typed character or an IME commit string,
+        /// repeated `repeats` times (OS key auto-repeat).
+        textBuffer: [120]u8 = @splat(0),
+        textLength: usize = 0,
+        repeats: usize = 1,
+
+        /// Whether this delivery carries a composition update. An update
+        /// with an empty preedit means the composition ended.
+        composition: bool = false,
+        preeditBuffer: [120]u8 = @splat(0),
+        preeditLength: usize = 0,
+        /// Caret range inside the preedit, in bytes.
+        cursor: [2]usize = .{ 0, 0 },
+        deleteBefore: usize = 0,
+        deleteAfter: usize = 0,
 
         pub fn text(self: @This(), arena: std.mem.Allocator) ![]u8 {
-            var repeatedBuffer = try arena.alloc(u8, self.repeats * self.characterLength);
+            var repeatedBuffer = try arena.alloc(u8, self.repeats * self.textLength);
             for (0..self.repeats) |i| {
                 @memcpy(
-                    repeatedBuffer[i * self.characterLength .. (i + 1) * self.characterLength],
-                    self.characterBuffer[0..self.characterLength],
+                    repeatedBuffer[i * self.textLength .. (i + 1) * self.textLength],
+                    self.textBuffer[0..self.textLength],
                 );
             }
             return repeatedBuffer;
@@ -1056,18 +1059,16 @@ pub const Window = switch (builtin.os.tag) {
         /// Publish the pending compose sequence as a preedit — empty when it
         /// resolved or cancelled, which removes the preview.
         fn pushComposePreview(window: *Self) void {
-            var composition = Event.Composition{
-                .preeditBuffer = undefined,
+            var input = Event.Input{
+                .composition = true,
                 .preeditLength = window.composePreviewLength,
                 .cursor = .{ window.composePreviewLength, window.composePreviewLength },
-                .deleteBefore = 0,
-                .deleteAfter = 0,
             };
             @memcpy(
-                composition.preeditBuffer[0..window.composePreviewLength],
+                input.preeditBuffer[0..window.composePreviewLength],
                 window.composePreview[0..window.composePreviewLength],
             );
-            window.eventQueue.push(Event{ .composition = composition });
+            window.eventQueue.push(Event{ .input = input });
         }
 
         fn keyboardHandleKeymap(
@@ -1222,19 +1223,15 @@ pub const Window = switch (builtin.os.tag) {
                     }
                 }
                 // Control codepoints (C0, DEL, C1) aren't text; route them through
-                // `Keys` only. Decode the one character and range-check it.
+                // `Keys` only.
                 const codepoint = if (characterLength > 0) std.unicode.utf8Decode(characterBuffer[0..characterLength]) catch null else null;
                 const isControl = if (codepoint) |cp| cp < 0x20 or (cp >= 0x7f and cp <= 0x9f) else false;
                 const hasText = characterLength > 0 and !isControl;
 
                 if (hasText) {
-                    window.eventQueue.push(Event{
-                        .input = .{
-                            .characterBuffer = characterBuffer,
-                            .characterLength = characterLength,
-                            .repeats = 1,
-                        },
-                    });
+                    var input = Event.Input{ .textLength = characterLength };
+                    @memcpy(input.textBuffer[0..characterLength], characterBuffer[0..characterLength]);
+                    window.eventQueue.push(Event{ .input = input });
                 }
 
                 // The keymap says which keys auto-repeat: arrows, letters,
@@ -1813,24 +1810,6 @@ pub const Window = switch (builtin.os.tag) {
             const window: *Self = @ptrCast(@alignCast(data));
             const pending = &window.textInputPending;
 
-            // Committed text rides the same channel as typed characters, one
-            // `.input` event per codepoint, so plain-text consumers get IME
-            // text without knowing the IME exists.
-            var index: usize = 0;
-            const commit = pending.commitBuffer[0..pending.commitLength];
-            while (index < commit.len) {
-                const sequenceLength = std.unicode.utf8ByteSequenceLength(commit[index]) catch 1;
-                const end = @min(index + sequenceLength, commit.len);
-                var characterBuffer: [7]u8 = undefined;
-                @memcpy(characterBuffer[0 .. end - index], commit[index..end]);
-                window.eventQueue.push(Event{ .input = .{
-                    .characterBuffer = characterBuffer,
-                    .characterLength = end - index,
-                    .repeats = 1,
-                } });
-                index = end;
-            }
-
             // A negative preedit cursor means "hide the caret"; land it at
             // the preedit's end.
             const cursorBegin: usize = if (pending.cursorBegin < 0)
@@ -1842,13 +1821,19 @@ pub const Window = switch (builtin.os.tag) {
             else
                 @min(@as(usize, @intCast(pending.cursorEnd)), pending.preeditLength);
 
-            window.eventQueue.push(Event{ .composition = .{
+            // The whole batch — commit, preedit, deletions — as it arrived,
+            // in one event.
+            var input = Event.Input{
+                .textLength = pending.commitLength,
+                .composition = true,
                 .preeditBuffer = pending.preeditBuffer,
                 .preeditLength = pending.preeditLength,
                 .cursor = .{ @min(cursorBegin, cursorEnd), @max(cursorBegin, cursorEnd) },
                 .deleteBefore = pending.deleteBefore,
                 .deleteAfter = pending.deleteAfter,
-            } });
+            };
+            @memcpy(input.textBuffer[0..pending.commitLength], pending.commitBuffer[0..pending.commitLength]);
+            window.eventQueue.push(Event{ .input = input });
 
             pending.* = .empty;
         }
@@ -1993,13 +1978,15 @@ pub const Window = switch (builtin.os.tag) {
                             // Reuses the same pendingPressed queue as a fresh press.
                             self.pendingPressed = self.pendingPressed.with(activeRepeat.key);
                             if (activeRepeat.characterLength > 0) {
-                                self.eventQueue.push(Event{
-                                    .input = Event.Input{
-                                        .characterBuffer = activeRepeat.characterBuffer,
-                                        .characterLength = activeRepeat.characterLength,
-                                        .repeats = new,
-                                    },
-                                });
+                                var input = Event.Input{
+                                    .textLength = activeRepeat.characterLength,
+                                    .repeats = new,
+                                };
+                                @memcpy(
+                                    input.textBuffer[0..activeRepeat.characterLength],
+                                    activeRepeat.characterBuffer[0..activeRepeat.characterLength],
+                                );
+                                self.eventQueue.push(Event{ .input = input });
                             }
                         }
                     }
@@ -2388,29 +2375,18 @@ pub const Window = switch (builtin.os.tag) {
         /// the combination clears it.
         fn handleDeadChar(self: *Self, wParam: WPARAM) void {
             self.deadCharPending = true;
-            var composition = Event.Composition{
-                .preeditBuffer = undefined,
-                .preeditLength = 0,
-                .cursor = .{ 0, 0 },
-                .deleteBefore = 0,
-                .deleteAfter = 0,
-            };
+            var input = Event.Input{ .composition = true };
             const codeUnit: u16 = @truncate(wParam);
-            composition.preeditLength = std.unicode.utf8Encode(codeUnit, &composition.preeditBuffer) catch 0;
-            composition.cursor = .{ composition.preeditLength, composition.preeditLength };
-            self.eventQueue.push(Event{ .composition = composition });
+            input.preeditLength = std.unicode.utf8Encode(codeUnit, &input.preeditBuffer) catch 0;
+            input.cursor = .{ input.preeditLength, input.preeditLength };
+            self.eventQueue.push(Event{ .input = input });
         }
 
         fn handleChar(self: *Self, wParam: WPARAM, lParam: LPARAM) void {
             if (self.deadCharPending) {
                 self.deadCharPending = false;
-                self.eventQueue.push(Event{ .composition = .{
-                    .preeditBuffer = undefined,
-                    .preeditLength = 0,
-                    .cursor = .{ 0, 0 },
-                    .deleteBefore = 0,
-                    .deleteAfter = 0,
-                } });
+                // Empty composition update: the dead-key preview clears.
+                self.eventQueue.push(Event{ .input = .{ .composition = true } });
             }
 
             const codeUnit: u16 = @truncate(wParam);
@@ -2442,11 +2418,9 @@ pub const Window = switch (builtin.os.tag) {
             const lp: u32 = @truncate(@as(u64, @bitCast(lParam)));
             const repeats: usize = @max(1, lp & 0xFFFF);
 
-            self.eventQueue.push(Event{ .input = .{
-                .characterBuffer = buffer,
-                .characterLength = length,
-                .repeats = repeats,
-            } });
+            var input = Event.Input{ .textLength = length, .repeats = repeats };
+            @memcpy(input.textBuffer[0..length], buffer[0..length]);
+            self.eventQueue.push(Event{ .input = input });
         }
 
         fn wndProc(hwnd: HWND, message: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT {
@@ -2533,7 +2507,7 @@ pub const Window = switch (builtin.os.tag) {
                     if (window) |self| self.applyTextInput();
                 },
                 WM_IME_SETCONTEXT => {
-                    // The preedit renders inline via `.composition` events;
+                    // The preedit renders inline via `.input` events;
                     // strip the flag so the system composition window stays
                     // hidden. Everything else passes through.
                     const masked: LPARAM = @bitCast(@as(usize, @bitCast(lParam)) & ~@as(usize, ISC_SHOWUICOMPOSITIONWINDOW));
@@ -2550,13 +2524,7 @@ pub const Window = switch (builtin.os.tag) {
                         // An empty preedit tells consumers the composition is
                         // over (a commit's text already arrived through
                         // WM_IME_COMPOSITION's result string).
-                        self.eventQueue.push(Event{ .composition = .{
-                            .preeditBuffer = undefined,
-                            .preeditLength = 0,
-                            .cursor = .{ 0, 0 },
-                            .deleteBefore = 0,
-                            .deleteAfter = 0,
-                        } });
+                        self.eventQueue.push(Event{ .input = .{ .composition = true } });
                     }
                 },
                 WM_KEYDOWN => {
@@ -2769,52 +2737,37 @@ pub const Window = switch (builtin.os.tag) {
             const himc = ImmGetContext(self.handle) orelse return;
             defer _ = ImmReleaseContext(self.handle, himc);
 
-            if (flags & GCS_RESULTSTR != 0) {
+            var input = Event.Input{ .composition = true };
+
+            if (flags & GCS_RESULTSTR != 0) result: {
                 // 40 UTF-16 units keep the worst-case UTF-8 within the event
                 // buffers, same clipping policy as the Wayland backend.
                 var wide: [40]u16 = undefined;
                 const byteCount = ImmGetCompositionStringW(himc, GCS_RESULTSTR, &wide, @sizeOf(@TypeOf(wide)));
-                if (byteCount > 0) {
-                    const units = @min(@as(usize, @intCast(byteCount)) / 2, wide.len);
-                    var iterator = std.unicode.Utf16LeIterator.init(wide[0..units]);
-                    while (iterator.nextCodepoint() catch null) |codepoint| {
-                        var buffer: [7]u8 = undefined;
-                        const length = std.unicode.utf8Encode(codepoint, &buffer) catch continue;
-                        self.eventQueue.push(Event{ .input = .{
-                            .characterBuffer = buffer,
-                            .characterLength = length,
-                            .repeats = 1,
-                        } });
-                    }
-                }
+                if (byteCount <= 0) break :result;
+                const units = @min(@as(usize, @intCast(byteCount)) / 2, wide.len);
+                input.textLength = std.unicode.utf16LeToUtf8(&input.textBuffer, wide[0..units]) catch 0;
             }
 
-            var composition = Event.Composition{
-                .preeditBuffer = undefined,
-                .preeditLength = 0,
-                .cursor = .{ 0, 0 },
-                .deleteBefore = 0,
-                .deleteAfter = 0,
-            };
             if (flags & GCS_COMPSTR != 0) preedit: {
                 var wide: [40]u16 = undefined;
                 const byteCount = ImmGetCompositionStringW(himc, GCS_COMPSTR, &wide, @sizeOf(@TypeOf(wide)));
                 if (byteCount <= 0) break :preedit;
                 const units = @min(@as(usize, @intCast(byteCount)) / 2, wide.len);
-                composition.preeditLength = std.unicode.utf16LeToUtf8(&composition.preeditBuffer, wide[0..units]) catch 0;
+                input.preeditLength = std.unicode.utf16LeToUtf8(&input.preeditBuffer, wide[0..units]) catch 0;
 
                 // GCS_CURSORPOS is in UTF-16 units; converting just the
                 // prefix gives the byte offset into the UTF-8 preedit.
                 const caret = ImmGetCompositionStringW(himc, GCS_CURSORPOS, null, 0);
                 const caretUnits: usize = if (caret < 0) units else @min(@as(usize, @intCast(caret)), units);
                 var prefix: [120]u8 = undefined;
-                const caretBytes = std.unicode.utf16LeToUtf8(&prefix, wide[0..caretUnits]) catch composition.preeditLength;
-                composition.cursor = .{
-                    @min(caretBytes, composition.preeditLength),
-                    @min(caretBytes, composition.preeditLength),
+                const caretBytes = std.unicode.utf16LeToUtf8(&prefix, wide[0..caretUnits]) catch input.preeditLength;
+                input.cursor = .{
+                    @min(caretBytes, input.preeditLength),
+                    @min(caretBytes, input.preeditLength),
                 };
             }
-            self.eventQueue.push(Event{ .composition = composition });
+            self.eventQueue.push(Event{ .input = input });
         }
 
         pub fn handleEvents(self: *Self) !void {

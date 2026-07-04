@@ -149,8 +149,6 @@ pub const Event = enum {
     keyUp,
     /// See `onInput()`.
     input,
-    /// See `onComposition()`.
-    composition,
 };
 
 /// A run of text sharing one resolved style. The unit `composeText` appends to
@@ -236,12 +234,10 @@ keysReleasedThisFrame: Keys = .{},
 /// `keysThisFrame` it survives frames without key events, so it can answer
 /// "is shift still held?" mid-gesture.
 modifiersHeld: Keys = .{},
-/// Backs `onInput()`. This frame's typed text, arena-allocated so frames
-/// with nothing typed cost nothing.
-inputTextThisFrame: []const u8 = &.{},
-/// Backs `onComposition()`. This frame's IME composition batch, set by the
-/// window layer; arena-copied like `inputTextThisFrame`.
-compositionThisFrame: ?Composition = null,
+/// Backs `onInput()`. This frame's text-entry transaction, assembled from
+/// window events at frame start; slices are arena-allocated, so frames with
+/// no text entry cost nothing.
+inputThisFrame: ?Input = null,
 /// See `useTextInput()`. Consumed (and reset) by `update()`.
 textInputRequestThisFrame: ?TextInputRequest = null,
 activeNodeKey: ?u64 = null,
@@ -1043,8 +1039,7 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
 
     self.keysThisFrame = .{};
     self.keysReleasedThisFrame = .{};
-    self.inputTextThisFrame = &.{};
-    self.compositionThisFrame = null;
+    self.inputThisFrame = null;
 
     self.frameCounter +%= 1;
     self.frameMeta = meta;
@@ -1065,20 +1060,19 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
                     continue;
                 };
                 inputText.appendSlice(meta.arena, typedText) catch |err| handleFrameError(err);
-            },
-            .composition => |composition| {
-                // Two IME batches within one frame would be rare enough that
-                // the last one winning is fine; its commits are all in
-                // `inputText` regardless.
-                self.compositionThisFrame = .{
-                    .preedit = meta.arena.dupe(u8, composition.preeditBuffer[0..composition.preeditLength]) catch |err| blk: {
+                // Text accumulates but composition state is level, so with
+                // two IME batches in one frame the last preedit wins — its
+                // commits are all in `inputText` regardless.
+                const merged = self.inputThisFrame orelse Input{};
+                self.inputThisFrame = if (input.composition) .{
+                    .preedit = meta.arena.dupe(u8, input.preeditBuffer[0..input.preeditLength]) catch |err| blk: {
                         handleFrameError(err);
                         break :blk &.{};
                     },
-                    .cursor = composition.cursor,
-                    .deleteBefore = composition.deleteBefore,
-                    .deleteAfter = composition.deleteAfter,
-                };
+                    .cursor = input.cursor,
+                    .deleteBefore = input.deleteBefore,
+                    .deleteAfter = input.deleteAfter,
+                } else merged;
             },
             .keys => |keys| {
                 self.keysThisFrame = self.keysThisFrame.with(keys);
@@ -1139,7 +1133,11 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
             else => {},
         }
     }
-    self.inputTextThisFrame = inputText.items;
+    if (inputText.items.len > 0 or self.inputThisFrame != null) {
+        var input = self.inputThisFrame orelse Input{};
+        input.text = inputText.items;
+        self.inputThisFrame = input;
+    }
     return &frameEnd;
 }
 
@@ -2079,8 +2077,7 @@ pub fn OnResult(comptime eventTag: Event) type {
     return switch (eventTag) {
         .scroll, .mouseMove => ?Vec2,
         .keyDown, .keyUp => Keys,
-        .input => ?[]const u8,
-        .composition => ?Composition,
+        .input => ?Input,
         else => bool,
     };
 }
@@ -2260,10 +2257,21 @@ pub fn getModifiersHeld() Keys {
     return self.modifiersHeld;
 }
 
-pub const Composition = struct {
-    /// The provisional text the IME is composing; replaces the previous
-    /// preedit wholesale on every update. Empty means the composition ended.
-    preedit: []const u8 = "",
+/// One frame's text entry, whole: what was typed or committed, plus the IME
+/// composition update when one arrived. Consumers that only want text read
+/// `.text` and ignore the rest. A full editor applies the fields in order:
+/// remove the previous preedit, delete `deleteBefore`/`deleteAfter` committed
+/// bytes around the cursor, insert `text`, then lay down the new `preedit`.
+pub const Input = struct {
+    /// Committed text: typed characters and IME commits alike. Control
+    /// codepoints (arrows, backspace, enter, ...) are filtered out at the
+    /// window layer, so they only ever show up through `onKeyDown()`.
+    text: []const u8 = "",
+    /// The IME's provisional text, replacing the previous preedit wholesale.
+    /// `null` means no composition update this frame; empty means the
+    /// composition ended. Non-null also marks `text` as IME-committed, which
+    /// is how it can ride a modifier chord without reading as a command.
+    preedit: ?[]const u8 = null,
     /// Caret range inside `preedit`, in bytes.
     cursor: [2]usize = .{ 0, 0 },
     /// Committed bytes around the cursor the IME asked to remove — Hangul
@@ -2271,16 +2279,6 @@ pub const Composition = struct {
     deleteBefore: usize = 0,
     deleteAfter: usize = 0,
 };
-
-/// This frame's IME composition batch, else `null`. Applies in order:
-/// remove the previous preedit, delete `deleteBefore`/`deleteAfter` committed
-/// bytes around the cursor, insert this frame's committed text (delivered
-/// through `onInput()`, so plain-text consumers get it without knowing the
-/// IME exists), then lay down the new `preedit`. Global like `onKeyDown()`.
-pub fn onComposition() ?Composition {
-    const self = getForbear();
-    return self.compositionThisFrame;
-}
 
 pub const TextInputRequest = struct {
     /// Where the caret sits in surface coordinates — the IME docks its
@@ -2297,13 +2295,11 @@ pub fn useTextInput(request: TextInputRequest) void {
     self.textInputRequestThisFrame = request;
 }
 
-/// Text typed this frame, else `null`. Control codepoints (arrows,
-/// backspace, enter, ...) are filtered out at the window layer, so they
-/// only ever show up through `onKeyDown()`/`onKeyUp()`; OS auto-repeat
-/// expands into repeated characters. Global for now, like `onKeyDown()`.
-pub fn onInput() ?[]const u8 {
+/// This frame's text entry, else `null`. OS auto-repeat expands into
+/// repeated characters in `.text`. Global for now, like `onKeyDown()`.
+pub fn onInput() ?Input {
     const self = getForbear();
-    return if (self.inputTextThisFrame.len > 0) self.inputTextThisFrame else null;
+    return self.inputThisFrame;
 }
 
 pub fn isNodeActive() bool {
