@@ -460,8 +460,11 @@ pub fn ScrollProvider() *const fn (void) void {
 }
 
 const InputState = struct {
+    /// The selection is always the span between `anchor` and `cursor`; with
+    /// no selection they sit on the same byte. Every operation is "move the
+    /// cursor, and collapse the anchor onto it unless extending".
     cursor: usize,
-    selection: [2]usize,
+    anchor: usize,
     text: ?std.ArrayList(u8),
 
     /// Where the caret sits relative to the input's content box, with the
@@ -472,8 +475,10 @@ const InputState = struct {
         height: f32,
     },
 
-    /// Edits recorded by `splice`, most recent last; ctrl+z pops them onto
-    /// `redoStack` and ctrl+shift+z / ctrl+y back. Managed by `useInput`.
+    /// Each stack holds the edits that, applied in pop order, walk the text
+    /// back (undo) or forward (redo) through its history. Managed by
+    /// `useInput`: `splice` records here, ctrl+z / ctrl+shift+z / ctrl+y
+    /// pop one stack and push its inverse onto the other.
     undoStack: std.ArrayList(Edit),
     redoStack: std.ArrayList(Edit),
 
@@ -481,20 +486,52 @@ const InputState = struct {
     /// styling it (typically underlined). Managed by `useInput`: replaced
     /// wholesale on every composition update and invisible to undo.
     composition: ?[2]usize,
+
+    pub fn selection(self: *const @This()) [2]usize {
+        return .{ @min(self.anchor, self.cursor), @max(self.anchor, self.cursor) };
+    }
 };
 
+/// Replaces `removed` with `inserted` at `start` and leaves the cursor and
+/// anchor at `cursorAfter`/`anchorAfter`. Self-inverting: `apply` returns the
+/// edit that puts everything back, so undo and redo are just applying edits
+/// popped off a stack.
 const Edit = struct {
     start: usize,
     removed: []const u8,
     inserted: []const u8,
-    cursorBefore: usize,
-    selectionBefore: [2]usize,
+    cursorAfter: usize,
+    anchorAfter: usize,
 };
+
+/// The only place that mutates text. Applies `edit` and returns its inverse,
+/// or null when the mutation failed and nothing changed.
+fn apply(
+    inputState: *InputState,
+    text: *std.ArrayList(u8),
+    arena: std.mem.Allocator,
+    edit: Edit,
+) ?Edit {
+    const inverse = Edit{
+        .start = edit.start,
+        .removed = edit.inserted,
+        .inserted = edit.removed,
+        .cursorAfter = inputState.cursor,
+        .anchorAfter = inputState.anchor,
+    };
+    text.replaceRange(arena, edit.start, edit.removed.len, edit.inserted) catch |err| {
+        forbear.handleFrameError(err);
+        return null;
+    };
+    inputState.cursor = edit.cursorAfter;
+    inputState.anchor = edit.anchorAfter;
+    return inverse;
+}
 
 /// Replace `text[start..end]` with `replacement`: the cursor lands after it,
 /// the selection collapses there, and the edit is recorded for undo. Every
-/// text mutation funnels through here — which is also where IME composition
-/// and undo coalescing would plug in.
+/// user-visible text edit funnels through here — which is also where IME
+/// composition and undo coalescing would plug in.
 fn splice(
     inputState: *InputState,
     text: *std.ArrayList(u8),
@@ -513,19 +550,14 @@ fn splice(
         .inserted = arena.dupe(u8, replacement) catch |err| {
             return forbear.handleFrameError(err);
         },
-        .cursorBefore = inputState.cursor,
-        .selectionBefore = inputState.selection,
+        .cursorAfter = start + replacement.len,
+        .anchorAfter = start + replacement.len,
     };
-
-    text.replaceRange(arena, start, end - start, replacement) catch |err| {
-        return forbear.handleFrameError(err);
-    };
-    inputState.undoStack.append(arena, edit) catch |err| {
+    const inverse = apply(inputState, text, arena, edit) orelse return;
+    inputState.undoStack.append(arena, inverse) catch |err| {
         return forbear.handleFrameError(err);
     };
     inputState.redoStack.clearRetainingCapacity();
-    inputState.cursor = start + replacement.len;
-    inputState.selection = .{ inputState.cursor, inputState.cursor };
 }
 
 const wordSeparators = [_]u8{ '_', ' ', '-', '/', '`', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '=', '+', '~', '.', ',', '?', '[', ']', '"', '\'', '{', '}', '\\', '|' };
@@ -566,6 +598,23 @@ fn nextWordBeginning(text: []const u8, from: usize) usize {
     return position;
 }
 
+/// A node's content box from its previous-frame measurement: the origin
+/// where flowing text starts and the space inside border and padding.
+fn innerBox(style: forbear.CompleteStyle, measurement: forbear.Node.Measurement) struct { origin: Vec2, size: Vec2 } {
+    const leading = Vec2{
+        style.borderWidth.x[0] + style.padding.x[0],
+        style.borderWidth.y[0] + style.padding.y[0],
+    };
+    const trailing = Vec2{
+        style.borderWidth.x[1] + style.padding.x[1],
+        style.borderWidth.y[1] + style.padding.y[1],
+    };
+    return .{
+        .origin = measurement.position + leading,
+        .size = measurement.size - leading - trailing,
+    };
+}
+
 /// Depends on the font styles of the parent to render. Pass the same
 /// `scrollingState` given to the input's `useScrolling` — called before this
 /// hook, so the caret reads this frame's scroll — and the cursor is kept in
@@ -585,7 +634,10 @@ pub fn useInput(
 
     const inputState = forbear.useState(InputState, InputState{
         .cursor = initialInputState.cursor,
-        .selection = initialInputState.selection,
+        .anchor = if (initialInputState.cursor == initialInputState.selection[0])
+            initialInputState.selection[1]
+        else
+            initialInputState.selection[0],
         .text = null,
 
         .caret = .{
@@ -636,9 +688,7 @@ pub fn useInput(
 
     if (inputState.text) |*text| {
         std.debug.assert(inputState.cursor <= text.items.len);
-        std.debug.assert(inputState.selection[0] <= inputState.selection[1]);
-        std.debug.assert(inputState.selection[0] <= text.items.len);
-        std.debug.assert(inputState.selection[1] <= text.items.len);
+        std.debug.assert(inputState.anchor <= text.items.len);
 
         // While composing, the preedit sits provisionally in the buffer. Pop
         // it for the frame so everything below edits committed text — the
@@ -652,7 +702,7 @@ pub fn useInput(
             };
             text.replaceRangeAssumeCapacity(range[0], range[1] - range[0], &.{});
             inputState.cursor = range[0];
-            inputState.selection = .{ range[0], range[0] };
+            inputState.anchor = range[0];
             inputState.composition = null;
         }
         // Editing keys stand down mid-composition, like in a browser: the
@@ -665,7 +715,6 @@ pub fn useInput(
         // that anchor, cursor on the moving end.
         if (forbear.getParentNode()) |parent| {
             const dragging = forbear.useState(bool, false);
-            const dragAnchor = forbear.useState(usize, 0);
 
             if (!forbear.isMouseButtonPressed()) {
                 dragging.* = false;
@@ -681,8 +730,8 @@ pub fn useInput(
             if (pressedInside or dragging.*) mouse: {
                 const measurement = forbear.useNodeMeasurement() orelse break :mouse;
                 const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
-                const localX = forbear.useMousePosition()[0] - measurement.position[0] -
-                    parent.style.borderWidth.x[0] - parent.style.padding.x[0] +
+                const localX = forbear.useMousePosition()[0] -
+                    innerBox(parent.style, measurement).origin[0] +
                     scrollingState._effectiveOffset[0];
 
                 const shaped = forbear.shapeRuns(forbear.useArena(), &.{.{
@@ -706,136 +755,117 @@ pub fn useInput(
                 }
                 index = @min(index, text.items.len);
 
-                // Every action here is "select from an anchor to the point,
-                // cursor on the moving end": a plain press anchors at the
-                // point itself (collapsing any selection), shift keeps the
-                // endpoint the cursor isn't on (like shift+arrows), dragging
-                // keeps the anchor of the press that started it, and a double
-                // press is an anchored start -> end.
+                // The cursor follows the point; the anchor stays put while
+                // shift is held or a drag is in progress, exactly like
+                // shift+arrows. A plain press collapses onto the point, and
+                // a double press on a collapsed cursor selects everything.
                 if (pressedInside) {
                     const shiftHeld = forbear.getModifiersHeld().shift;
                     const selectAll = doublePressed and !shiftHeld and
-                        inputState.selection[0] == inputState.selection[1];
-                    dragAnchor.* = if (shiftHeld)
-                        (if (inputState.cursor == inputState.selection[0])
-                            inputState.selection[1]
-                        else
-                            inputState.selection[0])
-                    else if (selectAll)
-                        0
-                    else
-                        index;
-                    if (selectAll) index = text.items.len;
+                        inputState.anchor == inputState.cursor;
+                    if (selectAll) {
+                        inputState.anchor = 0;
+                        index = text.items.len;
+                    } else if (!shiftHeld) {
+                        inputState.anchor = index;
+                    }
                     dragging.* = !selectAll;
                 }
                 inputState.cursor = index;
-                inputState.selection = .{ @min(dragAnchor.*, index), @max(dragAnchor.*, index) };
             }
         }
 
         if (focusContext.hasFocus()) {
             const keysDown = forbear.onKeyDown();
             const modifiersHeld = forbear.getModifiersHeld();
-            const hasSelection = inputState.selection[0] != inputState.selection[1];
-            // The selection endpoint the cursor is not on. With no selection
-            // both endpoints sit on the cursor, so the anchor is the cursor.
-            const anchor = if (inputState.cursor == inputState.selection[0])
-                inputState.selection[1]
-            else
-                inputState.selection[0];
 
-            const movedTo: ?usize = if (composing)
-                null
-            else if (keysDown.arrowLeft)
-                if (modifiersHeld.control)
-                    previousWordBeginning(text.items, inputState.cursor)
-                else if (hasSelection and !modifiersHeld.shift)
-                    inputState.selection[0]
-                else
-                    previousCodepointBoundary(text.items, inputState.cursor)
-            else if (keysDown.arrowRight)
-                if (modifiersHeld.control)
-                    nextWordBeginning(text.items, inputState.cursor)
-                else if (hasSelection and !modifiersHeld.shift)
-                    inputState.selection[1]
-                else
-                    nextCodepointBoundary(text.items, inputState.cursor)
-            else if (keysDown.home)
-                0
-            else if (keysDown.end)
-                text.items.len
-            else
-                null;
-
-            if (movedTo) |newCursor| {
-                inputState.cursor = newCursor;
-                inputState.selection = if (modifiersHeld.shift)
-                    .{ @min(anchor, newCursor), @max(anchor, newCursor) }
-                else
-                    .{ newCursor, newCursor };
-            }
-
-            if (!composing and (keysDown.backspace or keysDown.delete)) {
-                if (inputState.selection[0] != inputState.selection[1]) {
-                    splice(inputState, text, arena, inputState.selection[0], inputState.selection[1], "");
-                } else if (keysDown.backspace and inputState.cursor > 0) {
-                    const start = if (modifiersHeld.control)
+            // Editing keys stand down mid-composition, like in a browser: the
+            // backspace that cancels a dead key eats the pending accent, not
+            // a committed character.
+            if (!composing) {
+                // Selections are re-read per operation (not hoisted) because
+                // each block can change them for the next within the frame.
+                const movedTo: ?usize = if (keysDown.arrowLeft)
+                    if (modifiersHeld.control)
                         previousWordBeginning(text.items, inputState.cursor)
+                    else if (inputState.anchor != inputState.cursor and !modifiersHeld.shift)
+                        inputState.selection()[0]
                     else
-                        previousCodepointBoundary(text.items, inputState.cursor);
-                    splice(inputState, text, arena, start, inputState.cursor, "");
-                } else if (keysDown.delete and inputState.cursor < text.items.len) {
-                    const end = if (modifiersHeld.control)
+                        previousCodepointBoundary(text.items, inputState.cursor)
+                else if (keysDown.arrowRight)
+                    if (modifiersHeld.control)
                         nextWordBeginning(text.items, inputState.cursor)
+                    else if (inputState.anchor != inputState.cursor and !modifiersHeld.shift)
+                        inputState.selection()[1]
                     else
-                        nextCodepointBoundary(text.items, inputState.cursor);
-                    splice(inputState, text, arena, inputState.cursor, end, "");
+                        nextCodepointBoundary(text.items, inputState.cursor)
+                else if (keysDown.home)
+                    0
+                else if (keysDown.end)
+                    text.items.len
+                else
+                    null;
+
+                if (movedTo) |newCursor| {
+                    inputState.cursor = newCursor;
+                    if (!modifiersHeld.shift) inputState.anchor = newCursor;
                 }
-            }
 
-            if (!composing and modifiersHeld.control and keysDown.a) {
-                inputState.cursor = text.items.len;
-                inputState.selection = .{ 0, text.items.len };
-            }
-
-            if (!composing and modifiersHeld.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
-                forbear.setClipboardText(text.items[inputState.selection[0]..inputState.selection[1]]);
-                if (keysDown.x) {
-                    splice(inputState, text, arena, inputState.selection[0], inputState.selection[1], "");
+                if (keysDown.backspace or keysDown.delete) {
+                    const selection = inputState.selection();
+                    if (selection[0] != selection[1]) {
+                        splice(inputState, text, arena, selection[0], selection[1], "");
+                    } else if (keysDown.backspace and inputState.cursor > 0) {
+                        const start = if (modifiersHeld.control)
+                            previousWordBeginning(text.items, inputState.cursor)
+                        else
+                            previousCodepointBoundary(text.items, inputState.cursor);
+                        splice(inputState, text, arena, start, inputState.cursor, "");
+                    } else if (keysDown.delete and inputState.cursor < text.items.len) {
+                        const end = if (modifiersHeld.control)
+                            nextWordBeginning(text.items, inputState.cursor)
+                        else
+                            nextCodepointBoundary(text.items, inputState.cursor);
+                        splice(inputState, text, arena, inputState.cursor, end, "");
+                    }
                 }
-            }
 
-            if (!composing and modifiersHeld.control and keysDown.v) {
-                if (forbear.getClipboardText()) |pasted| {
-                    const range = if (inputState.selection[0] != inputState.selection[1])
-                        inputState.selection
-                    else
-                        [2]usize{ inputState.cursor, inputState.cursor };
-                    splice(inputState, text, arena, range[0], range[1], pasted);
+                if (modifiersHeld.control and keysDown.a) {
+                    inputState.anchor = 0;
+                    inputState.cursor = text.items.len;
                 }
-            }
 
-            if (!composing and modifiersHeld.control and keysDown.z and !modifiersHeld.shift) {
-                if (inputState.undoStack.pop()) |edit| undo: {
-                    text.replaceRange(arena, edit.start, edit.inserted.len, edit.removed) catch |err| {
-                        forbear.handleFrameError(err);
-                        break :undo;
-                    };
-                    inputState.cursor = edit.cursorBefore;
-                    inputState.selection = edit.selectionBefore;
-                    inputState.redoStack.append(arena, edit) catch |err| forbear.handleFrameError(err);
+                if (modifiersHeld.control and (keysDown.c or keysDown.x)) {
+                    const selection = inputState.selection();
+                    if (selection[0] != selection[1]) {
+                        forbear.setClipboardText(text.items[selection[0]..selection[1]]);
+                        if (keysDown.x) {
+                            splice(inputState, text, arena, selection[0], selection[1], "");
+                        }
+                    }
                 }
-            }
 
-            if (!composing and ((modifiersHeld.control and keysDown.z and modifiersHeld.shift) or (modifiersHeld.control and keysDown.y))) {
-                if (inputState.redoStack.pop()) |edit| redo: {
-                    text.replaceRange(arena, edit.start, edit.removed.len, edit.inserted) catch |err| {
-                        forbear.handleFrameError(err);
-                        break :redo;
-                    };
-                    inputState.cursor = edit.start + edit.inserted.len;
-                    inputState.selection = .{ inputState.cursor, inputState.cursor };
-                    inputState.undoStack.append(arena, edit) catch |err| forbear.handleFrameError(err);
+                if (modifiersHeld.control and keysDown.v) {
+                    if (forbear.getClipboardText()) |pasted| {
+                        const selection = inputState.selection();
+                        splice(inputState, text, arena, selection[0], selection[1], pasted);
+                    }
+                }
+
+                if (modifiersHeld.control and keysDown.z and !modifiersHeld.shift) {
+                    if (inputState.undoStack.pop()) |edit| {
+                        if (apply(inputState, text, arena, edit)) |inverse| {
+                            inputState.redoStack.append(arena, inverse) catch |err| forbear.handleFrameError(err);
+                        }
+                    }
+                }
+
+                if ((modifiersHeld.control and keysDown.z and modifiersHeld.shift) or (modifiersHeld.control and keysDown.y)) {
+                    if (inputState.redoStack.pop()) |edit| {
+                        if (apply(inputState, text, arena, edit)) |inverse| {
+                            inputState.undoStack.append(arena, inverse) catch |err| forbear.handleFrameError(err);
+                        }
+                    }
                 }
             }
 
@@ -864,11 +894,8 @@ pub fn useInput(
             const isCommandChord = (modifiersHeld.control and !modifiersHeld.alt) or modifiersHeld.super;
             if (!isCommandChord or compositionEvent != null) {
                 if (forbear.onInput()) |typed| {
-                    const range = if (inputState.selection[0] != inputState.selection[1])
-                        inputState.selection
-                    else
-                        [2]usize{ inputState.cursor, inputState.cursor };
-                    splice(inputState, text, arena, range[0], range[1], typed);
+                    const selection = inputState.selection();
+                    splice(inputState, text, arena, selection[0], selection[1], typed);
                 }
             }
 
@@ -890,11 +917,8 @@ pub fn useInput(
                     c.cursor
                 else
                     .{ newPreedit.len, newPreedit.len };
-                inputState.selection = .{
-                    start + @min(cursorRange[0], newPreedit.len),
-                    start + @min(cursorRange[1], newPreedit.len),
-                };
-                inputState.cursor = inputState.selection[1];
+                inputState.anchor = start + @min(cursorRange[0], newPreedit.len);
+                inputState.cursor = start + @min(cursorRange[1], newPreedit.len);
             }
 
             if (forbear.getParentNode()) |parent| caret: {
@@ -915,15 +939,10 @@ pub fn useInput(
                 // Follow the parent's vertical justification the same way
                 // layout justifies the flowing text, from the previous
                 // frame's resolved size.
-                const yOffset: f32 = if (measurement) |m| blk: {
-                    const innerHeight = m.size[1] -
-                        parent.style.borderWidth.y[0] - parent.style.borderWidth.y[1] -
-                        parent.style.padding.y[0] - parent.style.padding.y[1];
-                    break :blk switch (parent.style.yJustification) {
-                        .start => 0.0,
-                        .center => (innerHeight - measured.height) / 2.0,
-                        .end => innerHeight - measured.height,
-                    };
+                const yOffset: f32 = if (measurement) |m| switch (parent.style.yJustification) {
+                    .start => 0.0,
+                    .center => (innerBox(parent.style, m).size[1] - measured.height) / 2.0,
+                    .end => innerBox(parent.style, m).size[1] - measured.height,
                 } else 0.0;
 
                 // Keep the cursor in view: when a cursor move lands it
@@ -934,9 +953,7 @@ pub fn useInput(
                 if (lastCursor.* != inputState.cursor) {
                     lastCursor.* = inputState.cursor;
                     if (measurement) |m| {
-                        const innerWidth = m.size[0] -
-                            parent.style.borderWidth.x[0] - parent.style.borderWidth.x[1] -
-                            parent.style.padding.x[0] - parent.style.padding.x[1];
+                        const innerWidth = innerBox(parent.style, m).size[0];
                         scrollingState.offset[0] = @min(scrollingState.offset[0], measured.width);
                         scrollingState.offset[0] = @max(scrollingState.offset[0], measured.width - innerWidth + 1.0);
                         // Snap so following the cursor doesn't animate.
@@ -953,10 +970,11 @@ pub fn useInput(
                 // docks against the caret. Skipping this on unfocused frames
                 // is what disables the IME.
                 if (measurement) |m| {
+                    const caretOrigin = innerBox(parent.style, m).origin + inputState.caret.position;
                     forbear.useTextInput(.{
                         .caretRectangle = .{
-                            m.position[0] + parent.style.borderWidth.x[0] + parent.style.padding.x[0] + inputState.caret.position[0],
-                            m.position[1] + parent.style.borderWidth.y[0] + parent.style.padding.y[0] + inputState.caret.position[1],
+                            caretOrigin[0],
+                            caretOrigin[1],
                             1.0,
                             inputState.caret.height,
                         },
@@ -981,24 +999,25 @@ pub fn InputCaret(props: InputCaretProps) void {
             if (props.inputState.text) |text| {
                 if (focusContext.hasFocus()) {
                     const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
-                    const hasSelection = props.inputState.selection[0] != props.inputState.selection[1];
+                    const selection = props.inputState.selection();
+                    const hasSelection = selection[0] != selection[1];
 
                     // The span between the selection endpoints is independent
                     // of scrolling, and the cursor sits on one of them, so the
                     // scroll-adjusted `caret.position` anchors the whole box.
                     const selectionWidth: f32 = if (hasSelection) blk: {
                         const from = forbear.measureText(&.{.{
-                            .content = text.items[0..props.inputState.selection[0]],
+                            .content = text.items[0..selection[0]],
                             .style = textStyle,
                         }}, 0.0, .none);
                         const to = forbear.measureText(&.{.{
-                            .content = text.items[0..props.inputState.selection[1]],
+                            .content = text.items[0..selection[1]],
                             .style = textStyle,
                         }}, 0.0, .none);
                         break :blk to.width - from.width;
                     } else 0.0;
 
-                    const x = if (hasSelection and props.inputState.cursor == props.inputState.selection[1])
+                    const x = if (hasSelection and props.inputState.cursor == selection[1])
                         props.inputState.caret.position[0] - selectionWidth
                     else
                         props.inputState.caret.position[0];
