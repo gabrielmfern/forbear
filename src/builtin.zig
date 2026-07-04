@@ -675,8 +675,7 @@ pub fn useInput(
                 // keeps the anchor of the press that started it, and a double
                 // press is an anchored start -> end.
                 if (pressedInside) {
-                    // `onKeyDown` modifier bits reflect what's held.
-                    const shiftHeld = forbear.onKeyDown().shift;
+                    const shiftHeld = forbear.getModifiersHeld().shift;
                     const selectAll = doublePressed and !shiftHeld and
                         inputState.selection[0] == inputState.selection[1];
                     dragAnchor.* = if (shiftHeld)
@@ -698,6 +697,7 @@ pub fn useInput(
 
         if (focusContext.hasFocus()) {
             const keysDown = forbear.onKeyDown();
+            const modifiersHeld = forbear.getModifiersHeld();
             const hasSelection = inputState.selection[0] != inputState.selection[1];
             // The selection endpoint the cursor is not on. With no selection
             // both endpoints sit on the cursor, so the anchor is the cursor.
@@ -707,16 +707,16 @@ pub fn useInput(
                 inputState.selection[0];
 
             const movedTo: ?usize = if (keysDown.arrowLeft)
-                if (keysDown.control)
+                if (modifiersHeld.control)
                     previousWordBeginning(text.items, inputState.cursor)
-                else if (hasSelection and !keysDown.shift)
+                else if (hasSelection and !modifiersHeld.shift)
                     inputState.selection[0]
                 else
                     inputState.cursor -| 1
             else if (keysDown.arrowRight)
-                if (keysDown.control)
+                if (modifiersHeld.control)
                     nextWordBeginning(text.items, inputState.cursor)
-                else if (hasSelection and !keysDown.shift)
+                else if (hasSelection and !modifiersHeld.shift)
                     inputState.selection[1]
                 else
                     @min(inputState.cursor + 1, text.items.len)
@@ -729,7 +729,7 @@ pub fn useInput(
 
             if (movedTo) |newCursor| {
                 inputState.cursor = newCursor;
-                inputState.selection = if (keysDown.shift)
+                inputState.selection = if (modifiersHeld.shift)
                     .{ @min(anchor, newCursor), @max(anchor, newCursor) }
                 else
                     .{ newCursor, newCursor };
@@ -739,13 +739,13 @@ pub fn useInput(
                 if (inputState.selection[0] != inputState.selection[1]) {
                     splice(inputState, text, arena, inputState.selection[0], inputState.selection[1], "");
                 } else if (keysDown.backspace and inputState.cursor > 0) {
-                    const start = if (keysDown.control)
+                    const start = if (modifiersHeld.control)
                         previousWordBeginning(text.items, inputState.cursor)
                     else
                         inputState.cursor - 1;
                     splice(inputState, text, arena, start, inputState.cursor, "");
                 } else if (keysDown.delete and inputState.cursor < text.items.len) {
-                    const end = if (keysDown.control)
+                    const end = if (modifiersHeld.control)
                         nextWordBeginning(text.items, inputState.cursor)
                     else
                         inputState.cursor + 1;
@@ -753,19 +753,19 @@ pub fn useInput(
                 }
             }
 
-            if (keysDown.control and keysDown.a) {
+            if (modifiersHeld.control and keysDown.a) {
                 inputState.cursor = text.items.len;
                 inputState.selection = .{ 0, text.items.len };
             }
 
-            if (keysDown.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
+            if (modifiersHeld.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
                 forbear.setClipboardText(text.items[inputState.selection[0]..inputState.selection[1]]);
                 if (keysDown.x) {
                     splice(inputState, text, arena, inputState.selection[0], inputState.selection[1], "");
                 }
             }
 
-            if (keysDown.control and keysDown.v) {
+            if (modifiersHeld.control and keysDown.v) {
                 if (forbear.getClipboardText()) |pasted| {
                     const range = if (inputState.selection[0] != inputState.selection[1])
                         inputState.selection
@@ -775,7 +775,7 @@ pub fn useInput(
                 }
             }
 
-            if (keysDown.control and keysDown.z and !keysDown.shift) {
+            if (modifiersHeld.control and keysDown.z and !modifiersHeld.shift) {
                 if (inputState.undoStack.pop()) |edit| undo: {
                     text.replaceRange(arena, edit.start, edit.inserted.len, edit.removed) catch |err| {
                         forbear.handleFrameError(err);
@@ -787,7 +787,7 @@ pub fn useInput(
                 }
             }
 
-            if ((keysDown.control and keysDown.z and keysDown.shift) or (keysDown.control and keysDown.y)) {
+            if ((modifiersHeld.control and keysDown.z and modifiersHeld.shift) or (modifiersHeld.control and keysDown.y)) {
                 if (inputState.redoStack.pop()) |edit| redo: {
                     text.replaceRange(arena, edit.start, edit.removed.len, edit.inserted) catch |err| {
                         forbear.handleFrameError(err);
@@ -827,9 +827,10 @@ pub fn useInput(
             }
 
             // A chorded press is a command, not text entry (ctrl+a must not
-            // type an "a"). The exception is ctrl+alt, which is how AltGr
-            // chords arrive on Windows keymaps — those do type characters.
-            const isCommandChord = (keysDown.control and !keysDown.alt) or keysDown.super;
+            // type an "a"). The exceptions: ctrl+alt, which is how AltGr
+            // chords arrive on Windows keymaps and does type characters, and
+            // IME commits, which can ride on modifier chords.
+            const isCommandChord = (modifiersHeld.control and !modifiersHeld.alt) or modifiersHeld.super;
             if (!isCommandChord or compositionEvent != null) {
                 if (forbear.onInput()) |typed| {
                     const range = if (inputState.selection[0] != inputState.selection[1])
@@ -1077,7 +1078,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
         const pressed = forbear.onKeyDown();
         const items = self.focusable.items;
         if (pressed.tab and items.len > 0) {
-            const shift = pressed.shift;
+            const shift = forbear.getModifiersHeld().shift;
             if (self.focused) |current| {
                 var idx: usize = 0;
                 for (items, 0..) |item, i| {
