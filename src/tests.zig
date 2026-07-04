@@ -8630,6 +8630,36 @@ test "useInput: IME delete_surrounding retracts committed text" {
     try std.testing.expectEqualStrings("ab", observed.text());
 }
 
+test "useInput: editing keys stand down while composing" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "Jo" });
+    try inputFrame(arena, &observed, .{ .composition = .{ .preedit = "~", .cursor = .{ 1, 1 } } });
+    try std.testing.expectEqualStrings("Jo~", observed.text());
+    try std.testing.expectEqual([2]usize{ 2, 3 }, observed.composition.?);
+
+    // Backspace with no batch this frame: the preedit and the committed
+    // text both survive.
+    try inputFrame(arena, &observed, .{ .keys = .{ .backspace = true } });
+    try std.testing.expectEqualStrings("Jo~", observed.text());
+    try std.testing.expectEqual([2]usize{ 2, 3 }, observed.composition.?);
+
+    // Backspace landing in the same frame as the cancelling batch — this
+    // exact combination used to index past the shrunk buffer. Only the
+    // pending accent goes; "Jo" stays whole.
+    try inputFrame(arena, &observed, .{ .keys = .{ .backspace = true }, .composition = .{} });
+    try std.testing.expectEqualStrings("Jo", observed.text());
+    try std.testing.expectEqual(@as(?[2]usize, null), observed.composition);
+    try std.testing.expectEqual(@as(usize, 2), observed.cursor);
+}
+
 test "useInput: IME commits land even while a modifier chord is held" {
     try initTest(std.testing.allocator);
     defer forbear.deinit();

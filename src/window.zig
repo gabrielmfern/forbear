@@ -296,6 +296,10 @@ pub const Window = switch (builtin.os.tag) {
         /// Dead-key composition (´ + a = á), driven client-side from the
         /// locale's Compose table; null when the locale has none.
         xkbComposeState: ?*c.xkb_compose_state,
+        /// The pending compose sequence, previewed as a preedit while it
+        /// waits for its next key. Wayland event thread only.
+        composePreview: [16]u8,
+        composePreviewLength: usize,
         repeatInfo: struct {
             /// the rate of repeating keys in characters per second
             rate: i32,
@@ -1022,6 +1026,50 @@ pub const Window = switch (builtin.os.tag) {
             };
         }
 
+        /// Append the visible face of a fed keysym to the compose preview.
+        /// Dead keysyms have no unicode value of their own, so the common
+        /// ones map to their spacing lookalikes, the way browsers render a
+        /// pending dead key ("Jo~" while ~ waits for its letter).
+        fn appendComposePreview(window: *Self, keysym: u32) void {
+            const codepoint: u21 = switch (keysym) {
+                c.XKB_KEY_dead_acute => '´',
+                c.XKB_KEY_dead_grave => '`',
+                c.XKB_KEY_dead_tilde => '~',
+                c.XKB_KEY_dead_circumflex => '^',
+                c.XKB_KEY_dead_diaeresis => '¨',
+                c.XKB_KEY_dead_cedilla => '¸',
+                c.XKB_KEY_dead_abovering => '°',
+                c.XKB_KEY_dead_macron => '¯',
+                c.XKB_KEY_Multi_key => '·',
+                else => blk: {
+                    const value = c.xkb_keysym_to_utf32(keysym);
+                    break :blk if (value != 0 and value <= 0x10FFFF) @intCast(value) else return;
+                },
+            };
+            var buffer: [4]u8 = undefined;
+            const length = std.unicode.utf8Encode(codepoint, &buffer) catch return;
+            if (window.composePreviewLength + length > window.composePreview.len) return;
+            @memcpy(window.composePreview[window.composePreviewLength..][0..length], buffer[0..length]);
+            window.composePreviewLength += length;
+        }
+
+        /// Publish the pending compose sequence as a preedit — empty when it
+        /// resolved or cancelled, which removes the preview.
+        fn pushComposePreview(window: *Self) void {
+            var composition = Event.Composition{
+                .preeditBuffer = undefined,
+                .preeditLength = window.composePreviewLength,
+                .cursor = .{ window.composePreviewLength, window.composePreviewLength },
+                .deleteBefore = 0,
+                .deleteAfter = 0,
+            };
+            @memcpy(
+                composition.preeditBuffer[0..window.composePreviewLength],
+                window.composePreview[0..window.composePreviewLength],
+            );
+            window.eventQueue.push(Event{ .composition = composition });
+        }
+
         fn keyboardHandleKeymap(
             data: ?*anyopaque,
             wlKeyboard: ?*c.wl_keyboard,
@@ -1148,10 +1196,16 @@ pub const Window = switch (builtin.os.tag) {
                     const keysymEffective = c.xkb_state_key_get_one_sym(window.xkbState, xkbKeycode);
                     if (c.xkb_compose_state_feed(composeState, keysymEffective) == c.XKB_COMPOSE_FEED_ACCEPTED) {
                         switch (c.xkb_compose_state_get_status(composeState)) {
-                            c.XKB_COMPOSE_COMPOSING => characterLength = 0,
+                            c.XKB_COMPOSE_COMPOSING => {
+                                characterLength = 0;
+                                window.appendComposePreview(keysymEffective);
+                                window.pushComposePreview();
+                            },
                             c.XKB_COMPOSE_CANCELLED => {
                                 characterLength = 0;
                                 c.xkb_compose_state_reset(composeState);
+                                window.composePreviewLength = 0;
+                                window.pushComposePreview();
                             },
                             c.XKB_COMPOSE_COMPOSED => {
                                 characterLength = @min(@as(usize, @intCast(c.xkb_compose_state_get_utf8(
@@ -1160,6 +1214,8 @@ pub const Window = switch (builtin.os.tag) {
                                     characterBuffer.len,
                                 ))), characterBuffer.len);
                                 c.xkb_compose_state_reset(composeState);
+                                window.composePreviewLength = 0;
+                                window.pushComposePreview();
                             },
                             else => {},
                         }
@@ -1336,6 +1392,8 @@ pub const Window = switch (builtin.os.tag) {
             window.xkbState = null;
 
             window.xkbComposeState = null;
+            window.composePreview = undefined;
+            window.composePreviewLength = 0;
             const locale: [*:0]const u8 = std.c.getenv("LC_ALL") orelse std.c.getenv("LC_CTYPE") orelse std.c.getenv("LANG") orelse "C";
             if (c.xkb_compose_table_new_from_locale(window.xkbContext, locale, c.XKB_COMPOSE_COMPILE_NO_FLAGS)) |composeTable| {
                 // The state holds its own reference to the table.
@@ -2049,6 +2107,17 @@ pub const Window = switch (builtin.os.tag) {
         /// A WM_CHAR carrying a UTF-16 high surrogate is held here until its paired
         /// low-surrogate WM_CHAR arrives, so astral-plane codepoints survive.
         pendingHighSurrogate: ?u16 = null,
+        /// A WM_DEADCHAR is being previewed as a preedit until its WM_CHAR
+        /// resolves it — the OS composes dead keys itself and shows nothing.
+        deadCharPending: bool = false,
+
+        /// IME request state: written by the render thread (`setTextInput`),
+        /// applied in `wndProc` via a posted `WM_APP_TEXT_INPUT` — IMM32
+        /// input contexts are bound to the thread that owns the window.
+        textInputMutex: std.Io.Mutex = .init,
+        textInputWanted: bool = false,
+        textInputApplied: bool = false,
+        textInputArea: TextInputArea = .{ .x = 0, .y = 0, .width = 1, .height = 1 },
 
         eventQueue: EventQueue = .empty,
 
@@ -2199,8 +2268,14 @@ pub const Window = switch (builtin.os.tag) {
             window.pendingPressed = .{};
             window.pendingReleased = .{};
             window.pendingHighSurrogate = null;
+            window.deadCharPending = false;
             window.eventQueue = .empty;
             window.handlers = .{};
+
+            window.textInputMutex = .init;
+            window.textInputWanted = false;
+            window.textInputApplied = false;
+            window.textInputArea = .{ .x = 0, .y = 0, .width = 1, .height = 1 };
 
             window.allocator = allocator;
             window.io = io;
@@ -2243,6 +2318,10 @@ pub const Window = switch (builtin.os.tag) {
                 window.hInstance,
                 window,
             ) orelse return error.FailedToCreateWindow;
+
+            // Windows associates an IME context with every window by default;
+            // start detached to match "disabled until `setTextInput` asks".
+            _ = ImmAssociateContext(window.handle, null);
 
             window.updateDpi();
             window.updateClientSize();
@@ -2304,7 +2383,36 @@ pub const Window = switch (builtin.os.tag) {
         /// Decode a WM_CHAR code unit into a `.input` event, joining UTF-16
         /// surrogate pairs (which arrive as two consecutive WM_CHARs) and dropping
         /// control codepoints — those reach the app through `Keys` instead.
+        /// Preview a pressed dead key inline ("Jo~" while ~ waits for its
+        /// letter), like the Linux compose path; the WM_CHAR that resolves
+        /// the combination clears it.
+        fn handleDeadChar(self: *Self, wParam: WPARAM) void {
+            self.deadCharPending = true;
+            var composition = Event.Composition{
+                .preeditBuffer = undefined,
+                .preeditLength = 0,
+                .cursor = .{ 0, 0 },
+                .deleteBefore = 0,
+                .deleteAfter = 0,
+            };
+            const codeUnit: u16 = @truncate(wParam);
+            composition.preeditLength = std.unicode.utf8Encode(codeUnit, &composition.preeditBuffer) catch 0;
+            composition.cursor = .{ composition.preeditLength, composition.preeditLength };
+            self.eventQueue.push(Event{ .composition = composition });
+        }
+
         fn handleChar(self: *Self, wParam: WPARAM, lParam: LPARAM) void {
+            if (self.deadCharPending) {
+                self.deadCharPending = false;
+                self.eventQueue.push(Event{ .composition = .{
+                    .preeditBuffer = undefined,
+                    .preeditLength = 0,
+                    .cursor = .{ 0, 0 },
+                    .deleteBefore = 0,
+                    .deleteAfter = 0,
+                } });
+            }
+
             const codeUnit: u16 = @truncate(wParam);
 
             const codepoint: u21 = blk: {
@@ -2417,6 +2525,39 @@ pub const Window = switch (builtin.os.tag) {
                 },
                 WM_CHAR => {
                     if (window) |self| self.handleChar(wParam, lParam);
+                },
+                WM_DEADCHAR => {
+                    if (window) |self| self.handleDeadChar(wParam);
+                },
+                WM_APP_TEXT_INPUT => {
+                    if (window) |self| self.applyTextInput();
+                },
+                WM_IME_SETCONTEXT => {
+                    // The preedit renders inline via `.composition` events;
+                    // strip the flag so the system composition window stays
+                    // hidden. Everything else passes through.
+                    const masked: LPARAM = @bitCast(@as(usize, @bitCast(lParam)) & ~@as(usize, ISC_SHOWUICOMPOSITIONWINDOW));
+                    return DefWindowProcW(hwnd, message, wParam, masked);
+                },
+                WM_IME_STARTCOMPOSITION => {},
+                WM_IME_COMPOSITION => {
+                    if (window) |self| {
+                        self.handleImeComposition(@truncate(@as(usize, @bitCast(lParam))));
+                    }
+                },
+                WM_IME_ENDCOMPOSITION => {
+                    if (window) |self| {
+                        // An empty preedit tells consumers the composition is
+                        // over (a commit's text already arrived through
+                        // WM_IME_COMPOSITION's result string).
+                        self.eventQueue.push(Event{ .composition = .{
+                            .preeditBuffer = undefined,
+                            .preeditLength = 0,
+                            .cursor = .{ 0, 0 },
+                            .deleteBefore = 0,
+                            .deleteAfter = 0,
+                        } });
+                    }
                 },
                 WM_KEYDOWN => {
                     if (window) |self| {
@@ -2568,6 +2709,112 @@ pub const Window = switch (builtin.os.tag) {
 
             const wide: [*:0]const u16 = @ptrCast(@alignCast(ptr));
             return try std.unicode.utf16LeToUtf8Alloc(allocator, std.mem.span(wide));
+        }
+
+        /// Declares whether the app wants IME input right now and where the
+        /// caret is, in client coordinates. Only records the request and pokes
+        /// the window thread, which applies it in `wndProc` — IMM32 contexts
+        /// belong to the thread that owns the window.
+        pub fn setTextInput(self: *Self, request: ?TextInputArea) void {
+            self.textInputMutex.lockUncancelable(self.io);
+            const wanted = request != null;
+            const changed = wanted != self.textInputWanted or
+                (request != null and !std.meta.eql(request.?, self.textInputArea));
+            self.textInputWanted = wanted;
+            if (request) |area| self.textInputArea = area;
+            self.textInputMutex.unlock(self.io);
+
+            if (changed) _ = PostMessageW(self.handle, WM_APP_TEXT_INPUT, 0, 0);
+        }
+
+        fn applyTextInput(self: *Self) void {
+            self.textInputMutex.lockUncancelable(self.io);
+            const wanted = self.textInputWanted;
+            const area = self.textInputArea;
+            const applied = self.textInputApplied;
+            self.textInputApplied = wanted;
+            self.textInputMutex.unlock(self.io);
+
+            if (wanted != applied) {
+                if (wanted) {
+                    // Reattach the window's default IME context.
+                    _ = ImmAssociateContextEx(self.handle, null, IACE_DEFAULT);
+                } else {
+                    _ = ImmAssociateContext(self.handle, null);
+                }
+            }
+            if (wanted) {
+                const himc = ImmGetContext(self.handle) orelse return;
+                defer _ = ImmReleaseContext(self.handle, himc);
+                var form = CANDIDATEFORM{
+                    .dwIndex = 0,
+                    .dwStyle = CFS_EXCLUDE,
+                    .ptCurrentPos = .{ .x = area.x, .y = area.y },
+                    .rcArea = .{
+                        .left = area.x,
+                        .top = area.y,
+                        .right = area.x + area.width,
+                        .bottom = area.y + area.height,
+                    },
+                };
+                _ = ImmSetCandidateWindow(himc, &form);
+            }
+        }
+
+        /// One WM_IME_COMPOSITION can carry both a result string (text to
+        /// commit) and a composition string (the new preedit) — in that
+        /// order, mirroring the Wayland `done` batch. Handled fully here so
+        /// DefWindowProc doesn't re-deliver the result as WM_CHARs.
+        fn handleImeComposition(self: *Self, flags: u32) void {
+            const himc = ImmGetContext(self.handle) orelse return;
+            defer _ = ImmReleaseContext(self.handle, himc);
+
+            if (flags & GCS_RESULTSTR != 0) {
+                // 40 UTF-16 units keep the worst-case UTF-8 within the event
+                // buffers, same clipping policy as the Wayland backend.
+                var wide: [40]u16 = undefined;
+                const byteCount = ImmGetCompositionStringW(himc, GCS_RESULTSTR, &wide, @sizeOf(@TypeOf(wide)));
+                if (byteCount > 0) {
+                    const units = @min(@as(usize, @intCast(byteCount)) / 2, wide.len);
+                    var iterator = std.unicode.Utf16LeIterator.init(wide[0..units]);
+                    while (iterator.nextCodepoint() catch null) |codepoint| {
+                        var buffer: [7]u8 = undefined;
+                        const length = std.unicode.utf8Encode(codepoint, &buffer) catch continue;
+                        self.eventQueue.push(Event{ .input = .{
+                            .characterBuffer = buffer,
+                            .characterLength = length,
+                            .repeats = 1,
+                        } });
+                    }
+                }
+            }
+
+            var composition = Event.Composition{
+                .preeditBuffer = undefined,
+                .preeditLength = 0,
+                .cursor = .{ 0, 0 },
+                .deleteBefore = 0,
+                .deleteAfter = 0,
+            };
+            if (flags & GCS_COMPSTR != 0) preedit: {
+                var wide: [40]u16 = undefined;
+                const byteCount = ImmGetCompositionStringW(himc, GCS_COMPSTR, &wide, @sizeOf(@TypeOf(wide)));
+                if (byteCount <= 0) break :preedit;
+                const units = @min(@as(usize, @intCast(byteCount)) / 2, wide.len);
+                composition.preeditLength = std.unicode.utf16LeToUtf8(&composition.preeditBuffer, wide[0..units]) catch 0;
+
+                // GCS_CURSORPOS is in UTF-16 units; converting just the
+                // prefix gives the byte offset into the UTF-8 preedit.
+                const caret = ImmGetCompositionStringW(himc, GCS_CURSORPOS, null, 0);
+                const caretUnits: usize = if (caret < 0) units else @min(@as(usize, @intCast(caret)), units);
+                var prefix: [120]u8 = undefined;
+                const caretBytes = std.unicode.utf16LeToUtf8(&prefix, wide[0..caretUnits]) catch composition.preeditLength;
+                composition.cursor = .{
+                    @min(caretBytes, composition.preeditLength),
+                    @min(caretBytes, composition.preeditLength),
+                };
+            }
+            self.eventQueue.push(Event{ .composition = composition });
         }
 
         pub fn handleEvents(self: *Self) !void {
@@ -2780,6 +3027,38 @@ pub const Window = switch (builtin.os.tag) {
         /// need to keep a collapsed `.shift/.control/.alt` flag correct when one
         /// side is released while the other is still held.
         extern "user32" fn GetKeyState(nVirtKey: c_int) callconv(.winapi) i16;
+        extern "user32" fn PostMessageW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.winapi) BOOL;
+
+        const WM_DEADCHAR: UINT = 0x0103;
+        const WM_IME_STARTCOMPOSITION: UINT = 0x010D;
+        const WM_IME_ENDCOMPOSITION: UINT = 0x010E;
+        const WM_IME_COMPOSITION: UINT = 0x010F;
+        const WM_IME_SETCONTEXT: UINT = 0x0281;
+        /// WM_APP: private to this window class, used to hop `setTextInput`
+        /// requests from the render thread onto the window thread.
+        const WM_APP_TEXT_INPUT: UINT = 0x8000;
+
+        const GCS_COMPSTR: u32 = 0x0008;
+        const GCS_CURSORPOS: u32 = 0x0080;
+        const GCS_RESULTSTR: u32 = 0x0800;
+        const CFS_EXCLUDE: DWORD = 0x0080;
+        const IACE_DEFAULT: DWORD = 0x0010;
+        const ISC_SHOWUICOMPOSITIONWINDOW: u32 = 0x80000000;
+
+        const HIMC = *anyopaque;
+        const CANDIDATEFORM = extern struct {
+            dwIndex: DWORD,
+            dwStyle: DWORD,
+            ptCurrentPos: POINT,
+            rcArea: RECT,
+        };
+
+        extern "imm32" fn ImmGetContext(hWnd: HWND) callconv(.winapi) ?HIMC;
+        extern "imm32" fn ImmReleaseContext(hWnd: HWND, hIMC: ?HIMC) callconv(.winapi) BOOL;
+        extern "imm32" fn ImmGetCompositionStringW(hIMC: ?HIMC, dwIndex: DWORD, lpBuf: ?*anyopaque, dwBufLen: DWORD) callconv(.winapi) i32;
+        extern "imm32" fn ImmAssociateContext(hWnd: HWND, hIMC: ?HIMC) callconv(.winapi) ?HIMC;
+        extern "imm32" fn ImmAssociateContextEx(hWnd: HWND, hIMC: ?HIMC, dwFlags: DWORD) callconv(.winapi) BOOL;
+        extern "imm32" fn ImmSetCandidateWindow(hIMC: ?HIMC, lpCandidate: *CANDIDATEFORM) callconv(.winapi) BOOL;
 
         // CW_USEDEFAULT
         const CW_USEDEFAULT: c_int = @bitCast(@as(c_uint, 0x80000000));
