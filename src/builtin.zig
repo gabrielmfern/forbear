@@ -812,6 +812,7 @@ pub const EventPayload = union(forbear.Event) {
     mouseUp: bool,
     mouseMove: ?Vec2,
     click: bool,
+    doubleClick: bool,
     scroll: ?Vec2,
     keyDown: forbear.Keys,
     keyUp: forbear.Keys,
