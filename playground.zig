@@ -172,14 +172,13 @@ fn TextInput(placeholder: []const u8) void {
         },
     })({
         const scrollingState = forbear.useState(forbear.ScrollingState, .{});
+        forbear.useScrolling(scrollingState);
         const inputState = forbear.useInput(.{
             .cursor = 0,
             .selection = .{ 0, 0 },
             .text = "",
-        });
+        }, scrollingState);
         const focusContext = forbear.FocusContext.use();
-
-        forbear.useScrolling(scrollingState);
 
         const node = forbear.getParentNode().?;
         node.style.shadow = .{
@@ -209,7 +208,9 @@ fn TextInput(placeholder: []const u8) void {
         node.style.color = if (showingPlaceholder) forbear.hex("#5F5F5F") else forbear.hex("#fafafa");
         forbear.text(if (showingPlaceholder) placeholder else text);
 
-        forbear.InputCaret(inputState, scrollingState);
+        forbear.InputCaret(.{
+            .inputState = inputState
+        });
     });
 }
 
