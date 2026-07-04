@@ -646,6 +646,18 @@ pub const selectionColor = hex("#B3D7FE66");
 pub const transparent = hex("#00000000");
 // TODO: add all CSS named colors here
 
+pub const fontWeight = struct {
+    pub const thin: u32 = 100;
+    pub const extraLight: u32 = 200;
+    pub const light: u32 = 300;
+    pub const normal: u32 = 400;
+    pub const medium: u32 = 500;
+    pub const semiBold: u32 = 600;
+    pub const bold: u32 = 700;
+    pub const extraBold: u32 = 800;
+    pub const black: u32 = 900;
+};
+
 pub fn rgba(r: f32, g: f32, b: f32, a: f32) Vec4 {
     return .{
         r / 255.0,
