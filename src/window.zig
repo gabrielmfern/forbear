@@ -2367,9 +2367,6 @@ pub const Window = switch (builtin.os.tag) {
             self.allocator.destroy(self);
         }
 
-        /// Decode a WM_CHAR code unit into a `.input` event, joining UTF-16
-        /// surrogate pairs (which arrive as two consecutive WM_CHARs) and dropping
-        /// control codepoints — those reach the app through `Keys` instead.
         /// Preview a pressed dead key inline ("Jo~" while ~ waits for its
         /// letter), like the Linux compose path; the WM_CHAR that resolves
         /// the combination clears it.
@@ -2382,6 +2379,9 @@ pub const Window = switch (builtin.os.tag) {
             self.eventQueue.push(Event{ .input = input });
         }
 
+        /// Decode a WM_CHAR code unit into a `.input` event, joining UTF-16
+        /// surrogate pairs (which arrive as two consecutive WM_CHARs) and dropping
+        /// control codepoints — those reach the app through `Keys` instead.
         fn handleChar(self: *Self, wParam: WPARAM, lParam: LPARAM) void {
             if (self.deadCharPending) {
                 self.deadCharPending = false;
