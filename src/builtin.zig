@@ -471,7 +471,57 @@ const InputState = struct {
         position: Vec2,
         height: f32,
     },
+
+    /// Edits recorded by `splice`, most recent last; ctrl+z pops them onto
+    /// `redoStack` and ctrl+shift+z / ctrl+y back. Managed by `useInput`.
+    undoStack: std.ArrayList(Edit),
+    redoStack: std.ArrayList(Edit),
 };
+
+const Edit = struct {
+    start: usize,
+    removed: []const u8,
+    inserted: []const u8,
+    cursorBefore: usize,
+    selectionBefore: [2]usize,
+};
+
+/// Replace `text[start..end]` with `replacement`: the cursor lands after it,
+/// the selection collapses there, and the edit is recorded for undo. Every
+/// text mutation funnels through here — which is also where IME composition
+/// and undo coalescing would plug in.
+fn splice(
+    inputState: *InputState,
+    text: *std.ArrayList(u8),
+    arena: std.mem.Allocator,
+    start: usize,
+    end: usize,
+    replacement: []const u8,
+) void {
+    if (start == end and replacement.len == 0) return;
+
+    const edit = Edit{
+        .start = start,
+        .removed = arena.dupe(u8, text.items[start..end]) catch |err| {
+            return forbear.handleFrameError(err);
+        },
+        .inserted = arena.dupe(u8, replacement) catch |err| {
+            return forbear.handleFrameError(err);
+        },
+        .cursorBefore = inputState.cursor,
+        .selectionBefore = inputState.selection,
+    };
+
+    text.replaceRange(arena, start, end - start, replacement) catch |err| {
+        return forbear.handleFrameError(err);
+    };
+    inputState.undoStack.append(arena, edit) catch |err| {
+        return forbear.handleFrameError(err);
+    };
+    inputState.redoStack.clearRetainingCapacity();
+    inputState.cursor = start + replacement.len;
+    inputState.selection = .{ inputState.cursor, inputState.cursor };
+}
 
 const wordSeparators = [_]u8{ '_', ' ', '-', '/', '`', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '=', '+', '~', '.', ',', '?', '[', ']', '"', '\'', '{', '}', '\\', '|' };
 
@@ -519,6 +569,9 @@ pub fn useInput(
             .height = 0.0,
             .position = @splat(0.0),
         },
+
+        .undoStack = .empty,
+        .redoStack = .empty,
     });
     if (inputState.text == null) create: {
         var textArray = std.ArrayList(u8).initCapacity(arena, initialInputState.text.len) catch |err| {
@@ -547,6 +600,8 @@ pub fn useInput(
                         .c = keys.c,
                         .v = keys.v,
                         .x = keys.x,
+                        .y = keys.y,
+                        .z = keys.z,
                     },
                 },
                 .input => payload,
@@ -573,6 +628,9 @@ pub fn useInput(
             }
 
             const pressedInside = forbear.onMouseDown();
+            // Called every frame, not just on presses: its double-click
+            // timer only ticks when it runs.
+            const doublePressed = forbear.onDoubleClick();
             if (pressedInside) {
                 focusContext.focus();
             }
@@ -604,36 +662,31 @@ pub fn useInput(
                 }
                 index = @min(index, text.items.len);
 
+                // Every action here is "select from an anchor to the point,
+                // cursor on the moving end": a plain press anchors at the
+                // point itself (collapsing any selection), shift keeps the
+                // endpoint the cursor isn't on (like shift+arrows), dragging
+                // keeps the anchor of the press that started it, and a double
+                // press is an anchored start -> end.
                 if (pressedInside) {
                     // `onKeyDown` modifier bits reflect what's held.
-                    if (forbear.onKeyDown().shift) {
-                        // Extend from the endpoint the cursor isn't on, like
-                        // shift+arrows do; dragging on continues from it.
-                        const anchor = if (inputState.cursor == inputState.selection[0])
+                    const shiftHeld = forbear.onKeyDown().shift;
+                    const selectAll = doublePressed and !shiftHeld and
+                        inputState.selection[0] == inputState.selection[1];
+                    dragAnchor.* = if (shiftHeld)
+                        (if (inputState.cursor == inputState.selection[0])
                             inputState.selection[1]
                         else
-                            inputState.selection[0];
-                        dragging.* = true;
-                        dragAnchor.* = anchor;
-                        inputState.cursor = index;
-                        inputState.selection = .{ @min(anchor, index), @max(anchor, index) };
-                    } else if (forbear.onDoubleClick() and inputState.selection[0] == inputState.selection[1]) {
-                        // A double press selects everything, like ctrl+a. With
-                        // a selection already active, a press collapses it
-                        // back to the clicked point instead.
-                        inputState.cursor = text.items.len;
-                        inputState.selection = .{ 0, text.items.len };
-                        dragging.* = false;
-                    } else {
-                        dragging.* = true;
-                        dragAnchor.* = index;
-                        inputState.cursor = index;
-                        inputState.selection = .{ index, index };
-                    }
-                } else {
-                    inputState.cursor = index;
-                    inputState.selection = .{ @min(dragAnchor.*, index), @max(dragAnchor.*, index) };
+                            inputState.selection[0])
+                    else if (selectAll)
+                        0
+                    else
+                        index;
+                    if (selectAll) index = text.items.len;
+                    dragging.* = !selectAll;
                 }
+                inputState.cursor = index;
+                inputState.selection = .{ @min(dragAnchor.*, index), @max(dragAnchor.*, index) };
             }
         }
 
@@ -678,27 +731,20 @@ pub fn useInput(
 
             if (keysDown.backspace or keysDown.delete) {
                 if (inputState.selection[0] != inputState.selection[1]) {
-                    text.replaceRangeAssumeCapacity(
-                        inputState.selection[0],
-                        inputState.selection[1] - inputState.selection[0],
-                        &.{},
-                    );
-                    inputState.cursor = inputState.selection[0];
+                    splice(inputState, text, arena, inputState.selection[0], inputState.selection[1], "");
                 } else if (keysDown.backspace and inputState.cursor > 0) {
                     const start = if (keysDown.control)
                         previousWordBeginning(text.items, inputState.cursor)
                     else
                         inputState.cursor - 1;
-                    text.replaceRangeAssumeCapacity(start, inputState.cursor - start, &.{});
-                    inputState.cursor = start;
+                    splice(inputState, text, arena, start, inputState.cursor, "");
                 } else if (keysDown.delete and inputState.cursor < text.items.len) {
                     const end = if (keysDown.control)
                         nextWordBeginning(text.items, inputState.cursor)
                     else
                         inputState.cursor + 1;
-                    text.replaceRangeAssumeCapacity(inputState.cursor, end - inputState.cursor, &.{});
+                    splice(inputState, text, arena, inputState.cursor, end, "");
                 }
-                inputState.selection = .{ inputState.cursor, inputState.cursor };
             }
 
             if (keysDown.control and keysDown.a) {
@@ -709,32 +755,42 @@ pub fn useInput(
             if (keysDown.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
                 forbear.setClipboardText(text.items[inputState.selection[0]..inputState.selection[1]]);
                 if (keysDown.x) {
-                    text.replaceRangeAssumeCapacity(
-                        inputState.selection[0],
-                        inputState.selection[1] - inputState.selection[0],
-                        &.{},
-                    );
-                    inputState.cursor = inputState.selection[0];
-                    inputState.selection = .{ inputState.cursor, inputState.cursor };
+                    splice(inputState, text, arena, inputState.selection[0], inputState.selection[1], "");
                 }
             }
 
-            if (keysDown.control and keysDown.v) paste: {
-                const pasted = forbear.getClipboardText() orelse break :paste;
-                if (inputState.selection[0] != inputState.selection[1]) {
-                    text.replaceRangeAssumeCapacity(
-                        inputState.selection[0],
-                        inputState.selection[1] - inputState.selection[0],
-                        &.{},
-                    );
-                    inputState.cursor = inputState.selection[0];
+            if (keysDown.control and keysDown.v) {
+                if (forbear.getClipboardText()) |pasted| {
+                    const range = if (inputState.selection[0] != inputState.selection[1])
+                        inputState.selection
+                    else
+                        [2]usize{ inputState.cursor, inputState.cursor };
+                    splice(inputState, text, arena, range[0], range[1], pasted);
                 }
-                text.insertSlice(arena, inputState.cursor, pasted) catch |err| {
-                    forbear.handleFrameError(err);
-                    break :paste;
-                };
-                inputState.cursor += pasted.len;
-                inputState.selection = .{ inputState.cursor, inputState.cursor };
+            }
+
+            if (keysDown.control and keysDown.z and !keysDown.shift) {
+                if (inputState.undoStack.pop()) |edit| undo: {
+                    text.replaceRange(arena, edit.start, edit.inserted.len, edit.removed) catch |err| {
+                        forbear.handleFrameError(err);
+                        break :undo;
+                    };
+                    inputState.cursor = edit.cursorBefore;
+                    inputState.selection = edit.selectionBefore;
+                    inputState.redoStack.append(arena, edit) catch |err| forbear.handleFrameError(err);
+                }
+            }
+
+            if ((keysDown.control and keysDown.z and keysDown.shift) or (keysDown.control and keysDown.y)) {
+                if (inputState.redoStack.pop()) |edit| redo: {
+                    text.replaceRange(arena, edit.start, edit.removed.len, edit.inserted) catch |err| {
+                        forbear.handleFrameError(err);
+                        break :redo;
+                    };
+                    inputState.cursor = edit.start + edit.inserted.len;
+                    inputState.selection = .{ inputState.cursor, inputState.cursor };
+                    inputState.undoStack.append(arena, edit) catch |err| forbear.handleFrameError(err);
+                }
             }
 
             // A chorded press is a command, not text entry (ctrl+a must not
@@ -742,22 +798,12 @@ pub fn useInput(
             // chords arrive on Windows keymaps — those do type characters.
             const isCommandChord = (keysDown.control and !keysDown.alt) or keysDown.super;
             if (!isCommandChord) {
-                if (forbear.onInput()) |typed| insert: {
-                    if (inputState.selection[0] != inputState.selection[1]) {
-                        text.replaceRangeAssumeCapacity(
-                            inputState.selection[0],
-                            inputState.selection[1] - inputState.selection[0],
-                            &.{},
-                        );
-                        inputState.cursor = inputState.selection[0];
-                        inputState.selection = .{ inputState.cursor, inputState.cursor };
-                    }
-                    text.insertSlice(arena, inputState.cursor, typed) catch |err| {
-                        forbear.handleFrameError(err);
-                        break :insert;
-                    };
-                    inputState.cursor += typed.len;
-                    inputState.selection = .{ inputState.cursor, inputState.cursor };
+                if (forbear.onInput()) |typed| {
+                    const range = if (inputState.selection[0] != inputState.selection[1])
+                        inputState.selection
+                    else
+                        [2]usize{ inputState.cursor, inputState.cursor };
+                    splice(inputState, text, arena, range[0], range[1], typed);
                 }
             }
 
