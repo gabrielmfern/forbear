@@ -8284,9 +8284,6 @@ fn TextInputApp(observed: *InputObservation) void {
                 FocusContext.use().focus();
                 forbear.text(inputState.display);
 
-                // Observed in display space, which is what the old
-                // in-buffer-preedit representation exposed directly — the
-                // expectations below carry over unchanged.
                 observed.cursor = inputState.displayCursor();
                 observed.selection = inputState.displaySelection();
                 observed.composition = inputState.compositionRange();
