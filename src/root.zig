@@ -1120,14 +1120,8 @@ pub fn frame(meta: FrameMeta) *const fn (void) anyerror!void {
                 self.mousePosition = .{ pointerMotion.x, pointerMotion.y };
             },
             .pointerButton => |pointerButton| {
-                // TODO: we're not really handling the other platforms here now are we?
-                // 272 (0x110) = BTN_LEFT on Linux/Wayland; state 1 = pressed, 0 = released
-                if (pointerButton.button == 272) {
-                    if (pointerButton.state == 1) {
-                        self.mouseButtonPressed = true;
-                    } else {
-                        self.mouseButtonPressed = false;
-                    }
+                if (pointerButton.button == .left) {
+                    self.mouseButtonPressed = pointerButton.pressed;
                 }
             },
             else => {},

@@ -2,7 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const c = @import("c");
 
-pub const Cursor = enum {
+// Explicit tag so the Windows backend can hold it in a std.atomic.Value.
+pub const Cursor = enum(u8) {
     default,
     text,
     pointer,
@@ -158,6 +159,17 @@ pub const ScrollAxis = enum(u32) {
     horizontal = 1,
 };
 
+/// Cross-platform mouse button identity. Backends translate their native
+/// code (evdev BTN_* on Linux, WM_*BUTTON* messages on Windows) into one of
+/// these; buttons without a mapping are dropped at the backend.
+pub const MouseButton = enum {
+    left,
+    right,
+    middle,
+    back,
+    forward,
+};
+
 /// Where the caret sits in surface coordinates — the IME docks its candidate
 /// window against this rectangle.
 pub const TextInputArea = struct {
@@ -298,8 +310,8 @@ pub const Event = union(enum) {
     pub const PointerButton = struct {
         serial: u32,
         time: u32,
-        button: u32,
-        state: u32,
+        button: MouseButton,
+        pressed: bool,
     };
 
     pub const Scroll = struct {
@@ -889,12 +901,20 @@ pub const Window = switch (builtin.os.tag) {
             state: u32,
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
+            const mapped: MouseButton = switch (button) {
+                272 => .left, // BTN_LEFT
+                273 => .right, // BTN_RIGHT
+                274 => .middle, // BTN_MIDDLE
+                275 => .back, // BTN_SIDE
+                276 => .forward, // BTN_EXTRA
+                else => return,
+            };
             window.eventQueue.push(Event{
                 .pointerButton = .{
                     .serial = serial,
                     .time = time,
-                    .button = button,
-                    .state = state,
+                    .button = mapped,
+                    .pressed = state == c.WL_POINTER_BUTTON_STATE_PRESSED,
                 },
             });
             _ = wlPointer;
@@ -2068,10 +2088,6 @@ pub const Window = switch (builtin.os.tag) {
         }
     },
     .windows => struct {
-        const linuxLeftMouseButton: u32 = 272; // BTN_LEFT, to match the shared pointerButton convention
-        const buttonPressed: u32 = 1;
-        const buttonReleased: u32 = 0;
-
         handle: HWND,
         hInstance: HINSTANCE,
 
@@ -2093,6 +2109,15 @@ pub const Window = switch (builtin.os.tag) {
         /// A WM_DEADCHAR is being previewed as a preedit until its WM_CHAR
         /// resolves it — the OS composes dead keys itself and shows nothing.
         deadCharPending: bool = false,
+        /// Whether the pointer is over the client area. Win32 has no native
+        /// enter event, so the first WM_MOUSEMOVE after a WM_MOUSELEAVE
+        /// synthesizes `pointerEnter` and re-arms `TrackMouseEvent`.
+        mouseInside: bool = false,
+
+        /// The cursor the render thread last asked for. `SetCursor` only
+        /// works from the window thread, and the OS resets the cursor on
+        /// every mouse move anyway, so it is reasserted in WM_SETCURSOR.
+        cursor: std.atomic.Value(Cursor) = .init(.default),
 
         /// IME request state: written by the render thread (`setTextInput`),
         /// applied in `wndProc` via a posted `WM_APP_TEXT_INPUT` — IMM32
@@ -2205,6 +2230,8 @@ pub const Window = switch (builtin.os.tag) {
             window.keyboard = .{};
             window.pendingHighSurrogate = null;
             window.deadCharPending = false;
+            window.mouseInside = false;
+            window.cursor = .init(.default);
             window.eventQueue = .empty;
             window.handlers = .{};
 
@@ -2372,6 +2399,25 @@ pub const Window = switch (builtin.os.tag) {
             self.eventQueue.push(Event{ .input = input });
         }
 
+        fn pushPointerButton(self: *Self, button: MouseButton, pressed: bool) void {
+            self.eventQueue.push(Event{
+                .pointerButton = .{
+                    .serial = 0,
+                    .time = 0,
+                    .button = button,
+                    .pressed = pressed,
+                },
+            });
+        }
+
+        fn nativeCursorId(cursor: Cursor) ?*const anyopaque {
+            return switch (cursor) {
+                .default => IDC_ARROW,
+                .text => IDC_IBEAM,
+                .pointer => IDC_HAND,
+            };
+        }
+
         fn wndProc(hwnd: HWND, message: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.c) LRESULT {
             // Handle WM_NCCREATE to store the window pointer
             if (message == WM_NCCREATE) {
@@ -2400,6 +2446,20 @@ pub const Window = switch (builtin.os.tag) {
                     if (window) |self| {
                         const mouseX: u16 = @truncate(@as(u32, @intCast(lParam)));
                         const mouseY: u16 = @truncate(@as(u32, @intCast(lParam)) >> 16);
+                        if (!self.mouseInside) {
+                            self.mouseInside = true;
+                            // WM_MOUSELEAVE is one-shot: it has to be
+                            // requested again on every re-entry.
+                            var track = TRACKMOUSEEVENT{ .dwFlags = TME_LEAVE, .hwndTrack = hwnd };
+                            _ = TrackMouseEvent(&track);
+                            self.eventQueue.push(Event{
+                                .pointerEnter = .{
+                                    .serial = 0,
+                                    .x = mouseX,
+                                    .y = mouseY,
+                                },
+                            });
+                        }
                         self.eventQueue.push(Event{
                             .pointerMotion = .{
                                 .time = 0,
@@ -2409,29 +2469,39 @@ pub const Window = switch (builtin.os.tag) {
                         });
                     }
                 },
-                WM_LBUTTONDOWN => {
+                WM_MOUSELEAVE => {
                     if (window) |self| {
-                        self.eventQueue.push(Event{
-                            .pointerButton = .{
-                                .serial = 0,
-                                .time = 0,
-                                .button = linuxLeftMouseButton,
-                                .state = buttonPressed,
-                            },
-                        });
+                        self.mouseInside = false;
+                        self.eventQueue.push(Event{ .pointerLeave = .{ .serial = 0 } });
                     }
                 },
+                WM_LBUTTONDOWN => {
+                    if (window) |self| self.pushPointerButton(.left, true);
+                },
                 WM_LBUTTONUP => {
+                    if (window) |self| self.pushPointerButton(.left, false);
+                },
+                WM_RBUTTONDOWN => {
+                    if (window) |self| self.pushPointerButton(.right, true);
+                },
+                WM_RBUTTONUP => {
+                    if (window) |self| self.pushPointerButton(.right, false);
+                },
+                WM_MBUTTONDOWN => {
+                    if (window) |self| self.pushPointerButton(.middle, true);
+                },
+                WM_MBUTTONUP => {
+                    if (window) |self| self.pushPointerButton(.middle, false);
+                },
+                WM_XBUTTONDOWN, WM_XBUTTONUP => {
                     if (window) |self| {
-                        self.eventQueue.push(Event{
-                            .pointerButton = .{
-                                .serial = 0,
-                                .time = 0,
-                                .button = linuxLeftMouseButton,
-                                .state = buttonReleased,
-                            },
-                        });
+                        const xButton: u16 = @truncate(wParam >> 16);
+                        const button: MouseButton = if (xButton == XBUTTON1) .back else .forward;
+                        self.pushPointerButton(button, message == WM_XBUTTONDOWN);
                     }
+                    // Unlike the other button messages, WM_XBUTTON* asks
+                    // handlers to return TRUE.
+                    return 1;
                 },
                 WM_MOUSEWHEEL => {
                     if (window) |self| {
@@ -2444,6 +2514,44 @@ pub const Window = switch (builtin.os.tag) {
                                 .offset = @floatFromInt(-1 * offset),
                             },
                         });
+                    }
+                },
+                WM_MOUSEHWHEEL => {
+                    if (window) |self| {
+                        // Positive = tilted right, same sign as Wayland's
+                        // horizontal axis — no flip needed.
+                        const offset: i16 = @bitCast(@as(u16, @truncate(wParam >> 16)));
+                        self.eventQueue.push(Event{
+                            .scroll = .{
+                                .axis = .horizontal,
+                                .offset = @floatFromInt(offset),
+                            },
+                        });
+                    }
+                },
+                WM_SETCURSOR => {
+                    // The OS resets to the window class's arrow cursor on
+                    // every mouse move; reassert the frame-requested cursor
+                    // while over the client area.
+                    const hitTest: u16 = @truncate(@as(usize, @bitCast(lParam)));
+                    if (window != null and hitTest == HTCLIENT) {
+                        _ = SetCursor(LoadCursorW(null, nativeCursorId(window.?.cursor.load(.monotonic))));
+                        return 1;
+                    }
+                    return DefWindowProcW(hwnd, message, wParam, lParam);
+                },
+                WM_KILLFOCUS => {
+                    if (window) |self| {
+                        // Mirrors the Wayland keyboard-leave handler: releases
+                        // happening while another window has focus are never
+                        // delivered, so treat everything as released now.
+                        self.keyboard.releaseAll();
+                        self.pendingHighSurrogate = null;
+                        if (self.deadCharPending) {
+                            self.deadCharPending = false;
+                            // Empty composition update: the dead-key preview clears.
+                            self.eventQueue.push(Event{ .input = .{ .composition = true } });
+                        }
                     }
                 },
                 WM_CHAR => {
@@ -2570,16 +2678,11 @@ pub const Window = switch (builtin.os.tag) {
         }
 
         pub fn setCursor(self: *Self, cursor: Cursor, serial: u32) !void {
-            _ = self;
             _ = serial;
-
-            const nativeCursor = switch (cursor) {
-                .default => LoadCursorW(null, IDC_ARROW),
-                .text => LoadCursorW(null, IDC_IBEAM),
-                .pointer => LoadCursorW(null, IDC_HAND),
-            } orelse return error.FailedToLoadCursor;
-
-            _ = SetCursor(nativeCursor);
+            // Only records the request: `SetCursor` binds to the calling
+            // thread and this runs on the render thread, so the window
+            // thread applies it in WM_SETCURSOR.
+            self.cursor.store(cursor, .monotonic);
         }
 
         pub fn setClipboardText(self: *Self, text: []const u8) !void {
@@ -2904,6 +3007,22 @@ pub const Window = switch (builtin.os.tag) {
         const WM_MBUTTONUP: UINT = 0x0208;
         const WM_MBUTTONDBLCLK: UINT = 0x0209;
         const WM_MOUSEWHEEL: UINT = 0x020A;
+        const WM_XBUTTONDOWN: UINT = 0x020B;
+        const WM_XBUTTONUP: UINT = 0x020C;
+        const WM_MOUSEHWHEEL: UINT = 0x020E;
+        const WM_MOUSELEAVE: UINT = 0x02A3;
+        const WM_SETCURSOR: UINT = 0x0020;
+        const XBUTTON1: u16 = 0x0001;
+        const HTCLIENT: u16 = 1;
+
+        const TME_LEAVE: DWORD = 0x00000002;
+        const TRACKMOUSEEVENT = extern struct {
+            cbSize: DWORD = @sizeOf(TRACKMOUSEEVENT),
+            dwFlags: DWORD,
+            hwndTrack: HWND,
+            dwHoverTime: DWORD = 0,
+        };
+        extern "user32" fn TrackMouseEvent(lpEventTrack: *TRACKMOUSEEVENT) callconv(.winapi) BOOL;
 
         // Virtual Keycodes https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
         const VK_SHIFT: c_int = 0x10;

@@ -47,6 +47,13 @@ const Vec4 = @Vector(4, f32);
 const Vec3 = @Vector(3, f32);
 const Vec2 = @Vector(2, f32);
 
+pub const DrawCommandCounts = struct {
+    /// Glyphs actually written per glyph-bearing node, in visitation order.
+    /// A node can write fewer than `glyphs.slice.len` when a mid-frame
+    /// atlas reset skips some of them; null assumes the full count.
+    glyphsWritten: ?[]const usize = null,
+};
+
 /// Build the sorted list of draw commands for a given node tree and viewport.
 /// Culls nodes outside the viewport, emits element/shadow/text commands,
 /// and sorts by (z, kind) so shadows draw before elements before text.
@@ -54,6 +61,7 @@ pub fn buildDrawCommands(
     arena: std.mem.Allocator,
     nodeTree: *const NodeTree,
     viewport: Vec2,
+    counts: DrawCommandCounts,
 ) ![]DrawCommand {
     var nodesToRender = std.ArrayList(usize).empty;
     for (nodeTree.list.items, 0..) |node, i| {
@@ -71,6 +79,7 @@ pub fn buildDrawCommands(
 
     var shadowIndex: usize = 0;
     var glyphIndex: usize = 0;
+    var glyphNodeIndex: usize = 0;
 
     for (nodesToRender.items, 0..) |nodeIndex, elementIndex| {
         const node = nodeTree.at(nodeIndex);
@@ -99,7 +108,8 @@ pub fn buildDrawCommands(
         }
 
         if (node.glyphs) |glyphs| {
-            const glyphCount = glyphs.slice.len;
+            const glyphCount = if (counts.glyphsWritten) |written| written[glyphNodeIndex] else glyphs.slice.len;
+            glyphNodeIndex += 1;
             if (glyphCount > 0) {
                 commands[count] = .{
                     .kind = .text,
@@ -118,6 +128,34 @@ pub fn buildDrawCommands(
     const result = commands[0..count];
     std.mem.sort(DrawCommand, result, {}, DrawCommand.lessThan);
     return result;
+}
+
+/// Merges contiguous same-kind/blend/clip/z commands into one instanced
+/// draw, since `buildDrawCommands` emits one per node.
+pub fn mergeAdjacentDrawCommands(commands: []DrawCommand) []DrawCommand {
+    if (commands.len == 0) return commands;
+
+    var writeIndex: usize = 0;
+    for (commands[1..]) |cmd| {
+        const merged = &commands[writeIndex];
+        const canMerge = merged.kind == cmd.kind and
+            merged.blendMode == cmd.blendMode and
+            merged.z == cmd.z and
+            clipRectEql(merged.clipRect, cmd.clipRect) and
+            merged.end + 1 == cmd.start;
+        if (canMerge) {
+            merged.end = cmd.end;
+        } else {
+            writeIndex += 1;
+            commands[writeIndex] = cmd;
+        }
+    }
+    return commands[0 .. writeIndex + 1];
+}
+
+fn clipRectEql(a: ?Vec4, b: ?Vec4) bool {
+    if (a == null or b == null) return a == null and b == null;
+    return @reduce(.And, a.? == b.?);
 }
 
 /// Convert a single sRGB color component to linear RGB.
@@ -139,6 +177,23 @@ fn srgbToLinearColor(color: Vec4) Vec4 {
         color[3], // Alpha is already linear
     };
 }
+
+const Stopwatch = struct {
+    io: std.Io,
+    startNs: i128,
+
+    fn start(io: std.Io) Stopwatch {
+        return .{ .io = io, .startNs = std.Io.Clock.awake.now(io).toNanoseconds() };
+    }
+
+    fn elapsedMs(self: Stopwatch) i128 {
+        return @divTrunc(std.Io.Clock.awake.now(self.io).toNanoseconds() - self.startNs, std.time.ns_per_ms);
+    }
+
+    fn elapsedUs(self: Stopwatch) i128 {
+        return @divTrunc(std.Io.Clock.awake.now(self.io).toNanoseconds() - self.startNs, std.time.ns_per_us);
+    }
+};
 
 pub const VulkanError = error{
     ExtensioNotPresent,
@@ -1775,6 +1830,9 @@ const ShadowRenderingData = extern struct {
 };
 
 const ShadowsPipeline = struct {
+    logicalDevice: c.VkDevice,
+    physicalDevice: c.VkPhysicalDevice,
+
     pipelineLayout: c.VkPipelineLayout,
     graphicsPipeline: c.VkPipeline,
 
@@ -2026,6 +2084,9 @@ const ShadowsPipeline = struct {
         }
 
         return ShadowsPipeline{
+            .logicalDevice = logicalDevice,
+            .physicalDevice = physicalDevice,
+
             .pipelineLayout = pipelineLayout,
             .graphicsPipeline = graphicsPipeline,
 
@@ -2034,6 +2095,16 @@ const ShadowsPipeline = struct {
             .descriptorSets = descriptorSets,
             .descriptorPool = descriptorPool,
         };
+    }
+
+    fn ensureCapacity(self: *@This(), required: usize, frameIndex: usize) !void {
+        try self.shadows.ensureCapacity(
+            self.logicalDevice,
+            self.physicalDevice,
+            self.descriptorSets[frameIndex],
+            required,
+            frameIndex,
+        );
     }
 
     fn draw(
@@ -2103,6 +2174,8 @@ const ElementRenderingData = extern struct {
 
 const ElementsPipeline = struct {
     allocator: std.mem.Allocator,
+    logicalDevice: c.VkDevice,
+    physicalDevice: c.VkPhysicalDevice,
 
     pipelineLayout: c.VkPipelineLayout,
     blendAddGraphicsPipeline: c.VkPipeline,
@@ -2632,6 +2705,8 @@ const ElementsPipeline = struct {
 
         return ElementsPipeline{
             .allocator = allocator,
+            .logicalDevice = logicalDevice,
+            .physicalDevice = physicalDevice,
 
             .pipelineLayout = pipelineLayout,
             .blendAddGraphicsPipeline = blendAddGraphicsPipeline,
@@ -2646,6 +2721,23 @@ const ElementsPipeline = struct {
             .sampler = sampler,
             .registeredImages = try std.ArrayList(*const Image).initCapacity(allocator, 16),
         };
+    }
+
+    fn ensureCapacity(self: *@This(), requiredElements: usize, requiredGradientStops: usize, frameIndex: usize) !void {
+        try self.elements.ensureCapacity(
+            self.logicalDevice,
+            self.physicalDevice,
+            self.descriptorSets[frameIndex],
+            requiredElements,
+            frameIndex,
+        );
+        try self.gradientStops.ensureCapacity(
+            self.logicalDevice,
+            self.physicalDevice,
+            self.descriptorSets[frameIndex],
+            requiredGradientStops,
+            frameIndex,
+        );
     }
 
     fn registerImage(self: *@This(), image: *Image, logicalDevice: c.VkDevice) !u32 {
@@ -2774,6 +2866,9 @@ const TextPipeline = struct {
     // 18KB pages.
     const pageCacheCapacity = 64;
     const GlyphPageCache = Font.LRU(GlyphPageKey, *GlyphPage, pageCacheCapacity, GlyphPageKeyContext);
+
+    logicalDevice: c.VkDevice,
+    physicalDevice: c.VkPhysicalDevice,
 
     pipelineLayout: c.VkPipelineLayout,
     graphicsPipeline: c.VkPipeline,
@@ -3141,6 +3236,9 @@ const TextPipeline = struct {
         }
 
         return TextPipeline{
+            .logicalDevice = logicalDevice,
+            .physicalDevice = physicalDevice,
+
             .pipelineLayout = pipelineLayout,
             .graphicsPipeline = graphicsPipeline,
 
@@ -3154,6 +3252,88 @@ const TextPipeline = struct {
             .fontTextureAtlas = fontTextureAtlas,
             .sampler = sampler,
         };
+    }
+
+    fn ensureCapacity(self: *@This(), required: usize, frameIndex: usize) !void {
+        try self.glyphs.ensureCapacity(
+            self.logicalDevice,
+            self.physicalDevice,
+            self.descriptorSets[frameIndex],
+            required,
+            frameIndex,
+        );
+    }
+
+    /// Shared by both eviction paths (a whole page evicted from the page
+    /// cache, or a single glyph evicted from a page) so atlas space is
+    /// always handed back the same way.
+    fn reclaimGlyph(self: *@This(), data: GlyphRenderingData) !void {
+        try self.fontTextureAtlas.reclaim(.{
+            .u = @intFromFloat(data.textureCoordinates.u),
+            .v = @intFromFloat(data.textureCoordinates.v),
+            .width = data.bitmapWidth,
+            .height = data.bitmapHeight,
+        });
+    }
+
+    fn getOrCreateGlyphPage(self: *@This(), key: GlyphPageKey) !*GlyphPage {
+        if (self.glyphPageCache.getMut(key)) |entry| return entry.value;
+
+        const page = try self.allocator.create(GlyphPage);
+        page.* = try GlyphPage.init(self.allocator);
+        const putResult = self.glyphPageCache.put(key, page);
+        if (putResult.evicted) |evicted| {
+            for (evicted.value.entries[0..evicted.value.length]) |glyphEntry| {
+                try self.reclaimGlyph(glyphEntry.value);
+            }
+            evicted.value.deinit();
+            self.allocator.destroy(evicted.value);
+        }
+        return page;
+    }
+
+    /// Null means the atlas is full (`needsAtlasReset` is set); callers
+    /// should skip this glyph for the current frame.
+    fn getOrRasterizeGlyph(
+        self: *@This(),
+        glyphPage: *GlyphPage,
+        font: *Font,
+        fontSize: f32,
+        fontWeight: u32,
+        glyphIndex: c_uint,
+        arena: std.mem.Allocator,
+    ) !?GlyphRenderingData {
+        if (glyphPage.get(glyphIndex)) |entry| return entry.value;
+
+        // TODO: render glyphs in the GPU using the font texture atlas as frame buffer
+        try font.setWeight(fontWeight, arena);
+        const rasterizedGlyph = try font.rasterize(glyphIndex, fontSize);
+
+        const textureCoordinates = self.fontTextureAtlas.upload(
+            rasterizedGlyph.bitmap,
+            @intCast(rasterizedGlyph.width),
+            @intCast(rasterizedGlyph.height),
+            @intCast(@abs(rasterizedGlyph.pitch)),
+        ) catch |err| switch (err) {
+            error.MaximumTextureAtlasSizeReached => {
+                self.needsAtlasReset = true;
+                return null;
+            },
+            else => return err,
+        };
+        const pixelWidth = rasterizedGlyph.width / 3;
+        const data = GlyphRenderingData{
+            .bitmapTop = @intCast(rasterizedGlyph.top),
+            .bitmapLeft = @intCast(rasterizedGlyph.left),
+            .bitmapWidth = @intCast(pixelWidth),
+            .bitmapHeight = @intCast(rasterizedGlyph.height),
+            .textureCoordinates = textureCoordinates,
+        };
+        const putResult = glyphPage.put(glyphIndex, data);
+        if (putResult.evicted) |evicted| {
+            try self.reclaimGlyph(evicted.value);
+        }
+        return data;
     }
 
     fn draw(
@@ -3933,15 +4113,17 @@ pub const Renderer = struct {
         const io = root.getForbear().io;
         self.mutex.lockUncancelable(io);
         defer self.mutex.unlock(io);
+        const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
+
         try ensureNoError(c.vkWaitForFences(
             self.logicalDevice,
             1,
-            &self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight],
+            &self.inFlightFences[frameIndex],
             c.VK_TRUE,
             std.math.maxInt(u64),
         ));
 
-        try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0));
+        try ensureNoError(c.vkResetCommandBuffer(self.commandBuffers[frameIndex], 0));
 
         if (self.textPipeline.needsAtlasReset) {
             self.textPipeline.fontTextureAtlas.reset();
@@ -3951,7 +4133,7 @@ pub const Renderer = struct {
             self.textPipeline.needsAtlasReset = false;
         }
 
-        var start = @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms);
+        const acquireStopwatch = Stopwatch.start(io);
         var imageIndex: u32 = undefined;
         ensureNoError(c.vkAcquireNextImageKHR(
             self.logicalDevice,
@@ -3963,7 +4145,7 @@ pub const Renderer = struct {
             // the spec leaves the semaphore unsignaled and writes no index, so we
             // just skip the frame and let the loop retry.
             targetFrameTimeNs *| 6,
-            self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight],
+            self.imageAvailableSemaphores[frameIndex],
             null,
             &imageIndex,
         )) catch |err| {
@@ -3979,8 +4161,11 @@ pub const Renderer = struct {
                 else => return err,
             }
         };
-        if (@divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms) - start > 100) {
-            std.log.err("image ({d}) acquiring took {d}ms!!!!!!!", .{ imageIndex, @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_ms) - start });
+        {
+            const acquireMs = acquireStopwatch.elapsedMs();
+            if (acquireMs > 100) {
+                std.log.err("image ({d}) acquiring took {d}ms!!!!!!!", .{ imageIndex, acquireMs });
+            }
         }
 
         const swapchainImageIndex: usize = @intCast(imageIndex);
@@ -3994,28 +4179,18 @@ pub const Renderer = struct {
             1.0,
         );
 
+        const viewportVec = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
+
+        const prepStopwatch = Stopwatch.start(io);
         var nodesToRender = std.ArrayList(usize).empty;
-        for (nodeTree.list.items, 0..) |node, i| {
-            const viewport = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
-            const insideView = node.position[0] + node.size[0] > 0.0 and node.position[1] + node.size[1] > 0.0 and viewport[0] > node.position[0] and viewport[1] > node.position[1];
-            if (!insideView) {
-                continue;
-            }
-
-            try nodesToRender.append(arena, i);
-        }
-
-        const frameIndex = self.framesRenderedInSwapchain % maxFramesInFlight;
-
-        start = @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_us);
-        // --- Resize pass: single iteration to count shadows, elements,
-        // glyphs and then allocate enough memory on the shader buffers ---
         var totalShadowCount: usize = 0;
         var totalGlyphCount: usize = 0;
         var totalGradientStopCount: usize = 0;
-        const totalElementCount: usize = nodesToRender.items.len;
-        for (nodesToRender.items) |nodeIndex| {
-            const node = nodeTree.at(nodeIndex);
+        for (nodeTree.list.items, 0..) |node, i| {
+            const insideView = node.position[0] + node.size[0] > 0.0 and node.position[1] + node.size[1] > 0.0 and viewportVec[0] > node.position[0] and viewportVec[1] > node.position[1];
+            if (!insideView) continue;
+
+            try nodesToRender.append(arena, i);
             if (node.style.shadow != null) {
                 totalShadowCount += 1;
             }
@@ -4026,38 +4201,11 @@ pub const Renderer = struct {
                 totalGradientStopCount += node.style.background.gradient.stops.len;
             }
         }
+        const totalElementCount: usize = nodesToRender.items.len;
 
-        try self.shadowsPipeline.shadows.ensureCapacity(
-            self.logicalDevice,
-            self.physicalDevice,
-            self.shadowsPipeline.descriptorSets[frameIndex],
-            totalShadowCount,
-            frameIndex,
-        );
-        try self.elementsPipeline.elements.ensureCapacity(
-            self.logicalDevice,
-            self.physicalDevice,
-            self.elementsPipeline.descriptorSets[frameIndex],
-            totalElementCount,
-            frameIndex,
-        );
-        try self.elementsPipeline.gradientStops.ensureCapacity(
-            self.logicalDevice,
-            self.physicalDevice,
-            self.elementsPipeline.descriptorSets[frameIndex],
-            totalGradientStopCount,
-            frameIndex,
-        );
-        try self.textPipeline.glyphs.ensureCapacity(
-            self.logicalDevice,
-            self.physicalDevice,
-            self.textPipeline.descriptorSets[frameIndex],
-            totalGlyphCount,
-            frameIndex,
-        );
-
-        const viewportVec = Vec2{ @floatFromInt(self.swapchain.extent.width), @floatFromInt(self.swapchain.extent.height) };
-        const drawCommands = try buildDrawCommands(arena, nodeTree, viewportVec);
+        try self.shadowsPipeline.ensureCapacity(totalShadowCount, frameIndex);
+        try self.elementsPipeline.ensureCapacity(totalElementCount, totalGradientStopCount, frameIndex);
+        try self.textPipeline.ensureCapacity(totalGlyphCount, frameIndex);
 
         const atlasWidthInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.width));
         const atlasHeightInv: f32 = 1.0 / @as(f32, @floatFromInt(self.textPipeline.fontTextureAtlas.capacityExtent.height));
@@ -4065,6 +4213,9 @@ pub const Renderer = struct {
         var shadowIndex: usize = 0;
         var glyphIndex: usize = 0;
         var gradientStopIndex: usize = 0;
+        // Fed to buildDrawCommands below so a mid-loop atlas reset can't
+        // desync a text command's range from what was actually written.
+        var glyphsWritten = std.ArrayList(usize).empty;
 
         for (nodesToRender.items, 0..) |nodeIndex, elementIndex| {
             const node = nodeTree.at(nodeIndex);
@@ -4154,6 +4305,7 @@ pub const Renderer = struct {
 
             if (node.glyphs) |glyphs| {
                 const pixelAscent = glyphs.ascent;
+                const glyphStartIndex = glyphIndex;
 
                 // Per-run style resolution. Plain `text()` nodes leave
                 // `glyph.style` null and fall back to the node's style;
@@ -4186,74 +4338,18 @@ pub const Renderer = struct {
                             .fontSize = @round(glyphFontSize),
                             .fontWeight = glyphFontWeight,
                         };
-                        if (self.textPipeline.glyphPageCache.getMut(glyphPageKey)) |entry| {
-                            glyphPage = entry.value;
-                        } else {
-                            const page = try self.textPipeline.allocator.create(TextPipeline.GlyphPage);
-                            page.* = try TextPipeline.GlyphPage.init(self.textPipeline.allocator);
-                            const pagePutResult = self.textPipeline.glyphPageCache.put(glyphPageKey, page);
-                            if (pagePutResult.evicted) |evicted| {
-                                // Hand the evicted page's atlas rectangles back before
-                                // freeing it, otherwise that atlas space leaks.
-                                for (evicted.value.entries[0..evicted.value.length]) |glyphEntry| {
-                                    try self.textPipeline.fontTextureAtlas.reclaim(.{
-                                        .u = @intFromFloat(glyphEntry.value.textureCoordinates.u),
-                                        .v = @intFromFloat(glyphEntry.value.textureCoordinates.v),
-                                        .width = glyphEntry.value.bitmapWidth,
-                                        .height = glyphEntry.value.bitmapHeight,
-                                    });
-                                }
-                                evicted.value.deinit();
-                                self.textPipeline.allocator.destroy(evicted.value);
-                            }
-                            glyphPage = page;
-                        }
+                        glyphPage = try self.textPipeline.getOrCreateGlyphPage(glyphPageKey);
                         styleInitialized = true;
                     }
 
-                    const glyphRenderingData = blk: {
-                        // TODO: render glyphs in the GPU using the font texture atlas as frame buffer
-                        if (glyphPage.get(glyph.index)) |entry| {
-                            break :blk entry.value;
-                        } else {
-                            try glyphFont.setWeight(glyphFontWeight, arena);
-                            const rasterizedGlyph = try glyphFont.rasterize(
-                                glyph.index,
-                                glyphFontSize,
-                            );
-
-                            const textureCoordinates = self.textPipeline.fontTextureAtlas.upload(
-                                rasterizedGlyph.bitmap,
-                                @intCast(rasterizedGlyph.width),
-                                @intCast(rasterizedGlyph.height),
-                                @intCast(@abs(rasterizedGlyph.pitch)),
-                            ) catch |err| switch (err) {
-                                error.MaximumTextureAtlasSizeReached => {
-                                    self.textPipeline.needsAtlasReset = true;
-                                    continue;
-                                },
-                                else => return err,
-                            };
-                            const pixelWidth = rasterizedGlyph.width / 3;
-                            const data = TextPipeline.GlyphRenderingData{
-                                .bitmapTop = @intCast(rasterizedGlyph.top),
-                                .bitmapLeft = @intCast(rasterizedGlyph.left),
-                                .bitmapWidth = @intCast(pixelWidth),
-                                .bitmapHeight = @intCast(rasterizedGlyph.height),
-                                .textureCoordinates = textureCoordinates,
-                            };
-                            const putResult = glyphPage.put(glyph.index, data);
-                            if (putResult.evicted) |evicted| {
-                                try self.textPipeline.fontTextureAtlas.reclaim(.{
-                                    .u = @intFromFloat(evicted.value.textureCoordinates.u),
-                                    .v = @intFromFloat(evicted.value.textureCoordinates.v),
-                                    .width = evicted.value.bitmapWidth,
-                                    .height = evicted.value.bitmapHeight,
-                                });
-                            }
-                            break :blk data;
-                        }
-                    };
+                    const glyphRenderingData = try self.textPipeline.getOrRasterizeGlyph(
+                        glyphPage,
+                        glyphFont,
+                        glyphFontSize,
+                        glyphFontWeight,
+                        glyph.index,
+                        arena,
+                    ) orelse continue; // atlas full; needsAtlasReset is set, skip for this frame
 
                     const left: f32 = @floatFromInt(glyphRenderingData.bitmapLeft);
                     const top: f32 = @floatFromInt(glyphRenderingData.bitmapTop);
@@ -4280,22 +4376,26 @@ pub const Renderer = struct {
                     };
                     glyphIndex += 1;
                 }
+
+                try glyphsWritten.append(arena, glyphIndex - glyphStartIndex);
             }
         }
 
-        if (@divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_us) - start > 1000) {
-            std.log.warn(
-                "prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs",
-                .{
-                    totalShadowCount,
-                    totalElementCount,
-                    totalGlyphCount,
-                    @divTrunc(std.Io.Clock.awake.now(root.getForbear().io).toNanoseconds(), std.time.ns_per_us) - start,
-                },
-            );
+        const drawCommands = mergeAdjacentDrawCommands(try buildDrawCommands(arena, nodeTree, viewportVec, .{
+            .glyphsWritten = glyphsWritten.items,
+        }));
+
+        {
+            const prepUs = prepStopwatch.elapsedUs();
+            if (prepUs > 1000) {
+                std.log.warn(
+                    "prepared {d} shadows, {d} elements, {d} glyphs to render taking {d}μs",
+                    .{ totalShadowCount, totalElementCount, totalGlyphCount, prepUs },
+                );
+            }
         }
 
-        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], &c.VkCommandBufferBeginInfo{
+        try ensureNoError(c.vkBeginCommandBuffer(self.commandBuffers[frameIndex], &c.VkCommandBufferBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .pNext = null,
             .flags = 0,
@@ -4326,7 +4426,7 @@ pub const Renderer = struct {
             c.VK_SUBPASS_CONTENTS_INLINE,
         );
 
-        c.vkCmdSetViewport(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkViewport{c.VkViewport{
+        c.vkCmdSetViewport(self.commandBuffers[frameIndex], 0, 1, &[_]c.VkViewport{c.VkViewport{
             .x = 0.0,
             .y = 0.0,
             .width = @floatFromInt(self.swapchain.extent.width),
@@ -4339,9 +4439,9 @@ pub const Renderer = struct {
             .offset = c.VkOffset2D{ .x = 0, .y = 0 },
             .extent = self.swapchain.extent,
         };
-        c.vkCmdSetScissor(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight], 0, 1, &[_]c.VkRect2D{fullViewportScissor});
+        c.vkCmdSetScissor(self.commandBuffers[frameIndex], 0, 1, &[_]c.VkRect2D{fullViewportScissor});
 
-        // Simple draw loop (commands already sorted by buildDrawCommands)
+        // Simple draw loop (commands already sorted and merged by buildDrawCommands / mergeAdjacentDrawCommands)
         var lastClipRect: ?Vec4 = null;
         for (drawCommands) |cmd| {
             // Set scissor when clip rect changes
@@ -4377,9 +4477,9 @@ pub const Renderer = struct {
         }
 
         c.vkCmdEndRenderPass(self.commandBuffers[frameIndex]);
-        try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight]));
+        try ensureNoError(c.vkEndCommandBuffer(self.commandBuffers[frameIndex]));
 
-        const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[self.framesRenderedInSwapchain % maxFramesInFlight]};
+        const waitSemaphores: []const c.VkSemaphore = &.{self.imageAvailableSemaphores[frameIndex]};
         const renderFinishedSemaphores = self.renderFinishedSemaphores;
         const signalSemaphores: []const c.VkSemaphore = &.{renderFinishedSemaphores[swapchainImageIndex]};
         const waitStages: []const c.VkPipelineStageFlags = &.{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -4387,7 +4487,7 @@ pub const Renderer = struct {
         try ensureNoError(c.vkResetFences(
             self.logicalDevice,
             1,
-            &self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight],
+            &self.inFlightFences[frameIndex],
         ));
         try ensureNoError(c.vkQueueSubmit(
             self.graphicsQueue,
@@ -4399,11 +4499,11 @@ pub const Renderer = struct {
                 .pWaitSemaphores = waitSemaphores.ptr,
                 .pWaitDstStageMask = waitStages.ptr,
                 .commandBufferCount = 1,
-                .pCommandBuffers = &self.commandBuffers[self.framesRenderedInSwapchain % maxFramesInFlight],
+                .pCommandBuffers = &self.commandBuffers[frameIndex],
                 .signalSemaphoreCount = @intCast(signalSemaphores.len),
                 .pSignalSemaphores = signalSemaphores.ptr,
             },
-            self.inFlightFences[self.framesRenderedInSwapchain % maxFramesInFlight],
+            self.inFlightFences[frameIndex],
         ));
         self.executingFrame = false;
 

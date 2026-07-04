@@ -5978,7 +5978,7 @@ test "buildDrawCommands emits one element command per visible node" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // Two elements, two commands
         try std.testing.expectEqual(@as(usize, 2), cmds.len);
@@ -6006,7 +6006,7 @@ test "buildDrawCommands emits element + text for a text node" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // Parent element + text element + text glyphs = 3 commands
         try std.testing.expectEqual(@as(usize, 3), cmds.len);
@@ -6053,7 +6053,7 @@ test "buildDrawCommands sorts by z with shadow before element before text" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // Commands must be monotonically non-decreasing in (z, kind)
         for (cmds[1..], 0..) |cmd, i| {
@@ -6086,13 +6086,13 @@ test "buildDrawCommands culls nodes outside viewport" {
         const tree = try forbear.layout();
 
         // Tiny viewport at origin — node at (0,0) still overlaps
-        const cmdsInside = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 50, 50 });
+        const cmdsInside = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 50, 50 }, .{});
         try std.testing.expectEqual(@as(usize, 1), cmdsInside.len);
 
         // A 100x100 node at (0,0) is outside a viewport that starts at (200,0)
         // We can simulate this by passing a viewport smaller than the node's position.
         // The node is at x=0, y=0; a viewport of size 0x0 excludes it.
-        const cmdsOutside = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 0, 0 });
+        const cmdsOutside = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 0, 0 }, .{});
         try std.testing.expectEqual(@as(usize, 0), cmdsOutside.len);
     });
 }
@@ -6123,7 +6123,7 @@ test "buildDrawCommands propagates clipRect from layout" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         try std.testing.expectEqual(@as(usize, 2), cmds.len);
 
@@ -6174,7 +6174,7 @@ test "buildDrawCommands respects explicit zIndex overrides" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // The last command should be the one with zIndex=100
         try std.testing.expectEqual(@as(u16, 100), cmds[cmds.len - 1].z);
@@ -6216,7 +6216,7 @@ test "buildDrawCommands: nested children have z greater than parent" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         try std.testing.expectEqual(@as(usize, 3), cmds.len);
         // Commands are sorted by z, so nesting order is preserved
@@ -6254,7 +6254,7 @@ test "buildDrawCommands: siblings at same z remain in document order" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         try std.testing.expectEqual(@as(usize, 4), cmds.len);
         // Siblings share a z and, since std.mem.sort is stable, keep doc order
@@ -6297,7 +6297,7 @@ test "buildDrawCommands: elementIndex is unique and covers 0..N-1" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // Collect element indices
         var seen = [_]bool{false} ** 4;
@@ -6364,7 +6364,7 @@ test "buildDrawCommands: shadowIndex is sequential starting at 0" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // Gather shadow commands in order
         var shadowStarts = std.ArrayList(usize).empty;
@@ -6404,7 +6404,7 @@ test "buildDrawCommands: text command range matches glyph count" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // Gather text commands in order
         var glyphStart: usize = 0;
@@ -6463,7 +6463,7 @@ test "buildDrawCommands: total count equals elements + shadows + nonEmptyText" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // Count kinds
         var elementCount: usize = 0;
@@ -6507,7 +6507,7 @@ test "buildDrawCommands: empty text does not emit a text command" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         for (cmds) |cmd| {
             try std.testing.expect(cmd.kind != .text);
@@ -6540,7 +6540,7 @@ test "buildDrawCommands: each visible node produces exactly one element command"
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         var elementCount: usize = 0;
         for (cmds) |cmd| {
@@ -6588,7 +6588,7 @@ test "buildDrawCommands: nested clips intersect correctly" {
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // Find commands by z-level
         var outerClip: ?@Vector(4, f32) = null;
@@ -6652,7 +6652,7 @@ test "buildDrawCommands: three-level clip stack produces monotonically tighter b
         });
 
         const tree = try forbear.layout();
-        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 });
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
 
         // 4 elements total
         try std.testing.expectEqual(@as(usize, 4), cmds.len);
@@ -6672,6 +6672,128 @@ test "buildDrawCommands: three-level clip stack produces monotonically tighter b
         try std.testing.expect(clips[2] == null);
         // Level 3 (500x500): overflows 100x100 → clipped to parent's bounds
         try std.testing.expectEqual(@Vector(4, f32){ 0, 0, 100, 100 }, clips[3].?);
+    });
+}
+
+test "buildDrawCommands: an atlas-reset skip shrinks the text command range instead of desyncing it" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{
+            .style = .{ .width = .{ .fixed = 100 }, .height = .{ .fixed = 20 } },
+        })({
+            forbear.text("hello");
+        });
+
+        const tree = try forbear.layout();
+        const fullGlyphCount = tree.at(1).glyphs.?.slice.len;
+        try std.testing.expect(fullGlyphCount > 1);
+
+        // Only 1 of fullGlyphCount actually got written before the atlas filled up.
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{
+            .glyphsWritten = &.{1},
+        });
+
+        var textCmd: ?forbear.Graphics.DrawCommand = null;
+        for (cmds) |cmd| {
+            if (cmd.kind == .text) textCmd = cmd;
+        }
+        try std.testing.expect(textCmd != null);
+        try std.testing.expectEqual(@as(usize, 0), textCmd.?.start);
+        try std.testing.expectEqual(@as(usize, 0), textCmd.?.end);
+    });
+}
+
+// mergeAdjacentDrawCommands tests
+
+fn testDrawCommand(kind: forbear.Graphics.DrawKind, start: usize, end: usize, z: u16) forbear.Graphics.DrawCommand {
+    return .{
+        .kind = kind,
+        .blendMode = .normal,
+        .start = start,
+        .end = end,
+        .clipRect = null,
+        .z = z,
+    };
+}
+
+test "mergeAdjacentDrawCommands merges a contiguous run of the same kind into one instanced command" {
+    var commands = [_]forbear.Graphics.DrawCommand{
+        testDrawCommand(.element, 0, 0, 0),
+        testDrawCommand(.element, 1, 1, 0),
+        testDrawCommand(.element, 2, 2, 0),
+    };
+    const merged = forbear.Graphics.mergeAdjacentDrawCommands(&commands);
+
+    try std.testing.expectEqual(@as(usize, 1), merged.len);
+    try std.testing.expectEqual(@as(usize, 0), merged[0].start);
+    try std.testing.expectEqual(@as(usize, 2), merged[0].end);
+}
+
+test "mergeAdjacentDrawCommands keeps commands of different kinds separate" {
+    var commands = [_]forbear.Graphics.DrawCommand{
+        testDrawCommand(.shadow, 0, 0, 0),
+        testDrawCommand(.element, 0, 0, 0),
+        testDrawCommand(.element, 1, 1, 0),
+    };
+    const merged = forbear.Graphics.mergeAdjacentDrawCommands(&commands);
+
+    try std.testing.expectEqual(@as(usize, 2), merged.len);
+    try std.testing.expectEqual(forbear.Graphics.DrawKind.shadow, merged[0].kind);
+    try std.testing.expectEqual(forbear.Graphics.DrawKind.element, merged[1].kind);
+    try std.testing.expectEqual(@as(usize, 0), merged[1].start);
+    try std.testing.expectEqual(@as(usize, 1), merged[1].end);
+}
+
+test "mergeAdjacentDrawCommands does not merge across a non-contiguous interval gap" {
+    var commands = [_]forbear.Graphics.DrawCommand{
+        testDrawCommand(.element, 0, 0, 0),
+        testDrawCommand(.element, 2, 2, 0),
+    };
+    const merged = forbear.Graphics.mergeAdjacentDrawCommands(&commands);
+
+    try std.testing.expectEqual(@as(usize, 2), merged.len);
+}
+
+test "mergeAdjacentDrawCommands does not merge across a clip rect change" {
+    var commands = [_]forbear.Graphics.DrawCommand{
+        .{ .kind = .element, .blendMode = .normal, .start = 0, .end = 0, .clipRect = null, .z = 0 },
+        .{ .kind = .element, .blendMode = .normal, .start = 1, .end = 1, .clipRect = .{ 0, 0, 10, 10 }, .z = 0 },
+    };
+    const merged = forbear.Graphics.mergeAdjacentDrawCommands(&commands);
+
+    try std.testing.expectEqual(@as(usize, 2), merged.len);
+}
+
+test "mergeAdjacentDrawCommands on real layout output collapses sibling elements sharing a z-level" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        forbear.element(.{ .style = .{ .direction = .horizontal } })({
+            for (0..5) |_| {
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 10 }, .height = .{ .fixed = 10 } },
+                })({});
+            }
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
+        const merged = forbear.Graphics.mergeAdjacentDrawCommands(cmds);
+
+        // row + 5 children = 6 commands, but the 5 same-z children merge into one.
+        try std.testing.expectEqual(@as(usize, 6), cmds.len);
+        try std.testing.expectEqual(@as(usize, 2), merged.len);
     });
 }
 
