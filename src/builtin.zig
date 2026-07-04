@@ -499,9 +499,9 @@ fn nextWordBeginning(text: []const u8, from: usize) usize {
 /// view by moving the scroll offset as it travels.
 pub fn useInput(
     initialInputState: struct {
-        cursor: usize,
-        selection: [2]usize,
-        text: []const u8,
+        cursor: usize = 0,
+        selection: [2]usize = .{0,0},
+        text: []const u8 = &.{},
     },
     scrollingState: *ScrollingState,
 ) *InputState {
