@@ -143,6 +143,15 @@ pub const ScrollAxis = enum(u32) {
     horizontal = 1,
 };
 
+/// Where the caret sits in surface coordinates — the IME docks its candidate
+/// window against this rectangle.
+pub const TextInputArea = struct {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+};
+
 pub const EventQueue = struct {
     buffer: [256]Event,
     head: std.atomic.Value(usize),
@@ -204,6 +213,9 @@ pub const Event = union(enum) {
     /// release, modifiers included, like a DOM `keyup`. Never repeats.
     keysReleased: Keys,
     input: Input,
+    /// One IME batch, applied atomically: the committed text of the same
+    /// batch rides separate `.input` events pushed just before this one.
+    composition: Composition,
 
     pub const PointerEnter = struct {
         serial: u32,
@@ -231,6 +243,15 @@ pub const Event = union(enum) {
     pub const Scroll = struct {
         axis: ScrollAxis,
         offset: f32,
+    };
+
+    pub const Composition = struct {
+        preeditBuffer: [120]u8,
+        preeditLength: usize,
+        /// Caret range inside the preedit, in bytes.
+        cursor: [2]usize,
+        deleteBefore: usize,
+        deleteAfter: usize,
     };
 
     pub const Input = struct {
@@ -272,6 +293,9 @@ pub const Window = switch (builtin.os.tag) {
         xkbContext: *c.xkb_context,
         xkbKeymap: ?*c.xkb_keymap,
         xkbState: ?*c.xkb_state,
+        /// Dead-key composition (´ + a = á), driven client-side from the
+        /// locale's Compose table; null when the locale has none.
+        xkbComposeState: ?*c.xkb_compose_state,
         repeatInfo: struct {
             /// the rate of repeating keys in characters per second
             rate: i32,
@@ -285,6 +309,20 @@ pub const Window = switch (builtin.os.tag) {
 
         wlDataDeviceManager: ?*c.wl_data_device_manager,
         wlDataDevice: ?*c.wl_data_device,
+
+        zwpTextInputManager: ?*c.zwp_text_input_manager_v3,
+        zwpTextInput: ?*c.zwp_text_input_v3,
+        /// One IME batch accumulated between text-input events until `done`
+        /// applies it atomically. Wayland event thread only.
+        textInputPending: TextInputPending,
+        /// Guards the fields below: `textInputWanted`/`textInputArea` are
+        /// written by the render thread (`setTextInput`), `textInputFocused`
+        /// by the Wayland thread's enter/leave — whichever flips last sends
+        /// the enable/disable requests (libwayland requests are thread-safe).
+        textInputMutex: std.Io.Mutex,
+        textInputWanted: bool,
+        textInputFocused: bool,
+        textInputArea: TextInputArea,
         /// Guards every clipboard field below: the `dataSource*`/`dataDevice*`
         /// listeners run on the Wayland event thread while
         /// `setClipboardText`/`getClipboardText` run on the render thread —
@@ -574,6 +612,10 @@ pub const Window = switch (builtin.os.tag) {
                 &c.wl_data_device_manager_interface,
                 3,
             );
+            const textInputManager = BindingInfo(c.zwp_text_input_manager_v3).new(
+                &c.zwp_text_input_manager_v3_interface,
+                1,
+            );
 
             const interfaceName: []const u8 = interfacePtr[0..std.mem.len(interfacePtr)];
 
@@ -608,6 +650,8 @@ pub const Window = switch (builtin.os.tag) {
                 window.xdgDecorationManager = decorationManager.bind(registry, name, version);
             } else if (dataDeviceManager.is(interfaceName)) {
                 window.wlDataDeviceManager = dataDeviceManager.bind(registry, name, version);
+            } else if (textInputManager.is(interfaceName)) {
+                window.zwpTextInputManager = textInputManager.bind(registry, name, version);
             }
         }
 
@@ -1087,13 +1131,40 @@ pub const Window = switch (builtin.os.tag) {
                 std.debug.assert(window.xkbState != null);
 
                 var characterBuffer: [7:0]u8 = undefined;
-                const characterLength: usize = @intCast(c.xkb_state_key_get_utf8(
+                var characterLength: usize = @intCast(c.xkb_state_key_get_utf8(
                     window.xkbState,
                     xkbKeycode,
                     &characterBuffer,
                     characterBuffer.len,
                 ));
                 std.debug.assert(characterLength <= characterBuffer.len);
+
+                // Dead-key accents never reach any IME: xkb composes them
+                // client-side. Feed the effective (shift-aware) keysym; while
+                // a sequence is pending the key types nothing, and the key
+                // that completes it types the composed character instead of
+                // its own.
+                if (window.xkbComposeState) |composeState| {
+                    const keysymEffective = c.xkb_state_key_get_one_sym(window.xkbState, xkbKeycode);
+                    if (c.xkb_compose_state_feed(composeState, keysymEffective) == c.XKB_COMPOSE_FEED_ACCEPTED) {
+                        switch (c.xkb_compose_state_get_status(composeState)) {
+                            c.XKB_COMPOSE_COMPOSING => characterLength = 0,
+                            c.XKB_COMPOSE_CANCELLED => {
+                                characterLength = 0;
+                                c.xkb_compose_state_reset(composeState);
+                            },
+                            c.XKB_COMPOSE_COMPOSED => {
+                                characterLength = @min(@as(usize, @intCast(c.xkb_compose_state_get_utf8(
+                                    composeState,
+                                    &characterBuffer,
+                                    characterBuffer.len,
+                                ))), characterBuffer.len);
+                                c.xkb_compose_state_reset(composeState);
+                            },
+                            else => {},
+                        }
+                    }
+                }
                 // Control codepoints (C0, DEL, C1) aren't text; route them through
                 // `Keys` only. Decode the one character and range-check it.
                 const codepoint = if (characterLength > 0) std.unicode.utf8Decode(characterBuffer[0..characterLength]) catch null else null;
@@ -1264,6 +1335,16 @@ pub const Window = switch (builtin.os.tag) {
             window.xkbKeymap = null;
             window.xkbState = null;
 
+            window.xkbComposeState = null;
+            const locale: [*:0]const u8 = std.c.getenv("LC_ALL") orelse std.c.getenv("LC_CTYPE") orelse std.c.getenv("LANG") orelse "C";
+            if (c.xkb_compose_table_new_from_locale(window.xkbContext, locale, c.XKB_COMPOSE_COMPILE_NO_FLAGS)) |composeTable| {
+                // The state holds its own reference to the table.
+                defer c.xkb_compose_table_unref(composeTable);
+                window.xkbComposeState = c.xkb_compose_state_new(composeTable, c.XKB_COMPOSE_STATE_NO_FLAGS);
+            } else {
+                std.log.warn("no compose table for locale {s}; dead keys won't compose accents", .{std.mem.span(locale)});
+            }
+
             window.keysHeld = .{};
             window.pendingPressed = .{};
             window.pendingReleased = .{};
@@ -1288,6 +1369,13 @@ pub const Window = switch (builtin.os.tag) {
             window.wlDataDevice = null;
             window.wpFractionalScale = null;
             window.wpViewport = null;
+            window.zwpTextInputManager = null;
+            window.zwpTextInput = null;
+            window.textInputPending = .empty;
+            window.textInputMutex = .init;
+            window.textInputWanted = false;
+            window.textInputFocused = false;
+            window.textInputArea = .{ .x = 0, .y = 0, .width = 1, .height = 1 };
 
             window.wlDisplay = c.wl_display_connect(
                 null,
@@ -1353,6 +1441,14 @@ pub const Window = switch (builtin.os.tag) {
                     window.wlSeat,
                 ) orelse return error.UnableToGetDataDevice;
                 _ = c.wl_data_device_add_listener(window.wlDataDevice, &wlDataDeviceListener, @ptrCast(@alignCast(window)));
+            }
+
+            if (window.zwpTextInputManager) |manager| {
+                window.zwpTextInput = c.zwp_text_input_manager_v3_get_text_input(
+                    manager,
+                    window.wlSeat,
+                ) orelse return error.UnableToGetTextInput;
+                _ = c.zwp_text_input_v3_add_listener(window.zwpTextInput, &textInputListener, @ptrCast(@alignCast(window)));
             }
 
             c.wl_surface_commit(window.wlSurface);
@@ -1555,6 +1651,198 @@ pub const Window = switch (builtin.os.tag) {
             .selection = dataDeviceSelection,
         };
 
+        const TextInputPending = struct {
+            preeditBuffer: [120]u8,
+            preeditLength: usize,
+            cursorBegin: i32,
+            cursorEnd: i32,
+            deleteBefore: u32,
+            deleteAfter: u32,
+            commitBuffer: [120]u8,
+            commitLength: usize,
+
+            const empty: @This() = .{
+                .preeditBuffer = undefined,
+                .preeditLength = 0,
+                .cursorBegin = 0,
+                .cursorEnd = 0,
+                .deleteBefore = 0,
+                .deleteAfter = 0,
+                .commitBuffer = undefined,
+                .commitLength = 0,
+            };
+        };
+
+        /// Copy a text-input string into `buffer`, truncating at a UTF-8
+        /// boundary when it doesn't fit — the IME keeps composing fine, only
+        /// what we relay is clipped.
+        fn copyTextInputString(textPtr: [*c]const u8, buffer: []u8) usize {
+            if (textPtr == null) return 0;
+            const full = std.mem.span(@as([*:0]const u8, @ptrCast(textPtr)));
+            var length = @min(full.len, buffer.len);
+            if (length < full.len) {
+                std.log.warn("text-input string of {} bytes truncated to {}", .{ full.len, buffer.len });
+                while (length > 0 and full[length] & 0xC0 == 0x80) length -= 1;
+            }
+            @memcpy(buffer[0..length], full[0..length]);
+            return length;
+        }
+
+        fn textInputEnter(data: ?*anyopaque, textInput: ?*c.zwp_text_input_v3, surface: ?*c.wl_surface) callconv(.c) void {
+            _ = surface;
+            const window: *Self = @ptrCast(@alignCast(data));
+
+            window.textInputMutex.lockUncancelable(window.io);
+            defer window.textInputMutex.unlock(window.io);
+            window.textInputFocused = true;
+            // Enable resets on every focus change, so re-request what the
+            // app last declared it wanted.
+            if (window.textInputWanted) {
+                c.zwp_text_input_v3_enable(textInput);
+                const area = window.textInputArea;
+                c.zwp_text_input_v3_set_cursor_rectangle(textInput, area.x, area.y, area.width, area.height);
+                c.zwp_text_input_v3_commit(textInput);
+            }
+        }
+
+        fn textInputLeave(data: ?*anyopaque, textInput: ?*c.zwp_text_input_v3, surface: ?*c.wl_surface) callconv(.c) void {
+            _ = textInput;
+            _ = surface;
+            const window: *Self = @ptrCast(@alignCast(data));
+
+            window.textInputMutex.lockUncancelable(window.io);
+            defer window.textInputMutex.unlock(window.io);
+            // The compositor deactivates the text input on leave by itself.
+            window.textInputFocused = false;
+            window.textInputPending = .empty;
+        }
+
+        fn textInputPreeditString(
+            data: ?*anyopaque,
+            textInput: ?*c.zwp_text_input_v3,
+            textPtr: [*c]const u8,
+            cursorBegin: i32,
+            cursorEnd: i32,
+        ) callconv(.c) void {
+            _ = textInput;
+            const window: *Self = @ptrCast(@alignCast(data));
+            window.textInputPending.preeditLength = copyTextInputString(textPtr, &window.textInputPending.preeditBuffer);
+            window.textInputPending.cursorBegin = cursorBegin;
+            window.textInputPending.cursorEnd = cursorEnd;
+        }
+
+        fn textInputCommitString(data: ?*anyopaque, textInput: ?*c.zwp_text_input_v3, textPtr: [*c]const u8) callconv(.c) void {
+            _ = textInput;
+            const window: *Self = @ptrCast(@alignCast(data));
+            window.textInputPending.commitLength = copyTextInputString(textPtr, &window.textInputPending.commitBuffer);
+        }
+
+        fn textInputDeleteSurroundingText(
+            data: ?*anyopaque,
+            textInput: ?*c.zwp_text_input_v3,
+            beforeLength: u32,
+            afterLength: u32,
+        ) callconv(.c) void {
+            _ = textInput;
+            const window: *Self = @ptrCast(@alignCast(data));
+            window.textInputPending.deleteBefore = beforeLength;
+            window.textInputPending.deleteAfter = afterLength;
+        }
+
+        fn textInputDone(data: ?*anyopaque, textInput: ?*c.zwp_text_input_v3, serial: u32) callconv(.c) void {
+            _ = textInput;
+            _ = serial;
+            const window: *Self = @ptrCast(@alignCast(data));
+            const pending = &window.textInputPending;
+
+            // Committed text rides the same channel as typed characters, one
+            // `.input` event per codepoint, so plain-text consumers get IME
+            // text without knowing the IME exists.
+            var index: usize = 0;
+            const commit = pending.commitBuffer[0..pending.commitLength];
+            while (index < commit.len) {
+                const sequenceLength = std.unicode.utf8ByteSequenceLength(commit[index]) catch 1;
+                const end = @min(index + sequenceLength, commit.len);
+                var characterBuffer: [7]u8 = undefined;
+                @memcpy(characterBuffer[0 .. end - index], commit[index..end]);
+                window.eventQueue.push(Event{ .input = .{
+                    .characterBuffer = characterBuffer,
+                    .characterLength = end - index,
+                    .repeats = 1,
+                } });
+                index = end;
+            }
+
+            // A negative preedit cursor means "hide the caret"; land it at
+            // the preedit's end.
+            const cursorBegin: usize = if (pending.cursorBegin < 0)
+                pending.preeditLength
+            else
+                @min(@as(usize, @intCast(pending.cursorBegin)), pending.preeditLength);
+            const cursorEnd: usize = if (pending.cursorEnd < 0)
+                pending.preeditLength
+            else
+                @min(@as(usize, @intCast(pending.cursorEnd)), pending.preeditLength);
+
+            window.eventQueue.push(Event{ .composition = .{
+                .preeditBuffer = pending.preeditBuffer,
+                .preeditLength = pending.preeditLength,
+                .cursor = .{ @min(cursorBegin, cursorEnd), @max(cursorBegin, cursorEnd) },
+                .deleteBefore = pending.deleteBefore,
+                .deleteAfter = pending.deleteAfter,
+            } });
+
+            pending.* = .empty;
+        }
+
+        const textInputListener: c.zwp_text_input_v3_listener = .{
+            .enter = textInputEnter,
+            .leave = textInputLeave,
+            .preedit_string = textInputPreeditString,
+            .commit_string = textInputCommitString,
+            .delete_surrounding_text = textInputDeleteSurroundingText,
+            .done = textInputDone,
+        };
+
+        /// Declares whether the app wants IME input right now and where the
+        /// caret is. Diffed — requests only go out on change — and safe to
+        /// call from the render thread like `setClipboardText`.
+        pub fn setTextInput(self: *Self, request: ?TextInputArea) void {
+            const textInput = self.zwpTextInput orelse return;
+
+            self.textInputMutex.lockUncancelable(self.io);
+            defer self.textInputMutex.unlock(self.io);
+
+            const wanted = request != null;
+            const wantedChanged = wanted != self.textInputWanted;
+            self.textInputWanted = wanted;
+            var areaChanged = false;
+            if (request) |area| {
+                areaChanged = !std.meta.eql(area, self.textInputArea);
+                self.textInputArea = area;
+            }
+            if (!self.textInputFocused) return;
+
+            var dirty = false;
+            if (wantedChanged) {
+                if (wanted) {
+                    c.zwp_text_input_v3_enable(textInput);
+                } else {
+                    c.zwp_text_input_v3_disable(textInput);
+                }
+                dirty = true;
+            }
+            if (wanted and (wantedChanged or areaChanged)) {
+                const area = self.textInputArea;
+                c.zwp_text_input_v3_set_cursor_rectangle(textInput, area.x, area.y, area.width, area.height);
+                dirty = true;
+            }
+            if (dirty) {
+                c.zwp_text_input_v3_commit(textInput);
+                _ = c.wl_display_flush(self.wlDisplay);
+            }
+        }
+
         /// Copies `text` into an `allocator`-owned buffer, since the caller's
         /// slice (typically frame- or scope-arena-backed) won't outlive this call.
         pub fn setClipboardText(self: *Self, text: []const u8) !void {
@@ -1700,6 +1988,9 @@ pub const Window = switch (builtin.os.tag) {
             if (self.wlDataDevice) |dd| c.wl_data_device_release(dd);
             if (self.wlDataDeviceManager) |ddm| c.wl_data_device_manager_destroy(ddm);
 
+            if (self.zwpTextInput) |textInput| c.zwp_text_input_v3_destroy(textInput);
+            if (self.zwpTextInputManager) |manager| c.zwp_text_input_manager_v3_destroy(manager);
+
             c.xdg_toplevel_destroy(self.xdgToplevel);
             c.xdg_surface_destroy(self.xdgSurface);
 
@@ -1719,6 +2010,9 @@ pub const Window = switch (builtin.os.tag) {
 
             c.wl_display_disconnect(self.wlDisplay);
 
+            if (self.xkbComposeState) |composeState| {
+                c.xkb_compose_state_unref(composeState);
+            }
             if (self.xkbState) |xkbState| {
                 c.xkb_state_unref(xkbState);
             }

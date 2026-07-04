@@ -534,6 +534,24 @@ fn isWordSeparator(char: u8) bool {
     return std.mem.indexOfScalar(u8, &wordSeparators, char) != null;
 }
 
+/// One character left of `from`, snapped to a UTF-8 boundary — deleting or
+/// stepping over "é" moves both of its bytes, never leaving the text with a
+/// dangling continuation byte (which the shaper hard-crashes on).
+fn previousCodepointBoundary(text: []const u8, from: usize) usize {
+    var position = from;
+    while (position > 0) {
+        position -= 1;
+        if (text[position] & 0xC0 != 0x80) break;
+    }
+    return position;
+}
+
+fn nextCodepointBoundary(text: []const u8, from: usize) usize {
+    var position = @min(from + 1, text.len);
+    while (position < text.len and text[position] & 0xC0 == 0x80) position += 1;
+    return position;
+}
+
 fn previousWordBeginning(text: []const u8, from: usize) usize {
     var position = from;
     while (position > 0 and isWordSeparator(text[position - 1])) position -= 1;
@@ -712,14 +730,14 @@ pub fn useInput(
                 else if (hasSelection and !modifiersHeld.shift)
                     inputState.selection[0]
                 else
-                    inputState.cursor -| 1
+                    previousCodepointBoundary(text.items, inputState.cursor)
             else if (keysDown.arrowRight)
                 if (modifiersHeld.control)
                     nextWordBeginning(text.items, inputState.cursor)
                 else if (hasSelection and !modifiersHeld.shift)
                     inputState.selection[1]
                 else
-                    @min(inputState.cursor + 1, text.items.len)
+                    nextCodepointBoundary(text.items, inputState.cursor)
             else if (keysDown.home)
                 0
             else if (keysDown.end)
@@ -742,13 +760,13 @@ pub fn useInput(
                     const start = if (modifiersHeld.control)
                         previousWordBeginning(text.items, inputState.cursor)
                     else
-                        inputState.cursor - 1;
+                        previousCodepointBoundary(text.items, inputState.cursor);
                     splice(inputState, text, arena, start, inputState.cursor, "");
                 } else if (keysDown.delete and inputState.cursor < text.items.len) {
                     const end = if (modifiersHeld.control)
                         nextWordBeginning(text.items, inputState.cursor)
                     else
-                        inputState.cursor + 1;
+                        nextCodepointBoundary(text.items, inputState.cursor);
                     splice(inputState, text, arena, inputState.cursor, end, "");
                 }
             }
@@ -909,6 +927,20 @@ pub fn useInput(
                     .position = Vec2{ measured.width, yOffset } - scrollingState._effectiveOffset,
                     .height = measured.height,
                 };
+
+                // Declare IME interest while focused: the candidate window
+                // docks against the caret. Skipping this on unfocused frames
+                // is what disables the IME.
+                if (measurement) |m| {
+                    forbear.useTextInput(.{
+                        .caretRectangle = .{
+                            m.position[0] + parent.style.borderWidth.x[0] + parent.style.padding.x[0] + inputState.caret.position[0],
+                            m.position[1] + parent.style.borderWidth.y[0] + parent.style.padding.y[0] + inputState.caret.position[1],
+                            1.0,
+                            inputState.caret.height,
+                        },
+                    });
+                }
             }
         }
     }

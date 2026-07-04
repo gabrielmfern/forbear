@@ -40,6 +40,11 @@ fn initTest(allocator: std.mem.Allocator) !void {
     if (@hasField(forbear.Window, "pointerSerial")) {
         testWindow.pointerSerial = null;
     }
+    // `update()` pushes the frame's text-input request; a null proxy makes
+    // that a no-op instead of a read of undefined window state.
+    if (@hasField(forbear.Window, "zwpTextInput")) {
+        testWindow.zwpTextInput = null;
+    }
     const renderer: *forbear.Graphics.Renderer = undefined;
     try forbear.init(allocator, std.testing.io, &testWindow, renderer);
 }
@@ -8529,6 +8534,33 @@ test "useInput: a double press selects everything, pressing again collapses" {
         .secondsSincePrevious = 0.1,
     });
     try std.testing.expectEqual([2]usize{ 7, 7 }, observed.selection);
+}
+
+test "useInput: movement and deletion snap to UTF-8 boundaries" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "café" });
+    try std.testing.expectEqual(@as(usize, 5), observed.cursor);
+
+    // Backspace takes both bytes of "é"; a lone continuation byte would
+    // crash the shaper.
+    try inputFrame(arena, &observed, .{ .keys = .{ .backspace = true } });
+    try std.testing.expectEqualStrings("caf", observed.text());
+
+    try inputFrame(arena, &observed, .{ .typed = "é" });
+    try inputFrame(arena, &observed, .{ .keys = .{ .arrowLeft = true } });
+    try std.testing.expectEqual(@as(usize, 3), observed.cursor);
+    try inputFrame(arena, &observed, .{ .keys = .{ .delete = true } });
+    try std.testing.expectEqualStrings("caf", observed.text());
+    try inputFrame(arena, &observed, .{ .keys = .{ .arrowRight = true } });
+    try std.testing.expectEqual(@as(usize, 3), observed.cursor);
 }
 
 test "useInput: IME preedit is provisional and the commit is one undo step" {
