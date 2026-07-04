@@ -640,6 +640,26 @@ pub fn useInput(
         std.debug.assert(inputState.selection[0] <= text.items.len);
         std.debug.assert(inputState.selection[1] <= text.items.len);
 
+        // While composing, the preedit sits provisionally in the buffer. Pop
+        // it for the frame so everything below edits committed text — the
+        // stored range can't go stale against a mouse press or a cancelling
+        // backspace — and lay it (or its replacement) back down at the end.
+        var poppedPreedit: ?[]const u8 = null;
+        if (inputState.composition) |range| {
+            poppedPreedit = forbear.useArena().dupe(u8, text.items[range[0]..range[1]]) catch |err| blk: {
+                forbear.handleFrameError(err);
+                break :blk null;
+            };
+            text.replaceRangeAssumeCapacity(range[0], range[1] - range[0], &.{});
+            inputState.cursor = range[0];
+            inputState.selection = .{ range[0], range[0] };
+            inputState.composition = null;
+        }
+        // Editing keys stand down mid-composition, like in a browser: the
+        // backspace that cancels a dead key eats the pending accent, not a
+        // committed character.
+        const composing = poppedPreedit != null;
+
         // A press places the cursor at the nearest character boundary and
         // anchors there; keeping the button held drags a selection out from
         // that anchor, cursor on the moving end.
@@ -724,7 +744,9 @@ pub fn useInput(
             else
                 inputState.selection[0];
 
-            const movedTo: ?usize = if (keysDown.arrowLeft)
+            const movedTo: ?usize = if (composing)
+                null
+            else if (keysDown.arrowLeft)
                 if (modifiersHeld.control)
                     previousWordBeginning(text.items, inputState.cursor)
                 else if (hasSelection and !modifiersHeld.shift)
@@ -753,7 +775,7 @@ pub fn useInput(
                     .{ newCursor, newCursor };
             }
 
-            if (keysDown.backspace or keysDown.delete) {
+            if (!composing and (keysDown.backspace or keysDown.delete)) {
                 if (inputState.selection[0] != inputState.selection[1]) {
                     splice(inputState, text, arena, inputState.selection[0], inputState.selection[1], "");
                 } else if (keysDown.backspace and inputState.cursor > 0) {
@@ -771,19 +793,19 @@ pub fn useInput(
                 }
             }
 
-            if (modifiersHeld.control and keysDown.a) {
+            if (!composing and modifiersHeld.control and keysDown.a) {
                 inputState.cursor = text.items.len;
                 inputState.selection = .{ 0, text.items.len };
             }
 
-            if (modifiersHeld.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
+            if (!composing and modifiersHeld.control and (keysDown.c or keysDown.x) and inputState.selection[0] != inputState.selection[1]) {
                 forbear.setClipboardText(text.items[inputState.selection[0]..inputState.selection[1]]);
                 if (keysDown.x) {
                     splice(inputState, text, arena, inputState.selection[0], inputState.selection[1], "");
                 }
             }
 
-            if (modifiersHeld.control and keysDown.v) {
+            if (!composing and modifiersHeld.control and keysDown.v) {
                 if (forbear.getClipboardText()) |pasted| {
                     const range = if (inputState.selection[0] != inputState.selection[1])
                         inputState.selection
@@ -793,7 +815,7 @@ pub fn useInput(
                 }
             }
 
-            if (modifiersHeld.control and keysDown.z and !modifiersHeld.shift) {
+            if (!composing and modifiersHeld.control and keysDown.z and !modifiersHeld.shift) {
                 if (inputState.undoStack.pop()) |edit| undo: {
                     text.replaceRange(arena, edit.start, edit.inserted.len, edit.removed) catch |err| {
                         forbear.handleFrameError(err);
@@ -805,7 +827,7 @@ pub fn useInput(
                 }
             }
 
-            if ((modifiersHeld.control and keysDown.z and modifiersHeld.shift) or (modifiersHeld.control and keysDown.y)) {
+            if (!composing and ((modifiersHeld.control and keysDown.z and modifiersHeld.shift) or (modifiersHeld.control and keysDown.y))) {
                 if (inputState.redoStack.pop()) |edit| redo: {
                     text.replaceRange(arena, edit.start, edit.removed.len, edit.inserted) catch |err| {
                         forbear.handleFrameError(err);
@@ -818,19 +840,10 @@ pub fn useInput(
             }
 
             // An IME batch applies in protocol order around the committed
-            // text: drop the previous preedit, apply the batch's deletions
-            // of committed text, let the commit land through `onInput`
-            // below, then lay down the new preedit after it.
+            // text: the previous preedit is already popped, so apply the
+            // batch's deletions of committed text, let the commit land
+            // through `onInput` below, then lay down the new preedit.
             const compositionEvent = forbear.onComposition();
-            if (compositionEvent != null) {
-                if (inputState.composition) |range| {
-                    // Provisional text comes straight out, invisible to undo.
-                    text.replaceRangeAssumeCapacity(range[0], range[1] - range[0], &.{});
-                    inputState.cursor = range[0];
-                    inputState.selection = .{ range[0], range[0] };
-                    inputState.composition = null;
-                }
-            }
             if (compositionEvent) |c| {
                 if (c.deleteBefore > 0 or c.deleteAfter > 0) {
                     splice(
@@ -859,21 +872,29 @@ pub fn useInput(
                 }
             }
 
-            if (compositionEvent) |c| {
-                if (c.preedit.len > 0) preedit: {
-                    const start = inputState.cursor;
-                    // Provisional: inserted directly so undo never sees it.
-                    text.insertSlice(arena, start, c.preedit) catch |err| {
-                        forbear.handleFrameError(err);
-                        break :preedit;
-                    };
-                    inputState.composition = .{ start, start + c.preedit.len };
-                    inputState.selection = .{
-                        start + @min(c.cursor[0], c.preedit.len),
-                        start + @min(c.cursor[1], c.preedit.len),
-                    };
-                    inputState.cursor = inputState.selection[1];
-                }
+            const newPreedit: []const u8 = if (compositionEvent) |c|
+                c.preedit
+            else
+                // No batch this frame: the popped preedit goes back down
+                // unchanged at the (possibly moved) cursor.
+                poppedPreedit orelse "";
+            if (newPreedit.len > 0) preedit: {
+                const start = inputState.cursor;
+                // Provisional: inserted directly so undo never sees it.
+                text.insertSlice(arena, start, newPreedit) catch |err| {
+                    forbear.handleFrameError(err);
+                    break :preedit;
+                };
+                inputState.composition = .{ start, start + newPreedit.len };
+                const cursorRange: [2]usize = if (compositionEvent) |c|
+                    c.cursor
+                else
+                    .{ newPreedit.len, newPreedit.len };
+                inputState.selection = .{
+                    start + @min(cursorRange[0], newPreedit.len),
+                    start + @min(cursorRange[1], newPreedit.len),
+                };
+                inputState.cursor = inputState.selection[1];
             }
 
             if (forbear.getParentNode()) |parent| caret: {
