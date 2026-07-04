@@ -199,6 +199,53 @@ pub const EventQueue = struct {
     }
 };
 
+pub const KeyboardState = struct {
+    held: Keys = .{},
+    pendingPressed: Keys = .{},
+    pendingReleased: Keys = .{},
+
+    pub fn keyDown(self: *@This(), mapped: Keys) void {
+        self.pendingPressed = self.pendingPressed.with(mapped);
+        self.held = self.held.with(mapped);
+    }
+
+    pub fn keyUp(self: *@This(), mapped: Keys) void {
+        self.pendingReleased = self.pendingReleased.with(mapped);
+        self.held = self.held.without(mapped);
+    }
+
+    pub fn setHeldModifiers(self: *@This(), newModifiers: Keys) void {
+        const oldModifiers: Keys = .{
+            .shift = self.held.shift,
+            .control = self.held.control,
+            .alt = self.held.alt,
+            .super = self.held.super,
+        };
+        self.pendingReleased = self.pendingReleased.with(oldModifiers.without(newModifiers));
+        self.held.shift = newModifiers.shift;
+        self.held.control = newModifiers.control;
+        self.held.alt = newModifiers.alt;
+        self.held.super = newModifiers.super;
+    }
+
+    pub fn releaseAll(self: *@This()) void {
+        self.pendingReleased = self.pendingReleased.with(self.held);
+        self.held = .{};
+    }
+
+    pub fn flush(self: *@This(), queue: *EventQueue) void {
+        const keys = self.pendingPressed.with(self.held.modifiers());
+        if (!keys.isEmpty()) {
+            queue.push(Event{ .keys = keys });
+            self.pendingPressed = .{};
+        }
+        if (!self.pendingReleased.isEmpty()) {
+            queue.push(Event{ .keysReleased = self.pendingReleased });
+            self.pendingReleased = .{};
+        }
+    }
+};
+
 pub const Event = union(enum) {
     pointerEnter: PointerEnter,
     pointerLeave: PointerLeave,
@@ -333,7 +380,7 @@ pub const Window = switch (builtin.os.tag) {
         /// Guards every clipboard field below: the `dataSource*`/`dataDevice*`
         /// listeners run on the Wayland event thread while
         /// `setClipboardText`/`getClipboardText` run on the render thread —
-        /// unlike `keysHeld`, this state isn't funneled through `eventQueue`.
+        /// unlike `keyboard`, this state isn't funneled through `eventQueue`.
         clipboardMutex: std.Io.Mutex,
         /// The data source we created last time we set the clipboard. Lives
         /// until another app takes the selection (`cancelled`) or we replace
@@ -346,11 +393,9 @@ pub const Window = switch (builtin.os.tag) {
         /// selected, or while we're the current owner.
         selectionOffer: ?*c.wl_data_offer,
 
-        /// Keyboard state. The Wayland event thread writes; Forbear's render
-        /// thread drains the event queue at frame start.
-        keysHeld: Keys,
-        pendingPressed: Keys,
-        pendingReleased: Keys,
+        /// The Wayland event thread writes; Forbear's render thread drains
+        /// the event queue at frame start.
+        keyboard: KeyboardState,
         /// The one key currently auto-repeating, per xkb's convention that the
         /// latest repeatable key owns the repeat timer. `handleEvents` re-fires
         /// it into `pendingPressed` (and `.input` when it carries text) at the
@@ -1143,8 +1188,7 @@ pub const Window = switch (builtin.os.tag) {
             // released so keyup consumers see the transition, then clear the
             // held set so modifier levels read as released.
             window.activeRepeat = null;
-            window.pendingReleased = window.pendingReleased.with(window.keysHeld);
-            window.keysHeld = .{};
+            window.keyboard.releaseAll();
         }
 
         fn keyboardHandleKey(
@@ -1248,8 +1292,7 @@ pub const Window = switch (builtin.os.tag) {
                     };
                 }
 
-                window.pendingPressed = window.pendingPressed.with(mapped);
-                window.keysHeld = window.keysHeld.with(mapped);
+                window.keyboard.keyDown(mapped);
             } else if (state == c.WL_KEYBOARD_KEY_STATE_RELEASED) {
                 if (window.activeRepeat) |activeRepeat| {
                     if (activeRepeat.xkbKeycode == xkbKeycode) {
@@ -1257,8 +1300,7 @@ pub const Window = switch (builtin.os.tag) {
                     }
                 }
 
-                window.pendingReleased = window.pendingReleased.with(mapped);
-                window.keysHeld = window.keysHeld.without(mapped);
+                window.keyboard.keyUp(mapped);
             }
         }
 
@@ -1290,22 +1332,7 @@ pub const Window = switch (builtin.os.tag) {
             newMods.alt = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_ALT, effective) > 0;
             newMods.super = c.xkb_state_mod_name_is_active(xkbState, c.XKB_MOD_NAME_LOGO, effective) > 0;
 
-            var oldMods: Keys = .{};
-            oldMods.shift = window.keysHeld.shift;
-            oldMods.control = window.keysHeld.control;
-            oldMods.alt = window.keysHeld.alt;
-            oldMods.super = window.keysHeld.super;
-
-            // Modifiers that flipped off this notification are keyup edges;
-            // press edges aren't needed since modifiers are delivered as
-            // level state on every `Event.keys`. CapsLock isn't diffed here —
-            // it gets its edges from `keyboardHandleKey` like a regular key.
-            window.pendingReleased = window.pendingReleased.with(oldMods.without(newMods));
-
-            window.keysHeld.shift = newMods.shift;
-            window.keysHeld.control = newMods.control;
-            window.keysHeld.alt = newMods.alt;
-            window.keysHeld.super = newMods.super;
+            window.keyboard.setHeldModifiers(newMods);
         }
 
         fn keyboardHandleRepeatInfo(
@@ -1400,9 +1427,7 @@ pub const Window = switch (builtin.os.tag) {
                 std.log.warn("no compose table for locale {s}; dead keys won't compose accents", .{std.mem.span(locale)});
             }
 
-            window.keysHeld = .{};
-            window.pendingPressed = .{};
-            window.pendingReleased = .{};
+            window.keyboard = .{};
             window.activeRepeat = null;
             // Some setups never emit repeat_info; default to typical X11 values.
             window.repeatInfo = .{ .rate = 25, .delay = 600 };
@@ -1976,7 +2001,7 @@ pub const Window = switch (builtin.os.tag) {
                         if (new > 0) {
                             activeRepeat.totalRepeats += new;
                             // Reuses the same pendingPressed queue as a fresh press.
-                            self.pendingPressed = self.pendingPressed.with(activeRepeat.key);
+                            self.keyboard.pendingPressed = self.keyboard.pendingPressed.with(activeRepeat.key);
                             if (activeRepeat.characterLength > 0) {
                                 var input = Event.Input{
                                     .textLength = activeRepeat.characterLength,
@@ -1992,16 +2017,7 @@ pub const Window = switch (builtin.os.tag) {
                     }
                 }
 
-                const keys = self.pendingPressed.with(self.keysHeld.modifiers());
-                if (!keys.isEmpty()) {
-                    self.eventQueue.push(Event{ .keys = keys });
-                    self.pendingPressed = .{};
-                }
-
-                if (!self.pendingReleased.isEmpty()) {
-                    self.eventQueue.push(Event{ .keysReleased = self.pendingReleased });
-                    self.pendingReleased = .{};
-                }
+                self.keyboard.flush(&self.eventQueue);
             }
         }
 
@@ -2084,13 +2100,11 @@ pub const Window = switch (builtin.os.tag) {
         running: bool,
         dpi: [2]u32,
 
-        /// Keyboard state. `wndProc` runs synchronously inside `DispatchMessageW`
-        /// on the event thread, so it shares a thread with `handleEvents` and needs
-        /// no lock; `handleEvents` drains these into `eventQueue` each iteration so
+        /// `wndProc` runs synchronously inside `DispatchMessageW` on the event
+        /// thread, so it shares a thread with `handleEvents` and needs no
+        /// lock; `handleEvents` drains it into `eventQueue` each iteration so
         /// the render thread only ever observes pushed events.
-        keysHeld: Keys = .{},
-        pendingPressed: Keys = .{},
-        pendingReleased: Keys = .{},
+        keyboard: KeyboardState = .{},
         /// A WM_CHAR carrying a UTF-16 high surrogate is held here until its paired
         /// low-surrogate WM_CHAR arrives, so astral-plane codepoints survive.
         pendingHighSurrogate: ?u16 = null,
@@ -2201,7 +2215,7 @@ pub const Window = switch (builtin.os.tag) {
         }
 
         /// Samples the OS's effective modifier state via `GetKeyState` into
-        /// `self.keysHeld`; modifiers that flipped off become keyup edges.
+        /// `self.keyboard`; modifiers that flipped off become keyup edges.
         fn refreshModifiersFromOS(self: *Self) void {
             const down = struct {
                 fn f(vk: c_int) bool {
@@ -2217,18 +2231,7 @@ pub const Window = switch (builtin.os.tag) {
             // No combined "Windows key" VK — OR the two sides explicitly.
             current.super = down(VK_LWIN) or down(VK_RWIN);
 
-            var oldMods: Keys = .{};
-            oldMods.shift = self.keysHeld.shift;
-            oldMods.control = self.keysHeld.control;
-            oldMods.alt = self.keysHeld.alt;
-            oldMods.super = self.keysHeld.super;
-
-            self.pendingReleased = self.pendingReleased.with(oldMods.without(current));
-
-            self.keysHeld.shift = current.shift;
-            self.keysHeld.control = current.control;
-            self.keysHeld.alt = current.alt;
-            self.keysHeld.super = current.super;
+            self.keyboard.setHeldModifiers(current);
         }
 
         pub fn init(
@@ -2251,9 +2254,7 @@ pub const Window = switch (builtin.os.tag) {
             window.running = true;
             window.eventQueue = .empty;
 
-            window.keysHeld = .{};
-            window.pendingPressed = .{};
-            window.pendingReleased = .{};
+            window.keyboard = .{};
             window.pendingHighSurrogate = null;
             window.deadCharPending = false;
             window.eventQueue = .empty;
@@ -2535,16 +2536,14 @@ pub const Window = switch (builtin.os.tag) {
                         // 0..15) and scan code (bits 16..23) of lParam are
                         // intentionally ignored.
                         const key = virtualKeyToKeys(wParam);
-                        self.pendingPressed = self.pendingPressed.with(key);
-                        self.keysHeld = self.keysHeld.with(key);
+                        self.keyboard.keyDown(key);
                         refreshModifiersFromOS(self);
                     }
                 },
                 WM_KEYUP => {
                     if (window) |self| {
                         const key = virtualKeyToKeys(wParam);
-                        self.pendingReleased = self.pendingReleased.with(key);
-                        self.keysHeld = self.keysHeld.without(key);
+                        self.keyboard.keyUp(key);
                         refreshModifiersFromOS(self);
                     }
                 },
@@ -2790,16 +2789,7 @@ pub const Window = switch (builtin.os.tag) {
 
                 // Mirror the keyboard state accumulated by `wndProc` into the
                 // queue, matching the Linux backend's per-iteration snapshot.
-                const keys = self.pendingPressed.with(self.keysHeld.modifiers());
-                if (!keys.isEmpty()) {
-                    self.eventQueue.push(Event{ .keys = keys });
-                    self.pendingPressed = .{};
-                }
-
-                if (!self.pendingReleased.isEmpty()) {
-                    self.eventQueue.push(Event{ .keysReleased = self.pendingReleased });
-                    self.pendingReleased = .{};
-                }
+                self.keyboard.flush(&self.eventQueue);
             }
         }
 
