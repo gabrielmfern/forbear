@@ -1507,7 +1507,7 @@ pub noinline fn text(content: []const u8) void {
     };
 }
 
-const ShapedRuns = struct {
+pub const ShapedRuns = struct {
     glyphs: []LayoutGlyph,
     lineHeight: f32,
     ascent: f32,
@@ -1517,10 +1517,12 @@ const ShapedRuns = struct {
 };
 
 /// Shape `runs` into one shared line box and compute the intrinsic min/max
-/// sizing for `textWrapping`. Glyphs, styles, and scratch live on `arena` (the
-/// frame arena); `minSize`/`maxSize` are only meaningful while `textWrapping`
-/// holds, since each mode accumulates them differently.
-fn shapeRuns(arena: std.mem.Allocator, runs: []const TextRun, textWrapping: TextWrapping) !ShapedRuns {
+/// sizing for `textWrapping`. Glyphs, styles, and scratch live on `arena`
+/// (typically `useArena()`, the frame arena); `minSize`/`maxSize` are only
+/// meaningful while `textWrapping` holds, since each mode accumulates them
+/// differently. The primitive under `measureText`, for anything that needs
+/// the per-glyph advances and source bytes themselves.
+pub fn shapeRuns(arena: std.mem.Allocator, runs: []const TextRun, textWrapping: TextWrapping) !ShapedRuns {
     // Stable per-frame style copies for glyphs to point at; the builder's run
     // list is cleared the moment `composeText` ends.
     const runStyles = try arena.alloc(CompleteTextStyle, runs.len);
