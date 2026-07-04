@@ -477,13 +477,45 @@ const InputState = struct {
     undoStack: std.ArrayList(Edit),
     redoStack: std.ArrayList(Edit),
 
-    /// Byte range of the IME's provisional preedit inside `text`, for
-    /// styling it (typically underlined). Managed by `useInput`: replaced
-    /// wholesale on every composition update and invisible to undo.
-    composition: ?[2]usize,
+    /// The IME's provisional preedit, kept beside `text` — the buffer only
+    /// ever holds committed bytes, so edits, undo, and the cursor never have
+    /// to know a composition exists. Rendering reads `display`.
+    preeditBuffer: [120]u8,
+    preeditLength: usize,
+    /// Caret range inside the preedit, in bytes.
+    preeditCursor: [2]usize,
 
+    /// What to render: the committed text with the preedit laid in at the
+    /// cursor. Aliases `text` when no composition is active; rebuilt every
+    /// frame, so it can never go stale against an edit.
+    display: []const u8,
+
+    /// Cursor and selection in committed-text bytes.
     pub fn selection(self: *const @This()) [2]usize {
         return .{ @min(self.anchor, self.cursor), @max(self.anchor, self.cursor) };
+    }
+
+    /// Where the caret sits inside `display` — past the preedit's own caret
+    /// while composing, identical to `cursor` otherwise.
+    pub fn displayCursor(self: *const @This()) usize {
+        return self.cursor + self.preeditCursor[1];
+    }
+
+    /// The selection in `display` bytes: the IME's caret range while
+    /// composing (it owns the selection then), the committed one otherwise.
+    pub fn displaySelection(self: *const @This()) [2]usize {
+        if (self.preeditLength > 0) return .{
+            self.cursor + self.preeditCursor[0],
+            self.cursor + self.preeditCursor[1],
+        };
+        return self.selection();
+    }
+
+    /// Byte range of the preedit inside `display`, for styling it
+    /// (typically underlined), else null.
+    pub fn compositionRange(self: *const @This()) ?[2]usize {
+        if (self.preeditLength == 0) return null;
+        return .{ self.cursor, self.cursor + self.preeditLength };
     }
 };
 
@@ -592,6 +624,23 @@ fn nextWordBeginning(text: []const u8, from: usize) usize {
     return position;
 }
 
+/// Refresh `inputState.display` from the committed text and the preedit:
+/// aliases the committed text when no composition is active, else a fresh
+/// frame-arena composite with the preedit laid in at the cursor.
+fn compositeDisplay(inputState: *InputState, text: []const u8) void {
+    inputState.display = if (inputState.preeditLength == 0) text else blk: {
+        const preedit = inputState.preeditBuffer[0..inputState.preeditLength];
+        const display = forbear.useArena().alloc(u8, text.len + preedit.len) catch |err| {
+            forbear.handleFrameError(err);
+            break :blk text;
+        };
+        @memcpy(display[0..inputState.cursor], text[0..inputState.cursor]);
+        @memcpy(display[inputState.cursor..][0..preedit.len], preedit);
+        @memcpy(display[inputState.cursor + preedit.len ..], text[inputState.cursor..]);
+        break :blk display;
+    };
+}
+
 /// A node's content box from its previous-frame measurement: the origin
 /// where flowing text starts and the space inside border and padding.
 fn innerBox(style: forbear.CompleteStyle, measurement: forbear.Node.Measurement) struct { origin: Vec2, size: Vec2 } {
@@ -641,7 +690,11 @@ pub fn useInput(
 
         .undoStack = .empty,
         .redoStack = .empty,
-        .composition = null,
+
+        .preeditBuffer = undefined,
+        .preeditLength = 0,
+        .preeditCursor = .{ 0, 0 },
+        .display = &.{},
     });
     if (inputState.text == null) create: {
         var textArray = std.ArrayList(u8).initCapacity(arena, initialInputState.text.len) catch |err| {
@@ -684,25 +737,12 @@ pub fn useInput(
         std.debug.assert(inputState.cursor <= text.items.len);
         std.debug.assert(inputState.anchor <= text.items.len);
 
-        // While composing, the preedit sits provisionally in the buffer. Pop
-        // it for the frame so everything below edits committed text — the
-        // stored range can't go stale against a mouse press or a cancelling
-        // backspace — and lay it (or its replacement) back down at the end.
-        var poppedPreedit: ?[]const u8 = null;
-        if (inputState.composition) |range| {
-            poppedPreedit = forbear.useArena().dupe(u8, text.items[range[0]..range[1]]) catch |err| blk: {
-                forbear.handleFrameError(err);
-                break :blk null;
-            };
-            text.replaceRangeAssumeCapacity(range[0], range[1] - range[0], &.{});
-            inputState.cursor = range[0];
-            inputState.anchor = range[0];
-            inputState.composition = null;
-        }
-        // Editing keys stand down mid-composition, like in a browser: the
-        // backspace that cancels a dead key eats the pending accent, not a
-        // committed character.
-        const composing = poppedPreedit != null;
+        const composing = inputState.preeditLength > 0;
+
+        // Nothing has changed since last frame's composite, so this is
+        // exactly what was rendered — which is what mouse hit-testing must
+        // measure against.
+        compositeDisplay(inputState, text.items);
 
         if (forbear.getParentNode()) |parent| {
             const dragging = forbear.useState(bool, false);
@@ -726,7 +766,7 @@ pub fn useInput(
                     scrollingState._effectiveOffset[0];
 
                 const shaped = forbear.shapeRuns(forbear.useArena(), &.{.{
-                    .content = text.items,
+                    .content = inputState.display,
                     .style = textStyle,
                 }}, .none) catch |err| {
                     forbear.handleFrameError(err);
@@ -743,6 +783,16 @@ pub fn useInput(
                     if (localX < advanceX + glyph.advance[0] / 2.0) break;
                     advanceX += glyph.advance[0];
                     index += std.unicode.utf8ByteSequenceLength(glyph.textBuf[0]) catch 1;
+                }
+                index = @min(index, inputState.display.len);
+
+                // The press hit display bytes; the cursor lives in committed
+                // bytes. Presses past the preedit shift back by its length,
+                // presses inside it snap to its start (the preedit follows
+                // the cursor, so that's where it visually stays).
+                const preeditStart = inputState.cursor;
+                if (index > preeditStart) {
+                    index = preeditStart + (index -| (preeditStart + inputState.preeditLength));
                 }
                 index = @min(index, text.items.len);
 
@@ -853,12 +903,11 @@ pub fn useInput(
                 }
             }
 
-            // The frame's text entry applies in protocol order: the previous
-            // preedit is already popped, so delete committed text the IME
-            // asked to remove, insert the committed text, then lay down the
-            // new preedit. One transaction, one struct, sequential reads.
-            const inputEvent = forbear.onInput();
-            if (inputEvent) |input| {
+            // The frame's text entry applies in protocol order: delete
+            // committed text the IME asked to remove, insert the committed
+            // text, then take the new preedit. One transaction, one struct,
+            // sequential reads.
+            if (forbear.onInput()) |input| {
                 if (input.deleteBefore > 0 or input.deleteAfter > 0) {
                     splice(
                         inputState,
@@ -880,29 +929,28 @@ pub fn useInput(
                     const selection = inputState.selection();
                     splice(inputState, text, arena, selection[0], selection[1], input.text);
                 }
-            }
 
-            const compositionUpdate: ?[]const u8 = if (inputEvent) |input| input.preedit else null;
-            const newPreedit: []const u8 = compositionUpdate orelse
-                // No composition update this frame: the popped preedit goes
-                // back down unchanged at the (possibly moved) cursor.
-                (poppedPreedit orelse "");
-            if (newPreedit.len > 0) preedit: {
-                const start = inputState.cursor;
-                // Provisional: inserted directly so undo never sees it.
-                text.insertSlice(arena, start, newPreedit) catch |err| {
-                    forbear.handleFrameError(err);
-                    break :preedit;
-                };
-                inputState.composition = .{ start, start + newPreedit.len };
-                const cursorRange: [2]usize = if (compositionUpdate != null)
-                    inputEvent.?.cursor
-                else
-                    .{ newPreedit.len, newPreedit.len };
-                inputState.anchor = start + @min(cursorRange[0], newPreedit.len);
-                inputState.cursor = start + @min(cursorRange[1], newPreedit.len);
+                if (input.preedit) |preedit| {
+                    // Never in `text`, so undo and edits can't see it; the
+                    // composition owns the caret while it lasts, so any
+                    // committed selection collapses.
+                    const clipped = @min(preedit.len, inputState.preeditBuffer.len);
+                    @memcpy(inputState.preeditBuffer[0..clipped], preedit[0..clipped]);
+                    inputState.preeditLength = clipped;
+                    inputState.preeditCursor = .{
+                        @min(input.cursor[0], clipped),
+                        @min(input.cursor[1], clipped),
+                    };
+                    inputState.anchor = inputState.cursor;
+                }
             }
+        }
 
+        // Re-composite for rendering now that this frame's edits and
+        // composition updates are in.
+        compositeDisplay(inputState, text.items);
+
+        if (focusContext.hasFocus()) {
             if (forbear.getParentNode()) |parent| caret: {
                 if (parent.style.textWrapping != .none) {
                     std.log.err("useInput requires the input element to have textWrapping = .none, for now.", .{});
@@ -912,7 +960,7 @@ pub fn useInput(
 
                 const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
                 const measured = forbear.measureText(&.{.{
-                    .content = text.items[0..inputState.cursor],
+                    .content = inputState.display[0..inputState.displayCursor()],
                     .style = textStyle,
                 }}, 0.0, .none);
 
@@ -931,9 +979,9 @@ pub fn useInput(
                 // outside the inner width, pull the scroll offset just far
                 // enough that it's back inside. Only on cursor moves, so
                 // manual scrolling isn't fought over every frame.
-                const lastCursor = forbear.useState(usize, inputState.cursor);
-                if (lastCursor.* != inputState.cursor) {
-                    lastCursor.* = inputState.cursor;
+                const lastCursor = forbear.useState(usize, inputState.displayCursor());
+                if (lastCursor.* != inputState.displayCursor()) {
+                    lastCursor.* = inputState.displayCursor();
                     if (measurement) |m| {
                         const innerWidth = innerBox(parent.style, m).size[0];
                         scrollingState.offset[0] = @min(scrollingState.offset[0], measured.width);
@@ -978,10 +1026,10 @@ pub fn InputCaret(props: InputCaretProps) void {
     forbear.component(.{})({
         const focusContext = FocusContext.use();
         if (forbear.getParentNode()) |parent| {
-            if (props.inputState.text) |text| {
+            if (props.inputState.text != null) {
                 if (focusContext.hasFocus()) {
                     const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
-                    const selection = props.inputState.selection();
+                    const selection = props.inputState.displaySelection();
                     const hasSelection = selection[0] != selection[1];
 
                     // The span between the selection endpoints is independent
@@ -989,17 +1037,17 @@ pub fn InputCaret(props: InputCaretProps) void {
                     // scroll-adjusted `caret.position` anchors the whole box.
                     const selectionWidth: f32 = if (hasSelection) blk: {
                         const from = forbear.measureText(&.{.{
-                            .content = text.items[0..selection[0]],
+                            .content = props.inputState.display[0..selection[0]],
                             .style = textStyle,
                         }}, 0.0, .none);
                         const to = forbear.measureText(&.{.{
-                            .content = text.items[0..selection[1]],
+                            .content = props.inputState.display[0..selection[1]],
                             .style = textStyle,
                         }}, 0.0, .none);
                         break :blk to.width - from.width;
                     } else 0.0;
 
-                    const x = if (hasSelection and props.inputState.cursor == selection[1])
+                    const x = if (hasSelection and props.inputState.displayCursor() == selection[1])
                         props.inputState.caret.position[0] - selectionWidth
                     else
                         props.inputState.caret.position[0];

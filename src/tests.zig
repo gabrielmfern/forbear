@@ -8257,6 +8257,10 @@ const InputObservation = struct {
     cursor: usize = 0,
     selection: [2]usize = .{ 0, 0 },
     composition: ?[2]usize = null,
+    /// The caret's x inside the content box — the rendered width of
+    /// `display[0..displayCursor]`, letting tests aim clicks at glyph
+    /// boundaries without hardcoding font metrics.
+    caretX: f32 = 0.0,
     textBuffer: [64]u8 = undefined,
     textLength: usize = 0,
 
@@ -8278,12 +8282,16 @@ fn TextInputApp(observed: *InputObservation) void {
                 const scrolling = forbear.useState(forbear.ScrollingState, .{});
                 const inputState = forbear.useInput(.{}, scrolling);
                 FocusContext.use().focus();
-                forbear.text(inputState.text.?.items);
+                forbear.text(inputState.display);
 
-                observed.cursor = inputState.cursor;
-                observed.selection = inputState.selection();
-                observed.composition = inputState.composition;
-                const items = inputState.text.?.items;
+                // Observed in display space, which is what the old
+                // in-buffer-preedit representation exposed directly — the
+                // expectations below carry over unchanged.
+                observed.cursor = inputState.displayCursor();
+                observed.selection = inputState.displaySelection();
+                observed.composition = inputState.compositionRange();
+                observed.caretX = inputState.caret.position[0];
+                const items = inputState.display;
                 observed.textLength = items.len;
                 @memcpy(observed.textBuffer[0..items.len], items);
             });
@@ -8548,6 +8556,45 @@ test "useInput: a double press selects everything, pressing again collapses" {
         .secondsSincePrevious = 0.1,
     });
     try std.testing.expectEqual([2]usize{ 7, 7 }, observed.selection);
+}
+
+test "useInput: clicks during composition hit-test the display, not committed text" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "ab" });
+    try inputFrame(arena, &observed, .{ .keys = .{ .arrowLeft = true } });
+
+    // Preedit between "a" and "b": the screen shows "axyb".
+    try inputFrame(arena, &observed, .{ .composition = .{ .preedit = "xy", .cursor = .{ 2, 2 } } });
+    try std.testing.expectEqualStrings("axyb", observed.text());
+    try std.testing.expectEqual(@as(usize, 3), observed.cursor);
+
+    // Click just right of the preedit, in the first half of the rendered
+    // "b". Against the display that's still inside/at the preedit boundary,
+    // so the committed cursor must stay put — hit-testing committed "ab"
+    // instead would land past its end and drag the preedit to the end.
+    try inputFrame(arena, &observed, .{
+        .mousePosition = .{ observed.caretX + 1.0, 15.0 },
+        .mousePressed = true,
+    });
+    try std.testing.expectEqualStrings("axyb", observed.text());
+    try std.testing.expectEqual(@as(usize, 3), observed.cursor);
+    try std.testing.expectEqual([2]usize{ 1, 3 }, observed.composition.?);
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ observed.caretX + 1.0, 15.0 } });
+
+    // Click at the far left: the committed cursor moves to 0 and the
+    // preedit follows it.
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ 0.5, 15.0 }, .mousePressed = true });
+    try std.testing.expectEqualStrings("xyab", observed.text());
+    try std.testing.expectEqual(@as(usize, 2), observed.cursor);
+    try std.testing.expectEqual([2]usize{ 0, 2 }, observed.composition.?);
 }
 
 test "useInput: movement and deletion snap to UTF-8 boundaries" {
