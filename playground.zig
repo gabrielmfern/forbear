@@ -199,10 +199,6 @@ fn TextInput(placeholder: []const u8) void {
             timingFunction,
         );
 
-        if (forbear.onMouseDown()) {
-            focusContext.focus();
-        }
-
         const text = inputState.text.?.items;
         const showingPlaceholder = text.len == 0;
         node.style.color = if (showingPlaceholder) forbear.hex("#5F5F5F") else forbear.hex("#fafafa");
