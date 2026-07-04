@@ -8207,6 +8207,284 @@ test "ScrollingContext: the innermost hovered scrollable with room takes the whe
     try std.testing.expectEqual(zero, observed.innerUp);
 }
 
+// ── useInput tests ─────────────────────────────────────────────────────
+
+const InputObservation = struct {
+    cursor: usize = 0,
+    selection: [2]usize = .{ 0, 0 },
+    textBuffer: [64]u8 = undefined,
+    textLength: usize = 0,
+
+    fn text(self: *const InputObservation) []const u8 {
+        return self.textBuffer[0..self.textLength];
+    }
+};
+
+fn TextInputApp(observed: *InputObservation) void {
+    forbear.element(.{})({
+        FocusProvider()({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 200.0 },
+                    .height = .{ .fixed = 30.0 },
+                    .textWrapping = .none,
+                },
+            })({
+                const scrolling = forbear.useState(forbear.ScrollingState, .{});
+                const inputState = forbear.useInput(.{}, scrolling);
+                FocusContext.use().focus();
+                forbear.text(inputState.text.?.items);
+
+                observed.cursor = inputState.cursor;
+                observed.selection = inputState.selection;
+                const items = inputState.text.?.items;
+                observed.textLength = items.len;
+                @memcpy(observed.textBuffer[0..items.len], items);
+            });
+            FocusContext.use().resolve();
+        });
+    });
+}
+
+const InputFrameOptions = struct {
+    keys: forbear.Keys = .{},
+    typed: []const u8 = "",
+    mousePosition: @Vector(2, f32) = .{ 400.0, 400.0 },
+    mousePressed: bool = false,
+    /// Drives `useDeltaTime`, which the double-click timer accumulates.
+    secondsSincePrevious: f64 = 1.0,
+};
+
+fn inputFrame(arena: std.mem.Allocator, observed: *InputObservation, options: InputFrameOptions) !void {
+    try forbear.frame(try frameMeta(arena))({
+        const self = forbear.getForbear();
+        self.keysThisFrame = options.keys;
+        self.inputTextThisFrame = options.typed;
+        self.mousePosition = options.mousePosition;
+        self.mouseButtonPressed = options.mousePressed;
+        self.deltaTime = options.secondsSincePrevious;
+        TextInputApp(observed);
+        _ = try forbear.layout();
+    });
+}
+
+test "useInput: typing inserts at the cursor and replaces the selection" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    // Frame 1 mounts and focuses; editing starts on the next frame.
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "hey" });
+    try std.testing.expectEqualStrings("hey", observed.text());
+    try std.testing.expectEqual(@as(usize, 3), observed.cursor);
+    try std.testing.expectEqual([2]usize{ 3, 3 }, observed.selection);
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .a = true } });
+    try std.testing.expectEqual([2]usize{ 0, 3 }, observed.selection);
+    try inputFrame(arena, &observed, .{ .typed = "yo" });
+    try std.testing.expectEqualStrings("yo", observed.text());
+    try std.testing.expectEqual(@as(usize, 2), observed.cursor);
+}
+
+test "useInput: backspace and delete remove characters, words, and the selection" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "one two" });
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .backspace = true } });
+    try std.testing.expectEqualStrings("one tw", observed.text());
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .backspace = true } });
+    try std.testing.expectEqualStrings("one ", observed.text());
+    try std.testing.expectEqual(@as(usize, 4), observed.cursor);
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .home = true } });
+    try inputFrame(arena, &observed, .{ .keys = .{ .delete = true } });
+    try std.testing.expectEqualStrings("ne ", observed.text());
+    try std.testing.expectEqual(@as(usize, 0), observed.cursor);
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .delete = true } });
+    try std.testing.expectEqualStrings("", observed.text());
+
+    try inputFrame(arena, &observed, .{ .typed = "abc" });
+    try inputFrame(arena, &observed, .{ .keys = .{ .shift = true, .arrowLeft = true } });
+    try std.testing.expectEqual([2]usize{ 2, 3 }, observed.selection);
+    try inputFrame(arena, &observed, .{ .keys = .{ .backspace = true } });
+    try std.testing.expectEqualStrings("ab", observed.text());
+    try std.testing.expectEqual([2]usize{ 2, 2 }, observed.selection);
+}
+
+test "useInput: arrows move by character and word, shift extends, home/end jump" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "one two" });
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .arrowLeft = true } });
+    try std.testing.expectEqual(@as(usize, 6), observed.cursor);
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .arrowLeft = true } });
+    try std.testing.expectEqual(@as(usize, 4), observed.cursor);
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .shift = true, .arrowLeft = true } });
+    try std.testing.expectEqual([2]usize{ 0, 4 }, observed.selection);
+    try std.testing.expectEqual(@as(usize, 0), observed.cursor);
+
+    // A plain arrow with a selection active collapses to that side of it.
+    try inputFrame(arena, &observed, .{ .keys = .{ .arrowRight = true } });
+    try std.testing.expectEqual(@as(usize, 4), observed.cursor);
+    try std.testing.expectEqual([2]usize{ 4, 4 }, observed.selection);
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .shift = true, .end = true } });
+    try std.testing.expectEqual([2]usize{ 4, 7 }, observed.selection);
+    try std.testing.expectEqual(@as(usize, 7), observed.cursor);
+    try inputFrame(arena, &observed, .{ .keys = .{ .home = true } });
+    try std.testing.expectEqual(@as(usize, 0), observed.cursor);
+    try std.testing.expectEqual([2]usize{ 0, 0 }, observed.selection);
+}
+
+test "useInput: command chords do not type" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "hi" });
+
+    // ctrl+a arrives with the window layer still reporting typed text.
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .a = true }, .typed = "a" });
+    try std.testing.expectEqualStrings("hi", observed.text());
+    try std.testing.expectEqual([2]usize{ 0, 2 }, observed.selection);
+}
+
+test "useInput: undo and redo replay splices, new edits clear the redo stack" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "hello" });
+    try inputFrame(arena, &observed, .{ .typed = " world" });
+    try std.testing.expectEqualStrings("hello world", observed.text());
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .z = true } });
+    try std.testing.expectEqualStrings("hello", observed.text());
+    try std.testing.expectEqual(@as(usize, 5), observed.cursor);
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .z = true } });
+    try std.testing.expectEqualStrings("", observed.text());
+    try std.testing.expectEqual(@as(usize, 0), observed.cursor);
+    // Undo on an empty stack is a no-op.
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .z = true } });
+    try std.testing.expectEqualStrings("", observed.text());
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .shift = true, .z = true } });
+    try std.testing.expectEqualStrings("hello", observed.text());
+    try std.testing.expectEqual(@as(usize, 5), observed.cursor);
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .y = true } });
+    try std.testing.expectEqualStrings("hello world", observed.text());
+
+    // A fresh edit after an undo clears what was redoable.
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .z = true } });
+    try inputFrame(arena, &observed, .{ .typed = "!" });
+    try std.testing.expectEqualStrings("hello!", observed.text());
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .shift = true, .z = true } });
+    try std.testing.expectEqualStrings("hello!", observed.text());
+}
+
+test "useInput: clicking places the cursor, dragging and shift+click select" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "one two" });
+
+    // Press past the text's right edge: cursor to the end.
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ 150.0, 15.0 }, .mousePressed = true });
+    try std.testing.expectEqual(@as(usize, 7), observed.cursor);
+    try std.testing.expectEqual([2]usize{ 7, 7 }, observed.selection);
+
+    // Keep holding and drag to the far left: everything selected, cursor on
+    // the moving end.
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ 0.5, 15.0 }, .mousePressed = true });
+    try std.testing.expectEqual([2]usize{ 0, 7 }, observed.selection);
+    try std.testing.expectEqual(@as(usize, 0), observed.cursor);
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ 0.5, 15.0 } });
+
+    // A plain click with a selection active collapses it.
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ 150.0, 15.0 }, .mousePressed = true });
+    try std.testing.expectEqual([2]usize{ 7, 7 }, observed.selection);
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ 150.0, 15.0 } });
+
+    // Shift+click extends from where the cursor was.
+    try inputFrame(arena, &observed, .{
+        .keys = .{ .shift = true },
+        .mousePosition = .{ 0.5, 15.0 },
+        .mousePressed = true,
+    });
+    try std.testing.expectEqual([2]usize{ 0, 7 }, observed.selection);
+    try std.testing.expectEqual(@as(usize, 0), observed.cursor);
+}
+
+test "useInput: a double press selects everything, pressing again collapses" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{});
+    try inputFrame(arena, &observed, .{ .typed = "one two" });
+
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ 150.0, 15.0 }, .mousePressed = true });
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ 150.0, 15.0 }, .secondsSincePrevious = 0.1 });
+    try inputFrame(arena, &observed, .{
+        .mousePosition = .{ 150.0, 15.0 },
+        .mousePressed = true,
+        .secondsSincePrevious = 0.1,
+    });
+    try std.testing.expectEqual([2]usize{ 0, 7 }, observed.selection);
+    try std.testing.expectEqual(@as(usize, 7), observed.cursor);
+
+    // A third fast press lands on an active selection: collapse, not reselect.
+    try inputFrame(arena, &observed, .{ .mousePosition = .{ 150.0, 15.0 }, .secondsSincePrevious = 0.1 });
+    try inputFrame(arena, &observed, .{
+        .mousePosition = .{ 150.0, 15.0 },
+        .mousePressed = true,
+        .secondsSincePrevious = 0.1,
+    });
+    try std.testing.expectEqual([2]usize{ 7, 7 }, observed.selection);
+}
+
 // window.zig EventQueue tests
 
 // Mirrors the live setup in playground.zig: the Wayland event thread is the
