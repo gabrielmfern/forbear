@@ -406,6 +406,7 @@ pub const ScrollRoom = struct {
 
 pub const Scrollable = struct {
     key: u64,
+    z: u16,
     hovered: bool,
     room: ScrollRoom,
 };
@@ -425,6 +426,7 @@ pub const ScrollingContext = forbear.createContext(opaque {}, struct {
         const arena = forbear.getScopeArenaBy(self.scopeKey) orelse unreachable;
         self.scrollable.append(arena, .{
             .key = node.key,
+            .z = node.z,
             .hovered = forbear.isMouseInside(),
             .room = room,
         }) catch |err| forbear.handleFrameError(err);
@@ -451,15 +453,26 @@ pub const ScrollingContext = forbear.createContext(opaque {}, struct {
     pub fn resolve(self: *@This()) void {
         defer self.scrollable.clearRetainingCapacity();
         self.targets = .{ .{ null, null }, .{ null, null } };
-        // Ancestors mount before their descendants, so the last hovered
-        // registration with room in a direction is the innermost scrollable
-        // that can still move that way — one that's run out hands the wheel
-        // to its nearest scrollable ancestor.
+        // The hovered scrollable drawn topmost — highest z, later
+        // registration breaking ties, like cursor hit-testing — takes the
+        // wheel for each direction it has room in; one that's run out hands
+        // that direction to the hovered scrollable beneath it.
+        var targetZ = [2][2]u16{ .{ 0, 0 }, .{ 0, 0 } };
         for (self.scrollable.items) |scrollable| {
             if (!scrollable.hovered) continue;
             for (0..2) |direction| {
-                if (scrollable.room.x[direction]) self.targets[0][direction] = scrollable.key;
-                if (scrollable.room.y[direction]) self.targets[1][direction] = scrollable.key;
+                if (scrollable.room.x[direction] and
+                    (self.targets[0][direction] == null or scrollable.z >= targetZ[0][direction]))
+                {
+                    self.targets[0][direction] = scrollable.key;
+                    targetZ[0][direction] = scrollable.z;
+                }
+                if (scrollable.room.y[direction] and
+                    (self.targets[1][direction] == null or scrollable.z >= targetZ[1][direction]))
+                {
+                    self.targets[1][direction] = scrollable.key;
+                    targetZ[1][direction] = scrollable.z;
+                }
             }
         }
     }

@@ -8312,6 +8312,33 @@ fn ScrollPriorityApp(innerRoom: forbear.ScrollRoom, observed: *ScrollConsumption
     });
 }
 
+// The outer scrollable registers after its descendant already mounted and
+// registered — the shape of a virtual list whose hook runs after an overlay
+// child (e.g. a fixed search input) was built.
+fn ScrollLateAncestorApp(observed: *ScrollConsumption) void {
+    forbear.element(.{})({
+        forbear.ScrollProvider()({
+            const ctx = forbear.ScrollingContext.use();
+            forbear.element(.{
+                .style = .{ .width = .{ .fixed = 200.0 }, .height = .{ .fixed = 200.0 } },
+            })({
+                forbear.element(.{
+                    .style = .{ .width = .{ .fixed = 100.0 }, .height = .{ .fixed = 100.0 } },
+                })({
+                    ctx.register(.{});
+                    observed.innerDown = ctx.consumes(scrollDown);
+                    observed.innerUp = ctx.consumes(scrollUp);
+                });
+
+                ctx.register(.{});
+                observed.outerDown = ctx.consumes(scrollDown);
+                observed.outerUp = ctx.consumes(scrollUp);
+            });
+            ctx.resolve();
+        });
+    });
+}
+
 test "ScrollingContext: the innermost hovered scrollable with room takes the wheel" {
     try initTest(std.testing.allocator);
     defer forbear.deinit();
@@ -8364,6 +8391,32 @@ test "ScrollingContext: the innermost hovered scrollable with room takes the whe
     try std.testing.expectEqual(scrollUp, observed.outerUp);
     try std.testing.expectEqual(zero, observed.innerDown);
     try std.testing.expectEqual(zero, observed.innerUp);
+}
+
+test "ScrollingContext: the inner scrollable takes the wheel even when its ancestor registers after it" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    const self = forbear.getForbear();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const zero = @Vector(2, f32){ 0.0, 0.0 };
+    var observed: ScrollConsumption = .{};
+
+    self.mousePosition = .{ 50.0, 50.0 };
+    for (0..3) |_| {
+        try forbear.frame(try frameMeta(arena))({
+            ScrollLateAncestorApp(&observed);
+            _ = try forbear.layout();
+        });
+    }
+    try std.testing.expectEqual(scrollDown, observed.innerDown);
+    try std.testing.expectEqual(scrollUp, observed.innerUp);
+    try std.testing.expectEqual(zero, observed.outerDown);
+    try std.testing.expectEqual(zero, observed.outerUp);
 }
 
 // ── useInput tests ─────────────────────────────────────────────────────
