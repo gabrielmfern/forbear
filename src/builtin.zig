@@ -170,6 +170,28 @@ pub const ScrollingState = struct {
     /// The animated offset, if no animation, the same as offset.
     _effectiveOffset: Vec2 = identity,
     animate: bool = if (builtin.os.tag == .macos) false else true,
+    /// Disable for content with no measurable end (an anchored/virtual
+    /// list): `offset` stops clamping to `[0, contentSize]`, and the
+    /// element always registers as having scroll room in both directions.
+    /// The caller is expected to keep `offset` in whatever range makes
+    /// sense for it, recentering with `rebase` as needed.
+    clamp: bool = true,
+
+    /// This frame's already-visible scroll position — what's actually on
+    /// screen right now, spring settling included.
+    pub fn effectiveOffset(self: *const ScrollingState) Vec2 {
+        return self._effectiveOffset;
+    }
+
+    /// Shifts both the target and the currently-animated position by
+    /// `delta`, preserving the spring's velocity and remaining
+    /// displacement — for recentering onto a new anchor (e.g. an anchored
+    /// list crossing into its next item) without perturbing in-flight
+    /// motion.
+    pub fn rebase(self: *ScrollingState, delta: Vec2) void {
+        self.offset += delta;
+        self._effectiveOffset += delta;
+    }
 };
 
 pub fn useScrolling(state: *ScrollingState) void {
@@ -186,7 +208,7 @@ pub fn useScrolling(state: *ScrollingState) void {
     // the leading border + padding) to the last flow child's far edge. Add
     // the trailing border + padding so a full scroll rests the content end
     // inside the padding, mirroring how it sits at the start unscrolled.
-    const maxOffset: ?Vec2 = if (forbear.useNodeMeasurement()) |measurement|
+    const maxOffset: ?Vec2 = if (state.clamp) (if (forbear.useNodeMeasurement()) |measurement|
         @max(
             measurement.contentSize + Vec2{
                 node.style.padding.x[1] + node.style.borderWidth.x[1],
@@ -195,7 +217,7 @@ pub fn useScrolling(state: *ScrollingState) void {
             identity,
         )
     else
-        null;
+        null) else null;
 
     // Inside a `ScrollProvider`, the wheel goes to the innermost hovered
     // scrollable with room left in the delta's direction; without one, every
@@ -206,7 +228,9 @@ pub fn useScrolling(state: *ScrollingState) void {
         state.offset += if (scrollingContext) |context| context.consumes(delta) else delta;
     }
 
-    state.offset = if (maxOffset) |max|
+    state.offset = if (!state.clamp)
+        state.offset
+    else if (maxOffset) |max|
         @min(@max(state.offset, identity), max)
     else
         @max(state.offset, identity);
@@ -214,7 +238,7 @@ pub fn useScrolling(state: *ScrollingState) void {
     // Register after the clamp so the next frame's resolution judges room
     // from where this frame actually settled.
     if (scrollingContext) |context| {
-        context.register(.{
+        context.register(if (!state.clamp) .{} else .{
             .x = .{ state.offset[0] > 0.0, if (maxOffset) |max| state.offset[0] < max[0] else true },
             .y = .{ state.offset[1] > 0.0, if (maxOffset) |max| state.offset[1] < max[1] else true },
         });
@@ -240,7 +264,9 @@ pub fn useScrolling(state: *ScrollingState) void {
             },
         ),
     };
-    animated = if (maxOffset) |max|
+    animated = if (!state.clamp)
+        animated
+    else if (maxOffset) |max|
         @min(@max(animated, identity), max)
     else
         @max(animated, identity);
