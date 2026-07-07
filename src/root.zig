@@ -526,12 +526,14 @@ pub fn useAnimation(duration: f32) Animation {
     };
 }
 
+pub const TextMeasurement = struct { width: f32, height: f32, lines: usize };
+
 /// Lays out `runs` at `width` without mounting anything, reporting how tall the
 /// text wraps and how many lines it spans. Runs the same shaping and wrapping
 /// the layout pass uses, so the result matches what `text`/`composeText` would
 /// render at that width and `textWrapping`. `.none` ignores `width`. Must be
 /// called inside a frame; scratch goes on the frame arena.
-pub fn measureText(runs: []const TextRun, width: f32, textWrapping: TextWrapping) struct { width: f32, height: f32, lines: usize } {
+pub fn measureText(runs: []const TextRun, width: f32, textWrapping: TextWrapping) TextMeasurement {
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) return .{ .width = 0, .height = 0, .lines = 0 };
