@@ -495,39 +495,39 @@ pub fn ScrollProvider() *const fn (void) void {
     return forbear.componentChildrenSlotEnd();
 }
 
-const InputState = struct {
+pub const InputState = struct {
     /// The selection is always the span between `anchor` and `cursor`; with
     /// no selection they sit on the same byte. Every operation is "move the
     /// cursor, and collapse the anchor onto it unless extending".
-    cursor: usize,
-    anchor: usize,
-    text: std.ArrayList(u8),
+    cursor: usize = 0,
+    anchor: usize = 0,
+    text: std.ArrayList(u8) = .empty,
 
     /// Where the caret sits relative to the input's content box, with the
     /// scroll offset already applied; `height` is the text's line height.
     /// Only maintained while the input has focus.
     caret: struct {
-        position: Vec2,
-        height: f32,
-    },
+        position: Vec2 = @splat(0.0),
+        height: f32 = 0.0,
+    } = .{},
 
     /// Each stack holds the edits that, applied in pop order, walk the text
     /// back (undo) or forward (redo) through its history.
-    undoStack: std.ArrayList(Edit),
-    redoStack: std.ArrayList(Edit),
+    undoStack: std.ArrayList(Edit) = .empty,
+    redoStack: std.ArrayList(Edit) = .empty,
 
     /// The IME's provisional preedit, kept beside `text` — the buffer only
     /// ever holds committed bytes, so edits, undo, and the cursor never have
     /// to know a composition exists. Rendering reads `display`.
-    preeditBuffer: [120]u8,
-    preeditLength: usize,
+    preeditBuffer: [120]u8 = undefined,
+    preeditLength: usize = 0,
     /// Caret range inside the preedit, in bytes.
-    preeditCursor: [2]usize,
+    preeditCursor: [2]usize = .{ 0, 0 },
 
     /// What to render: the committed text with the preedit laid in at the
     /// cursor. Aliases `text` when no composition is active; rebuilt every
     /// frame, so it can never go stale against an edit.
-    display: []const u8,
+    display: []const u8 = &.{},
 
     /// Cursor and selection in committed-text bytes.
     pub fn selection(self: *const @This()) [2]usize {
@@ -697,47 +697,22 @@ fn innerBox(style: forbear.CompleteStyle, measurement: forbear.Node.Measurement)
     };
 }
 
+const UseInputProps = struct {
+    inputState: ?*InputState = null,
+    scrollingState: *ScrollingState,
+};
+
 /// Depends on the font styles of the parent to render. Pass the same
 /// `scrollingState` given to the input's `useScrolling` — called before this
 /// hook, so the caret reads this frame's scroll — and the cursor is kept in
 /// view by moving the scroll offset as it travels.
-pub fn useInput(
-    initialInputState: struct {
-        cursor: usize = 0,
-        /// The selection's other end; defaults to `cursor` (no selection).
-        anchor: ?usize = null,
-        text: []const u8 = &.{},
-    },
-    scrollingState: *ScrollingState,
-) *InputState {
+pub fn useInput(props: UseInputProps) *InputState {
     forbear.hook();
     defer forbear.hookEnd();
 
     const arena = forbear.useScopeArena();
 
-    const inputState = forbear.useState(InputState, InputState{
-        .cursor = initialInputState.cursor,
-        .anchor = initialInputState.anchor orelse initialInputState.cursor,
-        .text = .empty,
-
-        .caret = .{
-            .height = 0.0,
-            .position = @splat(0.0),
-        },
-
-        .undoStack = .empty,
-        .redoStack = .empty,
-
-        .preeditBuffer = undefined,
-        .preeditLength = 0,
-        .preeditCursor = .{ 0, 0 },
-        .display = &.{},
-    });
-    const initialTextPending = forbear.useState(bool, true);
-    if (initialTextPending.*) {
-        initialTextPending.* = false;
-        inputState.text.appendSlice(arena, initialInputState.text) catch |err| forbear.handleFrameError(err);
-    }
+    const inputState = props.inputState orelse forbear.useState(InputState, .{});
 
     const focusContext = FocusContext.use();
 
@@ -796,7 +771,7 @@ pub fn useInput(
             const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
             const localX = forbear.useMousePosition()[0] -
                 innerBox(parent.style, measurement).origin[0] +
-                scrollingState._effectiveOffset[0];
+                props.scrollingState._effectiveOffset[0];
 
             const shaped = forbear.shapeRuns(forbear.useArena(), &.{.{
                 .content = inputState.display,
@@ -1015,15 +990,15 @@ pub fn useInput(
             if (inputState.displayCursor() != cursorBeforeEvents) {
                 if (measurement) |m| {
                     const innerWidth = innerBox(parent.style, m).size[0];
-                    scrollingState.offset[0] = @min(scrollingState.offset[0], measured.width);
-                    scrollingState.offset[0] = @max(scrollingState.offset[0], measured.width - innerWidth + 1.0);
+                    props.scrollingState.offset[0] = @min(props.scrollingState.offset[0], measured.width);
+                    props.scrollingState.offset[0] = @max(props.scrollingState.offset[0], measured.width - innerWidth + 1.0);
                     // Snap so following the cursor doesn't animate.
-                    scrollingState._effectiveOffset[0] = scrollingState.offset[0];
+                    props.scrollingState._effectiveOffset[0] = props.scrollingState.offset[0];
                 }
             }
 
             inputState.caret = .{
-                .position = Vec2{ measured.width, yOffset } - scrollingState._effectiveOffset,
+                .position = Vec2{ measured.width, yOffset } - props.scrollingState._effectiveOffset,
                 .height = measured.height,
             };
 

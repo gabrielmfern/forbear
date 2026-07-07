@@ -19,6 +19,7 @@ pub const Focus = forbearBuiltin.Focus;
 pub const FocusConsumes = forbearBuiltin.FocusConsumes;
 pub const EventPayload = forbearBuiltin.EventPayload;
 pub const useInput = forbearBuiltin.useInput;
+pub const InputState = forbearBuiltin.InputState;
 pub const InputCaret = forbearBuiltin.InputCaret;
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
