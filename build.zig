@@ -142,6 +142,7 @@ fn createForbearModule(
         .target = target,
         .optimize = optimize,
     });
+    translateC.defineCMacro("_FORTIFY_SOURCE", "0");
     translateC.defineCMacro(switch (target.result.os.tag) {
         .linux => "LINUX",
         .macos => "MACOS",
