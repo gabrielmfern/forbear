@@ -1857,7 +1857,9 @@ pub fn handleFrameError(err: anyerror) void {
     if (builtin.is_test) return;
 
     std.debug.print("There was an error during frame's UI mounting stage: {}\n", .{self.frameMeta.?.err.?});
-    std.debug.dumpCurrentStackTrace(.{ .first_address = @returnAddress() });
+    if (@errorReturnTrace()) |trace| {
+        std.debug.dumpErrorReturnTrace(trace);
+    }
 }
 
 fn componentEnd(block: void) void {
