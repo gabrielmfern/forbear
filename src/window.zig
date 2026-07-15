@@ -478,7 +478,7 @@ pub const Window = switch (builtin.os.tag) {
         height: u32,
         title: [:0]const u8,
         appId: [:0]const u8,
-        running: bool,
+        running: std.atomic.Value(bool),
         dpi: [2]u32,
 
         scale: f32 = 1.0,
@@ -786,7 +786,7 @@ pub const Window = switch (builtin.os.tag) {
         fn xdgToplevelClose(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel) callconv(.c) void {
             _ = xdgToplevel;
             const window: *Self = @ptrCast(@alignCast(data));
-            window.running = false;
+            window.running.store(false, .release);
         }
 
         fn xdgToplevelConfigureBounds(
@@ -1408,7 +1408,7 @@ pub const Window = switch (builtin.os.tag) {
             window.dpi = .{ 96, 96 };
             window.title = title;
             window.appId = appId;
-            window.running = true;
+            window.running = .init(true);
             window.eventQueue = .empty;
             window.handlers = .{};
 
@@ -1988,7 +1988,7 @@ pub const Window = switch (builtin.os.tag) {
         }
 
         pub fn handleEvents(self: *Self) !void {
-            while (self.running) {
+            while (self.running.load(.acquire)) {
                 if (c.wl_display_dispatch(self.wlDisplay) == -1) {
                     return error.WaylandDispatchFailed;
                 }
@@ -2095,7 +2095,7 @@ pub const Window = switch (builtin.os.tag) {
         height: u32,
         title: [:0]const u16,
         className: [:0]const u16,
-        running: bool,
+        running: std.atomic.Value(bool),
         dpi: [2]u32,
 
         /// `wndProc` runs synchronously inside `DispatchMessageW` on the event
@@ -2224,7 +2224,7 @@ pub const Window = switch (builtin.os.tag) {
             errdefer allocator.free(window.title);
             window.className = try std.unicode.utf8ToUtf16LeAllocZ(allocator, className);
             errdefer allocator.free(window.className);
-            window.running = true;
+            window.running = .init(true);
             window.eventQueue = .empty;
 
             window.keyboard = .{};
@@ -2628,12 +2628,12 @@ pub const Window = switch (builtin.os.tag) {
                 },
                 WM_DESTROY => {
                     if (window) |self| {
-                        self.running = false;
+                        self.running.store(false, .release);
                     }
                 },
                 WM_CLOSE => {
                     if (window) |self| {
-                        self.running = false;
+                        self.running.store(false, .release);
                     }
                 },
                 WM_ACTIVATEAPP => {
@@ -2821,7 +2821,7 @@ pub const Window = switch (builtin.os.tag) {
         }
 
         pub fn handleEvents(self: *Self) !void {
-            while (self.running) {
+            while (self.running.load(.acquire)) {
                 var message: MSG = undefined;
                 // `TranslateMessage` turns WM_KEYDOWN into WM_CHAR for text input;
                 // `DispatchMessageW` then calls `wndProc` synchronously on this
@@ -2829,7 +2829,7 @@ pub const Window = switch (builtin.os.tag) {
                 const result = GetMessageW(&message, null, 0, 0);
                 if (result == 0) {
                     // WM_QUIT
-                    self.running = false;
+                    self.running.store(false, .release);
                     break;
                 }
                 if (result == -1) {
