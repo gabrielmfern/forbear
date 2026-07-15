@@ -8448,7 +8448,7 @@ fn TextInputApp(observed: *InputObservation) void {
                 },
             })({
                 const scrolling = forbear.useState(forbear.ScrollingState, .{});
-                const inputState = forbear.useInput(.{}, scrolling);
+                const inputState = forbear.useInput(.{ .scrollingState = scrolling });
                 FocusContext.use().focus();
                 forbear.text(inputState.display);
 
