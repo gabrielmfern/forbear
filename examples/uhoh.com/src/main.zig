@@ -81,7 +81,7 @@ fn renderingMain(
 ) !void {
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
     defer arenaAllocator.deinit();
-    errdefer window.running = false;
+    errdefer window.running.store(false, .release);
 
     const arena = arenaAllocator.allocator();
 
@@ -121,7 +121,7 @@ fn renderingMain(
     var traceBuffer: [4096]u8 = undefined;
     var traceWriter = traceFile.writer(io, &traceBuffer);
 
-    while (window.running) {
+    while (window.running.load(.acquire)) {
         defer _ = arenaAllocator.reset(.retain_capacity);
 
         try forbear.frame(.{
