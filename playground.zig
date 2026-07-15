@@ -447,6 +447,9 @@ fn renderingMain(
     io: std.Io,
     window: *forbear.Window,
 ) !void {
+    defer renderer.waitIdle() catch |err| {
+        std.log.err("failed waiting for renderer to go idle {}", .{err});
+    };
     var arenaAllocator = std.heap.ArenaAllocator.init(allocator);
     defer arenaAllocator.deinit();
     errdefer window.running.store(false, .release);
@@ -492,7 +495,6 @@ fn renderingMain(
             try forbear.update();
         });
     }
-    try renderer.waitIdle();
 }
 
 pub fn main(init: std.process.Init) !void {
