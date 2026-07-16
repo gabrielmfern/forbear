@@ -537,11 +537,6 @@ pub fn place(nodeTree: *NodeTree) void {
             }
         }
 
-        if (parent.style.height == .fit or parent.style.height.isGrow()) {
-            const newHeight = parent.fittingBase(.vertical) + contentSize[1];
-            parent.size[1] = @max(parent.size[1], newHeight);
-        }
-
         const availableSize: Vec2 = parent.size - Vec2{
             parent.fittingBase(.horizontal),
             parent.fittingBase(.vertical),
@@ -577,7 +572,7 @@ pub fn place(nodeTree: *NodeTree) void {
                 const child = &nodeTree.list.items[childIndex];
                 if (child.style.placement == .flow) {
                     if (parent.style.direction == .horizontal) {
-                        child.position += cursor;
+                        child.position = cursor;
                         child.position[0] += child.style.margin.x[0];
                         child.position[1] += switch (parent.style.yJustification) {
                             .start => child.style.margin.y[0],
@@ -587,7 +582,7 @@ pub fn place(nodeTree: *NodeTree) void {
 
                         cursor[0] += child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
                     } else if (parent.style.direction == .vertical) {
-                        child.position += cursor;
+                        child.position = cursor;
                         child.position[0] += switch (parent.style.xJustification) {
                             .start => child.style.margin.x[0],
                             .center => (availableSize[0] - child.style.margin.x[0] - child.size[0] - child.style.margin.x[1]) / 2 + child.style.margin.x[0],
@@ -657,7 +652,7 @@ pub fn layout() !*NodeTree {
         try growAndShrink(arena, &context.nodeTree);
 
         try wrap(arena, &context.nodeTree);
-        place(&context.nodeTree);
+        fit(&context.nodeTree);
 
         // Wrapping in pass 3 changed perpendicular sizes (taller text
         // nodes) — grow-sized siblings still need redistribution and
@@ -671,6 +666,8 @@ pub fn layout() !*NodeTree {
         //
         // The intention is for this to only change positions.
         try wrap(arena, &context.nodeTree);
+        fit(&context.nodeTree);
+        place(&context.nodeTree);
 
         root.position += root.style.translate;
 
