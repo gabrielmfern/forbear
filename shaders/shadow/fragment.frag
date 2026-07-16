@@ -30,14 +30,14 @@ void main() {
     float adjustedDist = d - spread;
 
     // Calculate shadow coverage from distance and blur.
-    float aa = max(fwidth(adjustedDist), 0.0001);
     float alpha;
     if (blur > 0.0) {
+        float aa = max(fwidth(adjustedDist), 0.0001);
         // Smooth falloff from inside to outside over the blur radius.
         alpha = 1.0 - smoothstep(-aa - blur, aa + blur, adjustedDist);
     } else {
         // Anti-aliased hard edge when no blur.
-        alpha = 1.0 - smoothstep(-aa, aa, adjustedDist);
+        alpha = clamp(0.5 - adjustedDist, 0.0, 1.0);
     }
 
     // Keep only the region outside the original element so transparent
@@ -45,8 +45,7 @@ void main() {
     vec2 elementLocalPos = p - elementOffset;
     vec2 eq = abs(elementLocalPos) - elementSize * 0.5 + r;
     float dElement = length(max(eq, 0.0)) + min(max(eq.x, eq.y), 0.0) - r;
-    float shapeAa = max(fwidth(dElement), 0.0001);
-    float elementCutout = 1.0 - smoothstep(-2.0 * shapeAa, 0.0, dElement);
+    float elementCutout = clamp(0.5 - dElement, 0.0, 1.0);
     alpha = max(alpha - elementCutout, 0.0);
 
     outColor = vertexColor;
