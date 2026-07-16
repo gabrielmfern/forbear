@@ -17,6 +17,7 @@ pub fn Sidebar() *const fn (void) void {
                 .fontSize = 14.0,
                 .lineHeight = 1.9,
                 .color = Colors.sidebarText,
+                .overflow = .hidden,
             },
         })({
             const scrolling = forbear.useState(forbear.ScrollingState, .{});

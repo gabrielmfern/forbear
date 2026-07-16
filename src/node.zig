@@ -511,7 +511,7 @@ pub const Style = struct {
         out.textWrapping = self.textWrapping orelse base.textWrapping;
         out.cursor = self.cursor orelse base.cursor;
 
-        out.overflow = self.overflow orelse .hidden;
+        out.overflow = self.overflow orelse .visible;
         out.placement = self.placement orelse .flow;
         out.zIndex = self.zIndex;
 

@@ -162,6 +162,7 @@ fn TextInput(placeholder: []const u8) void {
             .textWrapping = .none,
             .yJustification = .center,
             .direction = .vertical,
+            .overflow = .hidden,
         },
     })({
         const scrollingState = forbear.useState(forbear.ScrollingState, .{});
@@ -205,6 +206,7 @@ fn App() void {
             .style = .{
                 .width = .{ .fixed = viewportSize[0] },
                 .height = .{ .fixed = viewportSize[1] },
+                .overflow = .hidden,
             },
         })({
             forbear.FocusProvider()({
@@ -367,6 +369,7 @@ fn App() void {
                                 .borderRadius = 8.0,
                                 .borderWidth = .all(2.0),
                                 .borderColor = .{ 0.3, 0.6, 0.9, 1.0 },
+                                .overflow = .hidden,
                             },
                         })({
                             const clipScrolling = forbear.useState(forbear.ScrollingState, .{});
@@ -398,6 +401,7 @@ fn App() void {
                                     .background = .{ .color = .{ 0.15, 0.10, 0.20, 1.0 } },
                                     .borderRadius = 8.0,
                                     .padding = .all(8),
+                                    .overflow = .hidden,
                                 },
                             })({
                                 const leftScrolling = forbear.useState(forbear.ScrollingState, .{});
@@ -419,6 +423,7 @@ fn App() void {
                                     .background = .{ .color = .{ 0.10, 0.20, 0.15, 1.0 } },
                                     .borderRadius = 8.0,
                                     .padding = .all(8),
+                                    .overflow = .hidden,
                                 },
                             })({
                                 const rightScrolling = forbear.useState(forbear.ScrollingState, .{});

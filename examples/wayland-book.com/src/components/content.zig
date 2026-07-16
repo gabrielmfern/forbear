@@ -143,6 +143,7 @@ pub fn Content(activeChapter: *usize) !void {
                     .width = .{ .grow = 1.0 },
                     .height = .{ .fixed = viewport[1] },
                     .xJustification = .center,
+                    .overflow = .hidden,
                 },
             })({
                 const scrolling = forbear.useState(forbear.ScrollingState, .{});
