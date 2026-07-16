@@ -240,19 +240,15 @@ fn shrinkChildren(
 ///
 /// For every container whose size depends on its content, reset it to
 /// `fittingBase()` (padding + border) and accumulate each child's
-/// contribution via `fitChild`. Leaves and wrap containers are skipped:
-/// leaves carry intrinsic sizes (text glyphs, fixed dimensions) and wrap
-/// containers are sized later by `wrapAndPlace` based on actual line
-/// breaks.
+/// contribution via `fitChild`. Leaves are skipped: they carry intrinsic
+/// sizes (text glyphs, fixed dimensions).
 pub fn fit(nodeTree: *NodeTree) void {
     var i = nodeTree.list.items.len;
     while (i > 0) {
         i -= 1;
         const node = &nodeTree.list.items[i];
 
-        const shouldReset = node.firstChild != null and
-            node.glyphs == null and
-            node.style.overflow != .wrap;
+        const shouldReset = node.firstChild != null and node.glyphs == null;
         if (!shouldReset) continue;
 
         inline for (Direction.array) |fitDirection| {
@@ -511,23 +507,104 @@ pub fn wrapGlyphs(
     return cursor[1] + glyphs.lineHeight;
 }
 
-/// Wrap text, place children in parent-local coordinates, and expand
-/// fit/wrap containers to enclose their content.
-///
-/// Iteration is a single backward pass over `nodeTree.list.items`. Reverse
-/// order visits every descendant before its ancestor, which is what we need
-/// because:
-///   * Text wrapping inside a child sets the child's height before its
-///     parent reads it during placement.
-///   * A wrap container's own height depends on the line layout it computes
-///     from already-sized children.
-///
-/// Each iteration handles ONE container (or one text node): it wraps glyphs
-/// if it's a text node, otherwise it positions its direct children in its
-/// own local coordinate space and expands itself to fit them. Global
-/// (world-space) positions are computed later by `layout()` in a single
-/// top-down pass that adds each ancestor's position to its descendants.
-pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
+pub fn place(nodeTree: *NodeTree) void {
+    var i = nodeTree.list.items.len;
+    // walk in reverse so that we go through nodes deeper in the tree first,
+    // before going into the ones closer to the top
+    while (i > 0) {
+        i -= 1;
+        const parent = &nodeTree.list.items[i];
+
+        var childIndexOpt = parent.firstChild;
+
+        var contentSize: Vec2 = @splat(0.0);
+        {
+            // computing the size that the content will be spanning inside of
+            // the parent. used for: 1. justification 2. adjusting sizes
+            // because of changed wrapping width
+            while (childIndexOpt) |childIndex| {
+                const child = &nodeTree.list.items[childIndex];
+                if (child.style.placement == .flow) {
+                    if (parent.style.direction == .horizontal) {
+                        contentSize[0] += child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
+                        contentSize[1] = @max(child.style.margin.y[0] + child.size[1] + child.style.margin.y[1], contentSize[1]);
+                    } else if (parent.style.direction == .vertical) {
+                        contentSize[0] = @max(child.style.margin.x[0] + child.size[0] + child.style.margin.x[1], contentSize[0]);
+                        contentSize[1] += child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
+                    }
+                }
+                childIndexOpt = child.nextSibling;
+            }
+        }
+
+        if (parent.style.height == .fit or parent.style.height.isGrow()) {
+            const newHeight = parent.fittingBase(.vertical) + contentSize[1];
+            parent.size[1] = @max(parent.size[1], newHeight);
+        }
+
+        const availableSize: Vec2 = parent.size - Vec2{
+            parent.fittingBase(.horizontal),
+            parent.fittingBase(.vertical),
+        };
+
+        var cursor: Vec2 = @splat(0.0);
+        cursor += Vec2{
+            parent.style.padding.x[0] + parent.style.borderWidth.x[0],
+            parent.style.padding.y[0] + parent.style.borderWidth.y[0],
+        };
+        {
+            // justification step
+            if (parent.style.direction == .horizontal) {
+                cursor[0] += switch (parent.style.xJustification) {
+                    .start => 0.0,
+                    .center => (availableSize[0] - contentSize[0]) / 2,
+                    .end => availableSize[0] - contentSize[0],
+                };
+            }
+            if (parent.style.direction == .vertical) {
+                cursor[1] += switch (parent.style.yJustification) {
+                    .start => 0.0,
+                    .center => (availableSize[1] - contentSize[1]) / 2,
+                    .end => availableSize[1] - contentSize[1],
+                };
+            }
+        }
+
+        {
+            childIndexOpt = parent.firstChild;
+            // real placement
+            while (childIndexOpt) |childIndex| {
+                const child = &nodeTree.list.items[childIndex];
+                if (child.style.placement == .flow) {
+                    if (parent.style.direction == .horizontal) {
+                        child.position += cursor;
+                        child.position[0] += child.style.margin.x[0];
+                        child.position[1] += switch (parent.style.yJustification) {
+                            .start => child.style.margin.y[0],
+                            .center => (availableSize[1] - child.style.margin.y[0] - child.size[1] - child.style.margin.y[1]) / 2 + child.style.margin.y[0],
+                            .end => availableSize[1] - child.size[1] - child.style.margin.y[1],
+                        };
+
+                        cursor[0] += child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
+                    } else if (parent.style.direction == .vertical) {
+                        child.position += cursor;
+                        child.position[0] += switch (parent.style.xJustification) {
+                            .start => child.style.margin.x[0],
+                            .center => (availableSize[0] - child.style.margin.x[0] - child.size[0] - child.style.margin.x[1]) / 2 + child.style.margin.x[0],
+                            .end => availableSize[0] - child.size[0] - child.style.margin.x[1],
+                        };
+                        child.position[1] += child.style.margin.y[0];
+
+                        cursor[1] += child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
+                    }
+                }
+                childIndexOpt = child.nextSibling;
+            }
+        }
+    }
+}
+
+pub fn wrap(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
     var i = nodeTree.list.items.len;
     while (i > 0) {
         i -= 1;
@@ -538,7 +615,6 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
             node.style.borderWidth.y[0] + node.style.padding.y[0],
         };
 
-        // TODO: find a way to not have duplicate code between children and glyphs
         if (node.glyphs) |*glyphs| {
             if (node.style.textWrapping != .none) {
                 node.size[1] = try wrapGlyphs(
@@ -554,144 +630,6 @@ pub fn wrapAndPlace(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
                 }
             }
             continue;
-        }
-        if (node.firstChild == null) continue;
-
-        // TODO: should we remove this? there seems to be no real use case at this point
-        if (node.style.direction == .horizontal) {
-            const Line = struct {
-                start: usize,
-                end: usize,
-                width: f32,
-                height: f32,
-            };
-
-            var cursor = base;
-            var lines = std.ArrayList(Line).empty;
-            var currentLine = Line{ .start = node.firstChild.?, .end = node.firstChild.?, .width = 0.0, .height = 0.0 };
-            var wrapHeightAddition: f32 = 0.0;
-
-            var childIndexOption = node.firstChild;
-            while (childIndexOption) |childIndex| {
-                const child = nodeTree.at(childIndex);
-
-                if (child.style.placement == .flow) {
-                    const childOuterWidth = child.style.margin.x[0] + child.size[0] + child.style.margin.x[1];
-                    const childOuterHeight = child.style.margin.y[0] + child.size[1] + child.style.margin.y[1];
-
-                    if (node.style.overflow == .wrap) {
-                        const remainingSpace = node.size[0] - cursor[0] - node.style.borderWidth.x[1] - node.style.padding.x[1];
-                        if (childOuterWidth > remainingSpace) {
-                            const addition = currentLine.height + child.style.margin.y[0];
-                            cursor[1] += addition;
-                            // TODO: where does the bottom margin get used in this flow? I believe we're missing something
-                            node.size[1] += addition;
-                            wrapHeightAddition += addition;
-                            if (node.style.width == .ratio) {
-                                node.size[0] = node.size[1] * node.style.width.ratio;
-                            }
-                            cursor[0] = base[0];
-                            try lines.append(arena, currentLine);
-
-                            // New line starts at the overflow child; .end is still the prior line until assigned below.
-                            currentLine = .{ .start = childIndex, .end = childIndex, .width = 0, .height = 0 };
-                        }
-                    }
-
-                    cursor[0] += child.style.margin.x[0];
-                    child.position = cursor + Vec2{ 0, child.style.margin.y[0] };
-                    cursor[0] += child.size[0] + child.style.margin.x[1];
-
-                    currentLine.width += childOuterWidth;
-                    currentLine.height = @max(currentLine.height, childOuterHeight);
-                }
-
-                currentLine.end = childIndex;
-                childIndexOption = child.nextSibling;
-            }
-            try lines.append(arena, currentLine);
-
-            if (node.style.overflow == .wrap) {
-                // Wrap containers: height = base + wrapped lines + last line
-                node.size[1] = node.fittingBase(.vertical) + wrapHeightAddition + currentLine.height;
-                if (node.style.width == .ratio) {
-                    node.size[0] = node.size[1] * node.style.width.ratio;
-                }
-            } else if (node.style.height == .fit or node.style.height.isGrow()) {
-                // Non-wrap: expand height to fit tallest child
-                const newHeight = node.fittingBase(.vertical) + currentLine.height;
-                node.size[1] = @max(node.size[1], newHeight);
-            }
-
-            const availableWidth = node.size[0] - node.fittingBase(.horizontal);
-            const availableHeight = node.size[1] - node.fittingBase(.vertical);
-            for (lines.items) |line| {
-                const xOffset: f32 = switch (node.style.xJustification) {
-                    .start => 0.0,
-                    .center => (availableWidth - line.width) / 2.0,
-                    .end => availableWidth - line.width,
-                };
-                // For single-line containers, align children within the
-                // full available height so .center/.end work when the
-                // parent is taller than its content. For multi-line
-                // (wrapping), align within each line's height.
-                const alignHeight = if (lines.items.len == 1) @max(line.height, availableHeight) else line.height;
-                childIndexOption = line.start;
-                while (childIndexOption) |childIndex| {
-                    const child = nodeTree.at(childIndex);
-                    if (child.style.placement == .flow) {
-                        child.position[0] += xOffset;
-                        child.position[1] += switch (node.style.yJustification) {
-                            .start => 0.0,
-                            .center => (alignHeight - child.size[1]) / 2.0,
-                            .end => alignHeight - child.size[1],
-                        };
-                    }
-                    if (childIndex == line.end) break;
-                    childIndexOption = child.nextSibling;
-                }
-            }
-        } else {
-            var cursor = base;
-
-            var childIndexOption = node.firstChild;
-            while (childIndexOption) |childIndex| {
-                const child = nodeTree.at(childIndex);
-                if (child.style.placement == .flow) {
-                    cursor[1] += child.style.margin.y[0];
-                    child.position = cursor;
-                    cursor[1] += child.size[1] + child.style.margin.y[1];
-                }
-                childIndexOption = child.nextSibling;
-            }
-
-            const contentHeight = cursor[1] - base[1];
-
-            // Update fit containers to match content (needed before parent positions siblings)
-            if (node.style.height == .fit or node.style.height.isGrow()) {
-                const newHeight = node.fittingBase(.vertical) + contentHeight;
-                node.size[1] = @max(node.size[1], newHeight);
-            }
-            const availableWidth = node.size[0] - node.fittingBase(.horizontal);
-            const availableHeight = node.size[1] - node.fittingBase(.vertical);
-            const yOffset: f32 = switch (node.style.yJustification) {
-                .start => 0.0,
-                .center => (availableHeight - contentHeight) / 2.0,
-                .end => availableHeight - contentHeight,
-            };
-            childIndexOption = node.firstChild;
-            while (childIndexOption) |childIndex| {
-                const child = nodeTree.at(childIndex);
-                if (child.style.placement == .flow) {
-                    child.position[0] += switch (node.style.xJustification) {
-                        .start => 0.0,
-                        .center => (availableWidth - child.size[0]) / 2.0,
-                        .end => availableWidth - child.size[0],
-                    };
-                    child.position[1] += yOffset;
-                }
-                childIndexOption = child.nextSibling;
-            }
         }
     }
 }
@@ -718,23 +656,21 @@ pub fn layout() !*NodeTree {
 
         try growAndShrink(arena, &context.nodeTree);
 
-        try wrapAndPlace(arena, &context.nodeTree);
+        try wrap(arena, &context.nodeTree);
+        place(&context.nodeTree);
 
-        // Wrapping in pass 3 changed perpendicular sizes (taller text nodes,
-        // taller wrap containers) — ancestors were already effectively refit
-        // by wrapAndPlace itself, but their grow-sized siblings still need
-        // redistribution and cross-axis clamping against the new sizes.
+        // Wrapping in pass 3 changed perpendicular sizes (taller text
+        // nodes) — grow-sized siblings still need redistribution and
+        // cross-axis clamping against the new sizes.
         //
         // The intention is for this to only change cross-axis sizes.
         try growAndShrink(arena, &context.nodeTree);
 
-        // Pass 4 may have shrunk or grown some children; cursors and
-        // justification offsets need to be recomputed. Wrapping itself is
-        // stable because widths haven't changed since pass 2, but placement
-        // and wrapping share their main loop so the whole pass runs.
+        // Pass 4 may have shrunk or grown some children; glyph positions
+        // need to be recomputed against the new sizes.
         //
         // The intention is for this to only change positions.
-        try wrapAndPlace(arena, &context.nodeTree);
+        try wrap(arena, &context.nodeTree);
 
         root.position += root.style.translate;
 
@@ -808,6 +744,9 @@ pub fn layout() !*NodeTree {
             // What this node passes down to its descendants defaults to what
             // it inherited; if the node generates its own clip, fold that in.
             propagated[idx] = inherited;
+
+            // `.visible` lets children spill out unclipped.
+            if (node.style.overflow == .visible) continue;
 
             const hasConstrainedWidth = node.style.width != .fit or node.size[0] >= node.maxSize[0];
             const hasConstrainedHeight = node.style.height != .fit or node.size[1] >= node.maxSize[1];

@@ -1495,214 +1495,6 @@ test "wrapAndPlace offsets standard children by border plus padding" {
     });
 }
 
-test "overflow wrap places children on new lines and grows parent height" {
-    try initTest(std.testing.allocator);
-    defer forbear.deinit();
-
-    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arenaAllocator.deinit();
-
-    const arena = arenaAllocator.allocator();
-
-    try forbear.frame(try frameMeta(arena))({
-        // A 300px-wide horizontal container with overflow: wrap.
-        // Three 120x50 children: the first two fit on line 1 (240px < 300px),
-        // the third overflows and wraps to line 2.
-        forbear.element(.{
-            .style = .{
-                .width = .{ .fixed = 300 },
-                .height = .fit,
-                .direction = .horizontal,
-                .overflow = .wrap,
-            },
-        })({
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 120 },
-                    .height = .{ .fixed = 50 },
-                },
-            })({});
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 120 },
-                    .height = .{ .fixed = 50 },
-                },
-            })({});
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 120 },
-                    .height = .{ .fixed = 50 },
-                },
-            })({});
-        });
-
-        const tree = try forbear.layout();
-        const root = tree.at(0);
-        const childA = tree.at(root.firstChild.?);
-        const childB = tree.at(childA.nextSibling.?);
-        const childC = tree.at(childB.nextSibling.?);
-
-        try std.testing.expectEqual(@as(f32, 300), root.size[0]);
-
-        // Line 1: childA and childB side by side at y=0
-        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
-        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
-
-        try std.testing.expectEqual(@as(f32, 120), childB.position[0]);
-        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
-
-        // Line 2: childC wraps to a new row, x resets and y advances by
-        // line 1's height (50)
-        try std.testing.expectEqual(@as(f32, 0), childC.position[0]);
-        try std.testing.expectEqual(@as(f32, 50), childC.position[1]);
-
-        // Fit height = initial cross-axis max (50) + wrap addition (50) = 100
-        try std.testing.expectEqual(@as(f32, 100), root.size[1]);
-    });
-}
-
-test "overflow wrap line ranges start at the wrapping child for cross-axis justification" {
-    try initTest(std.testing.allocator);
-    defer forbear.deinit();
-
-    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arenaAllocator.deinit();
-
-    const arena = arenaAllocator.allocator();
-
-    try forbear.frame(try frameMeta(arena))({
-        // Same geometry as the basic wrap test, but center each row. The row that
-        // wraps must still align every child on that row (including the wrapped
-        // one); buggy line .start would attach the previous row's last child to
-        // the new row and skip applying x justification to the real wrapped child.
-        forbear.element(.{
-            .style = .{
-                .width = .{ .fixed = 300 },
-                .height = .fit,
-                .direction = .horizontal,
-                .overflow = .wrap,
-                .xJustification = .center,
-                .yJustification = .start,
-            },
-        })({
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 120 },
-                    .height = .{ .fixed = 50 },
-                },
-            })({});
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 120 },
-                    .height = .{ .fixed = 50 },
-                },
-            })({});
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .fixed = 120 },
-                    .height = .{ .fixed = 50 },
-                },
-            })({});
-        });
-
-        const tree = try forbear.layout();
-        const root = tree.at(0);
-        const childA = tree.at(root.firstChild.?);
-        const childB = tree.at(childA.nextSibling.?);
-        const childC = tree.at(childB.nextSibling.?);
-
-        // Inner width 300px; line 1 is 240px wide → +30; line 2 is 120px → +90
-        try std.testing.expectEqual(@as(f32, 30), childA.position[0]);
-        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
-
-        try std.testing.expectEqual(@as(f32, 150), childB.position[0]);
-        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
-
-        try std.testing.expectEqual(@as(f32, 90), childC.position[0]);
-        try std.testing.expectEqual(@as(f32, 50), childC.position[1]);
-    });
-}
-
-test "overflow wrap with grow-width parent wraps against resolved size" {
-    try initTest(std.testing.allocator);
-    defer forbear.deinit();
-
-    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arenaAllocator.deinit();
-
-    const arena = arenaAllocator.allocator();
-
-    try forbear.frame(try frameMeta(arena))({
-        // Outer container anchors to the viewport (800x600).
-        // The wrapping container uses grow so it fills the parent's
-        // full 800px width. With wrapping-aware fitting, minSize is
-        // the widest child (300) instead of the sum (900), so the
-        // grow resolves to 800 rather than being floored at 900.
-        // Three 300x60 children: the first two fit on line 1 (600 < 800),
-        // the third overflows and wraps to line 2.
-        forbear.element(.{
-            .style = .{
-                .width = .{ .grow = 1.0 },
-                .height = .{ .grow = 1.0 },
-                .direction = .vertical,
-            },
-        })({
-            forbear.element(.{
-                .style = .{
-                    .width = .{ .grow = 1.0 },
-                    .height = .fit,
-                    .direction = .horizontal,
-                    .overflow = .wrap,
-                },
-            })({
-                forbear.element(.{
-                    .style = .{
-                        .width = .{ .fixed = 300 },
-                        .height = .{ .fixed = 60 },
-                    },
-                })({});
-                forbear.element(.{
-                    .style = .{
-                        .width = .{ .fixed = 300 },
-                        .height = .{ .fixed = 60 },
-                    },
-                })({});
-                forbear.element(.{
-                    .style = .{
-                        .width = .{ .fixed = 300 },
-                        .height = .{ .fixed = 60 },
-                    },
-                })({});
-            });
-        });
-
-        const tree = try forbear.layout();
-        const outer = tree.at(0);
-        const wrapper = tree.at(outer.firstChild.?);
-        const childA = tree.at(wrapper.firstChild.?);
-        const childB = tree.at(childA.nextSibling.?);
-        const childC = tree.at(childB.nextSibling.?);
-
-        // Wrapper grows to parent's 800px (not 900, since minSize
-        // is now the widest child, not the sum)
-        try std.testing.expectEqual(@as(f32, 800), wrapper.size[0]);
-
-        // Line 1: A and B side by side at y=0
-        try std.testing.expectEqual(@as(f32, 0), childA.position[0]);
-        try std.testing.expectEqual(@as(f32, 0), childA.position[1]);
-
-        try std.testing.expectEqual(@as(f32, 300), childB.position[0]);
-        try std.testing.expectEqual(@as(f32, 0), childB.position[1]);
-
-        // Line 2: C wraps, x resets and y advances by line 1 height (60)
-        try std.testing.expectEqual(@as(f32, 0), childC.position[0]);
-        try std.testing.expectEqual(@as(f32, 60), childC.position[1]);
-
-        // Fit height = initial cross-axis max (60) + wrap addition (60) = 120
-        try std.testing.expectEqual(@as(f32, 120), wrapper.size[1]);
-    });
-}
-
 test "grow children split remaining space and stretch cross-axis" {
     try initTest(std.testing.allocator);
     defer forbear.deinit();
@@ -6137,6 +5929,44 @@ test "buildDrawCommands propagates clipRect from layout" {
         try std.testing.expect(parentClip == null);
         // Child (100x80) overflows parent (100x50) → clipped to parent's bounds
         try std.testing.expectEqual(@Vector(4, f32){ 0, 0, 100, 50 }, childClip.?);
+    });
+}
+
+test "overflow visible does not clip overflowing children" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    try forbear.frame(try frameMeta(arena))({
+        // Same geometry as the clipping test above, but the parent opts out
+        // with overflow: visible → the overflowing child gets no clipRect.
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 50 },
+                .direction = .vertical,
+                .overflow = .visible,
+            },
+        })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 80 },
+                },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
+
+        try std.testing.expectEqual(@as(usize, 2), cmds.len);
+
+        for (cmds) |cmd| {
+            try std.testing.expect(cmd.clipRect == null);
+        }
     });
 }
 

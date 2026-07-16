@@ -75,7 +75,7 @@ pub const TextWrapping = enum {
 
 pub const Overflow = enum {
     visible,
-    wrap,
+    hidden,
 };
 
 pub const Padding = struct {
@@ -511,7 +511,7 @@ pub const Style = struct {
         out.textWrapping = self.textWrapping orelse base.textWrapping;
         out.cursor = self.cursor orelse base.cursor;
 
-        out.overflow = self.overflow orelse .visible;
+        out.overflow = self.overflow orelse .hidden;
         out.placement = self.placement orelse .flow;
         out.zIndex = self.zIndex;
 
@@ -806,8 +806,6 @@ pub const Node = struct {
         const fitV = self.style.height == .fit or self.style.height.isGrow() or self.shouldFitMin(.vertical);
         if (!fitH and !fitV) return;
 
-        const wraps = self.style.overflow == .wrap and self.style.direction == .horizontal;
-
         inline for (Direction.array) |fitDirection| {
             const preferredSize = self.style.getPreferredSize(fitDirection);
             const layoutDirection = self.style.direction;
@@ -827,36 +825,19 @@ pub const Node = struct {
             const shouldAccumulate = preferredSize == .fit or preferredSize.isGrow();
 
             if (layoutDirection == fitDirection) {
-                if (wraps) {
-                    // With wrapping, inline-axis min is the widest single
-                    // child (any child could end up alone on a line).
-                    if (shouldAccumulate) {
-                        self.setSize(fitDirection, @max(
-                            self.getSize(fitDirection),
-                            contribution + self.fittingBase(fitDirection),
-                        ));
-                    }
-                    if (self.shouldFitMin(fitDirection)) {
-                        self.setMinSize(fitDirection, @max(
-                            self.getMinSize(fitDirection),
-                            minContribution + self.fittingBase(fitDirection),
-                        ));
-                    }
-                } else {
-                    if (preferredSize == .fit) {
-                        // TODO: ensure the max and min sizes here
-                        self.addSize(fitDirection, contribution);
-                    } else if (preferredSize.isGrow()) {
-                        // For grow, expand to fit content if needed
-                        self.setSize(fitDirection, @max(
-                            self.getSize(fitDirection),
-                            contribution + self.fittingBase(fitDirection),
-                        ));
-                    }
-                    if (self.shouldFitMin(fitDirection)) {
-                        // Main axis: use minSize to avoid unwrapped text bloat
-                        self.addMinSize(fitDirection, minContribution);
-                    }
+                if (preferredSize == .fit) {
+                    // TODO: ensure the max and min sizes here
+                    self.addSize(fitDirection, contribution);
+                } else if (preferredSize.isGrow()) {
+                    // For grow, expand to fit content if needed
+                    self.setSize(fitDirection, @max(
+                        self.getSize(fitDirection),
+                        contribution + self.fittingBase(fitDirection),
+                    ));
+                }
+                if (self.shouldFitMin(fitDirection)) {
+                    // Main axis: use minSize to avoid unwrapped text bloat
+                    self.addMinSize(fitDirection, minContribution);
                 }
             } else {
                 // cross axis fitting
