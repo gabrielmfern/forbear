@@ -11,6 +11,10 @@ layout(location = 7) in vec2 elementOffset;
 
 layout(location = 0) out vec4 outColor;
 
+// This uses an SDF for the shadow instead of matching the browser exactly with
+// Gaussian Blur. This is an honest trade-off here, and we can switch to
+// gaussian blur in the future, but that would increase the complexity of this
+// shader by quite a bit as far as I can tell.
 void main() {
     // localPos.xy is 0-1 across the quad, convert to pixel coords centered at origin
     vec2 p = (localPos.xy - 0.5) * size;
