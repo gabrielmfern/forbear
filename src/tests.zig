@@ -5898,12 +5898,13 @@ test "buildDrawCommands propagates clipRect from layout" {
     const arena = arenaAllocator.allocator();
 
     try forbear.frame(try frameMeta(arena))({
-        // Fixed-height parent with children that overflow → children get clipRect
+        // overflow: hidden parent with children that overflow → children get clipRect
         forbear.element(.{
             .style = .{
                 .width = .{ .fixed = 100 },
                 .height = .{ .fixed = 50 },
                 .direction = .vertical,
+                .overflow = .hidden,
             },
         })({
             forbear.element(.{
@@ -6399,6 +6400,7 @@ test "buildDrawCommands: nested clips intersect correctly" {
                 .width = .{ .fixed = 200 },
                 .height = .{ .fixed = 100 },
                 .direction = .vertical,
+                .overflow = .hidden,
             },
         })({
             forbear.element(.{
@@ -6406,6 +6408,7 @@ test "buildDrawCommands: nested clips intersect correctly" {
                     .width = .{ .fixed = 300 },
                     .height = .{ .fixed = 150 },
                     .direction = .vertical,
+                    .overflow = .hidden,
                 },
             })({
                 forbear.element(.{
@@ -6448,13 +6451,14 @@ test "buildDrawCommands: three-level clip stack produces monotonically tighter b
     defer arenaAllocator.deinit();
     const arena = arenaAllocator.allocator();
 
-    // Each level clips via fixed-size + overflowing child.
+    // Each level clips via overflow: hidden + overflowing child.
     try forbear.frame(try frameMeta(arena))({
         forbear.element(.{
             .style = .{
                 .width = .{ .fixed = 300 },
                 .height = .{ .fixed = 300 },
                 .direction = .vertical,
+                .overflow = .hidden,
             },
         })({
             forbear.element(.{
@@ -6462,6 +6466,7 @@ test "buildDrawCommands: three-level clip stack produces monotonically tighter b
                     .width = .{ .fixed = 200 },
                     .height = .{ .fixed = 200 },
                     .direction = .vertical,
+                    .overflow = .hidden,
                 },
             })({
                 forbear.element(.{
@@ -6469,6 +6474,7 @@ test "buildDrawCommands: three-level clip stack produces monotonically tighter b
                         .width = .{ .fixed = 100 },
                         .height = .{ .fixed = 100 },
                         .direction = .vertical,
+                        .overflow = .hidden,
                     },
                 })({
                     forbear.element(.{

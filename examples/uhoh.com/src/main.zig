@@ -36,6 +36,7 @@ fn App() !void {
                 .direction = .vertical,
                 .xJustification = .center,
                 .yJustification = .start,
+                .overflow = .hidden,
             },
         })({
             const scrolling = forbear.useState(forbear.ScrollingState, .{});
