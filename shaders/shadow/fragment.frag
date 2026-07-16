@@ -30,7 +30,7 @@ void main() {
     float alpha;
     if (blur > 0.0) {
         // Smooth falloff from inside to outside over the blur radius.
-        alpha = 1.0 - smoothstep(-aa, blur + aa, adjustedDist);
+        alpha = 1.0 - smoothstep(-aa - blur, aa + blur, adjustedDist);
     } else {
         // Anti-aliased hard edge when no blur.
         alpha = 1.0 - smoothstep(-aa, aa, adjustedDist);
