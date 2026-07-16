@@ -158,26 +158,6 @@ fn clipRectEql(a: ?Vec4, b: ?Vec4) bool {
     return @reduce(.And, a.? == b.?);
 }
 
-/// Convert a single sRGB color component to linear RGB.
-/// sRGB values are gamma-encoded for display; linear values are needed for
-/// physically correct blending/compositing in shaders when using an sRGB swapchain.
-fn srgbToLinear(value: f32) f32 {
-    if (value <= 0.04045) {
-        return value / 12.92;
-    } else {
-        return std.math.pow(f32, (value + 0.055) / 1.055, 2.4);
-    }
-}
-
-fn srgbToLinearColor(color: Vec4) Vec4 {
-    return Vec4{
-        srgbToLinear(color[0]),
-        srgbToLinear(color[1]),
-        srgbToLinear(color[2]),
-        color[3], // Alpha is already linear
-    };
-}
-
 const Stopwatch = struct {
     io: std.Io,
     startNs: i128,
@@ -1036,7 +1016,7 @@ pub const Image = struct {
                     .extent = extent,
                     .mipLevels = mipLevels,
                     .arrayLayers = 1,
-                    .format = c.VK_FORMAT_R8G8B8A8_SRGB,
+                    .format = c.VK_FORMAT_R8G8B8A8_UNORM,
                     .tiling = c.VK_IMAGE_TILING_OPTIMAL,
                     .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
                     .usage = c.VK_IMAGE_USAGE_SAMPLED_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -4233,7 +4213,7 @@ pub const Renderer = struct {
                 gradientStart = @intCast(gradientStopIndex);
                 for (stops) |stop| {
                     self.elementsPipeline.gradientStops.mapped[frameIndex][gradientStopIndex] = GradientStop{
-                        .color = srgbToLinearColor(stop.color),
+                        .color = stop.color,
                         .position = stop.position,
                     };
                     gradientStopIndex += 1;
@@ -4249,13 +4229,13 @@ pub const Renderer = struct {
                     projectionMatrix,
                 ),
                 .backgroundColor = switch (node.style.background) {
-                    .color => |color| srgbToLinearColor(color),
+                    .color => |color| color,
                     .image => Vec4{ 1.0, 1.0, 1.0, 1.0 },
                     .gradient => Vec4{ 0.0, 0.0, 0.0, 0.0 },
                 },
                 .size = node.size,
                 .borderRadius = node.style.borderRadius,
-                .borderColor = srgbToLinearColor(node.style.borderColor),
+                .borderColor = node.style.borderColor,
                 .borderSize = .{
                     node.style.borderWidth.y[0],
                     node.style.borderWidth.y[1],
@@ -4292,7 +4272,7 @@ pub const Renderer = struct {
                         ),
                         projectionMatrix,
                     ),
-                    .color = srgbToLinearColor(shadow.color),
+                    .color = shadow.color,
                     .blur = shadow.blurRadius,
                     .spread = shadow.spread,
                     .elementSize = node.size,
@@ -4326,7 +4306,7 @@ pub const Renderer = struct {
                         glyphFont = glyph.style.font;
                         glyphFontSize = glyph.style.fontSize;
                         glyphFontWeight = glyph.style.fontWeight;
-                        linearColor = srgbToLinearColor(glyph.style.color);
+                        linearColor = glyph.style.color;
 
                         // Outer lookup: once per run (per font/size/weight/dpi combo)
                         const glyphPageKey = TextPipeline.GlyphPageKey{
@@ -4419,7 +4399,7 @@ pub const Renderer = struct {
                 .clearValueCount = 1,
                 .pClearValues = &c.VkClearValue{
                     .color = c.VkClearColorValue{
-                        .float32 = srgbToLinearColor(clearColor),
+                        .float32 = clearColor,
                     },
                 },
             },
@@ -4649,7 +4629,7 @@ pub const Renderer = struct {
 
             var surfaceFormat: c.VkSurfaceFormatKHR = swapchainSupportDetails.formats[0];
             for (swapchainSupportDetails.formats) |availableFormat| {
-                if (availableFormat.format == c.VK_FORMAT_B8G8R8A8_SRGB and
+                if (availableFormat.format == c.VK_FORMAT_B8G8R8A8_UNORM and
                     availableFormat.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
                 {
                     surfaceFormat = availableFormat;
