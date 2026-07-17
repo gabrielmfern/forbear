@@ -2172,7 +2172,7 @@ pub fn onMouseMove() ?Vec2 {
     defer lastMousePosition.* = mousePosition;
     const delta = mousePosition - lastMousePosition.*;
 
-    if (isMouseInside() and (delta[0] != 0.0 or delta[1] != 0.0)) {
+    if (delta[0] != 0.0 or delta[1] != 0.0) {
         return delta;
     } else {
         return null;
