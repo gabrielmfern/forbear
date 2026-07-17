@@ -1153,6 +1153,11 @@ fn elementEnd(block: void) void {
     const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
     const node = self.nodeTree.at(previousNodeIndex);
 
+    node.position = switch (node.style.placement) {
+        .fixed => |v| v,
+        .relative => |v| v,
+        .flow => @splat(0.0),
+    };
     if (node.style.width == .ratio) {
         node.size[0] = node.style.width.ratio * node.size[1];
     }
@@ -1222,11 +1227,7 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
         parentZ + 1
     else
         parentZ;
-    result.ptr.position = switch (result.ptr.style.placement) {
-        .fixed => |v| v,
-        .relative => |v| v,
-        .flow => @splat(0.0),
-    };
+    result.ptr.position = @splat(0.0);
     result.ptr.size = .{
         switch (result.ptr.style.width) {
             .fixed => |width| width,
