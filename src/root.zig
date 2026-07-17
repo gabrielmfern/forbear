@@ -153,7 +153,7 @@ pub const Event = enum {
 };
 
 /// A run of text sharing one resolved style. The unit `composeText` appends to
-/// and `measureText` lays out; `text` is a single run spanning all its content.
+/// and `measureTextRuns` lays out; `text` is a single run spanning all its content.
 pub const TextRun = struct {
     content: []const u8,
     style: CompleteTextStyle,
@@ -528,12 +528,27 @@ pub fn useAnimation(duration: f32) Animation {
 
 pub const TextMeasurement = struct { width: f32, height: f32, lines: usize };
 
+pub fn useMeasuredText(content: []const u8, style: TextStyle, width: f32, textWrapping: TextWrapping) TextMeasurement {
+    const parent = getParentNode().?;
+    return measureTextRuns(
+        .{
+            .content = content,
+            .style = TextStyle.complete(
+                style,
+                CompleteTextStyle.from(BaseStyle.from(parent.style)),
+            ),
+        },
+        width,
+        textWrapping,
+    );
+}
+
 /// Lays out `runs` at `width` without mounting anything, reporting how tall the
 /// text wraps and how many lines it spans. Runs the same shaping and wrapping
 /// the layout pass uses, so the result matches what `text`/`composeText` would
 /// render at that width and `textWrapping`. `.none` ignores `width`. Must be
 /// called inside a frame; scratch goes on the frame arena.
-pub fn measureText(runs: []const TextRun, width: f32, textWrapping: TextWrapping) TextMeasurement {
+pub fn measureTextRuns(runs: []const TextRun, width: f32, textWrapping: TextWrapping) TextMeasurement {
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) return .{ .width = 0, .height = 0, .lines = 0 };
@@ -1563,7 +1578,7 @@ pub const ShapedRuns = struct {
 /// sizing for `textWrapping`. Glyphs, styles, and scratch live on `arena`
 /// (typically `useArena()`, the frame arena); `minSize`/`maxSize` are only
 /// meaningful while `textWrapping` holds, since each mode accumulates them
-/// differently. The primitive under `measureText`, for anything that needs
+/// differently. The primitive under `measureTextRuns`, for anything that needs
 /// the per-glyph advances and source bytes themselves.
 pub fn shapeRuns(arena: std.mem.Allocator, runs: []const TextRun, textWrapping: TextWrapping) !ShapedRuns {
     // Stable per-frame style copies for glyphs to point at; the builder's run
