@@ -100,10 +100,7 @@ pub fn buildDrawCommands(
                 .blendMode = .normal,
                 .start = shadowIndex,
                 .end = shadowIndex,
-                .clipRect = if (node.parent) |parentIndex|
-                    nodeTree.at(parentIndex).clipRect
-                else
-                    null,
+                .clipRect = node.clipRect,
                 .z = node.z,
             };
             count += 1;
