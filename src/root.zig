@@ -1180,16 +1180,16 @@ fn elementEnd(block: void) void {
             .ratio => |ratio| if (node.style.height == .fixed)
                 node.style.height.fixed * ratio
             else
-                0.0,
-            .fit, .grow => 0.0,
+                ratio * node.size[1],
+            .fit, .grow => node.size[0],
         },
         switch (node.style.height) {
             .fixed => |height| height,
             .ratio => |ratio| if (node.style.width == .fixed)
                 node.style.width.fixed * ratio
             else
-                0.0,
-            .fit, .grow => 0.0,
+                ratio * node.size[0],
+            .fit, .grow => node.size[1],
         },
     };
     node.minSize = .{
@@ -1198,13 +1198,13 @@ fn elementEnd(block: void) void {
         else if (node.style.width == .fixed)
             node.style.width.fixed
         else
-            0.0,
+            node.minSize[0],
         if (node.style.minHeight) |minHeight|
             minHeight
         else if (node.style.height == .fixed)
             node.style.height.fixed
         else
-            0.0,
+            node.minSize[1],
     };
     node.maxSize = .{
         if (node.style.maxWidth) |maxWidth|
@@ -1221,12 +1221,6 @@ fn elementEnd(block: void) void {
             std.math.inf(f32),
     };
 
-    if (node.style.width == .ratio) {
-        node.size[0] = node.style.width.ratio * node.size[1];
-    }
-    if (node.style.height == .ratio) {
-        node.size[1] = node.style.height.ratio * node.size[0];
-    }
     node.size[0] = @min(@max(node.size[0], node.minSize[0]), node.maxSize[0]);
     node.size[1] = @min(@max(node.size[1], node.minSize[1]), node.maxSize[1]);
 }
