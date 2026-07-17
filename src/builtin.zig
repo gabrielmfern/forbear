@@ -988,7 +988,7 @@ pub fn useInput(props: UseInputProps) *InputState {
             }
 
             const textStyle = forbear.CompleteTextStyle.from(forbear.BaseStyle.from(parent.style));
-            const measured = forbear.measureText(&.{.{
+            const measured = forbear.measureTextRuns(&.{.{
                 .content = inputState.display[0..inputState.displayCursor()],
                 .style = textStyle,
             }}, 0.0, .none);
@@ -1061,11 +1061,11 @@ pub fn InputCaret(props: InputCaretProps) void {
                 // of scrolling, and the cursor sits on one of them, so the
                 // scroll-adjusted `caret.position` anchors the whole box.
                 const selectionWidth: f32 = if (hasSelection) blk: {
-                    const from = forbear.measureText(&.{.{
+                    const from = forbear.measureTextRuns(&.{.{
                         .content = props.inputState.display[0..selection[0]],
                         .style = textStyle,
                     }}, 0.0, .none);
-                    const to = forbear.measureText(&.{.{
+                    const to = forbear.measureTextRuns(&.{.{
                         .content = props.inputState.display[0..selection[1]],
                         .style = textStyle,
                     }}, 0.0, .none);
