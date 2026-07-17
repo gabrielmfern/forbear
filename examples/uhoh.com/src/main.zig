@@ -41,7 +41,7 @@ fn App() !void {
         })({
             const scrolling = forbear.useState(forbear.ScrollingState, .{});
             forbear.useScrolling(scrolling);
-            forbear.ScrollBar(scrolling);
+            forbear.ScrollBar(scrolling, .{});
 
             forbear.ProfilingMetrics(.{});
 

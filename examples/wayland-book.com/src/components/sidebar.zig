@@ -23,7 +23,7 @@ pub fn Sidebar() *const fn (void) void {
             const scrolling = forbear.useState(forbear.ScrollingState, .{});
             forbear.useScrolling(scrolling);
 
-            forbear.ScrollBar(scrolling);
+            forbear.ScrollBar(scrolling, .{});
 
             forbear.componentChildrenSlot();
         });

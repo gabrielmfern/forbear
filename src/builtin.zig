@@ -300,7 +300,15 @@ pub fn useScrolling(state: *ScrollingState) void {
     node.childrenOffset = -state._effectiveOffset;
 }
 
-pub fn ScrollBar(state: *ScrollingState) void {
+pub const ScrollBarStyle = struct {
+    width: f32 = 7.0,
+    trackColor: Vec4 = forbear.rgba(180, 180, 180, 0.31),
+    trackBorderColor: Vec4 = forbear.rgba(200, 200, 200, 0.47),
+    thumbColor: Vec4 = forbear.rgba(80, 80, 80, 0.55),
+    thumbActiveColor: Vec4 = forbear.rgba(60, 60, 60, 0.78),
+};
+
+pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
     if (forbear.useNodeMeasurement()) |parentMeasurement| {
         // `.relative` placement is measured from the parent's content box
         // (inside its border + padding), so subtract those insets from the
@@ -316,48 +324,44 @@ pub fn ScrollBar(state: *ScrollingState) void {
         // doesn't visually shrink with vertical padding.
         const trackHeight = parentMeasurement.size[1] - border.y[0] - border.y[1];
         if (parentMeasurement.contentSize[1] > innerSize[1]) {
+            // Bound to the parent's own scope (we haven't opened the
+            // scrollbar's `component` yet), so this reads hover on the
+            // scrollable container itself, not on the bar.
+            const containerHovered = forbear.useState(bool, false);
+            if (forbear.onMouseEnter()) {
+                containerHovered.* = true;
+            }
+            if (forbear.onMouseLeave()) {
+                containerHovered.* = false;
+            }
+
             forbear.component(.{})({
                 const isHovered = forbear.useState(bool, false);
                 const isDragging = forbear.useState(bool, false);
 
-                const scrollbarWidth = forbear.useTransition(
+                // Kept visible through a drag even if the mouse strays
+                // outside the container mid-gesture.
+                const opacity = forbear.useTransition(
                     f32,
-                    if (isHovered.* or isDragging.*) 11.0 else 7.0,
+                    if (containerHovered.* or isDragging.*) 1.0 else 0.0,
                     0.15,
                     forbear.easeOut,
                 );
+                const fade = Vec4{ 1.0, 1.0, 1.0, opacity };
 
                 // track
                 forbear.element(.{
                     .style = .{
-                        .background = .{
-                            .color = forbear.useTransition(
-                                Vec4,
-                                if (isHovered.* or isDragging.*)
-                                    forbear.rgba(180, 180, 180, 0.31)
-                                else
-                                    forbear.rgba(180, 180, 180, 0.0),
-                                0.15,
-                                forbear.easeOut,
-                            ),
-                        },
+                        .background = .{ .color = style.trackColor * fade },
                         .borderStyle = .solid,
                         .borderWidth = .left(1.0),
-                        .borderColor = forbear.useTransition(
-                            Vec4,
-                            if (isHovered.* or isDragging.*)
-                                forbear.rgba(200, 200, 200, 0.47)
-                            else
-                                .{ 0.0, 0.0, 0.0, 0.0 },
-                            0.15,
-                            forbear.easeOut,
-                        ),
+                        .borderColor = style.trackBorderColor * fade,
                         // Anchor against the parent's outer right edge regardless
                         // of padding/border. `.relative` is measured from the
                         // content box, so we step back out by the right
-                        // padding+border and then inward by `scrollbarWidth`.
-                        .placement = .{ .relative = .{ innerSize[0] + padding.x[1] + border.x[1] - scrollbarWidth, -padding.y[0] } },
-                        .width = .{ .fixed = scrollbarWidth },
+                        // padding+border and then inward by `style.width`.
+                        .placement = .{ .relative = .{ innerSize[0] + padding.x[1] + border.x[1] - style.width, -padding.y[0] } },
+                        .width = .{ .fixed = style.width },
                         .height = .{ .fixed = trackHeight },
                         .cursor = .default,
                         .zIndex = 10,
@@ -383,10 +387,10 @@ pub fn ScrollBar(state: *ScrollingState) void {
                             .background = .{
                                 .color = forbear.useTransition(
                                     Vec4,
-                                    if (isHovered.* or isDragging.*) forbear.rgba(60, 60, 60, 0.78) else forbear.rgba(80, 80, 80, 0.55),
+                                    if (isHovered.* or isDragging.*) style.thumbActiveColor else style.thumbColor,
                                     0.15,
                                     forbear.easeOut,
-                                ),
+                                ) * fade,
                             },
                         },
                     })({});
