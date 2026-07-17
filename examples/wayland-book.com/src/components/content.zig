@@ -149,7 +149,7 @@ pub fn Content(activeChapter: *usize) !void {
                 const scrolling = forbear.useState(forbear.ScrollingState, .{});
                 forbear.useScrolling(scrolling);
 
-                forbear.ScrollBar(scrolling);
+                forbear.ScrollBar(scrolling, .{});
 
                 const measurement = forbear.useNodeMeasurement();
 

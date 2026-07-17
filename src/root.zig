@@ -10,6 +10,7 @@ pub const ProfilingMetrics = forbearBuiltin.ProfilingMetrics;
 pub const ScrollingState = forbearBuiltin.ScrollingState;
 pub const useScrolling = forbearBuiltin.useScrolling;
 pub const ScrollBar = forbearBuiltin.ScrollBar;
+pub const ScrollBarStyle = forbearBuiltin.ScrollBarStyle;
 pub const ScrollingContext = forbearBuiltin.ScrollingContext;
 pub const ScrollProvider = forbearBuiltin.ScrollProvider;
 pub const ScrollRoom = forbearBuiltin.ScrollRoom;

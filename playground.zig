@@ -213,7 +213,7 @@ fn App() void {
                 forbear.ScrollProvider()({
                     const scrolling = forbear.useState(forbear.ScrollingState, .{});
                     forbear.useScrolling(scrolling);
-                    forbear.ScrollBar(scrolling);
+                    forbear.ScrollBar(scrolling, .{});
 
                     forbear.element(.{
                         .style = .{
@@ -374,7 +374,7 @@ fn App() void {
                         })({
                             const clipScrolling = forbear.useState(forbear.ScrollingState, .{});
                             forbear.useScrolling(clipScrolling);
-                            forbear.ScrollBar(clipScrolling);
+                            forbear.ScrollBar(clipScrolling, .{});
 
                             forbear.text("Line 1");
                             forbear.text("Line 2");
@@ -406,7 +406,7 @@ fn App() void {
                             })({
                                 const leftScrolling = forbear.useState(forbear.ScrollingState, .{});
                                 forbear.useScrolling(leftScrolling);
-                                forbear.ScrollBar(leftScrolling);
+                                forbear.ScrollBar(leftScrolling, .{});
                                 forbear.text("Left A");
                                 forbear.text("Left B");
                                 forbear.text("Left C");
@@ -428,7 +428,7 @@ fn App() void {
                             })({
                                 const rightScrolling = forbear.useState(forbear.ScrollingState, .{});
                                 forbear.useScrolling(rightScrolling);
-                                forbear.ScrollBar(rightScrolling);
+                                forbear.ScrollBar(rightScrolling, .{});
                                 forbear.text("Right 1");
                                 forbear.text("Right 2");
                                 forbear.text("Right 3");
