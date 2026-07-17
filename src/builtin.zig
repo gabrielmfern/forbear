@@ -1029,6 +1029,7 @@ pub fn useInput(props: UseInputProps) *InputState {
 const InputCaretProps = struct {
     inputState: *const InputState,
     style: forbear.Style = .{},
+    selectionColor: Vec4 = forbear.selectionColor,
 };
 
 pub fn InputCaret(props: InputCaretProps) void {
@@ -1072,7 +1073,7 @@ pub fn InputCaret(props: InputCaretProps) void {
                         // for them to read through.
                         .background = .{
                             .color = if (hasSelection)
-                                forbear.selectionColor
+                                props.selectionColor
                             else
                                 textStyle.color,
                         },
