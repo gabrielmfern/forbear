@@ -5933,6 +5933,62 @@ test "buildDrawCommands propagates clipRect from layout" {
     });
 }
 
+test "buildDrawCommands clips a child's shadow to an overflow: hidden parent" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    const shadow = forbear.Shadow{
+        .color = .{ 0, 0, 0, 1 },
+        .blurRadius = 5,
+        .spread = 0,
+        .offset = .{ .x = .{ 0, 0 }, .y = .{ 0, 0 } },
+    };
+
+    try forbear.frame(try frameMeta(arena))({
+        // Same geometry as "buildDrawCommands propagates clipRect from
+        // layout" above, but the overflowing child also casts a shadow. The
+        // shadow must be clipped exactly like the child's own element/text
+        // commands are — to the parent's overflow: hidden bounds — not left
+        // unclipped just because it's a shadow.
+        forbear.element(.{
+            .style = .{
+                .width = .{ .fixed = 100 },
+                .height = .{ .fixed = 50 },
+                .direction = .vertical,
+                .overflow = .hidden,
+            },
+        })({
+            forbear.element(.{
+                .style = .{
+                    .width = .{ .fixed = 100 },
+                    .height = .{ .fixed = 80 },
+                    .shadow = shadow,
+                },
+            })({});
+        });
+
+        const tree = try forbear.layout();
+        const cmds = try forbear.Graphics.buildDrawCommands(arena, tree, .{ 800, 600 }, .{});
+
+        var shadowClip: ?@Vector(4, f32) = null;
+        var sawShadow = false;
+        for (cmds) |cmd| {
+            if (cmd.kind == .shadow) {
+                sawShadow = true;
+                shadowClip = cmd.clipRect;
+            }
+        }
+        try std.testing.expect(sawShadow);
+        // Child (100x80) overflows parent (100x50) → shadow clipped to
+        // parent's bounds, same as the element/text commands would be.
+        try std.testing.expectEqual(@Vector(4, f32){ 0, 0, 100, 50 }, shadowClip.?);
+    });
+}
+
 test "overflow visible does not clip overflowing children" {
     try initTest(std.testing.allocator);
     defer forbear.deinit();
