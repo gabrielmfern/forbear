@@ -324,38 +324,17 @@ pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
         // doesn't visually shrink with vertical padding.
         const trackHeight = parentMeasurement.size[1] - border.y[0] - border.y[1];
         if (parentMeasurement.contentSize[1] > innerSize[1]) {
-            // Bound to the parent's own scope (we haven't opened the
-            // scrollbar's `component` yet), so this reads hover on the
-            // scrollable container itself, not on the bar.
-            const containerHovered = forbear.useState(bool, false);
-            if (forbear.onMouseEnter()) {
-                containerHovered.* = true;
-            }
-            if (forbear.onMouseLeave()) {
-                containerHovered.* = false;
-            }
-
             forbear.component(.{})({
                 const isHovered = forbear.useState(bool, false);
                 const isDragging = forbear.useState(bool, false);
 
-                // Kept visible through a drag even if the mouse strays
-                // outside the container mid-gesture.
-                const opacity = forbear.useTransition(
-                    f32,
-                    if (containerHovered.* or isDragging.*) 1.0 else 0.0,
-                    0.15,
-                    forbear.easeOut,
-                );
-                const fade = Vec4{ 1.0, 1.0, 1.0, opacity };
-
                 // track
                 forbear.element(.{
                     .style = .{
-                        .background = .{ .color = style.trackColor * fade },
+                        .background = .{ .color = style.trackColor },
                         .borderStyle = .solid,
                         .borderWidth = .left(1.0),
-                        .borderColor = style.trackBorderColor * fade,
+                        .borderColor = style.trackBorderColor,
                         // Anchor against the parent's outer right edge regardless
                         // of padding/border. `.relative` is measured from the
                         // content box, so we step back out by the right
@@ -390,7 +369,7 @@ pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
                                     if (isHovered.* or isDragging.*) style.thumbActiveColor else style.thumbColor,
                                     0.15,
                                     forbear.easeOut,
-                                ) * fade,
+                                ),
                             },
                         },
                     })({});
