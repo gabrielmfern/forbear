@@ -7,6 +7,14 @@ pub const Cursor = enum(u8) {
     default,
     text,
     pointer,
+    /// Horizontal resize, CSS `ew-resize`.
+    eastWestResize,
+    /// Vertical resize, CSS `ns-resize`.
+    northSouthResize,
+    /// Diagonal resize (northeast/southwest), CSS `nesw-resize`.
+    northeastSouthwestResize,
+    /// Diagonal resize (northwest/southeast), CSS `nwse-resize`.
+    northwestSoutheastResize,
 };
 
 /// Cross-platform key identity. Backends translate their native key code
@@ -462,6 +470,10 @@ pub const Window = switch (builtin.os.tag) {
         defaultWlCursor: *c.wl_cursor,
         pointerWlCursor: *c.wl_cursor,
         textWlCursor: *c.wl_cursor,
+        eastWestResizeWlCursor: *c.wl_cursor,
+        northSouthResizeWlCursor: *c.wl_cursor,
+        northeastSouthwestResizeWlCursor: *c.wl_cursor,
+        northwestSoutheastResizeWlCursor: *c.wl_cursor,
 
         // Everything native related to the window itself
         wlSurface: *c.wl_surface,
@@ -1546,6 +1558,10 @@ pub const Window = switch (builtin.os.tag) {
             self.defaultWlCursor = c.wl_cursor_theme_get_cursor(self.wlCursorTheme, "default");
             self.pointerWlCursor = c.wl_cursor_theme_get_cursor(self.wlCursorTheme, "pointer");
             self.textWlCursor = c.wl_cursor_theme_get_cursor(self.wlCursorTheme, "text");
+            self.eastWestResizeWlCursor = c.wl_cursor_theme_get_cursor(self.wlCursorTheme, "ew-resize");
+            self.northSouthResizeWlCursor = c.wl_cursor_theme_get_cursor(self.wlCursorTheme, "ns-resize");
+            self.northeastSouthwestResizeWlCursor = c.wl_cursor_theme_get_cursor(self.wlCursorTheme, "nesw-resize");
+            self.northwestSoutheastResizeWlCursor = c.wl_cursor_theme_get_cursor(self.wlCursorTheme, "nwse-resize");
 
             self.cursorWlSurface = c.wl_compositor_create_surface(self.wlCompositor) orelse return error.FailedCreatingCursorSurface;
         }
@@ -1571,6 +1587,10 @@ pub const Window = switch (builtin.os.tag) {
                 .default => self.defaultWlCursor.images[0],
                 .pointer => self.pointerWlCursor.images[0],
                 .text => self.textWlCursor.images[0],
+                .eastWestResize => self.eastWestResizeWlCursor.images[0],
+                .northSouthResize => self.northSouthResizeWlCursor.images[0],
+                .northeastSouthwestResize => self.northeastSouthwestResizeWlCursor.images[0],
+                .northwestSoutheastResize => self.northwestSoutheastResizeWlCursor.images[0],
             };
             const wlBuffer = c.wl_cursor_image_get_buffer(wlCursorImage) orelse return error.FailedGettingCursorBuffer;
             c.wl_surface_attach(self.cursorWlSurface, wlBuffer, 0, 0);
@@ -2415,6 +2435,10 @@ pub const Window = switch (builtin.os.tag) {
                 .default => IDC_ARROW,
                 .text => IDC_IBEAM,
                 .pointer => IDC_HAND,
+                .eastWestResize => IDC_SIZEWE,
+                .northSouthResize => IDC_SIZENS,
+                .northeastSouthwestResize => IDC_SIZENESW,
+                .northwestSoutheastResize => IDC_SIZENWSE,
             };
         }
 
