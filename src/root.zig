@@ -1174,6 +1174,53 @@ fn elementEnd(block: void) void {
         .relative => |v| v,
         .flow => @splat(0.0),
     };
+    node.size = .{
+        switch (node.style.width) {
+            .fixed => |width| width,
+            .ratio => |ratio| if (node.style.height == .fixed)
+                node.style.height.fixed * ratio
+            else
+                0.0,
+            .fit, .grow => 0.0,
+        },
+        switch (node.style.height) {
+            .fixed => |height| height,
+            .ratio => |ratio| if (node.style.width == .fixed)
+                node.style.width.fixed * ratio
+            else
+                0.0,
+            .fit, .grow => 0.0,
+        },
+    };
+    node.minSize = .{
+        if (node.style.minWidth) |minWidth|
+            minWidth
+        else if (node.style.width == .fixed)
+            node.style.width.fixed
+        else
+            0.0,
+        if (node.style.minHeight) |minHeight|
+            minHeight
+        else if (node.style.height == .fixed)
+            node.style.height.fixed
+        else
+            0.0,
+    };
+    node.maxSize = .{
+        if (node.style.maxWidth) |maxWidth|
+            maxWidth
+        else if (node.style.width == .fixed)
+            node.style.width.fixed
+        else
+            std.math.inf(f32),
+        if (node.style.maxHeight) |maxHeight|
+            maxHeight
+        else if (node.style.height == .fixed)
+            node.style.height.fixed
+        else
+            std.math.inf(f32),
+    };
+
     if (node.style.width == .ratio) {
         node.size[0] = node.style.width.ratio * node.size[1];
     }
@@ -1244,58 +1291,9 @@ pub noinline fn element(props: ElementProps) *const fn (void) void {
     else
         parentZ;
     result.ptr.position = @splat(0.0);
-    result.ptr.size = .{
-        switch (result.ptr.style.width) {
-            .fixed => |width| width,
-            .ratio => |ratio| if (result.ptr.style.height == .fixed)
-                result.ptr.style.height.fixed * ratio
-            else
-                0.0,
-            .fit, .grow => 0.0,
-        },
-        switch (result.ptr.style.height) {
-            .fixed => |height| height,
-            .ratio => |ratio| if (result.ptr.style.width == .fixed)
-                result.ptr.style.width.fixed * ratio
-            else
-                0.0,
-            .fit, .grow => 0.0,
-        },
-    };
-    result.ptr.minSize = .{
-        if (result.ptr.style.minWidth) |minWidth|
-            minWidth
-        else if (result.ptr.style.width == .fixed)
-            result.ptr.style.width.fixed
-        else
-            0.0,
-        if (result.ptr.style.minHeight) |minHeight|
-            minHeight
-        else if (result.ptr.style.height == .fixed)
-            result.ptr.style.height.fixed
-        else
-            0.0,
-    };
-    result.ptr.maxSize = .{
-        if (result.ptr.style.maxWidth) |maxWidth|
-            maxWidth
-        else if (result.ptr.style.width == .fixed)
-            result.ptr.style.width.fixed
-        else
-            std.math.inf(f32),
-        if (result.ptr.style.maxHeight) |maxHeight|
-            maxHeight
-        else if (result.ptr.style.height == .fixed)
-            result.ptr.style.height.fixed
-        else
-            std.math.inf(f32),
-    };
-
-    // Clamp initial size to [minSize, maxSize] so that fitChild sees correct
-    // values (e.g. image elements with fixed width and ratio height that
-    // exceed their maxWidth/maxHeight constraints).
-    result.ptr.size[0] = @min(@max(result.ptr.size[0], result.ptr.minSize[0]), result.ptr.maxSize[0]);
-    result.ptr.size[1] = @min(@max(result.ptr.size[1], result.ptr.minSize[1]), result.ptr.maxSize[1]);
+    result.ptr.size = @splat(0.0);
+    result.ptr.minSize = @splat(0.0);
+    result.ptr.maxSize = @splat(0.0);
 
     self.nodeStack.append(self.arena, result.index) catch |err| {
         handleFrameError(err);
