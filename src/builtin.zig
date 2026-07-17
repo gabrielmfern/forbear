@@ -6,6 +6,12 @@ const Vec2 = @Vector(2, f32);
 const Vec4 = @Vector(4, f32);
 
 pub const ProfilingMetricsProps = struct {
+    placement: enum {
+        topLeft,
+        topRight,
+        bottomLeft,
+        bottomRight,
+    } = .topLeft,
     fps: bool = true,
     deltaTime: bool = true,
     memory: bool = true,
@@ -15,8 +21,8 @@ pub fn ProfilingMetrics(props: ProfilingMetricsProps) void {
     forbear.component(.{})({
         forbear.element(.{
             .style = .{
-                .placement = .{ .fixed = .{ 10, 10 } },
-                .zIndex = 10,
+                .placement = .{ .fixed = .{ -9999, -9999 } },
+                .zIndex = std.math.maxInt(u16),
                 .background = .{ .color = .{ 0.0, 0.0, 0.0, 0.9 } },
                 .fontSize = 16,
                 .textWrapping = .none,
@@ -27,6 +33,21 @@ pub fn ProfilingMetrics(props: ProfilingMetricsProps) void {
                 .direction = .vertical,
             },
         })({
+            const node = forbear.getParentNode().?;
+            if (forbear.useNodeMeasurement()) |measurement| {
+                const viewportSize = forbear.useViewportSize();
+                node.style.placement = switch (props.placement) {
+                    .topLeft => .{ .fixed = .{ 10, 10 } },
+                    .topRight => .{ .fixed = .{ viewportSize[0] - measurement.size[0] - 10, 10 } },
+                    .bottomLeft => .{ .fixed = .{ 10, viewportSize[1] - measurement.size[1] - 10 } },
+                    .bottomRight => .{
+                        .fixed = .{
+                            viewportSize[0] - measurement.size[0] - 10,
+                            viewportSize[1] - measurement.size[1] - 10,
+                        },
+                    },
+                };
+            }
             if (props.fps) {
                 const deltaTime = forbear.useDeltaTime();
                 const fps = if (deltaTime == 0) 0 else 1.0 / deltaTime;
