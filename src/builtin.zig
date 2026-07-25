@@ -420,14 +420,13 @@ pub const ScrollingContext = forbear.createContext(opaque {}, struct {
     /// of the last `resolve()` — the ones `useScrolling` yields the wheel to.
     targets: [2][2]?u64,
     scrollable: std.ArrayList(Scrollable),
-    scopeKey: u64,
 
     pub fn register(self: *@This(), room: ScrollRoom) void {
         const node = forbear.getParentNode() orelse {
             forbear.handleFrameError(error.NoParentForScrollableRegistration);
             return;
         };
-        const arena = forbear.getScopeArenaBy(self.scopeKey) orelse unreachable;
+        const arena = forbear.useArena();
         self.scrollable.append(arena, .{
             .key = node.key,
             .z = node.z,
@@ -455,7 +454,7 @@ pub const ScrollingContext = forbear.createContext(opaque {}, struct {
     }
 
     pub fn resolve(self: *@This()) void {
-        defer self.scrollable.clearRetainingCapacity();
+        defer self.scrollable = .empty;
         self.targets = .{ .{ null, null }, .{ null, null } };
         // The hovered scrollable drawn topmost — highest z, later
         // registration breaking ties, like cursor hit-testing — takes the
@@ -491,7 +490,6 @@ pub fn ScrollProvider() *const fn (void) void {
         ScrollingContext.Provider(.{
             .targets = .{ .{ null, null }, .{ null, null } },
             .scrollable = .empty,
-            .scopeKey = forbear.useScopeKey(),
         })({
             forbear.componentChildrenSlot();
         });
@@ -1103,7 +1101,6 @@ pub const Focus = struct {
 pub const FocusContext = forbear.createContext(opaque {}, struct {
     focused: ?Focus,
     focusable: std.ArrayList(Focus),
-    scopeKey: u64,
 
     pub fn register(self: *@This(), data: struct {
         consumes: Consumes = .{},
@@ -1112,7 +1109,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
             forbear.handleFrameError(error.NoParentForFocusRegistration);
             return;
         };
-        const arena = forbear.getScopeArenaBy(self.scopeKey) orelse unreachable;
+        const arena = forbear.useArena();
         self.focusable.append(arena, .{
             .key = node.key,
             .consumes = data.consumes,
@@ -1165,7 +1162,7 @@ pub const FocusContext = forbear.createContext(opaque {}, struct {
     }
 
     pub fn resolve(self: *@This()) void {
-        defer self.focusable.clearRetainingCapacity();
+        defer self.focusable = .empty;
 
         if (self.focused) |f| validate: {
             for (self.focusable.items) |item| {
@@ -1208,7 +1205,6 @@ pub fn FocusProvider() *const fn (void) void {
         FocusContext.Provider(.{
             .focused = null,
             .focusable = .empty,
-            .scopeKey = forbear.useScopeKey(),
         })({
             forbear.componentChildrenSlot();
         });
