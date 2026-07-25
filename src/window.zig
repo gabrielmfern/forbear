@@ -2899,6 +2899,16 @@ pub const Window = switch (builtin.os.tag) {
             self.eventQueue.push(Event{ .input = input });
         }
 
+        pub fn stop(self: *Self) void {
+            self.running.store(false, .release);
+            // `handleEvents` parks in `GetMessageW` until a message arrives,
+            // so clearing `running` alone would leave it blocked; WM_NULL is
+            // a no-op message posted purely to wake it for the next check.
+            if (PostMessageW(self.handle, WM_NULL, 0, 0) == 0) {
+                std.log.err("failed to wake the event loop", .{});
+            }
+        }
+
         pub fn handleEvents(self: *Self) !void {
             while (self.running.load(.acquire)) {
                 var message: MSG = undefined;
