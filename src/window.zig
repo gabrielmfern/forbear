@@ -491,6 +491,10 @@ pub const Window = switch (builtin.os.tag) {
         title: [:0]const u8,
         appId: [:0]const u8,
         running: std.atomic.Value(bool),
+        /// `stop()` writes to this so `handleEvents` — parked in `poll` on
+        /// Wayland's fd, which only becomes readable on compositor traffic —
+        /// wakes immediately from any thread, instead of only on `running`.
+        wakeEventFd: std.Io.File,
         dpi: [2]u32,
 
         scale: f32 = 1.0,
@@ -798,7 +802,7 @@ pub const Window = switch (builtin.os.tag) {
         fn xdgToplevelClose(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel) callconv(.c) void {
             _ = xdgToplevel;
             const window: *Self = @ptrCast(@alignCast(data));
-            window.running.store(false, .release);
+            window.stop();
         }
 
         fn xdgToplevelConfigureBounds(
@@ -1421,6 +1425,13 @@ pub const Window = switch (builtin.os.tag) {
             window.title = title;
             window.appId = appId;
             window.running = .init(true);
+            const wakeEventFdRc = std.os.linux.eventfd(0, std.os.linux.EFD.CLOEXEC | std.os.linux.EFD.NONBLOCK);
+            switch (posix.errno(wakeEventFdRc)) {
+                .SUCCESS => {},
+                else => |err| return posix.unexpectedErrno(err),
+            }
+            window.wakeEventFd = .{ .handle = @intCast(wakeEventFdRc), .flags = .{ .nonblocking = false } };
+            errdefer window.wakeEventFd.close(window.io);
             window.eventQueue = .empty;
             window.handlers = .{};
 
@@ -2007,9 +2018,51 @@ pub const Window = switch (builtin.os.tag) {
             return try list.toOwnedSlice(allocator);
         }
 
+        pub fn stop(self: *Self) void {
+            self.running.store(false, .release);
+            const value: u64 = 1;
+            std.Io.File.writeStreamingAll(self.wakeEventFd, self.io, std.mem.asBytes(&value)) catch |err| {
+                std.log.err("failed to wake the event loop: {}", .{err});
+            };
+        }
+
         pub fn handleEvents(self: *Self) !void {
+            var pollFds = [_]posix.pollfd{
+                .{ .fd = c.wl_display_get_fd(self.wlDisplay), .events = posix.POLL.IN, .revents = 0 },
+                .{ .fd = self.wakeEventFd.handle, .events = posix.POLL.IN, .revents = 0 },
+            };
+
             while (self.running.load(.acquire)) {
-                if (c.wl_display_dispatch(self.wlDisplay) == -1) {
+                // Race-free external poll-loop integration, per
+                // wayland-client-core.h: prepare_read must be paired with
+                // either read_events (data arrived) or cancel_read (it
+                // didn't), no matter which fd woke us.
+                while (c.wl_display_prepare_read(self.wlDisplay) != 0) {
+                    if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
+                        return error.WaylandDispatchFailed;
+                    }
+                }
+                _ = c.wl_display_flush(self.wlDisplay);
+
+                _ = posix.poll(&pollFds, -1) catch |err| {
+                    c.wl_display_cancel_read(self.wlDisplay);
+                    return err;
+                };
+
+                if (pollFds[0].revents & posix.POLL.IN != 0) {
+                    if (c.wl_display_read_events(self.wlDisplay) == -1) {
+                        return error.WaylandDispatchFailed;
+                    }
+                } else {
+                    c.wl_display_cancel_read(self.wlDisplay);
+                }
+
+                if (pollFds[1].revents & posix.POLL.IN != 0) {
+                    var drainValue: u64 = undefined;
+                    _ = std.Io.File.readStreaming(self.wakeEventFd, self.io, &.{std.mem.asBytes(&drainValue)}) catch {};
+                }
+
+                if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
                     return error.WaylandDispatchFailed;
                 }
 
@@ -2061,6 +2114,8 @@ pub const Window = switch (builtin.os.tag) {
         // }
 
         pub fn deinit(self: *Self) void {
+            self.wakeEventFd.close(self.io);
+
             if (self.xdgToplevelDecoration) |decoration| c.zxdg_toplevel_decoration_v1_destroy(decoration);
             if (self.wpFractionalScale) |fs| c.wp_fractional_scale_v1_destroy(fs);
             if (self.wpViewport) |vp| c.wp_viewport_destroy(vp);
