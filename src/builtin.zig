@@ -702,6 +702,7 @@ fn innerBox(style: forbear.CompleteStyle, measurement: forbear.Node.Measurement)
 const UseInputProps = struct {
     inputState: ?*InputState = null,
     scrollingState: *ScrollingState,
+    maxLength: ?usize = null,
 };
 
 /// Depends on the font styles of the parent to render. Pass the same
@@ -740,6 +741,7 @@ pub fn useInput(props: UseInputProps) *InputState {
     });
 
     const text = &inputState.text;
+    const maxLength = props.maxLength orelse std.math.maxInt(usize);
     std.debug.assert(inputState.cursor <= text.items.len);
     std.debug.assert(inputState.anchor <= text.items.len);
 
@@ -892,7 +894,14 @@ pub fn useInput(props: UseInputProps) *InputState {
             if (modifiersHeld.control and keysDown.v) {
                 if (forbear.getClipboardText()) |pasted| {
                     const selection = inputState.selection();
-                    splice(inputState, text, arena, selection[0], selection[1], pasted);
+                    if (text.items.len - (selection[1] - selection[0]) + pasted.len <= maxLength) {
+                        splice(inputState, text, arena, selection[0], selection[1], pasted);
+                    } else {
+                        std.log.warn(
+                            "dropped a {d} byte paste that does not fit an input capped at {d} bytes",
+                            .{ pasted.len, maxLength },
+                        );
+                    }
                 }
             }
 
@@ -937,7 +946,14 @@ pub fn useInput(props: UseInputProps) *InputState {
             const isCommandChord = (modifiersHeld.control and !modifiersHeld.alt) or modifiersHeld.super;
             if (input.text.len > 0 and (!isCommandChord or input.preedit != null)) {
                 const selection = inputState.selection();
-                splice(inputState, text, arena, selection[0], selection[1], input.text);
+                if (text.items.len - (selection[1] - selection[0]) + input.text.len <= maxLength) {
+                    splice(inputState, text, arena, selection[0], selection[1], input.text);
+                } else {
+                    std.log.warn(
+                        "dropped {d} bytes of text entry that do not fit an input capped at {d} bytes",
+                        .{ input.text.len, maxLength },
+                    );
+                }
             }
 
             if (input.preedit) |preedit| {
