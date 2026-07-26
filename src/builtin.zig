@@ -316,13 +316,28 @@ pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
         const parentNode = forbear.getParentNode() orelse return;
         const padding = parentNode.style.padding;
         const border = parentNode.style.borderWidth;
+        // The measurement is last frame's, so anchoring to it leaves the bar a
+        // frame behind whenever the parent is resizing — visible as lag while
+        // dragging a sidebar's edge. A `.fixed` side is already settled this
+        // frame, so read it off the style, the same way the element's own
+        // sizing resolves it.
+        const parentSize = Vec2{
+            switch (parentNode.style.width) {
+                .fixed => |width| width,
+                else => parentMeasurement.size[0],
+            },
+            switch (parentNode.style.height) {
+                .fixed => |height| height,
+                else => parentMeasurement.size[1],
+            },
+        };
         const innerSize = Vec2{
-            parentMeasurement.size[0] - padding.x[0] - padding.x[1] - border.x[0] - border.x[1],
-            parentMeasurement.size[1] - padding.y[0] - padding.y[1] - border.y[0] - border.y[1],
+            parentSize[0] - padding.x[0] - padding.x[1] - border.x[0] - border.x[1],
+            parentSize[1] - padding.y[0] - padding.y[1] - border.y[0] - border.y[1],
         };
         // Track spans the parent's full height between its borders, so it
         // doesn't visually shrink with vertical padding.
-        const trackHeight = parentMeasurement.size[1] - border.y[0] - border.y[1];
+        const trackHeight = parentSize[1] - border.y[0] - border.y[1];
         if (parentMeasurement.contentSize[1] > innerSize[1]) {
             forbear.component(.{})({
                 const isHovered = forbear.useState(bool, false);
