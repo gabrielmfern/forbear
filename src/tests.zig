@@ -8323,13 +8323,14 @@ const InputObservation = struct {
     caretX: f32 = 0.0,
     textBuffer: [64]u8 = undefined,
     textLength: usize = 0,
+    state: ?*forbear.InputState = null,
 
     fn text(self: *const InputObservation) []const u8 {
         return self.textBuffer[0..self.textLength];
     }
 };
 
-fn TextInputApp(observed: *InputObservation) void {
+fn TextInputApp(observed: *InputObservation, maxLength: ?usize) void {
     forbear.element(.{})({
         FocusProvider()({
             forbear.element(.{
@@ -8340,10 +8341,14 @@ fn TextInputApp(observed: *InputObservation) void {
                 },
             })({
                 const scrolling = forbear.useState(forbear.ScrollingState, .{});
-                const inputState = forbear.useInput(.{ .scrollingState = scrolling });
+                const inputState = forbear.useInput(.{
+                    .scrollingState = scrolling,
+                    .maxLength = maxLength,
+                });
                 FocusContext.use().focus();
                 forbear.text(inputState.display);
 
+                observed.state = inputState;
                 observed.cursor = inputState.displayCursor();
                 observed.selection = inputState.displaySelection();
                 observed.composition = inputState.compositionRange();
@@ -8372,6 +8377,8 @@ const InputFrameOptions = struct {
     mousePressed: bool = false,
     /// Drives `useDeltaTime`, which the double-click timer accumulates.
     secondsSincePrevious: f64 = 1.0,
+    maxLength: ?usize = null,
+    clipboard: ?[]const u8 = null,
 };
 
 fn inputFrame(arena: std.mem.Allocator, observed: *InputObservation, options: InputFrameOptions) !void {
@@ -8393,7 +8400,8 @@ fn inputFrame(arena: std.mem.Allocator, observed: *InputObservation, options: In
         self.mousePosition = options.mousePosition;
         self.mouseButtonPressed = options.mousePressed;
         self.deltaTime = options.secondsSincePrevious;
-        TextInputApp(observed);
+        forbear.clipboardTextForTesting = options.clipboard;
+        TextInputApp(observed, options.maxLength);
         _ = try forbear.layout();
     });
 }
@@ -8796,6 +8804,104 @@ test "useInput: IME commits land even while a modifier chord is held" {
         .composition = .{},
     });
     try std.testing.expectEqualStrings("hiX", observed.text());
+}
+
+test "useInput: maxLength drops typing that does not fit, whole chunks at a time" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{ .maxLength = 5 });
+    try inputFrame(arena, &observed, .{ .typed = "hey", .maxLength = 5 });
+    try inputFrame(arena, &observed, .{ .typed = "yo", .maxLength = 5 });
+    try std.testing.expectEqualStrings("heyyo", observed.text());
+    try std.testing.expectEqual(@as(usize, 5), observed.cursor);
+
+    try inputFrame(arena, &observed, .{ .typed = "!", .maxLength = 5 });
+    try std.testing.expectEqualStrings("heyyo", observed.text());
+    try std.testing.expectEqual(@as(usize, 5), observed.cursor);
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .backspace = true }, .maxLength = 5 });
+    try std.testing.expectEqualStrings("heyy", observed.text());
+    try inputFrame(arena, &observed, .{ .typed = "ab", .maxLength = 5 });
+    try std.testing.expectEqualStrings("heyy", observed.text());
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .a = true }, .maxLength = 5 });
+    try inputFrame(arena, &observed, .{ .typed = "ok", .maxLength = 5 });
+    try std.testing.expectEqualStrings("ok", observed.text());
+}
+
+test "useInput: maxLength drops a paste that does not fit" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{ .maxLength = 5 });
+    try inputFrame(arena, &observed, .{
+        .keys = .{ .control = true, .v = true },
+        .clipboard = "abcdef",
+        .maxLength = 5,
+    });
+    try std.testing.expectEqualStrings("", observed.text());
+
+    try inputFrame(arena, &observed, .{
+        .keys = .{ .control = true, .v = true },
+        .clipboard = "abcde",
+        .maxLength = 5,
+    });
+    try std.testing.expectEqualStrings("abcde", observed.text());
+
+    try inputFrame(arena, &observed, .{ .maxLength = 5 });
+    try inputFrame(arena, &observed, .{
+        .keys = .{ .control = true, .v = true },
+        .clipboard = "f",
+        .maxLength = 5,
+    });
+    try std.testing.expectEqualStrings("abcde", observed.text());
+
+    try inputFrame(arena, &observed, .{ .keys = .{ .control = true, .a = true }, .maxLength = 5 });
+    try inputFrame(arena, &observed, .{
+        .keys = .{ .control = true, .v = true },
+        .clipboard = "12345",
+        .maxLength = 5,
+    });
+    try std.testing.expectEqualStrings("12345", observed.text());
+}
+
+test "useInput: text stays inside a fixed buffer when maxLength matches its capacity" {
+    try initTest(std.testing.allocator);
+    defer forbear.deinit();
+
+    var arenaAllocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arenaAllocator.deinit();
+    const arena = arenaAllocator.allocator();
+
+    var buffer: [8]u8 = undefined;
+    var observed: InputObservation = .{};
+    try inputFrame(arena, &observed, .{ .maxLength = buffer.len });
+
+    const inputState = observed.state.?;
+    inputState.text = .{ .items = buffer[0..0], .capacity = buffer.len };
+
+    try inputFrame(arena, &observed, .{ .typed = "12345678", .maxLength = buffer.len });
+    try inputFrame(arena, &observed, .{
+        .keys = .{ .control = true, .v = true },
+        .clipboard = "9",
+        .maxLength = buffer.len,
+    });
+    try inputFrame(arena, &observed, .{ .typed = "9", .maxLength = buffer.len });
+
+    try std.testing.expectEqualStrings("12345678", observed.text());
+    try std.testing.expectEqual(@as([*]u8, &buffer), inputState.text.items.ptr);
+    try std.testing.expectEqual(@as(usize, buffer.len), inputState.text.capacity);
 }
 
 // window.zig EventQueue tests

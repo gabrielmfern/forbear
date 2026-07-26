@@ -1809,10 +1809,13 @@ pub fn setClipboardText(content: []const u8) void {
     window.setClipboardText(content) catch |err| handleFrameError(err);
 }
 
+pub var clipboardTextForTesting: ?[]const u8 = null;
+
 /// The returned slice is copied into this frame's arena — valid until the
 /// frame ends. Returns `null` if there's no window, the clipboard doesn't
 /// hold text, or reading it failed.
 pub fn getClipboardText() ?[]const u8 {
+    if (builtin.is_test) return clipboardTextForTesting;
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
     if (self.frameMeta.?.err != null) return null;
