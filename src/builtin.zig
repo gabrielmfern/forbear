@@ -310,17 +310,9 @@ pub const ScrollBarStyle = struct {
 
 pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
     if (forbear.useNodeMeasurement()) |parentMeasurement| {
-        // `.relative` placement is measured from the parent's content box
-        // (inside its border + padding), so subtract those insets from the
-        // parent's outer size to get the box the scrollbar must fit into.
         const parentNode = forbear.getParentNode() orelse return;
         const padding = parentNode.style.padding;
         const border = parentNode.style.borderWidth;
-        // The measurement is last frame's, so anchoring to it leaves the bar a
-        // frame behind whenever the parent is resizing — visible as lag while
-        // dragging a sidebar's edge. A `.fixed` side is already settled this
-        // frame, so read it off the style, the same way the element's own
-        // sizing resolves it.
         const parentSize = Vec2{
             switch (parentNode.style.width) {
                 .fixed => |width| width,
@@ -350,10 +342,6 @@ pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
                         .borderStyle = .solid,
                         .borderWidth = .left(1.0),
                         .borderColor = style.trackBorderColor,
-                        // Anchor against the parent's outer right edge regardless
-                        // of padding/border. `.relative` is measured from the
-                        // content box, so we step back out by the right
-                        // padding+border and then inward by `style.width`.
                         .placement = .{ .relative = .{ innerSize[0] + padding.x[1] + border.x[1] - style.width, -padding.y[0] } },
                         .width = .{ .fixed = style.width },
                         .height = .{ .fixed = trackHeight },
