@@ -447,6 +447,24 @@ pub const Style = struct {
     yJustification: ?Alignment = null,
     direction: ?Direction = null,
 
+    pub fn compose(styles: anytype) @This() {
+        var aggregated: @This() = styles[0];
+        inline for (styles, 0..) |current, i| {
+            if (i == 0) {
+                continue;
+            }
+
+            if (@TypeOf(current) != Style) {
+                @compileError(
+                    "every single argument to compose must be a style, found" ++ @typeName(@TypeOf(current)),
+                );
+            }
+
+            aggregated = current.overwrite(aggregated);
+        }
+        return aggregated;
+    }
+
     pub fn overwrite(self: @This(), other: @This()) @This() {
         return .{
             .background = self.background orelse other.background,
