@@ -302,10 +302,9 @@ pub fn useScrolling(state: *ScrollingState) void {
 
 pub const ScrollBarStyle = struct {
     width: f32 = 7.0,
-    trackColor: Vec4 = forbear.rgba(180, 180, 180, 0.31),
-    trackBorderColor: Vec4 = forbear.rgba(200, 200, 200, 0.47),
-    thumbColor: Vec4 = forbear.rgba(80, 80, 80, 0.55),
-    thumbActiveColor: Vec4 = forbear.rgba(60, 60, 60, 0.78),
+    track: forbear.Style = .{},
+    thumb: forbear.Style = .{},
+    accent: Vec4 = forbear.rgba(60, 60, 60, 0.78),
 };
 
 pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
@@ -337,44 +336,54 @@ pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
 
                 // track
                 forbear.element(.{
-                    .style = .{
-                        .background = .{ .color = style.trackColor },
+                    .style = style.track.overwrite(.{
+                        .background = .{ .color = forbear.rgba(180, 180, 180, 0.31) },
                         .borderStyle = .solid,
                         .borderWidth = .left(1.0),
-                        .borderColor = style.trackBorderColor,
+                        .borderColor = forbear.rgba(200, 200, 200, 0.47),
                         .placement = .{ .relative = .{ innerSize[0] + padding.x[1] + border.x[1] - style.width, -padding.y[0] } },
                         .width = .{ .fixed = style.width },
                         .height = .{ .fixed = trackHeight },
                         .cursor = .default,
                         .zIndex = 10,
-                    },
+                    }),
                 })({
                     // thumb
                     forbear.element(.{
-                        .style = .{
-                            .width = .{ .grow = 1.0 },
-                            .height = .{
-                                .fixed = trackHeight * innerSize[1] / parentMeasurement.contentSize[1],
+                        .style = forbear.Style.compose(.{
+                            forbear.Style{
+                                .width = .{ .grow = 1.0 },
+                                .height = .{
+                                    .fixed = trackHeight * innerSize[1] / parentMeasurement.contentSize[1],
+                                },
+                                .placement = .{
+                                    .relative = Vec2{
+                                        0,
+                                        if (state._effectiveOffset[1] == 0)
+                                            0.0
+                                        else
+                                            trackHeight * (state._effectiveOffset[1] / parentMeasurement.contentSize[1]),
+                                    },
+                                },
+                                .borderRadius = 6.0,
                             },
-                            .placement = .{
-                                .relative = Vec2{
-                                    0,
-                                    if (state._effectiveOffset[1] == 0)
-                                        0.0
-                                    else
-                                        trackHeight * (state._effectiveOffset[1] / parentMeasurement.contentSize[1]),
+                            style.thumb,
+                            forbear.Style{
+                                .background = .{
+                                    .color = forbear.useTransition(
+                                        Vec4,
+                                        if (isHovered.* or isDragging.*)
+                                            style.accent
+                                        else if (style.thumb.background) |background|
+                                            background.color
+                                        else
+                                            forbear.rgba(80, 80, 80, 0.55),
+                                        0.15,
+                                        forbear.easeOut,
+                                    ),
                                 },
                             },
-                            .borderRadius = 6.0,
-                            .background = .{
-                                .color = forbear.useTransition(
-                                    Vec4,
-                                    if (isHovered.* or isDragging.*) style.thumbActiveColor else style.thumbColor,
-                                    0.15,
-                                    forbear.easeOut,
-                                ),
-                            },
-                        },
+                        }),
                     })({});
 
                     if (forbear.onMouseEnter()) {
