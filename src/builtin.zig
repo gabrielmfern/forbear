@@ -333,6 +333,13 @@ pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
             forbear.component(.{})({
                 const isHovered = forbear.useState(bool, false);
                 const isDragging = forbear.useState(bool, false);
+                const grabOffset = forbear.useState(f32, 0.0);
+
+                const thumbHeight = trackHeight * innerSize[1] / parentMeasurement.contentSize[1];
+                const thumbTop = if (state._effectiveOffset[1] == 0)
+                    0.0
+                else
+                    trackHeight * (state._effectiveOffset[1] / parentMeasurement.contentSize[1]);
 
                 // track
                 forbear.element(.{
@@ -353,18 +360,8 @@ pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
                         .style = forbear.Style.compose(.{
                             forbear.Style{
                                 .width = .{ .grow = 1.0 },
-                                .height = .{
-                                    .fixed = trackHeight * innerSize[1] / parentMeasurement.contentSize[1],
-                                },
-                                .placement = .{
-                                    .relative = Vec2{
-                                        0,
-                                        if (state._effectiveOffset[1] == 0)
-                                            0.0
-                                        else
-                                            trackHeight * (state._effectiveOffset[1] / parentMeasurement.contentSize[1]),
-                                    },
-                                },
+                                .height = .{ .fixed = thumbHeight },
+                                .placement = .{ .relative = Vec2{ 0, thumbTop } },
                                 .borderRadius = 6.0,
                             },
                             style.thumb,
@@ -392,18 +389,21 @@ pub fn ScrollBar(state: *ScrollingState, style: ScrollBarStyle) void {
                     if (forbear.onMouseLeave()) {
                         isHovered.* = false;
                     }
+                    const trackTop = parentMeasurement.position[1] + border.y[0];
+                    const localY = forbear.useMousePosition()[1] - trackTop;
                     if (forbear.onMouseDown()) {
                         isDragging.* = true;
+                        grabOffset.* = if (localY >= thumbTop and localY <= thumbTop + thumbHeight)
+                            localY - thumbTop
+                        else
+                            thumbHeight / 2.0;
                     }
                     if (!forbear.isMouseButtonPressed()) {
                         isDragging.* = false;
                         state.animate = if (builtin.os.tag == .macos) false else true;
                     }
                     if (isDragging.*) {
-                        const trackTop = parentMeasurement.position[1] + border.y[0];
-                        const localY = forbear.useMousePosition()[1] - trackTop;
-                        const thumbHeight = trackHeight * innerSize[1] / parentMeasurement.contentSize[1];
-                        const target = (localY - thumbHeight / 2.0) * parentMeasurement.contentSize[1] / trackHeight;
+                        const target = (localY - grabOffset.*) * parentMeasurement.contentSize[1] / trackHeight;
                         state.offset[1] = target;
                         state.animate = false;
                     }
