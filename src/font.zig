@@ -479,7 +479,8 @@ pub const RasterizedGlyph = struct {
 
 pub const ShapedGlyph = struct {
     index: c_ushort,
-    utf8: c.kbts_encode_utf8,
+    textBuf: [4]u8,
+    textBufLength: u8,
     advance: Vec2,
     offset: Vec2,
 };
@@ -519,11 +520,22 @@ pub fn shape(self: *@This(), text: []const u8) ![]const ShapedGlyph {
     var run: c.kbts_run = undefined;
     while (c.kbts_ShapeRun(self.kbtsContext, &run) != 0) {
         var glyph: *c.kbts_glyph = undefined;
-        while (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&glyph)) != 0) {
-            var shapeCodepoint: c.kbts_shape_codepoint = undefined;
-            if (c.kbts_ShapeGetShapeCodepoint(self.kbtsContext, glyph.*.UserIdOrCodepointIndex, &shapeCodepoint) == 0) {
-                std.log.err("Could not get original codeopint for glyph with user id {}", .{glyph.*.UserIdOrCodepointIndex});
-                continue;
+        glyphs: while (c.kbts_GlyphIteratorNext(&run.Glyphs, @ptrCast(&glyph)) != 0) {
+            const componentCount: c_int = @max(@as(c_int, glyph.*.LigatureComponentCount), 1);
+            var textBuf: [4]u8 = undefined;
+            var textBufLength: usize = 0;
+            var component: c_int = 0;
+            while (component < componentCount) : (component += 1) {
+                var shapeCodepoint: c.kbts_shape_codepoint = undefined;
+                if (c.kbts_ShapeGetShapeCodepoint(self.kbtsContext, glyph.*.UserIdOrCodepointIndex + component, &shapeCodepoint) == 0) {
+                    std.log.err("Could not get original codeopint for glyph with user id {}", .{glyph.*.UserIdOrCodepointIndex});
+                    continue :glyphs;
+                }
+                const encoded = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint);
+                const encodedLength: usize = @intCast(encoded.EncodedLength);
+                const writeLength = @min(encodedLength, textBuf.len - textBufLength);
+                @memcpy(textBuf[textBufLength..][0..writeLength], encoded.Encoded[0..writeLength]);
+                textBufLength += writeLength;
             }
 
             // Field-by-field, NOT a `ShapedGlyph{ ... }` literal: the x86_64
@@ -536,7 +548,8 @@ pub fn shape(self: *@This(), text: []const u8) ![]const ShapedGlyph {
             reuse.glyphs[glyphCount].index = glyph.*.Id;
             reuse.glyphs[glyphCount].advance = .{ @floatFromInt(glyph.*.AdvanceX), @floatFromInt(glyph.*.AdvanceY) };
             reuse.glyphs[glyphCount].offset = .{ @floatFromInt(glyph.*.OffsetX), @floatFromInt(glyph.*.OffsetY) };
-            reuse.glyphs[glyphCount].utf8 = c.kbts_EncodeUtf8(shapeCodepoint.Codepoint);
+            reuse.glyphs[glyphCount].textBuf = textBuf;
+            reuse.glyphs[glyphCount].textBufLength = @intCast(textBufLength);
             glyphCount += 1;
         }
     }

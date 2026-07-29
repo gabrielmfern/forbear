@@ -1682,7 +1682,7 @@ pub fn shapeRuns(arena: std.mem.Allocator, runs: []const TextRun, textWrapping: 
         for (shaping.glyphs) |shapedGlyph| {
             var advance = shapedGlyph.advance / unitsPerEmVec2 * fontSizeVec2;
             const offset = shapedGlyph.offset / unitsPerEmVec2 * fontSizeVec2;
-            const isLinebreak = std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, "\n");
+            const isLinebreak = std.mem.startsWith(u8, &shapedGlyph.textBuf, "\n");
             if (isLinebreak) {
                 advance[0] = -cursor[0];
                 advance[1] += lineHeight;
@@ -1692,7 +1692,8 @@ pub fn shapeRuns(arena: std.mem.Allocator, runs: []const TextRun, textWrapping: 
                     .index = @intCast(shapedGlyph.index),
                     .position = cursor + offset,
 
-                    .textBuf = shapedGlyph.utf8.Encoded,
+                    .textBuf = shapedGlyph.textBuf,
+                    .textBufLength = shapedGlyph.textBufLength,
 
                     .advance = advance,
                     .offset = offset,
@@ -1704,7 +1705,7 @@ pub fn shapeRuns(arena: std.mem.Allocator, runs: []const TextRun, textWrapping: 
             cursor += advance;
             maxSize[0] = @max(maxSize[0], cursor[0]);
             if (textWrapping == .word) {
-                if (std.mem.startsWith(u8, &shapedGlyph.utf8.Encoded, " ") or isLinebreak) {
+                if (std.mem.startsWith(u8, &shapedGlyph.textBuf, " ") or isLinebreak) {
                     wordAdvance = @splat(0.0);
                     maxSize[1] += lineHeight;
                 } else {
