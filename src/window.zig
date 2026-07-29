@@ -2323,11 +2323,17 @@ pub const Window = switch (builtin.os.tag) {
                 return error.CouldNotFindHInstance;
             }
 
+            // Resource ID 1 is the conventional first `ICON` statement in the
+            // app's .rc file; null-safe no-op when the app embeds none.
+            const appIcon = LoadIconW(window.hInstance, @ptrFromInt(1));
+
             const windowClass = WNDCLASSEXW{
                 .hInstance = window.hInstance,
                 .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
                 .lpfnWndProc = wndProc,
                 .hCursor = LoadCursorW(null, IDC_ARROW),
+                .hIcon = appIcon,
+                .hIconSm = appIcon,
                 .lpszClassName = window.className.ptr,
             };
 
@@ -3243,6 +3249,7 @@ pub const Window = switch (builtin.os.tag) {
         extern "user32" fn PostQuitMessage(nExitCode: c_int) callconv(.c) void;
 
         extern "user32" fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: ?*const anyopaque) callconv(.c) HCURSOR;
+        extern "user32" fn LoadIconW(hInstance: HINSTANCE, lpIconName: ?*const anyopaque) callconv(.c) HICON;
         extern "user32" fn SetCursor(hCursor: HCURSOR) callconv(.c) HCURSOR;
 
         // Clipboard
