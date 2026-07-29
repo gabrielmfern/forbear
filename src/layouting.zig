@@ -364,6 +364,11 @@ pub fn growAndShrink(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
     }
 }
 
+pub const Lines = std.ArrayList(struct {
+    start: usize,
+    end: usize,
+});
+
 /// Wrap `glyphs` to `lineEnd` (content width, padding/border already excluded),
 /// repositioning each glyph from `base` and returning the laid-out height.
 /// `.none` is handled by the caller and never reaches here.
@@ -371,16 +376,11 @@ pub fn wrapGlyphs(
     arena: std.mem.Allocator,
     glyphs: *Glyphs,
     lineEnd: f32,
+    lines: *Lines,
     textWrapping: TextWrapping,
     xJustification: Alignment,
     base: Vec2,
 ) !f32 {
-    const Line = struct {
-        start: usize,
-        end: usize,
-    };
-    var lines = try std.ArrayList(Line).initCapacity(arena, 4);
-
     var cursor: Vec2 = @splat(0.0);
     var lineStartIndex: usize = 0;
 
@@ -612,10 +612,12 @@ pub fn wrap(arena: std.mem.Allocator, nodeTree: *NodeTree) !void {
 
         if (node.glyphs) |*glyphs| {
             if (node.style.textWrapping != .none) {
+                var lines = Lines.empty;
                 node.size[1] = try wrapGlyphs(
                     arena,
                     glyphs,
                     node.size[0] - node.fittingBase(.horizontal),
+                    &lines,
                     node.style.textWrapping,
                     node.style.xJustification,
                     base,
