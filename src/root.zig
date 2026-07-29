@@ -25,7 +25,7 @@ pub const InputCaret = forbearBuiltin.InputCaret;
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
 pub const Keys = @import("window.zig").Keys;
-const layouting = @import("layouting.zig");
+pub const layouting = @import("layouting.zig");
 pub const layout = layouting.layout;
 const nodeImport = @import("node.zig");
 pub const Node = nodeImport.Node;
@@ -529,7 +529,12 @@ pub fn useAnimation(duration: f32) Animation {
 
 pub const TextMeasurement = struct { width: f32, height: f32, lines: usize };
 
-pub fn useMeasuredText(content: []const u8, style: TextStyle, width: f32, textWrapping: TextWrapping) TextMeasurement {
+pub fn useMeasuredText(
+    content: []const u8,
+    style: TextStyle,
+    width: f32,
+    textWrapping: TextWrapping,
+) TextMeasurement {
     const parent = getParentNode().?;
     return measureTextRuns(
         .{
@@ -552,7 +557,9 @@ pub fn useMeasuredText(content: []const u8, style: TextStyle, width: f32, textWr
 pub fn measureTextRuns(runs: []const TextRun, width: f32, textWrapping: TextWrapping) TextMeasurement {
     const self = getForbear();
     std.debug.assert(self.frameMeta != null);
-    if (self.frameMeta.?.err != null) return .{ .width = 0, .height = 0, .lines = 0 };
+    if (self.frameMeta.?.err != null) {
+        return .{ .width = 0, .height = 0, .lines = 0 };
+    }
 
     const arena = self.frameMeta.?.arena;
     const shaped = shapeRuns(arena, runs, textWrapping) catch |err| {
@@ -566,10 +573,19 @@ pub fn measureTextRuns(runs: []const TextRun, width: f32, textWrapping: TextWrap
         .ascent = shaped.ascent,
         .preBreakIndices = shaped.preBreakIndices,
     };
+    var wrappedLines = layouting.Lines.empty;
     const height = if (textWrapping == .none)
         shaped.minSize[1]
     else
-        layouting.wrapGlyphs(arena, &glyphs, width, textWrapping, .start, @splat(0.0)) catch |err| {
+        layouting.wrapGlyphs(
+            arena,
+            &glyphs,
+            width,
+            &wrappedLines,
+            textWrapping,
+            .start,
+            @splat(0.0),
+        ) catch |err| {
             handleFrameError(err);
             return .{ .width = 0, .height = 0, .lines = 0 };
         };
@@ -750,6 +766,15 @@ pub fn useDeltaTime() f64 {
 pub fn useLastUpdateTime() f64 {
     const self = getForbear();
     return self.lastUpdateTime orelse self.startTime;
+}
+
+pub fn getNodeBy(index: usize) ?*Node {
+    const self = getForbear();
+    if (self.nodeTree.list.items.len > index) {
+        return self.nodeTree.at(index);
+    } else {
+        return null;
+    }
 }
 
 pub fn getParentNode() ?*Node {
