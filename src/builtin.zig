@@ -696,7 +696,7 @@ fn compositeDisplay(inputState: *InputState, text: []const u8) void {
 
 /// A node's content box from its previous-frame measurement: the origin
 /// where flowing text starts and the space inside border and padding.
-fn innerBox(style: forbear.CompleteStyle, measurement: forbear.Node.Measurement) struct { origin: Vec2, size: Vec2 } {
+pub fn innerBox(style: forbear.CompleteStyle, measurement: forbear.Node.Measurement) struct { origin: Vec2, size: Vec2 } {
     const leading = Vec2{
         style.borderWidth.x[0] + style.padding.x[0],
         style.borderWidth.y[0] + style.padding.y[0],

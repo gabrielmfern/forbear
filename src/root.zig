@@ -22,6 +22,7 @@ pub const EventPayload = forbearBuiltin.EventPayload;
 pub const useInput = forbearBuiltin.useInput;
 pub const InputState = forbearBuiltin.InputState;
 pub const InputCaret = forbearBuiltin.InputCaret;
+pub const innerBox = forbearBuiltin.innerBox;
 pub const Graphics = @import("graphics.zig");
 const ImageType = @import("graphics.zig").Image;
 pub const Keys = @import("window.zig").Keys;
