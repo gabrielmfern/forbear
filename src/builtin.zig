@@ -798,15 +798,13 @@ pub fn useInput(props: UseInputProps) *InputState {
             };
 
             // The character boundary nearest to the press: past a glyph's
-            // horizontal midpoint rounds to the boundary after it. Byte
-            // counting assumes one glyph per codepoint, so the clamp
-            // covers ligature/decomposition drift.
+            // horizontal midpoint rounds to the boundary after it.
             var index: usize = 0;
             var advanceX: f32 = 0.0;
             for (shaped.glyphs) |glyph| {
                 if (localX < advanceX + glyph.advance[0] / 2.0) break;
                 advanceX += glyph.advance[0];
-                index += std.unicode.utf8ByteSequenceLength(glyph.textBuf[0]) catch 1;
+                index += glyph.textBufLength;
             }
             index = @min(index, inputState.display.len);
 

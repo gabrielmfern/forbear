@@ -557,6 +557,7 @@ pub const LayoutGlyph = struct {
     position: Vec2,
 
     textBuf: [4]u8,
+    textBufLength: u8,
 
     /// Meant for the recalculation of the glyphs position if that's required
     /// at some other layouting step
