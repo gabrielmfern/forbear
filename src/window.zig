@@ -111,6 +111,8 @@ pub const Keys = packed struct {
     backspace: bool = false,
     delete: bool = false,
     insert: bool = false,
+    equal: bool = false,
+    minus: bool = false,
 
     /// Integer type wide enough to hold every key bit. Tracks `Keys`
     /// automatically — add a key, and `Backing` widens with it.
@@ -1065,6 +1067,8 @@ pub const Window = switch (builtin.os.tag) {
                 c.XKB_KEY_End => .{ .end = true },
                 c.XKB_KEY_Page_Up => .{ .pageUp = true },
                 c.XKB_KEY_Page_Down => .{ .pageDown = true },
+                c.XKB_KEY_equal => .{ .equal = true },
+                c.XKB_KEY_minus => .{ .minus = true },
                 c.XKB_KEY_Left => .{ .arrowLeft = true },
                 c.XKB_KEY_Right => .{ .arrowRight = true },
                 c.XKB_KEY_Up => .{ .arrowUp = true },
@@ -2240,6 +2244,8 @@ pub const Window = switch (builtin.os.tag) {
                 0x28 => .{ .arrowDown = true },
                 0x2D => .{ .insert = true },
                 0x2E => .{ .delete = true },
+                0xBB => .{ .equal = true },
+                0xBD => .{ .minus = true },
                 0x5B, 0x5C => .{ .super = true },
                 0x70 => .{ .f1 = true },
                 0x71 => .{ .f2 = true },
