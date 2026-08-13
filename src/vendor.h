@@ -10,10 +10,9 @@
 #include <malloc.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbcommon-compose.h>
-#include <xdg-shell-client-protocol.h>
+#include <libdecor.h>
 #include <fractional-scale-v1-client-protocol.h>
 #include <viewporter-client-protocol.h>
-#include <xdg-decoration-unstable-v1-client-protocol.h>
 #include <text-input-unstable-v3-client-protocol.h>
 #endif
 

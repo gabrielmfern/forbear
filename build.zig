@@ -62,6 +62,8 @@ const Dependencies = struct {
                 module.linkSystemLibrary("wayland-client", .{});
                 module.linkSystemLibrary("wayland-cursor", .{});
                 module.linkSystemLibrary("xkbcommon", .{});
+                module.linkSystemLibrary("decor-0", .{});
+                module.addIncludePath(.{ .cwd_relative = "/usr/include/libdecor-0" });
             },
             .macos => {
                 module.linkFramework("Cocoa", .{});
@@ -155,6 +157,7 @@ fn createForbearModule(
     switch (target.result.os.tag) {
         .linux => {
             translateC.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
+            translateC.addSystemIncludePath(.{ .cwd_relative = "/usr/include/libdecor-0" });
             translateC.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" });
             translateC.linkSystemLibrary("wayland-client", .{});
             translateC.linkSystemLibrary("wayland-cursor", .{});
@@ -182,20 +185,12 @@ fn createForbearModule(
         };
         const waylandProtocols = comptime [_]Protocol{
             Protocol{
-                .name = "xdg-shell",
-                .xmlPath = "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
-            },
-            Protocol{
                 .name = "fractional-scale-v1",
                 .xmlPath = "/usr/share/wayland-protocols/staging/fractional-scale/fractional-scale-v1.xml",
             },
             Protocol{
                 .name = "viewporter",
                 .xmlPath = "/usr/share/wayland-protocols/stable/viewporter/viewporter.xml",
-            },
-            Protocol{
-                .name = "xdg-decoration-unstable-v1",
-                .xmlPath = "/usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml",
             },
             Protocol{
                 .name = "text-input-unstable-v3",

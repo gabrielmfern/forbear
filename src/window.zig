@@ -372,7 +372,6 @@ pub const Window = switch (builtin.os.tag) {
         wlCompositor: *c.wl_compositor,
         wlShm: *c.wl_shm,
         wlSeat: *c.wl_seat,
-        xdgWmBase: *c.xdg_wm_base,
         wpFractionalScaleManager: ?*c.wp_fractional_scale_manager_v1 = null,
         wpViewporter: ?*c.wp_viewporter = null,
 
@@ -480,12 +479,12 @@ pub const Window = switch (builtin.os.tag) {
         // Everything native related to the window itself
         wlSurface: *c.wl_surface,
         wlOutput: *c.wl_output,
-        xdgSurface: *c.xdg_surface,
-        xdgToplevel: *c.xdg_toplevel,
+        libdecorContext: *c.libdecor,
+        libdecorFrame: *c.libdecor_frame,
+        libdecorConfigured: bool,
+        pointerInWindow: bool,
         wpFractionalScale: ?*c.wp_fractional_scale_v1 = null,
         wpViewport: ?*c.wp_viewport = null,
-        xdgDecorationManager: ?*c.zxdg_decoration_manager_v1 = null,
-        xdgToplevelDecoration: ?*c.zxdg_toplevel_decoration_v1 = null,
 
         // Window state
         width: u32,
@@ -685,10 +684,6 @@ pub const Window = switch (builtin.os.tag) {
                 &c.wl_shm_interface,
                 2,
             );
-            const xdgWmBase = BindingInfo(c.xdg_wm_base).new(
-                &c.xdg_wm_base_interface,
-                6,
-            );
             const seat = BindingInfo(c.wl_seat).new(
                 &c.wl_seat_interface,
                 9,
@@ -699,10 +694,6 @@ pub const Window = switch (builtin.os.tag) {
             );
             const viewporter = BindingInfo(c.wp_viewporter).new(
                 &c.wp_viewporter_interface,
-                1,
-            );
-            const decorationManager = BindingInfo(c.zxdg_decoration_manager_v1).new(
-                &c.zxdg_decoration_manager_v1_interface,
                 1,
             );
             const dataDeviceManager = BindingInfo(c.wl_data_device_manager).new(
@@ -720,13 +711,6 @@ pub const Window = switch (builtin.os.tag) {
                 window.wlCompositor = compositor.bind(registry, name, version);
             } else if (shm.is(interfaceName)) {
                 window.wlShm = shm.bind(registry, name, version);
-            } else if (xdgWmBase.is(interfaceName)) {
-                window.xdgWmBase = xdgWmBase.bind(registry, name, version);
-                _ = c.xdg_wm_base_add_listener(
-                    window.xdgWmBase,
-                    &xdgWmBaseListener,
-                    data,
-                );
             } else if (seat.is(interfaceName)) {
                 window.wlSeat = seat.bind(registry, name, version);
 
@@ -743,8 +727,6 @@ pub const Window = switch (builtin.os.tag) {
                 window.wpFractionalScaleManager = fractionalScaleManager.bind(registry, name, version);
             } else if (viewporter.is(interfaceName)) {
                 window.wpViewporter = viewporter.bind(registry, name, version);
-            } else if (decorationManager.is(interfaceName)) {
-                window.xdgDecorationManager = decorationManager.bind(registry, name, version);
             } else if (dataDeviceManager.is(interfaceName)) {
                 window.wlDataDeviceManager = dataDeviceManager.bind(registry, name, version);
             } else if (textInputManager.is(interfaceName)) {
@@ -758,40 +740,39 @@ pub const Window = switch (builtin.os.tag) {
             _: u32,
         ) callconv(.c) void {}
 
-        fn xdg_wm_base_ping(_: ?*anyopaque, xdgWmBase: ?*c.xdg_wm_base, serial: u32) callconv(.c) void {
-            c.xdg_wm_base_pong(xdgWmBase, serial);
+        fn libdecorHandleError(
+            context: ?*c.libdecor,
+            err: c.libdecor_error,
+            message: [*c]const u8,
+        ) callconv(.c) void {
+            _ = context;
+            std.log.err("libdecor error {}: {s}", .{ err, message });
         }
 
-        const xdgWmBaseListener: c.xdg_wm_base_listener = .{
-            .ping = xdg_wm_base_ping,
+        var libdecorInterface: c.libdecor_interface = .{
+            .@"error" = libdecorHandleError,
         };
 
-        fn xdg_surface_configure(data: ?*anyopaque, xdgSurface: ?*c.xdg_surface, serial: u32) callconv(.c) void {
-            std.log.debug("xdg surface configuration", .{});
-            const window: *Self = @ptrCast(@alignCast(data));
-            c.xdg_surface_ack_configure(
-                xdgSurface,
-                serial,
-            );
-            c.wl_surface_commit(window.wlSurface);
-        }
-
-        const xdgSurfaceListener: c.xdg_surface_listener = .{
-            .configure = xdg_surface_configure,
-        };
-
-        fn xdgToplevelConfigure(
+        fn libdecorFrameConfigure(
+            frame: ?*c.libdecor_frame,
+            configuration: ?*c.libdecor_configuration,
             data: ?*anyopaque,
-            xdgToplevel: ?*c.xdg_toplevel,
-            width: i32,
-            height: i32,
-            states: [*c]c.wl_array,
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
-            _ = xdgToplevel;
-            _ = states;
 
-            if (width > 0 and height > 0) {
+            var width: c_int = 0;
+            var height: c_int = 0;
+            if (!c.libdecor_configuration_get_content_size(configuration, frame, &width, &height) or width <= 0 or height <= 0) {
+                width = @intCast(window.width);
+                height = @intCast(window.height);
+            }
+
+            const state = c.libdecor_state_new(width, height);
+            c.libdecor_frame_commit(frame, state, configuration);
+            c.libdecor_state_free(state);
+            window.libdecorConfigured = true;
+
+            if (window.width != @as(u32, @intCast(width)) or window.height != @as(u32, @intCast(height))) {
                 window.width = @intCast(width);
                 window.height = @intCast(height);
                 if (window.wpViewport) |viewport| {
@@ -801,56 +782,33 @@ pub const Window = switch (builtin.os.tag) {
             }
         }
 
-        fn xdgToplevelClose(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel) callconv(.c) void {
-            _ = xdgToplevel;
+        fn libdecorFrameClose(frame: ?*c.libdecor_frame, data: ?*anyopaque) callconv(.c) void {
+            _ = frame;
             const window: *Self = @ptrCast(@alignCast(data));
             window.stop();
         }
 
-        fn xdgToplevelConfigureBounds(
-            data: ?*anyopaque,
-            xdgToplevel: ?*c.xdg_toplevel,
-            width: i32,
-            height: i32,
-        ) callconv(.c) void {
-            _ = data;
-            _ = xdgToplevel;
-            std.log.debug("xdg toplevel configure bounds: {}x{}", .{ width, height });
+        fn libdecorFrameCommit(frame: ?*c.libdecor_frame, data: ?*anyopaque) callconv(.c) void {
+            _ = frame;
+            const window: *Self = @ptrCast(@alignCast(data));
+            c.wl_surface_commit(window.wlSurface);
         }
 
-        fn xdgToplevelWmCapabilities(
+        fn libdecorFrameDismissPopup(
+            frame: ?*c.libdecor_frame,
+            seatName: [*c]const u8,
             data: ?*anyopaque,
-            xdgToplevel: ?*c.xdg_toplevel,
-            capabilities: [*c]c.wl_array,
         ) callconv(.c) void {
+            _ = frame;
+            _ = seatName;
             _ = data;
-            _ = xdgToplevel;
-            _ = capabilities;
         }
 
-        const xdgToplevelListener: c.xdg_toplevel_listener = .{
-            .configure = xdgToplevelConfigure,
-            .close = xdgToplevelClose,
-            .configure_bounds = xdgToplevelConfigureBounds,
-            .wm_capabilities = xdgToplevelWmCapabilities,
-        };
-
-        fn xdgToplevelDecorationConfigure(
-            data: ?*anyopaque,
-            decoration: ?*c.zxdg_toplevel_decoration_v1,
-            mode: u32,
-        ) callconv(.c) void {
-            _ = data;
-            _ = decoration;
-            if (mode == c.ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE) {
-                std.log.warn("compositor fell back to client-side decorations", .{});
-            } else {
-                std.log.debug("using server-side decorations", .{});
-            }
-        }
-
-        const xdgToplevelDecorationListener: c.zxdg_toplevel_decoration_v1_listener = .{
-            .configure = xdgToplevelDecorationConfigure,
+        var libdecorFrameInterface: c.libdecor_frame_interface = .{
+            .configure = libdecorFrameConfigure,
+            .close = libdecorFrameClose,
+            .commit = libdecorFrameCommit,
+            .dismiss_popup = libdecorFrameDismissPopup,
         };
 
         fn pointerHandleEnter(
@@ -862,8 +820,12 @@ pub const Window = switch (builtin.os.tag) {
             surfaceY: c.wl_fixed_t,
         ) callconv(.c) void {
             _ = wlPointer;
-            _ = surface;
             const window: *Self = @ptrCast(@alignCast(data));
+            if (surface != window.wlSurface) {
+                window.pointerInWindow = false;
+                return;
+            }
+            window.pointerInWindow = true;
             window.pointerSerial = serial;
             window.setCursor(.default, serial) catch |err| {
                 std.log.err("failed to set cursor: {}", .{err});
@@ -884,12 +846,13 @@ pub const Window = switch (builtin.os.tag) {
             surface: ?*c.wl_surface,
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
+            _ = wlPointer;
+            if (surface != window.wlSurface) return;
+            window.pointerInWindow = false;
             window.pointerSerial = null;
             window.eventQueue.push(Event{
                 .pointerLeave = .{ .serial = serial },
             });
-            _ = wlPointer;
-            _ = surface;
         }
 
         fn pointerHandleMotion(
@@ -900,6 +863,7 @@ pub const Window = switch (builtin.os.tag) {
             surfaceY: c.wl_fixed_t,
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
+            if (!window.pointerInWindow) return;
             window.eventQueue.push(Event{
                 .pointerMotion = .{
                     .time = time,
@@ -919,6 +883,7 @@ pub const Window = switch (builtin.os.tag) {
             state: u32,
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
+            if (!window.pointerInWindow) return;
             const mapped: MouseButton = switch (button) {
                 272 => .left, // BTN_LEFT
                 273 => .right, // BTN_RIGHT
@@ -946,6 +911,7 @@ pub const Window = switch (builtin.os.tag) {
             value: c.wl_fixed_t,
         ) callconv(.c) void {
             const window: *Self = @ptrCast(@alignCast(data));
+            if (!window.pointerInWindow) return;
             window.eventQueue.push(Event{
                 .scroll = .{ .axis = @enumFromInt(axis), .offset = @floatCast(c.wl_fixed_to_double(value)) },
             });
@@ -1470,10 +1436,10 @@ pub const Window = switch (builtin.os.tag) {
             // Initialize optional fields to null before the registry roundtrip,
             // since allocator.create does not zero-initialize memory.
             window.pointerSerial = null;
+            window.pointerInWindow = false;
+            window.libdecorConfigured = false;
             window.wpFractionalScaleManager = null;
             window.wpViewporter = null;
-            window.xdgDecorationManager = null;
-            window.xdgToplevelDecoration = null;
             window.wlDataDeviceManager = null;
             window.wlDataDevice = null;
             window.wpFractionalScale = null;
@@ -1503,36 +1469,11 @@ pub const Window = switch (builtin.os.tag) {
             window.wlSurface = c.wl_compositor_create_surface(window.wlCompositor) orelse return error.UnableToCreateSurface;
             errdefer c.wl_surface_destroy(window.wlSurface);
 
-            window.xdgSurface = c.xdg_wm_base_get_xdg_surface(
-                window.xdgWmBase,
-                window.wlSurface,
-            ) orelse return error.UnableToCreateXdgSurface;
-            errdefer c.xdg_surface_destroy(window.xdgSurface);
-            _ = c.xdg_surface_add_listener(
-                window.xdgSurface,
-                &xdgSurfaceListener,
-                @ptrCast(@alignCast(window)),
-            );
-
-            window.xdgToplevel = c.xdg_surface_get_toplevel(
-                window.xdgSurface,
-            ) orelse return error.UnableToGetTopLevelXdg;
-            errdefer c.xdg_toplevel_destroy(window.xdgToplevel);
-            _ = c.xdg_toplevel_add_listener(
-                window.xdgToplevel,
-                &xdgToplevelListener,
-                @ptrCast(@alignCast(window)),
-            );
-            c.xdg_toplevel_set_title(window.xdgToplevel, title.ptr);
-            c.xdg_toplevel_set_app_id(window.xdgToplevel, appId.ptr);
-
-            if (window.xdgDecorationManager) |manager| {
-                window.xdgToplevelDecoration = c.zxdg_decoration_manager_v1_get_toplevel_decoration(manager, window.xdgToplevel);
-                if (window.xdgToplevelDecoration) |decoration| {
-                    c.zxdg_toplevel_decoration_v1_set_mode(decoration, c.ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
-                    _ = c.zxdg_toplevel_decoration_v1_add_listener(decoration, &xdgToplevelDecorationListener, @ptrCast(@alignCast(window)));
-                }
-            }
+            window.libdecorContext = c.libdecor_new(
+                window.wlDisplay,
+                &libdecorInterface,
+            ) orelse return error.UnableToInitializeLibdecor;
+            errdefer c.libdecor_unref(window.libdecorContext);
 
             if (window.wpFractionalScaleManager) |manager| {
                 window.wpFractionalScale = c.wp_fractional_scale_manager_v1_get_fractional_scale(manager, window.wlSurface);
@@ -1560,8 +1501,22 @@ pub const Window = switch (builtin.os.tag) {
                 _ = c.zwp_text_input_v3_add_listener(window.zwpTextInput, &textInputListener, @ptrCast(@alignCast(window)));
             }
 
-            c.wl_surface_commit(window.wlSurface);
-            _ = c.wl_display_roundtrip(window.wlDisplay);
+            window.libdecorFrame = c.libdecor_decorate(
+                window.libdecorContext,
+                window.wlSurface,
+                &libdecorFrameInterface,
+                @ptrCast(@alignCast(window)),
+            ) orelse return error.UnableToDecorateWindow;
+            errdefer c.libdecor_frame_unref(window.libdecorFrame);
+            c.libdecor_frame_set_title(window.libdecorFrame, title.ptr);
+            c.libdecor_frame_set_app_id(window.libdecorFrame, appId.ptr);
+            c.libdecor_frame_map(window.libdecorFrame);
+
+            while (!window.libdecorConfigured) {
+                if (c.libdecor_dispatch(window.libdecorContext, -1) < 0) {
+                    return error.WaylandDispatchFailed;
+                }
+            }
 
             try window.setupCursor();
 
@@ -2043,6 +1998,7 @@ pub const Window = switch (builtin.os.tag) {
             var pollFds = [_]posix.pollfd{
                 .{ .fd = c.wl_display_get_fd(self.wlDisplay), .events = posix.POLL.IN, .revents = 0 },
                 .{ .fd = self.wakeEventFd.handle, .events = posix.POLL.IN, .revents = 0 },
+                .{ .fd = c.libdecor_get_fd(self.libdecorContext), .events = posix.POLL.IN, .revents = 0 },
             };
 
             while (self.running.load(.acquire)) {
@@ -2076,6 +2032,13 @@ pub const Window = switch (builtin.os.tag) {
                 }
 
                 if (c.wl_display_dispatch_pending(self.wlDisplay) == -1) {
+                    return error.WaylandDispatchFailed;
+                }
+
+                // libdecor's objects live on their own queue, which
+                // wl_display_read_events fills but dispatch_pending (default
+                // queue only) never drains.
+                if (c.libdecor_dispatch(self.libdecorContext, 0) < 0) {
                     return error.WaylandDispatchFailed;
                 }
 
@@ -2129,7 +2092,6 @@ pub const Window = switch (builtin.os.tag) {
         pub fn deinit(self: *Self) void {
             self.wakeEventFd.close(self.io);
 
-            if (self.xdgToplevelDecoration) |decoration| c.zxdg_toplevel_decoration_v1_destroy(decoration);
             if (self.wpFractionalScale) |fs| c.wp_fractional_scale_v1_destroy(fs);
             if (self.wpViewport) |vp| c.wp_viewport_destroy(vp);
 
@@ -2142,19 +2104,16 @@ pub const Window = switch (builtin.os.tag) {
             if (self.zwpTextInput) |textInput| c.zwp_text_input_v3_destroy(textInput);
             if (self.zwpTextInputManager) |manager| c.zwp_text_input_manager_v3_destroy(manager);
 
-            c.xdg_toplevel_destroy(self.xdgToplevel);
-            c.xdg_surface_destroy(self.xdgSurface);
+            c.libdecor_frame_unref(self.libdecorFrame);
+            c.libdecor_unref(self.libdecorContext);
 
             c.wl_cursor_theme_destroy(self.wlCursorTheme);
             c.wl_pointer_destroy(self.wlPointer);
             c.wl_keyboard_destroy(self.wlKeyboard);
-            if (self.xdgDecorationManager) |dm| c.zxdg_decoration_manager_v1_destroy(dm);
             if (self.wpFractionalScaleManager) |fsm| c.wp_fractional_scale_manager_v1_destroy(fsm);
             if (self.wpViewporter) |vp| c.wp_viewporter_destroy(vp);
             c.wl_shm_destroy(self.wlShm);
             c.wl_compositor_destroy(self.wlCompositor);
-
-            c.xdg_wm_base_destroy(self.xdgWmBase);
 
             c.wl_surface_destroy(self.wlSurface);
             c.wl_registry_destroy(self.wlRegistry);
