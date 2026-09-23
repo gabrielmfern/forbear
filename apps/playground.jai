@@ -356,13 +356,21 @@ parse_wayland_message :: (bytes: []u8, message_info: Message_Info) -> *void {
     return cast(*void) untyped_message_bytes.data;
 }
 
+Color :: struct {
+    b: u8;
+    g: u8;
+    r: u8;
+    // this is unused and the compositor ignores it
+    x: u8;
+} #no_padding;
+
 Wayland_Window :: struct {
     wl_surface_id: u32;
 
     wl_buffer_id: u32;
     wl_shm_pool_id: u32;
     pool_size: s32;
-    buffer: *void;
+    buffer: []Color;
     buffer_fd: s32;
     
     xdg_surface_id: u32;
@@ -404,7 +412,7 @@ init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window
         reset_temporary_storage();
     }
 
-    buffer_size := width * height * 4;
+    buffer_size := window.width * window.height * 4;
     window.pool_size = buffer_size;
     window.buffer_fd = memfd_create("buffer", 0);
     if window.buffer_fd == -1 {
@@ -415,10 +423,24 @@ init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window
         log_error("failed to create pixel buffer fd: %\n", errno());
         exit(-1);
     }
-    window.buffer = mmap(null, xx buffer_size, PROT_READ | PROT_WRITE, MAP_SHARED, window.buffer_fd, 0);
-    if window.buffer == MAP_FAILED {
+    buffer_pointer := mmap(null, xx buffer_size, PROT_READ | PROT_WRITE, MAP_SHARED, window.buffer_fd, 0);
+    if buffer_pointer == MAP_FAILED {
         log_error("failed to create pixel buffer fd: %\n", errno());
         exit(-1);
+    }
+    memset(buffer_pointer, 0, buffer_size);
+    window.buffer.data = cast(*Color) buffer_pointer;
+    window.buffer.count = window.width * window.height;
+
+    for y: 0..window.height - 1 {
+        for x: 0..window.width - 1 {
+            if (x / 50 + y / 50) % 2 == 0 {
+                // purple
+                window.buffer[y * window.width + x].r = 255;
+                window.buffer[y * window.width + x].g = 0;
+                window.buffer[y * window.width + x].b = 255;
+            }
+        }
     }
 
     window.wl_shm_pool_id = new_wayland_client_object(connection, Interface_Id.WL_SHM_POOL);
@@ -462,14 +484,28 @@ update_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Wind
                     log_error("failed to create pixel buffer: %\n", errno());
                     exit(-1);
                 }
-                window.buffer = mremap(window.buffer, xx window.pool_size, xx buffer_size, MREMAP_MAYMOVE);
-                if window.buffer == MAP_FAILED {
+                buffer_pointer := mremap(cast(*void) window.buffer.data, xx window.pool_size, xx buffer_size, MREMAP_MAYMOVE);
+                if buffer_pointer == MAP_FAILED {
                     log_error("failed to map pixel buffer: %\n", errno());
                     exit(-1);
                 }
+                window.buffer.data = cast(*Color) buffer_pointer;
+                window.buffer.count = window.width * window.height;
 
                 send_wayland_message(connection, window.wl_shm_pool_id, Wl_Shm_Pool_Request_Resize.{ size = buffer_size });
                 window.pool_size = buffer_size;
+            }
+
+            memset(cast(*void) window.buffer.data, 0, buffer_size);
+            for y: 0..window.height - 1 {
+                for x: 0..window.width - 1 {
+                    if (x / 50 + y / 50) % 2 == 0 {
+                        // purple
+                        window.buffer[y * window.width + x].r = 255;
+                        window.buffer[y * window.width + x].g = 0;
+                        window.buffer[y * window.width + x].b = 255;
+                    }
+                }
             }
 
             send_wayland_message(connection, window.wl_buffer_id, Wl_Buffer_Request_Destroy.{ });
