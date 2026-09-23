@@ -1,0 +1,7 @@
+{
+    "roots": [
+        "forbear.jai"
+    ],
+    "build_root": "forbear.jai",
+    "auto_insert_parentheses": true
+}

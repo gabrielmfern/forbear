@@ -1,0 +1,7 @@
+# jai compiler intermediates
+.build/
+
+# compiled binary (named after the entry file)
+dist
+playground
+*.rdi
