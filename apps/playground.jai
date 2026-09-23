@@ -6,6 +6,7 @@
 
 libc :: #library,system "libc";
 memfd_create :: (name: *u8, flags: u32) -> s32 #foreign libc;
+MREMAP_MAYMOVE :: 1;
 
 WAYLAND_DEBUGGING :: false;
 EXIT_ON_FIRST_FRAME :: false;
@@ -29,7 +30,6 @@ Wayland_Connection :: struct {
 
     reading_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
     pending_reads: []u8;
-    writing_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
 
     client_object_interfaces: [..]Interface_Id;
     server_object_interfaces: [..]Interface_Id;
@@ -66,13 +66,10 @@ init_wayland_connection :: (connection: *Wayland_Connection) {
     send_wayland_message(connection, 1, Wl_Display_Request_Get_Registry.{ registry = connection.wl_registry_id });
  
     while connection.wl_compositor_id == 0 || connection.wl_shm_id == 0 || connection.xdg_wm_base_id == 0 {
-        something: bool;
-        event: Message_Info;
-        data: *void;
-        event, data, something = next_wayland_event(connection);
+        event, data, something := next_wayland_event(connection);
         if !something {
             poll_wayland_connection(connection);
-            event, data, something = next_wayland_event(connection);
+            continue;
         }
 
         if event.type == {
@@ -208,6 +205,7 @@ next_wayland_event :: (connection: *Wayland_Connection) -> event: Message_Info, 
     return event, data, true;
 }
 
+// TODO(depessimization): we should be buffering the messages and flushing them instead of sending them all one by one
 writing_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
 send_wayland_message :: (connection: *Wayland_Connection, object_id: u32, message: $T) -> bool {
     bytes := array_view(writing_buffer, 0, size_of(MessageHeader));
@@ -360,17 +358,27 @@ parse_wayland_message :: (bytes: []u8, message_info: Message_Info) -> *void {
 
 Wayland_Window :: struct {
     wl_surface_id: u32;
+
     wl_buffer_id: u32;
     wl_shm_pool_id: u32;
+    pool_size: s32;
+    buffer: *void;
+    buffer_fd: s32;
     
     xdg_surface_id: u32;
     // only top level windows are supported. there are also popups
     xdg_toplevel_id: u32;
-    
+
+    width: s32;
+    height: s32;
+
     running: bool = true;
 };
 
 init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window, width: s32, height: s32) {
+    window.width = width;
+    window.height = height;
+
     window.wl_surface_id = new_wayland_client_object(connection, Interface_Id.WL_SURFACE);
     send_wayland_message(connection, connection.wl_compositor_id, Wl_Compositor_Request_Create_Surface.{ id = window.wl_surface_id });
     window.xdg_surface_id = new_wayland_client_object(connection, Interface_Id.XDG_SURFACE);
@@ -380,13 +388,10 @@ init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window
     send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
 
     while true {
-        something: bool;
-        event: Message_Info;
-        data: *void;
-        event, data, something = next_wayland_event(connection);
+        event, data, something := next_wayland_event(connection);
         if !something {
             poll_wayland_connection(connection);
-            event, data, something = next_wayland_event(connection);
+            continue;
         }
 
         if event.type == {
@@ -400,17 +405,18 @@ init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window
     }
 
     buffer_size := width * height * 4;
-    buffer_fd := memfd_create("buffer", 0);
-    if buffer_fd == -1 {
+    window.pool_size = buffer_size;
+    window.buffer_fd = memfd_create("buffer", 0);
+    if window.buffer_fd == -1 {
         log_error("failed to create pixel buffer fd: %\n", errno());
         exit(-1);
     }
-    if ftruncate(buffer_fd, xx buffer_size) == -1 {
+    if ftruncate(window.buffer_fd, xx buffer_size) == -1 {
         log_error("failed to create pixel buffer fd: %\n", errno());
         exit(-1);
     }
-    buffer := mmap(null, xx buffer_size, PROT_READ | PROT_WRITE, MAP_SHARED, buffer_fd, 0);
-    if buffer == MAP_FAILED {
+    window.buffer = mmap(null, xx buffer_size, PROT_READ | PROT_WRITE, MAP_SHARED, window.buffer_fd, 0);
+    if window.buffer == MAP_FAILED {
         log_error("failed to create pixel buffer fd: %\n", errno());
         exit(-1);
     }
@@ -418,7 +424,7 @@ init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window
     window.wl_shm_pool_id = new_wayland_client_object(connection, Interface_Id.WL_SHM_POOL);
     send_wayland_message(connection, connection.wl_shm_id, Wl_Shm_Request_Create_Pool.{ 
         id = window.wl_shm_pool_id, 
-        fd = xx buffer_fd, 
+        fd = xx window.buffer_fd, 
         size = buffer_size 
     });
 
@@ -426,43 +432,81 @@ init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window
     send_wayland_message(connection, window.wl_shm_pool_id, Wl_Shm_Pool_Request_Create_Buffer.{ 
         id = window.wl_buffer_id,
         offset = 0,
-        width = width,
-        height = height,
-        stride = width * 4,
+        width = window.width,
+        height = window.height,
+        stride = window.width * 4,
         format = Wl_Shm_Format.XRGB8888,
     });
 
     send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
-    send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Damage.{ x = 0, y = 0, width = width, height = height });
+    send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Damage.{ x = 0, y = 0, width = window.width, height = window.height });
     send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Frame.{ callback = new_wayland_client_object(connection, Interface_Id.WL_CALLBACK) });
     send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
 }
 
-update_wayland_window :: (window: *Wayland_Window, event: Message_Info, data: *void) {
+update_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window, event: Message_Info, data: *void) {
     if event.type == {
         case Xdg_Toplevel_Event_Close;
             window.running = false;
+        case Xdg_Toplevel_Event_Configure;
+            configure := cast(*Xdg_Toplevel_Event_Configure) data;
+            if configure.width {
+                window.width = configure.width;
+            }
+            if configure.height {
+                window.height = configure.height;
+            }
+            buffer_size := window.width * window.height * 4;
+            if buffer_size > window.pool_size {
+                if ftruncate(window.buffer_fd, xx buffer_size) == -1 {
+                    log_error("failed to create pixel buffer: %\n", errno());
+                    exit(-1);
+                }
+                window.buffer = mremap(window.buffer, xx window.pool_size, xx buffer_size, MREMAP_MAYMOVE);
+                if window.buffer == MAP_FAILED {
+                    log_error("failed to map pixel buffer: %\n", errno());
+                    exit(-1);
+                }
+
+                send_wayland_message(connection, window.wl_shm_pool_id, Wl_Shm_Pool_Request_Resize.{ size = buffer_size });
+                window.pool_size = buffer_size;
+            }
+
+            send_wayland_message(connection, window.wl_buffer_id, Wl_Buffer_Request_Destroy.{ });
+            window.wl_buffer_id = new_wayland_client_object(connection, Interface_Id.WL_BUFFER);
+            send_wayland_message(connection, window.wl_shm_pool_id, Wl_Shm_Pool_Request_Create_Buffer.{ 
+                id = window.wl_buffer_id,
+                offset = 0,
+                width = window.width,
+                height = window.height,
+                stride = window.width * 4,
+                format = Wl_Shm_Format.XRGB8888,
+            });
+        case Xdg_Surface_Event_Configure;
+            configure := cast(*Xdg_Surface_Event_Configure) data;
+            send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
+
+            send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
+            send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Damage.{ x = 0, y = 0, width = window.width, height = window.height });
+            send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Frame.{ callback = new_wayland_client_object(connection, Interface_Id.WL_CALLBACK) });
+            send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
         case Wl_Callback_Event_Done;
             if EXIT_ON_FIRST_FRAME  window.running = false;
     }
-    // handle:
-    // - configure events
-    // - close event
-    // for this window
 }
 
 main :: () {
     wayland_connection: Wayland_Connection;
     init_wayland_connection(*wayland_connection);
 
-    window: Wayland_Window;
-    init_wayland_window(*wayland_connection, *window, 800, 600);
+    wayland_window: Wayland_Window;
+    init_wayland_window(*wayland_connection, *wayland_window, 800, 600);
 
-    while window.running {
+    while wayland_window.running {
         event, data, something := next_wayland_event(*wayland_connection);
 
         if something {
-            update_wayland_window(*window, event, data);
+            update_wayland_window(*wayland_connection, *wayland_window, event, data);
         }
 
         reset_temporary_storage();
