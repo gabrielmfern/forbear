@@ -1,0 +1,1335 @@
+//
+// This file was auto-generated using the following command:
+//
+// jai build.jai
+//
+
+
+
+EGL_NO_X11 :: 1;
+__egl_h_ :: 1;
+
+KHRONOS_SUPPORT_INT64 :: 1;
+KHRONOS_SUPPORT_FLOAT :: 1;
+
+KHRONOS_MAX_ENUM :: 0x7FFFFFFF;
+
+EGL_EGL_PROTOTYPES :: 1;
+
+EGL_VERSION_1_0 :: 1;
+
+EGL_ALPHA_SIZE :: 0x3021;
+EGL_BAD_ACCESS :: 0x3002;
+EGL_BAD_ALLOC :: 0x3003;
+EGL_BAD_ATTRIBUTE :: 0x3004;
+EGL_BAD_CONFIG :: 0x3005;
+EGL_BAD_CONTEXT :: 0x3006;
+EGL_BAD_CURRENT_SURFACE :: 0x3007;
+EGL_BAD_DISPLAY :: 0x3008;
+EGL_BAD_MATCH :: 0x3009;
+EGL_BAD_NATIVE_PIXMAP :: 0x300A;
+EGL_BAD_NATIVE_WINDOW :: 0x300B;
+EGL_BAD_PARAMETER :: 0x300C;
+EGL_BAD_SURFACE :: 0x300D;
+EGL_BLUE_SIZE :: 0x3022;
+EGL_BUFFER_SIZE :: 0x3020;
+EGL_CONFIG_CAVEAT :: 0x3027;
+EGL_CONFIG_ID :: 0x3028;
+EGL_CORE_NATIVE_ENGINE :: 0x305B;
+EGL_DEPTH_SIZE :: 0x3025;
+
+EGL_DRAW :: 0x3059;
+EGL_EXTENSIONS :: 0x3055;
+EGL_FALSE :: 0;
+EGL_GREEN_SIZE :: 0x3023;
+EGL_HEIGHT :: 0x3056;
+EGL_LARGEST_PBUFFER :: 0x3058;
+EGL_LEVEL :: 0x3029;
+EGL_MAX_PBUFFER_HEIGHT :: 0x302A;
+EGL_MAX_PBUFFER_PIXELS :: 0x302B;
+EGL_MAX_PBUFFER_WIDTH :: 0x302C;
+EGL_NATIVE_RENDERABLE :: 0x302D;
+EGL_NATIVE_VISUAL_ID :: 0x302E;
+EGL_NATIVE_VISUAL_TYPE :: 0x302F;
+EGL_NONE :: 0x3038;
+EGL_NON_CONFORMANT_CONFIG :: 0x3051;
+EGL_NOT_INITIALIZED :: 0x3001;
+
+EGL_PBUFFER_BIT :: 0x0001;
+EGL_PIXMAP_BIT :: 0x0002;
+EGL_READ :: 0x305A;
+EGL_RED_SIZE :: 0x3024;
+EGL_SAMPLES :: 0x3031;
+EGL_SAMPLE_BUFFERS :: 0x3032;
+EGL_SLOW_CONFIG :: 0x3050;
+EGL_STENCIL_SIZE :: 0x3026;
+EGL_SUCCESS :: 0x3000;
+EGL_SURFACE_TYPE :: 0x3033;
+EGL_TRANSPARENT_BLUE_VALUE :: 0x3035;
+EGL_TRANSPARENT_GREEN_VALUE :: 0x3036;
+EGL_TRANSPARENT_RED_VALUE :: 0x3037;
+EGL_TRANSPARENT_RGB :: 0x3052;
+EGL_TRANSPARENT_TYPE :: 0x3034;
+EGL_TRUE :: 1;
+EGL_VENDOR :: 0x3053;
+EGL_VERSION :: 0x3054;
+EGL_WIDTH :: 0x3057;
+EGL_WINDOW_BIT :: 0x0004;
+
+EGL_VERSION_1_1 :: 1;
+EGL_BACK_BUFFER :: 0x3084;
+EGL_BIND_TO_TEXTURE_RGB :: 0x3039;
+EGL_BIND_TO_TEXTURE_RGBA :: 0x303A;
+EGL_CONTEXT_LOST :: 0x300E;
+EGL_MIN_SWAP_INTERVAL :: 0x303B;
+EGL_MAX_SWAP_INTERVAL :: 0x303C;
+EGL_MIPMAP_TEXTURE :: 0x3082;
+EGL_MIPMAP_LEVEL :: 0x3083;
+EGL_NO_TEXTURE :: 0x305C;
+EGL_TEXTURE_2D :: 0x305F;
+EGL_TEXTURE_FORMAT :: 0x3080;
+EGL_TEXTURE_RGB :: 0x305D;
+EGL_TEXTURE_RGBA :: 0x305E;
+EGL_TEXTURE_TARGET :: 0x3081;
+
+EGL_VERSION_1_2 :: 1;
+
+EGL_ALPHA_FORMAT :: 0x3088;
+EGL_ALPHA_FORMAT_NONPRE :: 0x308B;
+EGL_ALPHA_FORMAT_PRE :: 0x308C;
+EGL_ALPHA_MASK_SIZE :: 0x303E;
+EGL_BUFFER_PRESERVED :: 0x3094;
+EGL_BUFFER_DESTROYED :: 0x3095;
+EGL_CLIENT_APIS :: 0x308D;
+EGL_COLORSPACE :: 0x3087;
+EGL_COLORSPACE_sRGB :: 0x3089;
+EGL_COLORSPACE_LINEAR :: 0x308A;
+EGL_COLOR_BUFFER_TYPE :: 0x303F;
+EGL_CONTEXT_CLIENT_TYPE :: 0x3097;
+EGL_DISPLAY_SCALING :: 10000;
+EGL_HORIZONTAL_RESOLUTION :: 0x3090;
+EGL_LUMINANCE_BUFFER :: 0x308F;
+EGL_LUMINANCE_SIZE :: 0x303D;
+EGL_OPENGL_ES_BIT :: 0x0001;
+EGL_OPENVG_BIT :: 0x0002;
+EGL_OPENGL_ES_API :: 0x30A0;
+EGL_OPENVG_API :: 0x30A1;
+EGL_OPENVG_IMAGE :: 0x3096;
+EGL_PIXEL_ASPECT_RATIO :: 0x3092;
+EGL_RENDERABLE_TYPE :: 0x3040;
+EGL_RENDER_BUFFER :: 0x3086;
+EGL_RGB_BUFFER :: 0x308E;
+EGL_SINGLE_BUFFER :: 0x3085;
+EGL_SWAP_BEHAVIOR :: 0x3093;
+
+EGL_VERTICAL_RESOLUTION :: 0x3091;
+
+EGL_VERSION_1_3 :: 1;
+EGL_CONFORMANT :: 0x3042;
+EGL_CONTEXT_CLIENT_VERSION :: 0x3098;
+EGL_MATCH_NATIVE_PIXMAP :: 0x3041;
+EGL_OPENGL_ES2_BIT :: 0x0004;
+EGL_VG_ALPHA_FORMAT :: 0x3088;
+EGL_VG_ALPHA_FORMAT_NONPRE :: 0x308B;
+EGL_VG_ALPHA_FORMAT_PRE :: 0x308C;
+EGL_VG_ALPHA_FORMAT_PRE_BIT :: 0x0040;
+EGL_VG_COLORSPACE :: 0x3087;
+EGL_VG_COLORSPACE_sRGB :: 0x3089;
+EGL_VG_COLORSPACE_LINEAR :: 0x308A;
+EGL_VG_COLORSPACE_LINEAR_BIT :: 0x0020;
+
+EGL_VERSION_1_4 :: 1;
+
+EGL_MULTISAMPLE_RESOLVE_BOX_BIT :: 0x0200;
+EGL_MULTISAMPLE_RESOLVE :: 0x3099;
+EGL_MULTISAMPLE_RESOLVE_DEFAULT :: 0x309A;
+EGL_MULTISAMPLE_RESOLVE_BOX :: 0x309B;
+EGL_OPENGL_API :: 0x30A2;
+EGL_OPENGL_BIT :: 0x0008;
+EGL_SWAP_BEHAVIOR_PRESERVED_BIT :: 0x0400;
+
+EGL_VERSION_1_5 :: 1;
+
+EGL_CONTEXT_MAJOR_VERSION :: 0x3098;
+EGL_CONTEXT_MINOR_VERSION :: 0x30FB;
+EGL_CONTEXT_OPENGL_PROFILE_MASK :: 0x30FD;
+EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY :: 0x31BD;
+EGL_NO_RESET_NOTIFICATION :: 0x31BE;
+EGL_LOSE_CONTEXT_ON_RESET :: 0x31BF;
+EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT :: 0x00000001;
+EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT :: 0x00000002;
+EGL_CONTEXT_OPENGL_DEBUG :: 0x31B0;
+EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE :: 0x31B1;
+EGL_CONTEXT_OPENGL_ROBUST_ACCESS :: 0x31B2;
+EGL_OPENGL_ES3_BIT :: 0x00000040;
+EGL_CL_EVENT_HANDLE :: 0x309C;
+EGL_SYNC_CL_EVENT :: 0x30FE;
+EGL_SYNC_CL_EVENT_COMPLETE :: 0x30FF;
+EGL_SYNC_PRIOR_COMMANDS_COMPLETE :: 0x30F0;
+EGL_SYNC_TYPE :: 0x30F7;
+EGL_SYNC_STATUS :: 0x30F1;
+EGL_SYNC_CONDITION :: 0x30F8;
+EGL_SIGNALED :: 0x30F2;
+EGL_UNSIGNALED :: 0x30F3;
+EGL_SYNC_FLUSH_COMMANDS_BIT :: 0x0001;
+EGL_FOREVER :: 0xFFFFFFFFFFFFFFFF;
+EGL_TIMEOUT_EXPIRED :: 0x30F5;
+EGL_CONDITION_SATISFIED :: 0x30F6;
+
+EGL_SYNC_FENCE :: 0x30F9;
+EGL_GL_COLORSPACE :: 0x309D;
+EGL_GL_COLORSPACE_SRGB :: 0x3089;
+EGL_GL_COLORSPACE_LINEAR :: 0x308A;
+EGL_GL_RENDERBUFFER :: 0x30B9;
+EGL_GL_TEXTURE_2D :: 0x30B1;
+EGL_GL_TEXTURE_LEVEL :: 0x30BC;
+EGL_GL_TEXTURE_3D :: 0x30B2;
+EGL_GL_TEXTURE_ZOFFSET :: 0x30BD;
+EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_X :: 0x30B3;
+EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_X :: 0x30B4;
+EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Y :: 0x30B5;
+EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Y :: 0x30B6;
+EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Z :: 0x30B7;
+EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Z :: 0x30B8;
+EGL_IMAGE_PRESERVED :: 0x30D2;
+
+__eglext_h_ :: 1;
+
+EGL_EGLEXT_VERSION :: 20211210;
+
+EGL_KHR_cl_event :: 1;
+EGL_CL_EVENT_HANDLE_KHR :: 0x309C;
+EGL_SYNC_CL_EVENT_KHR :: 0x30FE;
+EGL_SYNC_CL_EVENT_COMPLETE_KHR :: 0x30FF;
+
+EGL_KHR_cl_event2 :: 1;
+
+EGL_KHR_client_get_all_proc_addresses :: 1;
+
+EGL_KHR_config_attribs :: 1;
+EGL_CONFORMANT_KHR :: 0x3042;
+EGL_VG_COLORSPACE_LINEAR_BIT_KHR :: 0x0020;
+EGL_VG_ALPHA_FORMAT_PRE_BIT_KHR :: 0x0040;
+
+EGL_KHR_context_flush_control :: 1;
+EGL_CONTEXT_RELEASE_BEHAVIOR_NONE_KHR :: 0;
+EGL_CONTEXT_RELEASE_BEHAVIOR_KHR :: 0x2097;
+EGL_CONTEXT_RELEASE_BEHAVIOR_FLUSH_KHR :: 0x2098;
+
+EGL_KHR_create_context :: 1;
+EGL_CONTEXT_MAJOR_VERSION_KHR :: 0x3098;
+EGL_CONTEXT_MINOR_VERSION_KHR :: 0x30FB;
+EGL_CONTEXT_FLAGS_KHR :: 0x30FC;
+EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR :: 0x30FD;
+EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_KHR :: 0x31BD;
+EGL_NO_RESET_NOTIFICATION_KHR :: 0x31BE;
+EGL_LOSE_CONTEXT_ON_RESET_KHR :: 0x31BF;
+EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR :: 0x00000001;
+EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE_BIT_KHR :: 0x00000002;
+EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR :: 0x00000004;
+EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR :: 0x00000001;
+EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT_KHR :: 0x00000002;
+EGL_OPENGL_ES3_BIT_KHR :: 0x00000040;
+
+EGL_KHR_create_context_no_error :: 1;
+EGL_CONTEXT_OPENGL_NO_ERROR_KHR :: 0x31B3;
+
+EGL_KHR_debug :: 1;
+
+EGL_OBJECT_THREAD_KHR :: 0x33B0;
+EGL_OBJECT_DISPLAY_KHR :: 0x33B1;
+EGL_OBJECT_CONTEXT_KHR :: 0x33B2;
+EGL_OBJECT_SURFACE_KHR :: 0x33B3;
+EGL_OBJECT_IMAGE_KHR :: 0x33B4;
+EGL_OBJECT_SYNC_KHR :: 0x33B5;
+EGL_OBJECT_STREAM_KHR :: 0x33B6;
+EGL_DEBUG_MSG_CRITICAL_KHR :: 0x33B9;
+EGL_DEBUG_MSG_ERROR_KHR :: 0x33BA;
+EGL_DEBUG_MSG_WARN_KHR :: 0x33BB;
+EGL_DEBUG_MSG_INFO_KHR :: 0x33BC;
+EGL_DEBUG_CALLBACK_KHR :: 0x33B8;
+
+EGL_KHR_display_reference :: 1;
+EGL_TRACK_REFERENCES_KHR :: 0x3352;
+
+EGL_KHR_fence_sync :: 1;
+
+EGL_SYNC_PRIOR_COMMANDS_COMPLETE_KHR :: 0x30F0;
+EGL_SYNC_CONDITION_KHR :: 0x30F8;
+EGL_SYNC_FENCE_KHR :: 0x30F9;
+
+EGL_KHR_get_all_proc_addresses :: 1;
+
+EGL_KHR_gl_colorspace :: 1;
+EGL_GL_COLORSPACE_KHR :: 0x309D;
+EGL_GL_COLORSPACE_SRGB_KHR :: 0x3089;
+EGL_GL_COLORSPACE_LINEAR_KHR :: 0x308A;
+
+EGL_KHR_gl_renderbuffer_image :: 1;
+EGL_GL_RENDERBUFFER_KHR :: 0x30B9;
+
+EGL_KHR_gl_texture_2D_image :: 1;
+EGL_GL_TEXTURE_2D_KHR :: 0x30B1;
+EGL_GL_TEXTURE_LEVEL_KHR :: 0x30BC;
+
+EGL_KHR_gl_texture_3D_image :: 1;
+EGL_GL_TEXTURE_3D_KHR :: 0x30B2;
+EGL_GL_TEXTURE_ZOFFSET_KHR :: 0x30BD;
+
+EGL_KHR_gl_texture_cubemap_image :: 1;
+EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_X_KHR :: 0x30B3;
+EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_X_KHR :: 0x30B4;
+EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Y_KHR :: 0x30B5;
+EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_KHR :: 0x30B6;
+EGL_GL_TEXTURE_CUBE_MAP_POSITIVE_Z_KHR :: 0x30B7;
+EGL_GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_KHR :: 0x30B8;
+
+EGL_KHR_image :: 1;
+
+EGL_NATIVE_PIXMAP_KHR :: 0x30B0;
+
+EGL_KHR_image_base :: 1;
+EGL_IMAGE_PRESERVED_KHR :: 0x30D2;
+
+EGL_KHR_image_pixmap :: 1;
+
+EGL_KHR_lock_surface :: 1;
+EGL_READ_SURFACE_BIT_KHR :: 0x0001;
+EGL_WRITE_SURFACE_BIT_KHR :: 0x0002;
+EGL_LOCK_SURFACE_BIT_KHR :: 0x0080;
+EGL_OPTIMAL_FORMAT_BIT_KHR :: 0x0100;
+EGL_MATCH_FORMAT_KHR :: 0x3043;
+EGL_FORMAT_RGB_565_EXACT_KHR :: 0x30C0;
+EGL_FORMAT_RGB_565_KHR :: 0x30C1;
+EGL_FORMAT_RGBA_8888_EXACT_KHR :: 0x30C2;
+EGL_FORMAT_RGBA_8888_KHR :: 0x30C3;
+EGL_MAP_PRESERVE_PIXELS_KHR :: 0x30C4;
+EGL_LOCK_USAGE_HINT_KHR :: 0x30C5;
+EGL_BITMAP_POINTER_KHR :: 0x30C6;
+EGL_BITMAP_PITCH_KHR :: 0x30C7;
+EGL_BITMAP_ORIGIN_KHR :: 0x30C8;
+EGL_BITMAP_PIXEL_RED_OFFSET_KHR :: 0x30C9;
+EGL_BITMAP_PIXEL_GREEN_OFFSET_KHR :: 0x30CA;
+EGL_BITMAP_PIXEL_BLUE_OFFSET_KHR :: 0x30CB;
+EGL_BITMAP_PIXEL_ALPHA_OFFSET_KHR :: 0x30CC;
+EGL_BITMAP_PIXEL_LUMINANCE_OFFSET_KHR :: 0x30CD;
+EGL_LOWER_LEFT_KHR :: 0x30CE;
+EGL_UPPER_LEFT_KHR :: 0x30CF;
+
+EGL_KHR_lock_surface2 :: 1;
+EGL_BITMAP_PIXEL_SIZE_KHR :: 0x3110;
+
+EGL_KHR_lock_surface3 :: 1;
+
+EGL_KHR_mutable_render_buffer :: 1;
+EGL_MUTABLE_RENDER_BUFFER_BIT_KHR :: 0x1000;
+
+EGL_KHR_no_config_context :: 1;
+
+EGL_KHR_partial_update :: 1;
+EGL_BUFFER_AGE_KHR :: 0x313D;
+
+EGL_KHR_platform_android :: 1;
+EGL_PLATFORM_ANDROID_KHR :: 0x3141;
+
+EGL_KHR_platform_gbm :: 1;
+EGL_PLATFORM_GBM_KHR :: 0x31D7;
+
+EGL_KHR_platform_wayland :: 1;
+EGL_PLATFORM_WAYLAND_KHR :: 0x31D8;
+
+EGL_KHR_platform_x11 :: 1;
+EGL_PLATFORM_X11_KHR :: 0x31D5;
+EGL_PLATFORM_X11_SCREEN_KHR :: 0x31D6;
+
+EGL_KHR_reusable_sync :: 1;
+
+EGL_SYNC_STATUS_KHR :: 0x30F1;
+EGL_SIGNALED_KHR :: 0x30F2;
+EGL_UNSIGNALED_KHR :: 0x30F3;
+EGL_TIMEOUT_EXPIRED_KHR :: 0x30F5;
+EGL_CONDITION_SATISFIED_KHR :: 0x30F6;
+EGL_SYNC_TYPE_KHR :: 0x30F7;
+EGL_SYNC_REUSABLE_KHR :: 0x30FA;
+EGL_SYNC_FLUSH_COMMANDS_BIT_KHR :: 0x0001;
+EGL_FOREVER_KHR :: 0xFFFFFFFFFFFFFFFF;
+
+EGL_KHR_stream :: 1;
+
+EGL_CONSUMER_LATENCY_USEC_KHR :: 0x3210;
+EGL_PRODUCER_FRAME_KHR :: 0x3212;
+EGL_CONSUMER_FRAME_KHR :: 0x3213;
+EGL_STREAM_STATE_KHR :: 0x3214;
+EGL_STREAM_STATE_CREATED_KHR :: 0x3215;
+EGL_STREAM_STATE_CONNECTING_KHR :: 0x3216;
+EGL_STREAM_STATE_EMPTY_KHR :: 0x3217;
+EGL_STREAM_STATE_NEW_FRAME_AVAILABLE_KHR :: 0x3218;
+EGL_STREAM_STATE_OLD_FRAME_AVAILABLE_KHR :: 0x3219;
+EGL_STREAM_STATE_DISCONNECTED_KHR :: 0x321A;
+EGL_BAD_STREAM_KHR :: 0x321B;
+EGL_BAD_STATE_KHR :: 0x321C;
+
+EGL_KHR_stream_attrib :: 1;
+
+EGL_KHR_stream_consumer_gltexture :: 1;
+
+EGL_CONSUMER_ACQUIRE_TIMEOUT_USEC_KHR :: 0x321E;
+
+EGL_KHR_stream_cross_process_fd :: 1;
+
+EGL_KHR_stream_fifo :: 1;
+
+EGL_STREAM_FIFO_LENGTH_KHR :: 0x31FC;
+EGL_STREAM_TIME_NOW_KHR :: 0x31FD;
+EGL_STREAM_TIME_CONSUMER_KHR :: 0x31FE;
+EGL_STREAM_TIME_PRODUCER_KHR :: 0x31FF;
+
+EGL_KHR_stream_producer_aldatalocator :: 1;
+
+EGL_KHR_stream_producer_eglsurface :: 1;
+
+EGL_STREAM_BIT_KHR :: 0x0800;
+
+EGL_KHR_surfaceless_context :: 1;
+
+EGL_KHR_swap_buffers_with_damage :: 1;
+
+EGL_KHR_vg_parent_image :: 1;
+EGL_VG_PARENT_IMAGE_KHR :: 0x30BA;
+
+EGL_KHR_wait_sync :: 1;
+
+EGL_ANDROID_GLES_layers :: 1;
+
+EGL_ANDROID_blob_cache :: 1;
+
+EGL_ANDROID_create_native_client_buffer :: 1;
+EGL_NATIVE_BUFFER_USAGE_ANDROID :: 0x3143;
+EGL_NATIVE_BUFFER_USAGE_PROTECTED_BIT_ANDROID :: 0x00000001;
+EGL_NATIVE_BUFFER_USAGE_RENDERBUFFER_BIT_ANDROID :: 0x00000002;
+EGL_NATIVE_BUFFER_USAGE_TEXTURE_BIT_ANDROID :: 0x00000004;
+
+EGL_ANDROID_framebuffer_target :: 1;
+EGL_FRAMEBUFFER_TARGET_ANDROID :: 0x3147;
+
+EGL_ANDROID_front_buffer_auto_refresh :: 1;
+EGL_FRONT_BUFFER_AUTO_REFRESH_ANDROID :: 0x314C;
+
+EGL_ANDROID_get_frame_timestamps :: 1;
+
+EGL_TIMESTAMPS_ANDROID :: 0x3430;
+EGL_COMPOSITE_DEADLINE_ANDROID :: 0x3431;
+EGL_COMPOSITE_INTERVAL_ANDROID :: 0x3432;
+EGL_COMPOSITE_TO_PRESENT_LATENCY_ANDROID :: 0x3433;
+EGL_REQUESTED_PRESENT_TIME_ANDROID :: 0x3434;
+EGL_RENDERING_COMPLETE_TIME_ANDROID :: 0x3435;
+EGL_COMPOSITION_LATCH_TIME_ANDROID :: 0x3436;
+EGL_FIRST_COMPOSITION_START_TIME_ANDROID :: 0x3437;
+EGL_LAST_COMPOSITION_START_TIME_ANDROID :: 0x3438;
+EGL_FIRST_COMPOSITION_GPU_FINISHED_TIME_ANDROID :: 0x3439;
+EGL_DISPLAY_PRESENT_TIME_ANDROID :: 0x343A;
+EGL_DEQUEUE_READY_TIME_ANDROID :: 0x343B;
+EGL_READS_DONE_TIME_ANDROID :: 0x343C;
+
+EGL_ANDROID_get_native_client_buffer :: 1;
+
+EGL_ANDROID_image_native_buffer :: 1;
+EGL_NATIVE_BUFFER_ANDROID :: 0x3140;
+
+EGL_ANDROID_native_fence_sync :: 1;
+EGL_SYNC_NATIVE_FENCE_ANDROID :: 0x3144;
+EGL_SYNC_NATIVE_FENCE_FD_ANDROID :: 0x3145;
+EGL_SYNC_NATIVE_FENCE_SIGNALED_ANDROID :: 0x3146;
+EGL_NO_NATIVE_FENCE_FD_ANDROID :: -1;
+
+EGL_ANDROID_presentation_time :: 1;
+
+EGL_ANDROID_recordable :: 1;
+EGL_RECORDABLE_ANDROID :: 0x3142;
+
+EGL_ANGLE_d3d_share_handle_client_buffer :: 1;
+EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE :: 0x3200;
+
+EGL_ANGLE_device_d3d :: 1;
+EGL_D3D9_DEVICE_ANGLE :: 0x33A0;
+EGL_D3D11_DEVICE_ANGLE :: 0x33A1;
+
+EGL_ANGLE_query_surface_pointer :: 1;
+
+EGL_ANGLE_surface_d3d_texture_2d_share_handle :: 1;
+
+EGL_ANGLE_sync_control_rate :: 1;
+
+EGL_ANGLE_window_fixed_size :: 1;
+EGL_FIXED_SIZE_ANGLE :: 0x3201;
+
+EGL_ARM_image_format :: 1;
+EGL_COLOR_COMPONENT_TYPE_UNSIGNED_INTEGER_ARM :: 0x3287;
+EGL_COLOR_COMPONENT_TYPE_INTEGER_ARM :: 0x3288;
+
+EGL_ARM_implicit_external_sync :: 1;
+EGL_SYNC_PRIOR_COMMANDS_IMPLICIT_EXTERNAL_ARM :: 0x328A;
+
+EGL_ARM_pixmap_multisample_discard :: 1;
+EGL_DISCARD_SAMPLES_ARM :: 0x3286;
+
+EGL_EXT_bind_to_front :: 1;
+EGL_FRONT_BUFFER_EXT :: 0x3464;
+
+EGL_EXT_buffer_age :: 1;
+EGL_BUFFER_AGE_EXT :: 0x313D;
+
+EGL_EXT_client_extensions :: 1;
+
+EGL_EXT_client_sync :: 1;
+EGL_SYNC_CLIENT_EXT :: 0x3364;
+EGL_SYNC_CLIENT_SIGNAL_EXT :: 0x3365;
+
+EGL_EXT_compositor :: 1;
+EGL_PRIMARY_COMPOSITOR_CONTEXT_EXT :: 0x3460;
+EGL_EXTERNAL_REF_ID_EXT :: 0x3461;
+EGL_COMPOSITOR_DROP_NEWEST_FRAME_EXT :: 0x3462;
+EGL_COMPOSITOR_KEEP_NEWEST_FRAME_EXT :: 0x3463;
+
+EGL_EXT_config_select_group :: 1;
+EGL_CONFIG_SELECT_GROUP_EXT :: 0x34C0;
+
+EGL_EXT_create_context_robustness :: 1;
+EGL_CONTEXT_OPENGL_ROBUST_ACCESS_EXT :: 0x30BF;
+EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_EXT :: 0x3138;
+EGL_NO_RESET_NOTIFICATION_EXT :: 0x31BE;
+EGL_LOSE_CONTEXT_ON_RESET_EXT :: 0x31BF;
+
+EGL_EXT_device_base :: 1;
+
+EGL_BAD_DEVICE_EXT :: 0x322B;
+EGL_DEVICE_EXT :: 0x322C;
+
+EGL_EXT_device_drm :: 1;
+EGL_DRM_DEVICE_FILE_EXT :: 0x3233;
+EGL_DRM_MASTER_FD_EXT :: 0x333C;
+
+EGL_EXT_device_drm_render_node :: 1;
+EGL_DRM_RENDER_NODE_FILE_EXT :: 0x3377;
+
+EGL_EXT_device_enumeration :: 1;
+
+EGL_EXT_device_openwf :: 1;
+EGL_OPENWF_DEVICE_ID_EXT :: 0x3237;
+EGL_OPENWF_DEVICE_EXT :: 0x333D;
+
+EGL_EXT_device_persistent_id :: 1;
+EGL_DEVICE_UUID_EXT :: 0x335C;
+EGL_DRIVER_UUID_EXT :: 0x335D;
+EGL_DRIVER_NAME_EXT :: 0x335E;
+
+EGL_EXT_device_query :: 1;
+
+EGL_EXT_device_query_name :: 1;
+EGL_RENDERER_EXT :: 0x335F;
+
+EGL_EXT_gl_colorspace_bt2020_linear :: 1;
+EGL_GL_COLORSPACE_BT2020_LINEAR_EXT :: 0x333F;
+
+EGL_EXT_gl_colorspace_bt2020_pq :: 1;
+EGL_GL_COLORSPACE_BT2020_PQ_EXT :: 0x3340;
+
+EGL_EXT_gl_colorspace_display_p3 :: 1;
+EGL_GL_COLORSPACE_DISPLAY_P3_EXT :: 0x3363;
+
+EGL_EXT_gl_colorspace_display_p3_linear :: 1;
+EGL_GL_COLORSPACE_DISPLAY_P3_LINEAR_EXT :: 0x3362;
+
+EGL_EXT_gl_colorspace_display_p3_passthrough :: 1;
+EGL_GL_COLORSPACE_DISPLAY_P3_PASSTHROUGH_EXT :: 0x3490;
+
+EGL_EXT_gl_colorspace_scrgb :: 1;
+EGL_GL_COLORSPACE_SCRGB_EXT :: 0x3351;
+
+EGL_EXT_gl_colorspace_scrgb_linear :: 1;
+EGL_GL_COLORSPACE_SCRGB_LINEAR_EXT :: 0x3350;
+
+EGL_EXT_image_dma_buf_import :: 1;
+EGL_LINUX_DMA_BUF_EXT :: 0x3270;
+EGL_LINUX_DRM_FOURCC_EXT :: 0x3271;
+EGL_DMA_BUF_PLANE0_FD_EXT :: 0x3272;
+EGL_DMA_BUF_PLANE0_OFFSET_EXT :: 0x3273;
+EGL_DMA_BUF_PLANE0_PITCH_EXT :: 0x3274;
+EGL_DMA_BUF_PLANE1_FD_EXT :: 0x3275;
+EGL_DMA_BUF_PLANE1_OFFSET_EXT :: 0x3276;
+EGL_DMA_BUF_PLANE1_PITCH_EXT :: 0x3277;
+EGL_DMA_BUF_PLANE2_FD_EXT :: 0x3278;
+EGL_DMA_BUF_PLANE2_OFFSET_EXT :: 0x3279;
+EGL_DMA_BUF_PLANE2_PITCH_EXT :: 0x327A;
+EGL_YUV_COLOR_SPACE_HINT_EXT :: 0x327B;
+EGL_SAMPLE_RANGE_HINT_EXT :: 0x327C;
+EGL_YUV_CHROMA_HORIZONTAL_SITING_HINT_EXT :: 0x327D;
+EGL_YUV_CHROMA_VERTICAL_SITING_HINT_EXT :: 0x327E;
+EGL_ITU_REC601_EXT :: 0x327F;
+EGL_ITU_REC709_EXT :: 0x3280;
+EGL_ITU_REC2020_EXT :: 0x3281;
+EGL_YUV_FULL_RANGE_EXT :: 0x3282;
+EGL_YUV_NARROW_RANGE_EXT :: 0x3283;
+EGL_YUV_CHROMA_SITING_0_EXT :: 0x3284;
+EGL_YUV_CHROMA_SITING_0_5_EXT :: 0x3285;
+
+EGL_EXT_image_dma_buf_import_modifiers :: 1;
+EGL_DMA_BUF_PLANE3_FD_EXT :: 0x3440;
+EGL_DMA_BUF_PLANE3_OFFSET_EXT :: 0x3441;
+EGL_DMA_BUF_PLANE3_PITCH_EXT :: 0x3442;
+EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT :: 0x3443;
+EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT :: 0x3444;
+EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT :: 0x3445;
+EGL_DMA_BUF_PLANE1_MODIFIER_HI_EXT :: 0x3446;
+EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT :: 0x3447;
+EGL_DMA_BUF_PLANE2_MODIFIER_HI_EXT :: 0x3448;
+EGL_DMA_BUF_PLANE3_MODIFIER_LO_EXT :: 0x3449;
+EGL_DMA_BUF_PLANE3_MODIFIER_HI_EXT :: 0x344A;
+
+EGL_EXT_image_gl_colorspace :: 1;
+EGL_GL_COLORSPACE_DEFAULT_EXT :: 0x314D;
+
+EGL_EXT_image_implicit_sync_control :: 1;
+EGL_IMPORT_SYNC_TYPE_EXT :: 0x3470;
+EGL_IMPORT_IMPLICIT_SYNC_EXT :: 0x3471;
+EGL_IMPORT_EXPLICIT_SYNC_EXT :: 0x3472;
+
+EGL_EXT_multiview_window :: 1;
+EGL_MULTIVIEW_VIEW_COUNT_EXT :: 0x3134;
+
+EGL_EXT_output_base :: 1;
+
+EGL_BAD_OUTPUT_LAYER_EXT :: 0x322D;
+EGL_BAD_OUTPUT_PORT_EXT :: 0x322E;
+EGL_SWAP_INTERVAL_EXT :: 0x322F;
+
+EGL_EXT_output_drm :: 1;
+EGL_DRM_CRTC_EXT :: 0x3234;
+EGL_DRM_PLANE_EXT :: 0x3235;
+EGL_DRM_CONNECTOR_EXT :: 0x3236;
+
+EGL_EXT_output_openwf :: 1;
+EGL_OPENWF_PIPELINE_ID_EXT :: 0x3238;
+EGL_OPENWF_PORT_ID_EXT :: 0x3239;
+
+EGL_EXT_pixel_format_float :: 1;
+EGL_COLOR_COMPONENT_TYPE_EXT :: 0x3339;
+EGL_COLOR_COMPONENT_TYPE_FIXED_EXT :: 0x333A;
+EGL_COLOR_COMPONENT_TYPE_FLOAT_EXT :: 0x333B;
+
+EGL_EXT_platform_base :: 1;
+
+EGL_EXT_platform_device :: 1;
+EGL_PLATFORM_DEVICE_EXT :: 0x313F;
+
+EGL_EXT_platform_wayland :: 1;
+EGL_PLATFORM_WAYLAND_EXT :: 0x31D8;
+
+EGL_EXT_platform_x11 :: 1;
+EGL_PLATFORM_X11_EXT :: 0x31D5;
+EGL_PLATFORM_X11_SCREEN_EXT :: 0x31D6;
+
+EGL_EXT_platform_xcb :: 1;
+EGL_PLATFORM_XCB_EXT :: 0x31DC;
+EGL_PLATFORM_XCB_SCREEN_EXT :: 0x31DE;
+
+EGL_EXT_present_opaque :: 1;
+EGL_PRESENT_OPAQUE_EXT :: 0x31DF;
+
+EGL_EXT_protected_content :: 1;
+EGL_PROTECTED_CONTENT_EXT :: 0x32C0;
+
+EGL_EXT_protected_surface :: 1;
+
+EGL_EXT_stream_consumer_egloutput :: 1;
+
+EGL_EXT_surface_CTA861_3_metadata :: 1;
+EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT :: 0x3360;
+EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT :: 0x3361;
+
+EGL_EXT_surface_SMPTE2086_metadata :: 1;
+EGL_SMPTE2086_DISPLAY_PRIMARY_RX_EXT :: 0x3341;
+EGL_SMPTE2086_DISPLAY_PRIMARY_RY_EXT :: 0x3342;
+EGL_SMPTE2086_DISPLAY_PRIMARY_GX_EXT :: 0x3343;
+EGL_SMPTE2086_DISPLAY_PRIMARY_GY_EXT :: 0x3344;
+EGL_SMPTE2086_DISPLAY_PRIMARY_BX_EXT :: 0x3345;
+EGL_SMPTE2086_DISPLAY_PRIMARY_BY_EXT :: 0x3346;
+EGL_SMPTE2086_WHITE_POINT_X_EXT :: 0x3347;
+EGL_SMPTE2086_WHITE_POINT_Y_EXT :: 0x3348;
+EGL_SMPTE2086_MAX_LUMINANCE_EXT :: 0x3349;
+EGL_SMPTE2086_MIN_LUMINANCE_EXT :: 0x334A;
+EGL_METADATA_SCALING_EXT :: 50000;
+
+EGL_EXT_surface_compression :: 1;
+EGL_SURFACE_COMPRESSION_EXT :: 0x34B0;
+EGL_SURFACE_COMPRESSION_PLANE1_EXT :: 0x328E;
+EGL_SURFACE_COMPRESSION_PLANE2_EXT :: 0x328F;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_NONE_EXT :: 0x34B1;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_DEFAULT_EXT :: 0x34B2;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_1BPC_EXT :: 0x34B4;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_2BPC_EXT :: 0x34B5;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_3BPC_EXT :: 0x34B6;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_4BPC_EXT :: 0x34B7;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_5BPC_EXT :: 0x34B8;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_6BPC_EXT :: 0x34B9;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_7BPC_EXT :: 0x34BA;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_8BPC_EXT :: 0x34BB;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_9BPC_EXT :: 0x34BC;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_10BPC_EXT :: 0x34BD;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_11BPC_EXT :: 0x34BE;
+EGL_SURFACE_COMPRESSION_FIXED_RATE_12BPC_EXT :: 0x34BF;
+
+EGL_EXT_swap_buffers_with_damage :: 1;
+
+EGL_EXT_sync_reuse :: 1;
+
+EGL_EXT_yuv_surface :: 1;
+EGL_YUV_ORDER_EXT :: 0x3301;
+EGL_YUV_NUMBER_OF_PLANES_EXT :: 0x3311;
+EGL_YUV_SUBSAMPLE_EXT :: 0x3312;
+EGL_YUV_DEPTH_RANGE_EXT :: 0x3317;
+EGL_YUV_CSC_STANDARD_EXT :: 0x330A;
+EGL_YUV_PLANE_BPP_EXT :: 0x331A;
+EGL_YUV_BUFFER_EXT :: 0x3300;
+EGL_YUV_ORDER_YUV_EXT :: 0x3302;
+EGL_YUV_ORDER_YVU_EXT :: 0x3303;
+EGL_YUV_ORDER_YUYV_EXT :: 0x3304;
+EGL_YUV_ORDER_UYVY_EXT :: 0x3305;
+EGL_YUV_ORDER_YVYU_EXT :: 0x3306;
+EGL_YUV_ORDER_VYUY_EXT :: 0x3307;
+EGL_YUV_ORDER_AYUV_EXT :: 0x3308;
+EGL_YUV_SUBSAMPLE_4_2_0_EXT :: 0x3313;
+EGL_YUV_SUBSAMPLE_4_2_2_EXT :: 0x3314;
+EGL_YUV_SUBSAMPLE_4_4_4_EXT :: 0x3315;
+EGL_YUV_DEPTH_RANGE_LIMITED_EXT :: 0x3318;
+EGL_YUV_DEPTH_RANGE_FULL_EXT :: 0x3319;
+EGL_YUV_CSC_STANDARD_601_EXT :: 0x330B;
+EGL_YUV_CSC_STANDARD_709_EXT :: 0x330C;
+EGL_YUV_CSC_STANDARD_2020_EXT :: 0x330D;
+EGL_YUV_PLANE_BPP_0_EXT :: 0x331B;
+EGL_YUV_PLANE_BPP_8_EXT :: 0x331C;
+EGL_YUV_PLANE_BPP_10_EXT :: 0x331D;
+
+EGL_HI_clientpixmap :: 1;
+
+EGL_CLIENT_PIXMAP_POINTER_HI :: 0x8F74;
+
+EGL_HI_colorformats :: 1;
+EGL_COLOR_FORMAT_HI :: 0x8F70;
+EGL_COLOR_RGB_HI :: 0x8F71;
+EGL_COLOR_RGBA_HI :: 0x8F72;
+EGL_COLOR_ARGB_HI :: 0x8F73;
+
+EGL_IMG_context_priority :: 1;
+EGL_CONTEXT_PRIORITY_LEVEL_IMG :: 0x3100;
+EGL_CONTEXT_PRIORITY_HIGH_IMG :: 0x3101;
+EGL_CONTEXT_PRIORITY_MEDIUM_IMG :: 0x3102;
+EGL_CONTEXT_PRIORITY_LOW_IMG :: 0x3103;
+
+EGL_IMG_image_plane_attribs :: 1;
+EGL_NATIVE_BUFFER_MULTIPLANE_SEPARATE_IMG :: 0x3105;
+EGL_NATIVE_BUFFER_PLANE_OFFSET_IMG :: 0x3106;
+
+EGL_MESA_drm_image :: 1;
+EGL_DRM_BUFFER_FORMAT_MESA :: 0x31D0;
+EGL_DRM_BUFFER_USE_MESA :: 0x31D1;
+EGL_DRM_BUFFER_FORMAT_ARGB32_MESA :: 0x31D2;
+EGL_DRM_BUFFER_MESA :: 0x31D3;
+EGL_DRM_BUFFER_STRIDE_MESA :: 0x31D4;
+EGL_DRM_BUFFER_USE_SCANOUT_MESA :: 0x00000001;
+EGL_DRM_BUFFER_USE_SHARE_MESA :: 0x00000002;
+EGL_DRM_BUFFER_USE_CURSOR_MESA :: 0x00000004;
+
+EGL_MESA_image_dma_buf_export :: 1;
+
+EGL_MESA_platform_gbm :: 1;
+EGL_PLATFORM_GBM_MESA :: 0x31D7;
+
+EGL_MESA_platform_surfaceless :: 1;
+EGL_PLATFORM_SURFACELESS_MESA :: 0x31DD;
+
+EGL_MESA_query_driver :: 1;
+
+EGL_NOK_swap_region :: 1;
+
+EGL_NOK_swap_region2 :: 1;
+
+EGL_NOK_texture_from_pixmap :: 1;
+EGL_Y_INVERTED_NOK :: 0x307F;
+
+EGL_NV_3dvision_surface :: 1;
+EGL_AUTO_STEREO_NV :: 0x3136;
+
+EGL_NV_context_priority_realtime :: 1;
+EGL_CONTEXT_PRIORITY_REALTIME_NV :: 0x3357;
+
+EGL_NV_coverage_sample :: 1;
+EGL_COVERAGE_BUFFERS_NV :: 0x30E0;
+EGL_COVERAGE_SAMPLES_NV :: 0x30E1;
+
+EGL_NV_coverage_sample_resolve :: 1;
+EGL_COVERAGE_SAMPLE_RESOLVE_NV :: 0x3131;
+EGL_COVERAGE_SAMPLE_RESOLVE_DEFAULT_NV :: 0x3132;
+EGL_COVERAGE_SAMPLE_RESOLVE_NONE_NV :: 0x3133;
+
+EGL_NV_cuda_event :: 1;
+EGL_CUDA_EVENT_HANDLE_NV :: 0x323B;
+EGL_SYNC_CUDA_EVENT_NV :: 0x323C;
+EGL_SYNC_CUDA_EVENT_COMPLETE_NV :: 0x323D;
+
+EGL_NV_depth_nonlinear :: 1;
+EGL_DEPTH_ENCODING_NV :: 0x30E2;
+EGL_DEPTH_ENCODING_NONE_NV :: 0;
+EGL_DEPTH_ENCODING_NONLINEAR_NV :: 0x30E3;
+
+EGL_NV_device_cuda :: 1;
+EGL_CUDA_DEVICE_NV :: 0x323A;
+
+EGL_NV_native_query :: 1;
+
+EGL_NV_post_convert_rounding :: 1;
+
+EGL_NV_post_sub_buffer :: 1;
+EGL_POST_SUB_BUFFER_SUPPORTED_NV :: 0x30BE;
+
+EGL_NV_quadruple_buffer :: 1;
+EGL_QUADRUPLE_BUFFER_NV :: 0x3231;
+
+EGL_NV_robustness_video_memory_purge :: 1;
+EGL_GENERATE_RESET_ON_VIDEO_MEMORY_PURGE_NV :: 0x334C;
+
+EGL_NV_stream_consumer_eglimage :: 1;
+EGL_STREAM_CONSUMER_IMAGE_NV :: 0x3373;
+EGL_STREAM_IMAGE_ADD_NV :: 0x3374;
+EGL_STREAM_IMAGE_REMOVE_NV :: 0x3375;
+EGL_STREAM_IMAGE_AVAILABLE_NV :: 0x3376;
+
+EGL_NV_stream_consumer_gltexture_yuv :: 1;
+EGL_YUV_PLANE0_TEXTURE_UNIT_NV :: 0x332C;
+EGL_YUV_PLANE1_TEXTURE_UNIT_NV :: 0x332D;
+EGL_YUV_PLANE2_TEXTURE_UNIT_NV :: 0x332E;
+
+EGL_NV_stream_cross_display :: 1;
+EGL_STREAM_CROSS_DISPLAY_NV :: 0x334E;
+
+EGL_NV_stream_cross_object :: 1;
+EGL_STREAM_CROSS_OBJECT_NV :: 0x334D;
+
+EGL_NV_stream_cross_partition :: 1;
+EGL_STREAM_CROSS_PARTITION_NV :: 0x323F;
+
+EGL_NV_stream_cross_process :: 1;
+EGL_STREAM_CROSS_PROCESS_NV :: 0x3245;
+
+EGL_NV_stream_cross_system :: 1;
+EGL_STREAM_CROSS_SYSTEM_NV :: 0x334F;
+
+EGL_NV_stream_dma :: 1;
+EGL_STREAM_DMA_NV :: 0x3371;
+EGL_STREAM_DMA_SERVER_NV :: 0x3372;
+
+EGL_NV_stream_fifo_next :: 1;
+EGL_PENDING_FRAME_NV :: 0x3329;
+EGL_STREAM_TIME_PENDING_NV :: 0x332A;
+
+EGL_NV_stream_fifo_synchronous :: 1;
+EGL_STREAM_FIFO_SYNCHRONOUS_NV :: 0x3336;
+
+EGL_NV_stream_flush :: 1;
+
+EGL_NV_stream_frame_limits :: 1;
+EGL_PRODUCER_MAX_FRAME_HINT_NV :: 0x3337;
+EGL_CONSUMER_MAX_FRAME_HINT_NV :: 0x3338;
+
+EGL_NV_stream_metadata :: 1;
+EGL_MAX_STREAM_METADATA_BLOCKS_NV :: 0x3250;
+EGL_MAX_STREAM_METADATA_BLOCK_SIZE_NV :: 0x3251;
+EGL_MAX_STREAM_METADATA_TOTAL_SIZE_NV :: 0x3252;
+EGL_PRODUCER_METADATA_NV :: 0x3253;
+EGL_CONSUMER_METADATA_NV :: 0x3254;
+EGL_PENDING_METADATA_NV :: 0x3328;
+EGL_METADATA0_SIZE_NV :: 0x3255;
+EGL_METADATA1_SIZE_NV :: 0x3256;
+EGL_METADATA2_SIZE_NV :: 0x3257;
+EGL_METADATA3_SIZE_NV :: 0x3258;
+EGL_METADATA0_TYPE_NV :: 0x3259;
+EGL_METADATA1_TYPE_NV :: 0x325A;
+EGL_METADATA2_TYPE_NV :: 0x325B;
+EGL_METADATA3_TYPE_NV :: 0x325C;
+
+EGL_NV_stream_origin :: 1;
+EGL_STREAM_FRAME_ORIGIN_X_NV :: 0x3366;
+EGL_STREAM_FRAME_ORIGIN_Y_NV :: 0x3367;
+EGL_STREAM_FRAME_MAJOR_AXIS_NV :: 0x3368;
+EGL_CONSUMER_AUTO_ORIENTATION_NV :: 0x3369;
+EGL_PRODUCER_AUTO_ORIENTATION_NV :: 0x336A;
+EGL_LEFT_NV :: 0x336B;
+EGL_RIGHT_NV :: 0x336C;
+EGL_TOP_NV :: 0x336D;
+EGL_BOTTOM_NV :: 0x336E;
+EGL_X_AXIS_NV :: 0x336F;
+EGL_Y_AXIS_NV :: 0x3370;
+
+EGL_NV_stream_remote :: 1;
+EGL_STREAM_STATE_INITIALIZING_NV :: 0x3240;
+EGL_STREAM_TYPE_NV :: 0x3241;
+EGL_STREAM_PROTOCOL_NV :: 0x3242;
+EGL_STREAM_ENDPOINT_NV :: 0x3243;
+EGL_STREAM_LOCAL_NV :: 0x3244;
+EGL_STREAM_PRODUCER_NV :: 0x3247;
+EGL_STREAM_CONSUMER_NV :: 0x3248;
+EGL_STREAM_PROTOCOL_FD_NV :: 0x3246;
+
+EGL_NV_stream_reset :: 1;
+EGL_SUPPORT_RESET_NV :: 0x3334;
+EGL_SUPPORT_REUSE_NV :: 0x3335;
+
+EGL_NV_stream_socket :: 1;
+EGL_STREAM_PROTOCOL_SOCKET_NV :: 0x324B;
+EGL_SOCKET_HANDLE_NV :: 0x324C;
+EGL_SOCKET_TYPE_NV :: 0x324D;
+
+EGL_NV_stream_socket_inet :: 1;
+EGL_SOCKET_TYPE_INET_NV :: 0x324F;
+
+EGL_NV_stream_socket_unix :: 1;
+EGL_SOCKET_TYPE_UNIX_NV :: 0x324E;
+
+EGL_NV_stream_sync :: 1;
+EGL_SYNC_NEW_FRAME_NV :: 0x321F;
+
+EGL_NV_sync :: 1;
+
+EGL_SYNC_PRIOR_COMMANDS_COMPLETE_NV :: 0x30E6;
+EGL_SYNC_STATUS_NV :: 0x30E7;
+EGL_SIGNALED_NV :: 0x30E8;
+EGL_UNSIGNALED_NV :: 0x30E9;
+EGL_SYNC_FLUSH_COMMANDS_BIT_NV :: 0x0001;
+EGL_FOREVER_NV :: 0xFFFFFFFFFFFFFFFF;
+EGL_ALREADY_SIGNALED_NV :: 0x30EA;
+EGL_TIMEOUT_EXPIRED_NV :: 0x30EB;
+EGL_CONDITION_SATISFIED_NV :: 0x30EC;
+EGL_SYNC_TYPE_NV :: 0x30ED;
+EGL_SYNC_CONDITION_NV :: 0x30EE;
+EGL_SYNC_FENCE_NV :: 0x30EF;
+
+EGL_NV_system_time :: 1;
+
+EGL_NV_triple_buffer :: 1;
+EGL_TRIPLE_BUFFER_NV :: 0x3230;
+
+EGL_TIZEN_image_native_buffer :: 1;
+EGL_NATIVE_BUFFER_TIZEN :: 0x32A0;
+
+EGL_TIZEN_image_native_surface :: 1;
+EGL_NATIVE_SURFACE_TIZEN :: 0x32A1;
+
+EGL_WL_bind_wayland_display :: 1;
+PFNEGLBINDWAYLANDDISPLAYWL :: PFNEGLBINDWAYLANDDISPLAYWLPROC;
+PFNEGLUNBINDWAYLANDDISPLAYWL :: PFNEGLUNBINDWAYLANDDISPLAYWLPROC;
+PFNEGLQUERYWAYLANDBUFFERWL :: PFNEGLQUERYWAYLANDBUFFERWLPROC;
+
+EGL_WAYLAND_BUFFER_WL :: 0x31D5;
+EGL_WAYLAND_PLANE_WL :: 0x31D6;
+EGL_TEXTURE_Y_U_V_WL :: 0x31D7;
+EGL_TEXTURE_Y_UV_WL :: 0x31D8;
+EGL_TEXTURE_Y_XUXV_WL :: 0x31D9;
+EGL_TEXTURE_EXTERNAL_WL :: 0x31DA;
+EGL_WAYLAND_Y_INVERTED_WL :: 0x31DB;
+
+EGL_WL_create_wayland_buffer_from_image :: 1;
+PFNEGLCREATEWAYLANDBUFFERFROMIMAGEWL :: PFNEGLCREATEWAYLANDBUFFERFROMIMAGEWLPROC;
+
+khronos_int32_t :: s32;
+khronos_uint32_t :: u32;
+khronos_int64_t :: s64;
+khronos_uint64_t :: u64;
+
+khronos_int8_t :: s8;
+khronos_uint8_t :: u8;
+khronos_int16_t :: s16;
+khronos_uint16_t :: u16;
+
+khronos_intptr_t :: s64;
+khronos_uintptr_t :: u64;
+
+khronos_ssize_t :: s64;
+khronos_usize_t :: u64;
+
+khronos_float_t :: float;
+
+khronos_utime_nanoseconds_t :: khronos_uint64_t;
+khronos_stime_nanoseconds_t :: khronos_int64_t;
+
+khronos_boolean_enum_t :: enum u32 {
+    FALSE                   :: 0;
+    TRUE                    :: 1;
+    BOOLEAN_ENUM_FORCE_SIZE :: 2147483647;
+
+    KHRONOS_FALSE                   :: FALSE;
+    KHRONOS_TRUE                    :: TRUE;
+    KHRONOS_BOOLEAN_ENUM_FORCE_SIZE :: BOOLEAN_ENUM_FORCE_SIZE;
+}
+
+EGLNativeDisplayType :: *void;
+EGLNativePixmapType :: khronos_uintptr_t;
+EGLNativeWindowType :: khronos_uintptr_t;
+
+NativeDisplayType :: EGLNativeDisplayType;
+NativePixmapType :: EGLNativePixmapType;
+NativeWindowType :: EGLNativeWindowType;
+
+EGLint :: khronos_int32_t;
+
+EGLBoolean :: u32;
+EGLDisplay :: *void;
+
+EGLConfig :: *void;
+EGLSurface :: *void;
+EGLContext :: *void;
+__eglMustCastToProperFunctionPointerType :: #type () -> void #c_call;
+
+PFNEGLCHOOSECONFIGPROC :: #type (dpy: EGLDisplay, attrib_list: *EGLint, configs: *EGLConfig, config_size: EGLint, num_config: *EGLint) -> EGLBoolean #c_call;
+PFNEGLCOPYBUFFERSPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, target: EGLNativePixmapType) -> EGLBoolean #c_call;
+PFNEGLCREATECONTEXTPROC :: #type (dpy: EGLDisplay, config: EGLConfig, share_context: EGLContext, attrib_list: *EGLint) -> EGLContext #c_call;
+PFNEGLCREATEPBUFFERSURFACEPROC :: #type (dpy: EGLDisplay, config: EGLConfig, attrib_list: *EGLint) -> EGLSurface #c_call;
+PFNEGLCREATEPIXMAPSURFACEPROC :: #type (dpy: EGLDisplay, config: EGLConfig, pixmap: EGLNativePixmapType, attrib_list: *EGLint) -> EGLSurface #c_call;
+PFNEGLCREATEWINDOWSURFACEPROC :: #type (dpy: EGLDisplay, config: EGLConfig, win: EGLNativeWindowType, attrib_list: *EGLint) -> EGLSurface #c_call;
+PFNEGLDESTROYCONTEXTPROC :: #type (dpy: EGLDisplay, ctx: EGLContext) -> EGLBoolean #c_call;
+PFNEGLDESTROYSURFACEPROC :: #type (dpy: EGLDisplay, surface: EGLSurface) -> EGLBoolean #c_call;
+PFNEGLGETCONFIGATTRIBPROC :: #type (dpy: EGLDisplay, config: EGLConfig, attribute: EGLint, value: *EGLint) -> EGLBoolean #c_call;
+PFNEGLGETCONFIGSPROC :: #type (dpy: EGLDisplay, configs: *EGLConfig, config_size: EGLint, num_config: *EGLint) -> EGLBoolean #c_call;
+PFNEGLGETCURRENTDISPLAYPROC :: #type () -> EGLDisplay #c_call;
+PFNEGLGETCURRENTSURFACEPROC :: #type (readdraw: EGLint) -> EGLSurface #c_call;
+PFNEGLGETDISPLAYPROC :: #type (display_id: EGLNativeDisplayType) -> EGLDisplay #c_call;
+PFNEGLGETERRORPROC :: #type () -> EGLint #c_call;
+PFNEGLGETPROCADDRESSPROC :: #type (procname: *u8) -> __eglMustCastToProperFunctionPointerType #c_call;
+PFNEGLINITIALIZEPROC :: #type (dpy: EGLDisplay, major: *EGLint, minor: *EGLint) -> EGLBoolean #c_call;
+PFNEGLMAKECURRENTPROC :: #type (dpy: EGLDisplay, draw: EGLSurface, read: EGLSurface, ctx: EGLContext) -> EGLBoolean #c_call;
+PFNEGLQUERYCONTEXTPROC :: #type (dpy: EGLDisplay, ctx: EGLContext, attribute: EGLint, value: *EGLint) -> EGLBoolean #c_call;
+PFNEGLQUERYSTRINGPROC :: #type (dpy: EGLDisplay, name: EGLint) -> *u8 #c_call;
+PFNEGLQUERYSURFACEPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, attribute: EGLint, value: *EGLint) -> EGLBoolean #c_call;
+PFNEGLSWAPBUFFERSPROC :: #type (dpy: EGLDisplay, surface: EGLSurface) -> EGLBoolean #c_call;
+PFNEGLTERMINATEPROC :: #type (dpy: EGLDisplay) -> EGLBoolean #c_call;
+PFNEGLWAITGLPROC :: #type () -> EGLBoolean #c_call;
+PFNEGLWAITNATIVEPROC :: #type (engine: EGLint) -> EGLBoolean #c_call;
+
+eglChooseConfig :: (dpy: EGLDisplay, attrib_list: *EGLint, configs: *EGLConfig, config_size: EGLint, num_config: *EGLint) -> EGLBoolean #foreign libegl;
+eglCopyBuffers :: (dpy: EGLDisplay, surface: EGLSurface, target: EGLNativePixmapType) -> EGLBoolean #foreign libegl;
+eglCreateContext :: (dpy: EGLDisplay, config: EGLConfig, share_context: EGLContext, attrib_list: *EGLint) -> EGLContext #foreign libegl;
+eglCreatePbufferSurface :: (dpy: EGLDisplay, config: EGLConfig, attrib_list: *EGLint) -> EGLSurface #foreign libegl;
+eglCreatePixmapSurface :: (dpy: EGLDisplay, config: EGLConfig, pixmap: EGLNativePixmapType, attrib_list: *EGLint) -> EGLSurface #foreign libegl;
+eglCreateWindowSurface :: (dpy: EGLDisplay, config: EGLConfig, win: EGLNativeWindowType, attrib_list: *EGLint) -> EGLSurface #foreign libegl;
+eglDestroyContext :: (dpy: EGLDisplay, ctx: EGLContext) -> EGLBoolean #foreign libegl;
+eglDestroySurface :: (dpy: EGLDisplay, surface: EGLSurface) -> EGLBoolean #foreign libegl;
+eglGetConfigAttrib :: (dpy: EGLDisplay, config: EGLConfig, attribute: EGLint, value: *EGLint) -> EGLBoolean #foreign libegl;
+eglGetConfigs :: (dpy: EGLDisplay, configs: *EGLConfig, config_size: EGLint, num_config: *EGLint) -> EGLBoolean #foreign libegl;
+eglGetCurrentDisplay :: () -> EGLDisplay #foreign libegl;
+eglGetCurrentSurface :: (readdraw: EGLint) -> EGLSurface #foreign libegl;
+eglGetDisplay :: (display_id: EGLNativeDisplayType) -> EGLDisplay #foreign libegl;
+eglGetError :: () -> EGLint #foreign libegl;
+eglGetProcAddress :: (procname: *u8) -> __eglMustCastToProperFunctionPointerType #foreign libegl;
+eglInitialize :: (dpy: EGLDisplay, major: *EGLint, minor: *EGLint) -> EGLBoolean #foreign libegl;
+eglMakeCurrent :: (dpy: EGLDisplay, draw: EGLSurface, read: EGLSurface, ctx: EGLContext) -> EGLBoolean #foreign libegl;
+eglQueryContext :: (dpy: EGLDisplay, ctx: EGLContext, attribute: EGLint, value: *EGLint) -> EGLBoolean #foreign libegl;
+eglQueryString :: (dpy: EGLDisplay, name: EGLint) -> *u8 #foreign libegl;
+eglQuerySurface :: (dpy: EGLDisplay, surface: EGLSurface, attribute: EGLint, value: *EGLint) -> EGLBoolean #foreign libegl;
+eglSwapBuffers :: (dpy: EGLDisplay, surface: EGLSurface) -> EGLBoolean #foreign libegl;
+eglTerminate :: (dpy: EGLDisplay) -> EGLBoolean #foreign libegl;
+eglWaitGL :: () -> EGLBoolean #foreign libegl;
+eglWaitNative :: (engine: EGLint) -> EGLBoolean #foreign libegl;
+
+PFNEGLBINDTEXIMAGEPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, buffer: EGLint) -> EGLBoolean #c_call;
+PFNEGLRELEASETEXIMAGEPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, buffer: EGLint) -> EGLBoolean #c_call;
+PFNEGLSURFACEATTRIBPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, attribute: EGLint, value: EGLint) -> EGLBoolean #c_call;
+PFNEGLSWAPINTERVALPROC :: #type (dpy: EGLDisplay, interval: EGLint) -> EGLBoolean #c_call;
+
+eglBindTexImage :: (dpy: EGLDisplay, surface: EGLSurface, buffer: EGLint) -> EGLBoolean #foreign libegl;
+eglReleaseTexImage :: (dpy: EGLDisplay, surface: EGLSurface, buffer: EGLint) -> EGLBoolean #foreign libegl;
+eglSurfaceAttrib :: (dpy: EGLDisplay, surface: EGLSurface, attribute: EGLint, value: EGLint) -> EGLBoolean #foreign libegl;
+eglSwapInterval :: (dpy: EGLDisplay, interval: EGLint) -> EGLBoolean #foreign libegl;
+
+EGLenum :: u32;
+EGLClientBuffer :: *void;
+
+PFNEGLBINDAPIPROC :: #type (api: EGLenum) -> EGLBoolean #c_call;
+PFNEGLQUERYAPIPROC :: #type () -> EGLenum #c_call;
+PFNEGLCREATEPBUFFERFROMCLIENTBUFFERPROC :: #type (dpy: EGLDisplay, buftype: EGLenum, buffer: EGLClientBuffer, config: EGLConfig, attrib_list: *EGLint) -> EGLSurface #c_call;
+PFNEGLRELEASETHREADPROC :: #type () -> EGLBoolean #c_call;
+PFNEGLWAITCLIENTPROC :: #type () -> EGLBoolean #c_call;
+
+eglBindAPI :: (api: EGLenum) -> EGLBoolean #foreign libegl;
+eglQueryAPI :: () -> EGLenum #foreign libegl;
+eglCreatePbufferFromClientBuffer :: (dpy: EGLDisplay, buftype: EGLenum, buffer: EGLClientBuffer, config: EGLConfig, attrib_list: *EGLint) -> EGLSurface #foreign libegl;
+eglReleaseThread :: () -> EGLBoolean #foreign libegl;
+eglWaitClient :: () -> EGLBoolean #foreign libegl;
+
+PFNEGLGETCURRENTCONTEXTPROC :: #type () -> EGLContext #c_call;
+
+eglGetCurrentContext :: () -> EGLContext #foreign libegl;
+
+EGLSync :: *void;
+EGLAttrib :: s64;
+EGLTime :: khronos_utime_nanoseconds_t;
+EGLImage :: *void;
+
+PFNEGLCREATESYNCPROC :: #type (dpy: EGLDisplay, type: EGLenum, attrib_list: *EGLAttrib) -> EGLSync #c_call;
+PFNEGLDESTROYSYNCPROC :: #type (dpy: EGLDisplay, sync: EGLSync) -> EGLBoolean #c_call;
+PFNEGLCLIENTWAITSYNCPROC :: #type (dpy: EGLDisplay, sync: EGLSync, flags: EGLint, timeout: EGLTime) -> EGLint #c_call;
+PFNEGLGETSYNCATTRIBPROC :: #type (dpy: EGLDisplay, sync: EGLSync, attribute: EGLint, value: *EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLCREATEIMAGEPROC :: #type (dpy: EGLDisplay, ctx: EGLContext, target: EGLenum, buffer: EGLClientBuffer, attrib_list: *EGLAttrib) -> EGLImage #c_call;
+PFNEGLDESTROYIMAGEPROC :: #type (dpy: EGLDisplay, image: EGLImage) -> EGLBoolean #c_call;
+PFNEGLGETPLATFORMDISPLAYPROC :: #type (platform: EGLenum, native_display: *void, attrib_list: *EGLAttrib) -> EGLDisplay #c_call;
+PFNEGLCREATEPLATFORMWINDOWSURFACEPROC :: #type (dpy: EGLDisplay, config: EGLConfig, native_window: *void, attrib_list: *EGLAttrib) -> EGLSurface #c_call;
+PFNEGLCREATEPLATFORMPIXMAPSURFACEPROC :: #type (dpy: EGLDisplay, config: EGLConfig, native_pixmap: *void, attrib_list: *EGLAttrib) -> EGLSurface #c_call;
+PFNEGLWAITSYNCPROC :: #type (dpy: EGLDisplay, sync: EGLSync, flags: EGLint) -> EGLBoolean #c_call;
+
+eglCreateSync :: (dpy: EGLDisplay, type: EGLenum, attrib_list: *EGLAttrib) -> EGLSync #foreign libegl;
+eglDestroySync :: (dpy: EGLDisplay, sync: EGLSync) -> EGLBoolean #foreign libegl;
+eglClientWaitSync :: (dpy: EGLDisplay, sync: EGLSync, flags: EGLint, timeout: EGLTime) -> EGLint #foreign libegl;
+eglGetSyncAttrib :: (dpy: EGLDisplay, sync: EGLSync, attribute: EGLint, value: *EGLAttrib) -> EGLBoolean #foreign libegl;
+eglCreateImage :: (dpy: EGLDisplay, ctx: EGLContext, target: EGLenum, buffer: EGLClientBuffer, attrib_list: *EGLAttrib) -> EGLImage #foreign libegl;
+eglDestroyImage :: (dpy: EGLDisplay, image: EGLImage) -> EGLBoolean #foreign libegl;
+eglGetPlatformDisplay :: (platform: EGLenum, native_display: *void, attrib_list: *EGLAttrib) -> EGLDisplay #foreign libegl;
+eglCreatePlatformWindowSurface :: (dpy: EGLDisplay, config: EGLConfig, native_window: *void, attrib_list: *EGLAttrib) -> EGLSurface #foreign libegl;
+eglCreatePlatformPixmapSurface :: (dpy: EGLDisplay, config: EGLConfig, native_pixmap: *void, attrib_list: *EGLAttrib) -> EGLSurface #foreign libegl;
+eglWaitSync :: (dpy: EGLDisplay, sync: EGLSync, flags: EGLint) -> EGLBoolean #foreign libegl;
+
+EGLSyncKHR :: *void;
+EGLAttribKHR :: s64;
+PFNEGLCREATESYNC64KHRPROC :: #type (dpy: EGLDisplay, type: EGLenum, attrib_list: *EGLAttribKHR) -> EGLSyncKHR #c_call;
+
+EGLLabelKHR :: *void;
+EGLObjectKHR :: *void;
+EGLDEBUGPROCKHR :: #type (error: EGLenum, command: *u8, messageType: EGLint, threadLabel: EGLLabelKHR, objectLabel: EGLLabelKHR, message: *u8) -> void #c_call;
+
+PFNEGLDEBUGMESSAGECONTROLKHRPROC :: #type (callback: EGLDEBUGPROCKHR, attrib_list: *EGLAttrib) -> EGLint #c_call;
+PFNEGLQUERYDEBUGKHRPROC :: #type (attribute: EGLint, value: *EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLLABELOBJECTKHRPROC :: #type (display: EGLDisplay, objectType: EGLenum, object: EGLObjectKHR, label: EGLLabelKHR) -> EGLint #c_call;
+
+PFNEGLQUERYDISPLAYATTRIBKHRPROC :: #type (dpy: EGLDisplay, name: EGLint, value: *EGLAttrib) -> EGLBoolean #c_call;
+
+EGLTimeKHR :: khronos_utime_nanoseconds_t;
+
+PFNEGLCREATESYNCKHRPROC :: #type (dpy: EGLDisplay, type: EGLenum, attrib_list: *EGLint) -> EGLSyncKHR #c_call;
+PFNEGLDESTROYSYNCKHRPROC :: #type (dpy: EGLDisplay, sync: EGLSyncKHR) -> EGLBoolean #c_call;
+PFNEGLCLIENTWAITSYNCKHRPROC :: #type (dpy: EGLDisplay, sync: EGLSyncKHR, flags: EGLint, timeout: EGLTimeKHR) -> EGLint #c_call;
+PFNEGLGETSYNCATTRIBKHRPROC :: #type (dpy: EGLDisplay, sync: EGLSyncKHR, attribute: EGLint, value: *EGLint) -> EGLBoolean #c_call;
+
+EGLImageKHR :: *void;
+
+PFNEGLCREATEIMAGEKHRPROC :: #type (dpy: EGLDisplay, ctx: EGLContext, target: EGLenum, buffer: EGLClientBuffer, attrib_list: *EGLint) -> EGLImageKHR #c_call;
+PFNEGLDESTROYIMAGEKHRPROC :: #type (dpy: EGLDisplay, image: EGLImageKHR) -> EGLBoolean #c_call;
+
+PFNEGLLOCKSURFACEKHRPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, attrib_list: *EGLint) -> EGLBoolean #c_call;
+PFNEGLUNLOCKSURFACEKHRPROC :: #type (dpy: EGLDisplay, surface: EGLSurface) -> EGLBoolean #c_call;
+
+PFNEGLQUERYSURFACE64KHRPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, attribute: EGLint, value: *EGLAttribKHR) -> EGLBoolean #c_call;
+
+PFNEGLSETDAMAGEREGIONKHRPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, rects: *EGLint, n_rects: EGLint) -> EGLBoolean #c_call;
+
+PFNEGLSIGNALSYNCKHRPROC :: #type (dpy: EGLDisplay, sync: EGLSyncKHR, mode: EGLenum) -> EGLBoolean #c_call;
+
+EGLStreamKHR :: *void;
+EGLuint64KHR :: khronos_uint64_t;
+
+PFNEGLCREATESTREAMKHRPROC :: #type (dpy: EGLDisplay, attrib_list: *EGLint) -> EGLStreamKHR #c_call;
+PFNEGLDESTROYSTREAMKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR) -> EGLBoolean #c_call;
+PFNEGLSTREAMATTRIBKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, attribute: EGLenum, value: EGLint) -> EGLBoolean #c_call;
+PFNEGLQUERYSTREAMKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, attribute: EGLenum, value: *EGLint) -> EGLBoolean #c_call;
+PFNEGLQUERYSTREAMU64KHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, attribute: EGLenum, value: *EGLuint64KHR) -> EGLBoolean #c_call;
+
+PFNEGLCREATESTREAMATTRIBKHRPROC :: #type (dpy: EGLDisplay, attrib_list: *EGLAttrib) -> EGLStreamKHR #c_call;
+PFNEGLSETSTREAMATTRIBKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, attribute: EGLenum, value: EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLQUERYSTREAMATTRIBKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, attribute: EGLenum, value: *EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLSTREAMCONSUMERACQUIREATTRIBKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, attrib_list: *EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLSTREAMCONSUMERRELEASEATTRIBKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, attrib_list: *EGLAttrib) -> EGLBoolean #c_call;
+
+PFNEGLSTREAMCONSUMERGLTEXTUREEXTERNALKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR) -> EGLBoolean #c_call;
+PFNEGLSTREAMCONSUMERACQUIREKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR) -> EGLBoolean #c_call;
+PFNEGLSTREAMCONSUMERRELEASEKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR) -> EGLBoolean #c_call;
+
+EGLNativeFileDescriptorKHR :: s32;
+
+PFNEGLGETSTREAMFILEDESCRIPTORKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR) -> EGLNativeFileDescriptorKHR #c_call;
+PFNEGLCREATESTREAMFROMFILEDESCRIPTORKHRPROC :: #type (dpy: EGLDisplay, file_descriptor: EGLNativeFileDescriptorKHR) -> EGLStreamKHR #c_call;
+
+PFNEGLQUERYSTREAMTIMEKHRPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, attribute: EGLenum, value: *EGLTimeKHR) -> EGLBoolean #c_call;
+
+PFNEGLCREATESTREAMPRODUCERSURFACEKHRPROC :: #type (dpy: EGLDisplay, config: EGLConfig, stream: EGLStreamKHR, attrib_list: *EGLint) -> EGLSurface #c_call;
+
+PFNEGLSWAPBUFFERSWITHDAMAGEKHRPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, rects: *EGLint, n_rects: EGLint) -> EGLBoolean #c_call;
+
+PFNEGLWAITSYNCKHRPROC :: #type (dpy: EGLDisplay, sync: EGLSyncKHR, flags: EGLint) -> EGLint #c_call;
+
+EGLsizeiANDROID :: khronos_ssize_t;
+EGLSetBlobFuncANDROID :: #type (key: *void, keySize: EGLsizeiANDROID, value: *void, valueSize: EGLsizeiANDROID) -> void #c_call;
+EGLGetBlobFuncANDROID :: #type (key: *void, keySize: EGLsizeiANDROID, value: *void, valueSize: EGLsizeiANDROID) -> EGLsizeiANDROID #c_call;
+PFNEGLSETBLOBCACHEFUNCSANDROIDPROC :: #type (dpy: EGLDisplay, set: EGLSetBlobFuncANDROID, get: EGLGetBlobFuncANDROID) -> void #c_call;
+
+PFNEGLCREATENATIVECLIENTBUFFERANDROIDPROC :: #type (attrib_list: *EGLint) -> EGLClientBuffer #c_call;
+
+EGLnsecsANDROID :: khronos_stime_nanoseconds_t;
+
+PFNEGLGETCOMPOSITORTIMINGSUPPORTEDANDROIDPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, name: EGLint) -> EGLBoolean #c_call;
+PFNEGLGETCOMPOSITORTIMINGANDROIDPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, numTimestamps: EGLint, names: *EGLint, values: *EGLnsecsANDROID) -> EGLBoolean #c_call;
+PFNEGLGETNEXTFRAMEIDANDROIDPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, frameId: *EGLuint64KHR) -> EGLBoolean #c_call;
+PFNEGLGETFRAMETIMESTAMPSUPPORTEDANDROIDPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, timestamp: EGLint) -> EGLBoolean #c_call;
+PFNEGLGETFRAMETIMESTAMPSANDROIDPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, frameId: EGLuint64KHR, numTimestamps: EGLint, timestamps: *EGLint, values: *EGLnsecsANDROID) -> EGLBoolean #c_call;
+
+AHardwareBuffer :: struct {}
+PFNEGLGETNATIVECLIENTBUFFERANDROIDPROC :: #type (buffer: *AHardwareBuffer) -> EGLClientBuffer #c_call;
+
+PFNEGLDUPNATIVEFENCEFDANDROIDPROC :: #type (dpy: EGLDisplay, sync: EGLSyncKHR) -> EGLint #c_call;
+
+PFNEGLPRESENTATIONTIMEANDROIDPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, time: EGLnsecsANDROID) -> EGLBoolean #c_call;
+
+PFNEGLQUERYSURFACEPOINTERANGLEPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, attribute: EGLint, value: **void) -> EGLBoolean #c_call;
+
+PFNEGLGETMSCRATEANGLEPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, numerator: *EGLint, denominator: *EGLint) -> EGLBoolean #c_call;
+
+PFNEGLCLIENTSIGNALSYNCEXTPROC :: #type (dpy: EGLDisplay, sync: EGLSync, attrib_list: *EGLAttrib) -> EGLBoolean #c_call;
+
+PFNEGLCOMPOSITORSETCONTEXTLISTEXTPROC :: #type (external_ref_ids: *EGLint, num_entries: EGLint) -> EGLBoolean #c_call;
+PFNEGLCOMPOSITORSETCONTEXTATTRIBUTESEXTPROC :: #type (external_ref_id: EGLint, context_attributes: *EGLint, num_entries: EGLint) -> EGLBoolean #c_call;
+PFNEGLCOMPOSITORSETWINDOWLISTEXTPROC :: #type (external_ref_id: EGLint, external_win_ids: *EGLint, num_entries: EGLint) -> EGLBoolean #c_call;
+PFNEGLCOMPOSITORSETWINDOWATTRIBUTESEXTPROC :: #type (external_win_id: EGLint, window_attributes: *EGLint, num_entries: EGLint) -> EGLBoolean #c_call;
+PFNEGLCOMPOSITORBINDTEXWINDOWEXTPROC :: #type (external_win_id: EGLint) -> EGLBoolean #c_call;
+PFNEGLCOMPOSITORSETSIZEEXTPROC :: #type (external_win_id: EGLint, width: EGLint, height: EGLint) -> EGLBoolean #c_call;
+PFNEGLCOMPOSITORSWAPPOLICYEXTPROC :: #type (external_win_id: EGLint, policy: EGLint) -> EGLBoolean #c_call;
+
+EGLDeviceEXT :: *void;
+
+PFNEGLQUERYDEVICEATTRIBEXTPROC :: #type (device: EGLDeviceEXT, attribute: EGLint, value: *EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLQUERYDEVICESTRINGEXTPROC :: #type (device: EGLDeviceEXT, name: EGLint) -> *u8 #c_call;
+PFNEGLQUERYDEVICESEXTPROC :: #type (max_devices: EGLint, devices: *EGLDeviceEXT, num_devices: *EGLint) -> EGLBoolean #c_call;
+PFNEGLQUERYDISPLAYATTRIBEXTPROC :: #type (dpy: EGLDisplay, attribute: EGLint, value: *EGLAttrib) -> EGLBoolean #c_call;
+
+PFNEGLQUERYDEVICEBINARYEXTPROC :: #type (device: EGLDeviceEXT, name: EGLint, max_size: EGLint, value: *void, size: *EGLint) -> EGLBoolean #c_call;
+
+PFNEGLQUERYDMABUFFORMATSEXTPROC :: #type (dpy: EGLDisplay, max_formats: EGLint, formats: *EGLint, num_formats: *EGLint) -> EGLBoolean #c_call;
+PFNEGLQUERYDMABUFMODIFIERSEXTPROC :: #type (dpy: EGLDisplay, format: EGLint, max_modifiers: EGLint, modifiers: *EGLuint64KHR, external_only: *EGLBoolean, num_modifiers: *EGLint) -> EGLBoolean #c_call;
+
+EGLOutputLayerEXT :: *void;
+EGLOutputPortEXT :: *void;
+
+PFNEGLGETOUTPUTLAYERSEXTPROC :: #type (dpy: EGLDisplay, attrib_list: *EGLAttrib, layers: *EGLOutputLayerEXT, max_layers: EGLint, num_layers: *EGLint) -> EGLBoolean #c_call;
+PFNEGLGETOUTPUTPORTSEXTPROC :: #type (dpy: EGLDisplay, attrib_list: *EGLAttrib, ports: *EGLOutputPortEXT, max_ports: EGLint, num_ports: *EGLint) -> EGLBoolean #c_call;
+PFNEGLOUTPUTLAYERATTRIBEXTPROC :: #type (dpy: EGLDisplay, layer: EGLOutputLayerEXT, attribute: EGLint, value: EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLQUERYOUTPUTLAYERATTRIBEXTPROC :: #type (dpy: EGLDisplay, layer: EGLOutputLayerEXT, attribute: EGLint, value: *EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLQUERYOUTPUTLAYERSTRINGEXTPROC :: #type (dpy: EGLDisplay, layer: EGLOutputLayerEXT, name: EGLint) -> *u8 #c_call;
+PFNEGLOUTPUTPORTATTRIBEXTPROC :: #type (dpy: EGLDisplay, port: EGLOutputPortEXT, attribute: EGLint, value: EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLQUERYOUTPUTPORTATTRIBEXTPROC :: #type (dpy: EGLDisplay, port: EGLOutputPortEXT, attribute: EGLint, value: *EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLQUERYOUTPUTPORTSTRINGEXTPROC :: #type (dpy: EGLDisplay, port: EGLOutputPortEXT, name: EGLint) -> *u8 #c_call;
+
+PFNEGLGETPLATFORMDISPLAYEXTPROC :: #type (platform: EGLenum, native_display: *void, attrib_list: *EGLint) -> EGLDisplay #c_call;
+PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC :: #type (dpy: EGLDisplay, config: EGLConfig, native_window: *void, attrib_list: *EGLint) -> EGLSurface #c_call;
+PFNEGLCREATEPLATFORMPIXMAPSURFACEEXTPROC :: #type (dpy: EGLDisplay, config: EGLConfig, native_pixmap: *void, attrib_list: *EGLint) -> EGLSurface #c_call;
+
+PFNEGLSTREAMCONSUMEROUTPUTEXTPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, layer: EGLOutputLayerEXT) -> EGLBoolean #c_call;
+
+PFNEGLQUERYSUPPORTEDCOMPRESSIONRATESEXTPROC :: #type (dpy: EGLDisplay, configs: *EGLConfig, attrib_list: *EGLAttrib, rates: *EGLint, rate_size: EGLint, num_rates: *EGLint) -> EGLBoolean #c_call;
+
+PFNEGLSWAPBUFFERSWITHDAMAGEEXTPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, rects: *EGLint, n_rects: EGLint) -> EGLBoolean #c_call;
+
+PFNEGLUNSIGNALSYNCEXTPROC :: #type (dpy: EGLDisplay, sync: EGLSync, attrib_list: *EGLAttrib) -> EGLBoolean #c_call;
+
+EGLClientPixmapHI :: struct {
+    pData:   *void;
+    iWidth:  EGLint;
+    iHeight: EGLint;
+    iStride: EGLint;
+}
+
+PFNEGLCREATEPIXMAPSURFACEHIPROC :: #type (dpy: EGLDisplay, config: EGLConfig, pixmap: *EGLClientPixmapHI) -> EGLSurface #c_call;
+
+PFNEGLCREATEDRMIMAGEMESAPROC :: #type (dpy: EGLDisplay, attrib_list: *EGLint) -> EGLImageKHR #c_call;
+PFNEGLEXPORTDRMIMAGEMESAPROC :: #type (dpy: EGLDisplay, image: EGLImageKHR, name: *EGLint, handle: *EGLint, stride: *EGLint) -> EGLBoolean #c_call;
+
+PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC :: #type (dpy: EGLDisplay, image: EGLImageKHR, fourcc: *s32, num_planes: *s32, modifiers: *EGLuint64KHR) -> EGLBoolean #c_call;
+PFNEGLEXPORTDMABUFIMAGEMESAPROC :: #type (dpy: EGLDisplay, image: EGLImageKHR, fds: *s32, strides: *EGLint, offsets: *EGLint) -> EGLBoolean #c_call;
+
+PFNEGLGETDISPLAYDRIVERCONFIGPROC :: #type (dpy: EGLDisplay) -> *u8 #c_call;
+PFNEGLGETDISPLAYDRIVERNAMEPROC :: #type (dpy: EGLDisplay) -> *u8 #c_call;
+
+PFNEGLSWAPBUFFERSREGIONNOKPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, numRects: EGLint, rects: *EGLint) -> EGLBoolean #c_call;
+
+PFNEGLSWAPBUFFERSREGION2NOKPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, numRects: EGLint, rects: *EGLint) -> EGLBoolean #c_call;
+
+PFNEGLQUERYNATIVEDISPLAYNVPROC :: #type (dpy: EGLDisplay, display_id: *EGLNativeDisplayType) -> EGLBoolean #c_call;
+PFNEGLQUERYNATIVEWINDOWNVPROC :: #type (dpy: EGLDisplay, surf: EGLSurface, window: *EGLNativeWindowType) -> EGLBoolean #c_call;
+PFNEGLQUERYNATIVEPIXMAPNVPROC :: #type (dpy: EGLDisplay, surf: EGLSurface, pixmap: *EGLNativePixmapType) -> EGLBoolean #c_call;
+
+PFNEGLPOSTSUBBUFFERNVPROC :: #type (dpy: EGLDisplay, surface: EGLSurface, x: EGLint, y: EGLint, width: EGLint, height: EGLint) -> EGLBoolean #c_call;
+
+PFNEGLSTREAMIMAGECONSUMERCONNECTNVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, num_modifiers: EGLint, modifiers: *EGLuint64KHR, attrib_list: *EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLQUERYSTREAMCONSUMEREVENTNVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, timeout: EGLTime, event: *EGLenum, aux: *EGLAttrib) -> EGLint #c_call;
+PFNEGLSTREAMACQUIREIMAGENVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, pImage: *EGLImage, sync: EGLSync) -> EGLBoolean #c_call;
+PFNEGLSTREAMRELEASEIMAGENVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, image: EGLImage, sync: EGLSync) -> EGLBoolean #c_call;
+
+PFNEGLSTREAMCONSUMERGLTEXTUREEXTERNALATTRIBSNVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, attrib_list: *EGLAttrib) -> EGLBoolean #c_call;
+
+PFNEGLSTREAMFLUSHNVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR) -> EGLBoolean #c_call;
+
+PFNEGLQUERYDISPLAYATTRIBNVPROC :: #type (dpy: EGLDisplay, attribute: EGLint, value: *EGLAttrib) -> EGLBoolean #c_call;
+PFNEGLSETSTREAMMETADATANVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, n: EGLint, offset: EGLint, size: EGLint, data: *void) -> EGLBoolean #c_call;
+PFNEGLQUERYSTREAMMETADATANVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, name: EGLenum, n: EGLint, offset: EGLint, size: EGLint, data: *void) -> EGLBoolean #c_call;
+
+PFNEGLRESETSTREAMNVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR) -> EGLBoolean #c_call;
+
+PFNEGLCREATESTREAMSYNCNVPROC :: #type (dpy: EGLDisplay, stream: EGLStreamKHR, type: EGLenum, attrib_list: *EGLint) -> EGLSyncKHR #c_call;
+
+EGLSyncNV :: *void;
+EGLTimeNV :: khronos_utime_nanoseconds_t;
+
+PFNEGLCREATEFENCESYNCNVPROC :: #type (dpy: EGLDisplay, condition: EGLenum, attrib_list: *EGLint) -> EGLSyncNV #c_call;
+PFNEGLDESTROYSYNCNVPROC :: #type (sync: EGLSyncNV) -> EGLBoolean #c_call;
+PFNEGLFENCENVPROC :: #type (sync: EGLSyncNV) -> EGLBoolean #c_call;
+PFNEGLCLIENTWAITSYNCNVPROC :: #type (sync: EGLSyncNV, flags: EGLint, timeout: EGLTimeNV) -> EGLint #c_call;
+PFNEGLSIGNALSYNCNVPROC :: #type (sync: EGLSyncNV, mode: EGLenum) -> EGLBoolean #c_call;
+PFNEGLGETSYNCATTRIBNVPROC :: #type (sync: EGLSyncNV, attribute: EGLint, value: *EGLint) -> EGLBoolean #c_call;
+
+EGLuint64NV :: khronos_utime_nanoseconds_t;
+
+PFNEGLGETSYSTEMTIMEFREQUENCYNVPROC :: #type () -> EGLuint64NV #c_call;
+PFNEGLGETSYSTEMTIMENVPROC :: #type () -> EGLuint64NV #c_call;
+
+wl_display :: struct {}
+wl_resource :: struct {}
+
+PFNEGLBINDWAYLANDDISPLAYWLPROC :: #type (dpy: EGLDisplay, display: *wl_display) -> EGLBoolean #c_call;
+PFNEGLUNBINDWAYLANDDISPLAYWLPROC :: #type (dpy: EGLDisplay, display: *wl_display) -> EGLBoolean #c_call;
+PFNEGLQUERYWAYLANDBUFFERWLPROC :: #type (dpy: EGLDisplay, buffer: *wl_resource, attribute: EGLint, value: *EGLint) -> EGLBoolean #c_call;
+
+wl_buffer :: struct {}
+PFNEGLCREATEWAYLANDBUFFERFROMIMAGEWLPROC :: #type (dpy: EGLDisplay, image: EGLImageKHR) -> *wl_buffer #c_call;
+
+#scope_file
+
+#import "Basic"; // For assert
+
+libegl :: #library,system "libEGL";
+
+#run {
+    {
+        info := type_info(EGLClientPixmapHI);
+        for info.members {
+            if it.name == {
+                case "pData";
+                    assert(it.offset_in_bytes == 0, "EGLClientPixmapHI.pData has unexpected offset % instead of 0", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 8, "EGLClientPixmapHI.pData has unexpected size % instead of 8", it.type.runtime_size);
+                case "iWidth";
+                    assert(it.offset_in_bytes == 8, "EGLClientPixmapHI.iWidth has unexpected offset % instead of 8", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "EGLClientPixmapHI.iWidth has unexpected size % instead of 4", it.type.runtime_size);
+                case "iHeight";
+                    assert(it.offset_in_bytes == 12, "EGLClientPixmapHI.iHeight has unexpected offset % instead of 12", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "EGLClientPixmapHI.iHeight has unexpected size % instead of 4", it.type.runtime_size);
+                case "iStride";
+                    assert(it.offset_in_bytes == 16, "EGLClientPixmapHI.iStride has unexpected offset % instead of 16", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "EGLClientPixmapHI.iStride has unexpected size % instead of 4", it.type.runtime_size);
+            }
+        }
+        assert(size_of(EGLClientPixmapHI) == 24, "EGLClientPixmapHI has size % instead of 24", size_of(EGLClientPixmapHI));
+    }
+}
+
