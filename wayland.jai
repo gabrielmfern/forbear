@@ -43,6 +43,9 @@ Interface_Id :: enum u32 {
     XDG_SURFACE;
     XDG_TOPLEVEL;
     XDG_POPUP;
+    ZWP_LINUX_DMABUF_V1;
+    ZWP_LINUX_BUFFER_PARAMS_V1;
+    ZWP_LINUX_DMABUF_FEEDBACK_V1;
 }
 
 Wl_Display_Error :: enum u32 {
@@ -1636,6 +1639,165 @@ Xdg_Popup_Event_Repositioned :: struct {
     token: u32;
 }
 
+Zwp_Linux_Dmabuf_V1_Request_Destroy :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Zwp_Linux_Dmabuf_V1_Request_Create_Params :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[.NEW_ID];
+    params_id: u32;
+}
+
+Zwp_Linux_Dmabuf_V1_Request_Get_Default_Feedback :: struct {
+    OPCODE :: 2;
+    ARGS :: ProtocolType.[.NEW_ID];
+    id: u32;
+}
+
+Zwp_Linux_Dmabuf_V1_Request_Get_Surface_Feedback :: struct {
+    OPCODE :: 3;
+    ARGS :: ProtocolType.[.NEW_ID, .OBJECT];
+    id: u32;
+    surface: u32;
+}
+
+Zwp_Linux_Dmabuf_V1_Event_Format :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[.UINT];
+    format: u32;
+}
+
+Zwp_Linux_Dmabuf_V1_Event_Modifier :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[.UINT, .UINT, .UINT];
+    format: u32;
+    modifier_hi: u32;
+    modifier_lo: u32;
+}
+
+Zwp_Linux_Buffer_Params_V1_Error :: enum u32 {
+    ALREADY_USED :: 0;
+    PLANE_IDX :: 1;
+    PLANE_SET :: 2;
+    INCOMPLETE :: 3;
+    INVALID_FORMAT :: 4;
+    INVALID_DIMENSIONS :: 5;
+    OUT_OF_BOUNDS :: 6;
+    INVALID_WL_BUFFER :: 7;
+    INVALID_DEV_T_SIZE :: 8;
+}
+
+Zwp_Linux_Buffer_Params_V1_Flags :: enum_flags u32 {
+    Y_INVERT :: 1;
+    INTERLACED :: 2;
+    BOTTOM_FIRST :: 4;
+}
+
+Zwp_Linux_Buffer_Params_V1_Request_Destroy :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Zwp_Linux_Buffer_Params_V1_Request_Add :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[.FILE_DESCRIPTOR, .UINT, .UINT, .UINT, .UINT, .UINT];
+    fd: Fd;
+    plane_idx: u32;
+    offset: u32;
+    stride: u32;
+    modifier_hi: u32;
+    modifier_lo: u32;
+}
+
+Zwp_Linux_Buffer_Params_V1_Request_Create :: struct {
+    OPCODE :: 2;
+    ARGS :: ProtocolType.[.INT, .INT, .UINT, .UINT];
+    width: s32;
+    height: s32;
+    format: u32;
+    flags: Zwp_Linux_Buffer_Params_V1_Flags;
+}
+
+Zwp_Linux_Buffer_Params_V1_Request_Create_Immed :: struct {
+    OPCODE :: 3;
+    ARGS :: ProtocolType.[.NEW_ID, .INT, .INT, .UINT, .UINT];
+    buffer_id: u32;
+    width: s32;
+    height: s32;
+    format: u32;
+    flags: Zwp_Linux_Buffer_Params_V1_Flags;
+}
+
+Zwp_Linux_Buffer_Params_V1_Request_Set_Sampling_Device :: struct {
+    OPCODE :: 4;
+    ARGS :: ProtocolType.[.ARRAY];
+    device: [] u8;
+}
+
+Zwp_Linux_Buffer_Params_V1_Event_Created :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[.NEW_ID];
+    buffer: u32;
+}
+
+Zwp_Linux_Buffer_Params_V1_Event_Failed :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[];
+}
+
+Zwp_Linux_Dmabuf_Feedback_V1_Tranche_Flags :: enum_flags u32 {
+    SCANOUT :: 1;
+    SAMPLING :: 2;
+}
+
+Zwp_Linux_Dmabuf_Feedback_V1_Request_Destroy :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Zwp_Linux_Dmabuf_Feedback_V1_Event_Done :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Zwp_Linux_Dmabuf_Feedback_V1_Event_Format_Table :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[.FILE_DESCRIPTOR, .UINT];
+    fd: Fd;
+    size: u32;
+}
+
+Zwp_Linux_Dmabuf_Feedback_V1_Event_Main_Device :: struct {
+    OPCODE :: 2;
+    ARGS :: ProtocolType.[.ARRAY];
+    device: [] u8;
+}
+
+Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Done :: struct {
+    OPCODE :: 3;
+    ARGS :: ProtocolType.[];
+}
+
+Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Target_Device :: struct {
+    OPCODE :: 4;
+    ARGS :: ProtocolType.[.ARRAY];
+    device: [] u8;
+}
+
+Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Formats :: struct {
+    OPCODE :: 5;
+    ARGS :: ProtocolType.[.ARRAY];
+    indices: [] u8;
+}
+
+Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Flags :: struct {
+    OPCODE :: 6;
+    ARGS :: ProtocolType.[.UINT];
+    flags: Zwp_Linux_Dmabuf_Feedback_V1_Tranche_Flags;
+}
+
     Interface_Info :: struct {
         name: string;
         version: u32;
@@ -1680,6 +1842,9 @@ INTERFACES :: Interface_Info.[
     .{ "xdg_surface", 7, 149, 5, 154, 1 },
     .{ "xdg_toplevel", 7, 155, 14, 169, 4 },
     .{ "xdg_popup", 7, 173, 3, 176, 3 },
+    .{ "zwp_linux_dmabuf_v1", 6, 179, 4, 183, 2 },
+    .{ "zwp_linux_buffer_params_v1", 6, 185, 5, 190, 2 },
+    .{ "zwp_linux_dmabuf_feedback_v1", 6, 192, 1, 193, 7 },
 ];
 
 Message_Id :: enum u32 {
@@ -1862,6 +2027,27 @@ Message_Id :: enum u32 {
     XDG_POPUP_CONFIGURE :: 176;
     XDG_POPUP_POPUP_DONE :: 177;
     XDG_POPUP_REPOSITIONED :: 178;
+    ZWP_LINUX_DMABUF_V1_DESTROY :: 179;
+    ZWP_LINUX_DMABUF_V1_CREATE_PARAMS :: 180;
+    ZWP_LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK :: 181;
+    ZWP_LINUX_DMABUF_V1_GET_SURFACE_FEEDBACK :: 182;
+    ZWP_LINUX_DMABUF_V1_FORMAT :: 183;
+    ZWP_LINUX_DMABUF_V1_MODIFIER :: 184;
+    ZWP_LINUX_BUFFER_PARAMS_V1_DESTROY :: 185;
+    ZWP_LINUX_BUFFER_PARAMS_V1_ADD :: 186;
+    ZWP_LINUX_BUFFER_PARAMS_V1_CREATE :: 187;
+    ZWP_LINUX_BUFFER_PARAMS_V1_CREATE_IMMED :: 188;
+    ZWP_LINUX_BUFFER_PARAMS_V1_SET_SAMPLING_DEVICE :: 189;
+    ZWP_LINUX_BUFFER_PARAMS_V1_CREATED :: 190;
+    ZWP_LINUX_BUFFER_PARAMS_V1_FAILED :: 191;
+    ZWP_LINUX_DMABUF_FEEDBACK_V1_DESTROY :: 192;
+    ZWP_LINUX_DMABUF_FEEDBACK_V1_DONE :: 193;
+    ZWP_LINUX_DMABUF_FEEDBACK_V1_FORMAT_TABLE :: 194;
+    ZWP_LINUX_DMABUF_FEEDBACK_V1_MAIN_DEVICE :: 195;
+    ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_DONE :: 196;
+    ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_TARGET_DEVICE :: 197;
+    ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FORMATS :: 198;
+    ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS :: 199;
 }
 
 MESSAGES :: Message_Info.[
@@ -2044,6 +2230,27 @@ MESSAGES :: Message_Info.[
     .{ Xdg_Popup_Event_Configure, 275, 4 },
     .{ Xdg_Popup_Event_Popup_Done, 279, 0 },
     .{ Xdg_Popup_Event_Repositioned, 279, 1 },
+    .{ Zwp_Linux_Dmabuf_V1_Request_Destroy, 280, 0 },
+    .{ Zwp_Linux_Dmabuf_V1_Request_Create_Params, 280, 1 },
+    .{ Zwp_Linux_Dmabuf_V1_Request_Get_Default_Feedback, 281, 1 },
+    .{ Zwp_Linux_Dmabuf_V1_Request_Get_Surface_Feedback, 282, 2 },
+    .{ Zwp_Linux_Dmabuf_V1_Event_Format, 284, 1 },
+    .{ Zwp_Linux_Dmabuf_V1_Event_Modifier, 285, 3 },
+    .{ Zwp_Linux_Buffer_Params_V1_Request_Destroy, 288, 0 },
+    .{ Zwp_Linux_Buffer_Params_V1_Request_Add, 288, 6 },
+    .{ Zwp_Linux_Buffer_Params_V1_Request_Create, 294, 4 },
+    .{ Zwp_Linux_Buffer_Params_V1_Request_Create_Immed, 298, 5 },
+    .{ Zwp_Linux_Buffer_Params_V1_Request_Set_Sampling_Device, 303, 1 },
+    .{ Zwp_Linux_Buffer_Params_V1_Event_Created, 304, 1 },
+    .{ Zwp_Linux_Buffer_Params_V1_Event_Failed, 305, 0 },
+    .{ Zwp_Linux_Dmabuf_Feedback_V1_Request_Destroy, 305, 0 },
+    .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Done, 305, 0 },
+    .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Format_Table, 305, 2 },
+    .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Main_Device, 307, 1 },
+    .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Done, 308, 0 },
+    .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Target_Device, 308, 1 },
+    .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Formats, 309, 1 },
+    .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Flags, 310, 1 },
 ];
 
     MAX_MESSAGE_STRUCT_SIZE :: #run () -> s64 {
@@ -2335,5 +2542,36 @@ ARGS :: ProtocolType.[
     .INT,
     .INT,
     .INT,
+    .UINT,
+    .NEW_ID,
+    .NEW_ID,
+    .NEW_ID,
+    .OBJECT,
+    .UINT,
+    .UINT,
+    .UINT,
+    .UINT,
+    .FILE_DESCRIPTOR,
+    .UINT,
+    .UINT,
+    .UINT,
+    .UINT,
+    .UINT,
+    .INT,
+    .INT,
+    .UINT,
+    .UINT,
+    .NEW_ID,
+    .INT,
+    .INT,
+    .UINT,
+    .UINT,
+    .ARRAY,
+    .NEW_ID,
+    .FILE_DESCRIPTOR,
+    .UINT,
+    .ARRAY,
+    .ARRAY,
+    .ARRAY,
     .UINT,
 ];

@@ -13,6 +13,7 @@
     PROTOCOLS :: string.[
         "/usr/share/wayland/wayland.xml",
         "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
+        "/usr/share/wayland-protocols/stable/linux-dmabuf/linux-dmabuf-v1.xml",
     ];
 
     OUTPUT :: #run tprint("%wayland.jai", #filepath);
@@ -347,6 +348,12 @@ build :: () {
 
     opts: Generate_Bindings_Options;
     array_add(*opts.system_include_paths, ..get_default_system_include_paths());
+    array_add(*opts.system_libraries, Library.{ filename = "libEGL" });
+    array_add(*opts.extra_clang_arguments, "-DEGL_NO_X11");
+    array_add(*opts.path_fragments_to_treat_as_non_system_paths, "EGL/", "KHR/");
+    array_add(*opts.source_files, "/usr/include/EGL/egl.h", "/usr/include/EGL/eglext.h");
+
+    generate_bindings(opts, "egl.jai");
 
     w := compiler_create_workspace("Main program");
     if !debug {
