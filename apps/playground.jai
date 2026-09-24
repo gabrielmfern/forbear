@@ -2,13 +2,19 @@
 #import "Socket";
 #import "Memory";
 #import "POSIX";
+#import "GL";
 #import,file "../wayland.jai";
+#import,file "../egl.jai";
 
 libc :: #library,system "libc";
 memfd_create :: (name: *u8, flags: u32) -> s32 #foreign libc;
 MREMAP_MAYMOVE :: 1;
 
+eglExportDMABUFImageQueryMESA: PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC;
+eglExportDMABUFImageMESA: PFNEGLEXPORTDMABUFIMAGEMESAPROC;
+
 WAYLAND_DEBUGGING :: false;
+EGL_DEBUGGING :: false;
 EXIT_ON_FIRST_FRAME :: false;
 
 MessageHeader :: struct {
@@ -25,7 +31,7 @@ Wayland_Connection :: struct {
     wl_display_id: u32;
     wl_registry_id: u32;
     wl_compositor_id: u32;
-    wl_shm_id: u32;
+    zwp_dmabuf_id: u32;
     xdg_wm_base_id: u32;
 
     reading_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
@@ -65,8 +71,19 @@ init_wayland_connection :: (connection: *Wayland_Connection) {
     connection.wl_display_id = new_wayland_client_object(connection, Interface_Id.WL_DISPLAY);
     connection.wl_registry_id = new_wayland_client_object(connection, Interface_Id.WL_REGISTRY);
     send_wayland_message(connection, 1, Wl_Display_Request_Get_Registry.{ registry = connection.wl_registry_id });
+
+    bind_global :: (connection: *Wayland_Connection, interface_id: Interface_Id, global: Wl_Registry_Event_Global) -> u32 {
+        id := new_wayland_client_object(connection, interface_id);
+        send_wayland_message(connection, connection.wl_registry_id, Wl_Registry_Request_Bind.{
+            name = global.name,
+            interface_name = global.interface_name,
+            version = min(INTERFACES[interface_id].version, global.version),
+            id = id,
+        });
+        return id;
+    }
  
-    while connection.wl_compositor_id == 0 || connection.wl_shm_id == 0 || connection.xdg_wm_base_id == 0 {
+    while connection.wl_compositor_id == 0 || connection.xdg_wm_base_id == 0 || connection.zwp_dmabuf_id == 0 {
         event, data, something := next_wayland_event(connection);
         if !something {
             poll_wayland_connection(connection);
@@ -77,29 +94,11 @@ init_wayland_connection :: (connection: *Wayland_Connection) {
             case Wl_Registry_Event_Global;
                 global := cast(*Wl_Registry_Event_Global) data;
                 if global.interface_name == "wl_compositor" {
-                    connection.wl_compositor_id = new_wayland_client_object(connection, Interface_Id.WL_COMPOSITOR);
-                    send_wayland_message(connection, connection.wl_registry_id, Wl_Registry_Request_Bind.{
-                        name = global.name,
-                        interface_name = global.interface_name,
-                        version = min(INTERFACES[Interface_Id.WL_COMPOSITOR].version, global.version),
-                        id = connection.wl_compositor_id,
-                    });
-                } else if global.interface_name == "wl_shm" {
-                    connection.wl_shm_id = new_wayland_client_object(connection, Interface_Id.WL_SHM);
-                    send_wayland_message(connection, connection.wl_registry_id, Wl_Registry_Request_Bind.{
-                        name = global.name,
-                        interface_name = global.interface_name,
-                        version = min(INTERFACES[Interface_Id.WL_SHM].version, global.version),
-                        id = connection.wl_shm_id,
-                    });
-                } else if global.interface_name == "xdg_wm_base" {
-                    connection.xdg_wm_base_id = new_wayland_client_object(connection, Interface_Id.XDG_WM_BASE);
-                    send_wayland_message(connection, connection.wl_registry_id, Wl_Registry_Request_Bind.{
-                        name = global.name,
-                        interface_name = global.interface_name,
-                        version = min(INTERFACES[Interface_Id.XDG_WM_BASE].version, global.version),
-                        id = connection.xdg_wm_base_id,
-                    });
+                    connection.wl_compositor_id = bind_global(connection, Interface_Id.WL_COMPOSITOR, global);
+                }else if global.interface_name == "xdg_wm_base" {
+                    connection.xdg_wm_base_id = bind_global(connection, Interface_Id.XDG_WM_BASE, global);
+                } else if global.interface_name == "zwp_linux_dmabuf_v1" {
+                    connection.zwp_dmabuf_id = bind_global(connection, Interface_Id.ZWP_LINUX_DMABUF_V1, global);
                 }
         }
 
@@ -383,22 +382,31 @@ Color :: struct {
 
 Wayland_Window :: struct {
     wl_surface_id: u32;
-
     wl_buffer_id: u32;
-    wl_shm_pool_id: u32;
-    pool_size: s32;
-    buffer: []Color;
-    buffer_fd: s32;
     
     xdg_surface_id: u32;
     // only top level windows are supported. there are also popups
     xdg_toplevel_id: u32;
 
     width: s32;
+    texture_width: s32;
     height: s32;
+    texture_height: s32;
+
+    egl_image: EGLImage;
+    fourcc: s32;
+    modifiers: u64;
+    fds: [4]s32;
+    offsets: [4]s32;
+    strides: [4]s32;
+    texture: GLuint;
+    fbo: GLuint;
 
     running: bool = true;
 };
+
+egl_display: EGLDisplay;
+egl_context: EGLContext;
 
 init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window, width: s32, height: s32) {
     window.width = width;
@@ -412,75 +420,17 @@ init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window
     send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Get_Toplevel.{ id = window.xdg_toplevel_id });
     send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
 
-    while true {
-        event, data, something := next_wayland_event(connection);
-        if !something {
-            poll_wayland_connection(connection);
-            continue;
-        }
+    glGenTextures(1, *window.texture);
+    glBindTexture(GL_TEXTURE_2D, window.texture);
+    window.texture_width = width;
+    window.texture_height = height;
+    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_RGBA8, xx window.width, xx window.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-        if event.type == {
-            case Xdg_Surface_Event_Configure;
-                configure := cast(*Xdg_Surface_Event_Configure) data;
-                send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
-                break;
-        }
-
-        reset_temporary_storage();
-    }
-
-    buffer_size := window.width * window.height * 4;
-    window.pool_size = buffer_size;
-    window.buffer_fd = memfd_create("buffer", 0);
-    if window.buffer_fd == -1 {
-        log_error("failed to create pixel buffer fd: %\n", errno());
-        exit(-1);
-    }
-    if ftruncate(window.buffer_fd, xx buffer_size) == -1 {
-        log_error("failed to create pixel buffer fd: %\n", errno());
-        exit(-1);
-    }
-    buffer_pointer := mmap(null, xx buffer_size, PROT_READ | PROT_WRITE, MAP_SHARED, window.buffer_fd, 0);
-    if buffer_pointer == MAP_FAILED {
-        log_error("failed to create pixel buffer fd: %\n", errno());
-        exit(-1);
-    }
-    memset(buffer_pointer, 0, buffer_size);
-    window.buffer.data = cast(*Color) buffer_pointer;
-    window.buffer.count = window.width * window.height;
-
-    for y: 0..window.height - 1 {
-        for x: 0..window.width - 1 {
-            if (x / 50 + y / 50) % 2 == 0 {
-                // purple
-                window.buffer[y * window.width + x].r = 255;
-                window.buffer[y * window.width + x].g = 0;
-                window.buffer[y * window.width + x].b = 255;
-            }
-        }
-    }
-
-    window.wl_shm_pool_id = new_wayland_client_object(connection, Interface_Id.WL_SHM_POOL);
-    send_wayland_message(connection, connection.wl_shm_id, Wl_Shm_Request_Create_Pool.{ 
-        id = window.wl_shm_pool_id, 
-        fd = xx window.buffer_fd, 
-        size = buffer_size 
-    });
-
-    window.wl_buffer_id = new_wayland_client_object(connection, Interface_Id.WL_BUFFER);
-    send_wayland_message(connection, window.wl_shm_pool_id, Wl_Shm_Pool_Request_Create_Buffer.{ 
-        id = window.wl_buffer_id,
-        offset = 0,
-        width = window.width,
-        height = window.height,
-        stride = window.width * 4,
-        format = Wl_Shm_Format.XRGB8888,
-    });
-
-    send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
-    send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Damage.{ x = 0, y = 0, width = window.width, height = window.height });
-    send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Frame.{ callback = new_wayland_client_object(connection, Interface_Id.WL_CALLBACK) });
-    send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
+    glGenFramebuffers(1, *window.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
+    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 }
 
 update_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window, event: Message_Info, data: *void) {
@@ -495,54 +445,95 @@ update_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Wind
             if configure.height {
                 window.height = configure.height;
             }
-            buffer_size := window.width * window.height * 4;
-            if buffer_size > window.pool_size {
-                if ftruncate(window.buffer_fd, xx buffer_size) == -1 {
-                    log_error("failed to create pixel buffer: %\n", errno());
-                    exit(-1);
-                }
-                buffer_pointer := mremap(cast(*void) window.buffer.data, xx window.pool_size, xx buffer_size, MREMAP_MAYMOVE);
-                if buffer_pointer == MAP_FAILED {
-                    log_error("failed to map pixel buffer: %\n", errno());
-                    exit(-1);
-                }
-                window.buffer.data = cast(*Color) buffer_pointer;
-                window.buffer.count = window.width * window.height;
-
-                send_wayland_message(connection, window.wl_shm_pool_id, Wl_Shm_Pool_Request_Resize.{ size = buffer_size });
-                window.pool_size = buffer_size;
-            }
-
-            memset(cast(*void) window.buffer.data, 0, buffer_size);
-            for y: 0..window.height - 1 {
-                for x: 0..window.width - 1 {
-                    if (x / 50 + y / 50) % 2 == 0 {
-                        // purple
-                        window.buffer[y * window.width + x].r = 255;
-                        window.buffer[y * window.width + x].g = 0;
-                        window.buffer[y * window.width + x].b = 255;
-                    }
-                }
-            }
-
-            send_wayland_message(connection, window.wl_buffer_id, Wl_Buffer_Request_Destroy.{ });
-            window.wl_buffer_id = new_wayland_client_object(connection, Interface_Id.WL_BUFFER);
-            send_wayland_message(connection, window.wl_shm_pool_id, Wl_Shm_Pool_Request_Create_Buffer.{ 
-                id = window.wl_buffer_id,
-                offset = 0,
-                width = window.width,
-                height = window.height,
-                stride = window.width * 4,
-                format = Wl_Shm_Format.XRGB8888,
-            });
         case Xdg_Surface_Event_Configure;
             configure := cast(*Xdg_Surface_Event_Configure) data;
             send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
 
+            if window.width * window.height != window.texture_width * window.texture_height {
+                if window.egl_image != null {
+                    if eglDestroyImage(egl_display, window.egl_image) != 1 {
+                        log_error("failed to destroy previous egl image: %\n", eglGetError());
+                        exit(-1);
+                    }
+                }
+
+                if window.texture != 0 {
+                    glDeleteTextures(1, *window.texture);
+                }
+
+                if window.fds[0] != 0 {
+                    close(window.fds[0]);
+                }
+
+                glGenTextures(1, *window.texture);
+                glBindTexture(GL_TEXTURE_2D, window.texture);
+                window.texture_width = window.width;
+                window.texture_height = window.height;
+                glTexImage2D(GL_TEXTURE_2D, 0, xx GL_RGBA8, xx window.width, xx window.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+                glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
+                assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+
+                window.egl_image = eglCreateImage(egl_display, egl_context, EGL_GL_TEXTURE_2D, cast(EGLClientBuffer) cast(u64) window.texture, null);
+                if window.egl_image == null {
+                    log_error("failed to create frame buffer: %\n", eglGetError());
+                    exit(-1);
+                }
+
+                num_planes: s32;
+                if eglExportDMABUFImageQueryMESA(egl_display, window.egl_image, *window.fourcc, *num_planes, *window.modifiers) != 1 {
+                    log_error("failed in eglExportDMABUFImageQueryMESA: %\n", eglGetError());
+                    exit(-1);
+                }
+                if EGL_DEBUGGING {
+                    print("num_planes %, fourcc %, modifiers %\n", num_planes, formatInt(window.fourcc, base = 16), formatInt(window.modifiers, base = 16));
+                }
+                if eglExportDMABUFImageMESA(egl_display, window.egl_image, window.fds.data, window.strides.data, window.offsets.data) != 1 {
+                    log_error("failed in eglExportDMABUFImageMESA: %\n", eglGetError());
+                    exit(-1);
+                }
+                if EGL_DEBUGGING {
+                    print("fds %, strides %, offsets %\n", window.fds, window.strides, window.offsets);
+                }
+            }
+
+            buffer_params_id := new_wayland_client_object(connection, Interface_Id.ZWP_LINUX_BUFFER_PARAMS_V1);
+            send_wayland_message(connection, connection.zwp_dmabuf_id, Zwp_Linux_Dmabuf_V1_Request_Create_Params.{
+                params_id = buffer_params_id,
+            });
+            send_wayland_message(connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Add.{
+                fd = xx window.fds[0],
+                plane_idx = 0,
+                offset = xx window.offsets[0],
+                stride = xx window.strides[0],
+                modifier_hi = xx (window.modifiers >> 32),
+                modifier_lo = xx (window.modifiers & 0xFFFFFFFF)
+            });
+
+            previous_buffer_id := window.wl_buffer_id;
+            window.wl_buffer_id = new_wayland_client_object(connection, Interface_Id.WL_BUFFER);
+            send_wayland_message(connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Create_Immed.{
+                buffer_id = window.wl_buffer_id,
+                width = window.width,
+                height = window.height,
+                format = xx window.fourcc,
+                flags = 0,
+            });
+
+            send_wayland_message(connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
+
             send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
             send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Damage.{ x = 0, y = 0, width = window.width, height = window.height });
-            send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Frame.{ callback = new_wayland_client_object(connection, Interface_Id.WL_CALLBACK) });
+            if EXIT_ON_FIRST_FRAME {
+                send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Frame.{ callback = new_wayland_client_object(connection, Interface_Id.WL_CALLBACK) });
+            }
             send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
+
+            if previous_buffer_id != 0 {
+                send_wayland_message(connection, previous_buffer_id, Wl_Buffer_Request_Destroy.{});
+            }
         case Wl_Callback_Event_Done;
             if EXIT_ON_FIRST_FRAME  window.running = false;
     }
@@ -552,18 +543,60 @@ main :: () {
     wayland_connection: Wayland_Connection;
     init_wayland_connection(*wayland_connection);
 
+    egl_display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, null, null);
+    major: s32;
+    minor: s32;
+    if eglInitialize(egl_display, *major, *minor) != 1 {
+        log_error("could not initialize egl");
+        exit(-1);
+    }
+    if eglBindAPI(EGL_OPENGL_API) != 1 {
+        log_error("could not bind opengl through egl");
+        exit(-1);
+    }
+    egl_context_attributes := EGLint.[
+        EGL_CONTEXT_MAJOR_VERSION, 3, 
+        EGL_CONTEXT_MINOR_VERSION, 3, 
+        EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+        EGL_NONE
+    ];
+    egl_context = eglCreateContext(egl_display, null, null, egl_context_attributes.data);
+    eglMakeCurrent(egl_display, null, null, egl_context);
+    gl_load(*gl, xx eglGetProcAddress);
+
+    if EGL_DEBUGGING {
+        print("loaded OpenGL %.%\n", gl_version_major, gl_version_minor);
+        print("opengl renderer %\n", to_string(glGetString(GL_RENDERER)));
+    }
+
+    eglExportDMABUFImageQueryMESA = xx eglGetProcAddress("eglExportDMABUFImageQueryMESA");
+    eglExportDMABUFImageMESA = xx eglGetProcAddress("eglExportDMABUFImageMESA");
+    if eglExportDMABUFImageQueryMESA == null || eglExportDMABUFImageMESA == null {
+        log_error("EGL_MESA_image_dma_buf_export is not supported\n");
+        exit(-1);
+    }
+
     wayland_window: Wayland_Window;
     init_wayland_window(*wayland_connection, *wayland_window, 800, 600);
 
     while wayland_window.running {
         event, data, something := next_wayland_event(*wayland_connection);
-
         if something {
             update_wayland_window(*wayland_connection, *wayland_window, event, data);
-
             update_wayland_connection(*wayland_connection, event, data);
         }
+
+        glViewport(0, 0, xx wayland_window.width, xx wayland_window.height);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(0, 0, xx (wayland_window.width / 2), xx wayland_window.height);
+        glClearColor(1, 0, 1, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glFinish();
 
         reset_temporary_storage();
     }
 }
+
+// NEXT: decide if we're implementing software rendering or opengl
+// NEXT: implement a basic element rectangle rendering
