@@ -32,6 +32,7 @@ Wayland_Connection :: struct {
     pending_reads: []u8;
 
     client_object_interfaces: [..]Interface_Id;
+    free_client_object_interface_ids: [..]s64;
     server_object_interfaces: [..]Interface_Id;
 };
 
@@ -106,6 +107,14 @@ init_wayland_connection :: (connection: *Wayland_Connection) {
     }
 }
 
+update_wayland_connection :: (connection: *Wayland_Connection, event: Message_Info, data: *void) {
+    if event.type == {
+        case Wl_Display_Event_Delete_Id;
+            delete := cast(*Wl_Display_Event_Delete_Id) data;
+            array_add(*connection.free_client_object_interface_ids, delete.id);
+    }
+}
+
 poll_wayland_connection :: (connection: *Wayland_Connection, timeout_ms: s32 = 1000) {
     polling_result := poll(*connection.polling_fd, 1, timeout_ms);
     if polling_result == {
@@ -119,8 +128,16 @@ poll_wayland_connection :: (connection: *Wayland_Connection, timeout_ms: s32 = 1
 }
 
 new_wayland_client_object :: (connection: *Wayland_Connection, interface_id: Interface_Id) -> u32 {
-    array_add(*connection.client_object_interfaces, interface_id);
-    return xx connection.client_object_interfaces.count;
+    if connection.free_client_object_interface_ids.count > 0 {
+        // we reuse ids that have been deleted/freed
+        id := pop(*connection.free_client_object_interface_ids);
+        connection.client_object_interfaces[id - 1] = interface_id;
+
+        return xx id;
+    } else {
+        array_add(*connection.client_object_interfaces, interface_id);
+        return xx connection.client_object_interfaces.count;
+    }
 }
 
 next_wayland_event :: (connection: *Wayland_Connection) -> event: Message_Info, data: *void, something: bool {
@@ -543,6 +560,8 @@ main :: () {
 
         if something {
             update_wayland_window(*wayland_connection, *wayland_window, event, data);
+
+            update_wayland_connection(*wayland_connection, event, data);
         }
 
         reset_temporary_storage();
