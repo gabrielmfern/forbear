@@ -597,6 +597,3 @@ main :: () {
         reset_temporary_storage();
     }
 }
-
-// NEXT: decide if we're implementing software rendering or opengl
-// NEXT: implement a basic element rectangle rendering
