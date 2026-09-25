@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /og/
+
+Sitemap: https://www.forbear.dev/sitemap.xml
