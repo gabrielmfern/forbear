@@ -17,6 +17,7 @@
   --color-bright-yellow: #CFBA78;
 }
 @layer base {
+  html { @apply overflow-x-clip; }
   body { @apply bg-bg text-fg leading-relaxed; }
   h1 { @apply text-bright text-3xl font-bold mb-8; }
   h2 { @apply text-bright text-2xl font-bold mt-12 mb-4; }
@@ -25,7 +26,20 @@
   ul { @apply list-disc pl-6 my-4; }
   a { @apply text-yellow hover:text-bright-yellow; }
   code { @apply bg-float text-bright px-1 rounded; }
+  pre { @apply bg-float text-fg text-sm p-4 rounded-lg overflow-x-auto my-6; }
+  pre code { @apply bg-transparent text-fg p-0; }
 }
+pre .hl-preproc { color: #ffffff; }
+pre .hl-function { color: #b8a36a; }
+pre .hl-delimiter { color: #c8d0d8; }
+pre .hl-type { color: #ffffff; }
+pre .hl-punctuation-delimiter { color: #c8d0d8; }
+pre .hl-operator { color: #e0e2ea; }
+pre .hl-statement { color: #ffffff; }
+pre .hl-number { color: #7fa0b8; }
+pre .hl-string { font-style: italic; color: #b8a36a; }
+pre .hl-comment { color: #4ebe4e; font-style: italic; }
+pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
 </style>
 </head>
 <body>
@@ -42,9 +56,11 @@
 
 <p>I had the idea to write a Bible program. I wanted to read on my computer without ads and such, so I tried Tauri, since I thought Electron would be slow. It turned out to be very slow on Linux too, because the webviews there aren't very good. That's when the idea for forbear started:</p>
 
-<a href="https://x.com/gabrielmfern/status/1894510587972898849" class="block max-w-sm mx-auto my-6"><img src="../assets/2025-02-25-i-want-react-for-zig-tweet.png"></a>
+<a href="https://x.com/gabrielmfern/status/1894510587972898849" class="block max-w-sm my-6"><img src="../assets/2025-02-25-i-want-react-for-zig-tweet.png"></a>
 
 <p>The first version of forbear was in Zig with OpenGL. It was my first time doing "serious" graphics, and I was learning OpenGL and Zig (my first low-level language) at the same time. I did countless things wrong that first time. I used FreeType, but then I thought I could maybe write my own font renderer, so I started trying to do it on the GPU and found out that it wasn't that easy.</p>
+
+<video src="../assets/2025-06-13-first-version-text-rendering.mp4#t=1" preload="metadata" controls muted loop playsinline class="w-full my-6 rounded-lg lg:w-[calc(100%+8rem)] lg:max-w-none lg:-mx-16"></video>
 
 <p>It didn't go very well, so in December 2025 I rewrote it, still in Zig, to get it right. By July 2026 the second version had 567 commits and about 23 thousand lines of code, and it got much, much further. It has:</p>
 
@@ -58,6 +74,41 @@
 
 <p>It was good enough to rebuild parts of the uhoh.com home page and of wayland-book.com. I'm quite proud of it.</p>
 
+<div class="flex gap-4 overflow-x-auto [scrollbar-width:none] my-6 mx-[calc(50%-50vw)] px-[calc(50vw-50%)]">
+<img src="../assets/2026-07-forbear-zig-uhoh.png" alt="The uhoh.com home page rendered by forbear at 240 FPS" class="h-[30rem] w-auto max-w-none rounded-lg">
+<img src="../assets/2026-07-forbear-zig-wayland-book.png" alt="The Wayland Book rendered by forbear" class="h-[30rem] w-auto max-w-none rounded-lg">
+</div>
+
+<p>This is what writing a forbear app looked like:</p>
+
+<pre><code><span class="hl-preproc">fn</span> <span class="hl-function">App</span><span class="hl-delimiter">()</span> <span class="hl-type">void</span> <span class="hl-delimiter">{</span>
+    forbear<span class="hl-punctuation-delimiter">.</span><span class="hl-function">component</span><span class="hl-delimiter">(</span><span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{})({</span>
+        forbear<span class="hl-punctuation-delimiter">.</span><span class="hl-function">element</span><span class="hl-delimiter">(</span><span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+            <span class="hl-punctuation-delimiter">.</span>style <span class="hl-operator">=</span> <span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+                <span class="hl-punctuation-delimiter">.</span>width <span class="hl-operator">=</span> <span class="hl-punctuation-delimiter">.</span>grow<span class="hl-punctuation-delimiter">,</span>
+                <span class="hl-punctuation-delimiter">.</span>direction <span class="hl-operator">=</span> <span class="hl-punctuation-delimiter">.</span>vertical<span class="hl-punctuation-delimiter">,</span>
+            <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span>
+        <span class="hl-delimiter">})({</span>
+            <span class="hl-statement">const</span> count <span class="hl-operator">=</span> forbear<span class="hl-punctuation-delimiter">.</span><span class="hl-function">useState</span><span class="hl-delimiter">(</span><span class="hl-type">u32</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+
+            forbear<span class="hl-punctuation-delimiter">.</span><span class="hl-function">printText</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;Count: {d}&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>count<span class="hl-operator">.*</span><span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+
+            forbear<span class="hl-punctuation-delimiter">.</span><span class="hl-function">element</span><span class="hl-delimiter">(</span><span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+                <span class="hl-punctuation-delimiter">.</span>style <span class="hl-operator">=</span> <span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+                    <span class="hl-punctuation-delimiter">.</span>background <span class="hl-operator">=</span> <span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span> <span class="hl-punctuation-delimiter">.</span>color <span class="hl-operator">=</span> <span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span> <span class="hl-number">0.0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0.0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0.0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">1.0</span> <span class="hl-delimiter">}</span> <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span>
+                    <span class="hl-punctuation-delimiter">.</span>borderRadius <span class="hl-operator">=</span> <span class="hl-number">8.0</span><span class="hl-punctuation-delimiter">,</span>
+                <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span>
+            <span class="hl-delimiter">})({</span>
+                <span class="hl-statement">if</span> <span class="hl-delimiter">(</span>forbear<span class="hl-punctuation-delimiter">.</span><span class="hl-function">onClick</span><span class="hl-delimiter">())</span> <span class="hl-delimiter">{</span>
+                    count<span class="hl-operator">.*</span> <span class="hl-operator">+=</span> <span class="hl-number">1</span><span class="hl-punctuation-delimiter">;</span>
+                <span class="hl-delimiter">}</span>
+
+                forbear<span class="hl-punctuation-delimiter">.</span><span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;Increment&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+            <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span></code></pre>
+
 <h2>Why I'm starting over</h2>
 
 <h3>Zig doesn't fit forbear</h3>
@@ -65,6 +116,21 @@
 <p>The previous version was written in Zig, and Zig doesn't seem to be the best language for this project. For the sake of its principles, I feel like Zig ends up making decisions that have more cons than pros. For example, being forced to handle return values means you can't forget to handle an error, but it also rules out an entire category of APIs I could implement. And that has no practical benefit for me, since I have never forgotten to handle a returned error or value that I needed.</p>
 
 <p>Keying is one example that I could not get quite right with what Zig provides. Every element needs a stable ID, so forbear knows which element is which from frame to frame. All I needed was a counter at compile time that gives each call site a unique number. Zig can't do that, so I worked around it with lots of inline functions and <code>@returnAddress</code>, which just isn't sustainable at all.</p>
+
+<pre><code><span class="hl-statement">pub</span> <span class="hl-statement">noinline</span> <span class="hl-preproc">fn</span> useState<span class="hl-delimiter">(</span><span class="hl-statement">comptime</span> <span class="hl-type">T</span><span class="hl-punctuation-delimiter">:</span> <span class="hl-type">type</span><span class="hl-punctuation-delimiter">,</span> initialValue<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">T</span><span class="hl-delimiter">)</span> <span class="hl-operator">*</span><span class="hl-type">T</span> <span class="hl-delimiter">{</span>
+    <span class="hl-comment">// ...</span>
+    <span class="hl-statement">const</span> state <span class="hl-operator">=</span> scope<span class="hl-punctuation-delimiter">.</span>states<span class="hl-punctuation-delimiter">.</span><span class="hl-function">getOrPut</span><span class="hl-delimiter">(</span>arena<span class="hl-punctuation-delimiter">,</span> <span class="hl-function">@returnAddress</span><span class="hl-delimiter">())</span> <span class="hl-statement">catch</span> <span class="hl-delimiter">|</span>err<span class="hl-delimiter">|</span> <span class="hl-delimiter">{</span>
+    <span class="hl-comment">// ...</span>
+<span class="hl-delimiter">}</span>
+
+<span class="hl-statement">pub</span> <span class="hl-statement">inline</span> <span class="hl-preproc">fn</span> hook<span class="hl-delimiter">()</span> <span class="hl-type">void</span> <span class="hl-delimiter">{</span>
+    <span class="hl-comment">// ...</span>
+    k <span class="hl-operator">=</span> <span class="hl-function">mixU64</span><span class="hl-delimiter">(</span>k<span class="hl-punctuation-delimiter">,</span> <span class="hl-function">@returnAddress</span><span class="hl-delimiter">())</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">pushScope</span><span class="hl-delimiter">(</span>k<span class="hl-delimiter">)</span> <span class="hl-statement">catch</span> <span class="hl-delimiter">|</span>err<span class="hl-delimiter">|</span> <span class="hl-delimiter">{</span>
+    <span class="hl-comment">// ...</span>
+<span class="hl-delimiter">}</span></code></pre>
+
+<p><code>useState</code> has to be <code>noinline</code> and <code>hook</code> has to be <code>inline</code>, just so <code>@returnAddress</code> points at the right call site. Get that wrong and two pieces of state quietly share the same ID.</p>
 
 <p>Another problem is generating bindings for C++ and Objective-C. I want JavaScript developers to use forbear too, so I plan to embed Node, similar to what I've done in <a href="https://github.com/gabrielmfern/pulgar">pulgar</a>. Node is written in C++, and Zig can only import C headers, so I would need to write a C wrapper for everything I use. Windowing on macOS has a similar problem: Zig has no Objective-C support, so I would have to call the Objective-C runtime by hand, which would make the code extremely hard to maintain.</p>
 
@@ -76,13 +142,59 @@
 
 <p>The language I've picked is Jai. It's Jonathan Blow's language, currently in private beta, that I learned about from some of his talks. Jai is still only its working name. It can generate bindings straight from C++ headers, and it ships with bindings for AppKit, Foundation, Windows, OpenGL and Vulkan, all important things I need for this project. Jai has no error system, which means I can pick whatever is best for forbear. It also has a macro system I can use, and it doesn't make any of the extreme, principle-driven choices that Zig makes.</p>
 
+<a href="https://x.com/gabrielmfern/status/2084016626094002673" class="block max-w-sm my-6"><img src="../assets/2026-08-02-jai-is-the-better-option-tweet.png" alt="Tweet: it really looks like Jai is just the better option for forbear"></a>
+
 <p>Jonathan Blow's ideas about simplicity are very close to what forbear is meant to be. Jai feels like what C++ should have been. forbear is meant to be what the operating system should give us for free.</p>
 
 <h2>What I'm doing differently</h2>
 
 <p>The first, smaller thing is implementing my own version of libwayland for the project. libwayland is really stupid to work with: the API is very annoying because of all the callbacks, which force me to allocate stuff I shouldn't need to, move void pointers around just to get data, or create global variables, none of which is necessary. The Wayland protocol naturally fits a while loop that processes each event from the compositor, so I implemented my own from scratch, talking to the compositor over the socket. It's definitely not as refined as libwayland yet, but after two days of work I already have a window that opens, resizes and draws a checkerboard in a shared pixel buffer.</p>
 
-<img src="../assets/2026-09-23-checkerboard.png" class="block max-w-sm mx-auto my-6 rounded-lg">
+<img src="../assets/2026-09-23-checkerboard.png" alt="A purple and black checkerboard drawn by the new Wayland code" class="block max-w-sm my-6 rounded-lg">
+
+<p>With libwayland, every event is a callback that gets a <code>void</code> pointer back, which I cast to my window just to push the event into my own queue:</p>
+
+<pre><code><span class="hl-preproc">fn</span> <span class="hl-function">pointerHandleMotion</span><span class="hl-delimiter">(</span>
+    data<span class="hl-punctuation-delimiter">:</span> <span class="hl-operator">?*</span><span class="hl-type">anyopaque</span><span class="hl-punctuation-delimiter">,</span>
+    wlPointer<span class="hl-punctuation-delimiter">:</span> <span class="hl-operator">?*</span>c<span class="hl-punctuation-delimiter">.</span>wl_pointer<span class="hl-punctuation-delimiter">,</span>
+    time<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">u32</span><span class="hl-punctuation-delimiter">,</span>
+    surfaceX<span class="hl-punctuation-delimiter">:</span> c<span class="hl-punctuation-delimiter">.</span>wl_fixed_t<span class="hl-punctuation-delimiter">,</span>
+    surfaceY<span class="hl-punctuation-delimiter">:</span> c<span class="hl-punctuation-delimiter">.</span>wl_fixed_t<span class="hl-punctuation-delimiter">,</span>
+<span class="hl-delimiter">)</span> <span class="hl-statement">callconv</span><span class="hl-delimiter">(</span><span class="hl-punctuation-delimiter">.</span>c<span class="hl-delimiter">)</span> <span class="hl-type">void</span> <span class="hl-delimiter">{</span>
+    <span class="hl-statement">const</span> window<span class="hl-punctuation-delimiter">:</span> <span class="hl-operator">*</span><span class="hl-type">Self</span> <span class="hl-operator">=</span> <span class="hl-function">@ptrCast</span><span class="hl-delimiter">(</span><span class="hl-function">@alignCast</span><span class="hl-delimiter">(</span>data<span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+    window<span class="hl-punctuation-delimiter">.</span>eventQueue<span class="hl-punctuation-delimiter">.</span><span class="hl-function">push</span><span class="hl-delimiter">(</span><span class="hl-type">Event</span><span class="hl-delimiter">{</span>
+        <span class="hl-punctuation-delimiter">.</span>pointerMotion <span class="hl-operator">=</span> <span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+            <span class="hl-punctuation-delimiter">.</span>time <span class="hl-operator">=</span> time<span class="hl-punctuation-delimiter">,</span>
+            <span class="hl-punctuation-delimiter">.</span>x <span class="hl-operator">=</span> <span class="hl-function">@floatCast</span><span class="hl-delimiter">(</span>c<span class="hl-punctuation-delimiter">.</span><span class="hl-function">wl_fixed_to_double</span><span class="hl-delimiter">(</span>surfaceX<span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+            <span class="hl-punctuation-delimiter">.</span>y <span class="hl-operator">=</span> <span class="hl-function">@floatCast</span><span class="hl-delimiter">(</span>c<span class="hl-punctuation-delimiter">.</span><span class="hl-function">wl_fixed_to_double</span><span class="hl-delimiter">(</span>surfaceY<span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+        <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span>
+    <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-string-special-symbol">_</span> <span class="hl-operator">=</span> wlPointer<span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span>
+
+<span class="hl-statement">const</span> wlPointerListener<span class="hl-punctuation-delimiter">:</span> c<span class="hl-punctuation-delimiter">.</span>wl_pointer_listener <span class="hl-operator">=</span> <span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+    <span class="hl-punctuation-delimiter">.</span>enter <span class="hl-operator">=</span> pointerHandleEnter<span class="hl-punctuation-delimiter">,</span>
+    <span class="hl-punctuation-delimiter">.</span>leave <span class="hl-operator">=</span> pointerHandleLeave<span class="hl-punctuation-delimiter">,</span>
+    <span class="hl-punctuation-delimiter">.</span>motion <span class="hl-operator">=</span> pointerHandleMotion<span class="hl-punctuation-delimiter">,</span>
+    <span class="hl-punctuation-delimiter">.</span>button <span class="hl-operator">=</span> pointerHandleButton<span class="hl-punctuation-delimiter">,</span>
+    <span class="hl-comment">// ...</span>
+<span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<p>Now it's just a loop:</p>
+
+<pre><code><span class="hl-statement">while</span> wayland_window<span class="hl-punctuation-delimiter">.</span>running <span class="hl-delimiter">{</span>
+    event<span class="hl-punctuation-delimiter">,</span> data<span class="hl-punctuation-delimiter">,</span> something <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-function">next_wayland_event</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>wayland_connection<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-statement">if</span> something <span class="hl-delimiter">{</span>
+        <span class="hl-statement">if</span> event<span class="hl-punctuation-delimiter">.</span>type <span class="hl-operator">==</span> <span class="hl-delimiter">{</span>
+            <span class="hl-statement">case</span> Xdg_Toplevel_Event_Close<span class="hl-punctuation-delimiter">;</span>
+                wayland_window<span class="hl-punctuation-delimiter">.</span>running <span class="hl-operator">=</span> <span class="hl-statement">false</span><span class="hl-punctuation-delimiter">;</span>
+            <span class="hl-statement">case</span> Xdg_Toplevel_Event_Configure<span class="hl-punctuation-delimiter">;</span>
+                configure <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-statement">cast</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span><span class="hl-type">Xdg_Toplevel_Event_Configure</span><span class="hl-delimiter">)</span> data<span class="hl-punctuation-delimiter">;</span>
+                <span class="hl-comment">// ...</span>
+        <span class="hl-delimiter">}</span>
+    <span class="hl-delimiter">}</span>
+    <span class="hl-function">reset_temporary_storage</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span></code></pre>
 
 <p>The second thing is using OpenGL instead of Vulkan for graphics. People complain a lot about the complexity of Vulkan, and it is insanely hard to start with, but in practice I found it simpler for adding features. OpenGL is easier to start with, but adding new features feels much harder, especially because its state machine API is extremely confusing to me. The main reason for the switch is that many of the people I want to give forbear apps to don't have machines that support Vulkan. OpenGL runs almost everywhere, macOS included, so the first version will use it as the default. I also considered making a software renderer the default instead, but I ended up going with OpenGL because I already know it, so it will be faster to implement.</p>
 
