@@ -16,7 +16,7 @@
         "/usr/share/wayland-protocols/stable/linux-dmabuf/linux-dmabuf-v1.xml",
     ];
 
-    OUTPUT :: #run tprint("%wayland.jai", #filepath);
+    OUTPUT :: #run tprint("%bindings.jai", #filepath);
 
     ProtocolType :: enum {
         // s32, 4 bytes
