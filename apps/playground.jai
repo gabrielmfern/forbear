@@ -583,9 +583,9 @@ Alignment :: enum u8 { START; CENTER; END; };
 // word => largest word
 // none => all in one line
 Text_Wrapping :: enum u8 {
-    CHARACTER;
     // Uses a simple greedy algorithm to break on word boundaries
     WORD;
+    CHARACTER;
     NONE;
 };
 
@@ -976,12 +976,12 @@ Node :: struct {
     size: Vector2;
     position: Vector2;
     min_size: Vector2;
-    max_size: Vector2;
+    max_size: Vector2 = FLOAT32_INFINITY;
 
     first_child: s64 = -1;
     last_child: s64 = -1;
     next_sibling: s64 = -1;
-    previous_Sibling: s64 = -1;
+    previous_sibling: s64 = -1;
     parent: s64 = -1;
 
     style: Complete_Style;
@@ -1000,34 +1000,37 @@ Node :: struct {
 
     tree: *Node_Tree;
 };
+get_sides_axis :: (sides: Sides, direction: Direction) -> Vector2 {
+    if direction == Direction.HORIZONTAL {
+        return sides.x;
+    } else {
+        return sides.y;
+    }
+}
+fitting_base :: (node: Node, direction: Direction) -> f32 {
+    padding_axis := get_sides_axis(node.style.padding, direction);
+    padding := padding_axis.x + padding_axis.y;
+    border_axis := get_sides_axis(node.style.border_width, direction);
+    border := border_axis.x + border_axis.y;
+    return padding + border;
+}
 
 Node_Tree :: [..]Node;
-
-put_node :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointer: *Node, index: s64 {
-    index := node_tree.buffer.count;
+append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointer: *Node, index: s64 {
+    index := node_tree.count;
     if index != 0 && parent_index == -1 {
         log_error("multiple root nodes are not allowed");
         exit(-1);
     }
 
     node := Node.{
-        size = ---,
-        position = ---,
-        min_size = ---,
-        max_size = ---,
-
-        style = ---,
-
-        key = ---,
-        z = ---,
-
         parent = parent_index,
         tree = node_tree,
     };
     if parent_index != -1 {
-        parent := node_tree[parent_index];
+        parent := node_tree.*[parent_index];
         if parent.last_child != -1 {
-            node_tree[parent.last_child].next_sibling = index;
+            node_tree.*[parent.last_child].next_sibling = index;
         }
         node.previous_sibling = parent.last_child;
         if parent.first_child == -1 {
@@ -1036,8 +1039,13 @@ put_node :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointer: *Node, i
         parent.last_child = index;
     }
     array_add(node_tree, node);
-    return *node_tree[index], index;
+    return *node_tree.*[index], index;
 }
+
+#add_context node_tree: *Node_Tree;
+#add_context parent_stack: *[..]Node;
+#add_context scope_stack: *[..]u64;
+#add_context base_style: *Base_Style;
 
 element :: (
     body: Code, 
@@ -1045,15 +1053,125 @@ element :: (
     key := "", 
     location := #caller_location
 ) #expand {
-    key: u64;
+    parent_index: s64 = -1;
+    parent: *Node;
+    if context.parent_stack.count > 0 {
+        parent_index = context.parent_stack.*[context.parent_stack.count - 1];
+        parent = *context.node_tree.*[parent_index];
+    }
+    node, index := append_to_node_tree(context.node_tree, parent_index);
+    previous_base_style := context.base_style.*;
+    complete_with(style, context.base_style, *node.style);
+    if parent_index != -1 {
+        if style.z_index < U16_MAX {
+            node.z = style.z_index;
+        } else if parent.z < U16_MAX {
+            node.z = parent.z + 1;
+        } else {
+            node.z = parent.z;
+        }
+    }
+
     if key.count > 0 {
-        key = fnv1a_hash(key.data, key.count);
+        node.key = fnv1a_hash(key.data, key.count);
     } else {
         // we use the caller location here
-        kye = fnv1a_hash(loc.fully_pathed_filename.data, loc.fully_pathed_filename.count);
-        key = fnv1a_hash(cast(u64) loc.line_number, key);
-        key = fnv1a_hash(cast(u64) loc.character_number, key);
+        node.key = fnv1a_hash(loc.fully_pathed_filename.data, loc.fully_pathed_filename.count);
+        node.key = fnv1a_hash(cast(u64) loc.line_number, node.key);
+        node.key = fnv1a_hash(cast(u64) loc.character_number, node.key);
     }
+    if context.scope_stack.count > 0 {
+        node.key = fnv1a_hash(context.scope_stack.*[context.scope_stack.count - 1], node.key);
+    }
+    node.key = fnv1a_hash(cast(u64) context.parent_stack.count, node.key);
+
+    if node.style.placement.kind == {
+        // we don't handle FLOW since the node already has the right position by default
+        case Placement.Kind.FIXED;
+            node.position = Placement.fixed;
+        case Placement.Kind.RELATIVE;
+            node.position = Placement.relative;
+    }
+    if node.style.width.kind == {
+        // we don't handle FIT or GROW since the node already has the right width by default
+        case Sizing.Kind.FIXED;
+            node.size.x = node.style.width.fixed;
+        case Sizing.Kind.RATIO;
+            if node.style.height.kind == Sizing.Kind.FIXED {
+                node.size.x = node.style.height.fixed * node.style.width.ratio;
+            }
+    }
+    if node.style.height.kind == {
+        // we don't handle FIT or GROW since the node already has the right width by default
+        case Sizing.Kind.FIXED;
+            node.size.y = node.style.height.fixed;
+        case Sizing.Kind.RATIO;
+            if node.style.width.kind == Sizing.Kind.FIXED {
+                node.size.y = node.style.width.fixed * node.style.height.ratio;
+            }
+    }
+    if !isnan(node.style.min_width) {
+        node.min_size.x = node.style.min_width;
+    } else if node.style.width.Kind == .FIXED {
+        node.min_size.x = node.style.width.fixed;
+    }
+    if !isnan(node.style.min_height) {
+        node.min_size.y = node.style.min_height;
+    } else if node.style.height.Kind == .FIXED {
+        node.min_size.y = node.style.height.fixed;
+    }
+    if !isnan(node.style.max_width) {
+        node.max_size.x = node.style.max_width;
+    } else if node.style.width.Kind == .FIXED {
+        node.max_size.x = node.style.width.fixed;
+    }
+    if !isnan(node.style.max_height) {
+        node.max_size.y = node.style.max_height;
+    } else if node.style.height.Kind == .FIXED {
+        node.max_size.y = node.style.height.fixed;
+    }
+
+    node.size = clamp(node.size, node.min_size, node.max_size);
+
+    array_add(context.parent_stack, index);
+    array_add(context.scope_stack, key);
+
+    if node.style.width.kind == Sizing.Kind.FIT {
+        node.size.x = fitting_base(node, Direction.HORIZONTAL);
+    } 
+    if node.style.width.kind != Sizing.Kind.FIXED && node.style.min_width == FLOAT32_NAN {
+        node.min_size.x = fitting_base(node, Direction.HORIZONTAL):
+    }
+    if node.style.height.kind == Sizing.Kind.FIT {
+        node.size.y = fitting_base(node, Direction.VERTICAL);
+    } 
+    if node.style.height.kind != Sizing.Kind.FIXED && node.style.min_height == FLOAT32_NAN {
+        node.min_size.y = fitting_base(node, Direction.VERTICAL):
+    }
+
+    // self.frameMeta.?.previousPushedNodeIndex = result.index;
+
+    // if (isNodeActive()) {
+    //     setCursor(result.ptr.style.cursor);
+    // }
+
+    #insert body;
+
+    pop(context.scope_stack);
+    pop(context.parent_stack);
+    context.base_style.* = previous_base_style;
+
+    // self.frameMeta.?.previousPushedNodeIndex = self.nodeStack.pop();
+
+    // const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
+    if (node.style.width.kind == Sizing.Kind.RATIO) {
+        node.size.x = node.style.width.ratio * node.size.y;
+    }
+    if (node.style.height.kind == Sizing.Kind.RATIO) {
+        node.size.y = node.style.height.ratio * node.size.x;
+    }
+
+    node.size = clamp(node.size, node.min_size, node.max_size);
 }
 
 main :: () {
@@ -1097,6 +1215,13 @@ main :: () {
     init_wayland_window(*wayland_connection, *wayland_window, 800, 600);
 
     node_tree: Node_Tree;
+    parent_stack: [..]Node;
+    scope_stack: [..]u64;
+    base_style: Base_Style;
+    context.node_tree = *node_tree;
+    context.parent_stack = *parent_stack;
+    context.scope_stack = *scope_stack;
+    context.base_style = *base_style;
 
     while wayland_window.running {
         event, data, something := next_wayland_event(*wayland_connection);
