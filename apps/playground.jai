@@ -4,7 +4,8 @@
 #import "POSIX";
 #import "Math";
 #import "GL";
-#import,file "../wayland.jai";
+#import "Hash";
+#import,file "../bindings.jai";
 #import,file "../egl.jai";
 
 libc :: #library,system "libc";
@@ -559,19 +560,19 @@ Sizing :: struct {
     kind: Kind;
 
     union {
-        fixed: float32;
+        fixed: float;
         // A ratio with respect to the opposite axis.
-        ratio: float32;
+        ratio: float;
         // Grows to fill available space, taking a proportional share based on
         // the factor. A factor of 2.0 claims twice the space of 1.0.
-        grow: float32;
+        grow: float;
     }
 };
 
 Shadow :: struct {
     offset: Sides;
-    blur_radius: float32;
-    spread: float32;
+    blur_radius: float;
+    spread: float;
     color: Vector4;
 };
 
@@ -594,79 +595,79 @@ Sides :: struct {
     x: Vector2;
     y: Vector2;
 };
-all :: (value: float32) -> Sides {
+all :: (value: float) -> Sides {
     return Sides.{
         x = make_vector2(value),
         y = make_vector2(value),
     };
 }
-in_line :: (value: float32) -> Sides {
+in_line :: (value: float) -> Sides {
     return Sides.{
         x = make_vector2(value),
         y = make_vector2(0.0),
     };
 }
-in_line :: (sides: Sides, value: float32) -> Sides {
+in_line :: (sides: Sides, value: float) -> Sides {
     return Sides.{
         x = make_vector2(value),
         y = sides.y
     };
 }
-block :: (value: float32) -> Sides {
+block :: (value: float) -> Sides {
     return Sides.{
         x = make_vector2(0.0),
         y = make_vector2(value),
     };
 }
-block :: (sides: Sides, value: float32) -> Sides {
+block :: (sides: Sides, value: float) -> Sides {
     return Sides.{
         x = sides.x,
         y = make_vector2(value),
     };
 }
-left :: (value: float32) -> Sides {
+left :: (value: float) -> Sides {
     return Sides.{
         x = Vector2.{ x = value, y = 0.0 },
         y = make_vector2(0.0),
     };
 }
-left :: (sides: Sides, value: float32) -> Sides {
+left :: (sides: Sides, value: float) -> Sides {
     return Sides.{
         x = Vector2.{ x = value, y = sides.x.y },
         y = sides.y,
     };
 }
-right :: (value: float32) -> Sides {
+right :: (value: float) -> Sides {
     return Sides.{
         x = Vector2.{ x = 0.0, y = value },
         y = make_vector2(0.0),
     };
 }
-right :: (sides: Sides, value: float32) -> Sides {
+right :: (sides: Sides, value: float) -> Sides {
     return Sides.{
         x = Vector2.{ x = sides.x.x, y = value },
         y = sides.y,
     };
 }
-top :: (value: float32) -> Sides {
+top :: (value: float) -> Sides {
     return Sides.{
         x = make_vector2(0.0),
         y = Vector2.{ x = value, y = 0.0 },
     };
 }
-top :: (sides: Sides, value: float32) -> Sides {
+top :: (sides: Sides, value: float) -> Sides {
     return Sides.{
         x = sides.x,
         y = Vector2.{ x = value, y = sides.y.y },
     };
 }
-bottom :: (value: float32) -> Sides {
+bottom :: (value: float) -> Sides {
     return Sides.{
         x = make_vector2(0.0),
         y = Vector2.{ x = 0.0, y = value },
     };
 }
-bottom :: (sides: Sides, value: float32) -> Sides {
+bottom :: (sides: Sides, value: float) -> Sides {
     return Sides.{
         x = sides.x,
         y = Vector2.{ x = sides.y.x, y = value },
@@ -685,7 +686,7 @@ Complete_Style :: struct {
     background: Background;
 
     color: Vector4;
-    border_radius: float32;
+    border_radius: float;
     border_color: Vector4;
     border_width: Border_Width;
     border_style: Border_Style;
@@ -697,8 +698,8 @@ Complete_Style :: struct {
     // Will do nothing if the font is not a variable font. If you don't have a
     // variable font, you should use different fonts for different weights.
     font_weight: u32;
-    font_size: float32;
-    line_height: float32;
+    font_size: float;
+    line_height: float;
     text_wrapping: Text_Wrapping;
     cursor: Cursor;
 
@@ -706,11 +707,11 @@ Complete_Style :: struct {
     placement: Placement;
     z_index: u16 = U16_MAX;
 
-    min_width: float32 = FLOAT32_NAN;
-    max_width: float32 = FLOAT32_NAN;
+    min_width: float = FLOAT32_NAN;
+    max_width: float = FLOAT32_NAN;
     width: Sizing;
-    max_height: float32 = FLOAT32_NAN;
-    min_height: float32 = FLOAT32_NAN;
+    max_height: float = FLOAT32_NAN;
+    min_height: float = FLOAT32_NAN;
     height: Sizing;
 
     translate: Vector2;
@@ -726,9 +727,9 @@ Complete_Style :: struct {
 Base_Style :: struct {
     // font: *Font,
     color: Vector4;
-    font_size: float32;
+    font_size: float;
     font_weight: u32;
-    line_height: float32;
+    line_height: float;
     text_wrapping: Text_Wrapping;
     cursor: Cursor;
 };
@@ -748,9 +749,9 @@ from :: (style: Complete_Style) -> Base_Style {
 Gradient_Stop :: struct {
     color: Vector4;
     // Position along the gradient in the [0, 1] range.
-    position: float32;
+    position: float;
 } #no_padding;
-angle :: (degrees: float32) -> Vector2 {
+angle :: (degrees: float) -> Vector2 {
     radians := degrees * PI / 180.0;
     return Vector2.{ x = sin(radians), y = -cos(radians)};
 }
@@ -821,7 +822,7 @@ Style :: struct {
     background: Background = Background.{ kind = UNSET };
 
     color: Vector4 = Vector4_NAN;
-    border_radius: float32 = FLOAT32_NAN;
+    border_radius: float = FLOAT32_NAN;
     border_color: Vector4 = Vector4_NAN;
     border_width: Border_Width = Sides_NAN;
     border_style: Border_Style = UNSET;
@@ -835,8 +836,8 @@ Style :: struct {
 
     // font: *Font = null;
     font_weight: u32 = 0;
-    font_size: float32 = FLOAT32_NAN;
-    line_height: float32 = FLOAT32_NAN;
+    font_size: float = FLOAT32_NAN;
+    line_height: float = FLOAT32_NAN;
     text_wrapping: Text_Wrapping = UNSET;
 
     cursor: Cursor = UNSET;
@@ -845,11 +846,11 @@ Style :: struct {
     placement: Placement = Placement.{ kind = UNSET };
     z_index: u16 = U16_MAX;
 
-    min_width: float32 = FLOAT32_NAN;
-    max_width: float32 = FLOAT32_NAN;
+    min_width: float = FLOAT32_NAN;
+    max_width: float = FLOAT32_NAN;
     width: Sizing = Sizing.{ kind = UNSET };
-    min_height: float32 = FLOAT32_NAN;
-    max_height: float32 = FLOAT32_NAN;
+    min_height: float = FLOAT32_NAN;
+    max_height: float = FLOAT32_NAN;
     height: Sizing = Sizing.{ kind = UNSET };
 
     translate: Vector2 = Vector2_NAN;
@@ -944,12 +945,115 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
     out.y_justification = ifx style.y_justification == xx UNSET then .START else style.y_justification;
 }
 
-// Node_Tree :: struct {
-//     buffer: [..]Node;
-// };
-// node_tree: Node_Tree;
+LayoutGlyph :: struct {
+    index: s32;
+    position: Vector2;
 
-element :: () {
+    textBuf: [4]u8;
+
+    // Meant for the recalculation of the glyphs position if that's required
+    // at some other layouting step
+    advance: Vector2;
+    // Meant for the recalculation of the glyphs position if that's required
+    // at some other layouting step
+    offset: Vector2;
+};
+
+Glyphs :: struct {
+    lineHeight: float;
+    // Distance from line top to the shared baseline, in pixels. The max ascent
+    // across runs, so mixed-size runs in a `composeText` block sit on one
+    // baseline. Drawing offsets every glyph down by this.
+    ascent: float;
+    slice: []LayoutGlyph;
+    // Indices into `slice` where a manual line break was requested before the
+    // glyph at that index. Ascending; may contain duplicates for consecutive
+    // breaks. A value equal to `slice.len` marks a trailing blank line.
+    preBreakIndices: []s64;
+};
+
+Node :: struct {
+    size: Vector2;
+    position: Vector2;
+    min_size: Vector2;
+    max_size: Vector2;
+
+    first_child: s64 = -1;
+    last_child: s64 = -1;
+    next_sibling: s64 = -1;
+    previous_Sibling: s64 = -1;
+    parent: s64 = -1;
+
+    style: Complete_Style;
+
+    content_size: Vector2;
+    // TODO: should we have this? this feels like the wrong solution to the problem, there should be a user-accessible way of changing the offset of the children without a specific property for it
+    // Generally used for scrolling. This is added to the position of the children of this node
+    children_offset: Vector2;
+
+    // Clip rect inherited from ancestors that have constrained size with overflowing children.
+    // Format: [x, y, width, height]. If NAN, no clipping is applied.
+    clipping_rectangle: Vector4 = Vector4_NAN;
+    // glyphs: ?Glyphs = null;
+    key: u64;
+    z: u16;
+
+    tree: *Node_Tree;
+};
+
+Node_Tree :: [..]Node;
+
+put_node :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointer: *Node, index: s64 {
+    index := node_tree.buffer.count;
+    if index != 0 && parent_index == -1 {
+        log_error("multiple root nodes are not allowed");
+        exit(-1);
+    }
+
+    node := Node.{
+        size = ---,
+        position = ---,
+        min_size = ---,
+        max_size = ---,
+
+        style = ---,
+
+        key = ---,
+        z = ---,
+
+        parent = parent_index,
+        tree = node_tree,
+    };
+    if parent_index != -1 {
+        parent := node_tree[parent_index];
+        if parent.last_child != -1 {
+            node_tree[parent.last_child].next_sibling = index;
+        }
+        node.previous_sibling = parent.last_child;
+        if parent.first_child == -1 {
+            parent.first_child = index;
+        }
+        parent.last_child = index;
+    }
+    array_add(node_tree, node);
+    return *node_tree[index], index;
+}
+
+element :: (
+    body: Code, 
+    style := Style.{}, 
+    key := "", 
+    location := #caller_location
+) #expand {
+    key: u64;
+    if key.count > 0 {
+        key = fnv1a_hash(key.data, key.count);
+    } else {
+        // we use the caller location here
+        kye = fnv1a_hash(loc.fully_pathed_filename.data, loc.fully_pathed_filename.count);
+        key = fnv1a_hash(cast(u64) loc.line_number, key);
+        key = fnv1a_hash(cast(u64) loc.character_number, key);
+    }
 }
 
 main :: () {
@@ -991,6 +1095,8 @@ main :: () {
 
     wayland_window: Wayland_Window;
     init_wayland_window(*wayland_connection, *wayland_window, 800, 600);
+
+    node_tree: Node_Tree;
 
     while wayland_window.running {
         event, data, something := next_wayland_event(*wayland_connection);
