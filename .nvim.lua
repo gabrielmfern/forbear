@@ -53,6 +53,7 @@ local function build(show_output)
       if show_output then
         output_buf = vim.api.nvim_create_buf(false, true)
         vim.bo[output_buf].bufhidden = "wipe"
+        vim.bo[output_buf].filetype = "jai_log"
         vim.api.nvim_buf_set_lines(output_buf, 0, -1, false, vim.split(vim.trim(output), "\n"))
         vim.api.nvim_open_win(output_buf, false, { split = "below", win = -1 })
       end
