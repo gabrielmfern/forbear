@@ -9,14 +9,14 @@
 #import "Process";
 #if OS == .LINUX #import "POSIX";
 
+BINDINGS :: #run tprint("%bindings-%.jai", #filepath, OS);
+
 // -------- wayland protocol types generator ========
     PROTOCOLS :: string.[
         "/usr/share/wayland/wayland.xml",
         "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
         "/usr/share/wayland-protocols/stable/linux-dmabuf/linux-dmabuf-v1.xml",
     ];
-
-    OUTPUT :: #run tprint("%bindings.jai", #filepath);
 
     ProtocolType :: enum {
         // s32, 4 bytes
@@ -67,7 +67,7 @@
         enums: [..] Wayland_Enum;
     }
 
-    generate :: (b: *String_Builder) {
+    generate_wayland_bindings :: (b: *String_Builder) {
         interfaces: [..] Interface;
         for PROTOCOLS  parse(it, *interfaces);
         emit(b, interfaces);
@@ -340,19 +340,22 @@ build :: () {
 
     opts: Generate_Bindings_Options;
     array_add(*opts.system_include_paths, ..get_default_system_include_paths());
-    array_add(*opts.system_libraries, Library.{ filename = "libEGL" });
-    array_add(*opts.extra_clang_arguments, "-DEGL_NO_X11");
-    array_add(*opts.path_fragments_to_treat_as_non_system_paths, "EGL/", "KHR/");
-    array_add(*opts.source_files, "/usr/include/EGL/egl.h", "/usr/include/EGL/eglext.h");
-
     b: String_Builder;
-    generate(*b);
+    #if OS == .LINUX {
+        array_add(*opts.system_libraries, Library.{ filename = "libEGL" });
+        array_add(*opts.extra_clang_arguments, "-DEGL_NO_X11");
+        array_add(*opts.path_fragments_to_treat_as_non_system_paths, "EGL/", "KHR/");
+        array_add(*opts.source_files, "/usr/include/EGL/egl.h", "/usr/include/EGL/eglext.h");
+    }
     egl, ok := generate_bindings(opts);
-    assert(ok, "could not generate EGL bindings");
+    assert(ok, "could not generate bindings");
     append(*b, "\n");
     append(*b, builder_to_string(*egl));
-    ok = write_entire_file(OUTPUT, *b);
-    assert(ok, "could not write %", OUTPUT);
+    #if OS == .LINUX {
+        generate_wayland_bindings(*b);
+    }
+    ok = write_entire_file(BINDINGS, *b);
+    assert(ok, "could not write %", BINDINGS);
 
     w := compiler_create_workspace("Main program");
     if !debug {
