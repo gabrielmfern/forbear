@@ -450,7 +450,7 @@
 
                 if window.width * window.height != window.texture_width * window.texture_height {
                     if window.egl_image != null {
-                        if eglDestroyImage(egl_display, window.egl_image) != 1 {
+                        if eglDestroyImage(context.backend.egl_display, window.egl_image) != 1 {
                             log_error("failed to destroy previous egl image: %\n", eglGetError());
                             exit(-1);
                         }
@@ -475,21 +475,21 @@
                     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
                     assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 
-                    window.egl_image = eglCreateImage(egl_display, egl_context, EGL_GL_TEXTURE_2D, cast(EGLClientBuffer) cast(u64) window.texture, null);
+                    window.egl_image = eglCreateImage(context.backend.egl_display, context.backend.egl_context, EGL_GL_TEXTURE_2D, cast(EGLClientBuffer) cast(u64) window.texture, null);
                     if window.egl_image == null {
                         log_error("failed to create frame buffer: %\n", eglGetError());
                         exit(-1);
                     }
 
                     num_planes: s32;
-                    if eglExportDMABUFImageQueryMESA(egl_display, window.egl_image, *window.fourcc, *num_planes, *window.modifiers) != 1 {
+                    if eglExportDMABUFImageQueryMESA(context.backend.egl_display, window.egl_image, *window.fourcc, *num_planes, *window.modifiers) != 1 {
                         log_error("failed in eglExportDMABUFImageQueryMESA: %\n", eglGetError());
                         exit(-1);
                     }
                     if EGL_DEBUGGING {
                         print("num_planes %, fourcc %, modifiers %\n", num_planes, formatInt(window.fourcc, base = 16), formatInt(window.modifiers, base = 16));
                     }
-                    if eglExportDMABUFImageMESA(egl_display, window.egl_image, window.fds.data, window.strides.data, window.offsets.data) != 1 {
+                    if eglExportDMABUFImageMESA(context.backend.egl_display, window.egl_image, window.fds.data, window.strides.data, window.offsets.data) != 1 {
                         log_error("failed in eglExportDMABUFImageMESA: %\n", eglGetError());
                         exit(-1);
                     }
@@ -1073,13 +1073,13 @@
     ) #expand {
         parent_index: s64 = -1;
         parent: *Node;
-        if context.parent_stack.count > 0 {
-            parent_index = context.parent_stack.*[context.parent_stack.count - 1];
-            parent = *context.node_tree.*[parent_index];
+        if context.backend.parent_stack.count > 0 {
+            parent_index = context.backend.parent_stack[context.backend.parent_stack.count - 1];
+            parent = *context.backend.node_tree[parent_index];
         }
-        node, index := append_to_node_tree(context.node_tree, parent_index);
-        previous_base_style := context.base_style.*;
-        complete_with(style, context.base_style, *node.style);
+        node, index := append_to_node_tree(*context.backend.node_tree, parent_index);
+        previous_base_style := context.backend.base_style;
+        complete_with(style, context.backend.base_style, *node.style);
         if parent_index != -1 {
             if style.z_index < U16_MAX {
                 node.z = style.z_index;
@@ -1098,10 +1098,10 @@
             node.key = fnv1a_hash(cast(u64) location.line_number, node.key);
             node.key = fnv1a_hash(cast(u64) location.character_number, node.key);
         }
-        if context.scope_stack.count > 0 {
-            node.key = fnv1a_hash(context.scope_stack.*[context.scope_stack.count - 1], node.key);
+        if context.backend.scope_stack.count > 0 {
+            node.key = fnv1a_hash(context.backend.scope_stack[context.backend.scope_stack.count - 1], node.key);
         }
-        node.key = fnv1a_hash(cast(u64) context.parent_stack.count, node.key);
+        node.key = fnv1a_hash(cast(u64) context.backend.parent_stack.count, node.key);
 
         if node.style.placement.kind == {
             // we don't handle FLOW since the node already has the right position by default
@@ -1152,8 +1152,8 @@
         node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
         node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 
-        array_add(context.parent_stack, index);
-        array_add(context.scope_stack, node.key);
+        array_add(*context.backend.parent_stack, index);
+        array_add(*context.backend.scope_stack, node.key);
 
         if node.style.width.kind == Sizing.Kind.FIT {
             node.size.x = fitting_base(node, Direction.HORIZONTAL);
@@ -1176,9 +1176,9 @@
 
         #insert body;
 
-        pop(context.scope_stack);
-        pop(context.parent_stack);
-        context.base_style.* = previous_base_style;
+        pop(*context.backend.scope_stack);
+        pop(*context.backend.parent_stack);
+        context.backend.base_style = previous_base_style;
 
         // self.frameMeta.?.previousPushedNodeIndex = self.nodeStack.pop();
 

@@ -1,3 +1,5 @@
+#import "Basic";
+#import "GL";
 #import,file "../forbear.jai";
 
 main :: () {
