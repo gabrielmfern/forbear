@@ -382,7 +382,7 @@
         x: u8;
     } #no_padding;
 
-    Wayland_Window :: struct {
+    Wayland_EGL_Window :: struct {
         wl_surface_id: u32;
         wl_buffer_id: u32;
         
@@ -407,7 +407,7 @@
         running: bool = true;
     };
 
-    init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window, width: s32, height: s32) {
+    init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32) {
         window.width = width;
         window.height = height;
 
@@ -418,7 +418,6 @@
         window.xdg_toplevel_id = new_wayland_client_object(connection, Interface_Id.XDG_TOPLEVEL);
         send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Get_Toplevel.{ id = window.xdg_toplevel_id });
         send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
-
         glGenTextures(1, *window.texture);
         glBindTexture(GL_TEXTURE_2D, window.texture);
         window.texture_width = width;
@@ -432,7 +431,7 @@
         assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
     }
 
-    update_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_Window, event: Message_Info, data: *void) {
+    update_wayland_egl_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, event: Message_Info, data: *void) {
         if event.type == {
             case Xdg_Toplevel_Event_Close;
                 window.running = false;
@@ -450,7 +449,7 @@
 
                 if window.width * window.height != window.texture_width * window.texture_height {
                     if window.egl_image != null {
-                        if eglDestroyImage(context.backend.egl_display, window.egl_image) != 1 {
+                        if eglDestroyImage(context.user_interface_builder.backend.egl_display, window.egl_image) != 1 {
                             log_error("failed to destroy previous egl image: %\n", eglGetError());
                             exit(-1);
                         }
@@ -475,21 +474,21 @@
                     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
                     assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 
-                    window.egl_image = eglCreateImage(context.backend.egl_display, context.backend.egl_context, EGL_GL_TEXTURE_2D, cast(EGLClientBuffer) cast(u64) window.texture, null);
+                    window.egl_image = eglCreateImage(context.user_interface_builder.backend.egl_display, context.user_interface_builder.backend.egl_context, EGL_GL_TEXTURE_2D, cast(EGLClientBuffer) cast(u64) window.texture, null);
                     if window.egl_image == null {
                         log_error("failed to create frame buffer: %\n", eglGetError());
                         exit(-1);
                     }
 
                     num_planes: s32;
-                    if eglExportDMABUFImageQueryMESA(context.backend.egl_display, window.egl_image, *window.fourcc, *num_planes, *window.modifiers) != 1 {
+                    if eglExportDMABUFImageQueryMESA(context.user_interface_builder.backend.egl_display, window.egl_image, *window.fourcc, *num_planes, *window.modifiers) != 1 {
                         log_error("failed in eglExportDMABUFImageQueryMESA: %\n", eglGetError());
                         exit(-1);
                     }
                     if EGL_DEBUGGING {
                         print("num_planes %, fourcc %, modifiers %\n", num_planes, formatInt(window.fourcc, base = 16), formatInt(window.modifiers, base = 16));
                     }
-                    if eglExportDMABUFImageMESA(context.backend.egl_display, window.egl_image, window.fds.data, window.strides.data, window.offsets.data) != 1 {
+                    if eglExportDMABUFImageMESA(context.user_interface_builder.backend.egl_display, window.egl_image, window.fds.data, window.strides.data, window.offsets.data) != 1 {
                         log_error("failed in eglExportDMABUFImageMESA: %\n", eglGetError());
                         exit(-1);
                     }
@@ -538,677 +537,15 @@
         }
     }
 
-    Direction :: enum u8 { HORIZONTAL; VERTICAL; };
-    opposite :: (direction: Direction) -> Direction {
-        if #complete direction == {
-            case .HORIZONTAL;
-                return .VERTICAL;
-            case .VERTICAL;
-                return .HORIZONTAL;
-        }
-    }
-
-    Sizing :: struct {
-        Kind :: enum u8 {
-            FIT; FIXED; RATIO; GROW;
-        };
-
-        kind: Kind;
-
-        union {
-            fixed: float;
-            // A ratio with respect to the opposite axis.
-            ratio: float;
-            // Grows to fill available space, taking a proportional share based on
-            // the factor. A factor of 2.0 claims twice the space of 1.0.
-            grow: float;
-        }
-    };
-    fit :: () -> Sizing {
-        return Sizing.{ kind = .FIT };
-    }
-    fixed :: (value: float) -> Sizing {
-        return Sizing.{ kind = .FIXED, fixed = value };
-    }
-    ratio :: (value: float) -> Sizing {
-        return Sizing.{ kind = .RATIO, ratio = value };
-    }
-    grow :: (value: float) -> Sizing {
-        return Sizing.{ kind = .GROW, grow = value };
-    }
-
-    Shadow :: struct {
-        offset: Sides;
-        blur_radius: float;
-        spread: float;
-        color: Vector4;
-    };
-
-    Alignment :: enum u8 { START; CENTER; END; };
-
-    // Will modify the min size of layout boxes that wrap text accordingly
-    // character => largest character
-    // word => largest word
-    // none => all in one line
-    Text_Wrapping :: enum u8 {
-        // Uses a simple greedy algorithm to break on word boundaries
-        WORD;
-        CHARACTER;
-        NONE;
-    };
-
-    Overflow :: enum u8 { VISIBLE; WRAP; };
-
-    Sides :: struct {
-        x: Vector2;
-        y: Vector2;
-    };
-    all :: (value: float) -> Sides {
-        return Sides.{
-            x = make_vector2(value),
-            y = make_vector2(value),
-        };
-    }
-    in_line :: (value: float) -> Sides {
-        return Sides.{
-            x = make_vector2(value),
-            y = make_vector2(0.0),
-        };
-    }
-    in_line :: (sides: Sides, value: float) -> Sides {
-        return Sides.{
-            x = make_vector2(value),
-            y = sides.y
-        };
-    }
-    block :: (value: float) -> Sides {
-        return Sides.{
-            x = make_vector2(0.0),
-            y = make_vector2(value),
-        };
-    }
-    block :: (sides: Sides, value: float) -> Sides {
-        return Sides.{
-            x = sides.x,
-            y = make_vector2(value),
-        };
-    }
-    left :: (value: float) -> Sides {
-        return Sides.{
-            x = Vector2.{ x = value, y = 0.0 },
-            y = make_vector2(0.0),
-        };
-    }
-    left :: (sides: Sides, value: float) -> Sides {
-        return Sides.{
-            x = Vector2.{ x = value, y = sides.x.y },
-            y = sides.y,
-        };
-    }
-    right :: (value: float) -> Sides {
-        return Sides.{
-            x = Vector2.{ x = 0.0, y = value },
-            y = make_vector2(0.0),
-        };
-    }
-    right :: (sides: Sides, value: float) -> Sides {
-        return Sides.{
-            x = Vector2.{ x = sides.x.x, y = value },
-            y = sides.y,
-        };
-    }
-    top :: (value: float) -> Sides {
-        return Sides.{
-            x = make_vector2(0.0),
-            y = Vector2.{ x = value, y = 0.0 },
-        };
-    }
-    top :: (sides: Sides, value: float) -> Sides {
-        return Sides.{
-            x = sides.x,
-            y = Vector2.{ x = value, y = sides.y.y },
-        };
-    }
-    bottom :: (value: float) -> Sides {
-        return Sides.{
-            x = make_vector2(0.0),
-            y = Vector2.{ x = 0.0, y = value },
-        };
-    }
-    bottom :: (sides: Sides, value: float) -> Sides {
-        return Sides.{
-            x = sides.x,
-            y = Vector2.{ x = sides.y.x, y = value },
-        };
-    }
-    Padding :: Sides;
-    Margin :: Sides;
-    Border_Width :: Sides;
-
-    Cursor :: enum u8 { DEFAULT; TEXT; POINTER; };
-
-    Border_Style :: enum u32 { SOLID; DASHED; };
-
-    // -1 in values means it should be inferred by forbear
-    Complete_Style :: struct {
-        background: Background;
-
-        color: Vector4;
-        border_radius: float;
-        border_color: Vector4;
-        border_width: Border_Width;
-        border_style: Border_Style;
-
-        shadow: Shadow;
-
-        // font: *Font;
-
-        // Will do nothing if the font is not a variable font. If you don't have a
-        // variable font, you should use different fonts for different weights.
-        font_weight: u32;
-        font_size: float;
-        line_height: float;
-        text_wrapping: Text_Wrapping;
-        cursor: Cursor;
-
-        overflow: Overflow;
-        placement: Placement;
-        z_index: u16 = U16_MAX;
-
-        min_width: float = FLOAT32_NAN;
-        max_width: float = FLOAT32_NAN;
-        width: Sizing;
-        max_height: float = FLOAT32_NAN;
-        min_height: float = FLOAT32_NAN;
-        height: Sizing;
-
-        translate: Vector2;
-
-        padding: Padding;
-        margin: Margin;
-
-        direction: Direction;
-        x_justification: Alignment;
-        y_justification: Alignment;
-    };
-
-    Base_Style :: struct {
-        // font: *Font,
-        color: Vector4;
-        font_size: float;
-        font_weight: u32;
-        line_height: float;
-        text_wrapping: Text_Wrapping;
-        cursor: Cursor;
-    };
-
-    from :: (style: Complete_Style) -> Base_Style {
-        return Base_Style.{
-            // font = style.font,
-            color = style.color,
-            font_size = style.font_size,
-            font_weight = style.font_weight,
-            line_height = style.line_height,
-            text_wrapping = style.text_wrapping,
-            cursor = style.cursor,
-        };
-    }
-
-    Gradient_Stop :: struct {
-        color: Vector4;
-        // Position along the gradient in the [0, 1] range.
-        position: float;
-    } #no_padding;
-    angle :: (degrees: float) -> Vector2 {
-        radians := degrees * PI / 180.0;
-        return Vector2.{ x = sin(radians), y = -cos(radians)};
-    }
-    to_top :: () -> Vector2 {
-        return Vector2.{ x = 0, y = -1 };
-    }
-    to_bottom :: () -> Vector2 {
-        return Vector2.{ x = 0, y = 1 };
-    }
-    to_left :: () -> Vector2 {
-        return Vector2.{ x = -1, y = 0 };
-    }
-    to_right :: () -> Vector2 {
-        return Vector2.{ x = 1, y = 0 };
-    }
-    to_top_left :: () -> Vector2 {
-        return Vector2.{ x = xx -SQRTH, y = xx -SQRTH };
-    }
-    to_top_right :: () -> Vector2 {
-        return Vector2.{ x = xx SQRTH, y = xx -SQRTH };
-    }
-    to_bottom_left :: () -> Vector2 {
-        return Vector2.{ x = xx -SQRTH, y = xx SQRTH };
-    }
-    to_bottom_right :: () -> Vector2 {
-        return Vector2.{ x = xx SQRTH, y = xx SQRTH };
-    }
-    Linear_Gradient :: struct {
-        // Stops define where each color sits along the gradient; positions are
-        // expected to be monotonically increasing within the [0, 1] range.
-        stops: []Gradient_Stop;
-        // Which way the gradient flows. Defaults to left-to-right.
-        direction: Vector2;
-    };
-
-    Background :: struct {
-        Kind :: enum u8 { 
-            COLOR; 
-            // IMAGE; 
-            GRADIENT; 
-        };
-
-        kind: Kind;
-        union {
-            // image: *Graphics.Image,
-            color: Vector4;
-            // A linear gradient across the element. Defaults to flowing left-to-right;
-            // set `direction` to change which way it runs. See `Linear_Gradient`.
-            gradient: Linear_Gradient;
-        }
-    };
-    color :: (value: Vector4) -> Background {
-        return Background.{ kind = .COLOR, color = value };
-    }
-    gradient :: (value: Linear_Gradient) -> Background {
-        return Background.{ kind = .GRADIENT, gradient = value };
-    }
-
-    Placement :: struct {
-        Kind :: enum u8 { FLOW; FIXED; RELATIVE; };
-
-        kind: Kind;
-        union {
-            fixed: Vector2;
-            relative: Vector2;
-        }
-    };
-    flow :: () -> Placement {
-        return Placement.{ kind = .FLOW };
-    }
-    fixed :: (value: Vector2) -> Placement {
-        return Placement.{ kind = .FIXED, fixed = value };
-    }
-    relative :: (value: Vector2) -> Placement {
-        return Placement.{ kind = .RELATIVE, relative = value };
-    }
-
-    UNSET :: 0xFF;
-    Vector2_NAN :: Vector2.{ x = FLOAT32_NAN, y = FLOAT32_NAN };
-    Vector4_NAN :: Vector4.{ x = FLOAT32_NAN, y = FLOAT32_NAN, z = FLOAT32_NAN, w = FLOAT32_NAN };
-    Sides_NAN :: Sides.{ x = Vector2_NAN, y = Vector2_NAN };
-    Style :: struct {
-        background: Background = Background.{ kind = UNSET };
-
-        color: Vector4 = Vector4_NAN;
-        border_radius: float = FLOAT32_NAN;
-        border_color: Vector4 = Vector4_NAN;
-        border_width: Border_Width = Sides_NAN;
-        border_style: Border_Style = UNSET;
-
-        shadow: Shadow = Shadow.{ 
-            offset = Sides_NAN, 
-            blur_radius = FLOAT32_NAN, 
-            spread = FLOAT32_NAN, 
-            color = Vector4_NAN,
-        };
-
-        // font: *Font = null;
-        font_weight: u32 = 0;
-        font_size: float = FLOAT32_NAN;
-        line_height: float = FLOAT32_NAN;
-        text_wrapping: Text_Wrapping = UNSET;
-
-        cursor: Cursor = UNSET;
-
-        overflow: Overflow = UNSET;
-        placement: Placement = Placement.{ kind = UNSET };
-        z_index: u16 = U16_MAX;
-
-        min_width: float = FLOAT32_NAN;
-        max_width: float = FLOAT32_NAN;
-        width: Sizing = Sizing.{ kind = UNSET };
-        min_height: float = FLOAT32_NAN;
-        max_height: float = FLOAT32_NAN;
-        height: Sizing = Sizing.{ kind = UNSET };
-
-        translate: Vector2 = Vector2_NAN;
-
-        padding: Padding = Sides_NAN;
-        margin: Margin = Sides_NAN;
-
-        x_justification: Alignment = UNSET;
-        y_justification: Alignment = UNSET;
-        direction: Direction = UNSET;
-    };
-
-    overwrite :: (style: Style, other: Style) -> Style {
-        result := style;
-
-        if result.background.kind == xx UNSET  result.background = other.background;
-
-        if isnan(result.color.x)  result.color = other.color;
-        if isnan(result.border_radius)  result.border_radius = other.border_radius;
-        if isnan(result.border_color.x)  result.border_color = other.border_color;
-        if isnan(result.border_width.x.x)  result.border_width = other.border_width;
-        if result.border_style == xx UNSET  result.border_style = other.border_style;
-
-        if isnan(result.shadow.blur_radius)  result.shadow = other.shadow;
-
-        if result.font_weight == 0  result.font_weight = other.font_weight;
-        if isnan(result.font_size)  result.font_size = other.font_size;
-        if isnan(result.line_height)  result.line_height = other.line_height;
-        if result.text_wrapping == xx UNSET  result.text_wrapping = other.text_wrapping;
-        if result.cursor == xx UNSET  result.cursor = other.cursor;
-
-        if result.overflow == xx UNSET  result.overflow = other.overflow;
-        if result.placement.kind == xx UNSET  result.placement = other.placement;
-        if result.z_index == U16_MAX  result.z_index = other.z_index;
-
-        if isnan(result.min_width)  result.min_width = other.min_width;
-        if isnan(result.max_width)  result.max_width = other.max_width;
-        if result.width.kind == xx UNSET  result.width = other.width;
-        if isnan(result.min_height)  result.min_height = other.min_height;
-        if isnan(result.max_height)  result.max_height = other.max_height;
-        if result.height.kind == xx UNSET  result.height = other.height;
-
-        if isnan(result.translate.x)  result.translate = other.translate;
-
-        if isnan(result.padding.x.x)  result.padding = other.padding;
-        if isnan(result.margin.x.x)  result.margin = other.margin;
-
-        if result.x_justification == xx UNSET  result.x_justification = other.x_justification;
-        if result.y_justification == xx UNSET  result.y_justification = other.y_justification;
-        if result.direction == xx UNSET  result.direction = other.direction;
-
-        return result;
-    }
-
-    complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
-        out.background = ifx style.background.kind == xx UNSET then Background.{ kind = .COLOR, color = make_vector4(0.0) } else style.background;
-
-        out.color = ifx isnan(style.color.x) then base.color else style.color;
-
-        out.border_radius = ifx isnan(style.border_radius) then 0.0 else style.border_radius;
-        out.border_color = ifx isnan(style.border_color.x) then make_vector4(0.0) else style.border_color;
-        out.border_width = ifx isnan(style.border_width.x.x) then all(0.0) else style.border_width;
-        out.border_style = ifx style.border_style == xx UNSET then .SOLID else style.border_style;
-
-        out.shadow = style.shadow;
-
-        out.font_weight = ifx style.font_weight == 0 then base.font_weight else style.font_weight;
-        out.font_size = ifx isnan(style.font_size) then base.font_size else style.font_size;
-        out.line_height = ifx isnan(style.line_height) then base.line_height else style.line_height;
-        out.text_wrapping = ifx style.text_wrapping == xx UNSET then base.text_wrapping else style.text_wrapping;
-        out.cursor = ifx style.cursor == xx UNSET then base.cursor else style.cursor;
-
-        out.overflow = ifx style.overflow == xx UNSET then .VISIBLE else style.overflow;
-        out.placement = ifx style.placement.kind == xx UNSET then Placement.{ kind = .FLOW } else style.placement;
-        out.z_index = style.z_index;
-
-        out.min_width = ifx isnan(style.min_width) then -1 else style.min_width;
-        out.max_width = ifx isnan(style.max_width) then -1 else style.max_width;
-        out.width = ifx style.width.kind == xx UNSET then Sizing.{ kind = .FIT } else style.width;
-
-        out.min_height = ifx isnan(style.min_height) then -1 else style.min_height;
-        out.max_height = ifx isnan(style.max_height) then -1 else style.max_height;
-        out.height = ifx style.height.kind == xx UNSET then Sizing.{ kind = .FIT } else style.height;
-
-        out.translate = ifx isnan(style.translate.x) then make_vector2(0.0) else style.translate;
-
-        out.padding = ifx isnan(style.padding.x.x) then all(0.0) else style.padding;
-        out.margin = ifx isnan(style.margin.x.x) then all(0.0) else style.margin;
-
-        out.direction = ifx style.direction == xx UNSET then .HORIZONTAL else style.direction;
-        out.x_justification = ifx style.x_justification == xx UNSET then .START else style.x_justification;
-        out.y_justification = ifx style.y_justification == xx UNSET then .START else style.y_justification;
-    }
-
-    LayoutGlyph :: struct {
-        index: s32;
-        position: Vector2;
-
-        textBuf: [4]u8;
-
-        // Meant for the recalculation of the glyphs position if that's required
-        // at some other layouting step
-        advance: Vector2;
-        // Meant for the recalculation of the glyphs position if that's required
-        // at some other layouting step
-        offset: Vector2;
-    };
-
-    Glyphs :: struct {
-        lineHeight: float;
-        // Distance from line top to the shared baseline, in pixels. The max ascent
-        // across runs, so mixed-size runs in a `composeText` block sit on one
-        // baseline. Drawing offsets every glyph down by this.
-        ascent: float;
-        slice: []LayoutGlyph;
-        // Indices into `slice` where a manual line break was requested before the
-        // glyph at that index. Ascending; may contain duplicates for consecutive
-        // breaks. A value equal to `slice.len` marks a trailing blank line.
-        preBreakIndices: []s64;
-    };
-
-    Node :: struct {
-        size: Vector2;
-        position: Vector2;
-        min_size: Vector2;
-        max_size: Vector2 = Vector2.{FLOAT32_INFINITY, FLOAT32_INFINITY};
-
-        first_child: s64 = -1;
-        last_child: s64 = -1;
-        next_sibling: s64 = -1;
-        previous_sibling: s64 = -1;
-        parent: s64 = -1;
-
-        style: Complete_Style;
-
-        content_size: Vector2;
-        // TODO: should we have this? this feels like the wrong solution to the problem, there should be a user-accessible way of changing the offset of the children without a specific property for it
-        // Generally used for scrolling. This is added to the position of the children of this node
-        children_offset: Vector2;
-
-        // Clip rect inherited from ancestors that have constrained size with overflowing children.
-        // Format: [x, y, width, height]. If NAN, no clipping is applied.
-        clipping_rectangle: Vector4 = Vector4_NAN;
-        // glyphs: ?Glyphs = null;
-        key: u64;
-        z: u16;
-
-        tree: *Node_Tree;
-    };
-    get_sides_axis :: (sides: Sides, direction: Direction) -> Vector2 {
-        if direction == Direction.HORIZONTAL {
-            return sides.x;
-        } else {
-            return sides.y;
-        }
-    }
-    fitting_base :: (node: Node, direction: Direction) -> float {
-        padding_axis := get_sides_axis(node.style.padding, direction);
-        padding := padding_axis.x + padding_axis.y;
-        border_axis := get_sides_axis(node.style.border_width, direction);
-        border := border_axis.x + border_axis.y;
-        return padding + border;
-    }
-
-    Node_Tree :: [..]Node;
-    append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointer: *Node, index: s64 {
-        index := node_tree.count;
-        if index != 0 && parent_index == -1 {
-            log_error("multiple root nodes are not allowed");
-            exit(-1);
-        }
-
-        node := Node.{
-            parent = parent_index,
-            tree = node_tree,
-        };
-        if parent_index != -1 {
-            parent := node_tree.*[parent_index];
-            if parent.last_child != -1 {
-                node_tree.*[parent.last_child].next_sibling = index;
-            }
-            node.previous_sibling = parent.last_child;
-            if parent.first_child == -1 {
-                parent.first_child = index;
-            }
-            parent.last_child = index;
-        }
-        array_add(node_tree, node);
-        return *node_tree.*[index], index;
-    }
-
-    element :: (
-        style := Style.{}, 
-        body: Code = #code {}, 
-        key := "", 
-        location := #caller_location
-    ) #expand {
-        parent_index: s64 = -1;
-        parent: *Node;
-        if context.backend.parent_stack.count > 0 {
-            parent_index = context.backend.parent_stack[context.backend.parent_stack.count - 1];
-            parent = *context.backend.node_tree[parent_index];
-        }
-        node, index := append_to_node_tree(*context.backend.node_tree, parent_index);
-        previous_base_style := context.backend.base_style;
-        complete_with(style, context.backend.base_style, *node.style);
-        if parent_index != -1 {
-            if style.z_index < U16_MAX {
-                node.z = style.z_index;
-            } else if parent.z < U16_MAX {
-                node.z = parent.z + 1;
-            } else {
-                node.z = parent.z;
-            }
-        }
-
-        if key.count > 0 {
-            node.key = fnv1a_hash(key.data, key.count);
-        } else {
-            // we use the caller location here
-            node.key = fnv1a_hash(location.fully_pathed_filename.data, location.fully_pathed_filename.count);
-            node.key = fnv1a_hash(cast(u64) location.line_number, node.key);
-            node.key = fnv1a_hash(cast(u64) location.character_number, node.key);
-        }
-        if context.backend.scope_stack.count > 0 {
-            node.key = fnv1a_hash(context.backend.scope_stack[context.backend.scope_stack.count - 1], node.key);
-        }
-        node.key = fnv1a_hash(cast(u64) context.backend.parent_stack.count, node.key);
-
-        if node.style.placement.kind == {
-            // we don't handle FLOW since the node already has the right position by default
-            case Placement.Kind.FIXED;
-                node.position = node.style.placement.fixed;
-            case Placement.Kind.RELATIVE;
-                node.position = node.style.placement.relative;
-        }
-        if node.style.width.kind == {
-            // we don't handle FIT or GROW since the node already has the right width by default
-            case Sizing.Kind.FIXED;
-                node.size.x = node.style.width.fixed;
-            case Sizing.Kind.RATIO;
-                if node.style.height.kind == Sizing.Kind.FIXED {
-                    node.size.x = node.style.height.fixed * node.style.width.ratio;
-                }
-        }
-        if node.style.height.kind == {
-            // we don't handle FIT or GROW since the node already has the right width by default
-            case Sizing.Kind.FIXED;
-                node.size.y = node.style.height.fixed;
-            case Sizing.Kind.RATIO;
-                if node.style.width.kind == Sizing.Kind.FIXED {
-                    node.size.y = node.style.width.fixed * node.style.height.ratio;
-                }
-        }
-        if !isnan(node.style.min_width) {
-            node.min_size.x = node.style.min_width;
-        } else if node.style.width.kind == .FIXED {
-            node.min_size.x = node.style.width.fixed;
-        }
-        if !isnan(node.style.min_height) {
-            node.min_size.y = node.style.min_height;
-        } else if node.style.height.kind == .FIXED {
-            node.min_size.y = node.style.height.fixed;
-        }
-        if !isnan(node.style.max_width) {
-            node.max_size.x = node.style.max_width;
-        } else if node.style.width.kind == .FIXED {
-            node.max_size.x = node.style.width.fixed;
-        }
-        if !isnan(node.style.max_height) {
-            node.max_size.y = node.style.max_height;
-        } else if node.style.height.kind == .FIXED {
-            node.max_size.y = node.style.height.fixed;
-        }
-
-        node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
-        node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
-
-        array_add(*context.backend.parent_stack, index);
-        array_add(*context.backend.scope_stack, node.key);
-
-        if node.style.width.kind == Sizing.Kind.FIT {
-            node.size.x = fitting_base(node, Direction.HORIZONTAL);
-        } 
-        if node.style.width.kind != Sizing.Kind.FIXED && node.style.min_width == FLOAT32_NAN {
-            node.min_size.x = fitting_base(node, Direction.HORIZONTAL);
-        }
-        if node.style.height.kind == Sizing.Kind.FIT {
-            node.size.y = fitting_base(node, Direction.VERTICAL);
-        } 
-        if node.style.height.kind != Sizing.Kind.FIXED && node.style.min_height == FLOAT32_NAN {
-            node.min_size.y = fitting_base(node, Direction.VERTICAL);
-        }
-
-        // self.frameMeta.?.previousPushedNodeIndex = result.index;
-
-        // if (isNodeActive()) {
-        //     setCursor(result.ptr.style.cursor);
-        // }
-
-        #insert body;
-
-        pop(*context.backend.scope_stack);
-        pop(*context.backend.parent_stack);
-        context.backend.base_style = previous_base_style;
-
-        // self.frameMeta.?.previousPushedNodeIndex = self.nodeStack.pop();
-
-        // const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
-        if (node.style.width.kind == Sizing.Kind.RATIO) {
-            node.size.x = node.style.width.ratio * node.size.y;
-        }
-        if (node.style.height.kind == Sizing.Kind.RATIO) {
-            node.size.y = node.style.height.ratio * node.size.x;
-        }
-
-        node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
-        node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
-    }
-
-    #add_context backend: *Wayland_Backend;
-
-    Wayland_Backend :: struct {
-        node_tree: Node_Tree;
-        parent_stack: [..]s64;
-        scope_stack: [..]u64;
-        base_style: Base_Style;
-
+    Wayland_EGL_Backend :: struct {
         egl_display: EGLDisplay;
         egl_context: EGLContext;
 
         connection: Wayland_Connection;
     };
+    init_wayland_egl_backend :: (backend: *Wayland_EGL_Backend) {
+        init_wayland_connection(*backend.connection);
 
-    init_wayland_egl :: (backend: *Wayland_Backend) {
         backend.egl_display = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, null, null);
         major: s32;
         minor: s32;
@@ -1243,10 +580,684 @@
         }
     }
 
-    init_wayland_backend :: (backend: *Wayland_Backend) {
-        init_wayland_connection(*backend.connection);
+    Backend :: Wayland_EGL_Backend;
+}
 
-        context.backend = backend;
+User_Interface_Builder :: struct {
+    node_tree: Node_Tree;
+
+    parent_stack: [..]s64;
+    scope_stack: [..]u64;
+    base_style: Base_Style;
+
+    backend: *Backend;
+};
+#add_context user_interface_builder: *User_Interface_Builder;
+
+Direction :: enum u8 { HORIZONTAL; VERTICAL; };
+opposite :: (direction: Direction) -> Direction {
+    if #complete direction == {
+    case .HORIZONTAL;
+        return .VERTICAL;
+    case .VERTICAL;
+        return .HORIZONTAL;
     }
+}
+
+Sizing :: struct {
+    Kind :: enum u8 {
+        FIT; FIXED; RATIO; GROW;
+    };
+
+    kind: Kind;
+
+    union {
+        fixed: float;
+        // A ratio with respect to the opposite axis.
+        ratio: float;
+        // Grows to fill available space, taking a proportional share based on
+        // the factor. A factor of 2.0 claims twice the space of 1.0.
+        grow: float;
+    }
+};
+fit :: () -> Sizing {
+    return Sizing.{ kind = .FIT };
+}
+fixed :: (value: float) -> Sizing {
+    return Sizing.{ kind = .FIXED, fixed = value };
+}
+ratio :: (value: float) -> Sizing {
+    return Sizing.{ kind = .RATIO, ratio = value };
+}
+grow :: (value: float) -> Sizing {
+    return Sizing.{ kind = .GROW, grow = value };
+}
+
+Shadow :: struct {
+    offset: Sides;
+    blur_radius: float;
+    spread: float;
+    color: Vector4;
+};
+
+Alignment :: enum u8 { START; CENTER; END; };
+
+// Will modify the min size of layout boxes that wrap text accordingly
+// character => largest character
+// word => largest word
+// none => all in one line
+Text_Wrapping :: enum u8 {
+    // Uses a simple greedy algorithm to break on word boundaries
+    WORD;
+    CHARACTER;
+    NONE;
+};
+
+Overflow :: enum u8 { VISIBLE; WRAP; };
+
+Sides :: struct {
+    x: Vector2;
+    y: Vector2;
+};
+all :: (value: float) -> Sides {
+    return Sides.{
+        x = make_vector2(value),
+        y = make_vector2(value),
+    };
+}
+in_line :: (value: float) -> Sides {
+    return Sides.{
+        x = make_vector2(value),
+        y = make_vector2(0.0),
+    };
+}
+in_line :: (sides: Sides, value: float) -> Sides {
+    return Sides.{
+        x = make_vector2(value),
+        y = sides.y
+    };
+}
+block :: (value: float) -> Sides {
+    return Sides.{
+        x = make_vector2(0.0),
+        y = make_vector2(value),
+    };
+}
+block :: (sides: Sides, value: float) -> Sides {
+    return Sides.{
+        x = sides.x,
+        y = make_vector2(value),
+    };
+}
+left :: (value: float) -> Sides {
+    return Sides.{
+        x = Vector2.{ x = value, y = 0.0 },
+        y = make_vector2(0.0),
+    };
+}
+left :: (sides: Sides, value: float) -> Sides {
+    return Sides.{
+        x = Vector2.{ x = value, y = sides.x.y },
+        y = sides.y,
+    };
+}
+right :: (value: float) -> Sides {
+    return Sides.{
+        x = Vector2.{ x = 0.0, y = value },
+        y = make_vector2(0.0),
+    };
+}
+right :: (sides: Sides, value: float) -> Sides {
+    return Sides.{
+        x = Vector2.{ x = sides.x.x, y = value },
+        y = sides.y,
+    };
+}
+top :: (value: float) -> Sides {
+    return Sides.{
+        x = make_vector2(0.0),
+        y = Vector2.{ x = value, y = 0.0 },
+    };
+}
+top :: (sides: Sides, value: float) -> Sides {
+    return Sides.{
+        x = sides.x,
+        y = Vector2.{ x = value, y = sides.y.y },
+    };
+}
+bottom :: (value: float) -> Sides {
+    return Sides.{
+        x = make_vector2(0.0),
+        y = Vector2.{ x = 0.0, y = value },
+    };
+}
+bottom :: (sides: Sides, value: float) -> Sides {
+    return Sides.{
+        x = sides.x,
+        y = Vector2.{ x = sides.y.x, y = value },
+    };
+}
+Padding :: Sides;
+Margin :: Sides;
+Border_Width :: Sides;
+
+Cursor :: enum u8 { DEFAULT; TEXT; POINTER; };
+
+Border_Style :: enum u32 { SOLID; DASHED; };
+
+// -1 in values means it should be inferred by forbear
+Complete_Style :: struct {
+    background: Background;
+
+    color: Vector4;
+    border_radius: float;
+    border_color: Vector4;
+    border_width: Border_Width;
+    border_style: Border_Style;
+
+    shadow: Shadow;
+
+    // font: *Font;
+
+    // Will do nothing if the font is not a variable font. If you don't have a
+    // variable font, you should use different fonts for different weights.
+    font_weight: u32;
+    font_size: float;
+    line_height: float;
+    text_wrapping: Text_Wrapping;
+    cursor: Cursor;
+
+    overflow: Overflow;
+    placement: Placement;
+    z_index: u16 = U16_MAX;
+
+    min_width: float = FLOAT32_NAN;
+    max_width: float = FLOAT32_NAN;
+    width: Sizing;
+    max_height: float = FLOAT32_NAN;
+    min_height: float = FLOAT32_NAN;
+    height: Sizing;
+
+    translate: Vector2;
+
+    padding: Padding;
+    margin: Margin;
+
+    direction: Direction;
+    x_justification: Alignment;
+    y_justification: Alignment;
+};
+
+Base_Style :: struct {
+    // font: *Font,
+    color: Vector4 = Vector4.{ 1.0, 1.0, 1.0, 1.0 };
+    font_size: float = 16.0;
+    font_weight: u32 = 600;
+    line_height: float = 1.0;
+    text_wrapping: Text_Wrapping = .WORD;
+    cursor: Cursor = .DEFAULT;
+};
+
+from :: (style: Complete_Style) -> Base_Style {
+    return Base_Style.{
+        // font = style.font,
+        color = style.color,
+        font_size = style.font_size,
+        font_weight = style.font_weight,
+        line_height = style.line_height,
+        text_wrapping = style.text_wrapping,
+        cursor = style.cursor,
+    };
+}
+
+Gradient_Stop :: struct {
+    color: Vector4;
+    // Position along the gradient in the [0, 1] range.
+    position: float;
+} #no_padding;
+angle :: (degrees: float) -> Vector2 {
+    radians := degrees * PI / 180.0;
+    return Vector2.{ x = sin(radians), y = -cos(radians)};
+}
+to_top :: () -> Vector2 {
+    return Vector2.{ x = 0, y = -1 };
+}
+to_bottom :: () -> Vector2 {
+    return Vector2.{ x = 0, y = 1 };
+}
+to_left :: () -> Vector2 {
+    return Vector2.{ x = -1, y = 0 };
+}
+to_right :: () -> Vector2 {
+    return Vector2.{ x = 1, y = 0 };
+}
+to_top_left :: () -> Vector2 {
+    return Vector2.{ x = xx -SQRTH, y = xx -SQRTH };
+}
+to_top_right :: () -> Vector2 {
+    return Vector2.{ x = xx SQRTH, y = xx -SQRTH };
+}
+to_bottom_left :: () -> Vector2 {
+    return Vector2.{ x = xx -SQRTH, y = xx SQRTH };
+}
+to_bottom_right :: () -> Vector2 {
+    return Vector2.{ x = xx SQRTH, y = xx SQRTH };
+}
+Linear_Gradient :: struct {
+    // Stops define where each color sits along the gradient; positions are
+    // expected to be monotonically increasing within the [0, 1] range.
+    stops: []Gradient_Stop;
+    // Which way the gradient flows. Defaults to left-to-right.
+    direction: Vector2;
+};
+
+Background :: struct {
+    Kind :: enum u8 { 
+        COLOR; 
+        // IMAGE; 
+        GRADIENT; 
+    };
+
+    kind: Kind;
+    union {
+        // image: *Graphics.Image,
+        color: Vector4;
+        // A linear gradient across the element. Defaults to flowing left-to-right;
+        // set `direction` to change which way it runs. See `Linear_Gradient`.
+        gradient: Linear_Gradient;
+    }
+};
+color :: (value: Vector4) -> Background {
+    return Background.{ kind = .COLOR, color = value };
+}
+gradient :: (value: Linear_Gradient) -> Background {
+    return Background.{ kind = .GRADIENT, gradient = value };
+}
+
+Placement :: struct {
+    Kind :: enum u8 { FLOW; FIXED; RELATIVE; };
+
+    kind: Kind;
+    union {
+        fixed: Vector2;
+        relative: Vector2;
+    }
+};
+flow :: () -> Placement {
+    return Placement.{ kind = .FLOW };
+}
+fixed :: (value: Vector2) -> Placement {
+    return Placement.{ kind = .FIXED, fixed = value };
+}
+relative :: (value: Vector2) -> Placement {
+    return Placement.{ kind = .RELATIVE, relative = value };
+}
+
+UNSET :: 0xFF;
+Vector2_NAN :: Vector2.{ x = FLOAT32_NAN, y = FLOAT32_NAN };
+Vector4_NAN :: Vector4.{ x = FLOAT32_NAN, y = FLOAT32_NAN, z = FLOAT32_NAN, w = FLOAT32_NAN };
+Sides_NAN :: Sides.{ x = Vector2_NAN, y = Vector2_NAN };
+Style :: struct {
+    background: Background = Background.{ kind = UNSET };
+
+    color: Vector4 = Vector4_NAN;
+    border_radius: float = FLOAT32_NAN;
+    border_color: Vector4 = Vector4_NAN;
+    border_width: Border_Width = Sides_NAN;
+    border_style: Border_Style = UNSET;
+
+    shadow: Shadow = Shadow.{ 
+        offset = Sides_NAN, 
+        blur_radius = FLOAT32_NAN, 
+        spread = FLOAT32_NAN, 
+        color = Vector4_NAN,
+    };
+
+    // font: *Font = null;
+    font_weight: u32 = 0;
+    font_size: float = FLOAT32_NAN;
+    line_height: float = FLOAT32_NAN;
+    text_wrapping: Text_Wrapping = UNSET;
+
+    cursor: Cursor = UNSET;
+
+    overflow: Overflow = UNSET;
+    placement: Placement = Placement.{ kind = UNSET };
+    z_index: u16 = U16_MAX;
+
+    min_width: float = FLOAT32_NAN;
+    max_width: float = FLOAT32_NAN;
+    width: Sizing = Sizing.{ kind = UNSET };
+    min_height: float = FLOAT32_NAN;
+    max_height: float = FLOAT32_NAN;
+    height: Sizing = Sizing.{ kind = UNSET };
+
+    translate: Vector2 = Vector2_NAN;
+
+    padding: Padding = Sides_NAN;
+    margin: Margin = Sides_NAN;
+
+    x_justification: Alignment = UNSET;
+    y_justification: Alignment = UNSET;
+    direction: Direction = UNSET;
+};
+
+overwrite :: (style: Style, other: Style) -> Style {
+    result := style;
+
+    if result.background.kind == xx UNSET  result.background = other.background;
+
+    if isnan(result.color.x)  result.color = other.color;
+    if isnan(result.border_radius)  result.border_radius = other.border_radius;
+    if isnan(result.border_color.x)  result.border_color = other.border_color;
+    if isnan(result.border_width.x.x)  result.border_width = other.border_width;
+    if result.border_style == xx UNSET  result.border_style = other.border_style;
+
+    if isnan(result.shadow.blur_radius)  result.shadow = other.shadow;
+
+    if result.font_weight == 0  result.font_weight = other.font_weight;
+    if isnan(result.font_size)  result.font_size = other.font_size;
+    if isnan(result.line_height)  result.line_height = other.line_height;
+    if result.text_wrapping == xx UNSET  result.text_wrapping = other.text_wrapping;
+    if result.cursor == xx UNSET  result.cursor = other.cursor;
+
+    if result.overflow == xx UNSET  result.overflow = other.overflow;
+    if result.placement.kind == xx UNSET  result.placement = other.placement;
+    if result.z_index == U16_MAX  result.z_index = other.z_index;
+
+    if isnan(result.min_width)  result.min_width = other.min_width;
+    if isnan(result.max_width)  result.max_width = other.max_width;
+    if result.width.kind == xx UNSET  result.width = other.width;
+    if isnan(result.min_height)  result.min_height = other.min_height;
+    if isnan(result.max_height)  result.max_height = other.max_height;
+    if result.height.kind == xx UNSET  result.height = other.height;
+
+    if isnan(result.translate.x)  result.translate = other.translate;
+
+    if isnan(result.padding.x.x)  result.padding = other.padding;
+    if isnan(result.margin.x.x)  result.margin = other.margin;
+
+    if result.x_justification == xx UNSET  result.x_justification = other.x_justification;
+    if result.y_justification == xx UNSET  result.y_justification = other.y_justification;
+    if result.direction == xx UNSET  result.direction = other.direction;
+
+    return result;
+}
+
+complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
+    out.background = ifx style.background.kind == xx UNSET then Background.{ kind = .COLOR, color = make_vector4(0.0) } else style.background;
+
+    out.color = ifx isnan(style.color.x) then base.color else style.color;
+
+    out.border_radius = ifx isnan(style.border_radius) then 0.0 else style.border_radius;
+    out.border_color = ifx isnan(style.border_color.x) then make_vector4(0.0) else style.border_color;
+    out.border_width = ifx isnan(style.border_width.x.x) then all(0.0) else style.border_width;
+    out.border_style = ifx style.border_style == xx UNSET then .SOLID else style.border_style;
+
+    out.shadow = style.shadow;
+
+    out.font_weight = ifx style.font_weight == 0 then base.font_weight else style.font_weight;
+    out.font_size = ifx isnan(style.font_size) then base.font_size else style.font_size;
+    out.line_height = ifx isnan(style.line_height) then base.line_height else style.line_height;
+    out.text_wrapping = ifx style.text_wrapping == xx UNSET then base.text_wrapping else style.text_wrapping;
+    out.cursor = ifx style.cursor == xx UNSET then base.cursor else style.cursor;
+
+    out.overflow = ifx style.overflow == xx UNSET then .VISIBLE else style.overflow;
+    out.placement = ifx style.placement.kind == xx UNSET then Placement.{ kind = .FLOW } else style.placement;
+    out.z_index = style.z_index;
+
+    out.min_width = ifx isnan(style.min_width) then -1 else style.min_width;
+    out.max_width = ifx isnan(style.max_width) then -1 else style.max_width;
+    out.width = ifx style.width.kind == xx UNSET then Sizing.{ kind = .FIT } else style.width;
+
+    out.min_height = ifx isnan(style.min_height) then -1 else style.min_height;
+    out.max_height = ifx isnan(style.max_height) then -1 else style.max_height;
+    out.height = ifx style.height.kind == xx UNSET then Sizing.{ kind = .FIT } else style.height;
+
+    out.translate = ifx isnan(style.translate.x) then make_vector2(0.0) else style.translate;
+
+    out.padding = ifx isnan(style.padding.x.x) then all(0.0) else style.padding;
+    out.margin = ifx isnan(style.margin.x.x) then all(0.0) else style.margin;
+
+    out.direction = ifx style.direction == xx UNSET then .HORIZONTAL else style.direction;
+    out.x_justification = ifx style.x_justification == xx UNSET then .START else style.x_justification;
+    out.y_justification = ifx style.y_justification == xx UNSET then .START else style.y_justification;
+}
+
+LayoutGlyph :: struct {
+    index: s32;
+    position: Vector2;
+
+    textBuf: [4]u8;
+
+    // Meant for the recalculation of the glyphs position if that's required
+    // at some other layouting step
+    advance: Vector2;
+    // Meant for the recalculation of the glyphs position if that's required
+    // at some other layouting step
+    offset: Vector2;
+};
+
+Glyphs :: struct {
+    lineHeight: float;
+    // Distance from line top to the shared baseline, in pixels. The max ascent
+    // across runs, so mixed-size runs in a `composeText` block sit on one
+    // baseline. Drawing offsets every glyph down by this.
+    ascent: float;
+    slice: []LayoutGlyph;
+    // Indices into `slice` where a manual line break was requested before the
+    // glyph at that index. Ascending; may contain duplicates for consecutive
+    // breaks. A value equal to `slice.len` marks a trailing blank line.
+    preBreakIndices: []s64;
+};
+
+Node :: struct {
+    size: Vector2;
+    position: Vector2;
+    min_size: Vector2;
+    max_size: Vector2 = Vector2.{FLOAT32_INFINITY, FLOAT32_INFINITY};
+
+    first_child: s64 = -1;
+    last_child: s64 = -1;
+    next_sibling: s64 = -1;
+    previous_sibling: s64 = -1;
+    parent: s64 = -1;
+
+    style: Complete_Style;
+
+    content_size: Vector2;
+    // TODO: should we have this? this feels like the wrong solution to the problem, there should be a user-accessible way of changing the offset of the children without a specific property for it
+    // Generally used for scrolling. This is added to the position of the children of this node
+    children_offset: Vector2;
+
+    // Clip rect inherited from ancestors that have constrained size with overflowing children.
+    // Format: [x, y, width, height]. If NAN, no clipping is applied.
+    clipping_rectangle: Vector4 = Vector4_NAN;
+    // glyphs: ?Glyphs = null;
+    key: u64;
+    z: u16;
+
+    tree: *Node_Tree;
+};
+get_sides_axis :: (sides: Sides, direction: Direction) -> Vector2 {
+    if direction == Direction.HORIZONTAL {
+        return sides.x;
+    } else {
+        return sides.y;
+    }
+}
+fitting_base :: (node: Node, direction: Direction) -> float {
+    padding_axis := get_sides_axis(node.style.padding, direction);
+    padding := padding_axis.x + padding_axis.y;
+    border_axis := get_sides_axis(node.style.border_width, direction);
+    border := border_axis.x + border_axis.y;
+    return padding + border;
+}
+
+Node_Tree :: [..]Node;
+append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointer: *Node, index: s64 {
+    index := node_tree.count;
+    if index != 0 && parent_index == -1 {
+        log_error("multiple root nodes are not allowed");
+        exit(-1);
+    }
+
+    node := Node.{
+        parent = parent_index,
+        tree = node_tree,
+    };
+    if parent_index != -1 {
+        parent := node_tree.*[parent_index];
+        if parent.last_child != -1 {
+            node_tree.*[parent.last_child].next_sibling = index;
+        }
+        node.previous_sibling = parent.last_child;
+        if parent.first_child == -1 {
+            parent.first_child = index;
+        }
+        parent.last_child = index;
+    }
+    array_add(node_tree, node);
+    return *node_tree.*[index], index;
+}
+
+element :: (
+    style := Style.{}, 
+    body: Code = #code {}, 
+    key := "", 
+    location := #caller_location
+) #expand {
+    parent_index: s64 = -1;
+    parent: *Node;
+    if context.user_interface_builder.parent_stack.count > 0 {
+        parent_index = context.user_interface_builder.parent_stack[context.user_interface_builder.parent_stack.count - 1];
+        parent = *context.user_interface_builder.node_tree[parent_index];
+    }
+    node, index := append_to_node_tree(*context.user_interface_builder.node_tree, parent_index);
+    previous_base_style := context.user_interface_builder.base_style;
+    complete_with(style, context.user_interface_builder.base_style, *node.style);
+    if parent_index != -1 {
+        if style.z_index < U16_MAX {
+            node.z = style.z_index;
+        } else if parent.z < U16_MAX {
+            node.z = parent.z + 1;
+        } else {
+            node.z = parent.z;
+        }
+    }
+
+    if key.count > 0 {
+        node.key = fnv1a_hash(key.data, key.count);
+    } else {
+        // we use the caller location here
+        node.key = fnv1a_hash(location.fully_pathed_filename.data, location.fully_pathed_filename.count);
+        node.key = fnv1a_hash(cast(u64) location.line_number, node.key);
+        node.key = fnv1a_hash(cast(u64) location.character_number, node.key);
+    }
+    if context.user_interface_builder.scope_stack.count > 0 {
+        node.key = fnv1a_hash(context.user_interface_builder.scope_stack[context.user_interface_builder.scope_stack.count - 1], node.key);
+    }
+    node.key = fnv1a_hash(cast(u64) context.user_interface_builder.parent_stack.count, node.key);
+
+    if node.style.placement.kind == {
+        // we don't handle FLOW since the node already has the right position by default
+        case Placement.Kind.FIXED;
+            node.position = node.style.placement.fixed;
+        case Placement.Kind.RELATIVE;
+            node.position = node.style.placement.relative;
+    }
+    if node.style.width.kind == {
+        // we don't handle FIT or GROW since the node already has the right width by default
+        case Sizing.Kind.FIXED;
+            node.size.x = node.style.width.fixed;
+        case Sizing.Kind.RATIO;
+            if node.style.height.kind == Sizing.Kind.FIXED {
+                node.size.x = node.style.height.fixed * node.style.width.ratio;
+            }
+    }
+    if node.style.height.kind == {
+        // we don't handle FIT or GROW since the node already has the right width by default
+        case Sizing.Kind.FIXED;
+            node.size.y = node.style.height.fixed;
+        case Sizing.Kind.RATIO;
+            if node.style.width.kind == Sizing.Kind.FIXED {
+                node.size.y = node.style.width.fixed * node.style.height.ratio;
+            }
+    }
+    if !isnan(node.style.min_width) {
+        node.min_size.x = node.style.min_width;
+    } else if node.style.width.kind == .FIXED {
+        node.min_size.x = node.style.width.fixed;
+    }
+    if !isnan(node.style.min_height) {
+        node.min_size.y = node.style.min_height;
+    } else if node.style.height.kind == .FIXED {
+        node.min_size.y = node.style.height.fixed;
+    }
+    if !isnan(node.style.max_width) {
+        node.max_size.x = node.style.max_width;
+    } else if node.style.width.kind == .FIXED {
+        node.max_size.x = node.style.width.fixed;
+    }
+    if !isnan(node.style.max_height) {
+        node.max_size.y = node.style.max_height;
+    } else if node.style.height.kind == .FIXED {
+        node.max_size.y = node.style.height.fixed;
+    }
+
+    node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
+    node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
+
+    array_add(*context.user_interface_builder.parent_stack, index);
+    array_add(*context.user_interface_builder.scope_stack, node.key);
+
+    if node.style.width.kind == Sizing.Kind.FIT {
+        node.size.x = fitting_base(node, Direction.HORIZONTAL);
+    } 
+    if node.style.width.kind != Sizing.Kind.FIXED && node.style.min_width == FLOAT32_NAN {
+        node.min_size.x = fitting_base(node, Direction.HORIZONTAL);
+    }
+    if node.style.height.kind == Sizing.Kind.FIT {
+        node.size.y = fitting_base(node, Direction.VERTICAL);
+    } 
+    if node.style.height.kind != Sizing.Kind.FIXED && node.style.min_height == FLOAT32_NAN {
+        node.min_size.y = fitting_base(node, Direction.VERTICAL);
+    }
+
+    // self.frameMeta.?.previousPushedNodeIndex = result.index;
+
+    // if (isNodeActive()) {
+    //     setCursor(result.ptr.style.cursor);
+    // }
+
+    #insert body;
+
+    pop(*context.user_interface_builder.scope_stack);
+    pop(*context.user_interface_builder.parent_stack);
+    context.user_interface_builder.base_style = previous_base_style;
+
+    // self.frameMeta.?.previousPushedNodeIndex = self.nodeStack.pop();
+
+    // const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
+    if (node.style.width.kind == Sizing.Kind.RATIO) {
+        node.size.x = node.style.width.ratio * node.size.y;
+    }
+    if (node.style.height.kind == Sizing.Kind.RATIO) {
+        node.size.y = node.style.height.ratio * node.size.x;
+    }
+
+    node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
+    node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
+}
+element :: (body: Code, location := #caller_location) #expand {
+    element(body = body, location = location);
+}
+element :: (style: Style, key: string, location := #caller_location) #expand {
+    element(style = style, key = key, location = location);
+}
+
+init_forbear :: (backend: *Backend, base_style: Base_Style = Base_Style.{}) {
+    context.user_interface_builder.backend = backend;
+    context.user_interface_builder.base_style = base_style;
 }
 
