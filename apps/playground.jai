@@ -10,8 +10,8 @@ main :: () {
     while wayland_window.running {
         event, data, something := next_wayland_event(*wayland_backend.connection);
         if something {
-            update_wayland_window(*wayland_connection, *wayland_window, event, data);
-            update_wayland_connection(*wayland_connection, event, data);
+            update_wayland_window(*wayland_backend.connection, *wayland_window, event, data);
+            update_wayland_connection(*wayland_backend.connection, event, data);
         }
 
         element(Style.{ });
