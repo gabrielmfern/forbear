@@ -6,10 +6,16 @@ local severities = {
   Info = vim.diagnostic.severity.INFO,
 }
 local output_buf
+local jai = "jai-linux"
+if vim.fn.has("mac") == 1 then
+  jai = "jai-macos"
+elseif vim.fn.has("win32") == 1 then
+  jai = "jai"
+end
 
 local function build(show_output)
   vim.cmd("silent! wall")
-  vim.system({ "jai-linux", "build.jai" }, { cwd = root, text = true }, function(result)
+  vim.system({ jai, "build.jai" }, { cwd = root, text = true }, function(result)
     vim.schedule(function()
       vim.diagnostic.reset(ns)
       local output = result.stdout .. result.stderr
