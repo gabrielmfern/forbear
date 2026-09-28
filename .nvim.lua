@@ -15,6 +15,7 @@ end
 
 local function build(show_output)
   vim.cmd("silent! wall")
+  local start = vim.uv.hrtime()
   vim.system({ jai, "build.jai" }, { cwd = root, text = true }, function(result)
     vim.schedule(function()
       vim.diagnostic.reset(ns)
@@ -46,7 +47,7 @@ local function build(show_output)
         vim.api.nvim_buf_delete(output_buf, { force = true })
       end
       if result.code == 0 then
-        vim.notify("jai: build ok")
+        vim.notify(string.format("jai: build ok (%.2fs)", (vim.uv.hrtime() - start) / 1e9))
       else
         vim.notify("jai: build failed", vim.log.levels.ERROR)
       end

@@ -67,16 +67,10 @@
         enums: [..] Wayland_Enum;
     }
 
-    generate :: () {
-        set_build_options_dc(.{do_output=false});
-
+    generate :: (b: *String_Builder) {
         interfaces: [..] Interface;
         for PROTOCOLS  parse(it, *interfaces);
-
-        b: String_Builder;
-        emit(*b, interfaces);
-        ok := write_entire_file(OUTPUT, *b);
-        assert(ok, "could not write %", OUTPUT);
+        emit(b, interfaces);
     }
 
     parse :: (path: string, interfaces: *[..] Interface) {
@@ -325,8 +319,6 @@
 #run build();
 
 build :: () {
-    generate();
-
     debug := get_build_options().array_bounds_check == .ON;
     jails :: #exists(JAILS_DIAGNOSTICS_BUILD);
 
@@ -353,7 +345,14 @@ build :: () {
     array_add(*opts.path_fragments_to_treat_as_non_system_paths, "EGL/", "KHR/");
     array_add(*opts.source_files, "/usr/include/EGL/egl.h", "/usr/include/EGL/eglext.h");
 
-    generate_bindings(opts, "egl.jai");
+    b: String_Builder;
+    generate(*b);
+    egl, ok := generate_bindings(opts);
+    assert(ok, "could not generate EGL bindings");
+    append(*b, "\n");
+    append(*b, builder_to_string(*egl));
+    ok = write_entire_file(OUTPUT, *b);
+    assert(ok, "could not write %", OUTPUT);
 
     w := compiler_create_workspace("Main program");
     if !debug {
