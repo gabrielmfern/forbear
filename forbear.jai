@@ -581,6 +581,71 @@
     }
 
     Backend :: Wayland_EGL_Backend;
+} else #if OS == .MACOS {
+    #import "Objective_C";
+    #import "Objective_C/AppKit";
+
+    MacOS_GL_Window :: struct {
+        width: s32;
+        height: s32;
+
+        ns_window: *NSWindow;
+        view: *NSView;
+
+        running := true;
+    };
+
+    init_macos_gl_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window, width: s32, height: s32) {
+        window.width = width;
+        window.height = height;
+
+        rectangle := NSRect.{ size = .{ width = xx width, height = xx height } };
+
+        window.ns_window = NSWindow.initWithContentRect(
+            objc_alloc(NSWindow), 
+            rectangle, 
+            NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable, 
+            NSBackingStoreBuffered, 
+            NO, 
+            NSScreen.mainScreen()
+        );
+        NSWindow.setReleasedWhenClosed(window.ns_window, NO);
+        NSWindow.makeKeyAndOrderFront(window.ns_window, null);
+
+        window.view = NSWindow.contentView(window.ns_window);
+        NSView.setWantsBestResolutionOpenGLSurface(window.view, YES);
+        NSOpenGLContext.setView(backend.gl_context, window.view);
+    }
+
+    MacOS_GL_Backend :: struct {
+        app: *NSApplication;
+        pixel_format: *NSOpenGLPixelFormat;
+        gl_context: *NSOpenGLContext;
+    };
+
+    init_macos_gl_backend :: (backend: *MacOS_GL_Backend) {
+        init_objective_c();
+        init_app_kit();
+        backend.app = NSApplication.sharedApplication();
+        NSApplication.setActivationPolicy(backend.app, NSApplicationActivationPolicyRegular);
+        NSApplication.finishLaunching(backend.app);
+        NSApplication.activateIgnoringOtherApps(backend.app, YES);
+
+        attributes := NSOpenGLPixelFormatAttribute.[
+            NSOpenGLPFADoubleBuffer, 
+            NSOpenGLPFAAccelerated,
+            NSOpenGLPFAColorSize, 24, 
+            NSOpenGLPFAAlphaSize, 8,
+            NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core,
+            0,
+        ];
+        backend.pixel_format = NSOpenGLPixelFormat.initWithAttributes(objc_alloc(NSOpenGLPixelFormat), attributes.data);
+        backend.gl_context = NSOpenGLContext.initWithFormat(objc_alloc(NSOpenGLContext), backend.pixel_format, null);
+        NSOpenGLContext.makeCurrentContext(backend.gl_context);
+        gl_load(*gl);
+    }
+
+    Backend :: MacOS_GL_Backend;
 }
 
 User_Interface_Builder :: struct {
