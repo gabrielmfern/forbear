@@ -1321,6 +1321,9 @@ element :: (style: Style, key: string, location := #caller_location) #expand {
     element(style = style, key = key, location = location);
 }
 
+// TOOD: currently we're defining the specific backend names to be just one
+// here, but in the long-term we will include multiple backends for each
+// operating system, not one, so we need to handle that in a better way.
 init_forbear :: (backend: *Backend, base_style: Base_Style = Base_Style.{}) {
     context.user_interface_builder.backend = backend;
     context.user_interface_builder.base_style = base_style;
