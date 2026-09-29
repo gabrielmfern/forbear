@@ -407,7 +407,7 @@
         running: bool = true;
     };
 
-    init_wayland_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32) {
+    init_wayland_egl_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32) {
         window.width = width;
         window.height = height;
 
@@ -449,7 +449,7 @@
 
                 if window.width * window.height != window.texture_width * window.texture_height {
                     if window.egl_image != null {
-                        if eglDestroyImage(context.user_interface_builder.backend.egl_display, window.egl_image) != 1 {
+                        if eglDestroyImage(context.forbear.backend.egl_display, window.egl_image) != 1 {
                             log_error("failed to destroy previous egl image: %\n", eglGetError());
                             exit(-1);
                         }
@@ -474,21 +474,21 @@
                     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
                     assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 
-                    window.egl_image = eglCreateImage(context.user_interface_builder.backend.egl_display, context.user_interface_builder.backend.egl_context, EGL_GL_TEXTURE_2D, cast(EGLClientBuffer) cast(u64) window.texture, null);
+                    window.egl_image = eglCreateImage(context.forbear.backend.egl_display, context.forbear.backend.egl_context, EGL_GL_TEXTURE_2D, cast(EGLClientBuffer) cast(u64) window.texture, null);
                     if window.egl_image == null {
                         log_error("failed to create frame buffer: %\n", eglGetError());
                         exit(-1);
                     }
 
                     num_planes: s32;
-                    if eglExportDMABUFImageQueryMESA(context.user_interface_builder.backend.egl_display, window.egl_image, *window.fourcc, *num_planes, *window.modifiers) != 1 {
+                    if eglExportDMABUFImageQueryMESA(context.forbear.backend.egl_display, window.egl_image, *window.fourcc, *num_planes, *window.modifiers) != 1 {
                         log_error("failed in eglExportDMABUFImageQueryMESA: %\n", eglGetError());
                         exit(-1);
                     }
                     if EGL_DEBUGGING {
                         print("num_planes %, fourcc %, modifiers %\n", num_planes, formatInt(window.fourcc, base = 16), formatInt(window.modifiers, base = 16));
                     }
-                    if eglExportDMABUFImageMESA(context.user_interface_builder.backend.egl_display, window.egl_image, window.fds.data, window.strides.data, window.offsets.data) != 1 {
+                    if eglExportDMABUFImageMESA(context.forbear.backend.egl_display, window.egl_image, window.fds.data, window.strides.data, window.offsets.data) != 1 {
                         log_error("failed in eglExportDMABUFImageMESA: %\n", eglGetError());
                         exit(-1);
                     }
@@ -523,7 +523,7 @@
                 send_wayland_message(connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
 
                 send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
-                send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Damage.{ x = 0, y = 0, width = window.width, height = window.height });
+                send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Damage_Buffer.{ x = 0, y = 0, width = window.width, height = window.height });
                 if EXIT_ON_FIRST_FRAME {
                     send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Frame.{ callback = new_wayland_client_object(connection, Interface_Id.WL_CALLBACK) });
                 }
@@ -537,6 +537,7 @@
         }
     }
 
+    // TOOD: we still need to add double buffering and proper vsync to the EGL wayland backend here 
     Wayland_EGL_Backend :: struct {
         egl_display: EGLDisplay;
         egl_context: EGLContext;
@@ -648,7 +649,7 @@
     Backend :: MacOS_GL_Backend;
 }
 
-User_Interface_Builder :: struct {
+Forbear :: struct {
     node_tree: Node_Tree;
 
     parent_stack: [..]s64;
@@ -657,7 +658,7 @@ User_Interface_Builder :: struct {
 
     backend: *Backend;
 };
-#add_context user_interface_builder: *User_Interface_Builder;
+#add_context forbear: *Forbear;
 
 Direction :: enum u8 { HORIZONTAL; VERTICAL; };
 opposite :: (direction: Direction) -> Direction {
@@ -1194,13 +1195,13 @@ element :: (
 ) #expand {
     parent_index: s64 = -1;
     parent: *Node;
-    if context.user_interface_builder.parent_stack.count > 0 {
-        parent_index = context.user_interface_builder.parent_stack[context.user_interface_builder.parent_stack.count - 1];
-        parent = *context.user_interface_builder.node_tree[parent_index];
+    if context.forbear.parent_stack.count > 0 {
+        parent_index = context.forbear.parent_stack[context.forbear.parent_stack.count - 1];
+        parent = *context.forbear.node_tree[parent_index];
     }
-    node, index := append_to_node_tree(*context.user_interface_builder.node_tree, parent_index);
-    previous_base_style := context.user_interface_builder.base_style;
-    complete_with(style, context.user_interface_builder.base_style, *node.style);
+    node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
+    previous_base_style := context.forbear.base_style;
+    complete_with(style, context.forbear.base_style, *node.style);
     if parent_index != -1 {
         if style.z_index < U16_MAX {
             node.z = style.z_index;
@@ -1219,10 +1220,10 @@ element :: (
         node.key = fnv1a_hash(cast(u64) location.line_number, node.key);
         node.key = fnv1a_hash(cast(u64) location.character_number, node.key);
     }
-    if context.user_interface_builder.scope_stack.count > 0 {
-        node.key = fnv1a_hash(context.user_interface_builder.scope_stack[context.user_interface_builder.scope_stack.count - 1], node.key);
+    if context.forbear.scope_stack.count > 0 {
+        node.key = fnv1a_hash(context.forbear.scope_stack[context.forbear.scope_stack.count - 1], node.key);
     }
-    node.key = fnv1a_hash(cast(u64) context.user_interface_builder.parent_stack.count, node.key);
+    node.key = fnv1a_hash(cast(u64) context.forbear.parent_stack.count, node.key);
 
     if node.style.placement.kind == {
         // we don't handle FLOW since the node already has the right position by default
@@ -1273,8 +1274,8 @@ element :: (
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 
-    array_add(*context.user_interface_builder.parent_stack, index);
-    array_add(*context.user_interface_builder.scope_stack, node.key);
+    array_add(*context.forbear.parent_stack, index);
+    array_add(*context.forbear.scope_stack, node.key);
 
     if node.style.width.kind == Sizing.Kind.FIT {
         node.size.x = fitting_base(node, Direction.HORIZONTAL);
@@ -1297,9 +1298,9 @@ element :: (
 
     #insert body;
 
-    pop(*context.user_interface_builder.scope_stack);
-    pop(*context.user_interface_builder.parent_stack);
-    context.user_interface_builder.base_style = previous_base_style;
+    pop(*context.forbear.scope_stack);
+    pop(*context.forbear.parent_stack);
+    context.forbear.base_style = previous_base_style;
 
     // self.frameMeta.?.previousPushedNodeIndex = self.nodeStack.pop();
 
@@ -1324,8 +1325,36 @@ element :: (style: Style, key: string, location := #caller_location) #expand {
 // TOOD: currently we're defining the specific backend names to be just one
 // here, but in the long-term we will include multiple backends for each
 // operating system, not one, so we need to handle that in a better way.
-init_forbear :: (backend: *Backend, base_style: Base_Style = Base_Style.{}) {
-    context.user_interface_builder.backend = backend;
-    context.user_interface_builder.base_style = base_style;
+init_forbear :: (
+    forbear: *Forbear, 
+    backend: *Backend, 
+    base_style: Base_Style = Base_Style.{}
+) {
+    forbear.backend = backend;
+    forbear.base_style = base_style;
+    context.forbear = forbear;
+}
+
+render :: (window: *Wayland_EGL_Window) {
+    #if OS == .LINUX {
+        glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
+        glViewport(0, 0, xx window.width, xx window.height);
+
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(0, 0, xx (window.width / 2), xx window.height);
+        glClearColor(1, 0, 1, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_SCISSOR_TEST);
+
+        // context.user_interface_builder.node_tree;
+
+        glFinish();
+
+        send_wayland_message(*context.forbear.backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
+        send_wayland_message(*context.forbear.backend.connection, window.wl_surface_id, Wl_Surface_Request_Damage_Buffer.{ x = 0, y = 0, width = window.width, height = window.height });
+        send_wayland_message(*context.forbear.backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
+    }
+
+    array_reset_keeping_memory(*context.forbear.node_tree);
 }
 
