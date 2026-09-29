@@ -1,7 +1,7 @@
 #import "Socket";
 #import "Memory";
 #import "POSIX";
-#import "Math";
+Math :: #import "Math";
 #import "GL";
 #import "Hash";
 #import "Basic";
@@ -10,6 +10,15 @@
 } else #if OS == .MACOS {
     #import,file "bindings-MACOS.jai";
 }
+
+Vector2 :: Math.Vector2;
+Vector4 :: Math.Vector4;
+FLOAT32_NAN :: Math.FLOAT32_NAN;
+FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
+U16_MAX :: Math.U16_MAX;
+isnan :: Math.isnan;
+make_vector2 :: Math.make_vector2;
+make_vector4 :: Math.make_vector4;
 
 #if OS == .LINUX {
     eglExportDMABUFImageQueryMESA: PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC;
@@ -537,10 +546,33 @@
         }
     }
 
+    compile_shader :: (kind: GLenum, source: string) -> u32 {
+        shader := glCreateShader(kind);
+        data := source.data;
+        length: GLint = xx source.count;
+        glShaderSource(shader, 1, *data, *length);
+        glCompileShader(shader);
+
+        status: GLint;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, *status);
+        if !status {
+            log: [1024]u8;
+            log_length: GLsizei;
+            glGetShaderInfoLog(shader, log.count, *log_length, log.data);
+            log_error("failed to compile shader: %\n", to_string(log.data, log_length));
+            exit(-1);
+        }
+        return shader;
+    }
+
     // TOOD: we still need to add double buffering and proper vsync to the EGL wayland backend here 
     Wayland_EGL_Backend :: struct {
         egl_display: EGLDisplay;
         egl_context: EGLContext;
+
+        node_program: u32;
+        node_vao: u32;
+        node_vbo: u32;
 
         connection: Wayland_Connection;
     };
@@ -577,6 +609,73 @@
         eglExportDMABUFImageMESA = xx eglGetProcAddress("eglExportDMABUFImageMESA");
         if eglExportDMABUFImageQueryMESA == null || eglExportDMABUFImageMESA == null {
             log_error("EGL_MESA_image_dma_buf_export is not supported\n");
+            exit(-1);
+        }
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+        glGenVertexArrays(1, *backend.node_vao);
+        glBindVertexArray(backend.node_vao);
+        glGenBuffers(1, *backend.node_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, backend.node_vbo);
+
+        stride :: size_of(Node_Draw_Instance);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 0);
+        glVertexAttribDivisor(0, 1);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 8);
+        glVertexAttribDivisor(1, 1);
+
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
+        glVertexAttribDivisor(2, 1);
+
+        vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
+#version 330 core
+layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 size;
+layout(location = 2) in vec4 color;
+
+uniform vec2 viewport;
+
+out vec4 v_color;
+
+void main() {
+  vec2 corner = vec2(gl_VertexID & 1, gl_VertexID >> 1);
+  v_color = color;
+
+  gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
+}
+GLSL);
+        defer glDeleteShader(vertex_shader);
+        fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
+#version 330 core
+
+in vec4 v_color;
+out vec4 out_color;
+
+void main() {
+    // TODO: render rounded corners and borders
+    out_color = v_color;
+}
+GLSL);
+        defer glDeleteShader(fragment_shader);
+
+        backend.node_program = glCreateProgram();
+        glAttachShader(backend.node_program, vertex_shader);
+        glAttachShader(backend.node_program, fragment_shader);
+        glLinkProgram(backend.node_program);
+
+        status: GLint;
+        glGetProgramiv(backend.node_program, GL_LINK_STATUS, *status);
+        if !status {
+            log: [1024]u8;
+            log_length: GLsizei;
+            glGetProgramInfoLog(backend.node_program, log.count, *log_length, log.data);
+            log_error("failed to link program: %\n", to_string(log.data, log_length));
             exit(-1);
         }
     }
@@ -882,8 +981,8 @@ Gradient_Stop :: struct {
     position: float;
 } #no_padding;
 angle :: (degrees: float) -> Vector2 {
-    radians := degrees * PI / 180.0;
-    return Vector2.{ x = sin(radians), y = -cos(radians)};
+    radians := degrees * Math.PI / 180.0;
+    return Vector2.{ x = Math.sin(radians), y = -Math.cos(radians)};
 }
 to_top :: () -> Vector2 {
     return Vector2.{ x = 0, y = -1 };
@@ -898,16 +997,16 @@ to_right :: () -> Vector2 {
     return Vector2.{ x = 1, y = 0 };
 }
 to_top_left :: () -> Vector2 {
-    return Vector2.{ x = xx -SQRTH, y = xx -SQRTH };
+    return Vector2.{ x = xx -Math.SQRTH, y = xx -Math.SQRTH };
 }
 to_top_right :: () -> Vector2 {
-    return Vector2.{ x = xx SQRTH, y = xx -SQRTH };
+    return Vector2.{ x = xx Math.SQRTH, y = xx -Math.SQRTH };
 }
 to_bottom_left :: () -> Vector2 {
-    return Vector2.{ x = xx -SQRTH, y = xx SQRTH };
+    return Vector2.{ x = xx -Math.SQRTH, y = xx Math.SQRTH };
 }
 to_bottom_right :: () -> Vector2 {
-    return Vector2.{ x = xx SQRTH, y = xx SQRTH };
+    return Vector2.{ x = xx Math.SQRTH, y = xx Math.SQRTH };
 }
 Linear_Gradient :: struct {
     // Stops define where each color sits along the gradient; positions are
@@ -933,6 +1032,15 @@ Background :: struct {
         gradient: Linear_Gradient;
     }
 };
+rgb :: (r: float, g: float, b: float) -> Vector4 {
+    return Vector4.{r / 255.0, g / 255.0, b / 255.0, 1.0};
+}
+rgba :: (r: float, g: float, b: float) -> Vector4 {
+    return rgb(r, g, b);
+}
+rgba :: (r: float, g: float, b: float, a: float) -> Vector4 {
+    return Vector4.{r / 255.0, g / 255.0, b / 255.0, a};
+}
 color :: (value: Vector4) -> Background {
     return Background.{ kind = .COLOR, color = value };
 }
@@ -1072,12 +1180,12 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
     out.placement = ifx style.placement.kind == xx UNSET then Placement.{ kind = .FLOW } else style.placement;
     out.z_index = style.z_index;
 
-    out.min_width = ifx isnan(style.min_width) then -1 else style.min_width;
-    out.max_width = ifx isnan(style.max_width) then -1 else style.max_width;
+    out.min_width = style.min_width;
+    out.max_width = style.max_width;
     out.width = ifx style.width.kind == xx UNSET then Sizing.{ kind = .FIT } else style.width;
 
-    out.min_height = ifx isnan(style.min_height) then -1 else style.min_height;
-    out.max_height = ifx isnan(style.max_height) then -1 else style.max_height;
+    out.min_height = style.min_height;
+    out.max_height = style.max_height;
     out.height = ifx style.height.kind == xx UNSET then Sizing.{ kind = .FIT } else style.height;
 
     out.translate = ifx isnan(style.translate.x) then make_vector2(0.0) else style.translate;
@@ -1117,6 +1225,11 @@ Glyphs :: struct {
     preBreakIndices: []s64;
 };
 
+Node_Draw_Instance :: struct {
+    position: Vector2;
+    size: Vector2;
+    color: Vector4;
+};
 Node :: struct {
     size: Vector2;
     position: Vector2;
@@ -1335,18 +1448,34 @@ init_forbear :: (
     context.forbear = forbear;
 }
 
-render :: (window: *Wayland_EGL_Window) {
+render_and_reset_node_tree :: (window: *Wayland_EGL_Window) {
     #if OS == .LINUX {
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
         glViewport(0, 0, xx window.width, xx window.height);
 
-        glEnable(GL_SCISSOR_TEST);
-        glScissor(0, 0, xx (window.width / 2), xx window.height);
-        glClearColor(1, 0, 1, 1);
+        glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glDisable(GL_SCISSOR_TEST);
 
-        // context.user_interface_builder.node_tree;
+        using context.forbear;
+        instances_buffer := NewArray(node_tree.count, Node_Draw_Instance);
+        instances := array_view(instances_buffer, 0, 0);
+        defer free(cast(*void) instances.data);
+        for context.forbear.node_tree {
+            if it.style.background.kind != .COLOR  continue;
+            instances.count += 1;
+            instances[instances.count - 1] = Node_Draw_Instance.{ 
+                position = it.position, 
+                size = it.size, 
+                color = it.style.background.color 
+            };
+        }
+
+        glUseProgram(context.forbear.backend.node_program);
+        glUniform2f(glGetUniformLocation(context.forbear.backend.node_program, "viewport"), xx window.width, xx window.height);
+        glBindVertexArray(context.forbear.backend.node_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, context.forbear.backend.node_vbo);
+        glBufferData(GL_ARRAY_BUFFER, instances.count * size_of(Node_Draw_Instance), instances.data, GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, xx instances.count);
 
         glFinish();
 
