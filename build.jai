@@ -337,26 +337,43 @@ build :: () {
 
     options := get_build_options();
 
-    opts: Generate_Bindings_Options;
-    array_add(*opts.system_include_paths, ..get_default_system_include_paths());
+    egl_opts: Generate_Bindings_Options;
+    array_add(*egl_opts.system_include_paths, ..get_default_system_include_paths());
     b: String_Builder;
     #if OS == .LINUX {
-        array_add(*opts.system_libraries, Library.{ filename = "libEGL" });
-        array_add(*opts.extra_clang_arguments, "-DEGL_NO_X11");
-        array_add(*opts.path_fragments_to_treat_as_non_system_paths, "EGL/", "KHR/");
-        array_add(*opts.source_files, "/usr/include/EGL/egl.h", "/usr/include/EGL/eglext.h");
+        array_add(*egl_opts.system_libraries, Library.{ filename = "libEGL" });
+        array_add(*egl_opts.extra_clang_arguments, "-DEGL_NO_X11");
+        array_add(*egl_opts.path_fragments_to_treat_as_non_system_paths, "EGL/", "KHR/");
+        array_add(*egl_opts.source_files, "/usr/include/EGL/egl.h", "/usr/include/EGL/eglext.h");
     }
-    egl, ok := generate_bindings(opts);
+    egl, egl_ok := generate_bindings(egl_opts);
+    assert(egl_ok, "could not generate bindings");
 
-    assert(ok, "could not generate bindings");
+    build_kb_text_shape_ok := build_cpp_static_lib("vendor/kb_text_shape", "vendor/kb_text_shape.c", extra = .["-fPIC"], debug = debug);
+    assert(build_kb_text_shape_ok, "could not compile kb_text_shape");
+    kbts_opts: Generate_Bindings_Options;
+    array_add(*kbts_opts.system_include_paths, ..get_default_system_include_paths());
+    array_add(*kbts_opts.library_search_paths, "vendor");
+    array_add(*kbts_opts.libraries, .{ filename = "kb_text_shape" });
+    array_add(*kbts_opts.source_files, "vendor/kb_text_shape.h");
+    kbts_opts.generate_library_declarations = false;
+    kbts_opts.generate_compile_time_struct_checks = false;
+    kbts_opts.strip_enum_prefixes = false;
+    kbts_opts.auto_detect_enum_prefixes = false;
+    kbts, kbts_ok := generate_bindings(kbts_opts);
+    assert(kbts_ok, "could not generate kb_text_shape bindings");
+
     append(*b, "\n");
     append(*b, builder_to_string(*egl));
+    append(*b, "\n#scope_export\n");
+    append(*b, builder_to_string(*kbts));
+    append(*b, "\nkb_text_shape :: #library,no_dll \"vendor/kb_text_shape\";\n");
     append(*b, "\n#scope_export\n");
     #if OS == .LINUX {
         generate_wayland_bindings(*b);
     }
-    ok = write_entire_file(BINDINGS, *b);
-    assert(ok, "could not write %", BINDINGS);
+    bindings_writing_ok := write_entire_file(BINDINGS, *b);
+    assert(bindings_writing_ok, "could not write %", BINDINGS);
 
     w := compiler_create_workspace("Main program");
     if !debug {
