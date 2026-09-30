@@ -2,7 +2,7 @@
 //
 // This file was auto-generated using the following command:
 //
-// jai build.jai
+// jai build.jai - bindings
 //
 
 
@@ -1339,7 +1339,7 @@ libegl :: #library,system "libEGL";
 //
 // This file was auto-generated using the following command:
 //
-// jai build.jai
+// jai build.jai - bindings
 //
 
 
