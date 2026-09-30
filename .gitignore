@@ -1,8 +1,7 @@
-# jai compiler intermediates
+# compiled outputs
+*.a
+*.rdi
 .build/
-
-# compiled binary (named after the entry file)
+.vercel
 dist
 playground
-*.rdi
-.vercel
