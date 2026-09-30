@@ -45,6 +45,22 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
 }
 
 #if OS == .LINUX {
+    eglExportDMABUFImageQueryMESA: PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC;
+    eglExportDMABUFImageMESA: PFNEGLEXPORTDMABUFIMAGEMESAPROC;
+
+    status: GLint;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, *status);
+    if !status {
+        log: [1024]u8;
+        log_length: GLsizei;
+        glGetShaderInfoLog(shader, log.count, *log_length, log.data);
+        log_error("failed to compile shader: %\n", to_string(log.data, log_length));
+        exit(-1);
+    }
+    return shader;
+}
+
+#if OS == .LINUX {
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
     EXIT_ON_FIRST_FRAME :: false;
@@ -610,6 +626,93 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
     }
 
     Backend :: Wayland_EGL_Backend;
+    Window :: Wayland_EGL_Window;
+} else #if OS == .MACOS {
+    #import "Objective_C";
+    #import "Objective_C/AppKit";
+
+    MacOS_GL_Window :: struct {
+        width: float64;
+        height: float64;
+
+        ns_window: *NSWindow;
+        view: *NSView;
+
+        running := true;
+    };
+    init_macos_gl_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window, width: float64, height: float64) {
+        window.width = width;
+        window.height = height;
+
+        rectangle := NSRect.{ size = .{ width = width, height = height } };
+
+        window.ns_window = NSWindow.initWithContentRect(
+            objc_alloc(NSWindow), 
+            rectangle, 
+            NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable, 
+            NSBackingStoreBuffered, 
+            NO, 
+            NSScreen.mainScreen()
+        );
+        NSWindow.setReleasedWhenClosed(window.ns_window, NO);
+        NSWindow.makeKeyAndOrderFront(window.ns_window, null);
+
+        window.view = NSWindow.contentView(window.ns_window);
+        NSView.setWantsBestResolutionOpenGLSurface(window.view, YES);
+        NSOpenGLContext.setView(backend.gl_context, window.view);
+    }
+    update_macos_gl_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window) {
+        is_visible: (*void, Selector) -> BOOL #c_call = xx objc_msgSend;
+        if !is_visible(window.ns_window, selector("isVisible")) {
+            window.running = false;
+        }
+
+        backing := NSView.convertRectToBacking(window.view, NSView.frame(window.view));
+        if backing.size.width != window.width || backing.size.height != window.height {
+            window.width = backing.size.width;
+            window.height = backing.size.height;
+            NSOpenGLContext.update(backend.gl_context);
+        }
+    }
+
+    MacOS_GL_Backend :: struct {
+        app: *NSApplication;
+        pixel_format: *NSOpenGLPixelFormat;
+        gl_context: *NSOpenGLContext;
+    };
+    init_macos_gl_backend :: (backend: *MacOS_GL_Backend) {
+        init_objective_c();
+        init_app_kit();
+        backend.app = NSApplication.sharedApplication();
+        NSApplication.setActivationPolicy(backend.app, NSApplicationActivationPolicyRegular);
+        NSApplication.finishLaunching(backend.app);
+        NSApplication.activateIgnoringOtherApps(backend.app, YES);
+
+        attributes := NSOpenGLPixelFormatAttribute.[
+            NSOpenGLPFADoubleBuffer, 
+            NSOpenGLPFAAccelerated,
+            NSOpenGLPFAColorSize, 24, 
+            NSOpenGLPFAAlphaSize, 8,
+            NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core,
+            0,
+        ];
+        backend.pixel_format = NSOpenGLPixelFormat.initWithAttributes(objc_alloc(NSOpenGLPixelFormat), attributes.data);
+        backend.gl_context = NSOpenGLContext.initWithFormat(objc_alloc(NSOpenGLContext), backend.pixel_format, null);
+        NSOpenGLContext.makeCurrentContext(backend.gl_context);
+        gl_load(*gl);
+    }
+    update_macos_gl_backend :: (backend: *MacOS_GL_Backend) {
+        pool := objc_init(objc_alloc(NSAutoreleasePool));
+        while true {
+            event := NSApplication.nextEventMatchingMask(backend.app, NSEventMaskAny, NSDate.distantPast(), NSDefaultRunLoopMode, YES);
+            if !event break;
+            backend.app.sendEvent(backend.app, event);
+        }
+        NSAutoreleasePool.drain(pool);
+    }
+
+    Backend :: MacOS_GL_Backend;
+    Window :: MacOS_GL_Window;
 }
 
 Direction :: enum u8 { HORIZONTAL; VERTICAL; };
@@ -1814,10 +1917,12 @@ GLSL);
     context.forbear = forbear;
 }
 
-render_and_reset_node_tree :: (window: *Wayland_EGL_Window, clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
+render_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
     #if OS == .LINUX {
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
+    } else #if OS == .MACOS {
+        NSOpenGLContext.setView(backend.gl_context, window.view);
     }
 
     glViewport(0, 0, xx window.width, xx window.height);
@@ -1913,6 +2018,8 @@ render_and_reset_node_tree :: (window: *Wayland_EGL_Window, clearing_color := Ve
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Damage_Buffer.{ x = 0, y = 0, width = window.width, height = window.height });
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
+    } else #if OS == .MACOS {
+        NSOpenGLContext.flushBuffer(backend.gl_context);
     }
 
     array_reset_keeping_memory(*node_tree);

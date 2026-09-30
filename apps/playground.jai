@@ -6,10 +6,15 @@
 INTER_TTF :: #run read_entire_file(tprint("%Inter.ttf", #filepath));
 
 main :: () {
-    wayland_egl_backend: Wayland_EGL_Backend;
-    init_wayland_egl_backend(*wayland_egl_backend);
-    wayland_egl_window: Wayland_EGL_Window;
-    init_wayland_egl_window(*wayland_egl_backend.connection, *wayland_egl_window, 800, 600);
+    backend: Backend;
+    window: Window;
+    #if OS == .LINUX {
+        init_wayland_egl_backend(*wayland_egl_backend);
+        init_wayland_egl_window(*wayland_egl_backend.connection, *wayland_egl_window, 800, 600);
+    } else #if OS == .MACOS {
+        init_macos_gl_backend(*backend);
+        init_macos_gl_window(*backend, *window, 800, 600);
+    }
 
     inter: Font;
     init_font(*inter, INTER_TTF);
@@ -19,11 +24,16 @@ main :: () {
         font = *inter,
     });
 
-    while wayland_egl_window.running {
-        event, data, something := next_wayland_event(*wayland_egl_backend.connection);
-        if something {
-            update_wayland_egl_window(*wayland_egl_backend.connection, *wayland_egl_window, event, data);
-            update_wayland_connection(*wayland_egl_backend.connection, event, data);
+    while window.running {
+        #if OS == .LINUX {
+            event, data, something := next_wayland_event(*backend.connection);
+            if something {
+                update_wayland_connection(*backend.connection, event, data);
+                update_wayland_egl_window(*backend.connection, *window, event, data);
+            }
+        } else #if OS == .MACOS {
+            update_macos_gl_backend(*backend);
+            update_macos_gl_window(*backend, *window);
         }
 
         element(Style.{ 
@@ -35,7 +45,7 @@ main :: () {
             text("hello lisa");
         });
 
-        render_and_reset_node_tree(*wayland_egl_window, rgb(0.0, 0.0, 0.0));
+        render_and_reset_node_tree(*window, rgb(0.0, 0.0, 0.0));
 
         reset_temporary_storage();
     }
