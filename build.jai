@@ -378,21 +378,21 @@ build :: () {
         assert(bindings_writing_ok, "could not write %", BINDINGS);
     }
 
-    w := compiler_create_workspace("Main program");
-    if !debug {
-        set_optimization(*options, .OPTIMIZED);
-    }
-    if jails {
-        options.output_type = .NO_OUTPUT;
-    } else {
-        options.output_type = .DYNAMIC_LIBRARY;
-        options.output_executable_name = "forbear";
-        options.output_path = dist_dir;
-        make_directory_if_it_does_not_exist(dist_dir, recursive=true);
-    }
-    set_build_options(options, w);
-    add_build_string(tprint("DEBUG :: %;", debug), w);
-    add_build_file("forbear.jai", w);
+    // w := compiler_create_workspace("Main program");
+    // if !debug {
+    //     set_optimization(*options, .OPTIMIZED);
+    // }
+    // if jails {
+    //     options.output_type = .NO_OUTPUT;
+    // } else {
+    //     options.output_type = .DYNAMIC_LIBRARY;
+    //     options.output_executable_name = "forbear";
+    //     options.output_path = dist_dir;
+    //     make_directory_if_it_does_not_exist(dist_dir, recursive=true);
+    // }
+    // set_build_options(options, w);
+    // add_build_string(tprint("DEBUG :: %;", debug), w);
+    // add_build_file("forbear.jai", w);
 
     playground := compiler_create_workspace("Playground");
     playground_options := get_build_options();
