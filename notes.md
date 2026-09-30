@@ -1,3 +1,16 @@
+- [x] draw things the screen
+- [ ] support for text nodes
+- [ ] implement macos-opengl backend
+- [ ] layout nodes
+- [ ] draw rounded corners
+- [ ] do double buffering in wayland
+
+where I was at the end of 09/29/2026:
+- insert the text node into the node tree
+- draw the actual glyphs at their right positions
+
+## introspection
+
 right now we have window creation from scratch using our own wayland communication and buffer creation, not libwayland, implemented. it works well enough to play with at least, such that I already have a checkboard pattern rendering and handling resizing as well, that is without double buffering so looking very ugly.
 
 what I need to figure out:

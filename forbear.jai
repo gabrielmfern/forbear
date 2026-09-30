@@ -3,6 +3,7 @@
 #import "POSIX";
 Math :: #import "Math";
 #import "GL";
+#import "freetype";
 #import "Hash";
 #import "Basic";
 #if OS == .LINUX {
@@ -922,7 +923,7 @@ Complete_Style :: struct {
 
     shadow: Shadow;
 
-    // font: *Font;
+    font: *Font;
 
     // Will do nothing if the font is not a variable font. If you don't have a
     // variable font, you should use different fonts for different weights.
@@ -954,7 +955,7 @@ Complete_Style :: struct {
 };
 
 Base_Style :: struct {
-    // font: *Font,
+    font: *Font,
     color: Vector4 = Vector4.{ 1.0, 1.0, 1.0, 1.0 };
     font_size: float = 16.0;
     font_weight: u32 = 600;
@@ -965,7 +966,7 @@ Base_Style :: struct {
 
 from :: (style: Complete_Style) -> Base_Style {
     return Base_Style.{
-        // font = style.font,
+        font = style.font,
         color = style.color,
         font_size = style.font_size,
         font_weight = style.font_weight,
@@ -1087,7 +1088,7 @@ Style :: struct {
         color = Vector4_NAN,
     };
 
-    // font: *Font = null;
+    font: *Font = null;
     font_weight: u32 = 0;
     font_size: float = FLOAT32_NAN;
     line_height: float = FLOAT32_NAN;
@@ -1129,6 +1130,7 @@ overwrite :: (style: Style, other: Style) -> Style {
 
     if isnan(result.shadow.blur_radius)  result.shadow = other.shadow;
 
+    if result.font == null  result.font = other.font;
     if result.font_weight == 0  result.font_weight = other.font_weight;
     if isnan(result.font_size)  result.font_size = other.font_size;
     if isnan(result.line_height)  result.line_height = other.line_height;
@@ -1170,6 +1172,7 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
 
     out.shadow = style.shadow;
 
+    out.font = ifx style.font == null then base.font else style.font;
     out.font_weight = ifx style.font_weight == 0 then base.font_weight else style.font_weight;
     out.font_size = ifx isnan(style.font_size) then base.font_size else style.font_size;
     out.line_height = ifx isnan(style.line_height) then base.line_height else style.line_height;
@@ -1214,14 +1217,11 @@ LayoutGlyph :: struct {
 
 Glyphs :: struct {
     lineHeight: float;
-    // Distance from line top to the shared baseline, in pixels. The max ascent
-    // across runs, so mixed-size runs in a `composeText` block sit on one
-    // baseline. Drawing offsets every glyph down by this.
+    // Distance from line top to the shared baseline, in pixels.
     ascent: float;
-    slice: []LayoutGlyph;
+    array: []LayoutGlyph;
     // Indices into `slice` where a manual line break was requested before the
-    // glyph at that index. Ascending; may contain duplicates for consecutive
-    // breaks. A value equal to `slice.len` marks a trailing blank line.
+    // glyph at that index.
     preBreakIndices: []s64;
 };
 
@@ -1245,14 +1245,17 @@ Node :: struct {
     style: Complete_Style;
 
     content_size: Vector2;
-    // TODO: should we have this? this feels like the wrong solution to the problem, there should be a user-accessible way of changing the offset of the children without a specific property for it
+    // TODO: should we have this? this feels like the wrong solution to the
+    // problem, there should be a user-accessible way of changing the offset of
+    // the children without a specific property for it
+    // 
     // Generally used for scrolling. This is added to the position of the children of this node
     children_offset: Vector2;
 
     // Clip rect inherited from ancestors that have constrained size with overflowing children.
     // Format: [x, y, width, height]. If NAN, no clipping is applied.
     clipping_rectangle: Vector4 = Vector4_NAN;
-    // glyphs: ?Glyphs = null;
+    glyphs: Glyphs;
     key: u64;
     z: u16;
 
@@ -1435,6 +1438,268 @@ element :: (style: Style, key: string, location := #caller_location) #expand {
     element(style = style, key = key, location = location);
 }
 
+Shaped_Glyph :: struct {
+    index: u16;
+    utf8: kbts_encode_utf8;
+    advance: Vector2;
+    offset: Vector2;
+};
+
+// Shaped_Word :: struct {
+//    hash: u64;
+//    length: s32;
+//    glyphs: []Shaped_Glyph;
+// };
+//
+// Shaping_Cache :: struct {
+//     slots: [4096]Shaped_Word;
+//     arena: Flat_Pool;
+// };
+
+Font :: struct {
+    freetype_face: FT_Face;
+    kbts_context: *kbts_shape_context;
+    kbts_font: *kbts_font;
+
+    // prev_cache: Shaping_Cache;
+    // next_cache: Shaping_Cache;
+};
+
+shape :: (font: *Font, content: string) -> [..]Shaped_Glyph {
+    // TODO(next): pass the language and direction down as styles
+    kbts_ShapeBegin(
+        font.kbts_context, 
+        xx kbts_direction_enum.KBTS_DIRECTION_RTL, 
+        xx kbts_language_enum.KBTS_LANGUAGE_DONT_KNOW
+    );
+    kbts_ShapeUtf8(
+        font.kbts_context, 
+        content.data, 
+        xx content.count, 
+        xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX
+    );
+    kbts_ShapeEnd(font.kbts_context);
+
+    // TODO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
+    shaped_glyphs: [..]Shaped_Glyph;
+
+    run: kbts_run;
+    while (kbts_ShapeRun(font.kbts_context, *run) != 0) {
+        glyph: *kbts_glyph;
+        while (kbts_GlyphIteratorNext(*run.Glyphs, *glyph) != 0) {
+            shape_codepoint: kbts_shape_codepoint;
+            if (kbts_ShapeGetShapeCodepoint(font.kbts_context, glyph.*.UserIdOrCodepointIndex, *shape_codepoint) == 0) {
+                log_error("Could not get original codeopint for glyph with user id %", glyph.*.UserIdOrCodepointIndex);
+                continue;
+            }
+
+            shaped_glyph: Shaped_Glyph;
+            shaped_glyph.index = glyph.*.Id;
+            shaped_glyph.advance = .{ xx glyph.*.AdvanceX, xx glyph.*.AdvanceY };
+            shaped_glyph.offset = .{ xx glyph.*.OffsetX, xx glyph.*.OffsetY };
+            shaped_glyph.utf8 = kbts_EncodeUtf8(shape_codepoint.Codepoint);
+            array_add(*shaped_glyphs, shaped_glyph);
+        }
+    }
+
+    return shaped_glyphs;
+}
+
+// build_text(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usize) !void {
+//     const self = getForbear();
+//     const arena = self.frameMeta.?.arena;
+//
+//     const parentIndexOptional = self.nodeStack.getLastOrNull();
+//     const result = try self.nodeTree.putNode(self.arena, parentIndexOptional);
+//
+//     const parentOptional = if (parentIndexOptional) |parentIndex|
+//         self.nodeTree.at(parentIndex)
+//     else
+//         null;
+//
+//     const baseStyle = if (parentOptional) |parent|
+//         BaseStyle.from(parent.style)
+//     else
+//         self.frameMeta.?.baseStyle;
+//
+//     (Style{
+//         .cursor = if (baseStyle.cursor == .default)
+//             .text
+//         else
+//             baseStyle.cursor,
+//         .xJustification = if (parentOptional) |parent| parent.style.xJustification else null,
+//         .yJustification = .start,
+//         .font = base.font,
+//         .color = base.color,
+//         .fontSize = base.fontSize,
+//         .fontWeight = base.fontWeight,
+//         .lineHeight = base.lineHeight,
+//     }).completeWith(baseStyle, &result.ptr.style);
+//
+//     const shaped = try shapeRuns(arena, runs, result.ptr.style.textWrapping);
+//
+//     const parentZ = if (parentOptional) |parent|
+//         parent.z
+//     else
+//         0;
+//
+//     var k: u64 = 0;
+//     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
+//         k = mixU64(k, lastScopeKey);
+//     }
+//     k = mixU64(k, @as(u64, self.nodeStack.items.len));
+//     // We don't mix the text content here because text selection would be nice
+//     // to work even with text changing
+//     //
+//     // k = mixU64(k, std.hash.Wyhash.hash(0, effectiveContent));
+//     k = mixU64(k, returnAddress);
+//
+//     result.ptr.key = k;
+//     result.ptr.position = @splat(0.0);
+//     result.ptr.z = if (parentZ < std.math.maxInt(u16))
+//         parentZ + 1
+//     else
+//         parentZ;
+//     result.ptr.size = .{ shaped.maxSize[0], shaped.minSize[1] };
+//     result.ptr.minSize = shaped.minSize;
+//     result.ptr.maxSize = shaped.maxSize;
+//     result.ptr.glyphs = Glyphs{
+//         .slice = shaped.glyphs,
+//         .lineHeight = shaped.lineHeight,
+//         .ascent = shaped.ascent,
+//         .preBreakIndices = shaped.preBreakIndices,
+//     };
+//
+//     if (parentOptional) |parent| {
+//         parent.fitChild(result.ptr);
+//     }
+//
+//     // Push self onto the parent stack so `on(.mouseOver)` resolves the
+//     // text node's own measurement, then pop. The text node itself is not
+//     // a scope and has no children, so this is purely for hit-testing.
+//     try self.nodeStack.append(self.arena, result.index);
+//     defer _ = self.nodeStack.pop();
+//
+//     try pushScope(result.ptr.key);
+//     defer popScope();
+//
+//     if (isNodeActive()) {
+//         setCursor(result.ptr.style.cursor);
+//     }
+// }
+text :: (style := Style.{}, content := "", key := "", location := #caller_location) #expand {
+    if content.count > 0 {
+        parent_index: s64 = -1;
+        parent: *Node;
+        if context.forbear.parent_stack.count > 0 {
+            parent_index = context.forbear.parent_stack[context.forbear.parent_stack.count - 1];
+            parent = *context.forbear.node_tree[parent_index];
+        }
+        node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
+        complete_with(style, context.forbear.base_style, *node.style);
+        if parent_index != -1 {
+            if parent.z < U16_MAX {
+                node.z = parent.z + 1;
+            } else {
+                node.z = parent.z;
+            }
+        }
+
+        if key.count > 0 {
+            node.key = fnv1a_hash(key.data, key.count);
+        } else {
+            // we use the caller location here
+            node.key = fnv1a_hash(location.fully_pathed_filename.data, location.fully_pathed_filename.count);
+            node.key = fnv1a_hash(cast(u64) location.line_number, node.key);
+            node.key = fnv1a_hash(cast(u64) location.character_number, node.key);
+        }
+        if context.forbear.scope_stack.count > 0 {
+            node.key = fnv1a_hash(context.forbear.scope_stack[context.forbear.scope_stack.count - 1], node.key);
+        }
+        node.key = fnv1a_hash(cast(u64) context.forbear.parent_stack.count, node.key);
+
+        if node.style.placement.kind == {
+            // we don't handle FLOW since the node already has the right position by default
+            case Placement.Kind.FIXED;
+                node.position = node.style.placement.fixed;
+            case Placement.Kind.RELATIVE;
+                node.position = node.style.placement.relative;
+        }
+        if node.style.width.kind == {
+            // we don't handle FIT or GROW since the node already has the right width by default
+            case Sizing.Kind.FIXED;
+                node.size.x = node.style.width.fixed;
+            case Sizing.Kind.RATIO;
+                if node.style.height.kind == Sizing.Kind.FIXED {
+                    node.size.x = node.style.height.fixed * node.style.width.ratio;
+                }
+        }
+        if node.style.height.kind == {
+            // we don't handle FIT or GROW since the node already has the right width by default
+            case Sizing.Kind.FIXED;
+                node.size.y = node.style.height.fixed;
+            case Sizing.Kind.RATIO;
+                if node.style.width.kind == Sizing.Kind.FIXED {
+                    node.size.y = node.style.width.fixed * node.style.height.ratio;
+                }
+        }
+        if !isnan(node.style.min_width) {
+            node.min_size.x = node.style.min_width;
+        } else if node.style.width.kind == .FIXED {
+            node.min_size.x = node.style.width.fixed;
+        }
+        if !isnan(node.style.min_height) {
+            node.min_size.y = node.style.min_height;
+        } else if node.style.height.kind == .FIXED {
+            node.min_size.y = node.style.height.fixed;
+        }
+        if !isnan(node.style.max_width) {
+            node.max_size.x = node.style.max_width;
+        } else if node.style.width.kind == .FIXED {
+            node.max_size.x = node.style.width.fixed;
+        }
+        if !isnan(node.style.max_height) {
+            node.max_size.y = node.style.max_height;
+        } else if node.style.height.kind == .FIXED {
+            node.max_size.y = node.style.height.fixed;
+        }
+
+        node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
+        node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
+
+        if node.style.width.kind == Sizing.Kind.FIT {
+            node.size.x = fitting_base(node, Direction.HORIZONTAL);
+        } 
+        if node.style.width.kind != Sizing.Kind.FIXED && node.style.min_width == FLOAT32_NAN {
+            node.min_size.x = fitting_base(node, Direction.HORIZONTAL);
+        }
+        if node.style.height.kind == Sizing.Kind.FIT {
+            node.size.y = fitting_base(node, Direction.VERTICAL);
+        } 
+        if node.style.height.kind != Sizing.Kind.FIXED && node.style.min_height == FLOAT32_NAN {
+            node.min_size.y = fitting_base(node, Direction.VERTICAL);
+        }
+
+        shaped_glyphs := shape(node.style.font, content);
+
+        if (node.style.width.kind == Sizing.Kind.RATIO) {
+            node.size.x = node.style.width.ratio * node.size.y;
+        }
+        if (node.style.height.kind == Sizing.Kind.RATIO) {
+            node.size.y = node.style.height.ratio * node.size.x;
+        }
+
+        node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
+        node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
+    }
+}
+text :: (style: Style, key := "", location := #caller_location) {
+    return text(style, "", key, location);
+}
+text :: (content: string, location := #caller_location) {
+    return text(Style.{}, content, "", location);
+}
+
 // TOOD: currently we're defining the specific backend names to be just one
 // here, but in the long-term we will include multiple backends for each
 // operating system, not one, so we need to handle that in a better way.
@@ -1448,12 +1713,12 @@ init_forbear :: (
     context.forbear = forbear;
 }
 
-render_and_reset_node_tree :: (window: *Wayland_EGL_Window) {
+render_and_reset_node_tree :: (window: *Wayland_EGL_Window, clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     #if OS == .LINUX {
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
         glViewport(0, 0, xx window.width, xx window.height);
 
-        glClearColor(0, 0, 0, 1);
+        glClearColor(clearing_color.x, clearing_color.y, clearing_color.z, clearing_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
 
         using context.forbear;
@@ -1470,18 +1735,18 @@ render_and_reset_node_tree :: (window: *Wayland_EGL_Window) {
             };
         }
 
-        glUseProgram(context.forbear.backend.node_program);
-        glUniform2f(glGetUniformLocation(context.forbear.backend.node_program, "viewport"), xx window.width, xx window.height);
-        glBindVertexArray(context.forbear.backend.node_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, context.forbear.backend.node_vbo);
+        glUseProgram(backend.node_program);
+        glUniform2f(glGetUniformLocation(backend.node_program, "viewport"), xx window.width, xx window.height);
+        glBindVertexArray(backend.node_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, backend.node_vbo);
         glBufferData(GL_ARRAY_BUFFER, instances.count * size_of(Node_Draw_Instance), instances.data, GL_STREAM_DRAW);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, xx instances.count);
 
         glFinish();
 
-        send_wayland_message(*context.forbear.backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
-        send_wayland_message(*context.forbear.backend.connection, window.wl_surface_id, Wl_Surface_Request_Damage_Buffer.{ x = 0, y = 0, width = window.width, height = window.height });
-        send_wayland_message(*context.forbear.backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
+        send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
+        send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Damage_Buffer.{ x = 0, y = 0, width = window.width, height = window.height });
+        send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
     }
 
     array_reset_keeping_memory(*context.forbear.node_tree);
