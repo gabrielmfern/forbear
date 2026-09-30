@@ -955,7 +955,7 @@ Complete_Style :: struct {
 };
 
 Base_Style :: struct {
-    font: *Font,
+    font: *Font;
     color: Vector4 = Vector4.{ 1.0, 1.0, 1.0, 1.0 };
     font_size: float = 16.0;
     font_weight: u32 = 600;
@@ -1459,7 +1459,7 @@ Shaped_Glyph :: struct {
 Font :: struct {
     freetype_face: FT_Face;
     kbts_context: *kbts_shape_context;
-    kbts_font: *kbts_font;
+    kbts_font_pointer: *kbts_font;
 
     // prev_cache: Shaping_Cache;
     // next_cache: Shaping_Cache;
@@ -1694,10 +1694,10 @@ text :: (style := Style.{}, content := "", key := "", location := #caller_locati
     }
 }
 text :: (style: Style, key := "", location := #caller_location) {
-    return text(style, "", key, location);
+    text(style, "", key, location);
 }
 text :: (content: string, location := #caller_location) {
-    return text(Style.{}, content, "", location);
+    text(Style.{}, content, "", location);
 }
 
 // TOOD: currently we're defining the specific backend names to be just one
