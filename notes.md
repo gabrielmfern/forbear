@@ -1,3 +1,5 @@
+## TODO
+
 - [x] draw things the screen
 - [ ] support for text nodes
 - [ ] implement macos-opengl backend
@@ -9,7 +11,7 @@ where I was at the end of 09/29/2026:
 - insert the text node into the node tree
 - draw the actual glyphs at their right positions
 
-## introspection
+## introspection 
 
 right now we have window creation from scratch using our own wayland communication and buffer creation, not libwayland, implemented. it works well enough to play with at least, such that I already have a checkboard pattern rendering and handling resizing as well, that is without double buffering so looking very ugly.
 
@@ -28,3 +30,12 @@ what's basically figured out already:
 - text rendering with freetype and kb_text_shape with a texture atlas
 
 direction of rewrite: how can I make things simpler?
+
+I think having functions by themselves run on data makes it much easier to have the program be cross-platform and have support for multiple rendering APIs, but it still is not quite perfect. Two things are still missing on what I've already written:
+1. the user being able to pick any backend with a different graphics API themselves
+2. lots of duplicated code between the same graphics API being used on different operating systems
+
+for simplicity's sake, I would be fine assuming we only use OpenGL for the time being then, in the long term, we can think of how to organize things towrads supporting multiple graphics APIs.
+
+but basically the model is that we can have each graphics API for each platform, but there are platform specific details for each graphics API, so it's not just as simple as saying "this code for opengl" "this code for linux".
+
