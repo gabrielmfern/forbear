@@ -3,6 +3,7 @@
 #import "POSIX";
 Math :: #import "Math";
 #import "GL";
+#import "Hash_Table";
 #import "Hash";
 #import "Basic";
 #if OS == .LINUX {
@@ -11,6 +12,10 @@ Math :: #import "Math";
 
 Vector2 :: Math.Vector2;
 Vector4 :: Math.Vector4;
+operator + :: Math.operator +;
+operator - :: Math.operator -;
+operator * :: Math.operator *;
+operator / :: Math.operator /;
 FLOAT32_NAN :: Math.FLOAT32_NAN;
 FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
 U16_MAX :: Math.U16_MAX;
@@ -553,14 +558,15 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
         }
     }
 
+    Atlas_Entry :: struct {
+        uv_min: Vector2;
+        uv_max: Vector2;
+    };
+
     // TOOD: we still need to add double buffering and proper vsync to the EGL wayland backend here
     Wayland_EGL_Backend :: struct {
         egl_display: EGLDisplay;
         egl_context: EGLContext;
-
-        node_program: u32;
-        node_vao: u32;
-        node_vbo: u32;
 
         connection: Wayland_Connection;
     };
@@ -601,88 +607,10 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
             log_error("EGL_MESA_image_dma_buf_export is not supported\n");
             exit(-1);
         }
-
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-
-        glGenVertexArrays(1, *backend.node_vao);
-        glBindVertexArray(backend.node_vao);
-        glGenBuffers(1, *backend.node_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, backend.node_vbo);
-
-        stride :: size_of(Node_Draw_Instance);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 0);
-        glVertexAttribDivisor(0, 1);
-
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 8);
-        glVertexAttribDivisor(1, 1);
-
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
-        glVertexAttribDivisor(2, 1);
-
-        vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
-#version 330 core
-layout(location = 0) in vec2 position;
-layout(location = 1) in vec2 size;
-layout(location = 2) in vec4 color;
-
-uniform vec2 viewport;
-
-out vec4 v_color;
-
-void main() {
-  vec2 corner = vec2(gl_VertexID & 1, gl_VertexID >> 1);
-  v_color = color;
-
-  gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
-}
-GLSL);
-        defer glDeleteShader(vertex_shader);
-        fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
-#version 330 core
-
-in vec4 v_color;
-out vec4 out_color;
-
-void main() {
-    // TODO: render rounded corners and borders
-    out_color = v_color;
-}
-GLSL);
-        defer glDeleteShader(fragment_shader);
-
-        backend.node_program = glCreateProgram();
-        glAttachShader(backend.node_program, vertex_shader);
-        glAttachShader(backend.node_program, fragment_shader);
-        glLinkProgram(backend.node_program);
-
-        status: GLint;
-        glGetProgramiv(backend.node_program, GL_LINK_STATUS, *status);
-        if !status {
-            log: [1024]u8;
-            log_length: GLsizei;
-            glGetProgramInfoLog(backend.node_program, log.count, *log_length, log.data);
-            log_error("failed to link program: %\n", to_string(log.data, log_length));
-            exit(-1);
-        }
     }
 
     Backend :: Wayland_EGL_Backend;
 }
-
-Forbear :: struct {
-    node_tree: Node_Tree;
-
-    parent_stack: [..]s64;
-    scope_stack: [..]u64;
-    base_style: Base_Style;
-
-    backend: *Backend;
-};
-#add_context forbear: *Forbear;
 
 Direction :: enum u8 { HORIZONTAL; VERTICAL; };
 opposite :: (direction: Direction) -> Direction {
@@ -851,7 +779,7 @@ Complete_Style :: struct {
 
     // Will do nothing if the font is not a variable font. If you don't have a
     // variable font, you should use different fonts for different weights.
-    font_weight: u32;
+    font_weight: u16;
     font_size: float;
     line_height: float;
     text_wrapping: Text_Wrapping;
@@ -882,7 +810,7 @@ Base_Style :: struct {
     font: *Font;
     color: Vector4 = Vector4.{ 1.0, 1.0, 1.0, 1.0 };
     font_size: float = 16.0;
-    font_weight: u32 = 600;
+    font_weight: u16 = 600;
     line_height: float = 1.0;
     text_wrapping: Text_Wrapping = .WORD;
     cursor: Cursor = .DEFAULT;
@@ -1013,7 +941,7 @@ Style :: struct {
     };
 
     font: *Font;
-    font_weight: u32 = 0;
+    font_weight: u16 = 0;
     font_size: float = FLOAT32_NAN;
     line_height: float = FLOAT32_NAN;
     text_wrapping: Text_Wrapping = UNSET;
@@ -1155,7 +1083,7 @@ Node :: struct {
     // Clip rect inherited from ancestors that have constrained size with overflowing children.
     // Format: [x, y, width, height]. If NAN, no clipping is applied.
     clipping_rectangle: Vector4 = Vector4_NAN;
-    glyphs: Glyphs;
+    glyphs: []Shaped_Glyph;
     key: u64;
     z: u16;
 
@@ -1343,7 +1271,7 @@ shaping_context: *kbts_shape_context;
 // TODO: should this be a global? the idea is mainly that we have a unique id
 // for all fonts created we can keep caching and such apart between different
 // fonts that might all be used for rendering
-font_counter: s64;
+font_counter: u16;
 Layout_Glyph :: struct {
     index: s32;
     position: Vector2;
@@ -1364,11 +1292,15 @@ Glyphs :: struct {
     // glyph at that index.
     pre_break_indices: []s64;
 };
+Glyph_Atlas_Entry :: struct {
+    bearing: Vector2;
+    size:    Vector2;
+    uv_min:  Vector2;
+    uv_max:  Vector2;
+};
 Glyph_Draw_Instance :: struct {
     position: Vector2;
-    size: Vector2;
-    uv_min: Vector2;
-    uv_max: Vector2;
+    using entry: Glyph_Atlas_Entry;
     color: Vector4;
 };
 Shaped_Glyph :: struct {
@@ -1390,7 +1322,7 @@ Shaped_Glyph :: struct {
 Font :: struct {
     raster_face: FT_Face;
     shaping_font: *kbts_font;
-    key: s64;
+    key: u16;
 
     // prev_cache: Shaping_Cache;
     // next_cache: Shaping_Cache;
@@ -1400,8 +1332,7 @@ init_font :: (font: *Font, memory: string) {
     if freetype_library == null {
         FT_Init_FreeType(*freetype_library);
         // TODO: implement subpixel font rendering and auto enable in lower DPI
-        // environments to match browser behavior. the freetype bindings in jai
-        // do not have this function implemented
+        // environments to match browser behavior.
         //
         // FT_Library_SetLcdFilter(freetype_library, FT_LCD_FILTER_DEFAULT);
     }
@@ -1425,11 +1356,45 @@ Raster_Glyph :: struct {
     height: u32;
     pitch: s32;
 };
-raster_text :: (font: *Font, glyph_index: u32, size: float) -> Raster_Glyph {
-    FT_Set_Pixel_Sizes(font.raster_face, xx floor(size + 0.5), xx floor(size + 0.5));
-    FT_Load_Glyph(font.raster_face, glyph_index, FT_LOAD_RENDER);
+set_weight :: (font: *Font, weight: u16) {
+    mm: *FT_MM_Var;
+    err := FT_Get_MM_Var(font.raster_face, *mm);
+    if err == xx FT_Err.Invalid_Argument {
+        log_error("cannot set weight - font does not support multiple masters. this is most likely not a variable font, doing nothing.");
+        return;
+    }
+    defer FT_Done_MM_Var(freetype_library, mm);
+
+    coords := NewArray(xx mm.num_axis, FT_Fixed);
+    defer free(coords.data);
+    FT_Get_Var_Design_Coordinates(font.raster_face, mm.num_axis, coords.data);
+
+    for i: 0..mm.*.num_axis - 1 {
+        a := *mm.*.axis[i];
+        w: u64 = #char "w";
+        g: u64 = #char "g";
+        h: u64 = #char "h";
+        t: u64 = #char "t";
+        wght := (w << 24) | (g << 16) | (h << 8) | t;
+        if a.tag == wght {
+            coords[i] = clamp(cast(s64)weight * 65536, xx a.minimum, xx a.maximum);
+            break;
+        }
+    }
+    FT_Set_Var_Design_Coordinates(font.raster_face, mm.num_axis, coords.data);
+}
+set_font_size :: (font: *Font, size: u16) {
+    FT_Set_Pixel_Sizes(font.raster_face, size, size);
+}
+round_font_size :: (size: float) -> u16 #expand {
+   assert(size <= 0xFFFF, "font sizes need to be packed to u16");
+   return xx floor(size + 0.5);
+}
+font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
+    FT_Load_Glyph(font.raster_face, xx glyph_index, FT_LOAD_RENDER);
     glyph := font.raster_face.glyph;
-    FT_Render_Glyph(glyph, FT_Render_Mode.NORMAL);
+    // FT_LOAD_RENDER already renders the glyph
+    // FT_Render_Glyph(glyph, FT_Render_Mode.NORMAL);
     raster_glyph: Raster_Glyph;
     if glyph.bitmap.buffer != null {
         raster_glyph.bitmap.data = glyph.bitmap.buffer;
@@ -1446,7 +1411,7 @@ shape_text :: (font: *Font, content: string) -> [..]Shaped_Glyph {
     // TODO(next): pass the language and direction down as styles
     kbts_ShapeBegin(
         shaping_context,
-        xx kbts_direction_enum.KBTS_DIRECTION_RTL,
+        xx kbts_direction_enum.KBTS_DIRECTION_LTR,
         xx kbts_language_enum.KBTS_LANGUAGE_DONT_KNOW
     );
     kbts_ShapeUtf8(
@@ -1485,88 +1450,6 @@ free_font :: (font: *Font) {
     FT_Done_Face(font.raster_face);
 }
 
-// build_text(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usize) !void {
-//     const self = getForbear();
-//     const arena = self.frameMeta.?.arena;
-//
-//     const parentIndexOptional = self.nodeStack.getLastOrNull();
-//     const result = try self.nodeTree.putNode(self.arena, parentIndexOptional);
-//
-//     const parentOptional = if (parentIndexOptional) |parentIndex|
-//         self.nodeTree.at(parentIndex)
-//     else
-//         null;
-//
-//     const baseStyle = if (parentOptional) |parent|
-//         BaseStyle.from(parent.style)
-//     else
-//         self.frameMeta.?.baseStyle;
-//
-//     (Style{
-//         .cursor = if (baseStyle.cursor == .default)
-//             .text
-//         else
-//             baseStyle.cursor,
-//         .xJustification = if (parentOptional) |parent| parent.style.xJustification else null,
-//         .yJustification = .start,
-//         .font = base.font,
-//         .color = base.color,
-//         .fontSize = base.fontSize,
-//         .fontWeight = base.fontWeight,
-//         .lineHeight = base.lineHeight,
-//     }).completeWith(baseStyle, &result.ptr.style);
-//
-//     const shaped = try shapeRuns(arena, runs, result.ptr.style.textWrapping);
-//
-//     const parentZ = if (parentOptional) |parent|
-//         parent.z
-//     else
-//         0;
-//
-//     var k: u64 = 0;
-//     if (self.scopeStack.getLastOrNull()) |lastScopeKey| {
-//         k = mixU64(k, lastScopeKey);
-//     }
-//     k = mixU64(k, @as(u64, self.nodeStack.items.len));
-//     // We don't mix the text content here because text selection would be nice
-//     // to work even with text changing
-//     //
-//     // k = mixU64(k, std.hash.Wyhash.hash(0, effectiveContent));
-//     k = mixU64(k, returnAddress);
-//
-//     result.ptr.key = k;
-//     result.ptr.position = @splat(0.0);
-//     result.ptr.z = if (parentZ < std.math.maxInt(u16))
-//         parentZ + 1
-//     else
-//         parentZ;
-//     result.ptr.size = .{ shaped.maxSize[0], shaped.minSize[1] };
-//     result.ptr.minSize = shaped.minSize;
-//     result.ptr.maxSize = shaped.maxSize;
-//     result.ptr.glyphs = Glyphs{
-//         .slice = shaped.glyphs,
-//         .lineHeight = shaped.lineHeight,
-//         .ascent = shaped.ascent,
-//         .preBreakIndices = shaped.preBreakIndices,
-//     };
-//
-//     if (parentOptional) |parent| {
-//         parent.fitChild(result.ptr);
-//     }
-//
-//     // Push self onto the parent stack so `on(.mouseOver)` resolves the
-//     // text node's own measurement, then pop. The text node itself is not
-//     // a scope and has no children, so this is purely for hit-testing.
-//     try self.nodeStack.append(self.arena, result.index);
-//     defer _ = self.nodeStack.pop();
-//
-//     try pushScope(result.ptr.key);
-//     defer popScope();
-//
-//     if (isNodeActive()) {
-//         setCursor(result.ptr.style.cursor);
-//     }
-// }
 text :: (style := Style.{}, content := "", key := "", location := #caller_location) #expand {
     if content.count > 0 {
         parent_index: s64 = -1;
@@ -1660,7 +1543,8 @@ text :: (style := Style.{}, content := "", key := "", location := #caller_locati
             node.min_size.y = fitting_base(node, Direction.VERTICAL);
         }
 
-        shaped_glyphs := shape_text(node.style.font, content);
+        // TODO(layouting): we should be using something that includes more data here since it's going to be required during layouting.
+        node.glyphs = shape_text(node.style.font, content);
 
         if (node.style.width.kind == Sizing.Kind.RATIO) {
             node.size.x = node.style.width.ratio * node.size.y;
@@ -1677,16 +1561,253 @@ text :: (content: string, location := #caller_location) {
     text(Style.{}, content, "", location);
 }
 
-// TOOD: currently we're defining the specific backend names to be just one
-// here, but in the long-term we will include multiple backends for each
-// operating system, not one, so we need to handle that in a better way.
+Glyph_Atlas :: struct {
+    // TODO: change this based on the render API that's selected. currently we only support OpenGL, though.
+    texture: u32;
+    table: Table(u64, Glyph_Atlas_Entry);
+
+    cursor_x: s32;
+    cursor_y: s32;
+    row_height: s32;
+
+    PADDING :: 1;
+    SIZE :: 1024;
+};
+glyph_atlas_key :: (font: *Font, glyph_index: u16, size: u16, weight: u16) -> u64 {
+    key := (cast(u64) font.key) << 48;
+    key |= (cast(u64) glyph_index) << 32;
+    key |= (cast(u64) size) << 16;
+    key |= (cast(u64) weight);
+    return key;
+}
+glyph_atlas_place :: (glyph_atlas: *Glyph_Atlas, width: s32, height: s32) -> x: s32, y: s32, ok: bool {
+    using glyph_atlas;
+    if cursor_x + width + PADDING > SIZE {
+        cursor_x = 0;
+        cursor_y += row_height + PADDING;
+        row_height = 0;
+    }
+    if cursor_y + height + PADDING > SIZE {
+        return 0, 0, false;
+    }
+
+    x, y := cursor_x, cursor_y;
+    cursor_x += width + PADDING;
+    row_height = max(row_height, height);
+    return x, y, true;
+}
+
+Forbear :: struct {
+    node_tree: Node_Tree;
+
+    parent_stack: [..]s64;
+    scope_stack: [..]u64;
+    base_style: Base_Style;
+
+    node_program: u32;
+    node_vao: u32;
+    node_vbo: u32;
+
+    glyph_atlas: Glyph_Atlas;
+    glyph_program: u32;
+    glyph_vao: u32;
+    glyph_vbo: u32;
+
+    backend: *Backend;
+};
+#add_context forbear: *Forbear;
 init_forbear :: (
     forbear: *Forbear,
-    backend: *Backend,
-    base_style: Base_Style,
+    // TOOD: currently we're defining the specific backend names to be just one
+    // here, but in the long-term we will include multiple backends for each
+    // operating system, not one, so we need to handle that in a better way.
+    program_backend: *Backend,
+    program_base_style: Base_Style,
 ) {
-    forbear.backend = backend;
-    forbear.base_style = base_style;
+    using forbear;
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+    {
+        // node rendering setup
+        glGenVertexArrays(1, *node_vao);
+        glBindVertexArray(node_vao);
+        glGenBuffers(1, *node_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, node_vbo);
+
+        stride :: size_of(Node_Draw_Instance);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 0);
+        glVertexAttribDivisor(0, 1);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 8);
+        glVertexAttribDivisor(1, 1);
+
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
+        glVertexAttribDivisor(2, 1);
+
+        vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
+#version 330 core
+layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 size;
+layout(location = 2) in vec4 color;
+
+uniform vec2 viewport;
+
+out vec4 v_color;
+
+const vec2 corners[6] = vec2[](
+  vec2(0, 0), vec2(1, 0), vec2(0, 1),
+  vec2(0, 1), vec2(1, 0), vec2(1, 1)
+);
+
+void main() {
+    vec2 corner = corners[gl_VertexID];
+    v_color = color;
+
+    gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
+}
+GLSL);
+        defer glDeleteShader(vertex_shader);
+        fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
+#version 330 core
+
+in vec4 v_color;
+out vec4 out_color;
+
+void main() {
+    // TODO: render rounded corners and borders
+    out_color = v_color;
+}
+GLSL);
+        defer glDeleteShader(fragment_shader);
+
+        node_program = glCreateProgram();
+        glAttachShader(node_program, vertex_shader);
+        glAttachShader(node_program, fragment_shader);
+        glLinkProgram(node_program);
+
+        status: GLint;
+        glGetProgramiv(node_program, GL_LINK_STATUS, *status);
+        if !status {
+            log: [1024]u8;
+            log_length: GLsizei;
+            glGetProgramInfoLog(node_program, log.count, *log_length, log.data);
+            log_error("failed to link program: %\n", to_string(log.data, log_length));
+            exit(-1);
+        }
+    }
+
+    {
+        // glyph rendering setup
+        glGenVertexArrays(1, *glyph_vao);
+        glBindVertexArray(glyph_vao);
+        glGenBuffers(1, *glyph_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, glyph_vbo);
+
+        stride :: size_of(Glyph_Draw_Instance);
+        // position
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 0);
+        glVertexAttribDivisor(0, 1);
+
+        // bearing
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 8);
+        glVertexAttribDivisor(1, 1);
+
+        // size
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
+        glVertexAttribDivisor(2, 1);
+
+        // uv_min
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 24);
+        glVertexAttribDivisor(3, 1);
+
+        // uv_max
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 32);
+        glVertexAttribDivisor(4, 1);
+
+        // color
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 40);
+        glVertexAttribDivisor(5, 1);
+
+        vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
+#version 330 core
+layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 bearing;
+layout(location = 2) in vec2 size;
+layout(location = 3) in vec2 uv_min;
+layout(location = 4) in vec2 uv_max;
+layout(location = 5) in vec4 color;
+
+uniform vec2 viewport;
+
+out vec4 v_color;
+out vec2 v_uv;
+
+const vec2 corners[6] = vec2[](
+  vec2(0, 0), vec2(1, 0), vec2(0, 1),
+  vec2(0, 1), vec2(1, 0), vec2(1, 1)
+);
+
+void main() {
+    vec2 corner = corners[gl_VertexID];
+    v_color = color;
+    v_uv = mix(uv_min, uv_max, corner);
+
+    gl_Position = vec4((position + bearing + corner * size) / viewport * 2.0 - 1.0, 0.0, 1.0);
+}
+GLSL);
+        defer glDeleteShader(vertex_shader);
+        fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
+#version 330 core
+
+in vec4 v_color;
+in vec2 v_uv;
+
+uniform sampler2D atlas;
+
+out vec4 out_color;
+
+void main() {
+    // TODO: handle subpixel rendering
+    float a = texture(atlas, v_uv).r * v_color.a;
+    out_color = vec4(v_color.rgb * a, a);
+}
+GLSL);
+        defer glDeleteShader(fragment_shader);
+
+        glyph_program = glCreateProgram();
+        glAttachShader(glyph_program, vertex_shader);
+        glAttachShader(glyph_program, fragment_shader);
+        glLinkProgram(glyph_program);
+
+        status: GLint;
+        glGetProgramiv(glyph_program, GL_LINK_STATUS, *status);
+        if !status {
+            log: [1024]u8;
+            log_length: GLsizei;
+            glGetProgramInfoLog(glyph_program, log.count, *log_length, log.data);
+            log_error("failed to link program: %\n", to_string(log.data, log_length));
+            exit(-1);
+        }
+        
+        glGenTextures(1, *glyph_atlas.texture);
+        glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
+        // TOOD: keep track of whether subpixel rendering is enabled to create the texture atlas here accordingly
+        glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, Glyph_Atlas.SIZE, Glyph_Atlas.SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, null);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    }
+
+    backend = program_backend;
+    base_style = program_base_style;
     context.forbear = forbear;
 }
 
@@ -1700,28 +1821,88 @@ render_and_reset_node_tree :: (window: *Wayland_EGL_Window, clearing_color := Ve
     glClearColor(clearing_color.x, clearing_color.y, clearing_color.z, clearing_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glyphs_buffer: [..]Glyph_Draw_Instance;
+    glyph_instances: [..]Glyph_Draw_Instance;
 
-    instances_buffer := NewArray(node_tree.count, Node_Draw_Instance);
-    instances := array_view(instances_buffer, 0, 0);
-    defer free(cast(*void) instances.data);
-    for node_tree {
-        if it.style.background.kind != .COLOR  continue;
-        if it.glyphs.array.count != 0 {
+    node_instances_buffer := NewArray(node_tree.count, Node_Draw_Instance);
+    node_instances := array_view(node_instances_buffer, 0, 0);
+    defer free(cast(*void) node_instances_buffer.data);
+    for node: node_tree {
+        if node.glyphs.count != 0 {
+            rounded_font_size := round_font_size(node.style.font_size);
+            set_weight(node.style.font, node.style.font_weight);
+            set_font_size(node.style.font, rounded_font_size);
+            font_units_to_pixel := (cast(float) rounded_font_size) / (cast(float) node.style.font.raster_face.units_per_EM);
+            ascender := cast(float)node.style.font.raster_face.ascender;
+            cursor := node.position;
+            cursor.y += ascender * font_units_to_pixel; 
+            for glyph: node.glyphs {
+                atlas_key := glyph_atlas_key(node.style.font, glyph.index, rounded_font_size, node.style.font_weight);
+                entry := table_find_pointer(*glyph_atlas.table, atlas_key);
+                if entry == null {
+                    // there's no entry in the atlas for this glyph configuration
+                    raster := font_raster_glyph(node.style.font, glyph.index);
+                    x, y, ok := glyph_atlas_place(*glyph_atlas, xx raster.width, xx raster.height);
+                    if !ok {
+                        log_error("the atlas is full, glyph index % will not be rendered", glyph.index);
+                        // TODO: pick how to handle the full atlas in a way that works as the user would prefer
+                    }
+
+                    if raster.bitmap.data != null {
+                        glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
+                        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                        glPixelStorei(GL_UNPACK_ROW_LENGTH, raster.pitch);
+                        glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, raster.width, raster.height, GL_RED, GL_UNSIGNED_BYTE, raster.bitmap.data);
+                        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                    }
+
+                    new_entry: Glyph_Atlas_Entry;
+                    new_entry.bearing = .{ xx raster.left, xx -raster.top };
+                    new_entry.size    = .{ xx raster.width, xx raster.height };
+                    new_entry.uv_min  = .{ 
+                        x = x / (cast(float) Glyph_Atlas.SIZE), 
+                        y = y / (cast(float) Glyph_Atlas.SIZE)
+                    };
+                    new_entry.uv_max  = .{ 
+                        x = ((cast(float)x) + (cast(float)raster.width)) / (cast(float) Glyph_Atlas.SIZE), 
+                        y = ((cast(float)y) + (cast(float)raster.height)) / (cast(float) Glyph_Atlas.SIZE)
+                    };
+                    entry = table_add(*glyph_atlas.table, atlas_key, new_entry);
+                }
+
+                glyph_draw_instance: Glyph_Draw_Instance;
+                glyph_draw_instance.entry = entry;
+                glyph_draw_instance.position = cursor + glyph.offset * font_units_to_pixel;
+                glyph_draw_instance.color = node.style.color;
+                array_add(*glyph_instances, glyph_draw_instance);
+                cursor += glyph.advance * font_units_to_pixel;
+            }
         }
-        instances.count += 1;
-        instances[instances.count - 1] = Node_Draw_Instance.{
-            position = it.position,
-            size = it.size,
-            color = it.style.background.color
-        };
+
+        if node.style.background.kind == .COLOR {
+            node_instances.count += 1;
+            node_instances[node_instances.count - 1] = Node_Draw_Instance.{
+                position = node.position,
+                size = node.size,
+                color = node.style.background.color
+            };
+        }
+        // TODO: write out the instance gathering for the other types of backgrounds
     }
 
-    glUseProgram(backend.node_program);
-    glUniform2f(glGetUniformLocation(backend.node_program, "viewport"), xx window.width, xx window.height);
-    glBindVertexArray(backend.node_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, backend.node_vbo); glBufferData(GL_ARRAY_BUFFER, instances.count * size_of(Node_Draw_Instance), instances.data, GL_STREAM_DRAW);
-    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, xx instances.count);
+    glUseProgram(node_program);
+    glUniform2f(glGetUniformLocation(node_program, "viewport"), xx window.width, xx window.height);
+    glBindVertexArray(node_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, node_vbo); glBufferData(GL_ARRAY_BUFFER, node_instances.count * size_of(Node_Draw_Instance), node_instances.data, GL_STREAM_DRAW);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx node_instances.count);
+
+    glUseProgram(glyph_program);
+    glUniform2f(glGetUniformLocation(glyph_program, "viewport"), xx window.width, xx window.height);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
+    glBindVertexArray(glyph_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, glyph_vbo);
+    glBufferData(GL_ARRAY_BUFFER, glyph_instances.count * size_of(Glyph_Draw_Instance), glyph_instances.data, GL_STREAM_DRAW);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx glyph_instances.count);
 
     #if OS == .LINUX {
         glFinish();

@@ -31,11 +31,12 @@ main :: () {
             height = fixed(500),
             background = color(rgb(255, 0, 255)),
             color = rgb(255, 255, 255),
+            font_size = 128,
         }, #code {
             text("hello lisa");
         });
 
-        render_and_reset_node_tree(*wayland_egl_window);
+        render_and_reset_node_tree(*wayland_egl_window, rgb(0.0, 0.0, 0.0));
 
         reset_temporary_storage();
     }
