@@ -1830,8 +1830,6 @@ render_and_reset_node_tree :: (window: *Wayland_EGL_Window, clearing_color := Ve
     for node: node_tree {
         if node.glyphs.count != 0 {
             rounded_font_size := round_font_size(node.style.font_size);
-            set_weight(node.style.font, node.style.font_weight);
-            set_font_size(node.style.font, rounded_font_size);
             font_units_to_pixel := (cast(float) rounded_font_size) / (cast(float) node.style.font.raster_face.units_per_EM);
             ascender := cast(float)node.style.font.raster_face.ascender;
             cursor := node.position;
@@ -1840,6 +1838,8 @@ render_and_reset_node_tree :: (window: *Wayland_EGL_Window, clearing_color := Ve
                 atlas_key := glyph_atlas_key(node.style.font, glyph.index, rounded_font_size, node.style.font_weight);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
                 if entry == null {
+                    set_weight(node.style.font, node.style.font_weight);
+                    set_font_size(node.style.font, rounded_font_size);
                     // there's no entry in the atlas for this glyph configuration
                     raster := font_raster_glyph(node.style.font, glyph.index);
                     x, y, ok := glyph_atlas_place(*glyph_atlas, xx raster.width, xx raster.height);
