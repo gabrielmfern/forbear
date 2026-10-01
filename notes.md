@@ -1,7 +1,7 @@
 ## TODO
 
 - [x] draw things the screen
-- [ ] support for text nodes
+- [x] support for text nodes
 - [ ] implement macos-opengl backend
 - [ ] layout nodes
 - [ ] draw rounded corners
