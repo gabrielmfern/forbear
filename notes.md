@@ -5,9 +5,16 @@
 - [ ] implement macos-opengl backend
 - [ ] layout nodes
 - [ ] draw rounded corners
-- [ ] draw in the z order
 - [ ] do double buffering in wayland
 - [ ] fix error when screenshotting wayland program: ```could not send wayland message: 11```
+- [ ] understand how we want to do memory, programs should use a pool, but should forbear define one by itself?
+- [ ] draw in the z order
+- [ ] text rendering completeness
+    - [ ] subpixel
+    - [ ] account for font weight for kbts as well 
+    - [ ] program just doesn't do anything if the atlas is full
+    - [ ] glyphs are sitting on fractional pixels on the texture atlas
+    - [ ] we don't really support multiple fonts right now? we're using the single kbts_context which uses the font in the top of the stack
 
 ## introspection 
 

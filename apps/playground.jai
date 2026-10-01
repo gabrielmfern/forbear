@@ -31,7 +31,6 @@ main :: () {
             height = fixed(500),
             background = color(rgb(255, 0, 255)),
             color = rgb(255, 255, 255),
-            font_size = 128,
         }, #code {
             text("hello lisa");
         });
