@@ -816,7 +816,7 @@ Base_Style :: struct {
     cursor: Cursor = .DEFAULT;
 };
 
-from :: (style: Complete_Style) -> Base_Style {
+base_style_from_complete_style :: (style: Complete_Style) -> Base_Style {
     return Base_Style.{
         font = style.font,
         color = style.color,
@@ -1146,6 +1146,7 @@ element :: (
     node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
     previous_base_style := context.forbear.base_style;
     complete_with(style, context.forbear.base_style, *node.style);
+    context.forbear.base_style = base_style_from_complete_style(node.style);
     if parent_index != -1 {
         if style.z_index < U16_MAX {
             node.z = style.z_index;
