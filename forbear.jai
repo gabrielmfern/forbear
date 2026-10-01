@@ -3,7 +3,6 @@
 #import "POSIX";
 Math :: #import "Math";
 #import "GL";
-#import "freetype";
 #import "Hash";
 #import "Basic";
 #if OS == .LINUX {
