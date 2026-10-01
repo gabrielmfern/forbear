@@ -406,4 +406,3 @@ build :: () {
     set_build_options(playground_options, playground);
     add_build_file("apps/playground.jai", playground);
 }
-

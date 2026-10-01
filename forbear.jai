@@ -15,19 +15,37 @@ Vector4 :: Math.Vector4;
 FLOAT32_NAN :: Math.FLOAT32_NAN;
 FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
 U16_MAX :: Math.U16_MAX;
+floor :: Math.floor;
+abs :: Math.abs;
 isnan :: Math.isnan;
 make_vector2 :: Math.make_vector2;
 make_vector4 :: Math.make_vector4;
 
-#if OS == .LINUX {
-    eglExportDMABUFImageQueryMESA: PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC;
-    eglExportDMABUFImageMESA: PFNEGLEXPORTDMABUFIMAGEMESAPROC;
+compile_shader :: (kind: GLenum, source: string) -> u32 {
+    shader := glCreateShader(kind);
+    data := source.data;
+    length: GLint = xx source.count;
+    glShaderSource(shader, 1, *data, *length);
+    glCompileShader(shader);
 
+    status: GLint;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, *status);
+    if !status {
+        log: [1024]u8;
+        log_length: GLsizei;
+        glGetShaderInfoLog(shader, log.count, *log_length, log.data);
+        log_error("failed to compile shader: %\n", to_string(log.data, log_length));
+        exit(-1);
+    }
+    return shader;
+}
+
+#if OS == .LINUX {
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
     EXIT_ON_FIRST_FRAME :: false;
 
-    Message_Header :: struct {
+    Wayland_Message_header :: struct {
         object_id: u32;
         opcode: u16;
         size: u16;
@@ -37,7 +55,7 @@ make_vector4 :: Math.make_vector4;
     Wayland_Connection :: struct {
         fd: s32;
         polling_fd: pollfd;
-        
+
         wl_display_id: u32;
         wl_registry_id: u32;
         wl_compositor_id: u32;
@@ -92,7 +110,7 @@ make_vector4 :: Math.make_vector4;
             });
             return id;
         }
-     
+
         while connection.wl_compositor_id == 0 || connection.xdg_wm_base_id == 0 || connection.zwp_dmabuf_id == 0 {
             event, data, something := next_wayland_event(connection);
             if !something {
@@ -151,8 +169,8 @@ make_vector4 :: Math.make_vector4;
 
     next_wayland_event :: (connection: *Wayland_Connection) -> event: Message_Info, data: *void, something: bool {
         should_read_more: bool;
-        if connection.pending_reads.count >= size_of(Message_Header) {
-            incoming_message_header := cast(*Message_Header) connection.pending_reads.data;
+        if connection.pending_reads.count >= size_of(Wayland_Message_header) {
+            incoming_message_header := cast(*Wayland_Message_header) connection.pending_reads.data;
             should_read_more = connection.pending_reads.count < incoming_message_header.size;
         } else {
             should_read_more = true;
@@ -162,8 +180,8 @@ make_vector4 :: Math.make_vector4;
             // move the leftover to the start of the buffer
             copy(connection.reading_buffer.data, connection.pending_reads.data, leftover);
             result := read(
-                connection.fd, 
-                cast(*void) (connection.reading_buffer.data + leftover), 
+                connection.fd,
+                cast(*void) (connection.reading_buffer.data + leftover),
                 xx (connection.reading_buffer.count - leftover)
             );
             if result == 0 {
@@ -184,12 +202,12 @@ make_vector4 :: Math.make_vector4;
             connection.pending_reads = array_view(connection.reading_buffer, 0, result + leftover);
         }
 
-        if connection.pending_reads.count < size_of(Message_Header) ||
-           connection.pending_reads.count < (cast(*Message_Header) connection.pending_reads.data).size {
+        if connection.pending_reads.count < size_of(Wayland_Message_header) ||
+           connection.pending_reads.count < (cast(*Wayland_Message_header) connection.pending_reads.data).size {
             return Message_Info.{}, null, false;
         }
 
-        incoming_message_header := cast(*Message_Header) connection.pending_reads.data;
+        incoming_message_header := cast(*Wayland_Message_header) connection.pending_reads.data;
 
         object_interface_id: Interface_Id;
         if incoming_message_header.object_id >= 0xff000000 {
@@ -202,7 +220,7 @@ make_vector4 :: Math.make_vector4;
             INTERFACES[object_interface_id].first_event + incoming_message_header.opcode
         ];
 
-        incoming_message := array_view(connection.pending_reads, size_of(Message_Header), incoming_message_header.size - size_of(Message_Header));
+        incoming_message := array_view(connection.pending_reads, size_of(Wayland_Message_header), incoming_message_header.size - size_of(Wayland_Message_header));
         connection.pending_reads.data += incoming_message_header.size;
         connection.pending_reads.count -= incoming_message_header.size;
 
@@ -211,10 +229,10 @@ make_vector4 :: Math.make_vector4;
         if event.type == Wl_Display_Event_Error {
             error := cast(*Wl_Display_Event_Error) data;
             log_error(
-                "protocol error on object % (%): code %, %", 
-                error.object_id, 
-                connection.client_object_interfaces[error.object_id - 1], 
-                error.code, 
+                "protocol error on object % (%): code %, %",
+                error.object_id,
+                connection.client_object_interfaces[error.object_id - 1],
+                error.code,
                 error.message
             );
             exit(-1);
@@ -234,7 +252,7 @@ make_vector4 :: Math.make_vector4;
     // TODO(depessimization): we should be buffering the messages and flushing them instead of sending them all one by one
     writing_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
     send_wayland_message :: (connection: *Wayland_Connection, object_id: u32, message: $T) -> bool {
-        bytes := array_view(writing_buffer, 0, size_of(Message_Header));
+        bytes := array_view(writing_buffer, 0, size_of(Wayland_Message_header));
 
         m := message;
         message_type_info := type_info(T);
@@ -280,7 +298,7 @@ make_vector4 :: Math.make_vector4;
             }
         }
 
-        header := cast(*Message_Header) bytes.data;
+        header := cast(*Wayland_Message_header) bytes.data;
         header.object_id = object_id;
         header.opcode = T.OPCODE;
         header.size = xx bytes.count;
@@ -338,7 +356,7 @@ make_vector4 :: Math.make_vector4;
 
             arg_type_info := cast(*Type_Info) arg_member.type;
             if it == {
-                case ProtocolType.FILE_DESCRIPTOR; 
+                case ProtocolType.FILE_DESCRIPTOR;
                     continue;
                 case ProtocolType.STRING;
                     value: string;
@@ -349,7 +367,7 @@ make_vector4 :: Math.make_vector4;
                     value.data = remainder.data;
                     remainder.data += (value.count + 4) & ~3; // account for the padding to four, and the -1 we did before
                     memcpy(
-                        cast(*void) *untyped_message_bytes[arg_member.offset_in_bytes], 
+                        cast(*void) *untyped_message_bytes[arg_member.offset_in_bytes],
                         cast(*void) *value,
                         arg_type_info.runtime_size
                     );
@@ -361,7 +379,7 @@ make_vector4 :: Math.make_vector4;
                     value.data = remainder.data;
                     remainder.data += (value.count + 3) & ~3;
                     memcpy(
-                        cast(*void) *untyped_message_bytes[arg_member.offset_in_bytes], 
+                        cast(*void) *untyped_message_bytes[arg_member.offset_in_bytes],
                         cast(*void) *value,
                         arg_type_info.runtime_size
                     );
@@ -371,8 +389,8 @@ make_vector4 :: Math.make_vector4;
                 case ProtocolType.NEW_ID; #through;
                 case ProtocolType.UINT;
                     memcpy(
-                        cast(*void) *untyped_message_bytes[arg_member.offset_in_bytes], 
-                        cast(*void) remainder.data, 
+                        cast(*void) *untyped_message_bytes[arg_member.offset_in_bytes],
+                        cast(*void) remainder.data,
                         arg_type_info.runtime_size
                     );
                     remainder.data += arg_type_info.runtime_size;
@@ -382,18 +400,10 @@ make_vector4 :: Math.make_vector4;
         return cast(*void) untyped_message_bytes.data;
     }
 
-    Color :: struct {
-        b: u8;
-        g: u8;
-        r: u8;
-        // this is unused and the compositor ignores it
-        x: u8;
-    } #no_padding;
-
     Wayland_EGL_Window :: struct {
         wl_surface_id: u32;
         wl_buffer_id: u32;
-        
+
         xdg_surface_id: u32;
         // only top level windows are supported. there are also popups
         xdg_toplevel_id: u32;
@@ -414,7 +424,6 @@ make_vector4 :: Math.make_vector4;
 
         running: bool = true;
     };
-
     init_wayland_egl_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32) {
         window.width = width;
         window.height = height;
@@ -545,26 +554,7 @@ make_vector4 :: Math.make_vector4;
         }
     }
 
-    compile_shader :: (kind: GLenum, source: string) -> u32 {
-        shader := glCreateShader(kind);
-        data := source.data;
-        length: GLint = xx source.count;
-        glShaderSource(shader, 1, *data, *length);
-        glCompileShader(shader);
-
-        status: GLint;
-        glGetShaderiv(shader, GL_COMPILE_STATUS, *status);
-        if !status {
-            log: [1024]u8;
-            log_length: GLsizei;
-            glGetShaderInfoLog(shader, log.count, *log_length, log.data);
-            log_error("failed to compile shader: %\n", to_string(log.data, log_length));
-            exit(-1);
-        }
-        return shader;
-    }
-
-    // TOOD: we still need to add double buffering and proper vsync to the EGL wayland backend here 
+    // TOOD: we still need to add double buffering and proper vsync to the EGL wayland backend here
     Wayland_EGL_Backend :: struct {
         egl_display: EGLDisplay;
         egl_context: EGLContext;
@@ -575,6 +565,8 @@ make_vector4 :: Math.make_vector4;
 
         connection: Wayland_Connection;
     };
+    eglExportDMABUFImageQueryMESA: PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC;
+    eglExportDMABUFImageMESA: PFNEGLEXPORTDMABUFIMAGEMESAPROC;
     init_wayland_egl_backend :: (backend: *Wayland_EGL_Backend) {
         init_wayland_connection(*backend.connection);
 
@@ -590,8 +582,8 @@ make_vector4 :: Math.make_vector4;
             exit(-1);
         }
         egl_context_attributes := EGLint.[
-            EGL_CONTEXT_MAJOR_VERSION, 3, 
-            EGL_CONTEXT_MINOR_VERSION, 3, 
+            EGL_CONTEXT_MAJOR_VERSION, 3,
+            EGL_CONTEXT_MINOR_VERSION, 3,
             EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
             EGL_NONE
         ];
@@ -951,10 +943,10 @@ Linear_Gradient :: struct {
 };
 
 Background :: struct {
-    Kind :: enum u8 { 
-        COLOR; 
-        // IMAGE; 
-        GRADIENT; 
+    Kind :: enum u8 {
+        COLOR;
+        // IMAGE;
+        GRADIENT;
     };
 
     kind: Kind;
@@ -1014,14 +1006,14 @@ Style :: struct {
     border_width: Border_Width = Sides_NAN;
     border_style: Border_Style = UNSET;
 
-    shadow: Shadow = Shadow.{ 
-        offset = Sides_NAN, 
-        blur_radius = FLOAT32_NAN, 
-        spread = FLOAT32_NAN, 
+    shadow: Shadow = Shadow.{
+        offset = Sides_NAN,
+        blur_radius = FLOAT32_NAN,
+        spread = FLOAT32_NAN,
         color = Vector4_NAN,
     };
 
-    font: *Font = null;
+    font: *Font;
     font_weight: u32 = 0;
     font_size: float = FLOAT32_NAN;
     line_height: float = FLOAT32_NAN;
@@ -1134,30 +1126,6 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
     out.y_justification = ifx style.y_justification == xx UNSET then .START else style.y_justification;
 }
 
-LayoutGlyph :: struct {
-    index: s32;
-    position: Vector2;
-
-    textBuf: [4]u8;
-
-    // Meant for the recalculation of the glyphs position if that's required
-    // at some other layouting step
-    advance: Vector2;
-    // Meant for the recalculation of the glyphs position if that's required
-    // at some other layouting step
-    offset: Vector2;
-};
-
-Glyphs :: struct {
-    lineHeight: float;
-    // Distance from line top to the shared baseline, in pixels.
-    ascent: float;
-    array: []LayoutGlyph;
-    // Indices into `slice` where a manual line break was requested before the
-    // glyph at that index.
-    preBreakIndices: []s64;
-};
-
 Node_Draw_Instance :: struct {
     position: Vector2;
     size: Vector2;
@@ -1181,7 +1149,7 @@ Node :: struct {
     // TODO: should we have this? this feels like the wrong solution to the
     // problem, there should be a user-accessible way of changing the offset of
     // the children without a specific property for it
-    // 
+    //
     // Generally used for scrolling. This is added to the position of the children of this node
     children_offset: Vector2;
 
@@ -1237,9 +1205,9 @@ append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointe
 }
 
 element :: (
-    style := Style.{}, 
-    body: Code = #code {}, 
-    key := "", 
+    style := Style.{},
+    body: Code = #code {},
+    key := "",
     location := #caller_location
 ) #expand {
     parent_index: s64 = -1;
@@ -1328,13 +1296,13 @@ element :: (
 
     if node.style.width.kind == Sizing.Kind.FIT {
         node.size.x = fitting_base(node, Direction.HORIZONTAL);
-    } 
+    }
     if node.style.width.kind != Sizing.Kind.FIXED && node.style.min_width == FLOAT32_NAN {
         node.min_size.x = fitting_base(node, Direction.HORIZONTAL);
     }
     if node.style.height.kind == Sizing.Kind.FIT {
         node.size.y = fitting_base(node, Direction.VERTICAL);
-    } 
+    }
     if node.style.height.kind != Sizing.Kind.FIXED && node.style.min_height == FLOAT32_NAN {
         node.min_size.y = fitting_base(node, Direction.VERTICAL);
     }
@@ -1371,13 +1339,45 @@ element :: (style: Style, key: string, location := #caller_location) #expand {
     element(style = style, key = key, location = location);
 }
 
+freetype_library: FT_Library;
+shaping_context: *kbts_shape_context;
+// TODO: should this be a global? the idea is mainly that we have a unique id
+// for all fonts created we can keep caching and such apart between different
+// fonts that might all be used for rendering
+font_counter: s64;
+Layout_Glyph :: struct {
+    index: s32;
+    position: Vector2;
+    text_buffer: [4]u8;
+    // Meant for the recalculation of the glyphs position if that's required
+    // at some other layouting step
+    advance: Vector2;
+    // Meant for the recalculation of the glyphs position if that's required
+    // at some other layouting step
+    offset: Vector2;
+};
+Glyphs :: struct {
+    line_height: float;
+    // Distance from line top to the shared baseline, in pixels.
+    ascent: float;
+    array: []Layout_Glyph;
+    // Indices into `slice` where a manual line break was requested before the
+    // glyph at that index.
+    pre_break_indices: []s64;
+};
+Glyph_Draw_Instance :: struct {
+    position: Vector2;
+    size: Vector2;
+    uv_min: Vector2;
+    uv_max: Vector2;
+    color: Vector4;
+};
 Shaped_Glyph :: struct {
     index: u16;
     utf8: kbts_encode_utf8;
     advance: Vector2;
     offset: Vector2;
 };
-
 // Shaped_Word :: struct {
 //    hash: u64;
 //    length: s32;
@@ -1388,40 +1388,85 @@ Shaped_Glyph :: struct {
 //     slots: [4096]Shaped_Word;
 //     arena: Flat_Pool;
 // };
-
 Font :: struct {
-    freetype_face: FT_Face;
-    kbts_context: *kbts_shape_context;
-    kbts_font_pointer: *kbts_font;
+    raster_face: FT_Face;
+    shaping_font: *kbts_font;
+    key: s64;
 
     // prev_cache: Shaping_Cache;
     // next_cache: Shaping_Cache;
 };
+// TOOD: handle errors for all of the freetype calls
+init_font :: (font: *Font, memory: string) {
+    if freetype_library == null {
+        FT_Init_FreeType(*freetype_library);
+        // TODO: implement subpixel font rendering and auto enable in lower DPI
+        // environments to match browser behavior. the freetype bindings in jai
+        // do not have this function implemented
+        //
+        // FT_Library_SetLcdFilter(freetype_library, FT_LCD_FILTER_DEFAULT);
+    }
+    if shaping_context == null {
+        shaping_context = kbts_CreateShapeContext(null, null);
+    }
+    FT_New_Memory_Face(freetype_library, memory.data, memory.count, 0, *font.raster_face);
+    // TODO: judege if we should support more than unicode here
+    assert(font.raster_face.charmap.encoding == FT_Encoding.UNICODE);
 
-shape :: (font: *Font, content: string) -> [..]Shaped_Glyph {
+    font.shaping_font = kbts_ShapePushFontFromMemory(shaping_context, memory.data, xx memory.count, 0);
+    font.key = font_counter;
+    font_counter += 1;
+}
+Raster_Glyph :: struct {
+    // might be null
+    bitmap: string;
+    left: s32;
+    top: s32;
+    width: u32;
+    height: u32;
+    pitch: s32;
+};
+raster_text :: (font: *Font, glyph_index: u32, size: float) -> Raster_Glyph {
+    FT_Set_Pixel_Sizes(font.raster_face, xx floor(size + 0.5), xx floor(size + 0.5));
+    FT_Load_Glyph(font.raster_face, glyph_index, FT_LOAD_RENDER);
+    glyph := font.raster_face.glyph;
+    FT_Render_Glyph(glyph, FT_Render_Mode.NORMAL);
+    raster_glyph: Raster_Glyph;
+    if glyph.bitmap.buffer != null {
+        raster_glyph.bitmap.data = glyph.bitmap.buffer;
+        raster_glyph.bitmap.count = xx (abs(glyph.bitmap.pitch) * xx glyph.bitmap.rows);
+    }
+    raster_glyph.width = glyph.bitmap.width;
+    raster_glyph.height = glyph.bitmap.rows;
+    raster_glyph.left = glyph.bitmap_left;
+    raster_glyph.top = glyph.bitmap_top;
+    raster_glyph.pitch = glyph.bitmap.pitch;
+    return raster_glyph;
+}
+shape_text :: (font: *Font, content: string) -> [..]Shaped_Glyph {
     // TODO(next): pass the language and direction down as styles
     kbts_ShapeBegin(
-        font.kbts_context, 
-        xx kbts_direction_enum.KBTS_DIRECTION_RTL, 
+        shaping_context,
+        xx kbts_direction_enum.KBTS_DIRECTION_RTL,
         xx kbts_language_enum.KBTS_LANGUAGE_DONT_KNOW
     );
     kbts_ShapeUtf8(
-        font.kbts_context, 
-        content.data, 
-        xx content.count, 
+        shaping_context,
+        content.data,
+        xx content.count,
         xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX
     );
-    kbts_ShapeEnd(font.kbts_context);
+    kbts_ShapeEnd(shaping_context);
 
     // TODO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
     shaped_glyphs: [..]Shaped_Glyph;
 
     run: kbts_run;
-    while (kbts_ShapeRun(font.kbts_context, *run) != 0) {
+    while (kbts_ShapeRun(shaping_context, *run) != 0) {
         glyph: *kbts_glyph;
         while (kbts_GlyphIteratorNext(*run.Glyphs, *glyph) != 0) {
             shape_codepoint: kbts_shape_codepoint;
-            if (kbts_ShapeGetShapeCodepoint(font.kbts_context, glyph.*.UserIdOrCodepointIndex, *shape_codepoint) == 0) {
+            if (kbts_ShapeGetShapeCodepoint(shaping_context, glyph.*.UserIdOrCodepointIndex, *shape_codepoint) == 0) {
                 log_error("Could not get original codeopint for glyph with user id %", glyph.*.UserIdOrCodepointIndex);
                 continue;
             }
@@ -1436,6 +1481,9 @@ shape :: (font: *Font, content: string) -> [..]Shaped_Glyph {
     }
 
     return shaped_glyphs;
+}
+free_font :: (font: *Font) {
+    FT_Done_Face(font.raster_face);
 }
 
 // build_text(runs: []const TextRun, base: CompleteTextStyle, returnAddress: usize) !void {
@@ -1602,18 +1650,18 @@ text :: (style := Style.{}, content := "", key := "", location := #caller_locati
 
         if node.style.width.kind == Sizing.Kind.FIT {
             node.size.x = fitting_base(node, Direction.HORIZONTAL);
-        } 
+        }
         if node.style.width.kind != Sizing.Kind.FIXED && node.style.min_width == FLOAT32_NAN {
             node.min_size.x = fitting_base(node, Direction.HORIZONTAL);
         }
         if node.style.height.kind == Sizing.Kind.FIT {
             node.size.y = fitting_base(node, Direction.VERTICAL);
-        } 
+        }
         if node.style.height.kind != Sizing.Kind.FIXED && node.style.min_height == FLOAT32_NAN {
             node.min_size.y = fitting_base(node, Direction.VERTICAL);
         }
 
-        shaped_glyphs := shape(node.style.font, content);
+        shaped_glyphs := shape_text(node.style.font, content);
 
         if (node.style.width.kind == Sizing.Kind.RATIO) {
             node.size.x = node.style.width.ratio * node.size.y;
@@ -1626,9 +1674,6 @@ text :: (style := Style.{}, content := "", key := "", location := #caller_locati
         node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
     }
 }
-text :: (style: Style, key := "", location := #caller_location) {
-    text(style, "", key, location);
-}
 text :: (content: string, location := #caller_location) {
     text(Style.{}, content, "", location);
 }
@@ -1637,9 +1682,9 @@ text :: (content: string, location := #caller_location) {
 // here, but in the long-term we will include multiple backends for each
 // operating system, not one, so we need to handle that in a better way.
 init_forbear :: (
-    forbear: *Forbear, 
-    backend: *Backend, 
-    base_style: Base_Style = Base_Style.{}
+    forbear: *Forbear,
+    backend: *Backend,
+    base_style: Base_Style,
 ) {
     forbear.backend = backend;
     forbear.base_style = base_style;
@@ -1647,34 +1692,39 @@ init_forbear :: (
 }
 
 render_and_reset_node_tree :: (window: *Wayland_EGL_Window, clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
+    using context.forbear;
     #if OS == .LINUX {
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
-        glViewport(0, 0, xx window.width, xx window.height);
+    }
 
-        glClearColor(clearing_color.x, clearing_color.y, clearing_color.z, clearing_color.w);
-        glClear(GL_COLOR_BUFFER_BIT);
+    glViewport(0, 0, xx window.width, xx window.height);
+    glClearColor(clearing_color.x, clearing_color.y, clearing_color.z, clearing_color.w);
+    glClear(GL_COLOR_BUFFER_BIT);
 
-        using context.forbear;
-        instances_buffer := NewArray(node_tree.count, Node_Draw_Instance);
-        instances := array_view(instances_buffer, 0, 0);
-        defer free(cast(*void) instances.data);
-        for context.forbear.node_tree {
-            if it.style.background.kind != .COLOR  continue;
-            instances.count += 1;
-            instances[instances.count - 1] = Node_Draw_Instance.{ 
-                position = it.position, 
-                size = it.size, 
-                color = it.style.background.color 
-            };
+    glyphs_buffer: [..]Glyph_Draw_Instance;
+
+    instances_buffer := NewArray(node_tree.count, Node_Draw_Instance);
+    instances := array_view(instances_buffer, 0, 0);
+    defer free(cast(*void) instances.data);
+    for node_tree {
+        if it.style.background.kind != .COLOR  continue;
+        if it.glyphs.array.count != 0 {
         }
+        instances.count += 1;
+        instances[instances.count - 1] = Node_Draw_Instance.{
+            position = it.position,
+            size = it.size,
+            color = it.style.background.color
+        };
+    }
 
-        glUseProgram(backend.node_program);
-        glUniform2f(glGetUniformLocation(backend.node_program, "viewport"), xx window.width, xx window.height);
-        glBindVertexArray(backend.node_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, backend.node_vbo);
-        glBufferData(GL_ARRAY_BUFFER, instances.count * size_of(Node_Draw_Instance), instances.data, GL_STREAM_DRAW);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, xx instances.count);
+    glUseProgram(backend.node_program);
+    glUniform2f(glGetUniformLocation(backend.node_program, "viewport"), xx window.width, xx window.height);
+    glBindVertexArray(backend.node_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, backend.node_vbo); glBufferData(GL_ARRAY_BUFFER, instances.count * size_of(Node_Draw_Instance), instances.data, GL_STREAM_DRAW);
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, xx instances.count);
 
+    #if OS == .LINUX {
         glFinish();
 
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
@@ -1682,6 +1732,5 @@ render_and_reset_node_tree :: (window: *Wayland_EGL_Window, clearing_color := Ve
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
     }
 
-    array_reset_keeping_memory(*context.forbear.node_tree);
+    array_reset_keeping_memory(*node_tree);
 }
-
