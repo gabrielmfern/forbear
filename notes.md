@@ -5,11 +5,9 @@
 - [ ] implement macos-opengl backend
 - [ ] layout nodes
 - [ ] draw rounded corners
+- [ ] draw in the z order
 - [ ] do double buffering in wayland
-
-where I was at the end of 09/29/2026:
-- insert the text node into the node tree
-- draw the actual glyphs at their right positions
+- [ ] fix error when screenshotting wayland program: ```could not send wayland message: 11```
 
 ## introspection 
 
