@@ -8,6 +8,8 @@ Math :: #import "Math";
 #import "Basic";
 #if OS == .LINUX {
     #load "bindings-LINUX.jai";
+} else #if OS == .MACOS {
+    #load "bindings-MACOS.jai";
 }
 
 Vector2 :: Math.Vector2;
@@ -48,19 +50,6 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
     eglExportDMABUFImageQueryMESA: PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC;
     eglExportDMABUFImageMESA: PFNEGLEXPORTDMABUFIMAGEMESAPROC;
 
-    status: GLint;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, *status);
-    if !status {
-        log: [1024]u8;
-        log_length: GLsizei;
-        glGetShaderInfoLog(shader, log.count, *log_length, log.data);
-        log_error("failed to compile shader: %\n", to_string(log.data, log_length));
-        exit(-1);
-    }
-    return shader;
-}
-
-#if OS == .LINUX {
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
     EXIT_ON_FIRST_FRAME :: false;

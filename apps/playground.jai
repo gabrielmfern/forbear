@@ -20,7 +20,7 @@ main :: () {
     init_font(*inter, INTER_TTF);
 
     forbear: Forbear;
-    init_forbear(*forbear, *wayland_egl_backend, Base_Style.{
+    init_forbear(*forbear, *backend, Base_Style.{
         font = *inter,
     });
 
