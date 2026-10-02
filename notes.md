@@ -2,7 +2,7 @@
 
 - [x] draw things the screen
 - [x] support for text nodes
-- [ ] implement macos-opengl backend
+- [x] implement macos-opengl backend
 - [ ] layout nodes
 - [ ] draw rounded corners
 - [ ] do double buffering in wayland
