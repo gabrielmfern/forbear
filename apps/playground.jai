@@ -9,8 +9,8 @@ main :: () {
     backend: Backend;
     window: Window;
     #if OS == .LINUX {
-        init_wayland_egl_backend(*wayland_egl_backend);
-        init_wayland_egl_window(*wayland_egl_backend.connection, *wayland_egl_window, 800, 600, "playground");
+        init_wayland_egl_backend(*backend);
+        init_wayland_egl_window(*backend.connection, *window, 800, 600, "playground");
     } else #if OS == .MACOS {
         init_macos_gl_backend(*backend);
         init_macos_gl_window(*backend, *window, 800, 600, "playground");

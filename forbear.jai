@@ -423,7 +423,7 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
         height: s32;
         texture_height: s32;
         // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
-        scale: s32 = 1;
+        scale: float64 = 1;
 
         egl_image: EGLImage;
         fourcc: s32;
@@ -635,9 +635,6 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
         running := true;
     };
     init_macos_gl_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window, width: float64, height: float64, title: string) {
-        window.width = width;
-        window.height = height;
-
         rectangle := NSRect.{ size = .{ width = width, height = height } };
 
         window.ns_window = NSWindow.initWithContentRect(
@@ -659,6 +656,8 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
 
         frame := NSView.frame(window.view);
         backing := NSView.convertRectToBacking(window.view, frame);
+        window.width = backing.size.width;
+        window.height = backing.size.height;
         window.scale = backing.size.width / frame.size.width;
 
     }
@@ -1940,17 +1939,18 @@ render_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 
     glClear(GL_COLOR_BUFFER_BIT);
 
     glyph_instances: [..]Glyph_Draw_Instance;
+    defer array_reset(*glyph_instances);
 
     node_instances_buffer := NewArray(node_tree.count, Node_Draw_Instance);
     node_instances := array_view(node_instances_buffer, 0, 0);
-    defer free(cast(*void) node_instances_buffer.data);
+    defer free(node_instances_buffer.data);
     for node: node_tree {
         if node.glyphs.count != 0 {
-            rounded_font_size := round_font_size(node.style.font_size);
-            font_units_to_pixel := (cast(float) rounded_font_size) / (cast(float) node.style.font.raster_face.units_per_EM);
+            rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
+            font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
             ascender := cast(float)node.style.font.raster_face.ascender;
             cursor := node.position;
-            cursor.y += ascender * font_units_to_pixel; 
+            cursor.y += ascender * font_units_to_point; 
             for glyph: node.glyphs {
                 atlas_key := glyph_atlas_key(node.style.font, glyph.index, rounded_font_size, node.style.font_weight);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
@@ -1989,10 +1989,12 @@ render_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 
 
                 glyph_draw_instance: Glyph_Draw_Instance;
                 glyph_draw_instance.entry = entry;
-                glyph_draw_instance.position = cursor + glyph.offset * font_units_to_pixel;
+                glyph_draw_instance.bearing /= cast(float) window.scale;
+                glyph_draw_instance.size /= cast(float) window.scale;
+                glyph_draw_instance.position = cursor + glyph.offset * font_units_to_point;
                 glyph_draw_instance.color = node.style.color;
                 array_add(*glyph_instances, glyph_draw_instance);
-                cursor += glyph.advance * font_units_to_pixel;
+                cursor += glyph.advance * font_units_to_point;
             }
         }
 
@@ -2007,14 +2009,17 @@ render_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 
         // TODO: write out the instance gathering for the other types of backgrounds
     }
 
+    point_width: float = (cast(float) window.width) / (cast(float) window.scale);
+    point_height: float = (cast(float) window.height) / (cast(float) window.scale);
+
     glUseProgram(node_program);
-    glUniform2f(glGetUniformLocation(node_program, "viewport"), xx (window.width / window.scale), xx (window.height / window.scale));
+    glUniform2f(glGetUniformLocation(node_program, "viewport"), point_width, point_height);
     glBindVertexArray(node_vao);
     glBindBuffer(GL_ARRAY_BUFFER, node_vbo); glBufferData(GL_ARRAY_BUFFER, node_instances.count * size_of(Node_Draw_Instance), node_instances.data, GL_STREAM_DRAW);
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx node_instances.count);
 
     glUseProgram(glyph_program);
-    glUniform2f(glGetUniformLocation(glyph_program, "viewport"), xx (window.width / window.scale), xx (window.height / window.scale));
+    glUniform2f(glGetUniformLocation(glyph_program, "viewport"), point_width, point_height);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
     glBindVertexArray(glyph_vao);
