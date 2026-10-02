@@ -452,6 +452,37 @@ build :: () {
         playground_options.output_executable_name = "playground";
         playground_options.output_path = "apps";
     }
+    #if OS == .MACOS {
+        playground_options.use_custom_link_command = true;
+        compiler_begin_intercept(playground);
+    }
     set_build_options(playground_options, playground);
     add_build_file("apps/playground.jai", playground);
+
+    #if OS == .MACOS {
+        while true {
+            message := compiler_wait_for_message();
+            if message.kind == .COMPLETE break;
+
+            if message.kind == .PHASE {
+                phase_message := cast(*Message_Phase) message;
+                phase := phase_message.phase;
+                if phase == .READY_FOR_CUSTOM_LINK_COMMAND {
+                    arguments: [..] string;
+                    array_add(*arguments, "clang", "-arch", #ifx CPU == .ARM64 then "arm64" else "x86_64");
+                    array_add(*arguments, "-o", tprint("%/%", playground_options.output_path, playground_options.output_executable_name));
+                    array_add(*arguments, "-Wl,-rpath,@loader_path");
+                    array_add(*arguments, ..phase_message.compiler_generated_object_files);
+                    array_add(*arguments, ..phase_message.support_object_files);
+                    array_add(*arguments, ..phase_message.system_libraries);
+                    array_add(*arguments, ..phase_message.user_libraries);
+                    result := run_command(..arguments);
+                    if result.exit_code != 0  compiler_report(tprint("link failed: %", get_quoted_command_string(arguments)));
+                    compiler_custom_link_command_is_complete(playground);
+                }
+            }
+        }
+
+        compiler_end_intercept(playground);
+    }
 }
