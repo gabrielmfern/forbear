@@ -47,9 +47,6 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
 }
 
 #if OS == .LINUX {
-    eglExportDMABUFImageQueryMESA: PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC;
-    eglExportDMABUFImageMESA: PFNEGLEXPORTDMABUFIMAGEMESAPROC;
-
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
     EXIT_ON_FIRST_FRAME :: false;
