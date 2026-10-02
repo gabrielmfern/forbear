@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+@theme {
+  --color-bg: #1C1F23;
+  --color-float: #111316;
+  --color-fg: #AEB8C4;
+  --color-muted: #6E7A87;
+  --color-bright: #FFFFFF;
+  --color-yellow: #B8A36A;
+}
+pre .hl-function { color: #b8a36a; }
+pre .hl-delimiter { color: #c8d0d8; }
+pre .hl-type { color: #ffffff; }
+pre .hl-punctuation-delimiter { color: #c8d0d8; }
+pre .hl-operator { color: #e0e2ea; }
+pre .hl-statement { color: #ffffff; }
+pre .hl-number { color: #7fa0b8; }
+pre .hl-string { font-style: italic; color: #b8a36a; }
+</style>
+</head>
+<body class="m-0">
+<div id="og" class="relative w-[1200px] h-[630px] overflow-hidden bg-bg">
+  <div class="absolute left-16 top-0 bottom-0 w-[500px] flex flex-col justify-center gap-6">
+    <p class="text-2xl text-muted">forbear log, entry 002</p>
+    <h1 class="text-[64px] leading-[1.05] font-bold text-bright">text, macOS<br>and rectangles!</h1>
+    <p class="text-xl leading-snug text-muted">The Jai rewrite draws its first rectangles and text, on Linux and on macOS.</p>
+  </div>
+  <div class="absolute left-[590px] top-[56px] flex flex-col gap-6">
+    <pre class="m-0 w-[560px] bg-float text-fg text-[17px] leading-snug p-6 rounded-2xl"><code><span class="hl-function">element</span><span class="hl-delimiter">(</span><span class="hl-type">Style</span><span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+    width <span class="hl-operator">=</span> <span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">500</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+    height <span class="hl-operator">=</span> <span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">500</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+    background <span class="hl-operator">=</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+    color <span class="hl-operator">=</span> <span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+<span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-statement">#code</span> <span class="hl-delimiter">{</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">"hello lisa"</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+    <div class="w-[800px] h-[600px] overflow-hidden rounded-2xl shadow-2xl">
+      <img src="../assets/2026-10-02-macos-window.png" class="block max-w-none w-[1000px] -ml-[98px] -mt-[98px]">
+    </div>
+  </div>
+</div>
+</body>
+</html>
