@@ -543,7 +543,7 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
                     width = window.width,
                     height = window.height,
                     format = xx window.fourcc,
-                    flags = 0,
+                    flags = .Y_INVERT,
                 });
 
                 send_wayland_message(connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
@@ -1761,6 +1761,7 @@ void main() {
     v_color = color;
 
     gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
+    gl_Position.y = -gl_Position.y;
 }
 GLSL);
         defer glDeleteShader(vertex_shader);
@@ -1856,6 +1857,7 @@ void main() {
     v_uv = mix(uv_min, uv_max, corner);
 
     gl_Position = vec4((position + bearing + corner * size) / viewport * 2.0 - 1.0, 0.0, 1.0);
+    gl_Position.y = -gl_Position.y;
 }
 GLSL);
         defer glDeleteShader(vertex_shader);
