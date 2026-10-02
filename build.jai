@@ -476,6 +476,7 @@ build :: () {
                     array_add(*arguments, ..phase_message.support_object_files);
                     array_add(*arguments, ..phase_message.system_libraries);
                     array_add(*arguments, ..phase_message.user_libraries);
+                    print("Running linker: %\n", get_quoted_command_string(arguments));
                     result := run_command(..arguments);
                     if result.exit_code != 0  compiler_report(tprint("link failed: %", get_quoted_command_string(arguments)));
                     compiler_custom_link_command_is_complete(playground);
