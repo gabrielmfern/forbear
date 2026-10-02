@@ -6,3 +6,6 @@
 dist
 playground
 playground.dSYM*
+
+# macos hates everyone
+.DS_Store
