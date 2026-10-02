@@ -422,6 +422,8 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
         texture_width: s32;
         height: s32;
         texture_height: s32;
+        // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
+        scale: s32 = 1;
 
         egl_image: EGLImage;
         fourcc: s32;
