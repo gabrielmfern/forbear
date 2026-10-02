@@ -3,6 +3,7 @@
 - [x] draw things the screen
 - [x] support for text nodes
 - [x] implement macos-opengl backend
+- [ ] get at least a proof-of-concept working for forbear from JSX
 - [ ] layout nodes
 - [ ] draw rounded corners
 - [ ] do double buffering in wayland
@@ -15,6 +16,14 @@
     - [ ] program just doesn't do anything if the atlas is full
     - [ ] glyphs are sitting on fractional pixels on the texture atlas
     - [ ] we don't really support multiple fonts right now? we're using the single kbts_context which uses the font in the top of the stack
+- [ ] window platform handling completeness
+    - [ ] macos window resizing freezes (and the same will happen for windows) the rendering
+    - [ ] wayland is not handling window scale
+    - [ ] handling the weird edge case of window decorations for Gnome :/
+    - [ ] handle window scales at runtime
+    - [ ] a macos program without a menu bar is a horrible experience (ex: cmd+q doesn't work)
+        - how can we do this in a cross platform manner? perhaps a component that makes changes to the window to render the menu items?
+    - [ ] windows backend?
 
 ## introspection 
 
