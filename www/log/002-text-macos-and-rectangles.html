@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>forbear log, entry 002: text, macOS and rectangles!</title>
+<meta name="description" content="forbear in Jai draws its first rectangles and text, on Linux and on macOS.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="forbear">
+<meta property="og:url" content="https://www.forbear.dev/log/002-text-macos-and-rectangles.html">
+<meta property="og:title" content="text, macOS and rectangles!">
+<meta property="og:description" content="forbear in Jai draws its first rectangles and text, on Linux and on macOS.">
+<meta property="og:image" content="https://www.forbear.dev/assets/og-002.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="text, macOS and rectangles!">
+<meta name="twitter:description" content="forbear in Jai draws its first rectangles and text, on Linux and on macOS.">
+<meta name="twitter:image" content="https://www.forbear.dev/assets/og-002.png">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+@theme {
+  --color-bg: #1C1F23;
+  --color-float: #111316;
+  --color-ui: #2C333B;
+  --color-fg: #AEB8C4;
+  --color-muted: #6E7A87;
+  --color-bright: #FFFFFF;
+  --color-yellow: #B8A36A;
+  --color-bright-yellow: #CFBA78;
+}
+@layer base {
+  html { @apply overflow-x-clip; }
+  body { @apply bg-bg text-fg leading-relaxed; }
+  h1 { @apply text-bright text-3xl font-bold mb-8; }
+  h2 { @apply text-bright text-2xl font-bold mt-12 mb-4; }
+  h3 { @apply text-bright text-xl font-bold mt-8 mb-3; }
+  p { @apply my-4; }
+  ul { @apply list-disc pl-6 my-4; }
+  ol { @apply list-decimal pl-6 my-4; }
+  a { @apply text-yellow hover:text-bright-yellow; }
+  code { @apply bg-float text-bright px-1 rounded; }
+  pre { @apply bg-float text-fg text-sm p-4 rounded-lg overflow-x-auto my-6; }
+  pre code { @apply bg-transparent text-fg p-0; }
+}
+pre .hl-function { color: #b8a36a; }
+pre .hl-delimiter { color: #c8d0d8; }
+pre .hl-type { color: #ffffff; }
+pre .hl-punctuation-delimiter { color: #c8d0d8; }
+pre .hl-operator { color: #e0e2ea; }
+pre .hl-statement { color: #ffffff; }
+pre .hl-number { color: #7fa0b8; }
+pre .hl-string { font-style: italic; color: #b8a36a; }
+pre .hl-comment { color: #4ebe4e; font-style: italic; }
+pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
+</style>
+</head>
+<body>
+<main class="max-w-2xl mx-auto px-4 py-16">
+<h1>forbear log, entry 002: text, macOS and rectangles!</h1>
+
+<p>A week ago I wrote <a href="001-im-rewriting-everything-again.html">the first entry</a>, about rewriting forbear from Zig in Jai.</p>
+
+<img src="../assets/2026-10-02-macos-window.png" alt="The forbear playground on macOS: a magenta rectangle with the text &quot;hello lisa&quot; in its top left corner" class="block my-6 rounded-lg">
+
+<h2>Rectangles</h2>
+
+<p>This is the whole playground app right now:</p>
+
+<pre><code>backend<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Backend</span><span class="hl-punctuation-delimiter">;</span>
+window<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Window</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">#if</span> OS <span class="hl-operator">==</span> <span class="hl-punctuation-delimiter">.</span>LINUX <span class="hl-delimiter">{</span>
+    <span class="hl-function">init_wayland_egl_backend</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">init_wayland_egl_window</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">.</span>connection<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>window<span class="hl-punctuation-delimiter">,</span> <span class="hl-number">800</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">600</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;playground&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span> <span class="hl-statement">else</span> <span class="hl-statement">#if</span> OS <span class="hl-operator">==</span> <span class="hl-punctuation-delimiter">.</span>MACOS <span class="hl-delimiter">{</span>
+    <span class="hl-function">init_macos_gl_backend</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">init_macos_gl_window</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>window<span class="hl-punctuation-delimiter">,</span> <span class="hl-number">800</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">600</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;playground&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span>
+
+inter<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Font</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-function">init_font</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>inter<span class="hl-punctuation-delimiter">,</span> INTER_TTF<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+
+forbear<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Forbear</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-function">init_forbear</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>forbear<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">,</span> <span class="hl-type">Base_Style</span><span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+    font <span class="hl-operator">=</span> <span class="hl-operator">*</span>inter<span class="hl-punctuation-delimiter">,</span>
+<span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+
+<span class="hl-statement">while</span> window<span class="hl-punctuation-delimiter">.</span>running <span class="hl-delimiter">{</span>
+    <span class="hl-statement">#if</span> OS <span class="hl-operator">==</span> <span class="hl-punctuation-delimiter">.</span>LINUX <span class="hl-delimiter">{</span>
+        event<span class="hl-punctuation-delimiter">,</span> data<span class="hl-punctuation-delimiter">,</span> something <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-function">next_wayland_event</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">.</span>connection<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-statement">if</span> something <span class="hl-delimiter">{</span>
+            <span class="hl-function">update_wayland_connection</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">.</span>connection<span class="hl-punctuation-delimiter">,</span> event<span class="hl-punctuation-delimiter">,</span> data<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+            <span class="hl-function">update_wayland_egl_window</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">.</span>connection<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>window<span class="hl-punctuation-delimiter">,</span> event<span class="hl-punctuation-delimiter">,</span> data<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-delimiter">}</span>
+    <span class="hl-delimiter">}</span> <span class="hl-statement">else</span> <span class="hl-statement">#if</span> OS <span class="hl-operator">==</span> <span class="hl-punctuation-delimiter">.</span>MACOS <span class="hl-delimiter">{</span>
+        <span class="hl-function">update_macos_gl_backend</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">update_macos_gl_window</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>window<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">}</span>
+
+    <span class="hl-function">element</span><span class="hl-delimiter">(</span><span class="hl-type">Style</span><span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+        width <span class="hl-operator">=</span> <span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">500</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        height <span class="hl-operator">=</span> <span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">500</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        background <span class="hl-operator">=</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+        color <span class="hl-operator">=</span> <span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-statement">#code</span> <span class="hl-delimiter">{</span>
+        <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;hello lisa&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+
+    <span class="hl-function">render_and_reset_node_tree</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>window<span class="hl-punctuation-delimiter">,</span> <span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">0.0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0.0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0.0</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+
+    <span class="hl-function">reset_temporary_storage</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span></code></pre>
+
+<p>If you knew how the code looked for the Zig version you can already see it's much simpler, and this already solves some of the problems that I was facing there.</p>
+
+<p>The children are passed as <code>#code</code>, and <code>element</code> is a macro (<code>#expand</code>), so the body runs right where it's written, with no closures and no callbacks.</p>
+
+<p>Keying works through <code>#caller_location</code>. In jai, a function can take <code>location := #caller_location</code>, which gives me the file, line and column of the call. I hash those, and a few more things around the runtime context and that's the key:</p>
+
+<pre><code><span class="hl-statement">if</span> key<span class="hl-punctuation-delimiter">.</span>count <span class="hl-operator">&gt;</span> <span class="hl-number">0</span> <span class="hl-delimiter">{</span>
+    node<span class="hl-punctuation-delimiter">.</span>key <span class="hl-operator">=</span> <span class="hl-function">fnv1a_hash</span><span class="hl-delimiter">(</span>key<span class="hl-punctuation-delimiter">.</span>data<span class="hl-punctuation-delimiter">,</span> key<span class="hl-punctuation-delimiter">.</span>count<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span> <span class="hl-statement">else</span> <span class="hl-delimiter">{</span>
+    <span class="hl-comment">// we use the caller location here</span>
+    node<span class="hl-punctuation-delimiter">.</span>key <span class="hl-operator">=</span> <span class="hl-function">fnv1a_hash</span><span class="hl-delimiter">(</span>location<span class="hl-punctuation-delimiter">.</span>fully_pathed_filename<span class="hl-punctuation-delimiter">.</span>data<span class="hl-punctuation-delimiter">,</span> location<span class="hl-punctuation-delimiter">.</span>fully_pathed_filename<span class="hl-punctuation-delimiter">.</span>count<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    node<span class="hl-punctuation-delimiter">.</span>key <span class="hl-operator">=</span> <span class="hl-function">fnv1a_hash</span><span class="hl-delimiter">(</span><span class="hl-statement">cast</span><span class="hl-delimiter">(</span><span class="hl-type">u64</span><span class="hl-delimiter">)</span> location<span class="hl-punctuation-delimiter">.</span>line_number<span class="hl-punctuation-delimiter">,</span> node<span class="hl-punctuation-delimiter">.</span>key<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    node<span class="hl-punctuation-delimiter">.</span>key <span class="hl-operator">=</span> <span class="hl-function">fnv1a_hash</span><span class="hl-delimiter">(</span><span class="hl-statement">cast</span><span class="hl-delimiter">(</span><span class="hl-type">u64</span><span class="hl-delimiter">)</span> location<span class="hl-punctuation-delimiter">.</span>character_number<span class="hl-punctuation-delimiter">,</span> node<span class="hl-punctuation-delimiter">.</span>key<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span>
+<span class="hl-statement">if</span> context<span class="hl-punctuation-delimiter">.</span>forbear<span class="hl-punctuation-delimiter">.</span>scope_stack<span class="hl-punctuation-delimiter">.</span>count <span class="hl-operator">&gt;</span> <span class="hl-number">0</span> <span class="hl-delimiter">{</span>
+    node<span class="hl-punctuation-delimiter">.</span>key <span class="hl-operator">=</span> <span class="hl-function">fnv1a_hash</span><span class="hl-delimiter">(</span>context<span class="hl-punctuation-delimiter">.</span>forbear<span class="hl-punctuation-delimiter">.</span>scope_stack<span class="hl-delimiter">[</span>context<span class="hl-punctuation-delimiter">.</span>forbear<span class="hl-punctuation-delimiter">.</span>scope_stack<span class="hl-punctuation-delimiter">.</span>count <span class="hl-operator">-</span> <span class="hl-number">1</span><span class="hl-delimiter">]</span><span class="hl-punctuation-delimiter">,</span> node<span class="hl-punctuation-delimiter">.</span>key<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span>
+node<span class="hl-punctuation-delimiter">.</span>key <span class="hl-operator">=</span> <span class="hl-function">fnv1a_hash</span><span class="hl-delimiter">(</span><span class="hl-statement">cast</span><span class="hl-delimiter">(</span><span class="hl-type">u64</span><span class="hl-delimiter">)</span> context<span class="hl-punctuation-delimiter">.</span>forbear<span class="hl-punctuation-delimiter">.</span>parent_stack<span class="hl-punctuation-delimiter">.</span>count<span class="hl-punctuation-delimiter">,</span> node<span class="hl-punctuation-delimiter">.</span>key<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<p>This really makes me full much safer about the long-term for this code. But, it doesn't really improve in another pain point that I had with the previous API which was with components. In the ideal world, the user can just define a function and call the function for the component, but that can't work because, in a React-like API, state needs to be tied to the component somehow which means it needs to have some real place to be. The other point is that the caller location is not enough to distinguish between different instances of the same element on differente instances of a component.</p>
+
+<p>Like the previous version, nodes live in one flat array. Each node points to its parent, children and siblings by index into the flat array. This is fully based on the idea from <a href="https://youtu.be/ShSGHb65f3M?si=rBw1AylZchgbExme">this awesome interview in Wookash's Podcast with Anton Mikhailov</a></p>
+
+<h2>Text</h2>
+
+<img src="../assets/2026-10-02-text-rendering.png" alt="&quot;hello lisa&quot; rendered by forbear in large white text on a black window" class="block my-6 rounded-lg">
+
+<p>Overall, the text architecture is the same as we had in the Zig version, with the exception of the runs paradigm that I started to implement there and felt was too complicated that I still need to figure out a better alternative for.</p>
+
+<p>There are two libraries involved: <a href="https://freetype.org/">freetype</a>, <a href="https://github.com/JimmyLefevre/kb">kb_text_shape</a>. kb_text_shape is a simpler replacement for harfbuzz, which is simpler and more sane to work with. Freetype loads in the font, and kb_text_shape (also checkout <a href="https://www.youtube.com/watch?v=7Tr0ty9-yeQ&t=8s">this</a> amazing talk from the creator of this library).</p>
+
+<p>The process is slightly involved. But, in simple terms:</p>
+
+<ol>
+  <li>load the font, and setup our libraries with it</li>
+  <li>create our texture atlas on a single texture (a single texture is important because other methods aren't actually supported for older OpenGL versions)</li>
+  <li>shape the incoming text with kb_text_shape and store it in our nodes</li>
+  <li>finally when rendering, gather the glyph instances that are going to be drawn looking up on the texture atlas from a hash table cache, or rasterized on the spot with freetype</li>
+</ol>
+
+<p>I think the most interesting part about this is that I found out that we can fill out a VBO with pretty much any data that's not actually vertex data and then we can just infer the vertex data when instance drawing. This simplified lots of what was my first try of using OpenGL in forbear.</p>
+
+<pre><code><span class="hl-type">Node_Draw_Instance</span> <span class="hl-punctuation-delimiter">::</span> <span class="hl-statement">struct</span> <span class="hl-delimiter">{</span>
+    position<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Vector2</span><span class="hl-punctuation-delimiter">;</span>
+    size<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Vector2</span><span class="hl-punctuation-delimiter">;</span>
+    color<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Vector4</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">;</span>
+
+<span class="hl-function">glVertexAttribPointer</span><span class="hl-delimiter">(</span><span class="hl-number">0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">2</span><span class="hl-punctuation-delimiter">,</span> GL_FLOAT<span class="hl-punctuation-delimiter">,</span> GL_FALSE<span class="hl-punctuation-delimiter">,</span> stride<span class="hl-punctuation-delimiter">,</span> <span class="hl-statement">cast</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span><span class="hl-type">void</span><span class="hl-delimiter">)</span> <span class="hl-number">0</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-function">glVertexAttribDivisor</span><span class="hl-delimiter">(</span><span class="hl-number">0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">1</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-comment">// ... same for size and color</span>
+
+<span class="hl-function">glDrawArraysInstanced</span><span class="hl-delimiter">(</span>GL_TRIANGLES<span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">6</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-statement">xx</span> node_instances<span class="hl-punctuation-delimiter">.</span>count<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<pre><code><span class="hl-statement">layout</span><span class="hl-delimiter">(</span>location <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-delimiter">)</span> <span class="hl-statement">in</span> <span class="hl-type">vec2</span> position<span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">layout</span><span class="hl-delimiter">(</span>location <span class="hl-operator">=</span> <span class="hl-number">1</span><span class="hl-delimiter">)</span> <span class="hl-statement">in</span> <span class="hl-type">vec2</span> size<span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">layout</span><span class="hl-delimiter">(</span>location <span class="hl-operator">=</span> <span class="hl-number">2</span><span class="hl-delimiter">)</span> <span class="hl-statement">in</span> <span class="hl-type">vec4</span> color<span class="hl-punctuation-delimiter">;</span>
+
+<span class="hl-statement">const</span> <span class="hl-type">vec2</span> corners<span class="hl-delimiter">[</span><span class="hl-number">6</span><span class="hl-delimiter">]</span> <span class="hl-operator">=</span> vec2<span class="hl-delimiter">[](</span>
+  <span class="hl-function">vec2</span><span class="hl-delimiter">(</span><span class="hl-number">0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-function">vec2</span><span class="hl-delimiter">(</span><span class="hl-number">1</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-function">vec2</span><span class="hl-delimiter">(</span><span class="hl-number">0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">1</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+  <span class="hl-function">vec2</span><span class="hl-delimiter">(</span><span class="hl-number">0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">1</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-function">vec2</span><span class="hl-delimiter">(</span><span class="hl-number">1</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-function">vec2</span><span class="hl-delimiter">(</span><span class="hl-number">1</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">1</span><span class="hl-delimiter">)</span>
+<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+
+<span class="hl-type">void</span> <span class="hl-function">main</span><span class="hl-delimiter">()</span> <span class="hl-delimiter">{</span>
+    <span class="hl-type">vec2</span> corner <span class="hl-operator">=</span> corners<span class="hl-delimiter">[</span><span class="hl-string-special-symbol">gl_VertexID</span><span class="hl-delimiter">]</span><span class="hl-punctuation-delimiter">;</span>
+    v_color <span class="hl-operator">=</span> color<span class="hl-punctuation-delimiter">;</span>
+
+    <span class="hl-string-special-symbol">gl_Position</span> <span class="hl-operator">=</span> <span class="hl-function">vec4</span><span class="hl-delimiter">((</span>position<span class="hl-punctuation-delimiter">.</span>xy <span class="hl-operator">+</span> corner <span class="hl-operator">*</span> size<span class="hl-punctuation-delimiter">.</span>xy<span class="hl-delimiter">)</span> <span class="hl-operator">/</span> viewport <span class="hl-operator">*</span> <span class="hl-number">2.0</span> <span class="hl-operator">-</span> <span class="hl-number">1.0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0.0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">1.0</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-string-special-symbol">gl_Position</span><span class="hl-punctuation-delimiter">.</span>y <span class="hl-operator">=</span> <span class="hl-operator">-</span><span class="hl-string-special-symbol">gl_Position</span><span class="hl-punctuation-delimiter">.</span>y<span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span></code></pre>
+
+<h2>macOS</h2>
+
+<p>Creating a window and an OpenGL context is plain Jai calling Objective-C, and the Jai bindings make it really, really simple:</p>
+
+<pre><code>window<span class="hl-punctuation-delimiter">.</span>ns_window <span class="hl-operator">=</span> NSWindow<span class="hl-punctuation-delimiter">.</span>initWithContentRect<span class="hl-delimiter">(</span>
+    <span class="hl-function">objc_alloc</span><span class="hl-delimiter">(</span>NSWindow<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+    rectangle<span class="hl-punctuation-delimiter">,</span>
+    NSWindowStyleMaskTitled <span class="hl-operator">|</span> NSWindowStyleMaskClosable <span class="hl-operator">|</span> NSWindowStyleMaskMiniaturizable <span class="hl-operator">|</span> NSWindowStyleMaskResizable<span class="hl-punctuation-delimiter">,</span>
+    NSBackingStoreBuffered<span class="hl-punctuation-delimiter">,</span>
+    NO<span class="hl-punctuation-delimiter">,</span>
+    NSScreen<span class="hl-punctuation-delimiter">.</span>mainScreen<span class="hl-delimiter">()</span>
+<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+NSWindow<span class="hl-punctuation-delimiter">.</span>setTitle<span class="hl-delimiter">(</span>window<span class="hl-punctuation-delimiter">.</span>ns_window<span class="hl-punctuation-delimiter">,</span> title<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+NSWindow<span class="hl-punctuation-delimiter">.</span>makeKeyAndOrderFront<span class="hl-delimiter">(</span>window<span class="hl-punctuation-delimiter">.</span>ns_window<span class="hl-punctuation-delimiter">,</span> <span class="hl-statement">null</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<p>In Zig, this would have been <code>objc_msgSend</code> casts by hand for every call. Though these exist in Jai, the bindings make it much easier.</p>
+
+<p>Now, I plan to start working on the beginnings of what will be forbear rendering from JSX..</p>
+
+<p><a href="https://github.com/gabrielmfern/forbear">https://github.com/gabrielmfern/forbear</a></p>
+</main>
+</body>
+</html>
