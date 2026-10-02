@@ -295,6 +295,7 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
                     add_bytes(*bytes, value.data, value.count);
                     bytes.count += 1;
                     assert(bytes.count < MAX_WAYLAND_MESSAGE_SIZE);
+                    bytes[bytes.count - 1] = 0;
                     pad_to_four(*bytes);
                 case .ARRAY;
                     value := (cast(*[]u8) source).*;
@@ -433,7 +434,7 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
 
         running: bool = true;
     };
-    init_wayland_egl_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32) {
+    init_wayland_egl_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
         window.width = width;
         window.height = height;
 
@@ -443,6 +444,7 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
         send_wayland_message(connection, connection.xdg_wm_base_id, Xdg_Wm_Base_Request_Get_Xdg_Surface.{ id = window.xdg_surface_id, surface = window.wl_surface_id });
         window.xdg_toplevel_id = new_wayland_client_object(connection, Interface_Id.XDG_TOPLEVEL);
         send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Get_Toplevel.{ id = window.xdg_toplevel_id });
+        send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Title.{ title = title });
         send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
         glGenTextures(1, *window.texture);
         glBindTexture(GL_TEXTURE_2D, window.texture);
@@ -623,13 +625,14 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
     MacOS_GL_Window :: struct {
         width: float64;
         height: float64;
+        scale: float64;
 
         ns_window: *NSWindow;
         view: *NSView;
 
         running := true;
     };
-    init_macos_gl_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window, width: float64, height: float64) {
+    init_macos_gl_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window, width: float64, height: float64, title: string) {
         window.width = width;
         window.height = height;
 
@@ -644,11 +647,18 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
             NSScreen.mainScreen()
         );
         NSWindow.setReleasedWhenClosed(window.ns_window, NO);
+        NSWindow.setTitle(window.ns_window, title);
         NSWindow.makeKeyAndOrderFront(window.ns_window, null);
 
         window.view = NSWindow.contentView(window.ns_window);
         NSView.setWantsBestResolutionOpenGLSurface(window.view, YES);
         NSOpenGLContext.setView(backend.gl_context, window.view);
+        backend.attached_view = window.view;
+
+        frame := NSView.frame(window.view);
+        backing := NSView.convertRectToBacking(window.view, frame);
+        window.scale = backing.size.width / frame.size.width;
+
     }
     update_macos_gl_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window) {
         is_visible: (*void, Selector) -> BOOL #c_call = xx objc_msgSend;
@@ -656,10 +666,12 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
             window.running = false;
         }
 
-        backing := NSView.convertRectToBacking(window.view, NSView.frame(window.view));
+        frame := NSView.frame(window.view);
+        backing := NSView.convertRectToBacking(window.view, frame);
         if backing.size.width != window.width || backing.size.height != window.height {
             window.width = backing.size.width;
             window.height = backing.size.height;
+            window.scale = backing.size.width / frame.size.width;
             NSOpenGLContext.update(backend.gl_context);
         }
     }
@@ -668,6 +680,8 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
         app: *NSApplication;
         pixel_format: *NSOpenGLPixelFormat;
         gl_context: *NSOpenGLContext;
+
+        attached_view: *NSView;
     };
     init_macos_gl_backend :: (backend: *MacOS_GL_Backend) {
         init_objective_c();
@@ -1913,7 +1927,10 @@ render_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 
     #if OS == .LINUX {
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
     } else #if OS == .MACOS {
-        NSOpenGLContext.setView(backend.gl_context, window.view);
+        if backend.attached_view != window.view {
+            NSOpenGLContext.setView(backend.gl_context, window.view);
+            backend.attached_view = window.view;
+        }
     }
 
     glViewport(0, 0, xx window.width, xx window.height);
@@ -1989,13 +2006,13 @@ render_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 
     }
 
     glUseProgram(node_program);
-    glUniform2f(glGetUniformLocation(node_program, "viewport"), xx window.width, xx window.height);
+    glUniform2f(glGetUniformLocation(node_program, "viewport"), xx (window.width / window.scale), xx (window.height / window.scale));
     glBindVertexArray(node_vao);
     glBindBuffer(GL_ARRAY_BUFFER, node_vbo); glBufferData(GL_ARRAY_BUFFER, node_instances.count * size_of(Node_Draw_Instance), node_instances.data, GL_STREAM_DRAW);
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx node_instances.count);
 
     glUseProgram(glyph_program);
-    glUniform2f(glGetUniformLocation(glyph_program, "viewport"), xx window.width, xx window.height);
+    glUniform2f(glGetUniformLocation(glyph_program, "viewport"), xx (window.width / window.scale), xx (window.height / window.scale));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
     glBindVertexArray(glyph_vao);
