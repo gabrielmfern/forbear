@@ -24,6 +24,7 @@
     - [ ] a macos program without a menu bar is a horrible experience (ex: cmd+q doesn't work)
         - how can we do this in a cross platform manner? perhaps a component that makes changes to the window to render the menu items?
     - [ ] windows backend?
+    - [ ] x11 backend?
 
 ## introspection 
 
