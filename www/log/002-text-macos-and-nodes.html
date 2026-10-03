@@ -58,6 +58,7 @@ pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
 <body>
 <main class="max-w-2xl mx-auto px-4 py-16">
 <h1>forbear log, entry 002: text, macOS and nodes!</h1>
+<p class="text-muted tabular-nums -mt-6"><time datetime="2026-10-03">2026-10-03</time></p>
 
 <p>A week ago I wrote <a href="001-im-rewriting-everything-again.html">the first entry</a>, about rewriting forbear from Zig in Jai. This week I've implemented node rendering, text rendering and some very basic macOS windowing.</p>
 
@@ -133,7 +134,7 @@ forbear<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">For
 <span class="hl-delimiter">}</span>
 node<span class="hl-punctuation-delimiter">.</span>key <span class="hl-operator">=</span> <span class="hl-function">fnv1a_hash</span><span class="hl-delimiter">(</span><span class="hl-statement">cast</span><span class="hl-delimiter">(</span><span class="hl-type">u64</span><span class="hl-delimiter">)</span> context<span class="hl-punctuation-delimiter">.</span>forbear<span class="hl-punctuation-delimiter">.</span>parent_stack<span class="hl-punctuation-delimiter">.</span>count<span class="hl-punctuation-delimiter">,</span> node<span class="hl-punctuation-delimiter">.</span>key<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span></code></pre>
 
-<p>This really makes me feel much safer about the long-term for this code. But, it doesn't really improve in another pain point that I had with the previous API which was with components. In the ideal world, the user can just define a function and call the function for the component, but that can't work because, in a React-like API, state needs to be tied to the component somehow which means it needs to have some real place to be. The other point is that the caller location is not enough to distinguish between different instances of the same element on different instances of a component.</p>
+<p>This really makes me feel much safer about the long-term for this code. But it doesn't help with another pain point I had with the previous API: components. In the ideal world, the user can just define a function and call the function for the component, but that can't work because, in a React-like API, state needs to be tied to the component somehow which means it needs to have some real place to be. The other point is that the caller location is not enough to distinguish between different instances of the same element on different instances of a component.</p>
 
 <p>Like the previous version, nodes live in one flat array. Each node points to its parent, children and siblings by index into the flat array. This is fully based on the idea from <a href="https://youtu.be/ShSGHb65f3M?si=rBw1AylZchgbExme">this awesome interview in Wookash's Podcast with Anton Mikhailov</a>.</p>
 
@@ -141,7 +142,7 @@ node<span class="hl-punctuation-delimiter">.</span>key <span class="hl-operator"
 
 <img src="../assets/2026-10-02-text-rendering.png" alt="&quot;hello lisa&quot; rendered by forbear in large white text on a black window" class="block my-6 rounded-lg">
 
-<p>Overall, the text architecture is the same as we had in the Zig version, with the exception of the runs paradigm that I started to implement there and felt was too complicated that I still need to figure out a better alternative for.</p>
+<p>Overall, the text architecture is the same as we had in the Zig version, except for runs. I started implementing runs there, but they felt too complicated, and I still need to figure out a better alternative.</p>
 
 <p>There are two libraries involved: <a href="https://freetype.org/">FreeType</a>, <a href="https://github.com/JimmyLefevre/kb">kb_text_shape</a>. FreeType loads the font and rasterizes the glyphs, and kb_text_shape shapes the text, turning a string into the glyphs and positions to draw. kb_text_shape is a replacement for HarfBuzz that is much simpler and more sane to work with (also check out <a href="https://www.youtube.com/watch?v=7Tr0ty9-yeQ&t=8s">this</a> amazing talk from the creator of this library).</p>
 
