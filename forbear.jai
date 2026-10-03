@@ -51,6 +51,8 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
     EGL_DEBUGGING :: false;
     EXIT_ON_FIRST_FRAME :: false;
 
+    GL_FRAMEBUFFER_FLIP_Y_MESA :: 35771;
+
     Wayland_Message_header :: struct {
         object_id: u32;
         opcode: u16;
@@ -445,17 +447,12 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
         send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Get_Toplevel.{ id = window.xdg_toplevel_id });
         send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Title.{ title = title });
         send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
+
         glGenTextures(1, *window.texture);
-        glBindTexture(GL_TEXTURE_2D, window.texture);
-        window.texture_width = width;
-        window.texture_height = height;
-        glTexImage2D(GL_TEXTURE_2D, 0, xx GL_RGBA8, xx window.width, xx window.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
         glGenFramebuffers(1, *window.fbo);
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
-        assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+        glFramebufferParameteri(GL_FRAMEBUFFER, GL_FRAMEBUFFER_FLIP_Y_MESA, xx GL_TRUE);
     }
 
     update_wayland_egl_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, event: Message_Info, data: *void) {
@@ -474,7 +471,7 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
                 configure := cast(*Xdg_Surface_Event_Configure) data;
                 send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
 
-                if window.width * window.height != window.texture_width * window.texture_height {
+                if window.egl_image == null || window.width * window.height != window.texture_width * window.texture_height {
                     if window.egl_image != null {
                         if eglDestroyImage(context.forbear.backend.egl_display, window.egl_image) != 1 {
                             log_error("failed to destroy previous egl image: %\n", eglGetError());
@@ -544,7 +541,7 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
                     width = window.width,
                     height = window.height,
                     format = xx window.fourcc,
-                    flags = .Y_INVERT,
+                    flags = 0,
                 });
 
                 send_wayland_message(connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
