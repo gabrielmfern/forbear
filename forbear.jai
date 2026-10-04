@@ -21,6 +21,7 @@ operator / :: Math.operator /;
 FLOAT32_NAN :: Math.FLOAT32_NAN;
 FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
 U16_MAX :: Math.U16_MAX;
+U64_MAX :: Math.U64_MAX;
 floor :: Math.floor;
 abs :: Math.abs;
 isnan :: Math.isnan;
@@ -1240,8 +1241,8 @@ element :: (
 ) #expand {
     parent_index: s64 = -1;
     parent: *Node;
-    if context.forbear.parent_stack.count > 0 {
-        parent_index = context.forbear.parent_stack[context.forbear.parent_stack.count - 1];
+    if context.forbear.parent_index != -1 {
+        parent_index = context.forbear.parent_index;
         parent = *context.forbear.node_tree[parent_index];
     }
     node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
@@ -1266,10 +1267,12 @@ element :: (
         node.key = fnv1a_hash(cast(u64) location.line_number, node.key);
         node.key = fnv1a_hash(cast(u64) location.character_number, node.key);
     }
-    if context.forbear.scope_stack.count > 0 {
-        node.key = fnv1a_hash(context.forbear.scope_stack[context.forbear.scope_stack.count - 1], node.key);
+    if context.forbear.scope_key != U64_MAX {
+        node.key = fnv1a_hash(context.forbear.scope_key, node.key);
     }
-    node.key = fnv1a_hash(cast(u64) context.forbear.parent_stack.count, node.key);
+    if parent_index != -1 {
+        node.key = fnv1a_hash(cast(u64) context.forbear.parent_index, node.key);
+    }
 
     if node.style.placement.kind == {
         // we don't handle FLOW since the node already has the right position by default
@@ -1320,8 +1323,10 @@ element :: (
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 
-    array_add(*context.forbear.parent_stack, index);
-    array_add(*context.forbear.scope_stack, node.key);
+    previous_parent_index := context.forbear.parent_index;
+    previous_scope_key := context.forbear.scope_key;
+    context.forbear.parent_index = index;
+    context.forbear.scope_key = node.key;
 
     if node.style.width.kind == Sizing.Kind.FIT {
         node.size.x = fitting_base(node, Direction.HORIZONTAL);
@@ -1335,22 +1340,16 @@ element :: (
     if node.style.height.kind != Sizing.Kind.FIXED && node.style.min_height == FLOAT32_NAN {
         node.min_size.y = fitting_base(node, Direction.VERTICAL);
     }
-
-    // self.frameMeta.?.previousPushedNodeIndex = result.index;
-
     // if (isNodeActive()) {
     //     setCursor(result.ptr.style.cursor);
     // }
 
     #insert body;
 
-    pop(*context.forbear.scope_stack);
-    pop(*context.forbear.parent_stack);
+    context.forbear.parent_index = previous_parent_index;
+    context.forbear.scope_key = previous_scope_key;
     context.forbear.base_style = previous_base_style;
 
-    // self.frameMeta.?.previousPushedNodeIndex = self.nodeStack.pop();
-
-    // const previousNodeIndex = self.frameMeta.?.previousPushedNodeIndex.?;
     if (node.style.width.kind == Sizing.Kind.RATIO) {
         node.size.x = node.style.width.ratio * node.size.y;
     }
@@ -1556,8 +1555,8 @@ text :: (style := Style.{}, content := "", key := "", location := #caller_locati
     if content.count > 0 {
         parent_index: s64 = -1;
         parent: *Node;
-        if context.forbear.parent_stack.count > 0 {
-            parent_index = context.forbear.parent_stack[context.forbear.parent_stack.count - 1];
+        if context.forbear.parent_index != -1 {
+            parent_index = context.forbear.parent_index;
             parent = *context.forbear.node_tree[parent_index];
         }
         node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
@@ -1578,10 +1577,12 @@ text :: (style := Style.{}, content := "", key := "", location := #caller_locati
             node.key = fnv1a_hash(cast(u64) location.line_number, node.key);
             node.key = fnv1a_hash(cast(u64) location.character_number, node.key);
         }
-        if context.forbear.scope_stack.count > 0 {
-            node.key = fnv1a_hash(context.forbear.scope_stack[context.forbear.scope_stack.count - 1], node.key);
+        if context.forbear.scope_key != U64_MAX {
+            node.key = fnv1a_hash(context.forbear.scope_key, node.key);
         }
-        node.key = fnv1a_hash(cast(u64) context.forbear.parent_stack.count, node.key);
+        if parent_index != -1 {
+            node.key = fnv1a_hash(cast(u64) context.forbear.parent_index, node.key);
+        }
 
         if node.style.placement.kind == {
             // we don't handle FLOW since the node already has the right position by default
@@ -1702,8 +1703,8 @@ glyph_atlas_place :: (glyph_atlas: *Glyph_Atlas, width: s32, height: s32) -> x: 
 Forbear :: struct {
     node_tree: Node_Tree;
 
-    parent_stack: [..]s64;
-    scope_stack: [..]u64;
+    parent_index: s64 = -1;
+    scope_key: u64 = U64_MAX;
     base_style: Base_Style;
 
     node_program: u32;
