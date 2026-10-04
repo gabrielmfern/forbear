@@ -9,8 +9,6 @@
 #import "Process";
 #if OS == .LINUX #import "POSIX";
 
-BINDINGS :: #run tprint("%bindings-%.jai", #filepath, OS);
-
 // -------- wayland protocol types generator ========
     PROTOCOLS :: string.[
         "/usr/share/wayland/wayland.xml",
@@ -315,6 +313,8 @@ BINDINGS :: #run tprint("%bindings-%.jai", #filepath, OS);
     }
 // ======== wayland protocol types generator ========
 
+BINDINGS_PATH :: #run tprint("%bindings-%.jai", #filepath, OS);
+
 #run build();
 
 build :: () {
@@ -335,96 +335,107 @@ build :: () {
     arch :: #ifx CPU == .ARM64 then "arm64" else "x64";
     dist_dir := tprint("dist/%-%", platform, arch);
 
-    options := get_build_options();
+    build_options := get_build_options();
 
-    regenerate := array_find(options.compile_time_command_line, "bindings") || !file_exists(BINDINGS) || !file_exists("vendor/kb_text_shape.a") || !file_exists("vendor/freetype.a");
+    regenerate := array_find(build_options.compile_time_command_line, "bindings") 
+              || !file_exists(BINDINGS_PATH) 
+              || !file_exists("vendor/kb_text_shape.a") 
+              || !file_exists("vendor/freetype.a");
     if regenerate {
-        egl_opts: Generate_Bindings_Options;
-        array_add(*egl_opts.system_include_paths, ..get_default_system_include_paths());
-        b: String_Builder;
+        bindings_builder: String_Builder;
         #if OS == .LINUX {
-            array_add(*egl_opts.system_libraries, Library.{ filename = "libEGL" });
-            array_add(*egl_opts.extra_clang_arguments, "-DEGL_NO_X11");
-            array_add(*egl_opts.path_fragments_to_treat_as_non_system_paths, "EGL/", "KHR/");
-            array_add(*egl_opts.source_files, "/usr/include/EGL/egl.h", "/usr/include/EGL/eglext.h");
+            // egl bindings
+            egl_bindings_opts: Generate_Bindings_Options;
+            array_add(*egl_bindings_opts.system_include_paths, ..get_default_system_include_paths());
+            array_add(*egl_bindings_opts.system_libraries, Library.{ filename = "libEGL" });
+            array_add(*egl_bindings_opts.extra_clang_arguments, "-DEGL_NO_X11");
+            array_add(*egl_bindings_opts.path_fragments_to_treat_as_non_system_paths, "EGL/", "KHR/");
+            array_add(*egl_bindings_opts.source_files, "/usr/include/EGL/egl.h", "/usr/include/EGL/eglext.h");
+            egl_builder, egl_ok := generate_bindings(egl_bindings_opts);
+            assert(egl_ok, "could not generate bindings");
+            append_and_steal_buffers(*bindings_builder, *egl_builder);
+            append(*bindings_builder, "\n#scope_export\n");
         }
-        egl, egl_ok := generate_bindings(egl_opts);
-        assert(egl_ok, "could not generate bindings");
+        
+        // libnode bindings
+        {}
 
-        build_kb_text_shape_ok := build_cpp_static_lib("vendor/kb_text_shape", "vendor/kb_text_shape.c", extra = .["-fPIC"], debug = debug);
-        assert(build_kb_text_shape_ok, "could not compile kb_text_shape");
-        kbts_opts: Generate_Bindings_Options;
-        array_add(*kbts_opts.system_include_paths, ..get_default_system_include_paths());
-        array_add(*kbts_opts.library_search_paths, "vendor");
-        array_add(*kbts_opts.libraries, .{ filename = "kb_text_shape" });
-        array_add(*kbts_opts.source_files, "vendor/kb_text_shape.h");
-        kbts_opts.generate_library_declarations = false;
-        kbts_opts.generate_compile_time_struct_checks = false;
-        kbts_opts.strip_enum_prefixes = false;
-        kbts_opts.auto_detect_enum_prefixes = false;
-        kbts, kbts_ok := generate_bindings(kbts_opts);
-        assert(kbts_ok, "could not generate kb_text_shape bindings");
-
-        build_freetype_ok := build_cpp_static_lib(
-            "vendor/freetype",
-            "vendor/freetype/src/base/ftsystem.c",
-            "vendor/freetype/src/base/ftinit.c",
-            "vendor/freetype/src/base/ftdebug.c",
-            "vendor/freetype/src/base/ftbase.c",
-            "vendor/freetype/src/base/ftbbox.c",
-            "vendor/freetype/src/base/ftglyph.c",
-            "vendor/freetype/src/base/ftbitmap.c",
-            "vendor/freetype/src/base/ftmm.c",
-            "vendor/freetype/src/autofit/autofit.c",
-            "vendor/freetype/src/truetype/truetype.c",
-            "vendor/freetype/src/type1/type1.c",
-            "vendor/freetype/src/cff/cff.c",
-            "vendor/freetype/src/cid/type1cid.c",
-            "vendor/freetype/src/pfr/pfr.c",
-            "vendor/freetype/src/type42/type42.c",
-            "vendor/freetype/src/winfonts/winfnt.c",
-            "vendor/freetype/src/pcf/pcf.c",
-            "vendor/freetype/src/bdf/bdf.c",
-            "vendor/freetype/src/psaux/psaux.c",
-            "vendor/freetype/src/psnames/psnames.c",
-            "vendor/freetype/src/pshinter/pshinter.c",
-            "vendor/freetype/src/sfnt/sfnt.c",
-            "vendor/freetype/src/smooth/smooth.c",
-            "vendor/freetype/src/raster/raster.c",
-            "vendor/freetype/src/sdf/sdf.c",
-            "vendor/freetype/src/svg/svg.c",
-            "vendor/freetype/src/gzip/ftgzip.c",
-            "vendor/freetype/src/lzw/ftlzw.c",
-            extra = .["-fPIC", "-DFT2_BUILD_LIBRARY", "-Ivendor/freetype/include"],
-            debug = debug,
-        );
-        assert(build_freetype_ok, "could not compile freetype");
-        freetype_opts: Generate_Bindings_Options;
-        array_add(*freetype_opts.system_include_paths, ..get_default_system_include_paths());
-        array_add(*freetype_opts.include_paths, "vendor/freetype/include");
-        array_add(*freetype_opts.library_search_paths, "vendor");
-        array_add(*freetype_opts.libraries, .{ filename = "freetype" });
-        array_add(*freetype_opts.source_files, "vendor/freetype/include/freetype/freetype.h", "vendor/freetype/include/freetype/ftmm.h");
-        freetype_opts.generate_library_declarations = false;
-        freetype_opts.generate_compile_time_struct_checks = false;
-        freetype_opts.auto_detect_enum_prefixes = true;
-        freetype, freetype_ok := generate_bindings(freetype_opts);
-        assert(freetype_ok, "could not generate freetype bindings");
-
-        append(*b, "\n");
-        append(*b, builder_to_string(*egl));
-        append(*b, "\n#scope_export\n");
-        append(*b, builder_to_string(*kbts));
-        append(*b, "\nkb_text_shape :: #library,no_dll \"vendor/kb_text_shape\";\n");
-        append(*b, "\n#scope_export\n");
-        append(*b, builder_to_string(*freetype));
-        append(*b, "\nfreetype :: #library,no_dll \"vendor/freetype\";\nptrdiff_t :: s64;\n");
-        append(*b, "\n#scope_export\n");
-        #if OS == .LINUX {
-            generate_wayland_bindings(*b);
+        {
+            // kbts bindings
+            build_kb_text_shape_ok := build_cpp_static_lib("vendor/kb_text_shape", "vendor/kb_text_shape.c", extra = .["-fPIC"], debug = debug);
+            assert(build_kb_text_shape_ok, "could not compile kb_text_shape");
+            kbts_bindings_opts: Generate_Bindings_Options;
+            array_add(*kbts_bindings_opts.system_include_paths, ..get_default_system_include_paths());
+            array_add(*kbts_bindings_opts.library_search_paths, "vendor");
+            array_add(*kbts_bindings_opts.libraries, .{ filename = "kb_text_shape" });
+            array_add(*kbts_bindings_opts.source_files, "vendor/kb_text_shape.h");
+            kbts_bindings_opts.generate_library_declarations = false;
+            kbts_bindings_opts.generate_compile_time_struct_checks = false;
+            kbts_bindings_opts.strip_enum_prefixes = false;
+            kbts_bindings_opts.auto_detect_enum_prefixes = false;
+            kbts_builder, kbts_ok := generate_bindings(kbts_bindings_opts);
+            assert(kbts_ok, "could not generate kb_text_shape bindings");
+            append_and_steal_buffers(*bindings_builder, *kbts_builder);
+            append(*bindings_builder, "\nkb_text_shape :: #library,no_dll \"vendor/kb_text_shape\";\n");
+            append(*bindings_builder, "\n#scope_export\n");
         }
-        bindings_writing_ok := write_entire_file(BINDINGS, *b);
-        assert(bindings_writing_ok, "could not write %", BINDINGS);
+
+        {
+            // freetype bindings
+            build_freetype_ok := build_cpp_static_lib(
+                "vendor/freetype",
+                "vendor/freetype/src/base/ftsystem.c",
+                "vendor/freetype/src/base/ftinit.c",
+                "vendor/freetype/src/base/ftdebug.c",
+                "vendor/freetype/src/base/ftbase.c",
+                "vendor/freetype/src/base/ftbbox.c",
+                "vendor/freetype/src/base/ftglyph.c",
+                "vendor/freetype/src/base/ftbitmap.c",
+                "vendor/freetype/src/base/ftmm.c",
+                "vendor/freetype/src/autofit/autofit.c",
+                "vendor/freetype/src/truetype/truetype.c",
+                "vendor/freetype/src/type1/type1.c",
+                "vendor/freetype/src/cff/cff.c",
+                "vendor/freetype/src/cid/type1cid.c",
+                "vendor/freetype/src/pfr/pfr.c",
+                "vendor/freetype/src/type42/type42.c",
+                "vendor/freetype/src/winfonts/winfnt.c",
+                "vendor/freetype/src/pcf/pcf.c",
+                "vendor/freetype/src/bdf/bdf.c",
+                "vendor/freetype/src/psaux/psaux.c",
+                "vendor/freetype/src/psnames/psnames.c",
+                "vendor/freetype/src/pshinter/pshinter.c",
+                "vendor/freetype/src/sfnt/sfnt.c",
+                "vendor/freetype/src/smooth/smooth.c",
+                "vendor/freetype/src/raster/raster.c",
+                "vendor/freetype/src/sdf/sdf.c",
+                "vendor/freetype/src/svg/svg.c",
+                "vendor/freetype/src/gzip/ftgzip.c",
+                "vendor/freetype/src/lzw/ftlzw.c",
+                extra = .["-fPIC", "-DFT2_BUILD_LIBRARY", "-Ivendor/freetype/include"],
+                debug = debug,
+            );
+            assert(build_freetype_ok, "could not compile freetype");
+            freetype_bindings_opts: Generate_Bindings_Options;
+            array_add(*freetype_bindings_opts.system_include_paths, ..get_default_system_include_paths());
+            array_add(*freetype_bindings_opts.include_paths, "vendor/freetype/include");
+            array_add(*freetype_bindings_opts.library_search_paths, "vendor");
+            array_add(*freetype_bindings_opts.libraries, .{ filename = "freetype" });
+            array_add(*freetype_bindings_opts.source_files, "vendor/freetype/include/freetype/freetype.h", "vendor/freetype/include/freetype/ftmm.h");
+            freetype_bindings_opts.generate_library_declarations = false;
+            freetype_bindings_opts.generate_compile_time_struct_checks = false;
+            freetype_bindings_opts.auto_detect_enum_prefixes = true;
+            freetype_builder, freetype_ok := generate_bindings(freetype_bindings_opts);
+            assert(freetype_ok, "could not generate freetype bindings");
+            append_and_steal_buffers(*bindings_builder, *freetype_builder);
+            append(*bindings_builder, "\nfreetype :: #library,no_dll \"vendor/freetype\";\nptrdiff_t :: s64;\n");
+            append(*bindings_builder, "\n#scope_export\n");
+            #if OS == .LINUX {
+                generate_wayland_bindings(*bindings_builder);
+            }
+        }
+
+        assert(write_entire_file(BINDINGS_PATH, *bindings_builder), "could not write %", BINDINGS_PATH);;
     }
 
     // w := compiler_create_workspace("Main program");
