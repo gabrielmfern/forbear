@@ -1233,23 +1233,23 @@ append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointe
     return *node_tree.*[index], index;
 }
 
-element :: (
-    style := Style.{},
-    body: Code = #code {},
-    key := "",
-    location := #caller_location
-) #expand {
-    parent_index: s64 = -1;
+Element_Opening_Data :: struct {
+    parent_index: s64; 
+    scope_key: u64; 
+    base_style: Base_Style;
+    node: *Node;
+};
+// intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
+open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Opening_Data {
     parent: *Node;
     if context.forbear.parent_index != -1 {
-        parent_index = context.forbear.parent_index;
-        parent = *context.forbear.node_tree[parent_index];
+        parent = *context.forbear.node_tree[context.forbear.parent_index];
     }
-    node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
+    node, index := append_to_node_tree(*context.forbear.node_tree, context.forbear.parent_index);
     previous_base_style := context.forbear.base_style;
     complete_with(style, context.forbear.base_style, *node.style);
     context.forbear.base_style = base_style_from_complete_style(node.style);
-    if parent_index != -1 {
+    if context.forbear.parent_index != -1 {
         if style.z_index < U16_MAX {
             node.z = style.z_index;
         } else if parent.z < U16_MAX {
@@ -1258,22 +1258,7 @@ element :: (
             node.z = parent.z;
         }
     }
-
-    if key.count > 0 {
-        node.key = fnv1a_hash(key.data, key.count);
-    } else {
-        // we use the caller location here
-        node.key = fnv1a_hash(location.fully_pathed_filename.data, location.fully_pathed_filename.count);
-        node.key = fnv1a_hash(cast(u64) location.line_number, node.key);
-        node.key = fnv1a_hash(cast(u64) location.character_number, node.key);
-    }
-    if context.forbear.scope_key != U64_MAX {
-        node.key = fnv1a_hash(context.forbear.scope_key, node.key);
-    }
-    if parent_index != -1 {
-        node.key = fnv1a_hash(cast(u64) context.forbear.parent_index, node.key);
-    }
-
+    node.key = key;
     if node.style.placement.kind == {
         // we don't handle FLOW since the node already has the right position by default
         case Placement.Kind.FIXED;
@@ -1344,11 +1329,18 @@ element :: (
     //     setCursor(result.ptr.style.cursor);
     // }
 
-    #insert body;
-
-    context.forbear.parent_index = previous_parent_index;
-    context.forbear.scope_key = previous_scope_key;
-    context.forbear.base_style = previous_base_style;
+    return Element_Opening_Data.{
+        base_style = previous_base_style, 
+        scope_key = previous_scope_key,
+        parent_index = previous_parent_index,
+        node = node,
+    };
+}
+close_element :: (stack_state_to_restore: Element_Opening_Data) {
+    using stack_state_to_restore;
+    context.forbear.parent_index = parent_index;
+    context.forbear.scope_key = scope_key;
+    context.forbear.base_style = base_style;
 
     if (node.style.width.kind == Sizing.Kind.RATIO) {
         node.size.x = node.style.width.ratio * node.size.y;
@@ -1360,11 +1352,38 @@ element :: (
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 }
+// API used when building UIs straight from jai
+element :: (
+    style := Style.{},
+    body: Code = #code {},
+    manual_key := "",
+    location := #caller_location
+) #expand {
+    key: u64;
+    if manual_key.count > 0 {
+        key = fnv1a_hash(manual_key.data, manual_key.count);
+    } else {
+        // we use the caller location here
+        key = fnv1a_hash(location.fully_pathed_filename.data, location.fully_pathed_filename.count);
+        key = fnv1a_hash(cast(u64) location.line_number, key);
+        key = fnv1a_hash(cast(u64) location.character_number, key);
+    }
+    if context.forbear.scope_key != U64_MAX {
+        key = fnv1a_hash(context.forbear.scope_key, key);
+    }
+    if context.forbear.parent_index != -1 {
+        key = fnv1a_hash(cast(u64) context.forbear.parent_index, key);
+    }
+
+    previous_stack_state := open_element(style, key);
+    #insert body;
+    close_element(previous_stack_state);
+}
 element :: (body: Code, location := #caller_location) #expand {
     element(body = body, location = location);
 }
 element :: (style: Style, key: string, location := #caller_location) #expand {
-    element(style = style, key = key, location = location);
+    element(style = style, manual_key = key, location = location);
 }
 
 freetype_library: FT_Library;
