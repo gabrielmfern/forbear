@@ -1574,111 +1574,11 @@ free_font :: (font: *Font) {
 
 text :: (style := Style.{}, content := "", key := "", location := #caller_location) #expand {
     if content.count > 0 {
-        parent_index: s64 = -1;
-        parent: *Node;
-        if context.forbear.parent_index != -1 {
-            parent_index = context.forbear.parent_index;
-            parent = *context.forbear.node_tree[parent_index];
-        }
-        node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
-        complete_with(style, context.forbear.base_style, *node.style);
-        if parent_index != -1 {
-            if parent.z < U16_MAX {
-                node.z = parent.z + 1;
-            } else {
-                node.z = parent.z;
-            }
-        }
-
-        if key.count > 0 {
-            node.key = fnv1a_hash(key.data, key.count);
-        } else {
-            // we use the caller location here
-            node.key = fnv1a_hash(location.fully_pathed_filename.data, location.fully_pathed_filename.count);
-            node.key = fnv1a_hash(cast(u64) location.line_number, node.key);
-            node.key = fnv1a_hash(cast(u64) location.character_number, node.key);
-        }
-        if context.forbear.scope_key != U64_MAX {
-            node.key = fnv1a_hash(context.forbear.scope_key, node.key);
-        }
-        if parent_index != -1 {
-            node.key = fnv1a_hash(cast(u64) context.forbear.parent_index, node.key);
-        }
-
-        if node.style.placement.kind == {
-            // we don't handle FLOW since the node already has the right position by default
-            case Placement.Kind.FIXED;
-                node.position = node.style.placement.fixed;
-            case Placement.Kind.RELATIVE;
-                node.position = node.style.placement.relative;
-        }
-        if node.style.width.kind == {
-            // we don't handle FIT or GROW since the node already has the right width by default
-            case Sizing.Kind.FIXED;
-                node.size.x = node.style.width.fixed;
-            case Sizing.Kind.RATIO;
-                if node.style.height.kind == Sizing.Kind.FIXED {
-                    node.size.x = node.style.height.fixed * node.style.width.ratio;
-                }
-        }
-        if node.style.height.kind == {
-            // we don't handle FIT or GROW since the node already has the right width by default
-            case Sizing.Kind.FIXED;
-                node.size.y = node.style.height.fixed;
-            case Sizing.Kind.RATIO;
-                if node.style.width.kind == Sizing.Kind.FIXED {
-                    node.size.y = node.style.width.fixed * node.style.height.ratio;
-                }
-        }
-        if !isnan(node.style.min_width) {
-            node.min_size.x = node.style.min_width;
-        } else if node.style.width.kind == .FIXED {
-            node.min_size.x = node.style.width.fixed;
-        }
-        if !isnan(node.style.min_height) {
-            node.min_size.y = node.style.min_height;
-        } else if node.style.height.kind == .FIXED {
-            node.min_size.y = node.style.height.fixed;
-        }
-        if !isnan(node.style.max_width) {
-            node.max_size.x = node.style.max_width;
-        } else if node.style.width.kind == .FIXED {
-            node.max_size.x = node.style.width.fixed;
-        }
-        if !isnan(node.style.max_height) {
-            node.max_size.y = node.style.max_height;
-        } else if node.style.height.kind == .FIXED {
-            node.max_size.y = node.style.height.fixed;
-        }
-
-        node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
-        node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
-
-        if node.style.width.kind == Sizing.Kind.FIT {
-            node.size.x = fitting_base(node, Direction.HORIZONTAL);
-        }
-        if node.style.width.kind != Sizing.Kind.FIXED && node.style.min_width == FLOAT32_NAN {
-            node.min_size.x = fitting_base(node, Direction.HORIZONTAL);
-        }
-        if node.style.height.kind == Sizing.Kind.FIT {
-            node.size.y = fitting_base(node, Direction.VERTICAL);
-        }
-        if node.style.height.kind != Sizing.Kind.FIXED && node.style.min_height == FLOAT32_NAN {
-            node.min_size.y = fitting_base(node, Direction.VERTICAL);
-        }
-
-        // TODO(layouting): we should be using something that includes more data here since it's going to be required during layouting.
-        node.glyphs = shape_text(node.style.font, content);
-
-        if (node.style.width.kind == Sizing.Kind.RATIO) {
-            node.size.x = node.style.width.ratio * node.size.y;
-        }
-        if (node.style.height.kind == Sizing.Kind.RATIO) {
-            node.size.y = node.style.height.ratio * node.size.x;
-        }
-
-        node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
-        node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
+        element(style, #code {
+            node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
+            // TODO(layouting): we should be using something that includes more data here since it's going to be required during layouting.
+            node.glyphs = shape_text(node.style.font, content);
+        });
     }
 }
 text :: (content: string, location := #caller_location) {
