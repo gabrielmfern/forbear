@@ -58,6 +58,24 @@
 <li class="flex gap-4"><span class="text-muted tabular-nums shrink-0">2026-10-03</span><span class="text-muted tabular-nums shrink-0">002</span><a href="log/002-text-macos-and-nodes.html">text, macOS and nodes!</a></li>
 <li class="flex gap-4"><span class="text-muted tabular-nums shrink-0">2026-09-25</span><span class="text-muted tabular-nums shrink-0">001</span><a href="log/001-im-rewriting-everything-again.html">I'm rewriting everything (again)</a></li>
 </ul>
+
+<hr class="my-4 border-0 border-t border-ui"/>
+
+<form id="subscribe" class="flex justify-end items-center gap-2 text-sm text-muted">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="text-muted hover:text-yellow cursor-pointer">get entries by email</button>
+</form>
+<script>
+  document.getElementById('subscribe').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const response = await fetch('/api/subscribe', { method: 'POST', body: form.email.value });
+    form.outerHTML = response.ok
+      ? '<p class="text-right text-sm text-muted">check your inbox for a link to confirm.</p>'
+      : '<p class="text-right text-sm text-muted">something went wrong, try again later.</p>';
+  });
+</script>
+
 </main>
 </body>
 </html>

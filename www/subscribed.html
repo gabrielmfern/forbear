@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>forbear, subscribed</title>
+<meta name="robots" content="noindex">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+@theme {
+  --color-bg: #1C1F23;
+  --color-fg: #AEB8C4;
+  --color-bright: #FFFFFF;
+  --color-yellow: #B8A36A;
+  --color-bright-yellow: #CFBA78;
+}
+@layer base {
+  body { @apply bg-bg text-fg leading-relaxed; }
+  h1 { @apply text-bright text-3xl font-bold mb-8; }
+  p { @apply my-4; }
+  a { @apply text-yellow hover:text-bright-yellow; }
+}
+</style>
+</head>
+<body>
+<main class="max-w-2xl mx-auto px-4 py-16">
+<h1>you're subscribed</h1>
+<p>You'll get the next forbear log entry by email.</p>
+<p><a href="/">back to forbear</a></p>
+</main>
+</body>
+</html>
