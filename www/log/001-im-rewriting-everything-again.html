@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>forbear log, entry 001: I'm rewriting everything (again)</title>
-<meta name="description" content="Why I'm rewriting forbear, my GUI framework, from Zig in Jai, and what I'm doing differently this time.">
+<title>forbear log, entry 001: i'm rewriting everything (again)</title>
+<meta name="description" content="why I'm rewriting forbear, my GUI framework, from Zig in Jai, and what I'm doing differently this time.">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="forbear">
 <meta property="og:url" content="https://www.forbear.dev/log/001-im-rewriting-everything-again.html">
-<meta property="og:title" content="I'm rewriting everything (again)">
-<meta property="og:description" content="Why I'm rewriting forbear, my GUI framework, from Zig in Jai, and what I'm doing differently this time.">
+<meta property="og:title" content="i'm rewriting everything (again)">
+<meta property="og:description" content="why I'm rewriting forbear, my GUI framework, from Zig in Jai, and what I'm doing differently this time.">
 <meta property="og:image" content="https://www.forbear.dev/assets/og-001.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="I'm rewriting everything (again)">
-<meta name="twitter:description" content="Why I'm rewriting forbear, my GUI framework, from Zig in Jai, and what I'm doing differently this time.">
+<meta name="twitter:title" content="i'm rewriting everything (again)">
+<meta name="twitter:description" content="why I'm rewriting forbear, my GUI framework, from Zig in Jai, and what I'm doing differently this time.">
 <meta name="twitter:image" content="https://www.forbear.dev/assets/og-001.png">
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 <style type="text/tailwindcss">
@@ -62,7 +62,7 @@ pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
 <body>
 <main class="max-w-2xl mx-auto px-4 py-16">
 <p class="mt-0 mb-8"><a href="/">&larr; forbear</a></p>
-<h1>forbear log, entry 001: I'm rewriting everything (again)</h1>
+<h1>forbear log, entry 001: i'm rewriting everything (again)</h1>
 <p class="text-muted tabular-nums -mt-6"><time datetime="2026-09-25">2026-09-25</time></p>
 
 <p>I'm rewriting forbear from Zig in Jai, from scratch, once again.</p>
@@ -71,7 +71,7 @@ pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
 
 <p>I believe all software has become putrid, slow and unnecessarily wasteful with resources. This has been the only economically viable option because it's so insanely hard to build a desktop app, especially for web developers, who I perceive to be most of the programmers today. forbear is meant to change that.</p>
 
-<h2>Looking back</h2>
+<h2>looking back</h2>
 
 <p>I had the idea to write a Bible program. I wanted to read on my computer without ads and such, so I tried Tauri, since I thought Electron would be slow. It turned out to be very slow on Linux too, because the webviews there aren't very good. That's when the idea for forbear started:</p>
 
@@ -128,9 +128,9 @@ pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
     <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
 <span class="hl-delimiter">}</span></code></pre>
 
-<h2>Why I'm starting over</h2>
+<h2>why i'm starting over</h2>
 
-<h3>Zig doesn't fit forbear</h3>
+<h3>zig doesn't fit forbear</h3>
 
 <p>The previous version was written in Zig, and Zig doesn't seem to be the best language for this project. For the sake of its principles, I feel like Zig ends up making decisions that have more cons than pros. For example, being forced to handle return values means you can't forget to handle an error, but it also rules out an entire category of APIs I could implement. And that has no practical benefit for me, since I have never forgotten to handle a returned error or value that I needed.</p>
 
@@ -153,11 +153,11 @@ pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
 
 <p>Another problem is generating bindings for C++ and Objective-C. I want JavaScript developers to use forbear too, so I plan to embed Node, similar to what I've done in <a href="https://github.com/gabrielmfern/pulgar">pulgar</a>. Node is written in C++, and Zig can only import C headers, so I would need to write a C wrapper for everything I use. Windowing on macOS has a similar problem: Zig has no Objective-C support, so I would have to call the Objective-C runtime by hand, which would make the code extremely hard to maintain.</p>
 
-<h3>I'm still learning</h3>
+<h3>i'm still learning</h3>
 
 <p>I don't think I can invent the de facto standard for building GUI applications on my first iteration. First and foremost, I'm inexperienced in graphics, low-level work and many other things this endeavour requires. On top of that, I believe multiple iterations are what lead to better design in just about anything, so I think this fits right in.</p>
 
-<h3>Why Jai</h3>
+<h3>why Jai</h3>
 
 <p>The language I've picked is Jai. It's Jonathan Blow's language, currently in private beta, that I learned about from some of his talks. Jai is still only its working name. It can generate bindings straight from C++ headers, and it ships with bindings for AppKit, Foundation, Windows, OpenGL and Vulkan, all important things I need for this project. Jai has no error system, which means I can pick whatever is best for forbear. It also has a macro system I can use, and it doesn't make any of the extreme, principle-driven choices that Zig makes.</p>
 
@@ -165,7 +165,7 @@ pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
 
 <p>Jonathan Blow's ideas about simplicity are very close to what forbear is meant to be. Jai feels like what C++ should have been. forbear is meant to be what the operating system should give us for free.</p>
 
-<h2>What I'm doing differently</h2>
+<h2>what i'm doing differently</h2>
 
 <p>The first, smaller thing is implementing my own version of libwayland for the project. libwayland is really stupid to work with: the API is very annoying because of all the callbacks, which force me to allocate stuff I shouldn't need to, move void pointers around just to get data, or create global variables, none of which is necessary. The Wayland protocol naturally fits a while loop that processes each event from the compositor, so I implemented my own from scratch, talking to the compositor over the socket. It's definitely not as refined as libwayland yet, but after two days of work I already have a window that opens, resizes and draws a checkerboard in a shared pixel buffer.</p>
 
