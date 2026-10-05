@@ -318,7 +318,9 @@ BINDINGS_PATH :: #run tprint("%bindings-%.jai", #filepath, OS);
 #run build();
 
 build :: () {
-    debug := get_build_options().array_bounds_check == .ON;
+    build_options := get_build_options();
+
+    debug := build_options.array_bounds_check == .ON;
     jails :: #exists(JAILS_DIAGNOSTICS_BUILD);
 
     set_build_options_dc(.{do_output=false});
@@ -335,13 +337,19 @@ build :: () {
     arch :: #ifx CPU == .ARM64 then "arm64" else "x64";
     dist_dir := tprint("dist/%-%", platform, arch);
 
-    build_options := get_build_options();
+    build_javascript_ok := build_cpp_static_lib(
+        "vendor/javascript",
+        "javascript.cpp",
+        extra = .["-std=c++20", "-fPIC", "-Ivendor/libnode/include"],
+        debug = debug,
+    );
+    assert(build_javascript_ok, "could not compile javascript.cpp");
 
-    regenerate := array_find(build_options.compile_time_command_line, "bindings") 
+    regenerate_bindings := array_find(build_options.compile_time_command_line, "bindings") 
               || !file_exists(BINDINGS_PATH) 
               || !file_exists("vendor/kb_text_shape.a") 
               || !file_exists("vendor/freetype.a");
-    if regenerate {
+    if regenerate_bindings {
         bindings_builder: String_Builder;
         #if OS == .LINUX {
             // egl bindings
@@ -356,9 +364,6 @@ build :: () {
             append_and_steal_buffers(*bindings_builder, *egl_builder);
             append(*bindings_builder, "\n#scope_export\n");
         }
-        
-        // libnode bindings
-        {}
 
         {
             // kbts bindings
@@ -455,7 +460,7 @@ build :: () {
     // add_build_file("forbear.jai", w);
 
     playground := compiler_create_workspace("Playground");
-    playground_options := get_build_options();
+    playground_options := get_build_options(playground);
     if jails {
         playground_options.output_type = .NO_OUTPUT;
     } else {
