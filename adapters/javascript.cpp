@@ -4,9 +4,9 @@
 #include "v8-platform.h"
 #include <cstdint>
 
-extern "C" void forbear_open(void* adapter, void* style_object);
+extern "C" void forbear_open(void* adapter, void* js_style_object, char* manual_key_data, int64_t manual_key_count);
 extern "C" void forbear_close(void* adapter);
-extern "C" void forbear_text_push(void* adapter);
+extern "C" void forbear_text_push(void* adapter, void* js_style_object, char* content_data, int64_t content_count, char* manual_key_data, int64_t manual_key_count);
 
 enum JavascriptStyleField : uint8_t {
     BACKGROUND, COLOR, BORDER_RADIUS, BORDER_COLOR, BORDER_WIDTH, BORDER_STYLE,

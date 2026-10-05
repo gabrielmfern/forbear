@@ -1377,9 +1377,9 @@ element :: (
         key = fnv1a_hash(cast(u64) context.forbear.parent_index, key);
     }
 
-    previous_stack_state := open_element(style, key);
+    opening := open_element(style, key);
     #insert body;
-    close_element(previous_stack_state);
+    close_element(opening);
 }
 element :: (body: Code, location := #caller_location) #expand {
     element(body = body, location = location);
@@ -1572,13 +1572,13 @@ free_font :: (font: *Font) {
     FT_Done_Face(font.raster_face);
 }
 
-text :: (style := Style.{}, content := "", key := "", location := #caller_location) #expand {
+text :: (style := Style.{}, content := "", manual_Key := "", location := #caller_location) #expand {
     if content.count > 0 {
         element(style, #code {
             node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
             // TODO(layouting): we should be using something that includes more data here since it's going to be required during layouting.
             node.glyphs = shape_text(node.style.font, content);
-        });
+        }, manual_key = manual_Key);
     }
 }
 text :: (content: string, location := #caller_location) {

@@ -339,7 +339,7 @@ build :: () {
 
     build_javascript_ok := build_cpp_static_lib(
         "vendor/javascript",
-        "javascript.cpp",
+        "adapters/javascript.cpp",
         extra = .["-std=c++20", "-fPIC", "-Ivendor/libnode/include"],
         debug = debug,
     );
