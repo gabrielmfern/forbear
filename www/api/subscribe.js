@@ -4,6 +4,14 @@ export async function POST(request) {
   const email = (await request.text()).trim().toLowerCase();
   if (!/^[^\s@,;<>]+@[^\s@,;<>]+$/.test(email)) return new Response('invalid email', { status: 400 });
 
+  const existing = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(email)}`, {
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+  });
+  if (existing.ok) {
+    const contact = await existing.json();
+    if (!contact.unsubscribed) return new Response(null, { status: 409 });
+  }
+
   const token = createHmac('sha256', process.env.RESEND_API_KEY).update(email).digest('hex');
   const link = `https://www.forbear.dev/api/verify?email=${encodeURIComponent(email)}&token=${token}`;
 
