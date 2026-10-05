@@ -715,6 +715,7 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
 }
 
 Direction :: enum u8 { HORIZONTAL; VERTICAL; };
+DIRECTIONS :: Direction.[.HORIZONTAL, .VERTICAL];
 opposite :: (direction: Direction) -> Direction {
     if #complete direction == {
     case .HORIZONTAL;
@@ -779,6 +780,13 @@ Sides :: struct {
     x: Vector2;
     y: Vector2;
 };
+get :: (sides: Sides, direction: Direction) -> Vector2 {
+    if direction == .HORIZONTAL {
+        return sides.x;
+    } else {
+        return sides.y;
+    }
+}
 all :: (value: float) -> Sides {
     return Sides.{
         x = make_vector2(value),
@@ -1194,17 +1202,45 @@ Node :: struct {
 
     tree: *Node_Tree;
 };
-get_sides_axis :: (sides: Sides, direction: Direction) -> Vector2 {
+get_preferred_size :: (node: *Node, direction: Direction) -> Sizing #expand {
     if direction == Direction.HORIZONTAL {
-        return sides.x;
+        return node.style.width;
     } else {
-        return sides.y;
+        return node.style.height;
+    }
+}
+should_fit_min :: (node: *Node, direction: Direction) -> bool #expand {
+    if direction == .HORIZONTAL {
+        return isnan(node.style.min_width) && node.style.width.kind != .FIXED;
+    } else {
+        return isnan(node.style.min_height) && node.style.height.kind != .FIXED;
+    }
+}
+add :: (vector: *Vector2, direction: Direction, increment: float) #expand {
+    if direction == Direction.HORIZONTAL {
+        vector.x += increment;
+    } else {
+        vector.y += increment;
+    }
+}
+get :: (vector: Vector2, direction: Direction) -> float #expand {
+    if direction == Direction.HORIZONTAL {
+        return vector.x;
+    } else {
+        return vector.y;
+    }
+}
+set :: (vector: *Vector2, direction: Direction, value: float) #expand {
+    if direction == Direction.HORIZONTAL {
+        vector.x = value;
+    } else {
+        vector.y = value;
     }
 }
 fitting_base :: (node: Node, direction: Direction) -> float {
-    padding_axis := get_sides_axis(node.style.padding, direction);
+    padding_axis := get(node.style.padding, direction);
     padding := padding_axis.x + padding_axis.y;
-    border_axis := get_sides_axis(node.style.border_width, direction);
+    border_axis := get(node.style.border_width, direction);
     border := border_axis.x + border_axis.y;
     return padding + border;
 }
@@ -1571,14 +1607,13 @@ shape_text :: (font: *Font, content: string) -> [..]Shaped_Glyph {
 free_font :: (font: *Font) {
     FT_Done_Face(font.raster_face);
 }
-
-text :: (style := Style.{}, content := "", manual_Key := "", location := #caller_location) #expand {
+text :: (style := Style.{}, content := "", manual_key := "", location := #caller_location) #expand {
     if content.count > 0 {
         element(style, #code {
             node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
             // TODO(layouting): we should be using something that includes more data here since it's going to be required during layouting.
             node.glyphs = shape_text(node.style.font, content);
-        }, manual_key = manual_Key);
+        }, manual_key = manual_key);
     }
 }
 text :: (content: string, location := #caller_location) {
@@ -1839,6 +1874,96 @@ GLSL);
     context.forbear = forbear;
 }
 
+layout :: () {
+    using context.forbear;
+    if node_tree.count > 0 {
+        // fit all nodes
+        for < * node: node_tree {
+            if node.first_child != -1 && node.glyphs.count == 0 {
+                if node.style.width.kind == .FIT {
+                    node.size.x = fitting_base(node, .HORIZONTAL);
+                }
+                if isnan(node.style.min_width) && node.style.width.kind != .FIXED {
+                    node.min_size.x = fitting_base(node, .HORIZONTAL);
+                }
+                if node.style.height.kind == .FIT {
+                    node.size.y = fitting_base(node, .VERTICAL);
+                }
+                if isnan(node.style.min_height) && node.style.height.kind != .FIXED {
+                    node.min_size.y = fitting_base(node, .VERTICAL);
+                }
+                child_index := node.first_child;
+                while child_index != -1 {
+                    child := node_tree[child_index];
+                    if child.style.placement.kind == .FLOW {
+                        // Check if parent should accumulate child sizes.
+                        // .fit nodes always accumulate. .grow nodes also accumulate because
+                        // when their parent can't provide space, content determines size.
+                        fitH := node.style.width.kind == .FIT || node.style.width.kind == .GROW || should_fit_min(node, .HORIZONTAL);
+                        fitV := node.style.height.kind == .FIT || node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL);
+                        if fitH || fitV {
+                            for fit_direction: DIRECTIONS {
+                                preferred_size := get_preferred_size(node, fit_direction);
+                                child_margin_vector := get(child.style.margin, fit_direction);
+                                child_margins := child_margin_vector.x + child_margin_vector.y;
+
+                                child_size := get(child.size, fit_direction);
+                                child_min_size := get(child.min_size, fit_direction);
+                                child_size_contribution := child_margins + child_size;
+                                child_min_size_contribution := child_margins + ifx fit_direction == .VERTICAL then
+                                    max(child_size, child_min_size)
+                                else
+                                    child_min_size;
+
+                                should_accumulate := preferred_size.kind == .FIT || preferred_size.kind == .GROW;
+
+                                if node.style.direction == fit_direction {
+                                    if preferred_size.kind == .FIT {
+                                        // TODO: ensure the max and min sizes here
+                                        add(*node.size, fit_direction, child_size_contribution);
+                                    } else if (preferred_size.kind == .GROW) {
+                                        // TODO: ensure the max and min sizes here
+                                        if fit_direction == .HORIZONTAL {
+                                            node.size.x = max(node.size.x, child_size_contribution + fitting_base(node, .HORIZONTAL));
+                                        } else {
+                                            node.size.y = max(node.size.y, child_size_contribution + fitting_base(node, .VERTICAL));
+                                        }
+                                    }
+                                    if should_fit_min(node, fit_direction) {
+                                        add(*node.min_size, fit_direction, child_min_size_contribution);
+                                    }
+                                } else {
+                                    // cross axis fitting
+                                    if (should_accumulate) {
+                                        // TODO: ensure the max and min sizes here
+                                        set(
+                                            *node.size, 
+                                            fit_direction, 
+                                            max(
+                                                child_size_contribution + fitting_base(node, fit_direction), 
+                                                get(node.size, fit_direction)
+                                            )
+                                        );
+                                    }
+                                    if (should_fit_min(node, fit_direction)) {
+                                        set(*node.min_size, fit_direction, max(
+                                            child_min_size_contribution + fitting_base(node, fit_direction),
+                                            get(node.min_size, fit_direction),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    child_index = child.next_sibling;
+                }
+            }
+        }
+    }
+}
+
+
+// TODO: this render should not take a window, instead it should determine the target window based on the nodes. we should include a root window, though
 draw_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
     #if OS == .LINUX {

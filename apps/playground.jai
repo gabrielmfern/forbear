@@ -22,6 +22,7 @@ main :: () {
     forbear: Forbear;
     init_forbear(*forbear, *backend, Base_Style.{
         font = *inter,
+        color = rgb(255, 255, 255),
     });
 
     while window.running {
@@ -37,13 +38,32 @@ main :: () {
         }
 
         element(Style.{ 
-            width = fixed(500),
-            height = fixed(500),
+            // width = fixed(500),
+            // height = fixed(500),
+            padding = block(in_line(50), 30),
             background = color(rgb(255, 0, 255)),
-            color = rgb(255, 255, 255),
         }, #code {
+            element(Style.{
+                width = fixed(60),
+                height = fixed(75),
+                margin = in_line(50),
+                background = color(rgb(0, 0, 255)),
+            });
+            element(Style.{
+                width = fixed(60),
+                height = fixed(75),
+                background = color(rgb(0, 255, 0)),
+            });
+            element(Style.{
+                width = fixed(60),
+                height = fixed(75),
+                margin = in_line(50),
+                background = color(rgb(255, 0, 0)),
+            });
             text("hello lisa");
         });
+
+        layout();
 
         draw_and_reset_node_tree(*window, rgb(0.0, 0.0, 0.0));
 
