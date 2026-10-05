@@ -20,6 +20,7 @@ export async function POST(request) {
     headers: {
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
+      'Idempotency-Key': `confirm-subscription/${email}`,
     },
     body: JSON.stringify({
       from: 'forbear <log@forbear.dev>',
