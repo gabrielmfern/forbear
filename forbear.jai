@@ -1050,6 +1050,9 @@ Style :: struct {
 
     cursor: Cursor = UNSET;
 
+    // TODO: use this. we're currently not using this for anything I think this
+    // can wrap, without having to flow with text. Flowing with text is meant
+    // for text decorations and such, which can be done with a text builder API
     overflow: Overflow = UNSET;
     placement: Placement = Placement.{ kind = UNSET };
     z_index: u16 = U16_MAX;
@@ -1336,8 +1339,7 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
         node = node,
     };
 }
-close_element :: (stack_state_to_restore: Element_Opening_Data) {
-    using stack_state_to_restore;
+close_element :: (using data: Element_Opening_Data) {
     context.forbear.parent_index = parent_index;
     context.forbear.scope_key = scope_key;
     context.forbear.base_style = base_style;
