@@ -4,6 +4,7 @@
 .build/
 .vercel
 dist
+*.so*
 playground
 playground.dSYM*
 
