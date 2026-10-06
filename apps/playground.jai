@@ -45,7 +45,7 @@ main :: () {
             text("hello lisa");
         });
 
-        render_and_reset_node_tree(*window, rgb(0.0, 0.0, 0.0));
+        draw_and_reset_node_tree(*window, rgb(0.0, 0.0, 0.0));
 
         reset_temporary_storage();
     }

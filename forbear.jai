@@ -1839,7 +1839,7 @@ GLSL);
     context.forbear = forbear;
 }
 
-render_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
+draw_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
     #if OS == .LINUX {
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
