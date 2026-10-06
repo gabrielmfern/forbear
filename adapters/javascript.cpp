@@ -1,5 +1,7 @@
 #include "node.h"
 #include "uv.h"
+#include "v8-container.h"
+#include "v8-exception.h"
 #include "v8-isolate.h"
 #include "v8-platform.h"
 #include <cstdint>
@@ -22,7 +24,6 @@ static const char* style_field_names[] = {
     "maxHeight", "height", "translate", "padding", "margin", "xJustification", 
     "yJustification", "direction",
 };
-
 struct JavascriptRuntime {
     uv_loop_t* loop;
     std::unique_ptr<node::MultiIsolatePlatform> platform;
@@ -30,7 +31,54 @@ struct JavascriptRuntime {
     v8::Isolate* isolate;
     v8::Global<v8::Context>* context;
     v8::Global<v8::String> property_names[DIRECTION + 1];
+
+    v8::Global<v8::String> fixed_string;
+    v8::Global<v8::String> ratio_string;
+    v8::Global<v8::String> grow_string;
+    v8::Global<v8::String> fit_string;
+    v8::Global<v8::String> flow_string;
+    v8::Global<v8::String> relative_string;
+    v8::Global<v8::String> color_string;
+    v8::Global<v8::String> gradient_string;
 };
+
+void fixed(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() == 1 && info[0]->IsArray()) {
+        auto number = info[0].As<v8::Number>();
+        auto sizing = v8::Array::New(isolate, 2);
+        sizing->Set(context, 0, runtime->fixed_string.Get(isolate)).Check();
+        sizing->Set(context, 1, number).Check();
+        return_value.Set(sizing);
+    } else if (info.Length() == 1 && info[0]->IsArray()) {
+        auto vector2 = info[0].As<v8::Array>();
+        auto placement = v8::Array::New(isolate, 3);
+        placement->Set(context, 0, runtime->fixed_string.Get(isolate)).Check();
+        v8::Local<v8::Value> x;
+        v8::Local<v8::Value> y;
+        if (vector2->Get(context, 0).ToLocal(&x) && 
+            vector2->Get(context, 1).ToLocal(&y) && 
+            x->IsNumber()                        && 
+            y->IsNumber()) {
+            placement->Set(context, 1, x).Check();
+            placement->Set(context, 2, y).Check();
+            return_value.Set(placement);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "fixed with a vector, expects the vector to be an array of two numbers")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "fixed expects either one number, or a Vector2")
+        ));
+    }
+}
 
 extern "C" void* javascript_init() {
     auto runtime = new JavascriptRuntime;
@@ -60,6 +108,28 @@ extern "C" void* javascript_init() {
                     );
                 }
 
+                runtime->fixed_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "fixed"));
+                runtime->fit_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "fit"));
+                runtime->ratio_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "ratio"));
+                runtime->grow_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "grow"));
+                runtime->relative_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "relative"));
+                runtime->color_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "color"));
+                runtime->gradient_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "gradient"));
+
+                auto context = runtime->context->Get(runtime->isolate);
+
+                auto fixed_function = v8::FunctionTemplate::New(
+                    runtime->isolate,
+                    fixed,
+                    v8::External::New(runtime->isolate, runtime)
+                )->GetFunction(context).ToLocalChecked();
+
+                context->Global()->Set(
+                    context,
+                    runtime->fixed_string.Get(runtime->isolate),
+                    fixed_function
+                ).Check();
+
                 return (void*) runtime;
             }
         }
@@ -67,6 +137,9 @@ extern "C" void* javascript_init() {
 
     return nullptr;
 }
+
+// extern "C" bool javascript_load(void* runtime, char* source_data, int64_t source_count, char* source_name_data, int64_t source_name_count) {
+// }
 
 // commented out since this is meant to run for the entire program's lifetime. we might want to bring it back in the future, so leave this here.
 //
