@@ -8,23 +8,23 @@
 - [ ] draw rounded corners
 - [ ] do double buffering in wayland
 - [ ] fix error when screenshotting wayland program: ```could not send wayland message: 11```
-- [ ] understand how we want to do memory, programs should use a pool, but should forbear define one by itself?
+- [ ] fix wayland window rendering as fast as possible without any vsync
+    - we should be using wayland's `frame` to render
 - [ ] draw in the z order
-- [ ] text rendering completeness
-    - [ ] subpixel
-    - [ ] account for font weight for kbts as well 
-    - [ ] program just doesn't do anything if the atlas is full
-    - [ ] glyphs are sitting on fractional pixels on the texture atlas
-    - [ ] we don't really support multiple fonts right now? we're using the single kbts_context which uses the font in the top of the stack
-- [ ] window platform handling completeness
-    - [ ] macos window resizing freezes (and the same will happen for windows) the rendering
-    - [ ] wayland is not handling window scale
-    - [ ] handling the weird edge case of window decorations for Gnome :/
-    - [ ] handle window scales at runtime
-    - [ ] a macos program without a menu bar is a horrible experience (ex: cmd+q doesn't work)
-        - how can we do this in a cross platform manner? perhaps a component that makes changes to the window to render the menu items?
-    - [ ] windows backend?
-    - [ ] x11 backend?
+- [ ] account for font weight on kbts as well 
+- [ ] we're using the single kbts_context which uses the font in the top of the stack
+- [ ] program just doesn't do anything if the atlas is full
+- [ ] glyphs are sitting on fractional pixels on the texture atlas
+- [ ] subpixel text rendering
+- [ ] wayland is not handling window scale
+- [ ] handling the weird edge case of window decorations for Gnome :/
+- [ ] handle window scales changing at runtime
+- [ ] macos window resizing freezes (and the same will happen for windows) the rendering
+    - this will require some drastic changes that allows us to run the UI definition every time the resize event comes back in macos and windows  
+- [ ] a macos program without a menu bar is a horrible experience (ex: cmd+q doesn't work)
+    - how can we do this in a cross platform manner? perhaps a component that makes changes to the window to render the menu items?
+- [ ] windows backend
+- [ ] start implementing a real app using forbear's javascript adapter
 
 ## introspection 
 
