@@ -163,6 +163,25 @@ extern "C" void* javascript_init(char* source_data, int64_t source_count, char* 
     return nullptr;
 }
 
+extern "C" bool javascript_render(void* runtime_opaque) {
+    auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
+    if (!runtime->render.IsEmpty()) {
+        auto isolate = runtime->setup->isolate();
+        auto context = runtime->setup->context();
+        // v8::TryCatch try_catch(isolate);
+
+        v8::Local<v8::Value> result;
+        if (runtime->render.Get(isolate)->Call(context, v8::Undefined(isolate), 0, nullptr).ToLocal(&result)) {
+            return true;
+        } else {
+            // TODO: handle the exception here somehow
+            // auto exception = try_catch.Exception();
+        }
+    }
+
+    return false;
+}
+
 // commented out since this is meant to run for the entire program's lifetime. we might want to bring it back in the future, so leave this here.
 //
 // extern "C" void javascript_destroy(void* runtime_opaque) {
