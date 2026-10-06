@@ -9,13 +9,13 @@ cd vendor/node
 for linux:
 ```bash
 ./configure --ninja
-make -j$(( $(nproc) / 2 ))
+make
 ```
 
 for macos:
 ```bash
 ./configure --ninja
-make JOBS=$(( $(sysctl -n hw.ncpu) / 2 ))
+make
 ```
 
 for windows:
