@@ -34,6 +34,10 @@ javascript_style_get_external :: (runtime_opaque: *void, style_object: *void, fi
 init_javascript_adapter :: (adapter: *Javascript_Adapter, frame_context := context) {
     adapter.frame_context = frame_context;
     adapter.runtime = javascript_init();
+    if adapter.runtime == null {
+        log_error("could not initliaze javascript runtime\n");
+        exit(-1);
+    }
 }
 
 render_with_javascript_adapter :: (adapter: *Javascript_Adapter) {
