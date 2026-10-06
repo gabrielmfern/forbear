@@ -1,5 +1,4 @@
 #include "node.h"
-#include "uv.h"
 #include "v8-container.h"
 #include "v8-exception.h"
 #include "v8-isolate.h"
@@ -25,11 +24,8 @@ static const char* style_field_names[] = {
     "yJustification", "direction",
 };
 struct JavascriptRuntime {
-    uv_loop_t* loop;
     std::unique_ptr<node::MultiIsolatePlatform> platform;
-    node::ArrayBufferAllocator* allocator;
-    v8::Isolate* isolate;
-    v8::Global<v8::Context>* context;
+    std::unique_ptr<node::CommonEnvironmentSetup> setup;
     v8::Global<v8::String> property_names[DIRECTION + 1];
 
     v8::Global<v8::String> fixed_string;
@@ -86,53 +82,49 @@ extern "C" void* javascript_init() {
     // TODO: should we have this thread pool be configurable?
     runtime->platform = node::MultiIsolatePlatform::Create(1);
     auto platform = runtime->platform.get();
-    v8::V8::InitializePlatform(platform);
-    if (v8::V8::Initialize()) {
-        runtime->loop = new uv_loop_t;
-        if (uv_loop_init(runtime->loop) == 0) {
-            runtime->allocator = node::CreateArrayBufferAllocator();
-            runtime->isolate = node::NewIsolate(runtime->allocator, runtime->loop, platform);
-            if (runtime->isolate) {
-                v8::Isolate::Scope isolate_scope(runtime->isolate);
-                v8::HandleScope handle_scope(runtime->isolate);
-                runtime->context = new v8::Global<v8::Context>(runtime->isolate, node::NewContext(runtime->isolate));
+    std::vector<std::string> errors;
+    // TODO: "forbear" here is the process name. should we have this be configurable?
+    std::vector<std::string> args = { "forbear" };
+    // TODO: should we have these exec_args configurable?
+    std::vector<std::string> exec_args;
+    runtime->setup = node::CommonEnvironmentSetup::Create(platform, &errors, args, exec_args);
+    if (runtime->setup != nullptr) {
+        auto isolate = runtime->setup->isolate();
+        auto context = runtime->setup->context();
+        auto env = runtime->setup->env();
 
-                for (uint8_t field = 0; field <= DIRECTION; ++field) {
-                    runtime->property_names[field].Reset(
-                        runtime->isolate,
-                        v8::String::NewFromUtf8(
-                            runtime->isolate,
-                            style_field_names[field],
-                            v8::NewStringType::kInternalized
-                        ).ToLocalChecked()
-                    );
-                }
-
-                runtime->fixed_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "fixed"));
-                runtime->fit_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "fit"));
-                runtime->ratio_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "ratio"));
-                runtime->grow_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "grow"));
-                runtime->relative_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "relative"));
-                runtime->color_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "color"));
-                runtime->gradient_string.Reset(runtime->isolate, v8::String::NewFromUtf8Literal(runtime->isolate, "gradient"));
-
-                auto context = runtime->context->Get(runtime->isolate);
-
-                auto fixed_function = v8::FunctionTemplate::New(
-                    runtime->isolate,
-                    fixed,
-                    v8::External::New(runtime->isolate, runtime)
-                )->GetFunction(context).ToLocalChecked();
-
-                context->Global()->Set(
-                    context,
-                    runtime->fixed_string.Get(runtime->isolate),
-                    fixed_function
-                ).Check();
-
-                return (void*) runtime;
-            }
+        for (uint8_t field = 0; field <= DIRECTION; ++field) {
+            runtime->property_names[field].Reset(
+                isolate,
+                v8::String::NewFromUtf8(
+                    isolate,
+                    style_field_names[field],
+                    v8::NewStringType::kInternalized
+                ).ToLocalChecked()
+            );
         }
+
+        runtime->fixed_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "fixed"));
+        runtime->fit_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "fit"));
+        runtime->ratio_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "ratio"));
+        runtime->grow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "grow"));
+        runtime->relative_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "relative"));
+        runtime->color_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "color"));
+        runtime->gradient_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "gradient"));
+
+        auto fixed_function = v8::FunctionTemplate::New(
+            isolate,
+            fixed,
+            v8::External::New(isolate, runtime)
+        )->GetFunction(context).ToLocalChecked();
+
+        context->Global()->Set(
+            context,
+            runtime->fixed_string.Get(isolate),
+            fixed_function
+        ).Check();
+
+        return (void*) runtime;
     }
 
     return nullptr;
@@ -165,7 +157,9 @@ extern "C" bool javascript_style_get_number(
 ) {
     auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
     auto object = *static_cast<v8::Local<v8::Object>*>(style_object);
-    auto context = runtime->context->Get(runtime->isolate);
+    
+    auto isolate = runtime->setup->isolate();
+    auto context = runtime->setup->context();
     switch (field) {
         case BORDER_RADIUS: 
         case FONT_WEIGHT:
@@ -179,7 +173,7 @@ extern "C" bool javascript_style_get_number(
         {
             auto maybe_value = object->Get(
                 context,
-                runtime->property_names[field].Get(runtime->isolate)
+                runtime->property_names[field].Get(isolate)
             );
             v8::Local<v8::Value> value;
             if (!maybe_value.ToLocal(&value) || !value->IsNumber()) {
@@ -199,7 +193,8 @@ extern "C" bool javascript_style_get_number(
 extern "C" int64_t javascript_style_get_string_length(void* runtime_opaque, void* style_object, JavascriptStyleField field) {
     auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
     auto object = *static_cast<v8::Local<v8::Object>*>(style_object);
-    auto context = runtime->context->Get(runtime->isolate);
+    auto isolate = runtime->setup->isolate();
+    auto context = runtime->setup->context();
     switch (field) {
         case BORDER_STYLE:
         case TEXT_WRAPPING:
@@ -211,14 +206,14 @@ extern "C" int64_t javascript_style_get_string_length(void* runtime_opaque, void
         {
             auto maybe_value = object->Get(
                 context,
-                runtime->property_names[field].Get(runtime->isolate)
+                runtime->property_names[field].Get(isolate)
             );
             v8::Local<v8::Value> value;
             if (!maybe_value.ToLocal(&value) || !value->IsString()) {
                 break;
             }
 
-            return (int64_t) value.As<v8::String>()->Utf8LengthV2(runtime->isolate);
+            return (int64_t) value.As<v8::String>()->Utf8LengthV2(isolate);
         }
         default: {
             break;
@@ -230,7 +225,8 @@ extern "C" int64_t javascript_style_get_string_length(void* runtime_opaque, void
 extern "C" bool javascript_style_copy_string(void* runtime_opaque, void* style_object, JavascriptStyleField field, uint8_t* result, int64_t result_count) {
     auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
     auto object = *static_cast<v8::Local<v8::Object>*>(style_object);
-    auto context = runtime->context->Get(runtime->isolate);
+    auto isolate = runtime->setup->isolate();
+    auto context = runtime->setup->context();
     switch (field) {
         case BORDER_STYLE:
         case TEXT_WRAPPING:
@@ -242,7 +238,7 @@ extern "C" bool javascript_style_copy_string(void* runtime_opaque, void* style_o
         {
             auto maybe_value = object->Get(
                 context,
-                runtime->property_names[field].Get(runtime->isolate)
+                runtime->property_names[field].Get(isolate)
             );
             v8::Local<v8::Value> value;
             if (!maybe_value.ToLocal(&value) || !value->IsString()) {
@@ -250,12 +246,12 @@ extern "C" bool javascript_style_copy_string(void* runtime_opaque, void* style_o
             }
 
             auto string = value.As<v8::String>();
-            auto length = (int64_t) string->Utf8LengthV2(runtime->isolate);
+            auto length = (int64_t) string->Utf8LengthV2(isolate);
             if (result_count < length) {
                 break;
             }
 
-            string->WriteUtf8V2(runtime->isolate, (char*) result, (size_t) length);
+            string->WriteUtf8V2(isolate, (char*) result, (size_t) length);
             return true;
         }
         default: {
@@ -268,7 +264,8 @@ extern "C" bool javascript_style_copy_string(void* runtime_opaque, void* style_o
 extern "C" int64_t javascript_style_get_array_count(void* runtime_opaque, void* style_object, JavascriptStyleField field) {
     auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
     auto object = *static_cast<v8::Local<v8::Object>*>(style_object);
-    auto context = runtime->context->Get(runtime->isolate);
+    auto isolate = runtime->setup->isolate();
+    auto context = runtime->setup->context();
     switch (field) {
         case BACKGROUND:
         case COLOR:
@@ -284,7 +281,7 @@ extern "C" int64_t javascript_style_get_array_count(void* runtime_opaque, void* 
         {
             auto maybe_value = object->Get(
                 context,
-                runtime->property_names[field].Get(runtime->isolate)
+                runtime->property_names[field].Get(isolate)
             );
             v8::Local<v8::Value> value;
             if (!maybe_value.ToLocal(&value) || !value->IsArray()) {
@@ -303,7 +300,8 @@ extern "C" int64_t javascript_style_get_array_count(void* runtime_opaque, void* 
 extern "C" bool javascript_style_get_array_number(void* runtime_opaque, void* style_object, JavascriptStyleField field, int64_t index, double* result) {
     auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
     auto object = *static_cast<v8::Local<v8::Object>*>(style_object);
-    auto context = runtime->context->Get(runtime->isolate);
+    auto isolate = runtime->setup->isolate();
+    auto context = runtime->setup->context();
     switch (field) {
         case BACKGROUND:
         case COLOR:
@@ -319,7 +317,7 @@ extern "C" bool javascript_style_get_array_number(void* runtime_opaque, void* st
         {
             auto maybe_value = object->Get(
                 context,
-                runtime->property_names[field].Get(runtime->isolate)
+                runtime->property_names[field].Get(isolate)
             );
             v8::Local<v8::Value> value;
             if (!maybe_value.ToLocal(&value) || !value->IsArray()) {
@@ -350,7 +348,8 @@ extern "C" bool javascript_style_get_array_number(void* runtime_opaque, void* st
 extern "C" int64_t javascript_style_get_array_string_length(void* runtime_opaque, void* style_object, JavascriptStyleField field, int64_t index) {
     auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
     auto object = *static_cast<v8::Local<v8::Object>*>(style_object);
-    auto context = runtime->context->Get(runtime->isolate);
+    auto isolate = runtime->setup->isolate();
+    auto context = runtime->setup->context();
     switch (field) {
         case BACKGROUND:
         case PLACEMENT:
@@ -359,7 +358,7 @@ extern "C" int64_t javascript_style_get_array_string_length(void* runtime_opaque
         {
             auto maybe_value = object->Get(
                 context,
-                runtime->property_names[field].Get(runtime->isolate)
+                runtime->property_names[field].Get(isolate)
             );
             v8::Local<v8::Value> value;
             if (!maybe_value.ToLocal(&value) || !value->IsArray()) {
@@ -377,7 +376,7 @@ extern "C" int64_t javascript_style_get_array_string_length(void* runtime_opaque
                 break;
             }
 
-            return (int64_t) element.As<v8::String>()->Utf8LengthV2(runtime->isolate);
+            return (int64_t) element.As<v8::String>()->Utf8LengthV2(isolate);
         }
         default: {
             break;
@@ -389,7 +388,8 @@ extern "C" int64_t javascript_style_get_array_string_length(void* runtime_opaque
 extern "C" bool javascript_style_copy_array_string(void* runtime_opaque, void* style_object, JavascriptStyleField field, int64_t index, uint8_t* result, int64_t result_count) {
     auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
     auto object = *static_cast<v8::Local<v8::Object>*>(style_object);
-    auto context = runtime->context->Get(runtime->isolate);
+    auto isolate = runtime->setup->isolate();
+    auto context = runtime->setup->context();
     switch (field) {
         case BACKGROUND:
         case PLACEMENT:
@@ -398,7 +398,7 @@ extern "C" bool javascript_style_copy_array_string(void* runtime_opaque, void* s
         {
             auto maybe_value = object->Get(
                 context,
-                runtime->property_names[field].Get(runtime->isolate)
+                runtime->property_names[field].Get(isolate)
             );
             v8::Local<v8::Value> value;
             if (!maybe_value.ToLocal(&value) || !value->IsArray()) {
@@ -417,12 +417,12 @@ extern "C" bool javascript_style_copy_array_string(void* runtime_opaque, void* s
             }
 
             auto string = element.As<v8::String>();
-            auto length = (int64_t) string->Utf8LengthV2(runtime->isolate);
+            auto length = (int64_t) string->Utf8LengthV2(isolate);
             if (result_count < length) {
                 break;
             }
 
-            string->WriteUtf8V2(runtime->isolate, (char*) result, (size_t) length);
+            string->WriteUtf8V2(isolate, (char*) result, (size_t) length);
             return true;
         }
         default: {
@@ -435,13 +435,14 @@ extern "C" bool javascript_style_copy_array_string(void* runtime_opaque, void* s
 extern "C" void* javascript_style_get_external(void* runtime_opaque, void* style_object, JavascriptStyleField field) {
     auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
     auto object = *static_cast<v8::Local<v8::Object>*>(style_object);
-    auto context = runtime->context->Get(runtime->isolate);
+    auto isolate = runtime->setup->isolate();
+    auto context = runtime->setup->context();
     switch (field) {
         case FONT:
         {
             auto maybe_value = object->Get(
                 context,
-                runtime->property_names[field].Get(runtime->isolate)
+                runtime->property_names[field].Get(isolate)
             );
             v8::Local<v8::Value> value;
             if (!maybe_value.ToLocal(&value) || !value->IsExternal()) {
