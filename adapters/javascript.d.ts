@@ -62,6 +62,12 @@ declare function close(): void;
 declare function text(style: Style, content: string, manualKey?: string): void;
 declare function text(content: string, manualKey?: string): void;
 
+declare namespace JSX {
+  interface IntrinsicElements {
+    element: Style & { key?: string; children?: any };
+  }
+}
+
 declare function rgb(r: number, g: number, b: number): Vector4;
 declare function rgba(r: number, g: number, b: number, a: number): Vector4;
 declare function color(value: Vector4): Background;

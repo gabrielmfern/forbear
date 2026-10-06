@@ -1,0 +1,10 @@
+{
+  "name": "javascript-example",
+  "scripts": {
+    "build": "node ../../adapters/jsx.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "6.0.2"
+  }
+}

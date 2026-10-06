@@ -1,10 +1,16 @@
 #import "Basic";
 #import "File";
-#import,file "../forbear.jai";
-#load "../adapters/javascript.jai";
+#import,file "../../forbear.jai";
+#load "../../adapters/javascript.jai";
 
-JAVASCRIPT_SOURCE :: #run read_entire_file(tprint("%javascript-example.js", #filepath));
-INTER_TTF :: #run read_entire_file(tprint("%Inter.ttf", #filepath));
+#run {
+    #import "Process";
+    result := run_command("npm", "run", "build", working_directory = #filepath);
+    assert(result.type == .EXITED && result.exit_code == 0, "npm run build failed");
+}
+
+JAVASCRIPT_SOURCE :: #run read_entire_file(tprint("%dist/index.js", #filepath));
+INTER_TTF :: #run read_entire_file(tprint("%../Inter.ttf", #filepath));
 
 main :: () {
     backend: Backend;

@@ -3,7 +3,7 @@
 - [x] draw things the screen
 - [x] support for text nodes
 - [x] implement macos-opengl backend
-- [ ] get at least a proof-of-concept working for forbear from JSX
+- [x] get at least a proof-of-concept working for forbear from JSX
 - [ ] layout nodes
 - [ ] draw rounded corners
 - [ ] do double buffering in wayland

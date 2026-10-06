@@ -6,8 +6,13 @@
 .build/
 .vercel
 dist
-javascript-example
+main
 playground
+
+# javascript
+node_modules
+package-lock.json
+dist
 
 # macos hates everyone
 .DS_Store

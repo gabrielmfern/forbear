@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "types": ["node"],
+    "jsx": "preserve",
+    "strict": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "module": "esnext",
+    "target": "es2024"
+  },
+  "include": ["src", "../../adapters/javascript.d.ts"]
+}
