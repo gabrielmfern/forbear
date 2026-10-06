@@ -1874,11 +1874,20 @@ GLSL);
     context.forbear = forbear;
 }
 
+// layouting is completely dependent on the fact that the children are appended
+// in in the order of parent -> children, if we ever change that, layouting
+// completely changes too, at least in the way it traverses things, but the
+// core algorithms will remain.
+//
+// heavily inspired by Clay distrubuted under the zlib/libpng license:
+// - https://github.com/nicbarker/clay
+// - https://www.clay.com/
+// - https://www.youtube.com/watch?v=by9lQvpvMIc
 layout :: () {
     using context.forbear;
     if node_tree.count > 0 {
-        // fit all nodes
-        for < * node: node_tree {
+        // fit all nodes according to the sizes of its children
+        for <*node: node_tree {
             if node.first_child != -1 && node.glyphs.count == 0 {
                 if node.style.width.kind == .FIT {
                     node.size.x = fitting_base(node, .HORIZONTAL);
@@ -1895,6 +1904,7 @@ layout :: () {
                 child_index := node.first_child;
                 while child_index != -1 {
                     child := node_tree[child_index];
+                    defer child_index = child.next_sibling;
                     if child.style.placement.kind == .FLOW {
                         // Check if parent should accumulate child sizes.
                         // .fit nodes always accumulate. .grow nodes also accumulate because
@@ -1955,9 +1965,51 @@ layout :: () {
                             }
                         }
                     }
-                    child_index = child.next_sibling;
                 }
             }
+        }
+
+        changing: [..]Node;
+        // we grow incrementally dividing up the available space between
+        // the grow children untuil they fill up the width
+        for *node: node_tree {
+            if node.first_child != -1 && node.glyphs.count == 0 {
+                layout_direction := node.style.direction;
+                opposite_direction := opposite(layout_direction);
+                // this grows the children of this node. we need to do two visits here:
+                // 1) to grow the children on the opposite axis of the layout direction (Style.direction)
+                // 2) to grow the children equally in the layout direciton
+                child_index := node.first_child;
+                while child_index != -1 {
+                    child := node_tree[child_index];
+                    defer child_index = child.next_sibling;
+
+                    child.min_size = min(child.min_size, child.max_size);
+                    child_margin := get(child.style.margin, opposite_direction);
+
+                    available := get(node.size, opposite_direction) 
+                        - fitting_base(node, opposite_direction) 
+                        - child_margin.x - child_margin.y;
+
+                    preferred_size := get_preferred_size(child, opposite_direction);
+                    size := get(child.size, opposite_direction);
+                    min_size := get(child.min_size, opposite_direction);
+                    max_size := get(child.max_size, opposite_direction);
+                    if preferred_size.kind == .GROW || 
+                        (child.style.placement.kind == .FLOW && 
+                        size > available && min_size < size) {
+                        set(*child.size, opposite_direction, clamp(
+                            available, min_size, max_size
+                        ));
+                    }
+                }
+            }
+        }
+        array_reset_keeping_memory(*changing);
+        // we shrink children so that nodes don't overflow the parent, but
+        // fit to the largest size possible that's bigger than their
+        // minimum size
+        for *node: node_tree {
         }
     }
 }
