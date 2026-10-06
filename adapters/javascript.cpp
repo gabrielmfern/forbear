@@ -1,6 +1,7 @@
 #include "node.h"
 #include "v8-container.h"
 #include "v8-exception.h"
+#include "v8-function-callback.h"
 #include "v8-isolate.h"
 #include "v8-platform.h"
 #include <cstdint>
@@ -76,7 +77,20 @@ void fixed(const v8::FunctionCallbackInfo<v8::Value>& info) {
     }
 }
 
-extern "C" void* javascript_init() {
+void define_global_function(JavascriptRuntime* runtime, v8::Local<v8::String> name, v8::FunctionCallback function) {
+    auto isolate = runtime->setup->isolate();
+    auto context = runtime->setup->context();
+    auto env = runtime->setup->env();
+
+    auto function_template = v8::FunctionTemplate::New(
+        isolate,
+        function,
+        v8::External::New(isolate, runtime)
+    )->GetFunction(context).ToLocalChecked();
+    context->Global()->Set(context, name, function_template).Check();
+}
+
+extern "C" void* javascript_init(char* source_data, int64_t source_count, char* source_name_data, int64_t source_name_count) {
     auto runtime = new JavascriptRuntime;
 
     // TODO: should we have this thread pool be configurable?
@@ -112,26 +126,23 @@ extern "C" void* javascript_init() {
         runtime->color_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "color"));
         runtime->gradient_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "gradient"));
 
-        auto fixed_function = v8::FunctionTemplate::New(
-            isolate,
-            fixed,
-            v8::External::New(isolate, runtime)
-        )->GetFunction(context).ToLocalChecked();
+        define_global_function(runtime, runtime->fixed_string.Get(isolate), fixed);
 
-        context->Global()->Set(
-            context,
-            runtime->fixed_string.Get(isolate),
-            fixed_function
-        ).Check();
-
-        return (void*) runtime;
+        node::ModuleData entry;
+        entry.set_source(std::string_view(source_data, source_count));
+        entry.set_format(node::ModuleFormat::kModule);
+        entry.set_resource_name(std::string_view(source_name_data, source_name_count));
+        auto loaded = node::LoadEnvironment(
+            runtime->setup->env(),
+            &entry
+        );
+        if (!loaded.IsEmpty()) {
+            return (void*) runtime;
+        }
     }
 
     return nullptr;
 }
-
-// extern "C" bool javascript_load(void* runtime, char* source_data, int64_t source_count, char* source_name_data, int64_t source_name_count) {
-// }
 
 // commented out since this is meant to run for the entire program's lifetime. we might want to bring it back in the future, so leave this here.
 //

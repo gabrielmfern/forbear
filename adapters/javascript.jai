@@ -21,7 +21,7 @@ Javascript_Style_Field :: enum u8 {
     Y_JUSTIFICATION; DIRECTION;
 };
 
-javascript_init :: () -> *void #c_call;
+javascript_init :: (source_data: *u8, source_count: s64, source_name_data: *u8, source_name_count: s64) -> *void #c_call;
 javascript_style_get_number :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, result: *float64) -> bool #c_call;
 javascript_style_get_string_length :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> s64 #c_call;
 javascript_style_copy_string :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, result: *u8, result_count: s64) -> bool #c_call;
@@ -31,9 +31,19 @@ javascript_style_get_array_string_length :: (runtime_opaque: *void, style_object
 javascript_style_copy_array_string :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, index: s64, result: *u8, result_count: s64) -> bool #c_call;
 javascript_style_get_external :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> *void #c_call;
 
-init_javascript_adapter :: (adapter: *Javascript_Adapter, frame_context := context) {
+init_javascript_adapter :: (
+    adapter: *Javascript_Adapter, 
+    main_javascript_source: string, 
+    main_javascript_source_name: string, 
+    frame_context := context
+) {
     adapter.frame_context = frame_context;
-    adapter.runtime = javascript_init();
+    adapter.runtime = javascript_init(
+        main_javascript_source.data, 
+        main_javascript_source.count, 
+        main_javascript_source_name.data, 
+        main_javascript_source_name.count
+    );
     if adapter.runtime == null {
         log_error("could not initliaze javascript runtime\n");
         exit(-1);
