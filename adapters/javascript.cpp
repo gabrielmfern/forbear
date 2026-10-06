@@ -27,8 +27,10 @@ static const char* style_field_names[] = {
 struct JavascriptRuntime {
     std::unique_ptr<node::MultiIsolatePlatform> platform;
     std::unique_ptr<node::CommonEnvironmentSetup> setup;
-    v8::Global<v8::String> property_names[DIRECTION + 1];
 
+    v8::Global<v8::Function> render;
+
+    v8::Global<v8::String> property_names[DIRECTION + 1];
     v8::Global<v8::String> fixed_string;
     v8::Global<v8::String> ratio_string;
     v8::Global<v8::String> grow_string;
@@ -46,13 +48,13 @@ void fixed(const v8::FunctionCallbackInfo<v8::Value>& info) {
     auto runtime = static_cast<JavascriptRuntime*>(
         v8::External::Cast(*info.Data())->Value()
     );
-    if (info.Length() == 1 && info[0]->IsArray()) {
+    if (info.Length() >= 1 && info[0]->IsArray()) {
         auto number = info[0].As<v8::Number>();
         auto sizing = v8::Array::New(isolate, 2);
         sizing->Set(context, 0, runtime->fixed_string.Get(isolate)).Check();
         sizing->Set(context, 1, number).Check();
         return_value.Set(sizing);
-    } else if (info.Length() == 1 && info[0]->IsArray()) {
+    } else if (info.Length() >= 1 && info[0]->IsArray()) {
         auto vector2 = info[0].As<v8::Array>();
         auto placement = v8::Array::New(isolate, 3);
         placement->Set(context, 0, runtime->fixed_string.Get(isolate)).Check();
@@ -73,6 +75,22 @@ void fixed(const v8::FunctionCallbackInfo<v8::Value>& info) {
     } else {
         isolate->ThrowException(v8::Exception::TypeError(
             v8::String::NewFromUtf8Literal(isolate, "fixed expects either one number, or a Vector2")
+        ));
+    }
+}
+
+void set_render_function(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() >= 1 && info[0]->IsFunction()) {
+        runtime->render.Reset(isolate, info[0].As<v8::Function>());
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "setRender expects a function as a parameter")
         ));
     }
 }
@@ -127,6 +145,7 @@ extern "C" void* javascript_init(char* source_data, int64_t source_count, char* 
         runtime->gradient_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "gradient"));
 
         define_global_function(runtime, runtime->fixed_string.Get(isolate), fixed);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "setRenderFunction"), set_render_function);
 
         node::ModuleData entry;
         entry.set_source(std::string_view(source_data, source_count));
