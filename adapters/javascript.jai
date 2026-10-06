@@ -21,6 +21,7 @@ init_javascript_adapter :: (
 ) {
     adapter.frame_context = frame_context;
     adapter.runtime = javascript_init(
+        adapter,
         main_javascript_source.data, 
         main_javascript_source.count, 
         main_javascript_source_name.data, 
@@ -47,7 +48,7 @@ Javascript_Style_Field :: enum u8 {
     Y_JUSTIFICATION; DIRECTION;
 };
 
-javascript_init :: (source_data: *u8, source_count: s64, source_name_data: *u8, source_name_count: s64) -> *void #c_call #foreign javascript_shim;
+javascript_init :: (adapter: *void, source_data: *u8, source_count: s64, source_name_data: *u8, source_name_count: s64) -> *void #c_call #foreign javascript_shim;
 javascript_render :: (runtime_opaque: *void) -> void #c_call #foreign javascript_shim;
 javascript_style_get_number :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, result: *float64) -> bool #c_call #foreign javascript_shim;
 javascript_style_get_string_length :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
@@ -341,7 +342,7 @@ forbear_close :: (adapter: *Javascript_Adapter) #c_call {
     }
 }
 
-forbear_text_push :: (adapter: *Javascript_Adapter, js_style_object: *void, content_data: *u8, content_count: s64, manual_key_data: *u8, manual_key_count: s64) #c_call {
+forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_data: *u8, content_count: s64, manual_key_data: *u8, manual_key_count: s64) #c_call {
     push_context adapter.frame_context {
         content: string;
         content.data = content_data;

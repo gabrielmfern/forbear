@@ -8,7 +8,7 @@
 
 extern "C" void forbear_open(void* adapter, void* js_style_object, char* manual_key_data, int64_t manual_key_count);
 extern "C" void forbear_close(void* adapter);
-extern "C" void forbear_text_push(void* adapter, void* js_style_object, char* content_data, int64_t content_count, char* manual_key_data, int64_t manual_key_count);
+extern "C" void forbear_text(void* adapter, void* js_style_object, char* content_data, int64_t content_count, char* manual_key_data, int64_t manual_key_count);
 
 enum JavascriptStyleField : uint8_t {
     BACKGROUND, COLOR, BORDER_RADIUS, BORDER_COLOR, BORDER_WIDTH, BORDER_STYLE,
@@ -25,6 +25,8 @@ static const char* style_field_names[] = {
     "yJustification", "direction",
 };
 struct JavascriptRuntime {
+    void* adapter;
+
     std::unique_ptr<node::MultiIsolatePlatform> platform;
     std::unique_ptr<node::CommonEnvironmentSetup> setup;
 
@@ -108,8 +110,15 @@ void define_global_function(JavascriptRuntime* runtime, v8::Local<v8::String> na
     context->Global()->Set(context, name, function_template).Check();
 }
 
-extern "C" void* javascript_init(char* source_data, int64_t source_count, char* source_name_data, int64_t source_name_count) {
+extern "C" void* javascript_init(
+    void* adapter,
+    char* source_data, 
+    int64_t source_count, 
+    char* source_name_data, 
+    int64_t source_name_count
+) {
     auto runtime = new JavascriptRuntime;
+    runtime->adapter = adapter;
 
     // TODO: should we have this thread pool be configurable?
     runtime->platform = node::MultiIsolatePlatform::Create(1);
