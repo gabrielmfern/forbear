@@ -7,9 +7,9 @@ Math :: #import "Math";
 #import "Hash";
 #import "Basic";
 #if OS == .LINUX {
-    #load "bindings-LINUX.jai";
+    #load "bindings-linux.jai";
 } else #if OS == .MACOS {
-    #load "bindings-MACOS.jai";
+    #load "bindings-macos.jai";
 }
 
 Vector2 :: Math.Vector2;
