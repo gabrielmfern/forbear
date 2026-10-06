@@ -6,6 +6,7 @@
 #include "v8-object.h"
 #include "v8-platform.h"
 #include "v8-primitive.h"
+#include "v8-locker.h"
 #include <cmath>
 #include <cstdint>
 #include <numbers>
@@ -31,7 +32,6 @@ static const char* style_field_names[] = {
 struct JavascriptRuntime {
     void* adapter;
 
-    std::unique_ptr<node::MultiIsolatePlatform> platform;
     std::unique_ptr<node::CommonEnvironmentSetup> setup;
 
     v8::Global<v8::Function> render;
@@ -826,83 +826,89 @@ extern "C" void* javascript_init(
     auto runtime = new JavascriptRuntime;
     runtime->adapter = adapter;
 
-    // TODO: should we have this thread pool be configurable?
-    runtime->platform = node::MultiIsolatePlatform::Create(1);
-    auto platform = runtime->platform.get();
-    std::vector<std::string> errors;
-    // TODO: "forbear" here is the process name. should we have this be configurable?
     std::vector<std::string> args = { "forbear" };
-    // TODO: should we have these exec_args configurable?
-    std::vector<std::string> exec_args;
-    runtime->setup = node::CommonEnvironmentSetup::Create(platform, &errors, args, exec_args);
-    if (runtime->setup != nullptr) {
-        auto isolate = runtime->setup->isolate();
-        auto context = runtime->setup->context();
-        auto env = runtime->setup->env();
+    auto init = node::InitializeOncePerProcess(args, {});
+    if (!init->early_return()) {
+        // TODO: should we have this thread pool be configurable?
+        auto platform = init->platform();
+        std::vector<std::string> errors;
+        runtime->setup = node::CommonEnvironmentSetup::Create(platform, &errors, init->args(), init->exec_args());
+        if (runtime->setup != nullptr) {
+            
+            auto isolate = runtime->setup->isolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolate_scope(isolate);
+            v8::HandleScope handle_scope(isolate);
+            v8::Context::Scope context_scope(runtime->setup->context());
+            auto context = runtime->setup->context();
+            auto env = runtime->setup->env();
 
-        for (uint8_t field = 0; field <= DIRECTION; ++field) {
-            runtime->property_names[field].Reset(
-                isolate,
-                v8::String::NewFromUtf8(
+            for (uint8_t field = 0; field <= DIRECTION; ++field) {
+                runtime->property_names[field].Reset(
                     isolate,
-                    style_field_names[field],
-                    v8::NewStringType::kInternalized
-                ).ToLocalChecked()
+                    v8::String::NewFromUtf8(
+                        isolate,
+                        style_field_names[field],
+                        v8::NewStringType::kInternalized
+                    ).ToLocalChecked()
+                );
+            }
+
+            runtime->fixed_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "fixed"));
+            runtime->fit_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "fit"));
+            runtime->ratio_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "ratio"));
+            runtime->grow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "grow"));
+            runtime->flow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "flow"));
+            runtime->relative_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "relative"));
+            runtime->color_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "color"));
+            runtime->gradient_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "gradient"));
+
+            define_global_function(runtime, runtime->fixed_string.Get(isolate), fixed);
+            define_global_function(runtime, runtime->fit_string.Get(isolate), fit);
+            define_global_function(runtime, runtime->ratio_string.Get(isolate), ratio);
+            define_global_function(runtime, runtime->grow_string.Get(isolate), grow);
+            define_global_function(runtime, runtime->flow_string.Get(isolate), flow);
+            define_global_function(runtime, runtime->relative_string.Get(isolate), relative);
+            define_global_function(runtime, runtime->color_string.Get(isolate), color);
+            define_global_function(runtime, runtime->gradient_string.Get(isolate), gradient);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "rgb"), rgb);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "rgba"), rgba);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "all"), all);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "inLine"), in_line);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "inline"), in_line);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "block"), block);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "left"), left);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "right"), right);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "top"), top);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "bottom"), bottom);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "angle"), angle);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTop"), to_top);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottom"), to_bottom);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toLeft"), to_left);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toRight"), to_right);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTopLeft"), to_top_left);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTopRight"), to_top_right);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottomLeft"), to_bottom_left);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottomRight"), to_bottom_right);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "open"), js_open);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "close"), js_close);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "text"), js_text);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "setRenderFunction"), set_render_function);
+
+            node::ModuleData entry;
+            entry.set_source(std::string_view(source_data, source_count));
+            entry.set_format(node::ModuleFormat::kModule);
+            entry.set_resource_name(std::string_view(source_name_data, source_name_count));
+            auto loaded = node::LoadEnvironment(
+                runtime->setup->env(),
+                &entry
             );
+            if (!loaded.IsEmpty()) {
+                return (void*) runtime;
+            }
         }
-
-        runtime->fixed_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "fixed"));
-        runtime->fit_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "fit"));
-        runtime->ratio_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "ratio"));
-        runtime->grow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "grow"));
-        runtime->flow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "flow"));
-        runtime->relative_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "relative"));
-        runtime->color_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "color"));
-        runtime->gradient_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "gradient"));
-
-        define_global_function(runtime, runtime->fixed_string.Get(isolate), fixed);
-        define_global_function(runtime, runtime->fit_string.Get(isolate), fit);
-        define_global_function(runtime, runtime->ratio_string.Get(isolate), ratio);
-        define_global_function(runtime, runtime->grow_string.Get(isolate), grow);
-        define_global_function(runtime, runtime->flow_string.Get(isolate), flow);
-        define_global_function(runtime, runtime->relative_string.Get(isolate), relative);
-        define_global_function(runtime, runtime->color_string.Get(isolate), color);
-        define_global_function(runtime, runtime->gradient_string.Get(isolate), gradient);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "rgb"), rgb);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "rgba"), rgba);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "all"), all);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "inLine"), in_line);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "inline"), in_line);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "block"), block);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "left"), left);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "right"), right);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "top"), top);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "bottom"), bottom);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "angle"), angle);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTop"), to_top);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottom"), to_bottom);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toLeft"), to_left);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toRight"), to_right);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTopLeft"), to_top_left);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTopRight"), to_top_right);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottomLeft"), to_bottom_left);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottomRight"), to_bottom_right);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "open"), js_open);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "close"), js_close);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "text"), js_text);
-        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "setRenderFunction"), set_render_function);
-
-        node::ModuleData entry;
-        entry.set_source(std::string_view(source_data, source_count));
-        entry.set_format(node::ModuleFormat::kModule);
-        entry.set_resource_name(std::string_view(source_name_data, source_name_count));
-        auto loaded = node::LoadEnvironment(
-            runtime->setup->env(),
-            &entry
-        );
-        if (!loaded.IsEmpty()) {
-            return (void*) runtime;
-        }
+    } else {
+        // TODO: print init->errors()
     }
 
     return nullptr;
@@ -912,6 +918,10 @@ extern "C" bool javascript_render(void* runtime_opaque) {
     auto runtime = static_cast<JavascriptRuntime*>(runtime_opaque);
     if (!runtime->render.IsEmpty()) {
         auto isolate = runtime->setup->isolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolate_scope(isolate);
+        v8::HandleScope handle_scope(isolate);
+        v8::Context::Scope context_scope(runtime->setup->context());
         auto context = runtime->setup->context();
         // v8::TryCatch try_catch(isolate);
 

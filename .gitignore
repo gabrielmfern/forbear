@@ -6,6 +6,7 @@
 dist
 *.so*
 playground
+javascript-example
 playground.dSYM*
 
 # macos hates everyone

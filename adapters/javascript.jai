@@ -1,9 +1,35 @@
 #import "Basic";
 #import "Hash";
 
-javascript_shim :: #library,no_dll "../vendor/javascript";
-libnode :: #library,link_always "../vendor/libnode/linux-x64/libnode";
+libm :: #library,system,link_always "libm";
 libstdcpp :: #system_library,link_always "libstdc++";
+libnode :: #library,link_always "../vendor/libnode/linux-x64/libnode";
+
+#run {
+    #import "File";
+    #import "File_Utilities";
+    #import "Compiler";
+    #import "BuildCpp";
+
+    options := get_build_options();
+    dest_dir := options.output_path;
+    if !dest_dir.count {
+        dest_dir = ".";
+    }
+    dest := tprint("%/libnode.so.147", dest_dir);
+    src  := tprint("%/../vendor/libnode/linux-x64/libnode.so.147", #filepath);
+    if !file_exists(dest) {
+        copy_file(src, dest);
+    }
+
+    build_cpp_static_lib(
+        tprint("%/javascript", #filepath),
+        tprint("%/javascript.cpp", #filepath),
+        extra = .["-std=c++20", "-fno-rtti", "-fno-exceptions", "-fPIC", tprint("-I%/../vendor/libnode/include", #filepath)],
+        debug = true,
+    );
+}
+javascript_shim :: #library,no_dll "./javascript";
 
 Javascript_Adapter :: struct {
     // see javascript.cpp
@@ -318,6 +344,7 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
     return result;
 }
 
+#program_export
 forbear_open :: (adapter: *Javascript_Adapter, js_style_object: *void, manual_key_data: *u8, manual_key_count: s64) #c_call {
     push_context adapter.frame_context {
         key: u64;
@@ -333,6 +360,7 @@ forbear_open :: (adapter: *Javascript_Adapter, js_style_object: *void, manual_ke
     }
 }
 
+#program_export
 forbear_close :: (adapter: *Javascript_Adapter) #c_call {
     push_context adapter.frame_context {
         opening := pop(*adapter.openings_stack);
@@ -340,6 +368,7 @@ forbear_close :: (adapter: *Javascript_Adapter) #c_call {
     }
 }
 
+#program_export
 forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_data: *u8, content_count: s64, manual_key_data: *u8, manual_key_count: s64) #c_call {
     push_context adapter.frame_context {
         content: string;
