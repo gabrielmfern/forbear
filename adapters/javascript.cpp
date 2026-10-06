@@ -50,7 +50,7 @@ void fixed(const v8::FunctionCallbackInfo<v8::Value>& info) {
     auto runtime = static_cast<JavascriptRuntime*>(
         v8::External::Cast(*info.Data())->Value()
     );
-    if (info.Length() >= 1 && info[0]->IsArray()) {
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
         auto number = info[0].As<v8::Number>();
         auto sizing = v8::Array::New(isolate, 2);
         sizing->Set(context, 0, runtime->fixed_string.Get(isolate)).Check();
