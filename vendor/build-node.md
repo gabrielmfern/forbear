@@ -1,0 +1,24 @@
+<!-- later, we should move this to a BUILD.md instructions for other people to use, too -->
+
+first, clone:
+```bash
+git submodule update --init --depth 1 vendor/node
+cd vendor/node
+```
+
+for linux:
+```bash
+./configure --ninja
+make -j$(( $(nproc) / 2 ))
+```
+
+for macos:
+```bash
+./configure --ninja
+make JOBS=$(( $(sysctl -n hw.ncpu) / 2 ))
+```
+
+for windows:
+```bash
+.\vcbuild dll
+```
