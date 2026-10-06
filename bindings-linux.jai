@@ -1,8 +1,7 @@
-
 //
 // This file was auto-generated using the following command:
 //
-// jai build.jai - bindings
+// jai generate.jai
 //
 
 
@@ -1339,7 +1338,7 @@ libegl :: #library,system "libEGL";
 //
 // This file was auto-generated using the following command:
 //
-// jai build.jai - bindings
+// jai generate.jai
 //
 
 
@@ -4171,7 +4170,7 @@ kb_text_shape :: #library,no_dll "vendor/kb_text_shape";
 //
 // This file was auto-generated using the following command:
 //
-// jai build.jai - bindings
+// jai generate.jai
 //
 
 

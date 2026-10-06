@@ -1,7 +1,7 @@
 {
     "roots": [
-        "apps/playground.jai"
+        "apps/playground.jai",
+        "apps/javascript-example.jai"
     ],
-    "build_root": "build.jai",
     "auto_insert_parentheses": true
 }
