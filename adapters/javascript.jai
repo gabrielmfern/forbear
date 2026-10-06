@@ -2,8 +2,8 @@
 #import "Hash";
 
 libm :: #library,system,link_always "libm";
-libstdcpp :: #system_library,link_always "libstdc++";
-libnode :: #library,link_always "../vendor/libnode/linux-x64/libnode";
+libstdcpp :: #library,system,link_always "libstdc++";
+libnode :: #library,link_always "../vendor/node/out/Release/libnode";
 
 #run {
     #import "File";
@@ -16,8 +16,15 @@ libnode :: #library,link_always "../vendor/libnode/linux-x64/libnode";
     if !dest_dir.count {
         dest_dir = ".";
     }
-    dest := tprint("%/libnode.so.147", dest_dir);
-    src  := tprint("%/../vendor/libnode/linux-x64/libnode.so.147", #filepath);
+    node_root := tprint("%/../vendor/node", #filepath);
+    #if OS == .LINUX {
+        src  := tprint("%/out/Release/libnode.so.137", node_root);
+        dest := tprint("%/libnode.so.137", dest_dir);
+    } else #if OS == .MACOS {
+        src  := tprint("%/out/Release/libnode.dylib", node_root);
+        dest := tprint("%/libnode.dylib", dest_dir);
+    }
+    assert(file_exists(src), "libnode is missing; build vendor/node with --shared");
     if !file_exists(dest) {
         copy_file(src, dest);
     }
@@ -25,7 +32,12 @@ libnode :: #library,link_always "../vendor/libnode/linux-x64/libnode";
     build_cpp_static_lib(
         tprint("%/javascript", #filepath),
         tprint("%/javascript.cpp", #filepath),
-        extra = .["-std=c++20", "-fno-rtti", "-fno-exceptions", "-fPIC", tprint("-I%/../vendor/libnode/include", #filepath)],
+        extra = .[
+            "-std=c++20", "-fno-rtti", "-fno-exceptions", "-fPIC",
+            tprint("-I%/src", node_root),
+            tprint("-I%/deps/v8/include", node_root),
+            tprint("-I%/deps/uv/include", node_root),
+        ],
         debug = true,
     );
 }
