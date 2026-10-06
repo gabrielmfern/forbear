@@ -1,6 +1,5 @@
 #import "Basic";
 #import "Hash";
-#import,file "../forbear.jai";
 
 javascript_shim :: #library,no_dll "../vendor/javascript";
 libnode :: #library,link_always "../vendor/libnode/linux-x64/libnode";
@@ -17,9 +16,8 @@ init_javascript_adapter :: (
     adapter: *Javascript_Adapter, 
     main_javascript_source: string, 
     main_javascript_source_name: string, 
-    frame_context := context
 ) {
-    adapter.frame_context = frame_context;
+    adapter.frame_context = context;
     adapter.runtime = javascript_init(
         adapter,
         main_javascript_source.data, 
