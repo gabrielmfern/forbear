@@ -1,13 +1,13 @@
 # compiled outputs
 *.a
+*.dSYM*
 *.rdi
+*.so*
 .build/
 .vercel
 dist
-*.so*
-playground
 javascript-example
-playground.dSYM*
+playground
 
 # macos hates everyone
 .DS_Store
