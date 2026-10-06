@@ -1,10 +1,6 @@
 #import "Basic";
 #import "Hash";
 
-libm :: #library,system,link_always "libm";
-libstdcpp :: #library,system,link_always "libstdc++";
-libnode :: #library,link_always "../vendor/node/out/Release/libnode";
-
 #run {
     #import "File";
     #import "File_Utilities";
@@ -18,10 +14,14 @@ libnode :: #library,link_always "../vendor/node/out/Release/libnode";
     }
     node_root := tprint("%/../vendor/node", #filepath);
     #if OS == .LINUX {
-        src  := tprint("%/out/Release/libnode.so.137", node_root);
+        src  := tprint("%/out/Release/lib/libnode.so.137", node_root);
         dest := tprint("%/libnode.so.137", dest_dir);
+        copy := tprint("%/out/Release/lib/libnode.so", node_root);
+        if !file_exists(copy) {
+            copy_file(src, copy);
+        }
     } else #if OS == .MACOS {
-        src  := tprint("%/out/Release/libnode.dylib", node_root);
+        src  := tprint("%/out/Release/lib/libnode.dylib", node_root);
         dest := tprint("%/libnode.dylib", dest_dir);
     }
     assert(file_exists(src), "libnode is missing; build vendor/node with --shared");
@@ -41,6 +41,10 @@ libnode :: #library,link_always "../vendor/node/out/Release/libnode";
         debug = true,
     );
 }
+
+libm :: #library,system,link_always "libm";
+libstdcpp :: #library,system,link_always "libstdc++";
+libnode :: #library,link_always "../vendor/node/out/Release/lib/libnode";
 javascript_shim :: #library,no_dll "./javascript";
 
 Javascript_Adapter :: struct {
