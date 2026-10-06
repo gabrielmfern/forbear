@@ -20,6 +20,7 @@ type Direction = "horizontal" | "vertical";
 type Overflow = "visible" | "wrap";
 type TextWrapping = "word" | "character" | "none";
 
+// TODO: there's currently no way of 1) defining a new font from javascript and 2) using an existing font define in jai from javascript
 interface Font {
     readonly __forbearFont: unique symbol;
 }
