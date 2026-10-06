@@ -3,8 +3,12 @@
 #include "v8-exception.h"
 #include "v8-function-callback.h"
 #include "v8-isolate.h"
+#include "v8-object.h"
 #include "v8-platform.h"
+#include "v8-primitive.h"
+#include <cmath>
 #include <cstdint>
+#include <numbers>
 
 extern "C" void forbear_open(void* adapter, void* js_style_object, char* manual_key_data, int64_t manual_key_count);
 extern "C" void forbear_close(void* adapter);
@@ -81,6 +85,708 @@ void fixed(const v8::FunctionCallbackInfo<v8::Value>& info) {
     }
 }
 
+void fit(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    auto sizing = v8::Array::New(isolate, 1);
+    sizing->Set(context, 0, runtime->fit_string.Get(isolate)).Check();
+    return_value.Set(sizing);
+}
+
+void ratio(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto number = info[0].As<v8::Number>();
+        auto sizing = v8::Array::New(isolate, 2);
+        sizing->Set(context, 0, runtime->ratio_string.Get(isolate)).Check();
+        sizing->Set(context, 1, number).Check();
+        return_value.Set(sizing);
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "ratio expects one number")
+        ));
+    }
+}
+
+void grow(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto number = info[0].As<v8::Number>();
+        auto sizing = v8::Array::New(isolate, 2);
+        sizing->Set(context, 0, runtime->grow_string.Get(isolate)).Check();
+        sizing->Set(context, 1, number).Check();
+        return_value.Set(sizing);
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "grow expects one number")
+        ));
+    }
+}
+
+void flow(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    auto placement = v8::Array::New(isolate, 1);
+    placement->Set(context, 0, runtime->flow_string.Get(isolate)).Check();
+    return_value.Set(placement);
+}
+
+void relative(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() >= 1 && info[0]->IsArray()) {
+        auto vector2 = info[0].As<v8::Array>();
+        auto placement = v8::Array::New(isolate, 3);
+        placement->Set(context, 0, runtime->relative_string.Get(isolate)).Check();
+        v8::Local<v8::Value> x;
+        v8::Local<v8::Value> y;
+        if (vector2->Get(context, 0).ToLocal(&x) &&
+            vector2->Get(context, 1).ToLocal(&y) &&
+            x->IsNumber()                        &&
+            y->IsNumber()) {
+            placement->Set(context, 1, x).Check();
+            placement->Set(context, 2, y).Check();
+            return_value.Set(placement);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "relative expects a Vector2, an array of two numbers")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "relative expects a Vector2")
+        ));
+    }
+}
+
+void rgb(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 3 &&
+        info[0]->IsNumber() &&
+        info[1]->IsNumber() &&
+        info[2]->IsNumber()) {
+        auto vector4 = v8::Array::New(isolate, 4);
+        vector4->Set(context, 0, v8::Number::New(isolate, info[0].As<v8::Number>()->Value() / 255.0)).Check();
+        vector4->Set(context, 1, v8::Number::New(isolate, info[1].As<v8::Number>()->Value() / 255.0)).Check();
+        vector4->Set(context, 2, v8::Number::New(isolate, info[2].As<v8::Number>()->Value() / 255.0)).Check();
+        vector4->Set(context, 3, v8::Number::New(isolate, 1.0)).Check();
+        return_value.Set(vector4);
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "rgb expects three numbers")
+        ));
+    }
+}
+
+void rgba(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 4 &&
+        info[0]->IsNumber() &&
+        info[1]->IsNumber() &&
+        info[2]->IsNumber() &&
+        info[3]->IsNumber()) {
+        auto vector4 = v8::Array::New(isolate, 4);
+        vector4->Set(context, 0, v8::Number::New(isolate, info[0].As<v8::Number>()->Value() / 255.0)).Check();
+        vector4->Set(context, 1, v8::Number::New(isolate, info[1].As<v8::Number>()->Value() / 255.0)).Check();
+        vector4->Set(context, 2, v8::Number::New(isolate, info[2].As<v8::Number>()->Value() / 255.0)).Check();
+        vector4->Set(context, 3, info[3].As<v8::Number>()).Check();
+        return_value.Set(vector4);
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "rgba expects four numbers")
+        ));
+    }
+}
+
+void color(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() >= 1 && info[0]->IsArray()) {
+        auto vector4 = info[0].As<v8::Array>();
+        v8::Local<v8::Value> r;
+        v8::Local<v8::Value> g;
+        v8::Local<v8::Value> b;
+        v8::Local<v8::Value> a;
+        if (vector4->Get(context, 0).ToLocal(&r) &&
+            vector4->Get(context, 1).ToLocal(&g) &&
+            vector4->Get(context, 2).ToLocal(&b) &&
+            vector4->Get(context, 3).ToLocal(&a) &&
+            r->IsNumber() &&
+            g->IsNumber() &&
+            b->IsNumber() &&
+            a->IsNumber()) {
+            auto background = v8::Array::New(isolate, 5);
+            background->Set(context, 0, runtime->color_string.Get(isolate)).Check();
+            background->Set(context, 1, r).Check();
+            background->Set(context, 2, g).Check();
+            background->Set(context, 3, b).Check();
+            background->Set(context, 4, a).Check();
+            return_value.Set(background);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "color expects a Vector4, an array of four numbers")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "color expects a Vector4")
+        ));
+    }
+}
+
+void gradient(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() >= 2 && info[0]->IsArray() && info[1]->IsArray()) {
+        auto direction = info[0].As<v8::Array>();
+        auto stops = info[1].As<v8::Array>();
+        v8::Local<v8::Value> x;
+        v8::Local<v8::Value> y;
+        if (direction->Get(context, 0).ToLocal(&x) &&
+            direction->Get(context, 1).ToLocal(&y) &&
+            x->IsNumber() &&
+            y->IsNumber()) {
+            auto stop_count = stops->Length();
+            auto background = v8::Array::New(isolate, 3 + stop_count * 5);
+            background->Set(context, 0, runtime->gradient_string.Get(isolate)).Check();
+            background->Set(context, 1, x).Check();
+            background->Set(context, 2, y).Check();
+            for (uint32_t i = 0; i < stop_count; ++i) {
+                v8::Local<v8::Value> stop_value;
+                if (!stops->Get(context, i).ToLocal(&stop_value) || !stop_value->IsArray()) {
+                    isolate->ThrowException(v8::Exception::TypeError(
+                        v8::String::NewFromUtf8Literal(isolate, "gradient expects each stop to be an array of five numbers")
+                    ));
+                    return;
+                }
+                auto stop = stop_value.As<v8::Array>();
+                v8::Local<v8::Value> r;
+                v8::Local<v8::Value> g;
+                v8::Local<v8::Value> b;
+                v8::Local<v8::Value> a;
+                v8::Local<v8::Value> position;
+                if (stop->Get(context, 0).ToLocal(&r) &&
+                    stop->Get(context, 1).ToLocal(&g) &&
+                    stop->Get(context, 2).ToLocal(&b) &&
+                    stop->Get(context, 3).ToLocal(&a) &&
+                    stop->Get(context, 4).ToLocal(&position) &&
+                    r->IsNumber() &&
+                    g->IsNumber() &&
+                    b->IsNumber() &&
+                    a->IsNumber() &&
+                    position->IsNumber()) {
+                    auto index = 3 + i * 5;
+                    background->Set(context, index, r).Check();
+                    background->Set(context, index + 1, g).Check();
+                    background->Set(context, index + 2, b).Check();
+                    background->Set(context, index + 3, a).Check();
+                    background->Set(context, index + 4, position).Check();
+                } else {
+                    isolate->ThrowException(v8::Exception::TypeError(
+                        v8::String::NewFromUtf8Literal(isolate, "gradient expects each stop to be an array of five numbers")
+                    ));
+                    return;
+                }
+            }
+            return_value.Set(background);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "gradient expects a Vector2 for the direction")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "gradient expects a Vector2 and an array of GradientStops")
+        ));
+    }
+}
+
+void all(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto number = info[0].As<v8::Number>();
+        auto sides = v8::Array::New(isolate, 4);
+        sides->Set(context, 0, number).Check();
+        sides->Set(context, 1, number).Check();
+        sides->Set(context, 2, number).Check();
+        sides->Set(context, 3, number).Check();
+        return_value.Set(sides);
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "all expects one number")
+        ));
+    }
+}
+
+void in_line(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto number = info[0].As<v8::Number>();
+        auto zero = v8::Number::New(isolate, 0.0);
+        auto sides = v8::Array::New(isolate, 4);
+        sides->Set(context, 0, number).Check();
+        sides->Set(context, 1, number).Check();
+        sides->Set(context, 2, zero).Check();
+        sides->Set(context, 3, zero).Check();
+        return_value.Set(sides);
+    } else if (info.Length() >= 2 && info[0]->IsArray() && info[1]->IsNumber()) {
+        auto existing = info[0].As<v8::Array>();
+        auto number = info[1].As<v8::Number>();
+        v8::Local<v8::Value> top;
+        v8::Local<v8::Value> bottom;
+        if (existing->Get(context, 2).ToLocal(&top) &&
+            existing->Get(context, 3).ToLocal(&bottom) &&
+            top->IsNumber() &&
+            bottom->IsNumber()) {
+            auto sides = v8::Array::New(isolate, 4);
+            sides->Set(context, 0, number).Check();
+            sides->Set(context, 1, number).Check();
+            sides->Set(context, 2, top).Check();
+            sides->Set(context, 3, bottom).Check();
+            return_value.Set(sides);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "inLine with Sides expects an array of four numbers")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "inLine expects a number, or a Sides array and a number")
+        ));
+    }
+}
+
+void block(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto number = info[0].As<v8::Number>();
+        auto zero = v8::Number::New(isolate, 0.0);
+        auto sides = v8::Array::New(isolate, 4);
+        sides->Set(context, 0, zero).Check();
+        sides->Set(context, 1, zero).Check();
+        sides->Set(context, 2, number).Check();
+        sides->Set(context, 3, number).Check();
+        return_value.Set(sides);
+    } else if (info.Length() >= 2 && info[0]->IsArray() && info[1]->IsNumber()) {
+        auto existing = info[0].As<v8::Array>();
+        auto number = info[1].As<v8::Number>();
+        v8::Local<v8::Value> left;
+        v8::Local<v8::Value> right;
+        if (existing->Get(context, 0).ToLocal(&left) &&
+            existing->Get(context, 1).ToLocal(&right) &&
+            left->IsNumber() &&
+            right->IsNumber()) {
+            auto sides = v8::Array::New(isolate, 4);
+            sides->Set(context, 0, left).Check();
+            sides->Set(context, 1, right).Check();
+            sides->Set(context, 2, number).Check();
+            sides->Set(context, 3, number).Check();
+            return_value.Set(sides);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "block with Sides expects an array of four numbers")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "block expects a number, or a Sides array and a number")
+        ));
+    }
+}
+
+void left(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto number = info[0].As<v8::Number>();
+        auto zero = v8::Number::New(isolate, 0.0);
+        auto sides = v8::Array::New(isolate, 4);
+        sides->Set(context, 0, number).Check();
+        sides->Set(context, 1, zero).Check();
+        sides->Set(context, 2, zero).Check();
+        sides->Set(context, 3, zero).Check();
+        return_value.Set(sides);
+    } else if (info.Length() >= 2 && info[0]->IsArray() && info[1]->IsNumber()) {
+        auto existing = info[0].As<v8::Array>();
+        auto number = info[1].As<v8::Number>();
+        v8::Local<v8::Value> right;
+        v8::Local<v8::Value> top;
+        v8::Local<v8::Value> bottom;
+        if (existing->Get(context, 1).ToLocal(&right) &&
+            existing->Get(context, 2).ToLocal(&top) &&
+            existing->Get(context, 3).ToLocal(&bottom) &&
+            right->IsNumber() &&
+            top->IsNumber() &&
+            bottom->IsNumber()) {
+            auto sides = v8::Array::New(isolate, 4);
+            sides->Set(context, 0, number).Check();
+            sides->Set(context, 1, right).Check();
+            sides->Set(context, 2, top).Check();
+            sides->Set(context, 3, bottom).Check();
+            return_value.Set(sides);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "left with Sides expects an array of four numbers")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "left expects a number, or a Sides array and a number")
+        ));
+    }
+}
+
+void right(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto number = info[0].As<v8::Number>();
+        auto zero = v8::Number::New(isolate, 0.0);
+        auto sides = v8::Array::New(isolate, 4);
+        sides->Set(context, 0, zero).Check();
+        sides->Set(context, 1, number).Check();
+        sides->Set(context, 2, zero).Check();
+        sides->Set(context, 3, zero).Check();
+        return_value.Set(sides);
+    } else if (info.Length() >= 2 && info[0]->IsArray() && info[1]->IsNumber()) {
+        auto existing = info[0].As<v8::Array>();
+        auto number = info[1].As<v8::Number>();
+        v8::Local<v8::Value> left;
+        v8::Local<v8::Value> top;
+        v8::Local<v8::Value> bottom;
+        if (existing->Get(context, 0).ToLocal(&left) &&
+            existing->Get(context, 2).ToLocal(&top) &&
+            existing->Get(context, 3).ToLocal(&bottom) &&
+            left->IsNumber() &&
+            top->IsNumber() &&
+            bottom->IsNumber()) {
+            auto sides = v8::Array::New(isolate, 4);
+            sides->Set(context, 0, left).Check();
+            sides->Set(context, 1, number).Check();
+            sides->Set(context, 2, top).Check();
+            sides->Set(context, 3, bottom).Check();
+            return_value.Set(sides);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "right with Sides expects an array of four numbers")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "right expects a number, or a Sides array and a number")
+        ));
+    }
+}
+
+void top(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto number = info[0].As<v8::Number>();
+        auto zero = v8::Number::New(isolate, 0.0);
+        auto sides = v8::Array::New(isolate, 4);
+        sides->Set(context, 0, zero).Check();
+        sides->Set(context, 1, zero).Check();
+        sides->Set(context, 2, number).Check();
+        sides->Set(context, 3, zero).Check();
+        return_value.Set(sides);
+    } else if (info.Length() >= 2 && info[0]->IsArray() && info[1]->IsNumber()) {
+        auto existing = info[0].As<v8::Array>();
+        auto number = info[1].As<v8::Number>();
+        v8::Local<v8::Value> left;
+        v8::Local<v8::Value> right;
+        v8::Local<v8::Value> bottom;
+        if (existing->Get(context, 0).ToLocal(&left) &&
+            existing->Get(context, 1).ToLocal(&right) &&
+            existing->Get(context, 3).ToLocal(&bottom) &&
+            left->IsNumber() &&
+            right->IsNumber() &&
+            bottom->IsNumber()) {
+            auto sides = v8::Array::New(isolate, 4);
+            sides->Set(context, 0, left).Check();
+            sides->Set(context, 1, right).Check();
+            sides->Set(context, 2, number).Check();
+            sides->Set(context, 3, bottom).Check();
+            return_value.Set(sides);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "top with Sides expects an array of four numbers")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "top expects a number, or a Sides array and a number")
+        ));
+    }
+}
+
+void bottom(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto number = info[0].As<v8::Number>();
+        auto zero = v8::Number::New(isolate, 0.0);
+        auto sides = v8::Array::New(isolate, 4);
+        sides->Set(context, 0, zero).Check();
+        sides->Set(context, 1, zero).Check();
+        sides->Set(context, 2, zero).Check();
+        sides->Set(context, 3, number).Check();
+        return_value.Set(sides);
+    } else if (info.Length() >= 2 && info[0]->IsArray() && info[1]->IsNumber()) {
+        auto existing = info[0].As<v8::Array>();
+        auto number = info[1].As<v8::Number>();
+        v8::Local<v8::Value> left;
+        v8::Local<v8::Value> right;
+        v8::Local<v8::Value> top;
+        if (existing->Get(context, 0).ToLocal(&left) &&
+            existing->Get(context, 1).ToLocal(&right) &&
+            existing->Get(context, 2).ToLocal(&top) &&
+            left->IsNumber() &&
+            right->IsNumber() &&
+            top->IsNumber()) {
+            auto sides = v8::Array::New(isolate, 4);
+            sides->Set(context, 0, left).Check();
+            sides->Set(context, 1, right).Check();
+            sides->Set(context, 2, top).Check();
+            sides->Set(context, 3, number).Check();
+            return_value.Set(sides);
+        } else {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "bottom with Sides expects an array of four numbers")
+            ));
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "bottom expects a number, or a Sides array and a number")
+        ));
+    }
+}
+
+void angle(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto radians = info[0].As<v8::Number>()->Value() * std::numbers::pi / 180.0;
+        auto vector2 = v8::Array::New(isolate, 2);
+        vector2->Set(context, 0, v8::Number::New(isolate, std::sin(radians))).Check();
+        vector2->Set(context, 1, v8::Number::New(isolate, -std::cos(radians))).Check();
+        return_value.Set(vector2);
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "angle expects one number")
+        ));
+    }
+}
+
+void to_top(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto vector2 = v8::Array::New(isolate, 2);
+    vector2->Set(context, 0, v8::Number::New(isolate, 0.0)).Check();
+    vector2->Set(context, 1, v8::Number::New(isolate, -1.0)).Check();
+    return_value.Set(vector2);
+}
+
+void to_bottom(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto vector2 = v8::Array::New(isolate, 2);
+    vector2->Set(context, 0, v8::Number::New(isolate, 0.0)).Check();
+    vector2->Set(context, 1, v8::Number::New(isolate, 1.0)).Check();
+    return_value.Set(vector2);
+}
+
+void to_left(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto vector2 = v8::Array::New(isolate, 2);
+    vector2->Set(context, 0, v8::Number::New(isolate, -1.0)).Check();
+    vector2->Set(context, 1, v8::Number::New(isolate, 0.0)).Check();
+    return_value.Set(vector2);
+}
+
+void to_right(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto vector2 = v8::Array::New(isolate, 2);
+    vector2->Set(context, 0, v8::Number::New(isolate, 1.0)).Check();
+    vector2->Set(context, 1, v8::Number::New(isolate, 0.0)).Check();
+    return_value.Set(vector2);
+}
+
+void to_top_left(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto h = std::sqrt(0.5);
+    auto vector2 = v8::Array::New(isolate, 2);
+    vector2->Set(context, 0, v8::Number::New(isolate, -h)).Check();
+    vector2->Set(context, 1, v8::Number::New(isolate, -h)).Check();
+    return_value.Set(vector2);
+}
+
+void to_top_right(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto h = std::sqrt(0.5);
+    auto vector2 = v8::Array::New(isolate, 2);
+    vector2->Set(context, 0, v8::Number::New(isolate, h)).Check();
+    vector2->Set(context, 1, v8::Number::New(isolate, -h)).Check();
+    return_value.Set(vector2);
+}
+
+void to_bottom_left(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto h = std::sqrt(0.5);
+    auto vector2 = v8::Array::New(isolate, 2);
+    vector2->Set(context, 0, v8::Number::New(isolate, -h)).Check();
+    vector2->Set(context, 1, v8::Number::New(isolate, h)).Check();
+    return_value.Set(vector2);
+}
+
+void to_bottom_right(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto h = std::sqrt(0.5);
+    auto vector2 = v8::Array::New(isolate, 2);
+    vector2->Set(context, 0, v8::Number::New(isolate, h)).Check();
+    vector2->Set(context, 1, v8::Number::New(isolate, h)).Check();
+    return_value.Set(vector2);
+}
+
+void js_open(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    v8::Local<v8::Object> style;
+    v8::Local<v8::Value> manual_key = v8::String::Empty(isolate);
+    if (info.Length() >= 1 && info[0]->IsObject() && !info[0]->IsArray()) {
+        style = info[0].As<v8::Object>();
+        if (info.Length() >= 2 && info[1]->IsString()) {
+            manual_key = info[1];
+        } else if (info.Length() >= 2 && !info[1]->IsNullOrUndefined()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "open expects a string for the manual key")
+            ));
+            return;
+        }
+    } else if (info.Length() >= 1 && info[0]->IsString()) {
+        style = v8::Object::New(isolate);
+        manual_key = info[0];
+    } else if (info.Length() == 0 || info[0]->IsNullOrUndefined()) {
+        style = v8::Object::New(isolate);
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "open expects a Style object, a string key, or no arguments")
+        ));
+        return;
+    }
+    v8::String::Utf8Value key(isolate, manual_key);
+    forbear_open(runtime->adapter, &style, *key, key.length());
+}
+
+void js_close(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    forbear_close(runtime->adapter);
+}
+
+void js_text(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    v8::Local<v8::Object> style;
+    v8::Local<v8::Value> content;
+    v8::Local<v8::Value> manual_key = v8::String::Empty(isolate);
+    if (info.Length() >= 2 && info[0]->IsObject() && !info[0]->IsArray() && info[1]->IsString()) {
+        style = info[0].As<v8::Object>();
+        content = info[1];
+        if (info.Length() >= 3 && info[2]->IsString()) {
+            manual_key = info[2];
+        } else if (info.Length() >= 3 && !info[2]->IsNullOrUndefined()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "text expects a string for the manual key")
+            ));
+            return;
+        }
+    } else if (info.Length() >= 1 && info[0]->IsString()) {
+        style = v8::Object::New(isolate);
+        content = info[0];
+        if (info.Length() >= 2 && info[1]->IsString()) {
+            manual_key = info[1];
+        } else if (info.Length() >= 2 && !info[1]->IsNullOrUndefined()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "text expects a string for the manual key")
+            ));
+            return;
+        }
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "text expects a content string, or a Style object and a content string")
+        ));
+        return;
+    }
+    v8::String::Utf8Value content_utf8(isolate, content);
+    v8::String::Utf8Value key(isolate, manual_key);
+    forbear_text(runtime->adapter, &style, *content_utf8, content_utf8.length(), *key, key.length());
+}
+
 void set_render_function(const v8::FunctionCallbackInfo<v8::Value>& info) {
     auto isolate = info.GetIsolate();
     auto context = isolate->GetCurrentContext();
@@ -149,11 +855,41 @@ extern "C" void* javascript_init(
         runtime->fit_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "fit"));
         runtime->ratio_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "ratio"));
         runtime->grow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "grow"));
+        runtime->flow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "flow"));
         runtime->relative_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "relative"));
         runtime->color_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "color"));
         runtime->gradient_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "gradient"));
 
         define_global_function(runtime, runtime->fixed_string.Get(isolate), fixed);
+        define_global_function(runtime, runtime->fit_string.Get(isolate), fit);
+        define_global_function(runtime, runtime->ratio_string.Get(isolate), ratio);
+        define_global_function(runtime, runtime->grow_string.Get(isolate), grow);
+        define_global_function(runtime, runtime->flow_string.Get(isolate), flow);
+        define_global_function(runtime, runtime->relative_string.Get(isolate), relative);
+        define_global_function(runtime, runtime->color_string.Get(isolate), color);
+        define_global_function(runtime, runtime->gradient_string.Get(isolate), gradient);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "rgb"), rgb);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "rgba"), rgba);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "all"), all);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "inLine"), in_line);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "inline"), in_line);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "block"), block);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "left"), left);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "right"), right);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "top"), top);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "bottom"), bottom);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "angle"), angle);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTop"), to_top);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottom"), to_bottom);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toLeft"), to_left);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toRight"), to_right);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTopLeft"), to_top_left);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTopRight"), to_top_right);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottomLeft"), to_bottom_left);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottomRight"), to_bottom_right);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "open"), js_open);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "close"), js_close);
+        define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "text"), js_text);
         define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "setRenderFunction"), set_render_function);
 
         node::ModuleData entry;
