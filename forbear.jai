@@ -12,41 +12,6 @@ Math :: #import "Math";
     #load "bindings-macos.jai";
 }
 
-Vector2 :: Math.Vector2;
-Vector4 :: Math.Vector4;
-operator + :: Math.operator +;
-operator - :: Math.operator -;
-operator * :: Math.operator *;
-operator / :: Math.operator /;
-FLOAT32_NAN :: Math.FLOAT32_NAN;
-FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
-U16_MAX :: Math.U16_MAX;
-U64_MAX :: Math.U64_MAX;
-floor :: Math.floor;
-abs :: Math.abs;
-isnan :: Math.isnan;
-make_vector2 :: Math.make_vector2;
-make_vector4 :: Math.make_vector4;
-
-compile_shader :: (kind: GLenum, source: string) -> u32 {
-    shader := glCreateShader(kind);
-    data := source.data;
-    length: GLint = xx source.count;
-    glShaderSource(shader, 1, *data, *length);
-    glCompileShader(shader);
-
-    status: GLint;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, *status);
-    if !status {
-        log: [1024]u8;
-        log_length: GLsizei;
-        glGetShaderInfoLog(shader, log.count, *log_length, log.data);
-        log_error("failed to compile shader: %\n", to_string(log.data, log_length));
-        exit(-1);
-    }
-    return shader;
-}
-
 #if OS == .LINUX {
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
@@ -926,7 +891,7 @@ Base_Style :: struct {
     cursor: Cursor = .DEFAULT;
 };
 
-base_style_from_complete_style :: (style: Complete_Style) -> Base_Style {
+from :: (style: Complete_Style) -> Base_Style {
     return Base_Style.{
         font = style.font,
         color = style.color,
@@ -1287,7 +1252,7 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
     node, index := append_to_node_tree(*context.forbear.node_tree, context.forbear.parent_index);
     previous_base_style := context.forbear.base_style;
     complete_with(style, context.forbear.base_style, *node.style);
-    context.forbear.base_style = base_style_from_complete_style(node.style);
+    context.forbear.base_style = from(node.style);
     if context.forbear.parent_index != -1 {
         if style.z_index < U16_MAX {
             node.z = style.z_index;
@@ -1619,7 +1584,6 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
 text :: (content: string, location := #caller_location) {
     text(Style.{}, content, "", location);
 }
-
 Glyph_Atlas :: struct {
     // TODO: change this based on the render API that's selected. currently we only support OpenGL, though.
     texture: u32;
@@ -1981,7 +1945,7 @@ layout :: () {
                 // 2) to grow the children equally in the layout direciton
                 child_index := node.first_child;
                 while child_index != -1 {
-                    child := node_tree[child_index];
+                    child := *node_tree[child_index];
                     defer child_index = child.next_sibling;
 
                     child.min_size = min(child.min_size, child.max_size);
@@ -2013,7 +1977,6 @@ layout :: () {
         }
     }
 }
-
 
 // TODO: this render should not take a window, instead it should determine the target window based on the nodes. we should include a root window, though
 draw_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
@@ -2132,3 +2095,43 @@ draw_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 1.
 
     array_reset_keeping_memory(*node_tree);
 }
+
+#scope_module
+
+Vector2 :: Math.Vector2;
+Vector4 :: Math.Vector4;
+min :: Math.min;
+max :: Math.max;
+operator + :: Math.operator +;
+operator - :: Math.operator -;
+operator * :: Math.operator *;
+operator / :: Math.operator /;
+FLOAT32_NAN :: Math.FLOAT32_NAN;
+FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
+U16_MAX :: Math.U16_MAX;
+U64_MAX :: Math.U64_MAX;
+floor :: Math.floor;
+abs :: Math.abs;
+isnan :: Math.isnan;
+make_vector2 :: Math.make_vector2;
+make_vector4 :: Math.make_vector4;
+
+compile_shader :: (kind: GLenum, source: string) -> u32 {
+    shader := glCreateShader(kind);
+    data := source.data;
+    length: GLint = xx source.count;
+    glShaderSource(shader, 1, *data, *length);
+    glCompileShader(shader);
+
+    status: GLint;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, *status);
+    if !status {
+        log: [1024]u8;
+        log_length: GLsizei;
+        glGetShaderInfoLog(shader, log.count, *log_length, log.data);
+        log_error("failed to compile shader: %\n", to_string(log.data, log_length));
+        exit(-1);
+    }
+    return shader;
+}
+
