@@ -55,8 +55,11 @@ interface Style {
     direction?: Direction;
 }
 
-declare function element(style: Style, children: () => void): void;
-declare function text(style: Style, content: string): void;
+declare function open(style?: Style, manualKey?: string): void;
+declare function open(manualKey?: string): void;
+declare function close(): void;
+declare function text(style: Style, content: string, manualKey?: string): void;
+declare function text(content: string, manualKey?: string): void;
 
 declare function rgb(r: number, g: number, b: number): Vector4;
 declare function rgba(r: number, g: number, b: number, a: number): Vector4;
@@ -96,3 +99,5 @@ declare function toTopLeft(): Vector2;
 declare function toTopRight(): Vector2;
 declare function toBottomLeft(): Vector2;
 declare function toBottomRight(): Vector2;
+
+declare function setRenderFunction(render: () => any): void;
