@@ -1,5 +1,6 @@
 #import "Socket";
 #import "Memory";
+#import "String";
 #import "POSIX";
 Math :: #import "Math";
 #import "GL";
@@ -50,6 +51,10 @@ Math :: #import "Math";
 
         runtime_directory := to_string(getenv("XDG_RUNTIME_DIR"));
         wayland_display := to_string(getenv("WAYLAND_DISPLAY"));
+        if trim(wayland_display).count == 0 {
+            log_error("$WAYLAND_DISPLAY is not defined, using wayland-0");
+            wayland_display = "wayland-0";
+        }
         path := tprint("%/%", runtime_directory, wayland_display);
 
         sockaddr_un :: struct {
