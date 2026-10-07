@@ -78,7 +78,12 @@ function transformer(ctx) {
                 throw new Error(`${src.fileName}:${line + 1}:${character + 1}: JSX host tag must be element`);
             }
 
-            let key;
+            const src = openEl.getSourceFile();
+            const { line, character } =
+                src.getLineAndCharacterOfPosition(openEl.getStart());
+            let key = factory.createStringLiteral(
+                `${src.fileName}:${line + 1}:${character + 1}`,
+            );
             const properties = [];
             for (const attr of openEl.attributes.properties) {
                 if (ts.isJsxSpreadAttribute(attr)) {
