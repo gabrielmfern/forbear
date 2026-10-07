@@ -1974,7 +1974,7 @@ layout :: () {
                     {
                         // grow the children on the opposite axis of the layout direction (Style.direction)
                         child.min_size = min(child.min_size, child.max_size);
-                        child_margin := get(child.style.margin, opposite_direction);
+                        child_opposite_margin := get(child.style.margin, opposite_direction);
 
                         available := get(node.size, opposite_direction) 
                             - fitting_base(node, opposite_direction) 
@@ -2013,7 +2013,7 @@ layout :: () {
                 }
 
                 array_reset_keeping_memory(*changing);
-                child_index := node.first_child;
+                child_index = node.first_child;
                 // grow the children equally in the layout direciton
                 while child_index != -1 {
                     child := *node_tree[child_index];
@@ -2023,7 +2023,7 @@ layout :: () {
                 // we shrink children so that nodes don't overflow the parent, but
                 // fit to the largest size possible that's bigger than their
                 // minimum size
-                child_index := node.first_child;
+                child_index = node.first_child;
                 while child_index != -1 {
                     child := *node_tree[child_index];
                     defer child_index = child.next_sibling;
