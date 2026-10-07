@@ -1,5 +1,6 @@
 #import "Basic";
 #import "Hash";
+U64_MAX: u64 : 0xffff_ffff_ffff_ffff;
 
 #run {
     #import "File";
