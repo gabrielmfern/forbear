@@ -69,10 +69,8 @@ Math :: #import "Math";
         address.sun_path[path.count] = 0;
 
         if connect(connection.fd, cast(*sockaddr) *address, size_of(sockaddr_un)) != 0 {
-            // I once got an errno 2 here and the WAYLAND_DISPLAY env undefined
-            // when I started a tmux session in x11 and then reattached to it
-            // from Wayland. In that case I was able to fix by setting the env
-            // in the rnuning tmux session
+            // I once got an errno 2 here and the WAYLAND_DISPLAY env undefined when I started a tmux session in x11 and then
+            // reattached to it from Wayland. In that case I was able to fix by setting the env in the rnuning tmux session
             // 
             // tmux set-environment -t [SESSION_NAME] WAYLAND_DISPLAY "$WAYLAND_DISPLAY" 
             // tmux set-environment -t [SESSION_NAME] XDG_RUNTIME_DIR "$XDG_RUNTIME_DIR"
@@ -715,8 +713,8 @@ Sizing :: struct {
         fixed: float;
         // A ratio with respect to the opposite axis.
         ratio: float;
-        // Grows to fill available space, taking a proportional share based on
-        // the factor. A factor of 2.0 claims twice the space of 1.0.
+        // Grows to fill available space, taking a proportional share based on the factor. A factor of 2.0 claims twice the space
+        // of 1.0.
         grow: float;
     }
 };
@@ -866,8 +864,8 @@ Complete_Style :: struct {
 
     font: *Font;
 
-    // Will do nothing if the font is not a variable font. If you don't have a
-    // variable font, you should use different fonts for different weights.
+    // Will do nothing if the font is not a variable font. If you don't have a variable font, you should use different fonts
+    // for different weights.
     font_weight: u16;
     font_size: float;
     line_height: float;
@@ -951,8 +949,8 @@ to_bottom_right :: () -> Vector2 {
     return Vector2.{ x = xx Math.SQRTH, y = xx Math.SQRTH };
 }
 Linear_Gradient :: struct {
-    // Stops define where each color sits along the gradient; positions are
-    // expected to be monotonically increasing within the [0, 1] range.
+    // Stops define where each color sits along the gradient; positions are expected to be monotonically increasing within the
+    // [0, 1] range.
     stops: []Gradient_Stop;
     // Which way the gradient flows. Defaults to left-to-right.
     direction: Vector2;
@@ -969,8 +967,8 @@ Background :: struct {
     union {
         // image: *Graphics.Image,
         color: Vector4;
-        // A linear gradient across the element. Defaults to flowing left-to-right;
-        // set `direction` to change which way it runs. See `Linear_Gradient`.
+        // A linear gradient across the element. Defaults to flowing left-to-right; set `direction` to change which way it runs.
+        // See `Linear_Gradient`.
         gradient: Linear_Gradient;
     }
 };
@@ -1037,9 +1035,8 @@ Style :: struct {
 
     cursor: Cursor = UNSET;
 
-    // TODO: use this. we're currently not using this for anything I think this
-    // can wrap, without having to flow with text. Flowing with text is meant
-    // for text decorations and such, which can be done with a text builder API
+    // TODO: use this. we're currently not using this for anything I think this can wrap, without having to flow with text.
+    // Flowing with text is meant for text decorations and such, which can be done with a text builder API
     overflow: Overflow = UNSET;
     placement: Placement = Placement.{ kind = UNSET };
     z_index: u16 = U16_MAX;
@@ -1165,15 +1162,14 @@ Node :: struct {
     style: Complete_Style;
 
     content_size: Vector2;
-    // TODO: should we have this? this feels like the wrong solution to the
-    // problem, there should be a user-accessible way of changing the offset of
-    // the children without a specific property for it
+    // TODO: should we have this? this feels like the wrong solution to the problem, there should be a user-accessible way of
+    // changing the offset of the children without a specific property for it
     //
     // Generally used for scrolling. This is added to the position of the children of this node
     children_offset: Vector2;
 
-    // Clip rect inherited from ancestors that have constrained size with overflowing children.
-    // Format: [x, y, width, height]. If NAN, no clipping is applied.
+    // Clip rect inherited from ancestors that have constrained size with overflowing children. Format: [x, y, width, height].
+    // If NAN, no clipping is applied.
     clipping_rectangle: Vector4 = Vector4_NAN;
     glyphs: []Shaped_Glyph;
     key: u64;
@@ -1417,19 +1413,16 @@ element :: (style: Style, key: string, location := #caller_location) #expand {
 
 freetype_library: FT_Library;
 shaping_context: *kbts_shape_context;
-// TODO: should this be a global? the idea is mainly that we have a unique id
-// for all fonts created we can keep caching and such apart between different
-// fonts that might all be used for rendering
+// TODO: should this be a global? the idea is mainly that we have a unique id for all fonts created we can keep caching and
+// such apart between different fonts that might all be used for rendering
 font_counter: u16;
 Layout_Glyph :: struct {
     index: s32;
     position: Vector2;
     text_buffer: [4]u8;
-    // Meant for the recalculation of the glyphs position if that's required
-    // at some other layouting step
+    // Meant for the recalculation of the glyphs position if that's required at some other layouting step
     advance: Vector2;
-    // Meant for the recalculation of the glyphs position if that's required
-    // at some other layouting step
+    // Meant for the recalculation of the glyphs position if that's required at some other layouting step
     offset: Vector2;
 };
 Glyphs :: struct {
@@ -1437,8 +1430,7 @@ Glyphs :: struct {
     // Distance from line top to the shared baseline, in pixels.
     ascent: float;
     array: []Layout_Glyph;
-    // Indices into `slice` where a manual line break was requested before the
-    // glyph at that index.
+    // Indices into `slice` where a manual line break was requested before the glyph at that index.
     pre_break_indices: []s64;
 };
 Glyph_Atlas_Entry :: struct {
@@ -1672,9 +1664,8 @@ Forbear :: struct {
 #add_context forbear: *Forbear;
 init_forbear :: (
     forbear: *Forbear,
-    // TOOD: currently we're defining the specific backend names to be just one
-    // here, but in the long-term we will include multiple backends for each
-    // operating system, not one, so we need to handle that in a better way.
+    // TOOD: currently we're defining the specific backend names to be just one here, but in the long-term we will include
+    // multiple backends for each operating system, not one, so we need to handle that in a better way.
     program_backend: *Backend,
     program_base_style: Base_Style,
 ) {
@@ -1879,10 +1870,9 @@ GLSL);
 // ======== frame lifecycle functions ========
 //
 
-// layouting is completely dependent on the fact that the children are appended
-// in in the order of parent -> children, if we ever change that, layouting
-// completely changes too, at least in the way it traverses things, but the
-// core algorithms will remain.
+// layouting is completely dependent on the fact that the children are appended in in the order of parent -> children, if
+// we ever change that, layouting completely changes too, at least in the way it traverses things, but the core algorithms
+// will remain.
 //
 // heavily inspired by Clay distrubuted under the zlib/libpng license:
 // - https://github.com/nicbarker/clay
@@ -1892,8 +1882,7 @@ layout :: () {
     using context.forbear;
     push_allocator(context.forbear.frame_allocator);
     if node_tree.count > 0 {
-        // fit all nodes according to the sizes of its children
-        // this loop is reversed, which means it's doing children -> parent
+        // fit all nodes according to the sizes of its children this loop is reversed, which means it's doing children -> parent
         for <*node: node_tree {
             if node.first_child != -1 && node.glyphs.count == 0 {
                 if node.style.width.kind == .FIT {
@@ -1913,12 +1902,11 @@ layout :: () {
                     child := node_tree[child_index];
                     defer child_index = child.next_sibling;
                     if child.style.placement.kind == .FLOW {
-                        // Check if parent should accumulate child sizes.
-                        // .fit nodes always accumulate. .grow nodes also accumulate because
-                        // when their parent can't provide space, content determines size.
-                        fitH := node.style.width.kind == .FIT || node.style.width.kind == .GROW || should_fit_min(node, .HORIZONTAL);
-                        fitV := node.style.height.kind == .FIT || node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL);
-                        if fitH || fitV {
+                        // Check if parent should accumulate child sizes. .fit nodes always accumulate. .grow nodes also accumulate because when
+                        // their parent can't provide space, content determines size.
+                        fit_h := node.style.width.kind == .FIT || node.style.width.kind == .GROW || should_fit_min(node, .HORIZONTAL);
+                        fit_v := node.style.height.kind == .FIT || node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL);
+                        if fit_h || fit_v {
                             for fit_direction: DIRECTIONS {
                                 preferred_size := get_preferred_size(node, fit_direction);
                                 child_margin_vector := get(child.style.margin, fit_direction);
@@ -1989,127 +1977,172 @@ layout :: () {
                 // this value is only the initial one, it's modified during the iteration over the children that follows
                 remaining := inner_size(node, layout_direction);
 
-                child_index := node.first_child;
-                while child_index != -1 {
-                    child := *node_tree[child_index];
-                    defer child_index = child.next_sibling;
-
-                    {
-                        // grow the children on the opposite axis of the layout direction (Style.direction)
-                        child.min_size = min(child.min_size, child.max_size);
-                        child_opposite_margin := get(child.style.margin, opposite_direction);
-
-                        available := get(node.size, opposite_direction) 
-                            - fitting_base(node, opposite_direction) 
-                            - child_opposite_margin.x - child_opposite_margin.y;
-
-                        preferred_size := get_preferred_size(child, opposite_direction);
-                        size := get(child.size, opposite_direction);
-                        min_size := get(child.min_size, opposite_direction);
-                        max_size := get(child.max_size, opposite_direction);
-                        if preferred_size.kind == .GROW || 
-                            (child.style.placement.kind == .FLOW && 
-                            size > available && min_size < size) {
-                            set(*child.size, opposite_direction, clamp(
-                                available, min_size, max_size
-                            ));
-                        }
-                    }
-
-                    preferred_size := get_preferred_size(child, layout_direction);
-                    child_margin := get(child.style.margin, layout_direction);
-
-                    if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED) 
-                        && preferred_size.kind == .GROW {
-                        // growing child that's placed RELATIVE or FIXED will
-                        // have a size based on the parent solely without
-                        // considering its siblings.
-                        available := inner_size(node, layout_direction) - child_margin.x - child_margin.y;
-                        set(*child.size, layout_direction, clamp(
-                            available, 
-                            get(child.min_size, layout_direction),
-                            get(child.max_size, layout_direction),
-                        ));
-                    } else if child.style.placement.kind == .FLOW {
-                        if preferred_size.kind == .GROW && preferred_size.grow > 0.0 {
-                            // we reset the size of the node to 0 so that the
-                            // division is fair later
-                            set(*child.size, layout_direction, 0);
-                            if get(child.max_size, layout_direction) > 0 {
-                                array_add(*changing, child);
-                            }
-                        }
-                        remaining -= outer_size(child, layout_direction);
-                    }
-                }
                 EPSILON :: 0.001;
-                child_index = node.first_child;
-                // grow the children equally in the layout direciton
-                while remaining > EPSILON && changing.count > 0 {
-                    approximately_equal :: (a: float, b: float) -> bool {
-                        return abs(a - b) < EPSILON;
-                    }
+                approximately_equal :: (a: float, b: float) -> bool {
+                    return abs(a - b) < EPSILON;
+                }
 
-                    total_factor: float = 0.0;
-                    max_to_add: float = FLOAT32_INFINITY;
-                    index: s64 = 0;
-                    while index < changing.count {
-                        child := changing[index];
-                        max_size := get(child.max_size, layout_direction);
-                        size := get(child.size, layout_direction);
-                        if approximately_equal(size, max_size) {
-                            array_unordered_remove_by_index(*changing, index);
-                            // since the remove moves another child over to
-                            // this same index, we go to the next iteration
-                            // with the same index 
-                            continue;
-                        }
-                        preferred_size := get_preferred_size(child, layout_direction);
-                        total_factor += preferred_size.grow;
-                        max_to_add = min(max_to_add, (max_size - size) / preferred_size.grow);
 
-                        index += 1;
-                    }
+                child_index := node.first_child;
+                {
+                    while child_index != -1 {
+                        child := *node_tree[child_index];
+                        defer child_index = child.next_sibling;
 
-                    if changing.count > 0 && total_factor > 0 {
-                        to_add := min(max_to_add, remaining / total_factor);
-                        if to_add > 0.0 {
-                            remaining_before_loop := remaining;
-                            for child: changing {
-                                preferred_size := get_preferred_size(child, layout_direction);
-                                size := get(child.size, layout_direction);
-                                min_size := get(child.min_size, layout_direction);
-                                max_size := get(child.max_size, layout_direction);
-                                clamp_addendum := clamp(size + to_add * preferred_size.grow, min_size, max_size) - size;
-                                add(*child.size, layout_direction, clamp_addendum);
-                                remaining -= clamp_addendum;
+                        {
+                            // grow the children on the opposite axis of the layout direction (Style.direction)
+                            child.min_size = min(child.min_size, child.max_size);
+                            child_opposite_margin := get(child.style.margin, opposite_direction);
+
+                            available := get(node.size, opposite_direction) 
+                                - fitting_base(node, opposite_direction) 
+                                - child_opposite_margin.x - child_opposite_margin.y;
+
+                            preferred_size := get_preferred_size(child, opposite_direction);
+                            size := get(child.size, opposite_direction);
+                            min_size := get(child.min_size, opposite_direction);
+                            max_size := get(child.max_size, opposite_direction);
+                            if preferred_size.kind == .GROW || 
+                                (child.style.placement.kind == .FLOW && 
+                                size > available && min_size < size) {
+                                set(*child.size, opposite_direction, clamp(
+                                    available, min_size, max_size
+                                ));
                             }
-                            if remaining == remaining_before_loop {
-                                // this means there's a max size constraint
-                                // that doesn't let more size be added to any
-                                // of the children
+                        }
+
+                        preferred_size := get_preferred_size(child, layout_direction);
+                        child_margin := get(child.style.margin, layout_direction);
+
+                        if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED) 
+                            && preferred_size.kind == .GROW {
+                            // growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
+                            // siblings.
+                            available := inner_size(node, layout_direction) - child_margin.x - child_margin.y;
+                            set(*child.size, layout_direction, clamp(
+                                available, 
+                                get(child.min_size, layout_direction),
+                                get(child.max_size, layout_direction),
+                            ));
+                        } else if child.style.placement.kind == .FLOW {
+                            if preferred_size.kind == .GROW && preferred_size.grow > 0.0 {
+                                // we reset the size of the node to 0 so that the division is fair later
+                                set(*child.size, layout_direction, 0);
+                                if get(child.max_size, layout_direction) > 0 {
+                                    array_add(*changing, child);
+                                }
+                            }
+                            remaining -= outer_size(child, layout_direction);
+                        }
+                    }
+
+                    child_index = node.first_child;
+                    // grow the children equally in the layout direciton
+                    while remaining > EPSILON && changing.count > 0 {
+                        total_factor: float = 0.0;
+                        max_to_add: float = FLOAT32_INFINITY;
+                        index: s64 = 0;
+                        while index < changing.count {
+                            child := changing[index];
+                            max_size := get(child.max_size, layout_direction);
+                            size := get(child.size, layout_direction);
+                            if approximately_equal(size, max_size) {
+                                array_unordered_remove_by_index(*changing, index);
+                                // since the remove moves another child over to this same index, we go to the next iteration with the same index 
+                                continue;
+                            }
+                            preferred_size := get_preferred_size(child, layout_direction);
+                            total_factor += preferred_size.grow;
+                            max_to_add = min(max_to_add, (max_size - size) / preferred_size.grow);
+
+                            index += 1;
+                        }
+
+                        if changing.count > 0 && total_factor > 0 {
+                            to_add := min(max_to_add, remaining / total_factor);
+                            if to_add > 0.0 {
+                                remaining_before_loop := remaining;
+                                for child: changing {
+                                    preferred_size := get_preferred_size(child, layout_direction);
+                                    size := get(child.size, layout_direction);
+                                    min_size := get(child.min_size, layout_direction);
+                                    max_size := get(child.max_size, layout_direction);
+                                    clamp_addendum := clamp(size + to_add * preferred_size.grow, min_size, max_size) - size;
+                                    add(*child.size, layout_direction, clamp_addendum);
+                                    remaining -= clamp_addendum;
+                                }
+                                if approximately_equal(remaining, remaining_before_loop) {
+                                    // this means there's a max size constraint that doesn't let more size be added to any of the children
+                                    break;
+                                }
+                            } else {
                                 break;
                             }
-                        } else {
+                        } else if total_factor == 0 {
                             break;
                         }
-                    } else if total_factor == 0 {
-                        break;
                     }
                 }
+
+                // we shrink children so that nodes don't overflow the parent, but fit to the largest size possible that's bigger than
+                // their minimum size
                 if remaining < -EPSILON {
                     array_reset_keeping_memory(*changing);
-                    // we shrink children so that nodes don't overflow the parent, but
-                    // fit to the largest size possible that's bigger than their
-                    // minimum size
                     child_index = node.first_child;
                     while child_index != -1 {
                         child := *node_tree[child_index];
                         defer child_index = child.next_sibling;
-                        if child.style.placement.kind == .flow {
-                            if get(child.size, layout_direction) > get(child.min_size, layout_direction) {
-                                array_add(*changing, *child);
+                        if child.style.placement.kind == .FLOW && 
+                            get(child.size, layout_direction) > get(child.min_size, layout_direction) {
+                            array_add(*changing, child);
+                        }
+                    }
+                    while remaining < -EPSILON && changing.count > 0 {
+                        largest := get(changing[0].size, layout_direction);
+                        second_largest: float = 0.0;
+                        index := 0;
+                        while index < changing.count {
+                            child := changing[index];
+                            size := get(child.size, layout_direction);
+                            min_size := get(child.min_size, layout_direction);
+                            if approximately_equal(size, min_size) {
+                                array_unordered_remove_by_index(*changing, index);
+                                if index == 0 && changing.count > 0 {
+                                    largest = get(changing[0].size, layout_direction);
+                                }
+                                // since the remove moves another child over to this same index, we go to the next iteration with the same index 
+                                continue;
                             }
+                            if size > largest {
+                                largest = size;
+                            } else if size > second_largest {
+                                second_largest = size;
+                            }
+                            index += 1;
+                        }
+                        if changing.count > 0 {
+                            to_subtract := min(
+                                largest - second_largest,
+                                -remaining / cast(float)changing.count,
+                            );
+                            if (to_subtract == 0) {
+                                to_subtract = -remaining / cast(float)changing.count;
+                            }
+                            remaining_before_loop := remaining;
+                            for child: changing {
+                                old_size := get(child.size, layout_direction);
+                                if approximately_equal(old_size, largest) {
+                                    min_size := get(child.min_size, layout_direction);
+                                    clamped_reduction := max(old_size - to_subtract, min_size) - old_size;
+                                    add(*child.size, layout_direction, clamped_reduction);
+                                    remaining -= clamped_reduction;
+                                }
+                            }
+                            if approximately_equal(remaining, remaining_before_loop) {
+                                break;
+                            }
+                        } else {
+                            break;
                         }
                     }
                 }
