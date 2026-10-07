@@ -1,4 +1,4 @@
-#import "Basic";
+#import "Basic"()(MEMORY_DEBUGGER = true);
 #import "File";
 #import "GL";
 #import,file "../forbear.jai";
@@ -68,5 +68,6 @@ main :: () {
         draw_and_reset_node_tree(*window, rgb(0.0, 0.0, 0.0));
 
         reset_temporary_storage();
+        memory_visualizer_per_frame_update();
     }
 }
