@@ -68,6 +68,14 @@ Math :: #import "Math";
         address.sun_path[path.count] = 0;
 
         if connect(connection.fd, cast(*sockaddr) *address, size_of(sockaddr_un)) != 0 {
+            // I once got an errno 2 here and the WAYLAND_DISPLAY env undefined
+            // when I started a tmux session in x11 and then reattached to it
+            // from Wayland. In that case I was able to fix by setting the env
+            // in the rnuning tmux session
+            // 
+            // tmux set-environment -t [SESSION_NAME] WAYLAND_DISPLAY "$WAYLAND_DISPLAY" 
+            // tmux set-environment -t [SESSION_NAME] XDG_RUNTIME_DIR "$XDG_RUNTIME_DIR"
+            //
             log_error("connection failed: %\n", errno());
             exit(-1);
         }
