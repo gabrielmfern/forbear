@@ -9,7 +9,7 @@
 #import "Process";
 #if OS == .LINUX #import "POSIX";
 
-// -------- wayland protocol types generator ========
+// ======== wayland protocol types generator ========
     PROTOCOLS :: string.[
         "/usr/share/wayland/wayland.xml",
         "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
