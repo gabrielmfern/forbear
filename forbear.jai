@@ -2097,14 +2097,21 @@ layout :: () {
                         break;
                     }
                 }
-                array_reset_keeping_memory(*changing);
-                // we shrink children so that nodes don't overflow the parent, but
-                // fit to the largest size possible that's bigger than their
-                // minimum size
-                child_index = node.first_child;
-                while child_index != -1 {
-                    child := *node_tree[child_index];
-                    defer child_index = child.next_sibling;
+                if remaining < -EPSILON {
+                    array_reset_keeping_memory(*changing);
+                    // we shrink children so that nodes don't overflow the parent, but
+                    // fit to the largest size possible that's bigger than their
+                    // minimum size
+                    child_index = node.first_child;
+                    while child_index != -1 {
+                        child := *node_tree[child_index];
+                        defer child_index = child.next_sibling;
+                        if child.style.placement.kind == .flow {
+                            if get(child.size, layout_direction) > get(child.min_size, layout_direction) {
+                                array_add(*changing, *child);
+                            }
+                        }
+                    }
                 }
             }
         }
