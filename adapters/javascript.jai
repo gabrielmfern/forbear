@@ -68,6 +68,7 @@ init_javascript_adapter :: (
         main_javascript_source_name.data, 
         main_javascript_source_name.count
     );
+    adapter.openings_stack.allocator = context.forbear.persistent_allocator;
     if adapter.runtime == null {
         log_error("could not initliaze javascript runtime\n");
         exit(-1);
@@ -364,6 +365,7 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
 #program_export
 forbear_open :: (adapter: *Javascript_Adapter, js_style_object: *void, manual_key_data: *u8, manual_key_count: s64) #c_call {
     push_context adapter.frame_context {
+        push_allocator(context.forbear.frame_allocator);
         key: u64;
         key = fnv1a_hash(manual_key_data, manual_key_count);
         if context.forbear.scope_key != U64_MAX {
@@ -380,6 +382,7 @@ forbear_open :: (adapter: *Javascript_Adapter, js_style_object: *void, manual_ke
 #program_export
 forbear_close :: (adapter: *Javascript_Adapter) #c_call {
     push_context adapter.frame_context {
+        push_allocator(context.forbear.frame_allocator);
         opening := pop(*adapter.openings_stack);
         close_element(opening);
     }
@@ -388,6 +391,7 @@ forbear_close :: (adapter: *Javascript_Adapter) #c_call {
 #program_export
 forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_data: *u8, content_count: s64, manual_key_data: *u8, manual_key_count: s64) #c_call {
     push_context adapter.frame_context {
+        push_allocator(context.forbear.frame_allocator);
         content: string;
         content.data = content_data;
         content.count = content_count;
