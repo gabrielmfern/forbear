@@ -1,4 +1,9 @@
 CompileFlags:
   Add:
     - -std=c++20
-    - -I../vendor/libnode/include
+    - -fno-rtti
+    - -fno-exceptions
+    - -fPIC
+    - -I../vendor/node/src
+    - -I../vendor/node/deps/v8/include
+    - -I../vendor/node/deps/uv/include
