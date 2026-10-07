@@ -405,7 +405,7 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
         }
         style := style_from(adapter, js_style_object);
         opening := open_element(style, key);
-        opening.node.glyphs = shape_text(opening.node.style.font, content);
+        opening.node.glyphs = shape_text(opening.node.style.font, opening.node.style.text_wrapping, content);
         close_element(opening);
     }
 }

@@ -11,7 +11,7 @@
     - we should be using wayland's `frame` to render
 - [ ] draw rounded corners
 - [ ] draw in the z order
-- [ ] account for font weight on kbts as well 
+- [x] account for font weight on kbts as well 
 - [ ] we're using the single kbts_context which uses the font in the top of the stack
 - [ ] program just doesn't do anything if the atlas is full
 - [ ] glyphs are sitting on fractional pixels on the texture atlas

@@ -1171,7 +1171,7 @@ Node :: struct {
     // Clip rect inherited from ancestors that have constrained size with overflowing children. Format: [x, y, width, height].
     // If NAN, no clipping is applied.
     clipping_rectangle: Vector4 = Vector4_NAN;
-    glyphs: []Shaped_Glyph;
+    glyphs: Glyphs;
     key: u64;
     z: u16;
 
@@ -1416,22 +1416,33 @@ shaping_context: *kbts_shape_context;
 // TODO: should this be a global? the idea is mainly that we have a unique id for all fonts created we can keep caching and
 // such apart between different fonts that might all be used for rendering
 font_counter: u16;
-Layout_Glyph :: struct {
+Glyph :: struct {
     index: s32;
+    utf8: kbts_encode_utf8;
+
+    // all of these are in points units, that means they do not account for the font size, but they do account for the font weight.
     position: Vector2;
-    text_buffer: [4]u8;
     // Meant for the recalculation of the glyphs position if that's required at some other layouting step
     advance: Vector2;
     // Meant for the recalculation of the glyphs position if that's required at some other layouting step
     offset: Vector2;
 };
 Glyphs :: struct {
-    line_height: float;
-    // Distance from line top to the shared baseline, in pixels.
+    hash: u64;
+    length: s32;
+    array: [..]Glyph;
+    pre_break_indices: [..]s64;
+
+    //
+    // all of the properties bellow are in points units. this means they do not account for the font size, but they do account
+    // for the font weight.
+    //
+
+    // Distance from line top to the shared baseline
     ascent: float;
-    array: []Layout_Glyph;
-    // Indices into `slice` where a manual line break was requested before the glyph at that index.
-    pre_break_indices: []s64;
+    line_height: float;
+    min_size: Vector2;
+    max_size: Vector2;
 };
 Glyph_Atlas_Entry :: struct {
     bearing: Vector2;
@@ -1444,26 +1455,17 @@ Glyph_Draw_Instance :: struct {
     using entry: Glyph_Atlas_Entry;
     color: Vector4;
 };
-Shaped_Glyph :: struct {
-    index: u16;
-    utf8: kbts_encode_utf8;
-    advance: Vector2;
-    offset: Vector2;
-};
-// Shaped_Word :: struct {
-//    hash: u64;
-//    length: s32;
-//    glyphs: []Shaped_Glyph;
-// };
-//
 // Shaping_Cache :: struct {
-//     slots: [4096]Shaped_Word;
+//     slots: [4096]Glyphs;
 //     arena: Flat_Pool;
 // };
 Font :: struct {
     raster_face: FT_Face;
     shaping_font: *kbts_font;
     key: u16;
+
+    // kept track of so that this can be set during kbts text shaping 
+    weight: u16 = U16_MAX;
 
     // prev_cache: Shaping_Cache;
     // next_cache: Shaping_Cache;
@@ -1523,6 +1525,7 @@ set_weight :: (font: *Font, weight: u16) {
         }
     }
     FT_Set_Var_Design_Coordinates(font.raster_face, mm.num_axis, coords.data);
+    font.weight = weight;
 }
 set_font_size :: (font: *Font, size: u16) {
     FT_Set_Pixel_Sizes(font.raster_face, size, size);
@@ -1548,7 +1551,12 @@ font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
     raster_glyph.pitch = glyph.bitmap.pitch;
     return raster_glyph;
 }
-shape_text :: (font: *Font, content: string) -> [..]Shaped_Glyph {
+shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Glyphs {
+    // TODO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
+    glyphs: Glyphs;
+    glyphs.line_height = cast(float) font.raster_face.height;
+    glyphs.ascent = cast(float) font.raster_face.ascender;
+
     push_allocator(context.forbear.frame_allocator);
     // TODO(next): pass the language and direction down as styles
     kbts_ShapeBegin(
@@ -1556,37 +1564,77 @@ shape_text :: (font: *Font, content: string) -> [..]Shaped_Glyph {
         xx kbts_direction_enum.KBTS_DIRECTION_LTR,
         xx kbts_language_enum.KBTS_LANGUAGE_DONT_KNOW
     );
+    WGHT : u32 : 0x77676874;
+    if font.weight != U16_MAX {
+        kbts_ShapePushGlobalVariation(shaping_context, WGHT, cast(float) font.weight);
+    }
     kbts_ShapeUtf8(
         shaping_context,
         content.data,
         xx content.count,
         xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX
     );
+    if font.weight != U16_MAX {
+        kbts_ShapePopGlobalVariation(shaping_context, WGHT);
+    }
     kbts_ShapeEnd(shaping_context);
 
-    // TODO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
-    shaped_glyphs: [..]Shaped_Glyph;
-
     run: kbts_run;
+    pen: Vector2;
+    // the advance local to this word
+    word_advance: Vector2;
     while (kbts_ShapeRun(shaping_context, *run) != 0) {
-        glyph: *kbts_glyph;
-        while (kbts_GlyphIteratorNext(*run.Glyphs, *glyph) != 0) {
+        shaping_glyph: *kbts_glyph;
+        while (kbts_GlyphIteratorNext(*run.Glyphs, *shaping_glyph) != 0) {
             shape_codepoint: kbts_shape_codepoint;
-            if (kbts_ShapeGetShapeCodepoint(shaping_context, glyph.*.UserIdOrCodepointIndex, *shape_codepoint) == 0) {
-                log_error("Could not get original codeopint for glyph with user id %", glyph.*.UserIdOrCodepointIndex);
+            if (kbts_ShapeGetShapeCodepoint(shaping_context, shaping_glyph.UserIdOrCodepointIndex, *shape_codepoint) == 0) {
+                log_error("Could not get original codeopint for glyph with user id %", shaping_glyph.UserIdOrCodepointIndex);
                 continue;
             }
 
-            shaped_glyph: Shaped_Glyph;
-            shaped_glyph.index = glyph.*.Id;
-            shaped_glyph.advance = .{ xx glyph.*.AdvanceX, xx glyph.*.AdvanceY };
-            shaped_glyph.offset = .{ xx glyph.*.OffsetX, xx glyph.*.OffsetY };
-            shaped_glyph.utf8 = kbts_EncodeUtf8(shape_codepoint.Codepoint);
-            array_add(*shaped_glyphs, shaped_glyph);
+            utf8_encoded := kbts_EncodeUtf8(shape_codepoint.Codepoint);
+
+            advance := Vector2.{ xx shaping_glyph.AdvanceX, xx shaping_glyph.AdvanceY };
+            offset := Vector2.{ xx shaping_glyph.OffsetX, xx shaping_glyph.OffsetY };
+            utf8: string;
+            utf8.data = utf8_encoded.Encoded.data;
+            utf8.count = utf8_encoded.EncodedLength;
+            is_linebreak := starts_with(utf8, "\n");
+            if is_linebreak {
+                advance.x = -pen.x;
+                advance.y += glyphs.line_height;
+                array_add(*glyphs.pre_break_indices, glyphs.array.count);
+            } else {
+                glyph: Glyph;
+                glyph.index = xx shaping_glyph.Id;
+                glyph.advance = advance;
+                glyph.offset = offset;
+                glyph.position = pen + glyph.offset;
+                glyph.utf8 = utf8_encoded;
+                array_add(*glyphs.array, glyph);
+            }
+
+            pen += advance;
+            glyphs.max_size.x = max(glyphs.max_size.x, pen.x);
+            if text_wrapping == .WORD {
+                if starts_with(utf8, " ") || is_linebreak {
+                    word_advance = Vector2.{};
+                    glyphs.max_size.y += glyphs.line_height;
+                } else {
+                    word_advance += advance;
+                }
+                glyphs.min_size.x = max(glyphs.min_size.x, word_advance.x);
+            } else if text_wrapping == .CHARACTER {
+                glyphs.min_size.x = max(glyphs.min_size.x, advance.x);
+                glyphs.max_size.y += glyphs.line_height;
+            } else if text_wrapping == .NONE {
+                glyphs.min_size.x = max(glyphs.min_size.x, pen.x);
+            }
         }
     }
+    glyphs.min_size.y = pen.y + glyphs.line_height;
 
-    return shaped_glyphs;
+    return glyphs;
 }
 free_font :: (font: *Font) {
     FT_Done_Face(font.raster_face);
@@ -1595,8 +1643,7 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
     if content.count > 0 {
         element(style, #code {
             node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
-            // TODO(layouting): we should be using something that includes more data here since it's going to be required during layouting.
-            node.glyphs = shape_text(node.style.font, content);
+            node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
         }, manual_key = manual_key);
     }
 }
@@ -1882,79 +1929,83 @@ layout :: () {
     using context.forbear;
     push_allocator(context.forbear.frame_allocator);
     if node_tree.count > 0 {
-        // fit all nodes according to the sizes of its children this loop is reversed, which means it's doing children -> parent
-        for <*node: node_tree {
-            if node.first_child != -1 && node.glyphs.count == 0 {
-                if node.style.width.kind == .FIT {
-                    node.size.x = fitting_base(node, .HORIZONTAL);
-                }
-                if isnan(node.style.min_width) && node.style.width.kind != .FIXED {
-                    node.min_size.x = fitting_base(node, .HORIZONTAL);
-                }
-                if node.style.height.kind == .FIT {
-                    node.size.y = fitting_base(node, .VERTICAL);
-                }
-                if isnan(node.style.min_height) && node.style.height.kind != .FIXED {
-                    node.min_size.y = fitting_base(node, .VERTICAL);
-                }
-                child_index := node.first_child;
-                while child_index != -1 {
-                    child := node_tree[child_index];
-                    defer child_index = child.next_sibling;
-                    if child.style.placement.kind == .FLOW {
-                        // Check if parent should accumulate child sizes. .fit nodes always accumulate. .grow nodes also accumulate because when
-                        // their parent can't provide space, content determines size.
-                        fit_h := node.style.width.kind == .FIT || node.style.width.kind == .GROW || should_fit_min(node, .HORIZONTAL);
-                        fit_v := node.style.height.kind == .FIT || node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL);
-                        if fit_h || fit_v {
-                            for fit_direction: DIRECTIONS {
-                                preferred_size := get_preferred_size(node, fit_direction);
-                                child_margin_vector := get(child.style.margin, fit_direction);
-                                child_margins := child_margin_vector.x + child_margin_vector.y;
+        {
+            //
+            // ==== fitting nodes ====
+            //
+            for <*node: node_tree {
+                if node.first_child != -1 && node.glyphs.array.count == 0 {
+                    if node.style.width.kind == .FIT {
+                        node.size.x = fitting_base(node, .HORIZONTAL);
+                    }
+                    if isnan(node.style.min_width) && node.style.width.kind != .FIXED {
+                        node.min_size.x = fitting_base(node, .HORIZONTAL);
+                    }
+                    if node.style.height.kind == .FIT {
+                        node.size.y = fitting_base(node, .VERTICAL);
+                    }
+                    if isnan(node.style.min_height) && node.style.height.kind != .FIXED {
+                        node.min_size.y = fitting_base(node, .VERTICAL);
+                    }
+                    child_index := node.first_child;
+                    while child_index != -1 {
+                        child := node_tree[child_index];
+                        defer child_index = child.next_sibling;
+                        if child.style.placement.kind == .FLOW {
+                            // Check if parent should accumulate child sizes. .fit nodes always accumulate. .grow nodes also accumulate because when
+                            // their parent can't provide space, content determines size.
+                            fit_h := node.style.width.kind == .FIT || node.style.width.kind == .GROW || should_fit_min(node, .HORIZONTAL);
+                            fit_v := node.style.height.kind == .FIT || node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL);
+                            if fit_h || fit_v {
+                                for fit_direction: DIRECTIONS {
+                                    preferred_size := get_preferred_size(node, fit_direction);
+                                    child_margin_vector := get(child.style.margin, fit_direction);
+                                    child_margins := child_margin_vector.x + child_margin_vector.y;
 
-                                child_size := get(child.size, fit_direction);
-                                child_min_size := get(child.min_size, fit_direction);
-                                child_size_contribution := child_margins + child_size;
-                                child_min_size_contribution := child_margins + ifx fit_direction == .VERTICAL then
-                                    max(child_size, child_min_size)
-                                else
-                                    child_min_size;
+                                    child_size := get(child.size, fit_direction);
+                                    child_min_size := get(child.min_size, fit_direction);
+                                    child_size_contribution := child_margins + child_size;
+                                    child_min_size_contribution := child_margins + ifx fit_direction == .VERTICAL then
+                                        max(child_size, child_min_size)
+                                    else
+                                        child_min_size;
 
-                                should_accumulate := preferred_size.kind == .FIT || preferred_size.kind == .GROW;
+                                    should_accumulate := preferred_size.kind == .FIT || preferred_size.kind == .GROW;
 
-                                if node.style.direction == fit_direction {
-                                    if preferred_size.kind == .FIT {
-                                        // TODO: ensure the max and min sizes here
-                                        add(*node.size, fit_direction, child_size_contribution);
-                                    } else if (preferred_size.kind == .GROW) {
-                                        // TODO: ensure the max and min sizes here
-                                        if fit_direction == .HORIZONTAL {
-                                            node.size.x = max(node.size.x, child_size_contribution + fitting_base(node, .HORIZONTAL));
-                                        } else {
-                                            node.size.y = max(node.size.y, child_size_contribution + fitting_base(node, .VERTICAL));
+                                    if node.style.direction == fit_direction {
+                                        if preferred_size.kind == .FIT {
+                                            // TODO: ensure the max and min sizes here
+                                            add(*node.size, fit_direction, child_size_contribution);
+                                        } else if (preferred_size.kind == .GROW) {
+                                            // TODO: ensure the max and min sizes here
+                                            if fit_direction == .HORIZONTAL {
+                                                node.size.x = max(node.size.x, child_size_contribution + fitting_base(node, .HORIZONTAL));
+                                            } else {
+                                                node.size.y = max(node.size.y, child_size_contribution + fitting_base(node, .VERTICAL));
+                                            }
                                         }
-                                    }
-                                    if should_fit_min(node, fit_direction) {
-                                        add(*node.min_size, fit_direction, child_min_size_contribution);
-                                    }
-                                } else {
-                                    // cross axis fitting
-                                    if (should_accumulate) {
-                                        // TODO: ensure the max and min sizes here
-                                        set(
-                                            *node.size, 
-                                            fit_direction, 
-                                            max(
-                                                child_size_contribution + fitting_base(node, fit_direction), 
-                                                get(node.size, fit_direction)
-                                            )
-                                        );
-                                    }
-                                    if (should_fit_min(node, fit_direction)) {
-                                        set(*node.min_size, fit_direction, max(
-                                            child_min_size_contribution + fitting_base(node, fit_direction),
-                                            get(node.min_size, fit_direction),
-                                        ));
+                                        if should_fit_min(node, fit_direction) {
+                                            add(*node.min_size, fit_direction, child_min_size_contribution);
+                                        }
+                                    } else {
+                                        // cross axis fitting
+                                        if (should_accumulate) {
+                                            // TODO: ensure the max and min sizes here
+                                            set(
+                                                *node.size, 
+                                                fit_direction, 
+                                                max(
+                                                    child_size_contribution + fitting_base(node, fit_direction), 
+                                                    get(node.size, fit_direction)
+                                                )
+                                            );
+                                        }
+                                        if (should_fit_min(node, fit_direction)) {
+                                            set(*node.min_size, fit_direction, max(
+                                                child_min_size_contribution + fitting_base(node, fit_direction),
+                                                get(node.min_size, fit_direction),
+                                            ));
+                                        }
                                     }
                                 }
                             }
@@ -1964,188 +2015,219 @@ layout :: () {
             }
         }
 
-        changing: [..]*Node;
-        // this grows the children of this node. we need to do three visits here:
-        // 1) grow the children on the opposite axis of the layout direction (Style.direction)
-        // 2) iteratively grow the children equally in the layout direciton
-        // 3) iteratively shrink the children equally in the layout direction
-        for *node: node_tree {
-            if node.first_child != -1 && node.glyphs.count == 0 {
-                array_reset_keeping_memory(*changing);
-                layout_direction := node.style.direction;
-                opposite_direction := opposite(layout_direction);
-                // this value is only the initial one, it's modified during the iteration over the children that follows
-                remaining := inner_size(node, layout_direction);
+        {
+            //
+            // ==== growing and shrinking nodes ====
+            //
+            changing: [..]*Node;
+            // this grows the children of this node. we need to do three visits here:
+            // 1) grow the children on the opposite axis of the layout direction (Style.direction)
+            // 2) iteratively grow the children equally in the layout direciton
+            // 3) iteratively shrink the children equally in the layout direction
+            for *node: node_tree {
+                if node.first_child != -1 && node.glyphs.array.count == 0 {
+                    array_reset_keeping_memory(*changing);
+                    layout_direction := node.style.direction;
+                    opposite_direction := opposite(layout_direction);
+                    // this value is only the initial one, it's modified during the iteration over the children that follows
+                    remaining := inner_size(node, layout_direction);
 
-                EPSILON :: 0.001;
-                approximately_equal :: (a: float, b: float) -> bool {
-                    return abs(a - b) < EPSILON;
-                }
+                    EPSILON :: 0.001;
+                    approximately_equal :: (a: float, b: float) -> bool {
+                        return abs(a - b) < EPSILON;
+                    }
 
 
-                child_index := node.first_child;
-                {
-                    while child_index != -1 {
-                        child := *node_tree[child_index];
-                        defer child_index = child.next_sibling;
+                    child_index := node.first_child;
+                    {
+                        while child_index != -1 {
+                            child := *node_tree[child_index];
+                            defer child_index = child.next_sibling;
 
-                        {
-                            // grow the children on the opposite axis of the layout direction (Style.direction)
-                            child.min_size = min(child.min_size, child.max_size);
-                            child_opposite_margin := get(child.style.margin, opposite_direction);
+                            {
+                                // grow the children on the opposite axis of the layout direction (Style.direction)
+                                child.min_size = min(child.min_size, child.max_size);
+                                child_opposite_margin := get(child.style.margin, opposite_direction);
 
-                            available := get(node.size, opposite_direction) 
-                                - fitting_base(node, opposite_direction) 
-                                - child_opposite_margin.x - child_opposite_margin.y;
+                                available := get(node.size, opposite_direction) 
+                                    - fitting_base(node, opposite_direction) 
+                                    - child_opposite_margin.x - child_opposite_margin.y;
 
-                            preferred_size := get_preferred_size(child, opposite_direction);
-                            size := get(child.size, opposite_direction);
-                            min_size := get(child.min_size, opposite_direction);
-                            max_size := get(child.max_size, opposite_direction);
-                            if preferred_size.kind == .GROW || 
-                                (child.style.placement.kind == .FLOW && 
-                                size > available && min_size < size) {
-                                set(*child.size, opposite_direction, clamp(
-                                    available, min_size, max_size
+                                preferred_size := get_preferred_size(child, opposite_direction);
+                                size := get(child.size, opposite_direction);
+                                min_size := get(child.min_size, opposite_direction);
+                                max_size := get(child.max_size, opposite_direction);
+                                if preferred_size.kind == .GROW || 
+                                    (child.style.placement.kind == .FLOW && 
+                                    size > available && min_size < size) {
+                                    set(*child.size, opposite_direction, clamp(
+                                        available, min_size, max_size
+                                    ));
+                                }
+                            }
+
+                            preferred_size := get_preferred_size(child, layout_direction);
+                            child_margin := get(child.style.margin, layout_direction);
+
+                            if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED) 
+                                && preferred_size.kind == .GROW {
+                                // growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
+                                // siblings.
+                                available := inner_size(node, layout_direction) - child_margin.x - child_margin.y;
+                                set(*child.size, layout_direction, clamp(
+                                    available, 
+                                    get(child.min_size, layout_direction),
+                                    get(child.max_size, layout_direction),
                                 ));
+                            } else if child.style.placement.kind == .FLOW {
+                                if preferred_size.kind == .GROW && preferred_size.grow > 0.0 {
+                                    // we reset the size of the node to 0 so that the division is fair later
+                                    set(*child.size, layout_direction, 0);
+                                    if get(child.max_size, layout_direction) > 0 {
+                                        array_add(*changing, child);
+                                    }
+                                }
+                                remaining -= outer_size(child, layout_direction);
                             }
                         }
 
-                        preferred_size := get_preferred_size(child, layout_direction);
-                        child_margin := get(child.style.margin, layout_direction);
-
-                        if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED) 
-                            && preferred_size.kind == .GROW {
-                            // growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
-                            // siblings.
-                            available := inner_size(node, layout_direction) - child_margin.x - child_margin.y;
-                            set(*child.size, layout_direction, clamp(
-                                available, 
-                                get(child.min_size, layout_direction),
-                                get(child.max_size, layout_direction),
-                            ));
-                        } else if child.style.placement.kind == .FLOW {
-                            if preferred_size.kind == .GROW && preferred_size.grow > 0.0 {
-                                // we reset the size of the node to 0 so that the division is fair later
-                                set(*child.size, layout_direction, 0);
-                                if get(child.max_size, layout_direction) > 0 {
-                                    array_add(*changing, child);
+                        child_index = node.first_child;
+                        // grow the children equally in the layout direciton
+                        while remaining > EPSILON && changing.count > 0 {
+                            total_factor: float = 0.0;
+                            max_to_add: float = FLOAT32_INFINITY;
+                            index: s64 = 0;
+                            while index < changing.count {
+                                child := changing[index];
+                                max_size := get(child.max_size, layout_direction);
+                                size := get(child.size, layout_direction);
+                                if approximately_equal(size, max_size) {
+                                    array_unordered_remove_by_index(*changing, index);
+                                    // since the remove moves another child over to this same index, we go to the next iteration with the same index 
+                                    continue;
                                 }
+                                preferred_size := get_preferred_size(child, layout_direction);
+                                total_factor += preferred_size.grow;
+                                max_to_add = min(max_to_add, (max_size - size) / preferred_size.grow);
+
+                                index += 1;
                             }
-                            remaining -= outer_size(child, layout_direction);
+
+                            if changing.count > 0 && total_factor > 0 {
+                                to_add := min(max_to_add, remaining / total_factor);
+                                if to_add > 0.0 {
+                                    remaining_before_loop := remaining;
+                                    for child: changing {
+                                        preferred_size := get_preferred_size(child, layout_direction);
+                                        size := get(child.size, layout_direction);
+                                        min_size := get(child.min_size, layout_direction);
+                                        max_size := get(child.max_size, layout_direction);
+                                        clamp_addendum := clamp(size + to_add * preferred_size.grow, min_size, max_size) - size;
+                                        add(*child.size, layout_direction, clamp_addendum);
+                                        remaining -= clamp_addendum;
+                                    }
+                                    if approximately_equal(remaining, remaining_before_loop) {
+                                        // this means there's a max size constraint that doesn't let more size be added to any of the children
+                                        break;
+                                    }
+                                } else {
+                                    break;
+                                }
+                            } else if total_factor == 0 {
+                                break;
+                            }
                         }
                     }
 
-                    child_index = node.first_child;
-                    // grow the children equally in the layout direciton
-                    while remaining > EPSILON && changing.count > 0 {
-                        total_factor: float = 0.0;
-                        max_to_add: float = FLOAT32_INFINITY;
-                        index: s64 = 0;
-                        while index < changing.count {
-                            child := changing[index];
-                            max_size := get(child.max_size, layout_direction);
-                            size := get(child.size, layout_direction);
-                            if approximately_equal(size, max_size) {
-                                array_unordered_remove_by_index(*changing, index);
-                                // since the remove moves another child over to this same index, we go to the next iteration with the same index 
-                                continue;
+                    // we shrink children so that nodes don't overflow the parent, but fit to the largest size possible that's bigger than
+                    // their minimum size
+                    if remaining < -EPSILON {
+                        array_reset_keeping_memory(*changing);
+                        child_index = node.first_child;
+                        while child_index != -1 {
+                            child := *node_tree[child_index];
+                            defer child_index = child.next_sibling;
+                            if child.style.placement.kind == .FLOW && 
+                                get(child.size, layout_direction) > get(child.min_size, layout_direction) {
+                                array_add(*changing, child);
                             }
-                            preferred_size := get_preferred_size(child, layout_direction);
-                            total_factor += preferred_size.grow;
-                            max_to_add = min(max_to_add, (max_size - size) / preferred_size.grow);
-
-                            index += 1;
                         }
-
-                        if changing.count > 0 && total_factor > 0 {
-                            to_add := min(max_to_add, remaining / total_factor);
-                            if to_add > 0.0 {
+                        while remaining < -EPSILON && changing.count > 0 {
+                            largest := get(changing[0].size, layout_direction);
+                            second_largest: float = 0.0;
+                            index := 0;
+                            while index < changing.count {
+                                child := changing[index];
+                                size := get(child.size, layout_direction);
+                                min_size := get(child.min_size, layout_direction);
+                                if approximately_equal(size, min_size) {
+                                    array_unordered_remove_by_index(*changing, index);
+                                    if index == 0 && changing.count > 0 {
+                                        largest = get(changing[0].size, layout_direction);
+                                    }
+                                    // since the remove moves another child over to this same index, we go to the next iteration with the same index 
+                                    continue;
+                                }
+                                if size > largest {
+                                    largest = size;
+                                } else if size > second_largest {
+                                    second_largest = size;
+                                }
+                                index += 1;
+                            }
+                            if changing.count > 0 {
+                                to_subtract := min(
+                                    largest - second_largest,
+                                    -remaining / cast(float)changing.count,
+                                );
+                                if (to_subtract == 0) {
+                                    to_subtract = -remaining / cast(float)changing.count;
+                                }
                                 remaining_before_loop := remaining;
                                 for child: changing {
-                                    preferred_size := get_preferred_size(child, layout_direction);
-                                    size := get(child.size, layout_direction);
-                                    min_size := get(child.min_size, layout_direction);
-                                    max_size := get(child.max_size, layout_direction);
-                                    clamp_addendum := clamp(size + to_add * preferred_size.grow, min_size, max_size) - size;
-                                    add(*child.size, layout_direction, clamp_addendum);
-                                    remaining -= clamp_addendum;
+                                    old_size := get(child.size, layout_direction);
+                                    if approximately_equal(old_size, largest) {
+                                        min_size := get(child.min_size, layout_direction);
+                                        clamped_reduction := max(old_size - to_subtract, min_size) - old_size;
+                                        add(*child.size, layout_direction, clamped_reduction);
+                                        remaining -= clamped_reduction;
+                                    }
                                 }
                                 if approximately_equal(remaining, remaining_before_loop) {
-                                    // this means there's a max size constraint that doesn't let more size be added to any of the children
                                     break;
                                 }
                             } else {
                                 break;
                             }
-                        } else if total_factor == 0 {
-                            break;
                         }
                     }
-                }
 
-                // we shrink children so that nodes don't overflow the parent, but fit to the largest size possible that's bigger than
-                // their minimum size
-                if remaining < -EPSILON {
-                    array_reset_keeping_memory(*changing);
+                    // TODO: revisit the need for this. I think this is both not as performant as it should be as well as
+                    // not as accurate as it should be.
                     child_index = node.first_child;
                     while child_index != -1 {
                         child := *node_tree[child_index];
-                        defer child_index = child.next_sibling;
-                        if child.style.placement.kind == .FLOW && 
-                            get(child.size, layout_direction) > get(child.min_size, layout_direction) {
-                            array_add(*changing, child);
+                        if child.style.width.kind == .RATIO {
+                            child.size.x = child.size.y * child.style.width.ratio;
                         }
-                    }
-                    while remaining < -EPSILON && changing.count > 0 {
-                        largest := get(changing[0].size, layout_direction);
-                        second_largest: float = 0.0;
-                        index := 0;
-                        while index < changing.count {
-                            child := changing[index];
-                            size := get(child.size, layout_direction);
-                            min_size := get(child.min_size, layout_direction);
-                            if approximately_equal(size, min_size) {
-                                array_unordered_remove_by_index(*changing, index);
-                                if index == 0 && changing.count > 0 {
-                                    largest = get(changing[0].size, layout_direction);
-                                }
-                                // since the remove moves another child over to this same index, we go to the next iteration with the same index 
-                                continue;
-                            }
-                            if size > largest {
-                                largest = size;
-                            } else if size > second_largest {
-                                second_largest = size;
-                            }
-                            index += 1;
+                        if child.style.height.kind == .RATIO {
+                            child.size.y = child.size.x * child.style.height.ratio;
                         }
-                        if changing.count > 0 {
-                            to_subtract := min(
-                                largest - second_largest,
-                                -remaining / cast(float)changing.count,
-                            );
-                            if (to_subtract == 0) {
-                                to_subtract = -remaining / cast(float)changing.count;
-                            }
-                            remaining_before_loop := remaining;
-                            for child: changing {
-                                old_size := get(child.size, layout_direction);
-                                if approximately_equal(old_size, largest) {
-                                    min_size := get(child.min_size, layout_direction);
-                                    clamped_reduction := max(old_size - to_subtract, min_size) - old_size;
-                                    add(*child.size, layout_direction, clamped_reduction);
-                                    remaining -= clamped_reduction;
-                                }
-                            }
-                            if approximately_equal(remaining, remaining_before_loop) {
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
+                        child_index = child.next_sibling;
                     }
                 }
+            }
+        }
+
+        {
+            //
+            // ==== wrapping and placement ====
+            //
+            for <*node: node_tree {
+                base := Vector2.{
+                    node.style.border_width.x.x + node.style.padding.x.x,
+                    node.style.border_width.y.y + node.style.padding.y.y,
+                };
             }
         }
     }
@@ -2175,20 +2257,20 @@ draw_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 1.
     node_instances := array_view(node_instances_buffer, 0, 0);
     defer free(node_instances_buffer.data);
     for node: node_tree {
-        if node.glyphs.count != 0 {
+        if node.glyphs.array.count != 0 {
             rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
             font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
             ascender := cast(float)node.style.font.raster_face.ascender;
             cursor := node.position;
             cursor.y += ascender * font_units_to_point; 
-            for glyph: node.glyphs {
-                atlas_key := glyph_atlas_key(node.style.font, glyph.index, rounded_font_size, node.style.font_weight);
+            for glyph: node.glyphs.array {
+                atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
                 if entry == null {
                     set_weight(node.style.font, node.style.font_weight);
                     set_font_size(node.style.font, rounded_font_size);
                     // there's no entry in the atlas for this glyph configuration
-                    raster := font_raster_glyph(node.style.font, glyph.index);
+                    raster := font_raster_glyph(node.style.font, xx glyph.index);
                     x, y, ok := glyph_atlas_place(*glyph_atlas, xx raster.width, xx raster.height);
                     if !ok {
                         log_error("the atlas is full, glyph index % will not be rendered", glyph.index);
