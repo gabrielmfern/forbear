@@ -1482,6 +1482,7 @@ Raster_Glyph :: struct {
     pitch: s32;
 };
 set_weight :: (font: *Font, weight: u16) {
+    // TODO: cache that this was already set so that we can avoid work
     mm: *FT_MM_Var;
     err := FT_Get_MM_Var(font.raster_face, *mm);
     if err == xx FT_Err.Invalid_Argument {
@@ -1510,6 +1511,7 @@ set_weight :: (font: *Font, weight: u16) {
     font.weight = weight;
 }
 set_font_size :: (font: *Font, size: u16) {
+    // TODO: cache that this was already set so that we can avoid work
     FT_Set_Pixel_Sizes(font.raster_face, size, size);
 }
 round_font_size :: (size: float) -> u16 #expand {
@@ -1625,9 +1627,11 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
     if content.count > 0 {
         element(style, #code {
             node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
+            rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
+            set_weight(node.style.font, node.style.font_weight);
+            set_font_size(node.style.font, rounded_font_size);
             node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
 
-            rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
             font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
             node.size = node.glyphs.max_size * font_units_to_point;
             node.min_size = node.glyphs.min_size * font_units_to_point;
@@ -2520,7 +2524,7 @@ layout :: () {
 
         {
             //
-            // === placing nodes and justifying them in both directions ===
+            // === place nodes and justifying them in both directions ===
             //
             for *node: node_tree {
                 if it_index == 0 {
@@ -2620,9 +2624,7 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         if node.glyphs.array.count != 0 {
             rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
             font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
-            ascender := cast(float)node.style.font.raster_face.ascender;
-            cursor := node.position;
-            cursor.y += ascender * font_units_to_point; 
+
             for glyph: node.glyphs.array {
                 atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
@@ -2663,13 +2665,13 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                 glyph_draw_instance.entry = entry;
                 glyph_draw_instance.bearing /= cast(float) window.scale;
                 glyph_draw_instance.size /= cast(float) window.scale;
-                glyph_draw_instance.position = cursor + glyph.offset * font_units_to_point;
+                glyph_draw_instance.position = node.position + (Vector2.{0.0, node.glyphs.ascent} + glyph.position) * font_units_to_point;
                 glyph_draw_instance.color = node.style.color;
                 array_add(*glyph_instances, glyph_draw_instance);
-                cursor += glyph.advance * font_units_to_point;
             }
         }
 
+        // TODO: write out the instance gathering for the other types of backgrounds
         if node.style.background.kind == .COLOR {
             node_instances.count += 1;
             node_instances[node_instances.count - 1] = Node_Draw_Instance.{
@@ -2678,7 +2680,6 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                 color = node.style.background.color
             };
         }
-        // TODO: write out the instance gathering for the other types of backgrounds
     }
 
     point_width: float = (cast(float) window.width) / (cast(float) window.scale);

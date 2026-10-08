@@ -405,7 +405,14 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
         }
         style := style_from(adapter, js_style_object);
         opening := open_element(style, key);
+        rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
+        font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
+        set_weight(opening.node.style.font, opening.node.style.font_weight);
+        set_font_size(opening.node.style.font, rounded_font_size);
         opening.node.glyphs = shape_text(opening.node.style.font, opening.node.style.text_wrapping, content);
+        opening.node.size = opening.node.glyphs.max_size * font_units_to_point;
+        opening.node.min_size = opening.node.glyphs.min_size * font_units_to_point;
+        opening.node.max_size = node.glyphs.max_size * font_units_to_point;
         close_element(opening);
     }
 }
