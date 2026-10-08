@@ -2229,9 +2229,9 @@ layout :: () {
                 rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
                 font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
                 base := Vector2.{
-                    (node.style.border_width.x.x + node.style.padding.x.x) / rounded_font_size,
-                    (node.style.border_width.y.x + node.style.padding.y.x) / rounded_font_size,
-                };
+                    node.style.border_width.x.x + node.style.padding.x.x,
+                    node.style.border_width.y.x + node.style.padding.y.x,
+                } / font_units_to_point;
 
                 if node.glyphs.array.count > 0 && node.style.text_wrapping != .NONE {
                     using node.glyphs;
