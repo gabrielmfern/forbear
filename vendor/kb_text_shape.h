@@ -27122,7 +27122,7 @@ KBTS_EXPORT int kbts_ShapePopGlobalVariation(kbts_shape_context *Context, kbts_u
 
       if(Variation->Tag == Tag)
       {
-        KBTS__FOR(MoveIndex, GlobalVariationIndex, ScratchGlobalVariationCount)
+        KBTS__FOR(MoveIndex, GlobalVariationIndex + 1, ScratchGlobalVariationCount)
         {
           Context->ScratchGlobalVariations[MoveIndex - 1] = Context->ScratchGlobalVariations[MoveIndex];
         }
