@@ -11,7 +11,7 @@ Math :: #import "Math";
 #if OS == .LINUX {
     #load "bindings-linux.jai";
 } else #if OS == .MACOS {
-    #load "bindings-macos.jai";
+    #load "bindings-darwin.jai";
 }
 
 #if OS == .LINUX {
@@ -1627,10 +1627,11 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
             node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
             node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
 
-            rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
-            font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
-            node.min_size = node.glyphs.min_size 
-            node.max_size = node.glyphs.max_size
+            rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
+            font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
+            node.size = node.glyphs.max_size * font_units_to_point;
+            node.min_size = node.glyphs.min_size * font_units_to_point;
+            node.max_size = node.glyphs.max_size * font_units_to_point;
         }, manual_key = manual_key);
     }
 }
@@ -1693,11 +1694,14 @@ Forbear :: struct {
     glyph_vao: u32;
     glyph_vbo: u32;
 
+    // TODO: we're going to have to change this once we support multiple windows
+    window: *Window;
     backend: *Backend;
 };
 #add_context forbear: *Forbear;
 init_forbear :: (
     forbear: *Forbear,
+    program_window: *Window,
     // TOOD: currently we're defining the specific backend names to be just one here, but in the long-term we will include
     // multiple backends for each operating system, not one, so we need to handle that in a better way.
     program_backend: *Backend,
@@ -1706,6 +1710,7 @@ init_forbear :: (
     using forbear;
     context.forbear = forbear;
 
+    forbear.window = program_window;
     forbear.persistent_allocator = context.allocator;
     forbear.glyph_atlas.table.allocator = context.allocator;
     forbear.frame_allocator.proc = flat_pool_allocator_proc;
@@ -1912,7 +1917,7 @@ GLSL);
 // - https://github.com/nicbarker/clay
 // - https://www.clay.com/
 // - https://www.youtube.com/watch?v=by9lQvpvMIc
-layout :: (window: *Window) {
+layout :: () {
     using context.forbear;
     push_allocator(context.forbear.frame_allocator);
     if node_tree.count > 0 {
@@ -2228,13 +2233,13 @@ layout :: (window: *Window) {
                     if node.style.text_wrapping == {
                         case .CHARACTER;
                             for *glyph: array {
-                                while break_cursor < pre_break_indices.len &&
+                                while break_cursor < pre_break_indices.count &&
                                     pre_break_indices[break_cursor] == it_index {
                                     defer break_cursor += 1;
-                                    if it_index > lineStartIndex {
+                                    if it_index > line_start_index {
                                         array_add(*lines, Line.{
-                                            .start = line_start_index,
-                                            .end = index - 1,
+                                            start = line_start_index,
+                                            end = it_index - 1,
                                         });
                                     }
                                     line_start_index = it_index;
@@ -2244,8 +2249,8 @@ layout :: (window: *Window) {
 
                                 if (pen.x + glyph.advance.x) * font_units_to_point > line_end {
                                     array_add(*lines, .{
-                                        .start = line_start_index,
-                                        .end = it_index - 1,
+                                        start = line_start_index,
+                                        end = it_index - 1,
                                     });
                                     line_start_index = it_index;
                                     pen.x = 0.0;
@@ -2261,15 +2266,15 @@ layout :: (window: *Window) {
                                 position: Vector2 = VECTOR2_NAN;
                             }
                             last_space: Space;
-                            is_null :: inline (using space: Space) {
+                            is_null :: inline (using space: Space) -> bool {
                                 return index == -1 && position == VECTOR2_NAN;
                             }
                             for *glyph: array {
-                                while break_cursor < pre_break_indices.len && 
+                                while break_cursor < pre_break_indices.count && 
                                 pre_break_indices[break_cursor] == it_index {
                                     defer break_cursor += 1;
-                                    if index > line_start_index {
-                                        array_add(*liens, Line.{
+                                    if it_index > line_start_index {
+                                        array_add(*lines, Line.{
                                             start = line_start_index,
                                             end = it_index - 1,
                                         });
@@ -2280,12 +2285,12 @@ layout :: (window: *Window) {
                                     last_space = Space.{};
                                 }
 
-                                if (pen.x + advance.x) * font_units_to_point > line_end {
+                                if (pen.x + glyph.advance.x) * font_units_to_point > line_end {
                                     if !is_null(last_space) {
                                         first_word_glyph := array[last_space.index + 1];
                                         array_add(*lines, Line.{
-                                            .start = line_start_index,
-                                            .end = last_space.index,
+                                            start = line_start_index,
+                                            end = last_space.index,
                                         });
                                         line_start_index = last_space.index + 1;
                                         pen.x = 0.0;
@@ -2302,18 +2307,18 @@ layout :: (window: *Window) {
                                     }
                                 }
 
-                                glyph.position = base + cursor + glyph.offset;
+                                glyph.position = base + pen + glyph.offset;
                                 pen += glyph.advance;
-                                if starts_with(*glyph.utf8.Encoded, " ") {
-                                    last_space = .{
-                                        .index = it_index,
-                                        .position = glyph.position,
+                                if starts_with(to_string(glyph.utf8.Encoded), " ") {
+                                    last_space = Space.{
+                                        index = it_index,
+                                        position = glyph.position,
                                     };
                                 }
                             }
                     }
 
-                    while break_cursor < pre_break_indices.len {
+                    while break_cursor < pre_break_indices.count {
                         pen.y += line_height;
                         break_cursor += 1;
                     }
@@ -2341,7 +2346,7 @@ layout :: (window: *Window) {
                         width := (end_x - start_x) * font_units_to_point;
                         line_glyphs := array_view(array, line.start, line.end + 1);
                         for *glyph: line_glyphs {
-                            if node.style.xJustification == {
+                            if node.style.x_justification == {
                                 case .START;
                                 case .CENTER;
                                     glyph.position.x += (line_end - width) / 2.0;
@@ -2352,7 +2357,7 @@ layout :: (window: *Window) {
                     }
                     pen.y + line_height;
 
-                    node.size.y = cursor.y + line_height;
+                    node.size.y = pen.y + line_height;
                 }
             }
         }
@@ -2548,9 +2553,9 @@ layout :: (window: *Window) {
                                 child.position = base + child.style.placement.relative + child.style.translate;
                             case .FLOW;
                                 margin := get(child.style.margin, direction);
-                                add(pen, direction, margin.x);
+                                add(*pen, direction, margin.x);
                                 child.position = pen + child.style.translate + node.children_offset;
-                                add(pen, direction, get(child.size, direction) + get(margin.y));
+                                add(*pen, direction, get(child.size, direction) + margin.y);
                         }
                         child_index = child.next_sibling;
                     }
@@ -2558,7 +2563,7 @@ layout :: (window: *Window) {
                     content_size := get(pen, direction) - get(base, direction);
                     available := get(node.size, direction) - fitting_base(node, direction);
                     justification := get_justification(node, direction);
-                    offset: f32;
+                    offset: float;
                     if justification == {
                         case .CENTER;
                             offset = (available - content_size) / 2.0;
@@ -2574,11 +2579,11 @@ layout :: (window: *Window) {
                         if child.style.placement.kind == .FLOW {
                             if justification_opposite == {
                                 case .CENTER;
-                                    add(child.position, opposite_direction, (available_opposite - get(child.size, opposite_direction)) / 2.0);
+                                    add(*child.position, opposite_direction, (available_opposite - get(child.size, opposite_direction)) / 2.0);
                                 case .END;
-                                    add(child.position, opposite_direction, available_opposite - get(child.size, opposite_direction));
+                                    add(*child.position, opposite_direction, available_opposite - get(child.size, opposite_direction));
                             };
-                            add(child.position, direction, offset);
+                            add(*child.position, direction, offset);
                         }
                         child_index = child.next_sibling;
                     }
@@ -2589,7 +2594,7 @@ layout :: (window: *Window) {
 }
 
 // TODO: this render should not take a window, instead it should determine the target window based on the nodes. we should include a root window, though
-draw_and_reset_node_tree :: (window: *Window, clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
+draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
     push_allocator(frame_allocator);
     #if OS == .LINUX {
@@ -2718,6 +2723,7 @@ operator + :: Math.operator +;
 operator - :: Math.operator -;
 operator * :: Math.operator *;
 operator / :: Math.operator /;
+operator == :: Math.operator ==;
 FLOAT32_NAN :: Math.FLOAT32_NAN;
 FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
 U16_MAX :: Math.U16_MAX;

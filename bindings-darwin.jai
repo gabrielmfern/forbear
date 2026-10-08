@@ -1,21 +1,7 @@
-
 //
 // This file was auto-generated using the following command:
 //
-// jai build.jai
-//
-
-
-
-
-#scope_file
-
-
-#scope_export
-//
-// This file was auto-generated using the following command:
-//
-// jai build.jai
+// jai generate.jai
 //
 
 
@@ -2847,7 +2833,7 @@ kb_text_shape :: #library,no_dll "vendor/kb_text_shape";
 //
 // This file was auto-generated using the following command:
 //
-// jai build.jai
+// jai generate.jai
 //
 
 

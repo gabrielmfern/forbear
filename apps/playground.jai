@@ -1,4 +1,6 @@
-#import "Basic"()(MEMORY_DEBUGGER = true);
+MEMORY_DEBUGGING :: false;
+
+#import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 #import "File";
 #import "GL";
 #import,file "../forbear.jai";
@@ -20,7 +22,7 @@ main :: () {
     init_font(*inter, INTER_TTF);
 
     forbear: Forbear;
-    init_forbear(*forbear, *backend, Base_Style.{
+    init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *inter,
         color = rgb(255, 255, 255),
     });
@@ -64,9 +66,11 @@ main :: () {
         });
 
         layout();
-        draw_and_reset_node_tree(*window, rgb(0.0, 0.0, 0.0));
+        draw_and_reset_node_tree(rgb(0.0, 0.0, 0.0));
 
         reset_temporary_storage();
-        memory_visualizer_per_frame_update();
+        if MEMORY_DEBUGGING {
+            memory_visualizer_per_frame_update();
+        }
     }
 }
