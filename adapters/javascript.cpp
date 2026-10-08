@@ -38,7 +38,6 @@ struct JavascriptRuntime {
 
     v8::Global<v8::String> property_names[DIRECTION + 1];
     v8::Global<v8::String> fixed_string;
-    v8::Global<v8::String> ratio_string;
     v8::Global<v8::String> grow_string;
     v8::Global<v8::String> fit_string;
     v8::Global<v8::String> flow_string;
@@ -95,26 +94,6 @@ void fit(const v8::FunctionCallbackInfo<v8::Value>& info) {
     auto sizing = v8::Array::New(isolate, 1);
     sizing->Set(context, 0, runtime->fit_string.Get(isolate)).Check();
     return_value.Set(sizing);
-}
-
-void ratio(const v8::FunctionCallbackInfo<v8::Value>& info) {
-    auto isolate = info.GetIsolate();
-    auto context = isolate->GetCurrentContext();
-    auto return_value = info.GetReturnValue();
-    auto runtime = static_cast<JavascriptRuntime*>(
-        v8::External::Cast(*info.Data())->Value()
-    );
-    if (info.Length() >= 1 && info[0]->IsNumber()) {
-        auto number = info[0].As<v8::Number>();
-        auto sizing = v8::Array::New(isolate, 2);
-        sizing->Set(context, 0, runtime->ratio_string.Get(isolate)).Check();
-        sizing->Set(context, 1, number).Check();
-        return_value.Set(sizing);
-    } else {
-        isolate->ThrowException(v8::Exception::TypeError(
-            v8::String::NewFromUtf8Literal(isolate, "ratio expects one number")
-        ));
-    }
 }
 
 void grow(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -856,7 +835,6 @@ extern "C" void* javascript_init(
 
             runtime->fixed_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "fixed"));
             runtime->fit_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "fit"));
-            runtime->ratio_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "ratio"));
             runtime->grow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "grow"));
             runtime->flow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "flow"));
             runtime->relative_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "relative"));
@@ -865,7 +843,6 @@ extern "C" void* javascript_init(
 
             define_global_function(runtime, runtime->fixed_string.Get(isolate), fixed);
             define_global_function(runtime, runtime->fit_string.Get(isolate), fit);
-            define_global_function(runtime, runtime->ratio_string.Get(isolate), ratio);
             define_global_function(runtime, runtime->grow_string.Get(isolate), grow);
             define_global_function(runtime, runtime->flow_string.Get(isolate), flow);
             define_global_function(runtime, runtime->relative_string.Get(isolate), relative);

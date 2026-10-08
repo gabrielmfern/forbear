@@ -1,7 +1,7 @@
 type Vector2 = [x: number, y: number];
 type Vector4 = [r: number, g: number, b: number, a: number];
 type Sides = [left: number, right: number, top: number, bottom: number];
-type Sizing = [kind: "fit"] | [kind: "fixed" | "ratio" | "grow", value: number];
+type Sizing = [kind: "fit"] | [kind: "fixed" | "grow", value: number];
 type Placement = [kind: "flow"] | [kind: "fixed" | "relative", x: number, y: number];
 type GradientStop = [r: number, g: number, b: number, a: number, position: number];
 type Background =
@@ -76,7 +76,6 @@ declare function gradient(direction: Vector2, stops: GradientStop[]): Background
 declare function fit(): Sizing;
 declare function fixed(value: number): Sizing;
 declare function fixed(value: Vector2): Placement;
-declare function ratio(value: number): Sizing;
 declare function grow(value: number): Sizing;
 declare function flow(): Placement;
 declare function relative(value: Vector2): Placement;

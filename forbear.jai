@@ -704,7 +704,7 @@ opposite :: (direction: Direction) -> Direction {
 
 Sizing :: struct {
     Kind :: enum u8 {
-        FIT; FIXED; RATIO; GROW;
+        FIT; FIXED; GROW;
     };
 
     kind: Kind;
@@ -723,9 +723,6 @@ fit :: () -> Sizing {
 }
 fixed :: (value: float) -> Sizing {
     return Sizing.{ kind = .FIXED, fixed = value };
-}
-ratio :: (value: float) -> Sizing {
-    return Sizing.{ kind = .RATIO, ratio = value };
 }
 grow :: (value: float) -> Sizing {
     return Sizing.{ kind = .GROW, grow = value };
@@ -1177,6 +1174,13 @@ Node :: struct {
 
     tree: *Node_Tree;
 };
+get_justification :: (node: *Node, direction: Direction) -> Alignment #expand {
+    if direction == Direction.HORIZONTAL {
+        return node.style.x_justification;
+    } else {
+        return node.style.y_justification;
+    }
+}
 get_preferred_size :: (node: *Node, direction: Direction) -> Sizing #expand {
     if direction == Direction.HORIZONTAL {
         return node.style.width;
@@ -1284,30 +1288,15 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
         }
     }
     node.key = key;
-    if node.style.placement.kind == {
-        // we don't handle FLOW since the node already has the right position by default
-        case Placement.Kind.FIXED;
-            node.position = node.style.placement.fixed;
-        case Placement.Kind.RELATIVE;
-            node.position = node.style.placement.relative;
-    }
     if node.style.width.kind == {
         // we don't handle FIT or GROW since the node already has the right width by default
         case Sizing.Kind.FIXED;
             node.size.x = node.style.width.fixed;
-        case Sizing.Kind.RATIO;
-            if node.style.height.kind == Sizing.Kind.FIXED {
-                node.size.x = node.style.height.fixed * node.style.width.ratio;
-            }
     }
     if node.style.height.kind == {
         // we don't handle FIT or GROW since the node already has the right width by default
         case Sizing.Kind.FIXED;
             node.size.y = node.style.height.fixed;
-        case Sizing.Kind.RATIO;
-            if node.style.width.kind == Sizing.Kind.FIXED {
-                node.size.y = node.style.width.fixed * node.style.height.ratio;
-            }
     }
     if !isnan(node.style.min_width) {
         node.min_size.x = node.style.min_width;
@@ -1366,13 +1355,6 @@ close_element :: (using data: Element_Opening_Data) {
     context.forbear.parent_index = parent_index;
     context.forbear.scope_key = scope_key;
     context.forbear.base_style = base_style;
-
-    if (node.style.width.kind == Sizing.Kind.RATIO) {
-        node.size.x = node.style.width.ratio * node.size.y;
-    }
-    if (node.style.height.kind == Sizing.Kind.RATIO) {
-        node.size.y = node.style.height.ratio * node.size.x;
-    }
 
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
@@ -1587,7 +1569,7 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
         shaping_glyph: *kbts_glyph;
         while (kbts_GlyphIteratorNext(*run.Glyphs, *shaping_glyph) != 0) {
             shape_codepoint: kbts_shape_codepoint;
-            if (kbts_ShapeGetShapeCodepoint(shaping_context, shaping_glyph.UserIdOrCodepointIndex, *shape_codepoint) == 0) {
+            if kbts_ShapeGetShapeCodepoint(shaping_context, shaping_glyph.UserIdOrCodepointIndex, *shape_codepoint) == 0 {
                 log_error("Could not get original codeopint for glyph with user id %", shaping_glyph.UserIdOrCodepointIndex);
                 continue;
             }
@@ -1644,6 +1626,11 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
         element(style, #code {
             node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
             node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
+
+            rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
+            font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
+            node.min_size = node.glyphs.min_size 
+            node.max_size = node.glyphs.max_size
         }, manual_key = manual_key);
     }
 }
@@ -1929,6 +1916,58 @@ layout :: (window: *Window) {
     using context.forbear;
     push_allocator(context.forbear.frame_allocator);
     if node_tree.count > 0 {
+        fit_child :: (node: *Node, child: *Node, fit_direction: Direction) {
+            preferred_size := get_preferred_size(node, fit_direction);
+            child_margin_vector := get(child.style.margin, fit_direction);
+            child_margins := child_margin_vector.x + child_margin_vector.y;
+
+            child_size := get(child.size, fit_direction);
+            child_min_size := get(child.min_size, fit_direction);
+            child_size_contribution := child_margins + child_size;
+            child_min_size_contribution := child_margins + ifx fit_direction == .VERTICAL then
+                max(child_size, child_min_size)
+            else
+                child_min_size;
+
+            should_accumulate := preferred_size.kind == .FIT || preferred_size.kind == .GROW;
+
+            if node.style.direction == fit_direction {
+                if preferred_size.kind == .FIT {
+                    // TODO: ensure the max and min sizes here
+                    add(*node.size, fit_direction, child_size_contribution);
+                } else if preferred_size.kind == .GROW {
+                    // TODO: ensure the max and min sizes here
+                    if fit_direction == .HORIZONTAL {
+                        node.size.x = max(node.size.x, child_size_contribution + fitting_base(node, .HORIZONTAL));
+                    } else {
+                        node.size.y = max(node.size.y, child_size_contribution + fitting_base(node, .VERTICAL));
+                    }
+                }
+                if should_fit_min(node, fit_direction) {
+                    add(*node.min_size, fit_direction, child_min_size_contribution);
+                }
+            } else {
+                // cross axis fitting
+                if should_accumulate {
+                    // TODO: ensure the max and min sizes here
+                    set(
+                        *node.size, 
+                        fit_direction, 
+                        max(
+                            child_size_contribution + fitting_base(node, fit_direction), 
+                            get(node.size, fit_direction)
+                        )
+                    );
+                }
+                if should_fit_min(node, fit_direction) {
+                    set(*node.min_size, fit_direction, max(
+                        child_min_size_contribution + fitting_base(node, fit_direction),
+                        get(node.min_size, fit_direction),
+                    ));
+                }
+            }
+        }
+
         {
             //
             // ==== fitting nodes ====
@@ -1949,70 +1988,23 @@ layout :: (window: *Window) {
                     }
                     child_index := node.first_child;
                     while child_index != -1 {
-                        child := node_tree[child_index];
+                        child := *node_tree[child_index];
                         defer child_index = child.next_sibling;
-                        if child.style.placement.kind == .FLOW {
-                            // Check if parent should accumulate child sizes. .fit nodes always accumulate. .grow nodes also accumulate because when
-                            // their parent can't provide space, content determines size.
-                            fit_h := node.style.width.kind == .FIT || node.style.width.kind == .GROW || should_fit_min(node, .HORIZONTAL);
-                            fit_v := node.style.height.kind == .FIT || node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL);
-                            if fit_h || fit_v {
-                                for fit_direction: DIRECTIONS {
-                                    preferred_size := get_preferred_size(node, fit_direction);
-                                    child_margin_vector := get(child.style.margin, fit_direction);
-                                    child_margins := child_margin_vector.x + child_margin_vector.y;
-
-                                    child_size := get(child.size, fit_direction);
-                                    child_min_size := get(child.min_size, fit_direction);
-                                    child_size_contribution := child_margins + child_size;
-                                    child_min_size_contribution := child_margins + ifx fit_direction == .VERTICAL then
-                                        max(child_size, child_min_size)
-                                    else
-                                        child_min_size;
-
-                                    should_accumulate := preferred_size.kind == .FIT || preferred_size.kind == .GROW;
-
-                                    if node.style.direction == fit_direction {
-                                        if preferred_size.kind == .FIT {
-                                            // TODO: ensure the max and min sizes here
-                                            add(*node.size, fit_direction, child_size_contribution);
-                                        } else if (preferred_size.kind == .GROW) {
-                                            // TODO: ensure the max and min sizes here
-                                            if fit_direction == .HORIZONTAL {
-                                                node.size.x = max(node.size.x, child_size_contribution + fitting_base(node, .HORIZONTAL));
-                                            } else {
-                                                node.size.y = max(node.size.y, child_size_contribution + fitting_base(node, .VERTICAL));
-                                            }
-                                        }
-                                        if should_fit_min(node, fit_direction) {
-                                            add(*node.min_size, fit_direction, child_min_size_contribution);
-                                        }
-                                    } else {
-                                        // cross axis fitting
-                                        if (should_accumulate) {
-                                            // TODO: ensure the max and min sizes here
-                                            set(
-                                                *node.size, 
-                                                fit_direction, 
-                                                max(
-                                                    child_size_contribution + fitting_base(node, fit_direction), 
-                                                    get(node.size, fit_direction)
-                                                )
-                                            );
-                                        }
-                                        if (should_fit_min(node, fit_direction)) {
-                                            set(*node.min_size, fit_direction, max(
-                                                child_min_size_contribution + fitting_base(node, fit_direction),
-                                                get(node.min_size, fit_direction),
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
+                        if child.style.placement.kind == .FLOW && 
+                        (node.style.width.kind == .FIT || node.style.width.kind == .GROW || 
+                        should_fit_min(node, .HORIZONTAL) || node.style.height.kind == .FIT || 
+                        node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL)) {
+                            fit_child(node, child, .HORIZONTAL);
+                            fit_child(node, child, .VERTICAL);
                         }
                     }
                 }
             }
+        }
+
+        EPSILON :: 0.001;
+        approximately_equal :: (a: float, b: float) -> bool {
+            return abs(a - b) < EPSILON;
         }
 
         {
@@ -2020,10 +2012,6 @@ layout :: (window: *Window) {
             // ==== growing and shrinking nodes ====
             //
             changing: [..]*Node;
-            // this grows the children of this node. we need to do three visits here:
-            // 1) grow the children on the opposite axis of the layout direction (Style.direction)
-            // 2) iteratively grow the children equally in the layout direciton
-            // 3) iteratively shrink the children equally in the layout direction
             for *node: node_tree {
                 if node.first_child != -1 && node.glyphs.array.count == 0 {
                     array_reset_keeping_memory(*changing);
@@ -2032,27 +2020,29 @@ layout :: (window: *Window) {
                     // this value is only the initial one, it's modified during the iteration over the children that follows
                     remaining := inner_size(node, layout_direction);
 
-                    EPSILON :: 0.001;
-                    approximately_equal :: (a: float, b: float) -> bool {
-                        return abs(a - b) < EPSILON;
-                    }
-
-
+                    // this grows the children of this node. we need to do three visits here:
+                    // 1) grow the children on the opposite axis of the layout direction (Style.direction)
+                    // 2) iteratively grow the children equally in the layout direciton
+                    // 3) iteratively shrink the children equally in the layout direction
                     child_index := node.first_child;
                     {
+                        //
+                        // === growing the children ===
+                        //
                         while child_index != -1 {
                             child := *node_tree[child_index];
                             defer child_index = child.next_sibling;
 
-                            {
-                                // grow the children on the opposite axis of the layout direction (Style.direction)
-                                child.min_size = min(child.min_size, child.max_size);
-                                child_opposite_margin := get(child.style.margin, opposite_direction);
+                            child.min_size = min(child.min_size, child.max_size);
 
+                            {
+                                //
+                                // == cross-axis growth ==
+                                //
+                                child_opposite_margin := get(child.style.margin, opposite_direction);
                                 available := get(node.size, opposite_direction) 
                                     - fitting_base(node, opposite_direction) 
                                     - child_opposite_margin.x - child_opposite_margin.y;
-
                                 preferred_size := get_preferred_size(child, opposite_direction);
                                 size := get(child.size, opposite_direction);
                                 min_size := get(child.min_size, opposite_direction);
@@ -2139,9 +2129,13 @@ layout :: (window: *Window) {
                         }
                     }
 
-                    // we shrink children so that nodes don't overflow the parent, but fit to the largest size possible that's bigger than
-                    // their minimum size
+
                     if remaining < -EPSILON {
+                        // 
+                        // === nodes shrinking ===
+                        //
+                        // we shrink children so that nodes don't overflow the parent, but fit to the largest size possible that's bigger than
+                        // their minimum size
                         array_reset_keeping_memory(*changing);
                         child_index = node.first_child;
                         while child_index != -1 {
@@ -2180,7 +2174,7 @@ layout :: (window: *Window) {
                                     largest - second_largest,
                                     -remaining / cast(float)changing.count,
                                 );
-                                if (to_subtract == 0) {
+                                if to_subtract == 0 {
                                     to_subtract = -remaining / cast(float)changing.count;
                                 }
                                 remaining_before_loop := remaining;
@@ -2201,27 +2195,13 @@ layout :: (window: *Window) {
                             }
                         }
                     }
-
-                    // TODO: revisit the need for this. I think this is both not as performant as it should be as well as
-                    // not as accurate as it should be.
-                    child_index = node.first_child;
-                    while child_index != -1 {
-                        child := *node_tree[child_index];
-                        if child.style.width.kind == .RATIO {
-                            child.size.x = child.size.y * child.style.width.ratio;
-                        }
-                        if child.style.height.kind == .RATIO {
-                            child.size.y = child.size.x * child.style.height.ratio;
-                        }
-                        child_index = child.next_sibling;
-                    }
                 }
             }
         }
 
         {
             //
-            // ==== wrapping and placement ====
+            // ==== wrapping glyphs ====
             //
             for <*node: node_tree {
                 base := Vector2.{
@@ -2230,7 +2210,6 @@ layout :: (window: *Window) {
                 };
 
                 if node.glyphs.array.count > 0 && node.style.text_wrapping != .NONE {
-                    // === wrap glyphs === 
                     using node.glyphs;
                     Line :: struct {
                         start: s64;
@@ -2367,14 +2346,241 @@ layout :: (window: *Window) {
                                 case .CENTER;
                                     glyph.position.x += (line_end - width) / 2.0;
                                 case .END;
-                                    glyph.position.x += line_end - width
+                                    glyph.position.x += line_end - width;
                             }
                         }
                     }
+                    pen.y + line_height;
 
                     node.size.y = cursor.y + line_height;
-                    if node.style.width.kind == .RATIO {
-                        node.size[0] = node.size[1] * node.style.width.ratio;
+                }
+            }
+        }
+
+        {
+            //
+            // ==== refitting heights ====
+            //
+            for <*node: node_tree {
+                if node.first_child != -1 && node.glyphs.array.count == 0 {
+                    if node.style.height.kind == .FIT {
+                        node.size.y = fitting_base(node, .VERTICAL);
+                    }
+                    if isnan(node.style.min_height) && node.style.height.kind != .FIXED {
+                        node.min_size.y = fitting_base(node, .VERTICAL);
+                    }
+                    child_index := node.first_child;
+                    while child_index != -1 {
+                        child := *node_tree[child_index];
+                        defer child_index = child.next_sibling;
+                        if child.style.placement.kind == .FLOW && (node.style.height.kind == .FIT || node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL)) {
+                            fit_child(node, child, .VERTICAL);
+                        }
+                    }
+                }
+            }
+        }
+
+        {
+            //
+            // ==== regrowing nodes veritcally ====
+            //
+            changing: [..]*Node;
+            for *node: node_tree {
+                if node.first_child != -1 && node.glyphs.array.count == 0 {
+                    array_reset_keeping_memory(*changing);
+                    layout_direction := node.style.direction;
+                    opposite_direction := opposite(layout_direction);
+                    // this value is only the initial one, it's modified during the iteration over the children that follows
+                    remaining := inner_size(node, layout_direction);
+
+                    // this grows the children of this node. we need to do three visits here:
+                    // 1) grow the children on the opposite axis of the layout direction (Style.direction)
+                    // 2) iteratively grow the children equally in the layout direciton
+                    // 3) iteratively shrink the children equally in the layout direction
+                    child_index := node.first_child;
+                    {
+                        //
+                        // === growing the children ===
+                        //
+                        while child_index != -1 {
+                            child := *node_tree[child_index];
+                            defer child_index = child.next_sibling;
+
+                            child.min_size = min(child.min_size, child.max_size);
+
+                            if opposite_direction == .VERTICAL {
+                                //
+                                // == cross-axis growth ==
+                                //
+                                child_opposite_margin := get(child.style.margin, opposite_direction);
+                                available := get(node.size, opposite_direction) 
+                                    - fitting_base(node, opposite_direction) 
+                                    - child_opposite_margin.x - child_opposite_margin.y;
+                                preferred_size := get_preferred_size(child, opposite_direction);
+                                size := get(child.size, opposite_direction);
+                                min_size := get(child.min_size, opposite_direction);
+                                max_size := get(child.max_size, opposite_direction);
+                                if preferred_size.kind == .GROW || 
+                                    (child.style.placement.kind == .FLOW && 
+                                    size > available && min_size < size) {
+                                    set(*child.size, opposite_direction, clamp(
+                                        available, min_size, max_size
+                                    ));
+                                }
+                            }
+
+                            if layout_direction == .VERTICAL {
+                                preferred_size := get_preferred_size(child, layout_direction);
+                                child_margin := get(child.style.margin, layout_direction);
+
+                                if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED) 
+                                    && preferred_size.kind == .GROW {
+                                    // growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
+                                    // siblings.
+                                    available := inner_size(node, layout_direction) - child_margin.x - child_margin.y;
+                                    set(*child.size, layout_direction, clamp(
+                                        available, 
+                                        get(child.min_size, layout_direction),
+                                        get(child.max_size, layout_direction),
+                                    ));
+                                } else if child.style.placement.kind == .FLOW {
+                                    if preferred_size.kind == .GROW && preferred_size.grow > 0.0 {
+                                        // we reset the size of the node to 0 so that the division is fair later
+                                        set(*child.size, layout_direction, 0);
+                                        if get(child.max_size, layout_direction) > 0 {
+                                            array_add(*changing, child);
+                                        }
+                                    }
+                                    remaining -= outer_size(child, layout_direction);
+                                }
+                            }
+                        }
+
+                        if layout_direction == .VERTICAL {
+                            child_index = node.first_child;
+                            // grow the children equally in the layout direciton
+                            while remaining > EPSILON && changing.count > 0 {
+                                total_factor: float = 0.0;
+                                max_to_add: float = FLOAT32_INFINITY;
+                                index: s64 = 0;
+                                while index < changing.count {
+                                    child := changing[index];
+                                    max_size := get(child.max_size, layout_direction);
+                                    size := get(child.size, layout_direction);
+                                    if approximately_equal(size, max_size) {
+                                        array_unordered_remove_by_index(*changing, index);
+                                        // since the remove moves another child over to this same index, we go to the next iteration with the same index 
+                                        continue;
+                                    }
+                                    preferred_size := get_preferred_size(child, layout_direction);
+                                    total_factor += preferred_size.grow;
+                                    max_to_add = min(max_to_add, (max_size - size) / preferred_size.grow);
+
+                                    index += 1;
+                                }
+
+                                if changing.count > 0 && total_factor > 0 {
+                                    to_add := min(max_to_add, remaining / total_factor);
+                                    if to_add > 0.0 {
+                                        remaining_before_loop := remaining;
+                                        for child: changing {
+                                            preferred_size := get_preferred_size(child, layout_direction);
+                                            size := get(child.size, layout_direction);
+                                            min_size := get(child.min_size, layout_direction);
+                                            max_size := get(child.max_size, layout_direction);
+                                            clamp_addendum := clamp(size + to_add * preferred_size.grow, min_size, max_size) - size;
+                                            add(*child.size, layout_direction, clamp_addendum);
+                                            remaining -= clamp_addendum;
+                                        }
+                                        if approximately_equal(remaining, remaining_before_loop) {
+                                            // this means there's a max size constraint that doesn't let more size be added to any of the children
+                                            break;
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                } else if total_factor == 0 {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    // TODO: should we shrink nodes here again? if we indeed decide to do this, the min sizes for
+                    // wrapped text should also change, otherwise this will reduce the wrapped text's height again after
+                    // it wrapped and increased.
+                }
+            }
+        }
+
+        {
+            //
+            // === placing nodes and justifying them in both directions ===
+            //
+            for *node: node_tree {
+                if it_index == 0 {
+                    if node.style.placement.kind == {
+                        case .FLOW;
+                            node.position = node.style.translate;
+                        case .FIXED;
+                            node.position = node.style.placement.fixed + node.style.translate;
+                        case .RELATIVE;
+                            node.position = node.style.placement.relative + node.style.translate;
+                    }
+                }
+                base := node.position + Vector2.{
+                    node.style.border_width.x.x + node.style.padding.x.x,
+                    node.style.border_width.y.x + node.style.padding.y.x,
+                };
+                if node.first_child != -1 {
+                    // TODO: when the direction is horizontal, we should also handle node overflow wrapping here.
+                    pen := base;
+                    direction := node.style.direction;
+                    opposite_direction := opposite(node.style.direction);
+
+                    child_index := node.first_child;
+                    while child_index != -1 {
+                        child := *node_tree[child_index];
+                        if child.style.placement.kind == {
+                            case .FIXED;
+                                child.position = child.style.placement.fixed + child.style.translate;
+                            case .RELATIVE;
+                                child.position = base + child.style.placement.relative + child.style.translate;
+                            case .FLOW;
+                                margin := get(child.style.margin, direction);
+                                add(pen, direction, margin.x);
+                                child.position = pen + child.style.translate + node.children_offset;
+                                add(pen, direction, get(child.size, direction) + get(margin.y));
+                        }
+                        child_index = child.next_sibling;
+                    }
+
+                    content_size := get(pen, direction) - get(base, direction);
+                    available := get(node.size, direction) - fitting_base(node, direction);
+                    justification := get_justification(node, direction);
+                    offset: f32;
+                    if justification == {
+                        case .CENTER;
+                            offset = (available - content_size) / 2.0;
+                        case .END;
+                            offset = available - content_size;
+                    };
+
+                    available_opposite := get(node.size, opposite_direction) - fitting_base(node, opposite_direction);
+                    justification_opposite := get_justification(node, opposite_direction);
+                    child_index = node.first_child;
+                    while child_index != -1 {
+                        child := *node_tree[child_index];
+                        if child.style.placement.kind == .FLOW {
+                            if justification_opposite == {
+                                case .CENTER;
+                                    add(child.position, opposite_direction, (available_opposite - get(child.size, opposite_direction)) / 2.0);
+                                case .END;
+                                    add(child.position, opposite_direction, available_opposite - get(child.size, opposite_direction));
+                            };
+                            add(child.position, direction, offset);
+                        }
+                        child_index = child.next_sibling;
                     }
                 }
             }

@@ -11,6 +11,9 @@
     - we should be using wayland's `frame` to render
 - [ ] draw rounded corners
 - [ ] draw in the z order
+- [ ] draw background images 
+    - I'm removing aspect ratio sizings and instead we should draw images by clipping them into the given node,
+      keeping its aspect ratio
 - [x] account for font weight on kbts as well 
 - [ ] we're using the single kbts_context which uses the font in the top of the stack
 - [ ] program just doesn't do anything if the atlas is full
