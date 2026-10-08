@@ -1335,13 +1335,13 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
     if node.style.width.kind == Sizing.Kind.FIT {
         node.size.x = fitting_base(node, Direction.HORIZONTAL);
     }
-    if node.style.width.kind != Sizing.Kind.FIXED && node.style.min_width == FLOAT32_NAN {
+    if node.style.width.kind != Sizing.Kind.FIXED && isnan(node.style.min_width) {
         node.min_size.x = fitting_base(node, Direction.HORIZONTAL);
     }
     if node.style.height.kind == Sizing.Kind.FIT {
         node.size.y = fitting_base(node, Direction.VERTICAL);
     }
-    if node.style.height.kind != Sizing.Kind.FIXED && node.style.min_height == FLOAT32_NAN {
+    if node.style.height.kind != Sizing.Kind.FIXED && isnan(node.style.min_height) {
         node.min_size.y = fitting_base(node, Direction.VERTICAL);
     }
     // if (isNodeActive()) {
@@ -2218,16 +2218,15 @@ layout :: () {
             // ==== wrapping glyphs ====
             //
             for <*node: node_tree {
+                rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
+                font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
                 base := Vector2.{
-                    node.style.border_width.x.x + node.style.padding.x.x,
-                    node.style.border_width.y.y + node.style.padding.y.y,
+                    (node.style.border_width.x.x + node.style.padding.x.x) / rounded_font_size,
+                    (node.style.border_width.y.x + node.style.padding.y.x) / rounded_font_size,
                 };
 
                 if node.glyphs.array.count > 0 && node.style.text_wrapping != .NONE {
                     using node.glyphs;
-
-                    rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
-                    font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
 
                     Line :: struct {
                         start: s64;
@@ -2257,7 +2256,7 @@ layout :: () {
                                     pen.y += line_height;
                                 }
 
-                                if pen.x + glyph.advance.x > line_end {
+                                if pen.x + glyph.advance.x > line_end && it_index > line_start_index {
                                     array_add(*lines, .{
                                         start = line_start_index,
                                         end = it_index - 1,
@@ -2273,12 +2272,9 @@ layout :: () {
                         case .WORD;
                             Space :: struct {
                                 index: s64 = -1;
-                                position: Vector2 = VECTOR2_NAN;
+                                position: Vector2;
                             }
                             last_space: Space;
-                            is_null :: inline (using space: Space) -> bool {
-                                return index == -1 && position == VECTOR2_NAN;
-                            }
                             for *glyph: array {
                                 while break_cursor < pre_break_indices.count && 
                                 pre_break_indices[break_cursor] == it_index {
@@ -2295,26 +2291,24 @@ layout :: () {
                                     last_space = Space.{};
                                 }
 
-                                if pen.x + glyph.advance.x > line_end {
-                                    if !is_null(last_space) {
-                                        first_word_glyph := array[last_space.index + 1];
-                                        array_add(*lines, Line.{
-                                            start = line_start_index,
-                                            end = last_space.index,
-                                        });
-                                        line_start_index = last_space.index + 1;
-                                        pen.x = 0.0;
-                                        pen.y += line_height;
+                                if pen.x + glyph.advance.x > line_end && last_space.index != -1 {
+                                    first_word_glyph := array[last_space.index + 1];
+                                    array_add(*lines, Line.{
+                                        start = line_start_index,
+                                        end = last_space.index,
+                                    });
+                                    line_start_index = last_space.index + 1;
+                                    pen.x = 0.0;
+                                    pen.y += line_height;
 
-                                        for reverse_index: (last_space.index + 1)..(it_index + 1) {
-                                            reverse_glyph := *array[reverse_index];
-                                            reverse_glyph.position.x -= first_word_glyph.position.x - base.x;
-                                            reverse_glyph.position.y += line_height;
+                                    for reverse_index: (last_space.index + 1)..(it_index - 1) {
+                                        reverse_glyph := *array[reverse_index];
+                                        reverse_glyph.position.x -= first_word_glyph.position.x - base.x;
+                                        reverse_glyph.position.y += line_height;
 
-                                            pen += reverse_glyph.advance;
-                                        }
-                                        last_space = Space.{};
+                                        pen += reverse_glyph.advance;
                                     }
+                                    last_space = Space.{};
                                 }
 
                                 glyph.position = base + pen + glyph.offset;
@@ -2738,6 +2732,10 @@ abs :: Math.abs;
 isnan :: Math.isnan;
 make_vector2 :: Math.make_vector2;
 make_vector4 :: Math.make_vector4;
+
+isnan :: (value: Vector2) -> bool {
+    return isnan(value.x) || isnan(value.y);
+}
 
 compile_shader :: (kind: GLenum, source: string) -> u32 {
     shader := glCreateShader(kind);
