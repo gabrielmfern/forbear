@@ -4,7 +4,7 @@
 - [x] support for text nodes
 - [x] implement macos-opengl backend
 - [x] get at least a proof-of-concept working for forbear from JSX
-- [ ] layout nodes
+- [x] layout nodes
 - [ ] do double buffering in wayland
 - [ ] fix error when screenshotting wayland program: ```could not send wayland message: 11```
 - [ ] fix wayland window rendering as fast as possible without any vsync
