@@ -1283,10 +1283,10 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
     previous_base_style := context.forbear.base_style;
     complete_with(style, context.forbear.base_style, *node.style);
     context.forbear.base_style = from(node.style);
-    if context.forbear.parent_index != -1 {
-        if style.z_index < U16_MAX {
-            node.z = style.z_index;
-        } else if parent.z < U16_MAX {
+    if style.z_index < U16_MAX {
+        node.z = style.z_index;
+    } else if context.forbear.parent_index != -1 {
+        if parent.z < U16_MAX {
             node.z = parent.z + 1;
         } else {
             node.z = parent.z;
@@ -1636,12 +1636,20 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
             set_weight(node.style.font, node.style.font_weight);
             set_font_size(node.style.font, rounded_font_size);
             node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
-
             font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
             node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
             node.min_size = node.glyphs.min_size * font_units_to_point;
             node.max_size = node.glyphs.max_size * font_units_to_point;
-        }, manual_key = manual_key);
+
+            if node.parent != -1 {
+                parent := context.forbear.node_tree[node.parent];
+                if parent.style.cursor == .DEFAULT {
+                    node.style.cursor = .TEXT;
+                }
+                node.style.x_justification = parent.style.x_justification;
+                node.style.y_justification = parent.style.y_justification;
+            }
+        }, manual_key);
     }
 }
 text :: (content: string, location := #caller_location) {

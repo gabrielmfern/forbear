@@ -400,6 +400,7 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
 
         using opening := open_element(style, key);
 
+        // TODO: find out how to not have this code here duplicated with the one on for `text`
         rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
         font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
         set_weight(node.style.font, node.style.font_weight);
@@ -409,6 +410,14 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
         node.min_size = node.glyphs.min_size * font_units_to_point;
         node.max_size = node.glyphs.max_size * font_units_to_point;
 
+        if node.parent != -1 {
+            parent := context.forbear.node_tree[node.parent];
+            if parent.style.cursor == .DEFAULT {
+                node.style.cursor = .TEXT;
+            }
+            node.style.x_justification = parent.style.x_justification;
+            node.style.y_justification = parent.style.y_justification;
+        }
         close_element(opening);
     }
 }
