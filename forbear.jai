@@ -1633,7 +1633,7 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
             node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
 
             font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
-            node.size = node.glyphs.max_size * font_units_to_point;
+            node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
             node.min_size = node.glyphs.min_size * font_units_to_point;
             node.max_size = node.glyphs.max_size * font_units_to_point;
         }, manual_key = manual_key);
@@ -2220,17 +2220,18 @@ layout :: () {
 
                 if node.glyphs.array.count > 0 && node.style.text_wrapping != .NONE {
                     using node.glyphs;
+
+                    rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
+                    font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
+
                     Line :: struct {
                         start: s64;
                         end: s64;
                     }
                     lines: [..]Line;
-                    line_end := node.size.x - fitting_base(node, .HORIZONTAL);
+                    line_end := (node.size.x - fitting_base(node, .HORIZONTAL)) / font_units_to_point;
                     pen: Vector2;
                     line_start_index: s64 = 0;
-
-                    rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
-                    font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
 
                     break_cursor: s64 = 0;
 
@@ -2251,7 +2252,7 @@ layout :: () {
                                     pen.y += line_height;
                                 }
 
-                                if (pen.x + glyph.advance.x) * font_units_to_point > line_end {
+                                if pen.x + glyph.advance.x > line_end {
                                     array_add(*lines, .{
                                         start = line_start_index,
                                         end = it_index - 1,
@@ -2289,7 +2290,7 @@ layout :: () {
                                     last_space = Space.{};
                                 }
 
-                                if (pen.x + glyph.advance.x) * font_units_to_point > line_end {
+                                if pen.x + glyph.advance.x > line_end {
                                     if !is_null(last_space) {
                                         first_word_glyph := array[last_space.index + 1];
                                         array_add(*lines, Line.{
@@ -2298,14 +2299,14 @@ layout :: () {
                                         });
                                         line_start_index = last_space.index + 1;
                                         pen.x = 0.0;
-                                        pen.y += line_height * font_units_to_point;
+                                        pen.y += line_height;
 
                                         for reverse_index: (last_space.index + 1)..(it_index + 1) {
                                             reverse_glyph := *array[reverse_index];
-                                            reverse_glyph.position.x -= first_word_glyph.position.x * font_units_to_point - base.x;
-                                            reverse_glyph.position.y += line_height * font_units_to_point;
+                                            reverse_glyph.position.x -= first_word_glyph.position.x - base.x;
+                                            reverse_glyph.position.y += line_height;
 
-                                            pen += reverse_glyph.advance * font_units_to_point;
+                                            pen += reverse_glyph.advance;
                                         }
                                         last_space = Space.{};
                                     }
@@ -2347,7 +2348,7 @@ layout :: () {
                         start_x := array[line.start].position.x;
                         end_x := array[line.end].position.x + array[line.end].advance.x;
 
-                        width := (end_x - start_x) * font_units_to_point;
+                        width := end_x - start_x;
                         line_glyphs := array_view(array, line.start, line.end + 1);
                         for *glyph: line_glyphs {
                             if node.style.x_justification == {
@@ -2359,16 +2360,14 @@ layout :: () {
                             }
                         }
                     }
-                    pen.y + line_height;
-
-                    node.size.y = pen.y + line_height;
+                    node.size.y = (pen.y + line_height) * font_units_to_point;
                 }
             }
         }
 
         {
             //
-            // ==== refitting heights ====
+            // ==== refit heights ====
             //
             for <*node: node_tree {
                 if node.first_child != -1 && node.glyphs.array.count == 0 {
