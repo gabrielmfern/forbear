@@ -1247,7 +1247,7 @@ append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointe
         tree = node_tree,
     };
     if parent_index != -1 {
-        parent := node_tree.*[parent_index];
+        parent := *node_tree.*[parent_index];
         if parent.last_child != -1 {
             node_tree.*[parent.last_child].next_sibling = index;
         }
