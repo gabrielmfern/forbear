@@ -40,27 +40,39 @@ main :: () {
         }
 
         element(Style.{ 
-            // width = fixed(500),
-            // height = fixed(500),
             padding = block(in_line(50), 30),
             background = color(rgb(255, 0, 255)),
+            y_justification = .CENTER,
         }, #code {
+            text("root node");
             element(Style.{
                 width = fixed(60),
                 height = fixed(75),
-                margin = in_line(50),
+                margin = left(50),
                 background = color(rgb(0, 0, 255)),
+                x_justification = .CENTER,
+                y_justification = .CENTER,
+            }, #code {
+                text("first node");
             });
             element(Style.{
                 width = fixed(60),
                 height = fixed(75),
                 background = color(rgb(0, 255, 0)),
+                x_justification = .CENTER,
+                y_justification = .CENTER,
+            }, #code {
+                text("second node");
             });
             element(Style.{
                 width = fixed(60),
                 height = fixed(75),
-                margin = in_line(50),
+                margin = right(50),
                 background = color(rgb(255, 0, 0)),
+                x_justification = .CENTER,
+                y_justification = .CENTER,
+            }, #code {
+                text("third node");
             });
             text("hello lisa");
         });
