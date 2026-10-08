@@ -14,6 +14,11 @@ Math :: #import "Math";
     #load "bindings-darwin.jai";
 }
 
+#module_parameters(JAVASCRIPT_ADAPTER := false);
+#if JAVASCRIPT_ADAPTER == true {
+    #load "./adapters/javascript.jai";
+}
+
 #if OS == .LINUX {
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;

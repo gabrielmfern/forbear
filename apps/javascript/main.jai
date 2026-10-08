@@ -1,7 +1,6 @@
 #import "Basic";
 #import "File";
-#import,file "../../forbear.jai";
-#load "../../adapters/javascript.jai";
+#import,file "../../forbear.jai"(JAVASCRIPT_ADAPTER = true);
 
 #run {
     #import "Process";
@@ -27,7 +26,7 @@ main :: () {
     init_font(*inter, INTER_TTF);
 
     forbear: Forbear;
-    init_forbear(*forbear, *backend, Base_Style.{
+    init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *inter,
     });
 
@@ -47,7 +46,8 @@ main :: () {
         }
 
         render_with_javascript_adapter(*javascript_adapter);
-        draw_and_reset_node_tree(*window, rgb(0.0, 0.0, 0.0));
+        layout();
+        draw_and_reset_node_tree(rgb(0.0, 0.0, 0.0));
         reset_temporary_storage();
     }
 }

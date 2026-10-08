@@ -1,7 +1,3 @@
-#import "Basic";
-#import "Hash";
-U64_MAX: u64 : 0xffff_ffff_ffff_ffff;
-
 #run {
     #import "File";
     #import "File_Utilities";
@@ -296,8 +292,6 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
             result.width.kind = .FIT;
         } else if array_count == 2 && value == "fixed" && javascript_style_get_array_number(adapter.runtime, js_style_object, .WIDTH, 1, *number) {
             result.width = fixed(cast(float) number);
-        } else if array_count == 2 && value == "ratio" && javascript_style_get_array_number(adapter.runtime, js_style_object, .WIDTH, 1, *number) {
-            result.width = ratio(cast(float) number);
         } else if array_count == 2 && value == "grow" && javascript_style_get_array_number(adapter.runtime, js_style_object, .WIDTH, 1, *number) {
             result.width = grow(cast(float) number);
         }
@@ -311,8 +305,6 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
             result.height.kind = .FIT;
         } else if array_count == 2 && value == "fixed" && javascript_style_get_array_number(adapter.runtime, js_style_object, .HEIGHT, 1, *number) {
             result.height = fixed(cast(float) number);
-        } else if array_count == 2 && value == "ratio" && javascript_style_get_array_number(adapter.runtime, js_style_object, .HEIGHT, 1, *number) {
-            result.height = ratio(cast(float) number);
         } else if array_count == 2 && value == "grow" && javascript_style_get_array_number(adapter.runtime, js_style_object, .HEIGHT, 1, *number) {
             result.height = grow(cast(float) number);
         }
@@ -404,15 +396,19 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
             key = fnv1a_hash(cast(u64) context.forbear.parent_index, key);
         }
         style := style_from(adapter, js_style_object);
-        opening := open_element(style, key);
+
+
+        using opening := open_element(style, key);
+
         rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
         font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
-        set_weight(opening.node.style.font, opening.node.style.font_weight);
-        set_font_size(opening.node.style.font, rounded_font_size);
-        opening.node.glyphs = shape_text(opening.node.style.font, opening.node.style.text_wrapping, content);
-        opening.node.size = opening.node.glyphs.max_size * font_units_to_point;
-        opening.node.min_size = opening.node.glyphs.min_size * font_units_to_point;
-        opening.node.max_size = node.glyphs.max_size * font_units_to_point;
+        set_weight(node.style.font, node.style.font_weight);
+        set_font_size(node.style.font, rounded_font_size);
+        node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
+        node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
+        node.min_size = node.glyphs.min_size * font_units_to_point;
+        node.max_size = node.glyphs.max_size * font_units_to_point;
+
         close_element(opening);
     }
 }
