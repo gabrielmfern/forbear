@@ -246,7 +246,7 @@ Math :: #import "Math";
 
     // TODO(depessimization): we should be buffering the messages and flushing them instead of sending them all one by one
     writing_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
-    send_wayland_message :: (connection: *Wayland_Connection, object_id: u32, message: $T) -> bool {
+    send_wayland_message :: (connection: *Wayland_Connection, object_id: u32, message: $T) {
         bytes := array_view(writing_buffer, 0, size_of(Wayland_Message_header));
 
         m := message;
@@ -335,7 +335,7 @@ Math :: #import "Math";
         }
         memset(writing_buffer.data, 0, bytes.count);
 
-        return result == bytes.count;
+        assert(result == bytes.count, "incomplete message was sent. something went wrong");
     }
 
     parsing_buffer : [MAX_MESSAGE_STRUCT_SIZE]u8;
@@ -405,8 +405,11 @@ Math :: #import "Math";
         xdg_toplevel_id: u32;
 
         width: s32;
-        texture_width: s32;
         height: s32;
+        // these texture width and height are here because we have the frame images allocated to be the largest size the
+        // window was ever at, but we only render to the current window size. this way we can avoid texture allocations,
+        // and it also makes double buffering simpler.
+        texture_width: s32;
         texture_height: s32;
         // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
         scale: float64 = 1;
@@ -435,8 +438,6 @@ Math :: #import "Math";
         send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Title.{ title = title });
         send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
 
-        glGenTextures(1, *window.texture);
-
         glGenFramebuffers(1, *window.fbo);
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
         glFramebufferParameteri(GL_FRAMEBUFFER, GL_FRAMEBUFFER_FLIP_Y_MESA, xx GL_TRUE);
@@ -458,7 +459,7 @@ Math :: #import "Math";
                 configure := cast(*Xdg_Surface_Event_Configure) data;
                 send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
 
-                if window.egl_image == null || window.width * window.height != window.texture_width * window.texture_height {
+                if window.texture_width < window.width || window.texture_height < window.height {
                     if window.egl_image != null {
                         if eglDestroyImage(context.forbear.backend.egl_display, window.egl_image) != 1 {
                             log_error("failed to destroy previous egl image: %\n", eglGetError());
@@ -476,9 +477,9 @@ Math :: #import "Math";
 
                     glGenTextures(1, *window.texture);
                     glBindTexture(GL_TEXTURE_2D, window.texture);
-                    window.texture_width = window.width;
-                    window.texture_height = window.height;
-                    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_RGBA8, xx window.width, xx window.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+                    window.texture_width = max(window.width, window.texture_width);
+                    window.texture_height = max(window.height, window.texture_height);
+                    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_RGBA8, xx window.texture_width, xx window.texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
                     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
                     glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
