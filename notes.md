@@ -9,7 +9,10 @@
 - [x] fix wayland window rendering as fast as possible without any vsync
     - we should be using wayland's `frame` to render
 - [x] do double buffering in wayland
-- [ ] support for components
+- [ ] implement event handling
+    - [ ] keyboard input
+    - [ ] mouse input
+- [ ] build a calculator through the jsx adapter 
 - [ ] handle wayland topbars protocol (this doesn't address gnome unfortunately)
 - [ ] draw rounded corners
 - [ ] draw in the z order
@@ -18,6 +21,7 @@
       keeping its aspect ratio
 - [x] account for font weight on kbts as well 
 - [ ] we're using the single kbts_context which uses the font in the top of the stack
+- [ ] support for components
 - [ ] program just doesn't do anything if the atlas is full
 - [ ] glyphs are sitting on fractional pixels on the texture atlas
 - [ ] subpixel text rendering
@@ -29,7 +33,6 @@
 - [ ] a macos program without a menu bar is a horrible experience (ex: cmd+q doesn't work)
     - how can we do this in a cross platform manner? perhaps a component that makes changes to the window to render the menu items?
 - [ ] windows backend
-- [ ] build a calculator through the jsx adapter 
 
 ## introspection 
 
