@@ -5,8 +5,8 @@
 - [x] implement macos-opengl backend
 - [x] get at least a proof-of-concept working for forbear from JSX
 - [x] layout nodes
+- [x] fix error when screenshotting wayland program: ```could not send wayland message: 11```
 - [ ] do double buffering in wayland
-- [ ] fix error when screenshotting wayland program: ```could not send wayland message: 11```
 - [ ] fix wayland window rendering as fast as possible without any vsync
     - we should be using wayland's `frame` to render
 - [ ] handle wayland topbars protocol (this doesn't address gnome unfortunately)

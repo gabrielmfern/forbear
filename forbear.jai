@@ -55,7 +55,7 @@ Math :: #import "Math";
     };
 
     init_wayland_connection :: (connection: *Wayland_Connection) {
-        connection.fd = socket(AF_UNIX, SOCK.STREAM | SOCK.NONBLOCK, 0);
+        connection.fd = socket(AF_UNIX, SOCK.STREAM, 0);
         connection.polling_fd = pollfd.{ fd = connection.fd, events = POLLIN };
 
         runtime_directory := to_string(getenv("XDG_RUNTIME_DIR"));
@@ -196,10 +196,11 @@ Math :: #import "Math";
             leftover := connection.pending_reads.count;
             // move the leftover to the start of the buffer
             copy(connection.reading_buffer.data, connection.pending_reads.data, leftover);
-            result := read(
+            result := recv(
                 connection.fd,
                 cast(*void) (connection.reading_buffer.data + leftover),
-                xx (connection.reading_buffer.count - leftover)
+                xx (connection.reading_buffer.count - leftover),
+                .DONTWAIT
             );
             if result == 0 {
                 log_error("compositor closed the connection");
