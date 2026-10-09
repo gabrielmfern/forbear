@@ -14,6 +14,14 @@ Math :: #import "Math";
     #load "bindings-darwin.jai";
 }
 
+Vector2 :: Math.Vector2;
+Vector4 :: Math.Vector4;
+operator + :: Math.operator +;
+operator - :: Math.operator -;
+operator * :: Math.operator *;
+operator / :: Math.operator /;
+operator == :: Math.operator ==;
+
 #module_parameters(JAVASCRIPT_ADAPTER := false);
 #if JAVASCRIPT_ADAPTER == true {
     #load "./adapters/javascript.jai";
@@ -412,7 +420,6 @@ Math :: #import "Math";
 
     Wayland_EGL_Window :: struct {
         wl_surface_id: u32;
-        wl_buffer_id: u32;
         wl_buffer_params_id: u32;
         wl_frame_callback_id: u32;
 
@@ -425,13 +432,19 @@ Math :: #import "Math";
         // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
         scale: float64 = 1.0;
 
-        egl_image: EGLImage;
-        gbm_buffer_object: *gbm_bo;
-        texture: GLuint;
-        fbo: GLuint;
+        buffers: [2]Wayland_EGL_Buffer;
+        current: s64;
 
         waiting_for_vblank: bool;
         running := true;
+    };
+    Wayland_EGL_Buffer :: struct {
+        wl_buffer_id: u32;
+        gbm_buffer_object: *gbm_bo;
+        egl_image: EGLImage;
+        texture: GLuint;
+        fbo: GLuint;
+        busy: bool;
     };
     init_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
         window.width = width;
@@ -446,110 +459,112 @@ Math :: #import "Math";
         send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Title.{ title = title });
         send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
 
-        glGenTextures(1, *window.texture);
-
-        glGenFramebuffers(1, *window.fbo);
-        glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
-        glFramebufferParameteri(GL_FRAMEBUFFER, GL_FRAMEBUFFER_FLIP_Y_MESA, xx GL_TRUE);
+        for *buffer: window.buffers { 
+            glGenTextures(1, *buffer.texture);
+            glGenFramebuffers(1, *buffer.fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, buffer.fbo);
+            glFramebufferParameteri(GL_FRAMEBUFFER, GL_FRAMEBUFFER_FLIP_Y_MESA, xx GL_TRUE);
+        }
     }
     can_draw :: (window: Wayland_EGL_Window) -> bool {
-        return !window.waiting_for_vblank && window.wl_buffer_id != 0;
+        return !window.waiting_for_vblank && window.buffers[window.current].wl_buffer_id != 0 && !window.buffers[window.current].busy;
     }
     update_window :: (backend: *Backend, window: *Wayland_EGL_Window, event: Wayland_Event) {
         if event.object_id == window.xdg_surface_id && event.message.type == Xdg_Surface_Event_Configure {
             configure := cast(*Xdg_Surface_Event_Configure) event.data;
             send_wayland_message(*backend.connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
 
-            should_create_buffer := window.gbm_buffer_object == null || 
-                                    gbm_bo_get_width(window.gbm_buffer_object) != xx window.width || 
-                                    gbm_bo_get_height(window.gbm_buffer_object) != xx window.height;
+            for *buffer: window.buffers {
+                should_create_buffer := buffer.gbm_buffer_object == null || 
+                                        gbm_bo_get_width(buffer.gbm_buffer_object) != xx window.width || 
+                                        gbm_bo_get_height(buffer.gbm_buffer_object) != xx window.height;
 
-            fd, offset, stride, modifier_lo, modifier_hi: s64;
-            if should_create_buffer {
-                if window.egl_image != null {
-                    if eglDestroyImage(context.forbear.backend.egl_display, window.egl_image) != 1 {
-                        log_error("failed to destroy previous egl image: %\n", eglGetError());
+                if should_create_buffer {
+                    if buffer.egl_image != null {
+                        if eglDestroyImage(context.forbear.backend.egl_display, buffer.egl_image) != 1 {
+                            log_error("failed to destroy previous egl image: %\n", eglGetError());
+                            exit(-1);
+                        }
+                    }
+                    if buffer.gbm_buffer_object != null {
+                        gbm_bo_destroy(buffer.gbm_buffer_object);
+                    }
+
+                    buffer.gbm_buffer_object = gbm_bo_create_with_modifiers2(
+                        backend.device, xx window.width, xx window.height, 
+                        GBM_FORMAT_ABGR8888, backend.dmabuf_modifiers.data, 
+                        xx backend.dmabuf_modifiers.count, xx gbm_bo_flags.USE_RENDERING
+                    );
+                    if buffer.gbm_buffer_object == null {
+                        log_error("failed to create gbm buffer object\n");
                         exit(-1);
                     }
+
+                    fd, offset, stride, modifier_lo, modifier_hi: s64;
+                    modifier    := gbm_bo_get_modifier(buffer.gbm_buffer_object);
+                    plane_count := gbm_bo_get_plane_count(buffer.gbm_buffer_object);
+                    assert(plane_count == 1, "expecting the buffer to have only one plane");
+                    modifier_lo = xx (modifier & 0xFFFFFFFF);
+                    modifier_hi = xx (modifier >> 32);
+                    fd          = xx gbm_bo_get_fd_for_plane(buffer.gbm_buffer_object, 0);
+                    defer close(xx fd);
+                    offset      = xx gbm_bo_get_offset(buffer.gbm_buffer_object, 0);
+                    stride      = xx gbm_bo_get_stride_for_plane(buffer.gbm_buffer_object, 0);
+
+                    attributes := EGLAttrib.[
+                        EGL_WIDTH,                          xx window.width, 
+                        EGL_HEIGHT,                         xx window.height, 
+                        EGL_LINUX_DRM_FOURCC_EXT,           GBM_FORMAT_ABGR8888,
+                        EGL_DMA_BUF_PLANE0_FD_EXT,          fd, 
+                        EGL_DMA_BUF_PLANE0_OFFSET_EXT,      offset, 
+                        EGL_DMA_BUF_PLANE0_PITCH_EXT,       stride,
+                        EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, modifier_lo, 
+                        EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, modifier_hi,
+                        EGL_NONE,
+                    ];
+                    buffer.egl_image = eglCreateImage(context.forbear.backend.egl_display, null, EGL_LINUX_DMA_BUF_EXT, null, attributes.data);
+                    if buffer.egl_image == null {
+                        log_error("failed to create frame buffer: %\n", eglGetError());
+                        exit(-1);
+                    }
+
+                    glBindTexture(GL_TEXTURE_2D, buffer.texture);
+                    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, buffer.egl_image);
+                    glBindFramebuffer(GL_FRAMEBUFFER, buffer.fbo);
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, buffer.texture, 0);
+                    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+                    window.wl_buffer_params_id = new_wayland_client_object(*backend.connection, Interface_Id.ZWP_LINUX_BUFFER_PARAMS_V1);
+
+                    send_wayland_message(*backend.connection, backend.connection.zwp_dmabuf_id, Zwp_Linux_Dmabuf_V1_Request_Create_Params.{
+                        params_id = window.wl_buffer_params_id,
+                    });
+                    send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Add.{
+                        fd          = xx fd,
+                        plane_idx   = 0,
+                        offset      = xx offset,
+                        stride      = xx stride,
+                        modifier_lo = xx modifier_lo, 
+                        modifier_hi = xx modifier_hi,
+                    });
+
+                    previous_buffer_id := buffer.wl_buffer_id;
+                    buffer.wl_buffer_id = new_wayland_client_object(*backend.connection, Interface_Id.WL_BUFFER);
+                    buffer.busy = false;
+                    send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Create_Immed.{
+                        buffer_id = buffer.wl_buffer_id,
+                        width     = window.width,
+                        height    = window.height,
+                        format    = GBM_FORMAT_ABGR8888,
+                        flags     = 0,
+                    });
+
+                    send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
+                    window.wl_buffer_params_id = 0;
+
+                    if previous_buffer_id != 0 {
+                        send_wayland_message(*backend.connection, previous_buffer_id, Wl_Buffer_Request_Destroy.{});
+                    }
                 }
-                if window.gbm_buffer_object != null {
-                    gbm_bo_destroy(window.gbm_buffer_object);
-                }
-
-                window.gbm_buffer_object = gbm_bo_create_with_modifiers2(
-                    backend.device, xx window.width, xx window.height, 
-                    GBM_FORMAT_ABGR8888, backend.dmabuf_modifiers.data, 
-                    xx backend.dmabuf_modifiers.count, xx gbm_bo_flags.USE_RENDERING
-                );
-                if window.gbm_buffer_object == null {
-                    log_error("failed to create gbm buffer object\n");
-                    exit(-1);
-                }
-            }
-
-            modifier    := gbm_bo_get_modifier(window.gbm_buffer_object);
-            plane_count := gbm_bo_get_plane_count(window.gbm_buffer_object);
-            assert(plane_count == 1, "expecting the buffer to have only one plane");
-            modifier_lo = xx (modifier & 0xFFFFFFFF);
-            modifier_hi = xx (modifier >> 32);
-            fd          = xx gbm_bo_get_fd_for_plane(window.gbm_buffer_object, 0);
-            defer close(xx fd);
-            offset      = xx gbm_bo_get_offset(window.gbm_buffer_object, 0);
-            stride      = xx gbm_bo_get_stride_for_plane(window.gbm_buffer_object, 0);
-
-            if should_create_buffer {
-                attributes := EGLAttrib.[
-                    EGL_WIDTH,                          xx window.width, 
-                    EGL_HEIGHT,                         xx window.height, 
-                    EGL_LINUX_DRM_FOURCC_EXT,           GBM_FORMAT_ABGR8888,
-                    EGL_DMA_BUF_PLANE0_FD_EXT,          fd, 
-                    EGL_DMA_BUF_PLANE0_OFFSET_EXT,      offset, 
-                    EGL_DMA_BUF_PLANE0_PITCH_EXT,       stride,
-                    EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, modifier_lo, 
-                    EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, modifier_hi,
-                    EGL_NONE,
-                ];
-                window.egl_image = eglCreateImage(context.forbear.backend.egl_display, null, EGL_LINUX_DMA_BUF_EXT, null, attributes.data);
-                if window.egl_image == null {
-                    log_error("failed to create frame buffer: %\n", eglGetError());
-                    exit(-1);
-                }
-
-                glBindTexture(GL_TEXTURE_2D, window.texture);
-                glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, window.egl_image);
-                glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
-                assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
-            }
-
-            window.wl_buffer_params_id = new_wayland_client_object(*backend.connection, Interface_Id.ZWP_LINUX_BUFFER_PARAMS_V1);
-            send_wayland_message(*backend.connection, backend.connection.zwp_dmabuf_id, Zwp_Linux_Dmabuf_V1_Request_Create_Params.{
-                params_id = window.wl_buffer_params_id,
-            });
-            send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Add.{
-                fd          = xx fd,
-                plane_idx   = 0,
-                offset      = xx offset,
-                stride      = xx stride,
-                modifier_lo = xx modifier_lo, 
-                modifier_hi = xx modifier_hi,
-            });
-
-            previous_buffer_id := window.wl_buffer_id;
-            window.wl_buffer_id = new_wayland_client_object(*backend.connection, Interface_Id.WL_BUFFER);
-            send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Create_Immed.{
-                buffer_id = window.wl_buffer_id,
-                width     = window.width,
-                height    = window.height,
-                format    = GBM_FORMAT_ABGR8888,
-                flags     = 0,
-            });
-
-            send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
-            window.wl_buffer_params_id = 0;
-
-            if previous_buffer_id != 0 {
-                send_wayland_message(*backend.connection, previous_buffer_id, Wl_Buffer_Request_Destroy.{});
             }
         } else if event.object_id == window.xdg_toplevel_id {
             if event.message.type == {
@@ -575,6 +590,12 @@ Math :: #import "Math";
             log_error("compositor failed to import the dmabuf (%x%)", window.width, window.height);
             exit(-1);
         }
+
+        for *buffer: window.buffers {
+            if event.object_id == buffer.wl_buffer_id && event.message.type == Wl_Buffer_Event_Release {
+                buffer.busy = false;
+            }
+        }
     }
 
     Atlas_Entry :: struct {
@@ -582,7 +603,6 @@ Math :: #import "Math";
         uv_max: Vector2;
     };
 
-    // TOOD: we still need to add double buffering and proper vsync to the EGL wayland backend here
     Wayland_EGL_Backend :: struct {
         egl_display: EGLDisplay;
         egl_context: EGLContext;
@@ -813,7 +833,7 @@ fit :: () -> Sizing {
 fixed :: (value: float) -> Sizing {
     return Sizing.{ kind = .FIXED, fixed = value };
 }
-grow :: (value: float) -> Sizing {
+grow :: (value := 1.0) -> Sizing {
     return Sizing.{ kind = .GROW, grow = value };
 }
 
@@ -1283,6 +1303,10 @@ should_fit_min :: (node: *Node, direction: Direction) -> bool #expand {
     } else {
         return isnan(node.style.min_height) && node.style.height.kind != .FIXED;
     }
+}
+clamp :: (v: *Vector2, a: Vector2, b: Vector2) #expand {
+    v.x = clamp(v.x, a.x, b.x);
+    v.y = clamp(v.y, a.y, b.y);
 }
 add :: (vector: *Vector2, direction: Direction, increment: float) #expand {
     if direction == Direction.HORIZONTAL {
@@ -2039,7 +2063,6 @@ layout :: () {
 
             if node.style.direction == fit_direction {
                 if preferred_size.kind == .FIT {
-                    // TODO: ensure the max and min sizes here
                     add(*node.size, fit_direction, child_size_contribution);
                 } else if preferred_size.kind == .GROW {
                     // TODO: ensure the max and min sizes here
@@ -2104,6 +2127,7 @@ layout :: () {
                             fit_child(node, child, .VERTICAL);
                         }
                     }
+                    clamp(*node.size, node.min_size, node.max_size);
                 }
             }
         }
@@ -2692,7 +2716,7 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
     push_allocator(frame_allocator);
     #if OS == .LINUX {
-        glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, window.buffers[window.current].fbo);
     } else #if OS == .MACOS {
         if backend.attached_view != window.view {
             NSOpenGLContext.setView(backend.gl_context, window.view);
@@ -2791,16 +2815,18 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx glyph_instances.count);
 
     #if OS == .LINUX {
-        glFinish();
+        glFlush();
 
-        send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
+        send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.buffers[window.current].wl_buffer_id, x = 0, y = 0 });
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Damage_Buffer.{ x = 0, y = 0, width = window.width, height = window.height });
         window.wl_frame_callback_id = new_wayland_client_object(*backend.connection, .WL_CALLBACK);
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Frame.{
             callback = window.wl_frame_callback_id,
         });
         window.waiting_for_vblank = true;
+        window.buffers[window.current].busy = true;
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
+        window.current = (window.current + 1) % 2;
     } else #if OS == .MACOS {
         NSOpenGLContext.flushBuffer(backend.gl_context);
     }
@@ -2811,15 +2837,8 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 
 #scope_module
 
-Vector2 :: Math.Vector2;
-Vector4 :: Math.Vector4;
 min :: Math.min;
 max :: Math.max;
-operator + :: Math.operator +;
-operator - :: Math.operator -;
-operator * :: Math.operator *;
-operator / :: Math.operator /;
-operator == :: Math.operator ==;
 FLOAT32_NAN :: Math.FLOAT32_NAN;
 FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
 U16_MAX :: Math.U16_MAX;
