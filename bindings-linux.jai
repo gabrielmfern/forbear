@@ -1343,6 +1343,377 @@ libegl :: #library,system "libEGL";
 
 
 
+__GBM__ :: 1;
+
+GBM_FORMAT_BIG_ENDIAN :: 1<<31;
+
+GBM_BO_IMPORT_WL_BUFFER :: 0x5501;
+GBM_BO_IMPORT_EGL_IMAGE :: 0x5502;
+GBM_BO_IMPORT_FD :: 0x5503;
+GBM_BO_IMPORT_FD_MODIFIER :: 0x5504;
+
+GBM_MAX_PLANES :: 4;
+
+/**
+* \file gbm.h
+* \brief Generic Buffer Manager
+*/
+gbm_device :: struct {}
+gbm_bo :: struct {}
+gbm_surface :: struct {}
+
+/**
+* Abstraction representing the handle to a buffer allocated by the
+* manager
+*/
+gbm_bo_handle :: struct {
+    ptr: *void;
+
+    #overlay (ptr) _s32: s32;
+    #overlay (ptr) _u32: u32;
+    #overlay (ptr) _s64: s64;
+    #overlay (ptr) _u64: u64;
+}
+
+/** Format of the allocated buffer */
+gbm_bo_format :: enum u32 {
+    XRGB8888 :: 0;
+
+    ARGB8888 :: 1;
+
+    GBM_BO_FORMAT_XRGB8888 :: XRGB8888;
+
+    GBM_BO_FORMAT_ARGB8888 :: ARGB8888;
+}
+
+gbm_format_name_desc :: struct {
+    name: [5] u8;
+}
+
+/**
+* Flags to indicate the intended use for the buffer - these are passed into
+* gbm_bo_create(). The caller must set the union of all the flags that are
+* appropriate
+*
+* \sa Use gbm_device_is_format_supported() to check if the combination of format
+* and use flags are supported
+*/
+gbm_bo_flags :: enum u32 {
+    USE_SCANOUT               :: 1;
+
+    USE_CURSOR                :: 2;
+
+    USE_CURSOR_64X64          :: 2;
+
+    USE_RENDERING             :: 4;
+
+    USE_WRITE                 :: 8;
+
+    USE_LINEAR                :: 16;
+
+    USE_PROTECTED             :: 32;
+
+    USE_FRONT_RENDERING       :: 64;
+
+    FIXED_COMPRESSION_DEFAULT :: 128;
+
+    FIXED_COMPRESSION_1BPC    :: 256;
+
+    FIXED_COMPRESSION_2BPC    :: 384;
+
+    FIXED_COMPRESSION_3BPC    :: 512;
+
+    FIXED_COMPRESSION_4BPC    :: 640;
+
+    FIXED_COMPRESSION_5BPC    :: 768;
+
+    FIXED_COMPRESSION_6BPC    :: 896;
+
+    FIXED_COMPRESSION_7BPC    :: 1024;
+
+    FIXED_COMPRESSION_8BPC    :: 1152;
+
+    FIXED_COMPRESSION_9BPC    :: 1280;
+
+    FIXED_COMPRESSION_10BPC   :: 1408;
+
+    FIXED_COMPRESSION_11BPC   :: 1536;
+
+    FIXED_COMPRESSION_12BPC   :: 1664;
+
+    GBM_BO_USE_SCANOUT               :: USE_SCANOUT;
+
+    GBM_BO_USE_CURSOR                :: USE_CURSOR;
+
+    GBM_BO_USE_CURSOR_64X64          :: USE_CURSOR_64X64;
+
+    GBM_BO_USE_RENDERING             :: USE_RENDERING;
+
+    GBM_BO_USE_WRITE                 :: USE_WRITE;
+
+    GBM_BO_USE_LINEAR                :: USE_LINEAR;
+
+    GBM_BO_USE_PROTECTED             :: USE_PROTECTED;
+
+    GBM_BO_USE_FRONT_RENDERING       :: USE_FRONT_RENDERING;
+
+    GBM_BO_FIXED_COMPRESSION_DEFAULT :: FIXED_COMPRESSION_DEFAULT;
+
+    GBM_BO_FIXED_COMPRESSION_1BPC    :: FIXED_COMPRESSION_1BPC;
+
+    GBM_BO_FIXED_COMPRESSION_2BPC    :: FIXED_COMPRESSION_2BPC;
+
+    GBM_BO_FIXED_COMPRESSION_3BPC    :: FIXED_COMPRESSION_3BPC;
+
+    GBM_BO_FIXED_COMPRESSION_4BPC    :: FIXED_COMPRESSION_4BPC;
+
+    GBM_BO_FIXED_COMPRESSION_5BPC    :: FIXED_COMPRESSION_5BPC;
+
+    GBM_BO_FIXED_COMPRESSION_6BPC    :: FIXED_COMPRESSION_6BPC;
+
+    GBM_BO_FIXED_COMPRESSION_7BPC    :: FIXED_COMPRESSION_7BPC;
+
+    GBM_BO_FIXED_COMPRESSION_8BPC    :: FIXED_COMPRESSION_8BPC;
+
+    GBM_BO_FIXED_COMPRESSION_9BPC    :: FIXED_COMPRESSION_9BPC;
+
+    GBM_BO_FIXED_COMPRESSION_10BPC   :: FIXED_COMPRESSION_10BPC;
+
+    GBM_BO_FIXED_COMPRESSION_11BPC   :: FIXED_COMPRESSION_11BPC;
+
+    GBM_BO_FIXED_COMPRESSION_12BPC   :: FIXED_COMPRESSION_12BPC;
+}
+
+gbm_device_get_fd :: (gbm: *gbm_device) -> s32 #foreign libgbm;
+
+gbm_device_get_backend_name :: (gbm: *gbm_device) -> *u8 #foreign libgbm;
+
+gbm_device_is_format_supported :: (gbm: *gbm_device, format: u32, flags: u32) -> s32 #foreign libgbm;
+
+gbm_device_get_format_modifier_plane_count :: (gbm: *gbm_device, format: u32, modifier: u64) -> s32 #foreign libgbm;
+
+gbm_device_destroy :: (gbm: *gbm_device) -> void #foreign libgbm;
+
+gbm_create_device :: (fd: s32) -> *gbm_device #foreign libgbm;
+
+gbm_bo_create :: (gbm: *gbm_device, width: u32, height: u32, format: u32, flags: u32) -> *gbm_bo #foreign libgbm;
+
+gbm_bo_create_with_modifiers :: (gbm: *gbm_device, width: u32, height: u32, format: u32, modifiers: *u64, count: u32) -> *gbm_bo #foreign libgbm;
+
+gbm_bo_create_with_modifiers2 :: (gbm: *gbm_device, width: u32, height: u32, format: u32, modifiers: *u64, count: u32, flags: u32) -> *gbm_bo #foreign libgbm;
+
+gbm_import_fd_data :: struct {
+    fd:     s32;
+    width:  u32;
+    height: u32;
+    stride: u32;
+    format: u32;
+}
+
+gbm_import_fd_modifier_data :: struct {
+    width:    u32;
+    height:   u32;
+    format:   u32;
+    num_fds:  u32;
+    fds:      [4] s32;
+    strides:  [4] s32;
+    offsets:  [4] s32;
+    modifier: u64;
+}
+
+gbm_bo_import :: (gbm: *gbm_device, type: u32, buffer: *void, flags: u32) -> *gbm_bo #foreign libgbm;
+
+/**
+* Flags to indicate the type of mapping for the buffer - these are
+* passed into gbm_bo_map(). The caller must set the union of all the
+* flags that are appropriate.
+*
+* These flags are independent of the GBM_BO_USE_* creation flags. However,
+* mapping the buffer may require copying to/from a staging buffer.
+*
+* See also: pipe_map_flags
+*/
+gbm_bo_transfer_flags :: enum u32 {
+    READ       :: 1;
+
+    WRITE      :: 2;
+
+    READ_WRITE :: 3;
+
+    GBM_BO_TRANSFER_READ       :: READ;
+
+    GBM_BO_TRANSFER_WRITE      :: WRITE;
+
+    GBM_BO_TRANSFER_READ_WRITE :: READ_WRITE;
+}
+
+gbm_bo_map :: (bo: *gbm_bo, x: u32, y: u32, width: u32, height: u32, flags: u32, stride: *u32, map_data: **void) -> *void #foreign libgbm;
+
+gbm_bo_unmap :: (bo: *gbm_bo, map_data: *void) -> void #foreign libgbm;
+
+gbm_bo_get_width :: (bo: *gbm_bo) -> u32 #foreign libgbm;
+
+gbm_bo_get_height :: (bo: *gbm_bo) -> u32 #foreign libgbm;
+
+gbm_bo_get_stride :: (bo: *gbm_bo) -> u32 #foreign libgbm;
+
+gbm_bo_get_stride_for_plane :: (bo: *gbm_bo, plane: s32) -> u32 #foreign libgbm;
+
+gbm_bo_get_format :: (bo: *gbm_bo) -> u32 #foreign libgbm;
+
+gbm_bo_get_bpp :: (bo: *gbm_bo) -> u32 #foreign libgbm;
+
+gbm_bo_get_offset :: (bo: *gbm_bo, plane: s32) -> u32 #foreign libgbm;
+
+gbm_bo_get_device :: (bo: *gbm_bo) -> *gbm_device #foreign libgbm;
+
+gbm_bo_get_handle :: (bo: *gbm_bo) -> gbm_bo_handle #foreign libgbm;
+
+gbm_bo_get_fd :: (bo: *gbm_bo) -> s32 #foreign libgbm;
+
+gbm_bo_get_modifier :: (bo: *gbm_bo) -> u64 #foreign libgbm;
+
+gbm_bo_get_plane_count :: (bo: *gbm_bo) -> s32 #foreign libgbm;
+
+gbm_bo_get_handle_for_plane :: (bo: *gbm_bo, plane: s32) -> gbm_bo_handle #foreign libgbm;
+
+gbm_bo_get_fd_for_plane :: (bo: *gbm_bo, plane: s32) -> s32 #foreign libgbm;
+
+gbm_bo_write :: (bo: *gbm_bo, buf: *void, count: u64) -> s32 #foreign libgbm;
+
+gbm_bo_set_user_data :: (bo: *gbm_bo, data: *void, destroy_user_data: #type (unknown0: *gbm_bo, unknown1: *void) -> void #c_call) -> void #foreign libgbm;
+
+gbm_bo_get_user_data :: (bo: *gbm_bo) -> *void #foreign libgbm;
+
+gbm_bo_destroy :: (bo: *gbm_bo) -> void #foreign libgbm;
+
+gbm_surface_create :: (gbm: *gbm_device, width: u32, height: u32, format: u32, flags: u32) -> *gbm_surface #foreign libgbm;
+
+gbm_surface_create_with_modifiers :: (gbm: *gbm_device, width: u32, height: u32, format: u32, modifiers: *u64, count: u32) -> *gbm_surface #foreign libgbm;
+
+gbm_surface_create_with_modifiers2 :: (gbm: *gbm_device, width: u32, height: u32, format: u32, modifiers: *u64, count: u32, flags: u32) -> *gbm_surface #foreign libgbm;
+
+gbm_surface_lock_front_buffer :: (surface: *gbm_surface) -> *gbm_bo #foreign libgbm;
+
+gbm_surface_release_buffer :: (surface: *gbm_surface, bo: *gbm_bo) -> void #foreign libgbm;
+
+gbm_surface_has_free_buffers :: (surface: *gbm_surface) -> s32 #foreign libgbm;
+
+gbm_surface_destroy :: (surface: *gbm_surface) -> void #foreign libgbm;
+
+gbm_format_get_name :: (gbm_format: u32, desc: *gbm_format_name_desc) -> *u8 #foreign libgbm;
+
+#scope_file
+
+#import "Basic"; // For assert
+
+libgbm :: #library,system "libgbm";
+
+#run {
+    {
+        info := type_info(gbm_bo_handle);
+        for info.members {
+            if it.name == {
+                case "ptr";
+                    assert(it.offset_in_bytes == 0, "gbm_bo_handle.ptr has unexpected offset % instead of 0", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 8, "gbm_bo_handle.ptr has unexpected size % instead of 8", it.type.runtime_size);
+                case "_s32";
+                    assert(it.offset_in_bytes == 0, "gbm_bo_handle._s32 has unexpected offset % instead of 0", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_bo_handle._s32 has unexpected size % instead of 4", it.type.runtime_size);
+                case "_u32";
+                    assert(it.offset_in_bytes == 0, "gbm_bo_handle._u32 has unexpected offset % instead of 0", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_bo_handle._u32 has unexpected size % instead of 4", it.type.runtime_size);
+                case "_s64";
+                    assert(it.offset_in_bytes == 0, "gbm_bo_handle._s64 has unexpected offset % instead of 0", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 8, "gbm_bo_handle._s64 has unexpected size % instead of 8", it.type.runtime_size);
+                case "_u64";
+                    assert(it.offset_in_bytes == 0, "gbm_bo_handle._u64 has unexpected offset % instead of 0", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 8, "gbm_bo_handle._u64 has unexpected size % instead of 8", it.type.runtime_size);
+            }
+        }
+        assert(size_of(gbm_bo_handle) == 8, "gbm_bo_handle has size % instead of 8", size_of(gbm_bo_handle));
+    }
+
+    {
+        info := type_info(gbm_format_name_desc);
+        for info.members {
+            if it.name == {
+                case "name";
+                    assert(it.offset_in_bytes == 0, "gbm_format_name_desc.name has unexpected offset % instead of 0", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 5, "gbm_format_name_desc.name has unexpected size % instead of 5", it.type.runtime_size);
+            }
+        }
+        assert(size_of(gbm_format_name_desc) == 5, "gbm_format_name_desc has size % instead of 5", size_of(gbm_format_name_desc));
+    }
+
+    {
+        info := type_info(gbm_import_fd_data);
+        for info.members {
+            if it.name == {
+                case "fd";
+                    assert(it.offset_in_bytes == 0, "gbm_import_fd_data.fd has unexpected offset % instead of 0", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_import_fd_data.fd has unexpected size % instead of 4", it.type.runtime_size);
+                case "width";
+                    assert(it.offset_in_bytes == 4, "gbm_import_fd_data.width has unexpected offset % instead of 4", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_import_fd_data.width has unexpected size % instead of 4", it.type.runtime_size);
+                case "height";
+                    assert(it.offset_in_bytes == 8, "gbm_import_fd_data.height has unexpected offset % instead of 8", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_import_fd_data.height has unexpected size % instead of 4", it.type.runtime_size);
+                case "stride";
+                    assert(it.offset_in_bytes == 12, "gbm_import_fd_data.stride has unexpected offset % instead of 12", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_import_fd_data.stride has unexpected size % instead of 4", it.type.runtime_size);
+                case "format";
+                    assert(it.offset_in_bytes == 16, "gbm_import_fd_data.format has unexpected offset % instead of 16", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_import_fd_data.format has unexpected size % instead of 4", it.type.runtime_size);
+            }
+        }
+        assert(size_of(gbm_import_fd_data) == 20, "gbm_import_fd_data has size % instead of 20", size_of(gbm_import_fd_data));
+    }
+
+    {
+        info := type_info(gbm_import_fd_modifier_data);
+        for info.members {
+            if it.name == {
+                case "width";
+                    assert(it.offset_in_bytes == 0, "gbm_import_fd_modifier_data.width has unexpected offset % instead of 0", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_import_fd_modifier_data.width has unexpected size % instead of 4", it.type.runtime_size);
+                case "height";
+                    assert(it.offset_in_bytes == 4, "gbm_import_fd_modifier_data.height has unexpected offset % instead of 4", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_import_fd_modifier_data.height has unexpected size % instead of 4", it.type.runtime_size);
+                case "format";
+                    assert(it.offset_in_bytes == 8, "gbm_import_fd_modifier_data.format has unexpected offset % instead of 8", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_import_fd_modifier_data.format has unexpected size % instead of 4", it.type.runtime_size);
+                case "num_fds";
+                    assert(it.offset_in_bytes == 12, "gbm_import_fd_modifier_data.num_fds has unexpected offset % instead of 12", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 4, "gbm_import_fd_modifier_data.num_fds has unexpected size % instead of 4", it.type.runtime_size);
+                case "fds";
+                    assert(it.offset_in_bytes == 16, "gbm_import_fd_modifier_data.fds has unexpected offset % instead of 16", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 16, "gbm_import_fd_modifier_data.fds has unexpected size % instead of 16", it.type.runtime_size);
+                case "strides";
+                    assert(it.offset_in_bytes == 32, "gbm_import_fd_modifier_data.strides has unexpected offset % instead of 32", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 16, "gbm_import_fd_modifier_data.strides has unexpected size % instead of 16", it.type.runtime_size);
+                case "offsets";
+                    assert(it.offset_in_bytes == 48, "gbm_import_fd_modifier_data.offsets has unexpected offset % instead of 48", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 16, "gbm_import_fd_modifier_data.offsets has unexpected size % instead of 16", it.type.runtime_size);
+                case "modifier";
+                    assert(it.offset_in_bytes == 64, "gbm_import_fd_modifier_data.modifier has unexpected offset % instead of 64", it.offset_in_bytes);
+                    assert(it.type.runtime_size == 8, "gbm_import_fd_modifier_data.modifier has unexpected size % instead of 8", it.type.runtime_size);
+            }
+        }
+        assert(size_of(gbm_import_fd_modifier_data) == 72, "gbm_import_fd_modifier_data has size % instead of 72", size_of(gbm_import_fd_modifier_data));
+    }
+}
+
+
+#scope_export
+//
+// This file was auto-generated using the following command:
+//
+// jai generate.jai
+//
+
+
+
 kbts_s32 :: s32;
 
 kbts_b32 :: s32;

@@ -347,6 +347,17 @@ generate :: () {
         assert(egl_ok, "could not generate bindings");
         append_and_steal_buffers(*bindings_builder, *egl_builder);
         append(*bindings_builder, "\n#scope_export\n");
+
+        // gbm bindings
+        gbm_bindings_opts: Generate_Bindings_Options;
+        array_add(*gbm_bindings_opts.system_include_paths, ..get_default_system_include_paths());
+        array_add(*gbm_bindings_opts.system_libraries, Library.{ filename = "libgbm" });
+        array_add(*gbm_bindings_opts.path_fragments_to_treat_as_non_system_paths, "gbm.h");
+        array_add(*gbm_bindings_opts.source_files, "/usr/include/gbm.h");
+        gbm_builder, gbm_ok := generate_bindings(gbm_bindings_opts);
+        assert(gbm_ok, "could not generate gbm bindings");
+        append_and_steal_buffers(*bindings_builder, *gbm_builder);
+        append(*bindings_builder, "\n#scope_export\n");
     }
 
     {
@@ -425,17 +436,4 @@ generate :: () {
     }
 
     assert(write_entire_file(BINDINGS_PATH, *bindings_builder), "could not write %", BINDINGS_PATH);
-
-    // dist_dir := tprint("dist/%-%", platform, arch);
-    // w := compiler_create_workspace("Main program");
-    // if !debug {
-    //     set_optimization(*options, .OPTIMIZED);
-    // }
-    // options.output_type = .DYNAMIC_LIBRARY;
-    // options.output_executable_name = "forbear";
-    // options.output_path = dist_dir;
-    // make_directory_if_it_does_not_exist(dist_dir, recursive=true);
-    // set_build_options(options, w);
-    // add_build_string(tprint("DEBUG :: %;", debug), w);
-    // add_build_file("forbear.jai", w);
 }
