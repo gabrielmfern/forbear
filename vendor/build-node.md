@@ -8,6 +8,7 @@ cd vendor/node
 
 for linux:
 ```bash
+export CFLAGS="-include $PWD/../old-libm.h" CXXFLAGS="-include $PWD/../old-libm.h"
 ./configure --ninja
 make
 ```
