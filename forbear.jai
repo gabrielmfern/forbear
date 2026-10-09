@@ -109,6 +109,7 @@ Math :: #import "Math";
                 continue;
             }
 
+            update_wayland_connection(connection, event, data);
             if event.type == {
                 case Wl_Registry_Event_Global;
                     global := cast(*Wl_Registry_Event_Global) data;
@@ -134,6 +135,19 @@ Math :: #import "Math";
                 ping := cast(*Xdg_Wm_Base_Event_Ping) data;
                 send_wayland_message(connection, connection.xdg_wm_base_id, Xdg_Wm_Base_Request_Pong.{
             serial = ping.serial});
+            case Wl_Display_Event_Error;
+                error := cast(*Wl_Display_Event_Error) data;
+                log_error(
+                    "protocol error on object % (%): code %, %",
+                    error.object_id,
+                    connection.client_object_interfaces[error.object_id - 1],
+                    error.code,
+                    error.message
+                );
+                exit(-1);
+            case Zwp_Linux_Buffer_Params_V1_Event_Failed;
+                error := cast(*Zwp_Linux_Buffer_Params_V1_Event_Failed) data;
+                log_error("got a zwp_linux_buffer_params error");
         }
     }
 
@@ -220,18 +234,6 @@ Math :: #import "Math";
         connection.pending_reads.count -= incoming_message_header.size;
 
         data := parse_wayland_message(incoming_message, event);
-
-        if event.type == Wl_Display_Event_Error {
-            error := cast(*Wl_Display_Event_Error) data;
-            log_error(
-                "protocol error on object % (%): code %, %",
-                error.object_id,
-                connection.client_object_interfaces[error.object_id - 1],
-                error.code,
-                error.message
-            );
-            exit(-1);
-        }
 
         if WAYLAND_DEBUGGING {
             print("\n");
