@@ -9,6 +9,7 @@
 - [ ] fix error when screenshotting wayland program: ```could not send wayland message: 11```
 - [ ] fix wayland window rendering as fast as possible without any vsync
     - we should be using wayland's `frame` to render
+- [ ] handle wayland topbars protocol (this doesn't address gnome unfortunately)
 - [ ] draw rounded corners
 - [ ] draw in the z order
 - [ ] draw background images 
