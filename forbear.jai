@@ -31,7 +31,6 @@ Math :: #import "Math";
         opcode: u16;
         size: u16;
     } #no_padding;
-
     MAX_WAYLAND_MESSAGE_SIZE :: 4096;
     Wayland_Connection :: struct {
         fd: s32;
@@ -54,7 +53,6 @@ Math :: #import "Math";
         sun_family: sa_family_t;
         sun_path: [100]u8;
     };
-
     init_wayland_connection :: (connection: *Wayland_Connection) {
         connection.fd = socket(AF_UNIX, SOCK.STREAM, 0);
         connection.polling_fd = pollfd.{ fd = connection.fd, events = POLLIN };
@@ -136,29 +134,29 @@ Math :: #import "Math";
         assert(connection.xdg_wm_base_id != 0, "expected xdg_wm_base to have been bound");
         assert(connection.zwp_dmabuf_id != 0, "expected zwp_dmabuf to have been bound");
     }
-
     update_wayland_connection :: (connection: *Wayland_Connection, event: Wayland_Event) {
-        if event.message.type == {
-            case Wl_Display_Event_Delete_Id;
-                delete := cast(*Wl_Display_Event_Delete_Id) event.data;
-                array_add(*connection.free_client_object_interface_ids, delete.id);
-            case Xdg_Wm_Base_Event_Ping;
-                ping := cast(*Xdg_Wm_Base_Event_Ping) event.data;
-                send_wayland_message(connection, connection.xdg_wm_base_id, Xdg_Wm_Base_Request_Pong.{
-            serial = ping.serial});
-            case Wl_Display_Event_Error;
-                error := cast(*Wl_Display_Event_Error) event.data;
-                log_error(
-                    "protocol error on object % (%): code %, %",
-                    error.object_id,
-                    connection.client_object_interfaces[error.object_id - 1],
-                    error.code,
-                    error.message
-                );
-                exit(-1);
+        if event.object_id == connection.wl_display_id {
+            if event.message.type == {
+                case Wl_Display_Event_Delete_Id;
+                    delete := cast(*Wl_Display_Event_Delete_Id) event.data;
+                    array_add(*connection.free_client_object_interface_ids, delete.id);
+                case Wl_Display_Event_Error;
+                    error := cast(*Wl_Display_Event_Error) event.data;
+                    log_error(
+                        "protocol error on object % (%): code %, %",
+                        error.object_id,
+                        connection.client_object_interfaces[error.object_id - 1],
+                        error.code,
+                        error.message
+                    );
+                    exit(-1);
+            }
+        }
+        if event.object_id == connection.xdg_wm_base_id && event.message.type == Xdg_Wm_Base_Event_Ping {
+            ping := cast(*Xdg_Wm_Base_Event_Ping) event.data;
+            send_wayland_message(connection, connection.xdg_wm_base_id, Xdg_Wm_Base_Request_Pong.{ping.serial});
         }
     }
-
     poll_wayland_connection :: (connection: *Wayland_Connection, timeout_ms: s32 = 1000) {
         polling_result := poll(*connection.polling_fd, 1, timeout_ms);
         if polling_result == {
@@ -190,7 +188,6 @@ Math :: #import "Math";
         data: *void;
         object_id: u32;
     };
-
     next_wayland_event :: (connection: *Wayland_Connection, wait := false) -> Wayland_Event {
         while connection.pending_reads.count < size_of(Wayland_Message_header) ||
         connection.pending_reads.count < (cast(*Wayland_Message_header) connection.pending_reads.data).size {
@@ -260,7 +257,6 @@ Math :: #import "Math";
             object_id = incoming_message_header.object_id,
         };
     }
-
     // TODO(depessimization): we should be buffering the messages and flushing them instead of sending them all one by one
     writing_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
     send_wayland_message :: (connection: *Wayland_Connection, object_id: u32, message: $T) {
@@ -356,7 +352,6 @@ Math :: #import "Math";
 
         assert(result == bytes.count, "incomplete message was sent. something went wrong");
     }
-
     parsing_buffer : [MAX_MESSAGE_STRUCT_SIZE]u8;
     parse_wayland_message :: (bytes: []u8, message_info: Message_Info) -> *void {
         args := array_view(ARGS, message_info.first_arg, message_info.arg_count);
@@ -418,6 +413,8 @@ Math :: #import "Math";
     Wayland_EGL_Window :: struct {
         wl_surface_id: u32;
         wl_buffer_id: u32;
+        wl_buffer_params_id: u32;
+        wl_frame_callback_id: u32;
 
         xdg_surface_id: u32;
         // only top level windows are supported. there are also popups
@@ -459,122 +456,124 @@ Math :: #import "Math";
         return !window.waiting_for_vblank && window.wl_buffer_id != 0;
     }
     update_wayland_egl_window :: (backend: *Backend, window: *Wayland_EGL_Window, event: Wayland_Event) {
-        // TODO: we should actually route all of these events to the objects that they're actually meant for. this is
-        // going to be required for when we support running with multiple windows
-        if event.message.type == {
-            case Wl_Callback_Event_Done;
-                window.waiting_for_vblank = false;
-                if EXIT_ON_FIRST_FRAME {
+        if event.object_id == window.xdg_surface_id && event.message.type == Xdg_Surface_Event_Configure {
+            configure := cast(*Xdg_Surface_Event_Configure) event.data;
+            send_wayland_message(*backend.connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
+
+            should_create_buffer := window.gbm_buffer_object == null || 
+                                    gbm_bo_get_width(window.gbm_buffer_object) != xx window.width || 
+                                    gbm_bo_get_height(window.gbm_buffer_object) != xx window.height;
+
+            fd, offset, stride, modifier_lo, modifier_hi: s64;
+            if should_create_buffer {
+                if window.egl_image != null {
+                    if eglDestroyImage(context.forbear.backend.egl_display, window.egl_image) != 1 {
+                        log_error("failed to destroy previous egl image: %\n", eglGetError());
+                        exit(-1);
+                    }
+                }
+                if window.gbm_buffer_object != null {
+                    gbm_bo_destroy(window.gbm_buffer_object);
+                }
+
+                window.gbm_buffer_object = gbm_bo_create_with_modifiers2(
+                    backend.device, xx window.width, xx window.height, 
+                    GBM_FORMAT_ABGR8888, backend.dmabuf_modifiers.data, 
+                    xx backend.dmabuf_modifiers.count, xx gbm_bo_flags.USE_RENDERING
+                );
+                if window.gbm_buffer_object == null {
+                    log_error("failed to create gbm buffer object\n");
+                    exit(-1);
+                }
+            }
+
+            modifier    := gbm_bo_get_modifier(window.gbm_buffer_object);
+            plane_count := gbm_bo_get_plane_count(window.gbm_buffer_object);
+            assert(plane_count == 1, "expecting the buffer to have only one plane");
+            modifier_lo = xx (modifier & 0xFFFFFFFF);
+            modifier_hi = xx (modifier >> 32);
+            fd          = xx gbm_bo_get_fd_for_plane(window.gbm_buffer_object, 0);
+            defer close(xx fd);
+            offset      = xx gbm_bo_get_offset(window.gbm_buffer_object, 0);
+            stride      = xx gbm_bo_get_stride_for_plane(window.gbm_buffer_object, 0);
+
+            if should_create_buffer {
+                attributes := EGLAttrib.[
+                    EGL_WIDTH,                          xx window.width, 
+                    EGL_HEIGHT,                         xx window.height, 
+                    EGL_LINUX_DRM_FOURCC_EXT,           GBM_FORMAT_ABGR8888,
+                    EGL_DMA_BUF_PLANE0_FD_EXT,          fd, 
+                    EGL_DMA_BUF_PLANE0_OFFSET_EXT,      offset, 
+                    EGL_DMA_BUF_PLANE0_PITCH_EXT,       stride,
+                    EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, modifier_lo, 
+                    EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, modifier_hi,
+                    EGL_NONE,
+                ];
+                window.egl_image = eglCreateImage(context.forbear.backend.egl_display, null, EGL_LINUX_DMA_BUF_EXT, null, attributes.data);
+                if window.egl_image == null {
+                    log_error("failed to create frame buffer: %\n", eglGetError());
+                    exit(-1);
+                }
+
+                glBindTexture(GL_TEXTURE_2D, window.texture);
+                glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, window.egl_image);
+                glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
+                assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+            }
+
+            window.wl_buffer_params_id = new_wayland_client_object(*backend.connection, Interface_Id.ZWP_LINUX_BUFFER_PARAMS_V1);
+            send_wayland_message(*backend.connection, backend.connection.zwp_dmabuf_id, Zwp_Linux_Dmabuf_V1_Request_Create_Params.{
+                params_id = window.wl_buffer_params_id,
+            });
+            send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Add.{
+                fd          = xx fd,
+                plane_idx   = 0,
+                offset      = xx offset,
+                stride      = xx stride,
+                modifier_lo = xx modifier_lo, 
+                modifier_hi = xx modifier_hi,
+            });
+
+            previous_buffer_id := window.wl_buffer_id;
+            window.wl_buffer_id = new_wayland_client_object(*backend.connection, Interface_Id.WL_BUFFER);
+            send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Create_Immed.{
+                buffer_id = window.wl_buffer_id,
+                width     = window.width,
+                height    = window.height,
+                format    = GBM_FORMAT_ABGR8888,
+                flags     = 0,
+            });
+
+            send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
+            window.wl_buffer_params_id = 0;
+
+            if previous_buffer_id != 0 {
+                send_wayland_message(*backend.connection, previous_buffer_id, Wl_Buffer_Request_Destroy.{});
+            }
+        } else if event.object_id == window.xdg_toplevel_id {
+            if event.message.type == {
+                case Xdg_Toplevel_Event_Close;
+                    window.waiting_for_vblank = false;
                     window.running = false;
-                }
-            case Xdg_Toplevel_Event_Close;
-                window.waiting_for_vblank = false;
+                case Xdg_Toplevel_Event_Configure;
+                    configure := cast(*Xdg_Toplevel_Event_Configure) event.data;
+                    if configure.width {
+                        window.width = configure.width;
+                    }
+                    if configure.height {
+                        window.height = configure.height;
+                    }
+            }
+        } else if event.object_id == window.wl_frame_callback_id && event.message.type == Wl_Callback_Event_Done {
+            window.waiting_for_vblank = false;
+            window.wl_frame_callback_id = 0;
+            if EXIT_ON_FIRST_FRAME {
                 window.running = false;
-            case Xdg_Toplevel_Event_Configure;
-                configure := cast(*Xdg_Toplevel_Event_Configure) event.data;
-                if configure.width {
-                    window.width = configure.width;
-                }
-                if configure.height {
-                    window.height = configure.height;
-                }
-            case Zwp_Linux_Buffer_Params_V1_Event_Failed;
-                log_error("compositor failed to import the dmabuf (%x%)", window.width, window.height);
-                exit(-1);
-            case Xdg_Surface_Event_Configure;
-                configure := cast(*Xdg_Surface_Event_Configure) event.data;
-                send_wayland_message(*backend.connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
-
-                should_create_buffer := window.gbm_buffer_object == null || 
-                                        gbm_bo_get_width(window.gbm_buffer_object) != xx window.width || 
-                                        gbm_bo_get_height(window.gbm_buffer_object) != xx window.height;
-
-                fd, offset, stride, modifier_lo, modifier_hi: s64;
-                if should_create_buffer {
-                    if window.egl_image != null {
-                        if eglDestroyImage(context.forbear.backend.egl_display, window.egl_image) != 1 {
-                            log_error("failed to destroy previous egl image: %\n", eglGetError());
-                            exit(-1);
-                        }
-                    }
-                    if window.gbm_buffer_object != null {
-                        gbm_bo_destroy(window.gbm_buffer_object);
-                    }
-
-                    window.gbm_buffer_object = gbm_bo_create_with_modifiers2(
-                        backend.device, xx window.width, xx window.height, 
-                        GBM_FORMAT_ABGR8888, backend.dmabuf_modifiers.data, 
-                        xx backend.dmabuf_modifiers.count, xx gbm_bo_flags.USE_RENDERING
-                    );
-                    if window.gbm_buffer_object == null {
-                        log_error("failed to create gbm buffer object\n");
-                        exit(-1);
-                    }
-                }
-
-                modifier    := gbm_bo_get_modifier(window.gbm_buffer_object);
-                plane_count := gbm_bo_get_plane_count(window.gbm_buffer_object);
-                assert(plane_count == 1, "expecting the buffer to have only one plane");
-                modifier_lo = xx (modifier & 0xFFFFFFFF);
-                modifier_hi = xx (modifier >> 32);
-                fd          = xx gbm_bo_get_fd_for_plane(window.gbm_buffer_object, 0);
-                defer close(xx fd);
-                offset      = xx gbm_bo_get_offset(window.gbm_buffer_object, 0);
-                stride      = xx gbm_bo_get_stride_for_plane(window.gbm_buffer_object, 0);
-
-                if should_create_buffer {
-                    attributes := EGLAttrib.[
-                        EGL_WIDTH,                          xx window.width, 
-                        EGL_HEIGHT,                         xx window.height, 
-                        EGL_LINUX_DRM_FOURCC_EXT,           GBM_FORMAT_ABGR8888,
-                        EGL_DMA_BUF_PLANE0_FD_EXT,          fd, 
-                        EGL_DMA_BUF_PLANE0_OFFSET_EXT,      offset, 
-                        EGL_DMA_BUF_PLANE0_PITCH_EXT,       stride,
-                        EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, modifier_lo, 
-                        EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, modifier_hi,
-                        EGL_NONE,
-                    ];
-                    window.egl_image = eglCreateImage(context.forbear.backend.egl_display, null, EGL_LINUX_DMA_BUF_EXT, null, attributes.data);
-                    if window.egl_image == null {
-                        log_error("failed to create frame buffer: %\n", eglGetError());
-                        exit(-1);
-                    }
-
-                    glBindTexture(GL_TEXTURE_2D, window.texture);
-                    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, window.egl_image);
-                    glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
-                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
-                    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
-                }
-
-                buffer_params_id := new_wayland_client_object(*backend.connection, Interface_Id.ZWP_LINUX_BUFFER_PARAMS_V1);
-                send_wayland_message(*backend.connection, backend.connection.zwp_dmabuf_id, Zwp_Linux_Dmabuf_V1_Request_Create_Params.{
-                    params_id = buffer_params_id,
-                });
-                send_wayland_message(*backend.connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Add.{
-                    fd          = xx fd,
-                    plane_idx   = 0,
-                    offset      = xx offset,
-                    stride      = xx stride,
-                    modifier_lo = xx modifier_lo, 
-                    modifier_hi = xx modifier_hi,
-                });
-
-                previous_buffer_id := window.wl_buffer_id;
-                window.wl_buffer_id = new_wayland_client_object(*backend.connection, Interface_Id.WL_BUFFER);
-                send_wayland_message(*backend.connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Create_Immed.{
-                    buffer_id = window.wl_buffer_id,
-                    width     = window.width,
-                    height    = window.height,
-                    format    = GBM_FORMAT_ABGR8888,
-                    flags     = 0,
-                });
-
-                send_wayland_message(*backend.connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
-
-                if previous_buffer_id != 0 {
-                    send_wayland_message(*backend.connection, previous_buffer_id, Wl_Buffer_Request_Destroy.{});
-                }
+            }
+        } else if event.object_id == window.wl_buffer_params_id && event.message.type == Zwp_Linux_Buffer_Params_V1_Event_Failed {
+            log_error("compositor failed to import the dmabuf (%x%)", window.width, window.height);
+            exit(-1);
         }
     }
 
@@ -2794,8 +2793,9 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Damage_Buffer.{ x = 0, y = 0, width = window.width, height = window.height });
+        window.wl_frame_callback_id = new_wayland_client_object(*backend.connection, .WL_CALLBACK);
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Frame.{
-            callback = new_wayland_client_object(*backend.connection, .WL_CALLBACK)
+            callback = window.wl_frame_callback_id,
         });
         window.waiting_for_vblank = true;
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
