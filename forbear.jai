@@ -94,17 +94,16 @@ Math :: #import "Math";
         send_wayland_message(connection, connection.wl_display_id, Wl_Display_Request_Sync.{ callback = sync_id });
         synced := false;
         while !synced {
-            event, data, something := next_wayland_event(connection);
-            if !something {
+            event := next_wayland_event(connection);
+            if !event.something {
                 poll_wayland_connection(connection);
                 continue;
             }
 
-            update_wayland_connection(connection, event, data);
-            if event.type == {
+            update_wayland_connection(connection, event);
+            if event.message.type == {
                 case Wl_Registry_Event_Global;
-                    bind_global :: (connection: *Wayland_Connection, interface_id: Interface_Id, global: Wl_Registry_Event_Global,
-                    version := U32_MAX) -> u32 {
+                    bind_global :: (connection: *Wayland_Connection, interface_id: Interface_Id, global: Wl_Registry_Event_Global, version := U32_MAX) -> u32 {
                         id := new_wayland_client_object(connection, interface_id);
                         send_wayland_message(connection, connection.wl_registry_id, Wl_Registry_Request_Bind.{
                             name = global.name,
@@ -118,7 +117,7 @@ Math :: #import "Math";
                         return id;
                     }
 
-                    global := cast(*Wl_Registry_Event_Global) data;
+                    global := cast(*Wl_Registry_Event_Global) event.data;
                     if global.interface_name == "wl_compositor" {
                         connection.wl_compositor_id = bind_global(connection, Interface_Id.WL_COMPOSITOR, global);
                     } else if global.interface_name == "xdg_wm_base" {
@@ -138,17 +137,17 @@ Math :: #import "Math";
         assert(connection.zwp_dmabuf_id != 0, "expected zwp_dmabuf to have been bound");
     }
 
-    update_wayland_connection :: (connection: *Wayland_Connection, event: Message_Info, data: *void) {
-        if event.type == {
+    update_wayland_connection :: (connection: *Wayland_Connection, event: Wayland_Event) {
+        if event.message.type == {
             case Wl_Display_Event_Delete_Id;
-                delete := cast(*Wl_Display_Event_Delete_Id) data;
+                delete := cast(*Wl_Display_Event_Delete_Id) event.data;
                 array_add(*connection.free_client_object_interface_ids, delete.id);
             case Xdg_Wm_Base_Event_Ping;
-                ping := cast(*Xdg_Wm_Base_Event_Ping) data;
+                ping := cast(*Xdg_Wm_Base_Event_Ping) event.data;
                 send_wayland_message(connection, connection.xdg_wm_base_id, Xdg_Wm_Base_Request_Pong.{
             serial = ping.serial});
             case Wl_Display_Event_Error;
-                error := cast(*Wl_Display_Event_Error) data;
+                error := cast(*Wl_Display_Event_Error) event.data;
                 log_error(
                     "protocol error on object % (%): code %, %",
                     error.object_id,
@@ -185,7 +184,14 @@ Math :: #import "Math";
         }
     }
 
-    next_wayland_event :: (connection: *Wayland_Connection, wait := false) -> event: Message_Info, data: *void, something: bool {
+    Wayland_Event :: struct {
+        something: bool;
+        message: Message_Info;
+        data: *void;
+        object_id: u32;
+    };
+
+    next_wayland_event :: (connection: *Wayland_Connection, wait := false) -> Wayland_Event {
         while connection.pending_reads.count < size_of(Wayland_Message_header) ||
         connection.pending_reads.count < (cast(*Wayland_Message_header) connection.pending_reads.data).size {
             leftover := connection.pending_reads.count;
@@ -211,7 +217,7 @@ Math :: #import "Math";
                     continue;
                 }
                 if error_code == EAGAIN  {
-                    return Message_Info.{}, null, false;
+                    return Wayland_Event.{};
                 }
                 log_error("failed to read back from socket: %\n", error_code);
                 exit(-1);
@@ -229,7 +235,7 @@ Math :: #import "Math";
         } else {
             object_interface_id = connection.client_object_interfaces[incoming_message_header.object_id - 1];
         }
-        event: Message_Info = MESSAGES[
+        message_info: Message_Info = MESSAGES[
             INTERFACES[object_interface_id].first_event + incoming_message_header.opcode
         ];
 
@@ -237,17 +243,22 @@ Math :: #import "Math";
         connection.pending_reads.data += incoming_message_header.size;
         connection.pending_reads.count -= incoming_message_header.size;
 
-        data := parse_wayland_message(incoming_message, event);
+        data := parse_wayland_message(incoming_message, message_info);
 
         if WAYLAND_DEBUGGING {
             print("\n");
             print("message received\n");
-            print("event.type %\n", event.type);
+            print("event.type %\n", message_info.type);
             print("object interface %\n", object_interface_id);
             print("\n");
         }
 
-        return event, data, true;
+        return Wayland_Event.{
+            message = message_info,
+            data = data,
+            something = true,
+            object_id = incoming_message_header.object_id,
+        };
     }
 
     // TODO(depessimization): we should be buffering the messages and flushing them instead of sending them all one by one
@@ -334,7 +345,9 @@ Math :: #import "Math";
             error_code := errno();
             if error_code == EPIPE {
                 log_error("compositor closed the connection, draining what it sent before closing:");
-                while true  next_wayland_event(connection);
+                while true {
+                    next_wayland_event(connection);
+                }
             }
             log_error("could not send wayland message: %\n", error_code);
             exit(-1);
@@ -445,10 +458,10 @@ Math :: #import "Math";
     can_draw_to_wayland_egl_window :: (window: Wayland_EGL_Window) -> bool {
         return !window.waiting_for_vblank && window.wl_buffer_id != 0;
     }
-    update_wayland_egl_window :: (backend: *Backend, window: *Wayland_EGL_Window, event: Message_Info, data: *void) {
+    update_wayland_egl_window :: (backend: *Backend, window: *Wayland_EGL_Window, event: Wayland_Event) {
         // TODO: we should actually route all of these events to the objects that they're actually meant for. this is
         // going to be required for when we support running with multiple windows
-        if event.type == {
+        if event.message.type == {
             case Wl_Callback_Event_Done;
                 window.waiting_for_vblank = false;
                 if EXIT_ON_FIRST_FRAME {
@@ -458,7 +471,7 @@ Math :: #import "Math";
                 window.waiting_for_vblank = false;
                 window.running = false;
             case Xdg_Toplevel_Event_Configure;
-                configure := cast(*Xdg_Toplevel_Event_Configure) data;
+                configure := cast(*Xdg_Toplevel_Event_Configure) event.data;
                 if configure.width {
                     window.width = configure.width;
                 }
@@ -469,7 +482,7 @@ Math :: #import "Math";
                 log_error("compositor failed to import the dmabuf (%x%)", window.width, window.height);
                 exit(-1);
             case Xdg_Surface_Event_Configure;
-                configure := cast(*Xdg_Surface_Event_Configure) data;
+                configure := cast(*Xdg_Surface_Event_Configure) event.data;
                 send_wayland_message(*backend.connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
 
                 should_create_buffer := window.gbm_buffer_object == null || 
@@ -637,16 +650,16 @@ Math :: #import "Math";
         send_wayland_message(*backend.connection, backend.connection.wl_display_id, Wl_Display_Request_Sync.{ callback = sync_id });
         synced := false;
         while !synced {
-            event, data, something := next_wayland_event(*backend.connection);
-            if !something {
+            event := next_wayland_event(*backend.connection);
+            if !event.something {
                 poll_wayland_connection(*backend.connection);
                 continue;
             }
 
-            update_wayland_connection(*backend.connection, event, data);
-            if event.type == {
+            update_wayland_connection(*backend.connection, event);
+            if event.message.type == {
                 case Zwp_Linux_Dmabuf_V1_Event_Modifier;
-                    m := cast(*Zwp_Linux_Dmabuf_V1_Event_Modifier) data;
+                    m := cast(*Zwp_Linux_Dmabuf_V1_Event_Modifier) event.data;
                     modifier := ((cast(u64) m.modifier_hi) << 32) | m.modifier_lo;
                     if m.format == GBM_FORMAT_ABGR8888 && 
                     gbm_device_get_format_modifier_plane_count(backend.device, GBM_FORMAT_ABGR8888, modifier) == 1 {
