@@ -130,6 +130,10 @@ Math :: #import "Math";
             case Wl_Display_Event_Delete_Id;
                 delete := cast(*Wl_Display_Event_Delete_Id) data;
                 array_add(*connection.free_client_object_interface_ids, delete.id);
+            case Xdg_Wm_Base_Event_Ping;
+                ping := cast(*Xdg_Wm_Base_Event_Ping) data;
+                send_wayland_message(connection, connection.xdg_wm_base_id, Xdg_Wm_Base_Request_Pong.{
+            serial = ping.serial});
         }
     }
 
