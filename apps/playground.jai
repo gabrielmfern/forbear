@@ -27,6 +27,10 @@ main :: () {
         color = rgb(255, 255, 255),
     });
 
+    fps := 0;
+    frames := 0;
+    last := seconds_since_init();
+
     while window.running {
         #if OS == .LINUX {
             while true {
@@ -42,11 +46,38 @@ main :: () {
             update_window(*backend, *window);
         }
 
+        frames += 1;
+        now := seconds_since_init();
+        if now - last >= 1 {
+            fps = frames;
+            frames = 0;
+            last = now;
+        }
+
         element(Style.{ 
             padding = block(in_line(50), 30),
             background = color(rgb(255, 0, 255)),
             y_justification = .CENTER,
         }, #code {
+            element(Style.{
+                placement = fixed(Vector2.{10, 10}),
+                z_index = 10,
+                background = color(rgba(0, 0, 0, 0.9)),
+                font_size = 16,
+                text_wrapping = .NONE,
+                min_width = 152,
+                padding = all(4),
+                border_radius = 4,
+                color = rgb(255, 255, 0.0),
+                direction = Direction.VERTICAL,
+            }, #code {
+                element(Style.{ width = grow() }, #code {
+                    text("FPS:");
+                    element(Style.{ width = grow() });
+                    text(tprint("%", fps));
+                });
+            });
+
             text("root node");
             element(Style.{
                 width = fixed(60),

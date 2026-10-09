@@ -1730,6 +1730,7 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
         }
     }
     glyphs.min_size.y = pen.y + glyphs.line_height;
+    glyphs.max_size.y = max(glyphs.min_size.y, glyphs.max_size.y);
 
     return glyphs;
 }
