@@ -22,7 +22,6 @@ Math :: #import "Math";
 #if OS == .LINUX {
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
-    EXIT_ON_FIRST_FRAME :: false;
 
     GL_FRAMEBUFFER_FLIP_Y_MESA :: 35771;
 
@@ -553,19 +552,9 @@ Math :: #import "Math";
 
                 send_wayland_message(*backend.connection, buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
 
-                send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
-                send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Damage_Buffer.{ x = 0, y = 0, width = window.width, height = window.height });
-                if EXIT_ON_FIRST_FRAME {
-                    send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Frame.{ callback
-                    = new_wayland_client_object(*backend.connection, Interface_Id.WL_CALLBACK) });
-                }
-                send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
-
                 if previous_buffer_id != 0 {
                     send_wayland_message(*backend.connection, previous_buffer_id, Wl_Buffer_Request_Destroy.{});
                 }
-            case Wl_Callback_Event_Done;
-                if EXIT_ON_FIRST_FRAME  window.running = false;
         }
     }
 
