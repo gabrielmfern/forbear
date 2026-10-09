@@ -28,7 +28,7 @@
 - [ ] a macos program without a menu bar is a horrible experience (ex: cmd+q doesn't work)
     - how can we do this in a cross platform manner? perhaps a component that makes changes to the window to render the menu items?
 - [ ] windows backend
-- [ ] start implementing a real app using forbear's javascript adapter
+- [ ] build a calculator through the jsx adapter 
 
 ## introspection 
 

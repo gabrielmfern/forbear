@@ -32,7 +32,7 @@ main :: () {
             event, data, something := next_wayland_event(*backend.connection);
             while something {
                 update_wayland_connection(*backend.connection, event, data);
-                update_wayland_egl_window(*backend.connection, *window, event, data);
+                update_wayland_egl_window(*backend, *window, event, data);
 
                 event, data, something = next_wayland_event(*backend.connection);
             }
