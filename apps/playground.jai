@@ -29,12 +29,13 @@ main :: () {
 
     while window.running {
         #if OS == .LINUX {
-            event, data, something := next_wayland_event(*backend.connection);
-            while something {
+            while true {
+                event, data, something := next_wayland_event(*backend.connection, !can_draw_to_wayland_egl_window(window));
+                if !something {
+                    break;
+                }
                 update_wayland_connection(*backend.connection, event, data);
                 update_wayland_egl_window(*backend, *window, event, data);
-
-                event, data, something = next_wayland_event(*backend.connection);
             }
         } else #if OS == .MACOS {
             update_macos_gl_backend(*backend);

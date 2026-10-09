@@ -22,6 +22,7 @@ Math :: #import "Math";
 #if OS == .LINUX {
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
+    EXIT_ON_FIRST_FRAME :: false;
 
     GL_FRAMEBUFFER_FLIP_Y_MESA :: 35771;
 
@@ -184,23 +185,21 @@ Math :: #import "Math";
         }
     }
 
-    next_wayland_event :: (connection: *Wayland_Connection) -> event: Message_Info, data: *void, something: bool {
-        should_read_more: bool;
-        if connection.pending_reads.count >= size_of(Wayland_Message_header) {
-            incoming_message_header := cast(*Wayland_Message_header) connection.pending_reads.data;
-            should_read_more = connection.pending_reads.count < incoming_message_header.size;
-        } else {
-            should_read_more = true;
-        }
-        if should_read_more {
+    next_wayland_event :: (connection: *Wayland_Connection, wait := false) -> event: Message_Info, data: *void, something: bool {
+        while connection.pending_reads.count < size_of(Wayland_Message_header) ||
+        connection.pending_reads.count < (cast(*Wayland_Message_header) connection.pending_reads.data).size {
             leftover := connection.pending_reads.count;
-            // move the leftover to the start of the buffer
             copy(connection.reading_buffer.data, connection.pending_reads.data, leftover);
+
+            flags: MSG;
+            if !wait {
+                flags = .DONTWAIT;
+            }
             result := recv(
                 connection.fd,
                 cast(*void) (connection.reading_buffer.data + leftover),
                 xx (connection.reading_buffer.count - leftover),
-                .DONTWAIT
+                flags
             );
             if result == 0 {
                 log_error("compositor closed the connection");
@@ -208,21 +207,17 @@ Math :: #import "Math";
             }
             if result == -1 {
                 error_code := errno();
-                if error_code == EAGAIN {
-                    // this means there are no more messages to wait for, we can just yield
-                    return Message_Info.{}, null, false;
-                } else {
-                    log_error("failed to read back from socket: %\n", error_code);
-                    exit(-1);
+                if error_code == EINTR  {
+                    continue;
                 }
+                if error_code == EAGAIN  {
+                    return Message_Info.{}, null, false;
+                }
+                log_error("failed to read back from socket: %\n", error_code);
+                exit(-1);
             }
 
             connection.pending_reads = array_view(connection.reading_buffer, 0, result + leftover);
-        }
-
-        if connection.pending_reads.count < size_of(Wayland_Message_header) ||
-           connection.pending_reads.count < (cast(*Wayland_Message_header) connection.pending_reads.data).size {
-            return Message_Info.{}, null, false;
         }
 
         incoming_message_header := cast(*Wayland_Message_header) connection.pending_reads.data;
@@ -418,14 +413,15 @@ Math :: #import "Math";
         width: s32;
         height: s32;
         // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
-        scale: float64 = 1;
+        scale: float64 = 1.0;
 
         egl_image: EGLImage;
         gbm_buffer_object: *gbm_bo;
         texture: GLuint;
         fbo: GLuint;
 
-        running: bool = true;
+        waiting_for_vblank: bool;
+        running := true;
     };
     init_wayland_egl_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
         window.width = width;
@@ -446,10 +442,20 @@ Math :: #import "Math";
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
         glFramebufferParameteri(GL_FRAMEBUFFER, GL_FRAMEBUFFER_FLIP_Y_MESA, xx GL_TRUE);
     }
-
+    can_draw_to_wayland_egl_window :: (window: Wayland_EGL_Window) -> bool {
+        return !window.waiting_for_vblank && window.wl_buffer_id != 0;
+    }
     update_wayland_egl_window :: (backend: *Backend, window: *Wayland_EGL_Window, event: Message_Info, data: *void) {
+        // TODO: we should actually route all of these events to the objects that they're actually meant for. this is
+        // going to be required for when we support running with multiple windows
         if event.type == {
+            case Wl_Callback_Event_Done;
+                window.waiting_for_vblank = false;
+                if EXIT_ON_FIRST_FRAME {
+                    window.running = false;
+                }
             case Xdg_Toplevel_Event_Close;
+                window.waiting_for_vblank = false;
                 window.running = false;
             case Xdg_Toplevel_Event_Configure;
                 configure := cast(*Xdg_Toplevel_Event_Configure) data;
@@ -2775,6 +2781,10 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.wl_buffer_id, x = 0, y = 0 });
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Damage_Buffer.{ x = 0, y = 0, width = window.width, height = window.height });
+        send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Frame.{
+            callback = new_wayland_client_object(*backend.connection, .WL_CALLBACK)
+        });
+        window.waiting_for_vblank = true;
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
     } else #if OS == .MACOS {
         NSOpenGLContext.flushBuffer(backend.gl_context);
