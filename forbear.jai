@@ -145,9 +145,6 @@ Math :: #import "Math";
                     error.message
                 );
                 exit(-1);
-            case Zwp_Linux_Buffer_Params_V1_Event_Failed;
-                error := cast(*Zwp_Linux_Buffer_Params_V1_Event_Failed) data;
-                log_error("got a zwp_linux_buffer_params error");
         }
     }
 
@@ -408,11 +405,6 @@ Math :: #import "Math";
 
         width: s32;
         height: s32;
-        // these texture width and height are here because we have the frame images allocated to be the largest size the
-        // window was ever at, but we only render to the current window size. this way we can avoid texture allocations,
-        // and it also makes double buffering simpler.
-        texture_width: s32;
-        texture_height: s32;
         // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
         scale: float64 = 1;
 
@@ -457,58 +449,59 @@ Math :: #import "Math";
                 if configure.height {
                     window.height = configure.height;
                 }
+            case Zwp_Linux_Buffer_Params_V1_Event_Failed;
+                error := cast(*Zwp_Linux_Buffer_Params_V1_Event_Failed) data;
+                log_error("compositor failed to import the dmabuf (%x% stride % fourcc % modifier %)",
+                  window.width, window.height, window.strides[0], formatInt(window.fourcc, base = 16), formatInt(window.modifiers, base = 16));
+                exit(-1);
             case Xdg_Surface_Event_Configure;
                 configure := cast(*Xdg_Surface_Event_Configure) data;
                 send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
 
-                if window.texture_width < window.width || window.texture_height < window.height {
-                    if window.egl_image != null {
-                        if eglDestroyImage(context.forbear.backend.egl_display, window.egl_image) != 1 {
-                            log_error("failed to destroy previous egl image: %\n", eglGetError());
-                            exit(-1);
-                        }
-                    }
-
-                    if window.texture != 0 {
-                        glDeleteTextures(1, *window.texture);
-                    }
-
-                    if window.fds[0] != 0 {
-                        close(window.fds[0]);
-                    }
-
-                    glGenTextures(1, *window.texture);
-                    glBindTexture(GL_TEXTURE_2D, window.texture);
-                    window.texture_width = max(window.width, window.texture_width);
-                    window.texture_height = max(window.height, window.texture_height);
-                    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_RGBA8, xx window.texture_width, xx window.texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-                    glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
-                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
-                    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
-
-                    window.egl_image = eglCreateImage(context.forbear.backend.egl_display, context.forbear.backend.egl_context, EGL_GL_TEXTURE_2D, cast(EGLClientBuffer) cast(u64) window.texture, null);
-                    if window.egl_image == null {
-                        log_error("failed to create frame buffer: %\n", eglGetError());
+                if window.egl_image != null {
+                    if eglDestroyImage(context.forbear.backend.egl_display, window.egl_image) != 1 {
+                        log_error("failed to destroy previous egl image: %\n", eglGetError());
                         exit(-1);
                     }
+                }
 
-                    num_planes: s32;
-                    if eglExportDMABUFImageQueryMESA(context.forbear.backend.egl_display, window.egl_image, *window.fourcc, *num_planes, *window.modifiers) != 1 {
-                        log_error("failed in eglExportDMABUFImageQueryMESA: %\n", eglGetError());
-                        exit(-1);
-                    }
-                    if EGL_DEBUGGING {
-                        print("num_planes %, fourcc %, modifiers %\n", num_planes, formatInt(window.fourcc, base = 16), formatInt(window.modifiers, base = 16));
-                    }
-                    if eglExportDMABUFImageMESA(context.forbear.backend.egl_display, window.egl_image, window.fds.data, window.strides.data, window.offsets.data) != 1 {
-                        log_error("failed in eglExportDMABUFImageMESA: %\n", eglGetError());
-                        exit(-1);
-                    }
-                    if EGL_DEBUGGING {
-                        print("fds %, strides %, offsets %\n", window.fds, window.strides, window.offsets);
-                    }
+                if window.texture != 0 {
+                    glDeleteTextures(1, *window.texture);
+                }
+
+                if window.fds[0] != 0 {
+                    close(window.fds[0]);
+                }
+
+                glGenTextures(1, *window.texture);
+                glBindTexture(GL_TEXTURE_2D, window.texture);
+                glTexImage2D(GL_TEXTURE_2D, 0, xx GL_RGBA8, xx window.width, xx window.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+                glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, window.texture, 0);
+                assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+
+                window.egl_image = eglCreateImage(context.forbear.backend.egl_display, context.forbear.backend.egl_context, EGL_GL_TEXTURE_2D, cast(EGLClientBuffer) cast(u64) window.texture, null);
+                if window.egl_image == null {
+                    log_error("failed to create frame buffer: %\n", eglGetError());
+                    exit(-1);
+                }
+
+                num_planes: s32;
+                if eglExportDMABUFImageQueryMESA(context.forbear.backend.egl_display, window.egl_image, *window.fourcc, *num_planes, *window.modifiers) != 1 {
+                    log_error("failed in eglExportDMABUFImageQueryMESA: %\n", eglGetError());
+                    exit(-1);
+                }
+                if EGL_DEBUGGING {
+                    print("num_planes %, fourcc %, modifiers %\n", num_planes, formatInt(window.fourcc, base = 16), formatInt(window.modifiers, base = 16));
+                }
+                if eglExportDMABUFImageMESA(context.forbear.backend.egl_display, window.egl_image, window.fds.data, window.strides.data, window.offsets.data) != 1 {
+                    log_error("failed in eglExportDMABUFImageMESA: %\n", eglGetError());
+                    exit(-1);
+                }
+                if EGL_DEBUGGING {
+                    print("fds %, strides %, offsets %\n", window.fds, window.strides, window.offsets);
                 }
 
                 buffer_params_id := new_wayland_client_object(connection, Interface_Id.ZWP_LINUX_BUFFER_PARAMS_V1);
