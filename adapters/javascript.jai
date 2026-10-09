@@ -51,7 +51,7 @@ Javascript_Adapter :: struct {
     openings_stack: [..]Element_Opening_Data;
 };
 
-init_javascript_adapter :: (
+init_adapter :: (
     adapter: *Javascript_Adapter, 
     main_javascript_source: string, 
     main_javascript_source_name: string, 
@@ -71,7 +71,7 @@ init_javascript_adapter :: (
     }
 }
 
-render_with_javascript_adapter :: (adapter: *Javascript_Adapter) {
+render_with_adapter :: (adapter: *Javascript_Adapter) {
     // is there any data about the frame we should include here?
     javascript_render(adapter.runtime);
 }

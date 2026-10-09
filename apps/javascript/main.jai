@@ -15,11 +15,11 @@ main :: () {
     backend: Backend;
     window: Window;
     #if OS == .LINUX {
-        init_wayland_egl_backend(*backend);
-        init_wayland_egl_window(*backend.connection, *window, 800, 600, "playground");
+        init_backend(*backend);
+        init_window(*backend.connection, *window, 800, 600, "playground");
     } else #if OS == .MACOS {
-        init_macos_gl_backend(*backend);
-        init_macos_gl_window(*backend, *window, 800, 600, "playground");
+        init_backend(*backend);
+        init_window(*backend, *window, 800, 600, "playground");
     }
 
     inter: Font;
@@ -31,24 +31,24 @@ main :: () {
     });
 
     javascript_adapter: Javascript_Adapter;
-    init_javascript_adapter(*javascript_adapter, JAVASCRIPT_SOURCE, "javascript-example");
+    init_adapter(*javascript_adapter, JAVASCRIPT_SOURCE, "javascript-example");
 
     while window.running {
         #if OS == .LINUX {
             while true {
-                event := next_wayland_event(*backend.connection, !can_draw_to_wayland_egl_window(window));
+                event := next_event(*backend.connection, !can_draw(window));
                 if !event.something {
                     break;
                 }
-                update_wayland_connection(*backend.connection, event);
-                update_wayland_egl_window(*backend, *window, event);
+                update_backend(*backend, event);
+                update_window(*backend, *window, event);
             }
         } else #if OS == .MACOS {
-            update_macos_gl_backend(*backend);
-            update_macos_gl_window(*backend, *window);
+            update_backend(*backend);
+            update_window(*backend, *window);
         }
 
-        render_with_javascript_adapter(*javascript_adapter);
+        render_with_adapter(*javascript_adapter);
         layout();
         draw_and_reset_node_tree(rgb(0.0, 0.0, 0.0));
         reset_temporary_storage();

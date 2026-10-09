@@ -92,9 +92,9 @@ Math :: #import "Math";
         send_wayland_message(connection, connection.wl_display_id, Wl_Display_Request_Sync.{ callback = sync_id });
         synced := false;
         while !synced {
-            event := next_wayland_event(connection);
+            event := next_event(connection);
             if !event.something {
-                poll_wayland_connection(connection);
+                poll(connection);
                 continue;
             }
 
@@ -157,7 +157,7 @@ Math :: #import "Math";
             send_wayland_message(connection, connection.xdg_wm_base_id, Xdg_Wm_Base_Request_Pong.{ping.serial});
         }
     }
-    poll_wayland_connection :: (connection: *Wayland_Connection, timeout_ms: s32 = 1000) {
+    poll :: (connection: *Wayland_Connection, timeout_ms: s32 = 1000) {
         polling_result := poll(*connection.polling_fd, 1, timeout_ms);
         if polling_result == {
             case 0;
@@ -188,7 +188,7 @@ Math :: #import "Math";
         data: *void;
         object_id: u32;
     };
-    next_wayland_event :: (connection: *Wayland_Connection, wait := false) -> Wayland_Event {
+    next_event :: (connection: *Wayland_Connection, wait := false) -> Wayland_Event {
         while connection.pending_reads.count < size_of(Wayland_Message_header) ||
         connection.pending_reads.count < (cast(*Wayland_Message_header) connection.pending_reads.data).size {
             leftover := connection.pending_reads.count;
@@ -342,7 +342,7 @@ Math :: #import "Math";
             if error_code == EPIPE {
                 log_error("compositor closed the connection, draining what it sent before closing:");
                 while true {
-                    next_wayland_event(connection);
+                    next_event(connection);
                 }
             }
             log_error("could not send wayland message: %\n", error_code);
@@ -433,7 +433,7 @@ Math :: #import "Math";
         waiting_for_vblank: bool;
         running := true;
     };
-    init_wayland_egl_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
+    init_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
         window.width = width;
         window.height = height;
 
@@ -452,10 +452,10 @@ Math :: #import "Math";
         glBindFramebuffer(GL_FRAMEBUFFER, window.fbo);
         glFramebufferParameteri(GL_FRAMEBUFFER, GL_FRAMEBUFFER_FLIP_Y_MESA, xx GL_TRUE);
     }
-    can_draw_to_wayland_egl_window :: (window: Wayland_EGL_Window) -> bool {
+    can_draw :: (window: Wayland_EGL_Window) -> bool {
         return !window.waiting_for_vblank && window.wl_buffer_id != 0;
     }
-    update_wayland_egl_window :: (backend: *Backend, window: *Wayland_EGL_Window, event: Wayland_Event) {
+    update_window :: (backend: *Backend, window: *Wayland_EGL_Window, event: Wayland_Event) {
         if event.object_id == window.xdg_surface_id && event.message.type == Xdg_Surface_Event_Configure {
             configure := cast(*Xdg_Surface_Event_Configure) event.data;
             send_wayland_message(*backend.connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
@@ -597,7 +597,7 @@ Math :: #import "Math";
     glEGLImageTargetTexture2DOES: (target: GLenum, image: *void) #c_call;
     GBM_FORMAT_ABGR8888 :: 0x34324241;
     DRM_FORMAT_MOD_INVALID :: 0x00ffffffffffffff;
-    init_wayland_egl_backend :: (backend: *Wayland_EGL_Backend) {
+    init_backend :: (backend: *Wayland_EGL_Backend) {
         init_wayland_connection(*backend.connection);
 
         // TODO: this is hardcoded device, it can be wrong, and it can possibly not be the one the compositor is
@@ -649,9 +649,9 @@ Math :: #import "Math";
         send_wayland_message(*backend.connection, backend.connection.wl_display_id, Wl_Display_Request_Sync.{ callback = sync_id });
         synced := false;
         while !synced {
-            event := next_wayland_event(*backend.connection);
+            event := next_event(*backend.connection);
             if !event.something {
-                poll_wayland_connection(*backend.connection);
+                poll(*backend.connection);
                 continue;
             }
 
@@ -676,6 +676,9 @@ Math :: #import "Math";
             exit(-1);
         }
     }
+    update_backend :: (backend: *Wayland_EGL_Backend, event: Wayland_Event) {
+        update_wayland_connection(*backend.connection, event);
+    }
 
     Backend :: Wayland_EGL_Backend;
     Window :: Wayland_EGL_Window;
@@ -693,7 +696,7 @@ Math :: #import "Math";
 
         running := true;
     };
-    init_macos_gl_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window, width: float64, height: float64, title: string) {
+    init_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window, width: float64, height: float64, title: string) {
         rectangle := NSRect.{ size = .{ width = width, height = height } };
 
         window.ns_window = NSWindow.initWithContentRect(
@@ -718,9 +721,8 @@ Math :: #import "Math";
         window.width = backing.size.width;
         window.height = backing.size.height;
         window.scale = backing.size.width / frame.size.width;
-
     }
-    update_macos_gl_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window) {
+    update_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window) {
         is_visible: (*void, Selector) -> BOOL #c_call = xx objc_msgSend;
         if !is_visible(window.ns_window, selector("isVisible")) {
             window.running = false;
@@ -743,7 +745,7 @@ Math :: #import "Math";
 
         attached_view: *NSView;
     };
-    init_macos_gl_backend :: (backend: *MacOS_GL_Backend) {
+    init_backend :: (backend: *MacOS_GL_Backend) {
         init_objective_c();
         init_app_kit();
         backend.app = NSApplication.sharedApplication();
@@ -764,7 +766,7 @@ Math :: #import "Math";
         NSOpenGLContext.makeCurrentContext(backend.gl_context);
         gl_load(*gl);
     }
-    update_macos_gl_backend :: (backend: *MacOS_GL_Backend) {
+    update_backend :: (backend: *MacOS_GL_Backend) {
         pool := objc_init(objc_alloc(NSAutoreleasePool));
         while true {
             event := NSApplication.nextEventMatchingMask(backend.app, NSEventMaskAny, NSDate.distantPast(), NSDefaultRunLoopMode, YES);
