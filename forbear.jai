@@ -2646,10 +2646,14 @@ layout :: () {
                     if node.style.placement.kind == {
                         case .FLOW;
                             node.position = node.style.translate;
+                            node.position.x += node.style.margin.x.x;
+                            node.position.y += node.style.margin.y.x;
                         case .FIXED;
                             node.position = node.style.placement.fixed + node.style.translate;
                         case .RELATIVE;
                             node.position = node.style.placement.relative + node.style.translate;
+                            node.position.x += node.style.margin.x.x;
+                            node.position.y += node.style.margin.y.x;
                     }
                 }
                 base := node.position + Vector2.{
