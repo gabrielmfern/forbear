@@ -59,8 +59,8 @@ interface Style {
 declare function open(style?: Style, manualKey?: string): void;
 declare function open(manualKey?: string): void;
 declare function close(): void;
-declare function text(style: Style, content: string, manualKey?: string): void;
-declare function text(content: string, manualKey?: string): void;
+declare function text(style: Style, content: unknown, manualKey?: string): void;
+declare function text(content: unknown, manualKey?: string): void;
 
 declare namespace JSX {
   interface IntrinsicElements {
@@ -76,7 +76,7 @@ declare function gradient(direction: Vector2, stops: GradientStop[]): Background
 declare function fit(): Sizing;
 declare function fixed(value: number): Sizing;
 declare function fixed(value: Vector2): Placement;
-declare function grow(value: number): Sizing;
+declare function grow(value?: number): Sizing;
 declare function flow(): Placement;
 declare function relative(value: Vector2): Placement;
 

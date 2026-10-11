@@ -110,9 +110,11 @@ void grow(const v8::FunctionCallbackInfo<v8::Value>& info) {
         sizing->Set(context, 1, number).Check();
         return_value.Set(sizing);
     } else {
-        isolate->ThrowException(v8::Exception::TypeError(
-            v8::String::NewFromUtf8Literal(isolate, "grow expects one number")
-        ));
+        auto number = info[0].As<v8::Number>();
+        auto sizing = v8::Array::New(isolate, 2);
+        sizing->Set(context, 0, runtime->grow_string.Get(isolate)).Check();
+        sizing->Set(context, 1, v8::Number::New(isolate, 1.0)).Check();
+        return_value.Set(sizing);
     }
 }
 
@@ -744,9 +746,18 @@ void js_text(const v8::FunctionCallbackInfo<v8::Value>& info) {
             ));
             return;
         }
-    } else if (info.Length() >= 1 && info[0]->IsString()) {
+    } else if (info.Length() >= 1) {
         style = v8::Object::New(isolate);
-        content = info[0];
+        auto context = runtime->setup->context();
+        if (info[0]->IsString()) {
+            content = info[0];
+        } else if (info[0]->IsNumber() && info[0]->IsBigInt()) {
+            if (!info[0]->ToString(context).ToLocal(&content)) {
+                return;
+            }
+        }
+        // render nothing for boolean, undefined, null
+
         if (info.Length() >= 2 && info[1]->IsString()) {
             manual_key = info[1];
         } else if (info.Length() >= 2 && !info[1]->IsNullOrUndefined()) {
