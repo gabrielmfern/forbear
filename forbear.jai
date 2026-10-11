@@ -1866,39 +1866,39 @@ init_forbear :: (
         glVertexAttribDivisor(2, 1);
 
         vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
-#version 330 core
-layout(location = 0) in vec2 position;
-layout(location = 1) in vec2 size;
-layout(location = 2) in vec4 color;
+            #version 330 core
+            layout(location = 0) in vec2 position;
+            layout(location = 1) in vec2 size;
+            layout(location = 2) in vec4 color;
 
-uniform vec2 viewport;
+            uniform vec2 viewport;
 
-out vec4 v_color;
+            out vec4 v_color;
 
-const vec2 corners[6] = vec2[](
-  vec2(0, 0), vec2(1, 0), vec2(0, 1),
-  vec2(0, 1), vec2(1, 0), vec2(1, 1)
-);
+            const vec2 corners[6] = vec2[](
+              vec2(0, 0), vec2(1, 0), vec2(0, 1),
+              vec2(0, 1), vec2(1, 0), vec2(1, 1)
+            );
 
-void main() {
-    vec2 corner = corners[gl_VertexID];
-    v_color = color;
+            void main() {
+                vec2 corner = corners[gl_VertexID];
+                v_color = color;
 
-    gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
-    gl_Position.y = -gl_Position.y;
-}
+                gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
+                gl_Position.y = -gl_Position.y;
+            }
 GLSL);
         defer glDeleteShader(vertex_shader);
         fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
-#version 330 core
+            #version 330 core
 
-in vec4 v_color;
-out vec4 out_color;
+            in vec4 v_color;
+            out vec4 out_color;
 
-void main() {
-    // TODO: render rounded corners and borders
-    out_color = v_color;
-}
+            void main() {
+                // TODO: render rounded corners and borders
+                out_color = v_color;
+            }
 GLSL);
         defer glDeleteShader(fragment_shader);
 
@@ -1957,49 +1957,49 @@ GLSL);
         glVertexAttribDivisor(5, 1);
 
         vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
-#version 330 core
-layout(location = 0) in vec2 position;
-layout(location = 1) in vec2 bearing;
-layout(location = 2) in vec2 size;
-layout(location = 3) in vec2 uv_min;
-layout(location = 4) in vec2 uv_max;
-layout(location = 5) in vec4 color;
+            #version 330 core
+            layout(location = 0) in vec2 position;
+            layout(location = 1) in vec2 bearing;
+            layout(location = 2) in vec2 size;
+            layout(location = 3) in vec2 uv_min;
+            layout(location = 4) in vec2 uv_max;
+            layout(location = 5) in vec4 color;
 
-uniform vec2 viewport;
+            uniform vec2 viewport;
 
-out vec4 v_color;
-out vec2 v_uv;
+            out vec4 v_color;
+            out vec2 v_uv;
 
-const vec2 corners[6] = vec2[](
-  vec2(0, 0), vec2(1, 0), vec2(0, 1),
-  vec2(0, 1), vec2(1, 0), vec2(1, 1)
-);
+            const vec2 corners[6] = vec2[](
+              vec2(0, 0), vec2(1, 0), vec2(0, 1),
+              vec2(0, 1), vec2(1, 0), vec2(1, 1)
+            );
 
-void main() {
-    vec2 corner = corners[gl_VertexID];
-    v_color = color;
-    v_uv = mix(uv_min, uv_max, corner);
+            void main() {
+                vec2 corner = corners[gl_VertexID];
+                v_color = color;
+                v_uv = mix(uv_min, uv_max, corner);
 
-    gl_Position = vec4((position + bearing + corner * size) / viewport * 2.0 - 1.0, 0.0, 1.0);
-    gl_Position.y = -gl_Position.y;
-}
+                gl_Position = vec4((position + bearing + corner * size) / viewport * 2.0 - 1.0, 0.0, 1.0);
+                gl_Position.y = -gl_Position.y;
+            }
 GLSL);
         defer glDeleteShader(vertex_shader);
         fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
-#version 330 core
+            #version 330 core
 
-in vec4 v_color;
-in vec2 v_uv;
+            in vec4 v_color;
+            in vec2 v_uv;
 
-uniform sampler2D atlas;
+            uniform sampler2D atlas;
 
-out vec4 out_color;
+            out vec4 out_color;
 
-void main() {
-    // TODO: handle subpixel rendering
-    float a = texture(atlas, v_uv).r * v_color.a;
-    out_color = vec4(v_color.rgb * a, a);
-}
+            void main() {
+                // TODO: handle subpixel rendering
+                float a = texture(atlas, v_uv).r * v_color.a;
+                out_color = vec4(v_color.rgb * a, a);
+            }
 GLSL);
         defer glDeleteShader(fragment_shader);
 
