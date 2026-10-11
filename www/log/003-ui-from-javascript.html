@@ -572,30 +572,33 @@ implementation and the way we define buffers so that this library can start actu
 actually use. It's now not crashing when screnshotting, it's respecting the monitor's refresh rate through the
 <code>frame</code> event from the Wayland compositor and also is using a double buffer instead of just one.</p>
 
-<p>Besides this, forbear now is based on </p>
-
-<ul>
-  <li>Before: the window rendered as fast as it could, with one buffer. Now it waits for the compositor's <code>frame</code> callback and uses two buffers.</li>
-  <li>Buffers come from gbm, with the formats and modifiers the compositor asks for.</li>
-  <li>Short list of fixes: resizing, uninitialized memory showing while resizing, the crash when taking a screenshot, answering <code>xdg_wm_base</code> pings, picking the compositor socket the way libwayland does.</li>
-  <li>The FPS counter, in both Jai and JavaScript, to check all of this.</li>
-</ul>
-
-<h2>smaller things</h2>
-
-<ul>
-  <li>A flat pool for per-frame allocations.</li>
-  <li>The memory debugger in the playground.</li>
-  <li>You can now subscribe to new entries on the site.</li>
-</ul>
+<p>Besides this, all forbear allocations through frames are done through a <code>Flat_Pool</code> which is a kind of allocator in jai that keeps a reserved space in RAM and resets and is reused across boundaries, frames in our case. This also also fixes a few leaks we had.</p>
 
 <h2>what's next</h2>
 
-<ul>
-  <li>Mouse and keyboard input.</li>
-  <li>Then a calculator, written in JSX. Maybe show a static screenshot of its layout here as a teaser.</li>
-  <li>Rounded corners and borders, so it stops looking like a 1995 web page.</li>
-</ul>
+I'm really excited to start building some real applications with this to stress test the algorithsm and most importantly the JSX API. So, I plan on working on a calculator program. It should be a simple, instant to open, instant, beautiful and better than what's status quo for calculators. A simple app to start, then we can start working up to more thing.
+
+Before I can do this, I'm planning on working on event handling first, then state management and components.
+
+<p>Also, you can now subscribe to entries on the website, so I can notify you when I write a new one!</p>
+
+<form id="subscribe" class="flex items-center gap-2 my-4 text-sm text-muted">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="text-muted hover:text-yellow cursor-pointer">get entries by email</button>
+</form>
+<div id="subscribe-msg" class="mt-2 text-sm text-muted"></div>
+<script>
+  document.getElementById('subscribe').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const response = await fetch('/api/subscribe', { method: 'POST', body: form.email.value });
+    document.getElementById('subscribe-msg').textContent = response.status === 409
+      ? "you're already subscribed"
+      : response.ok
+        ? 'check your inbox for a link to confirm.'
+        : 'something went wrong, try again later.';
+  });
+</script>
 
 <p><a href="https://github.com/gabrielmfern/forbear">https://github.com/gabrielmfern/forbear</a></p>
 
