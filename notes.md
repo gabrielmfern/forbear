@@ -14,6 +14,7 @@
     - [ ] mouse input
 - [ ] build a calculator through the jsx adapter 
 - [ ] handle wayland topbars protocol (this doesn't address gnome unfortunately)
+- [ ] handling the weird edge case of window decorations for Gnome :/
 - [ ] draw rounded corners
 - [ ] draw in the z order
 - [ ] draw background images 
@@ -26,7 +27,6 @@
 - [ ] glyphs are sitting on fractional pixels on the texture atlas
 - [ ] subpixel text rendering
 - [ ] wayland is not handling window scale
-- [ ] handling the weird edge case of window decorations for Gnome :/
 - [ ] handle window scales changing at runtime
 - [ ] macos window resizing freezes (and the same will happen for windows) the rendering
     - this will require some drastic changes that allows us to run the UI definition every time the resize event comes back in macos and windows  
