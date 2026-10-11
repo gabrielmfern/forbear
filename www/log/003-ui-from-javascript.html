@@ -75,10 +75,32 @@ pre .hl-preproc { color: #ffffff; }
 </p>
 
 <p>
+  Both windows render in sync with my 240 Hz monitor, so the 4.2 ms you see on them is the time between frames, not
+  the time the work takes.
+</p>
+
+<p>
   To properly support JavaScript, I've decided to run it through Node.js. This doesn't mean I spawn a separate subprocess
   and then have to communicate through a socket or IPC or whatever. It's in the same process, by <a href="https://nodejs.org/api/embedding.html">embedding Node.js</a>
   and accessing the V8 memory mostly directly, which means we can keep the high bar for performance since most of the
   work is still done through jai.
+</p>
+
+<p>
+  The upside of running on Node.js is that users have access to all that they have there. They can use any libraries
+  they're already used to, and they can use (almost) any Node APIs they might want. The missing part around this is asynchronous work, which with the way we run things, is still not supported.
+</p>
+
+<p>
+  Node.js is not going to linked/included on any build of forbear, only when the user actually wants to use JavaScript, so
+  it doesn't affect anyone else. 
+</p>
+
+<p>
+  Including a way to run from JavaScript might look odd when coming from the first entry of this log, but the reality is
+  that it's better to provide a way to do things from wherever everyone prefers. I believe that users can build a better
+  app using JavaScript here, than they would if they were to build with Electron. And the native language way of doing
+  thigns will always be available instead.
 </p>
 
 <p>
@@ -436,7 +458,16 @@ pre .hl-preproc { color: #ffffff; }
 <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span></code></pre>
 </div>
 
-<p>The central part of this is element definition, so let's talk about that first. Nodes are not defined in JavaScript
+<p>To actually support this JSX flavour, we're compiling this JSX with a TypeScript transformer that converts the
+<code>element</code> definitions into the <code>open</code> and <code>close</code> function calls. It also keeps track
+of source code locations so that it can replicate the keying that's done by the <code>element</code> macro in jai. You
+can see the result in the <code>dist/index.js</code> tab above.</p>
+
+<p><code>open</code>, <code>close</code> and <code>text</code> are native functions, defined from C++, that call straight
+into jai. jai then reads each style field it needs out of the JavaScript object through V8, so there's no
+serialization step in between.</p>
+
+<p>The central part of this is element definition. Nodes are not defined in JavaScript
 here, as it might seem. Nodes are all defined in jai, but the parameters all come from JavaScript. This
 also means that, unlike in React, elements are not values you can pass around and return. You just "define" the
 element and it gets pushed into the <code>Node_Tree</code> in jai.</p>
@@ -445,12 +476,7 @@ element and it gets pushed into the <code>Node_Tree</code> in jai.</p>
 viable to rerun everything every single frame instead of just reacting when things change, like React does. This means
 you can do animations and all sorts of weird things across frames, since you have access to each and every one of them.</p>
 
-<p>The particular upside of this design is that users have access to all that they have in Node.js. They can use any
-libraries they're already used to, and they can use any Node APIs they might want.</p>
-
-<p>To actually support this JSX flavour, we're compiling this JSX with a TypeScript transformer that converts the
-<code>element</code> definitions into the <code>open</code> and <code>close</code> function calls. It also keeps track
-of source code locations so that it can replicate the keying that's done by the <code>element</code> macro in jai.</p>
+<p>The curse is the fact that this is different from React. You can't store an element in a variable or pass it as a prop, which I believe leads to a sligthly worse DX.</p>
 
 <p>But, if you've read any of the other posts, you'll know this is missing some of the important setup code that the
 previous applications already had, so here it is:</p>
@@ -515,12 +541,16 @@ INTER_TTF <span class="hl-punctuation-delimiter">::</span> <span class="hl-state
 <p>If you've seen the other code samples, you can see that this is actually not that different. The main difference is
 that jai doesn't render the elements directly, but rather calls this <code>render_with_adapter</code>.</p>
 
+<p>The other difference is at the top. The <code>#run</code> block runs <code>npm run build</code> while jai compiles,
+and <code>JAVASCRIPT_SOURCE</code> reads the output into a constant. So the JavaScript ends up inside the executable,
+with no file to read at startup.</p>
+
 <p>The long-term ideal is that every JavaScript application built with forbear will have this "escape hatch" of native
 code where they can do just about whatever they want. The reasoning for this is basically twofold:</p>
 
 <ol>
-  <li>so that all JavaScript developers start naturally learning and understanding more of the fundamentals without
-    actually trying to learn them,</li>
+  <li>so that nothing about the native side is hidden: the window, the events and the frame loop are a short file in
+    your own project that you can read and change, and working next to it is how the fundamentals become familiar,</li>
   <li>and so that advanced users of the library can have full control of everything without having to give up their
     preferred convenience.</li>
 </ol>
@@ -531,29 +561,27 @@ sometimes calling jai code as well.</p>
 
 <h2>layout</h2>
 
-<p>In other news, you can clearly see we also have layouting implemented! This has the following features:</p>
-
-<ul>
-  <li>fitting</li>
-  <li>growing</li>
-  <li>shrinking</li>
-  <li>text wrapping</li>
-  <li>fixed, minimum and maximum sizes</li>
-  <li>padding and margins</li>
-  <li>horizontal and vertical direction</li>
-  <li>justification on both axes</li>
-  <li>flow, fixed and relative placement</li>
-</ul>
+<p>In other news, you can clearly see we also have layouting implemented! This already has fitting, growing, shrinking, text wrapping, fixed, minimum, maximum sizes, padding, margins, horizontal and vertical placement, justification horizontally and vertically, flow, fixed and relative placement.</p>
 
 <p>Overall, it's actually not an extremely complicated algorithm. It's heavily based on <a
   href="https://github.com/nicbarker/clay">Clay</a>, implemented with improvements over the old Zig version, which was
 written from scratch based on Nic's <a href="https://www.youtube.com/watch?v=by9lQvpvMIc">awesome YouTube video</a>.
 It's only ~700 LOC in a single function.</p>
 
-<p>The most interesting part about it is the fact that it runs in multiple passes over the entire <code>Node_Tree</code>,
-and that's done for two reasons: 1) because it makes the algorithm much simpler (as Nic explains in much more detail and
-depth than I possibly can) and 2) because it really is faster to do that than to retroactively update nodes,
-which would be the alternative.</p>
+<p>The most interesting part about it is the fact that it runs in multiple passes over the entire <code>Node_Tree</code>:</p>
+
+<ol>
+  <li>fit every node to its children, going from children to parents</li>
+  <li>grow and shrink the children of every node, going from parents to children</li>
+  <li>wrap the text, now that the widths are known</li>
+  <li>fit the heights again, since wrapping changed them</li>
+  <li>grow the heights again</li>
+  <li>place every node and justify its children</li>
+</ol>
+
+<p>That's done for two reasons: 1) because it makes the algorithm much simpler (as Nic explains in much more detail and
+depth than I possibly can) and 2) because each pass is a plain loop over the nodes, which is faster than the alternative of
+going back to retroactively update them.</p>
 
 <p>The algorithm is also made simpler because we use a single, flat array to store all nodes, which I call the
 <code>Node_Tree</code>. Since nodes are always inserted in the order parent -> children, to iterate the entire tree
