@@ -142,13 +142,14 @@ main :: () {
                         text("Every frame, this whole window is laid out from scratch. The sidebar changes its width, so this paragraph has to wrap its words again, the cards below have to share what is left, and every bar has to find its new place. Nothing here is a transform, all of it is layout.");
                     });
                     element(Style.{ width = grow(), margin = top(16) }, #code {
-                        for card, index: [2]string.[
-                            string.["fit", "A node is as big as its children."],
-                            string.["grow", "A node takes a share of the space that is left."],
-                            string.["shrink", "A node gives space back when there is not enough."],
+                        for description, index: string.[
+                            "Each card takes a share of the width that is left.",
+                            "The number above is the weight of that share.",
+                            "When the weight changes, the text wraps again.",
                         ] {
+                            weight := 1 + 3 * wave(seconds, 0.9, index * 2.1);
                             element(Style.{
-                                width = grow(1 + 3 * wave(seconds, 0.9, index * 2.1)),
+                                width = grow(weight),
                                 height = grow(),
                                 background = color(rgb(44, 51, 59)),
                                 padding = all(10),
@@ -156,9 +157,9 @@ main :: () {
                             }, #code {
                                 element(Style.{ width = grow(), direction = .VERTICAL }, #code {
                                     element(Style.{ color = rgb(184, 163, 106), font_size = 18 }, #code {
-                                        text(card[0]);
+                                        text(tprint("grow(%)", formatFloat(weight, trailing_width = 2, zero_removal = .NO)));
                                     });
-                                    text(card[1]);
+                                    text(description);
                                 });
                             });
                         }

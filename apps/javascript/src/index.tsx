@@ -99,12 +99,13 @@ setRenderFunction(() => {
         </element>
         <element width={grow()} margin={top(16)}>
           {[
-            ["fit", "A node is as big as its children."],
-            ["grow", "A node takes a share of the space that is left."],
-            ["shrink", "A node gives space back when there is not enough."],
-          ].map(([title, description], index) => (
+            "Each card takes a share of the width that is left.",
+            "The number above is the weight of that share.",
+            "When the weight changes, the text wraps again.",
+          ].map((description, index) => {
+            const weight = 1 + 3 * wave(0.9, index * 2.1);
             <element
-              width={grow(1 + 3 * wave(0.9, index * 2.1))}
+              width={grow(weight)}
               height={grow()}
               background={color(rgb(44, 51, 59))}
               padding={all(10)}
@@ -112,12 +113,12 @@ setRenderFunction(() => {
             >
               <element width={grow()} direction="vertical">
                 <element color={rgb(184, 163, 106)} fontSize={18}>
-                  {title}
+                  {`grow(${weight.toFixed(2)})`}
                 </element>
                 {description}
               </element>
-            </element>
-          ))}
+            </element>;
+          })}
         </element>
         <element height={grow()} />
         <element margin={top(16)} color={rgb(255, 255, 255)} direction="vertical">
