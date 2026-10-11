@@ -2146,10 +2146,10 @@ layout :: () {
             for *node: node_tree {
                 if it_index == 0 {
                     if node.style.width.kind == .GROW {
-                        node.size.x = xx window.width;
+                        node.size.x = (cast(float) window.width) / (cast(float) window.scale);
                     }
                     if node.style.height.kind == .GROW {
-                        node.size.y = xx window.height;
+                        node.size.y = (cast(float) window.height) / (cast(float) window.scale);
                     }
                 }
                 if node.first_child != -1 && node.glyphs.array.count == 0 {
@@ -2521,7 +2521,7 @@ layout :: () {
             for *node: node_tree {
                 if it_index == 0 {
                     if node.style.height.kind == .GROW {
-                        node.size.y = xx window.height;
+                        node.size.y = (cast(float) window.height) / (cast(float) window.scale);
                     }
                 }
                 if node.first_child != -1 && node.glyphs.array.count == 0 {
