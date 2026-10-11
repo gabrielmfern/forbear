@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+@theme {
+  --color-bg: #1C1F23;
+  --color-float: #111316;
+  --color-ui: #2C333B;
+  --color-fg: #AEB8C4;
+  --color-muted: #6E7A87;
+  --color-bright: #FFFFFF;
+  --color-yellow: #B8A36A;
+}
+pre .hl-function { color: #b8a36a; }
+pre .hl-delimiter { color: #c8d0d8; }
+pre .hl-operator { color: #e0e2ea; }
+pre .hl-string { font-style: italic; color: #b8a36a; }
+pre .hl-special { color: #b8a36a; }
+pre .hl-label { color: #86a5bf; }
+</style>
+</head>
+<body class="m-0">
+<div id="og" class="relative w-[1200px] h-[630px] overflow-hidden bg-bg">
+  <div class="absolute left-16 top-0 bottom-0 w-[470px] flex flex-col justify-center gap-6">
+    <p class="text-2xl text-muted">forbear log, entry 003</p>
+    <h1 class="text-[68px] leading-[1.05] font-bold text-bright">UI from<br>JavaScript</h1>
+  </div>
+  <img src="../assets/2026-10-11-javascript-window.png" class="absolute left-[560px] top-[64px] w-[780px] max-w-none rounded-2xl ring-1 ring-ui shadow-2xl">
+  <pre class="absolute left-[700px] top-[36px] w-[540px] m-0 bg-float text-fg text-[24px] leading-snug p-6 rounded-2xl ring-1 ring-ui shadow-2xl"><code><span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}&gt;</span>
+  FPS:
+  <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-delimiter">/&gt;</span>
+  <span class="hl-delimiter">{</span><span class="hl-string">`</span><span class="hl-special">${</span>fps<span class="hl-special">}</span><span class="hl-string">`</span><span class="hl-delimiter">}</span>
+<span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span></code></pre>
+</div>
+</body>
+</html>
