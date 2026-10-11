@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>forbear log, entry 003: UI from JavaScript</title>
+<meta name="description" content="forbear now runs JSX on an embedded Node, lays nodes out, and renders in sync with the compositor on Wayland.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="forbear">
+<meta property="og:url" content="https://www.forbear.dev/log/003-ui-from-javascript.html">
+<meta property="og:title" content="UI from JavaScript">
+<meta property="og:description" content="forbear now runs JSX on an embedded Node, lays nodes out, and renders in sync with the compositor on Wayland.">
+<meta property="og:image" content="https://www.forbear.dev/assets/og-003.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="UI from JavaScript">
+<meta name="twitter:description" content="forbear now runs JSX on an embedded Node, lays nodes out, and renders in sync with the compositor on Wayland.">
+<meta name="twitter:image" content="https://www.forbear.dev/assets/og-003.png">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+@theme {
+  --color-bg: #1C1F23;
+  --color-float: #111316;
+  --color-ui: #2C333B;
+  --color-fg: #AEB8C4;
+  --color-muted: #6E7A87;
+  --color-bright: #FFFFFF;
+  --color-yellow: #B8A36A;
+  --color-bright-yellow: #CFBA78;
+}
+@layer base {
+  html { @apply overflow-x-clip; }
+  body { @apply bg-bg text-fg leading-relaxed; }
+  h1 { @apply text-bright text-3xl font-bold mb-8; }
+  h2 { @apply text-bright text-2xl font-bold mt-12 mb-4; }
+  h3 { @apply text-bright text-xl font-bold mt-8 mb-3; }
+  p { @apply my-4; }
+  ul { @apply list-disc pl-6 my-4; }
+  ol { @apply list-decimal pl-6 my-4; }
+  a { @apply text-yellow hover:text-bright-yellow; }
+  code { @apply bg-float text-bright px-1 rounded; }
+  pre { @apply bg-float text-fg text-sm p-4 rounded-lg overflow-x-auto my-6; }
+  pre code { @apply bg-transparent text-fg p-0; }
+}
+pre .hl-function { color: #b8a36a; }
+pre .hl-delimiter { color: #c8d0d8; }
+pre .hl-type { color: #ffffff; }
+pre .hl-punctuation-delimiter { color: #c8d0d8; }
+pre .hl-operator { color: #e0e2ea; }
+pre .hl-statement { color: #ffffff; }
+pre .hl-number { color: #7fa0b8; }
+pre .hl-string { font-style: italic; color: #b8a36a; }
+pre .hl-comment { color: #4ebe4e; font-style: italic; }
+pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
+pre .hl-special { color: #b8a36a; }
+pre .hl-label { color: #86a5bf; }
+pre .hl-preproc { color: #ffffff; }
+</style>
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+</head>
+<body>
+<main class="max-w-2xl mx-auto px-4 py-16">
+<p class="mt-0 mb-8"><a href="/">&larr; forbear</a></p>
+<h1>forbear log, entry 003: UI from JavaScript</h1>
+<p class="text-muted tabular-nums -mt-6"><time datetime="2026-10-11">2026-10-11</time></p>
+
+<video src="../assets/2026-10-11-jai-and-javascript-side-by-side.mp4" preload="metadata" controls autoplay muted loop playsinline class="block my-6 rounded-lg max-w-none w-[min(calc(100vw-2rem),1616px)] relative left-1/2 -translate-x-1/2"></video>
+
+<p>
+  This is realtime layouting happening every single frame, running every single frame, without any caching running in
+  both languages.
+</p>
+
+<p>
+  To properly support javascript, I've decided to run through Node.js. This doesn't mean I spawn a separate subprocess
+  and then have to go communicating through a socket or IPC or whatever. It's in the same process by <a href="https://nodejs.org/api/embedding.html">embedding Node.js</a>
+  and accessing the V8 memory mostly directly, which means we can keep the high bar for performance since most of the
+  work is still done through Jai.
+</p>
+
+<p>
+  The actual javascript code looks like this:
+</p>
+
+<div class="group my-6">
+<div class="flex text-sm">
+<label class="cursor-pointer rounded-t-lg px-4 py-2 text-muted hover:text-fg has-[:checked]:bg-float has-[:checked]:text-bright has-[:focus-visible]:outline"><input type="radio" name="code-003" id="code-003-source" class="sr-only" checked>src/index.tsx</label>
+<label class="cursor-pointer rounded-t-lg px-4 py-2 text-muted hover:text-fg has-[:checked]:bg-float has-[:checked]:text-bright has-[:focus-visible]:outline"><input type="radio" name="code-003" id="code-003-output" class="sr-only">dist/index.js</label>
+</div>
+<pre class="hidden group-has-[#code-003-source:checked]:block my-0 h-[28rem] overflow-y-auto rounded-tl-none"><code><span class="hl-string-special-symbol">console</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">log</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;hey, this is nodejs, believe it or not!&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+
+<span class="hl-statement">let</span> fps <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> frames <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> last <span class="hl-operator">=</span> performance<span class="hl-punctuation-delimiter">.</span><span class="hl-function">now</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> previous <span class="hl-operator">=</span> last<span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> frameSum <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> frameMax <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> averageMs <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> maxMs <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+
+<span class="hl-function">setRenderFunction</span><span class="hl-delimiter">(()</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">{</span>
+  <span class="hl-statement">const</span> now <span class="hl-operator">=</span> performance<span class="hl-punctuation-delimiter">.</span><span class="hl-function">now</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+  <span class="hl-statement">const</span> delta <span class="hl-operator">=</span> now <span class="hl-operator">-</span> previous<span class="hl-punctuation-delimiter">;</span>
+  previous <span class="hl-operator">=</span> now<span class="hl-punctuation-delimiter">;</span>
+  frames <span class="hl-operator">+=</span> <span class="hl-number">1</span><span class="hl-punctuation-delimiter">;</span>
+  frameSum <span class="hl-operator">+=</span> delta<span class="hl-punctuation-delimiter">;</span>
+  frameMax <span class="hl-operator">=</span> <span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">max</span><span class="hl-delimiter">(</span>frameMax<span class="hl-punctuation-delimiter">,</span> delta<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+  <span class="hl-statement">if</span> <span class="hl-delimiter">(</span>now <span class="hl-operator">-</span> last <span class="hl-operator">&gt;=</span> <span class="hl-number">1000</span><span class="hl-delimiter">)</span> <span class="hl-delimiter">{</span>
+    fps <span class="hl-operator">=</span> frames<span class="hl-punctuation-delimiter">;</span>
+    averageMs <span class="hl-operator">=</span> frameSum <span class="hl-operator">/</span> frames<span class="hl-punctuation-delimiter">;</span>
+    maxMs <span class="hl-operator">=</span> frameMax<span class="hl-punctuation-delimiter">;</span>
+    frames <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+    frameSum <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+    frameMax <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+    last <span class="hl-operator">=</span> now<span class="hl-punctuation-delimiter">;</span>
+  <span class="hl-delimiter">}</span>
+
+  <span class="hl-statement">const</span> seconds <span class="hl-operator">=</span> now <span class="hl-operator">/</span> <span class="hl-number">1000</span><span class="hl-punctuation-delimiter">;</span>
+  <span class="hl-statement">const</span> <span class="hl-function">wave</span> <span class="hl-operator">=</span> <span class="hl-delimiter">(</span>speed<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">number</span><span class="hl-punctuation-delimiter">,</span> phase<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">number</span><span class="hl-delimiter">)</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">(</span><span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">sin</span><span class="hl-delimiter">(</span>seconds <span class="hl-operator">*</span> speed <span class="hl-operator">+</span> phase<span class="hl-delimiter">)</span> <span class="hl-operator">+</span> <span class="hl-number">1</span><span class="hl-delimiter">)</span> <span class="hl-operator">/</span> <span class="hl-number">2</span><span class="hl-punctuation-delimiter">;</span>
+  <span class="hl-statement">const</span> bars <span class="hl-operator">=</span> <span class="hl-number">8</span> <span class="hl-operator">+</span> <span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">floor</span><span class="hl-delimiter">(</span><span class="hl-number">40</span> <span class="hl-operator">*</span> <span class="hl-function">wave</span><span class="hl-delimiter">(</span><span class="hl-number">0.4</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+  <span class="hl-statement">const</span> phase <span class="hl-operator">=</span> <span class="hl-delimiter">(</span>seconds <span class="hl-operator">*</span> <span class="hl-number">2.3</span><span class="hl-delimiter">)</span> <span class="hl-operator">%</span> <span class="hl-delimiter">(</span><span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span>PI <span class="hl-operator">*</span> <span class="hl-number">2</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+
+  <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span>
+    <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span>
+    <span class="hl-label">height</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span>
+    <span class="hl-label">background</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">28</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">31</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">35</span><span class="hl-delimiter">))}</span>
+    <span class="hl-label">color</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">174</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">184</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">196</span><span class="hl-delimiter">)}</span>
+    <span class="hl-label">fontSize</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-number">14</span><span class="hl-delimiter">}</span>
+    <span class="hl-label">padding</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)}</span>
+    <span class="hl-label">direction</span><span class="hl-operator">=</span><span class="hl-string">&quot;vertical&quot;</span>
+  <span class="hl-delimiter">&gt;</span>
+    <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-label">yJustification</span><span class="hl-operator">=</span><span class="hl-string">&quot;center&quot;</span><span class="hl-delimiter">&gt;</span>
+      <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">fontSize</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-number">28</span><span class="hl-delimiter">}</span> <span class="hl-label">color</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">)}&gt;</span>
+        forbear
+      <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+      <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-delimiter">/&gt;</span>
+      <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span>
+        <span class="hl-label">background</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">17</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">19</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">22</span><span class="hl-delimiter">))}</span>
+        <span class="hl-label">textWrapping</span><span class="hl-operator">=</span><span class="hl-string">&quot;none&quot;</span>
+        <span class="hl-label">minWidth</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-number">152</span><span class="hl-delimiter">}</span>
+        <span class="hl-label">padding</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)}</span>
+        <span class="hl-label">color</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">184</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">163</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">106</span><span class="hl-delimiter">)}</span>
+        <span class="hl-label">direction</span><span class="hl-operator">=</span><span class="hl-string">&quot;vertical&quot;</span>
+      <span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}&gt;</span>
+          FPS:
+          <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-delimiter">/&gt;</span>
+          <span class="hl-delimiter">{</span><span class="hl-string">`</span><span class="hl-special">${</span>fps<span class="hl-special">}</span><span class="hl-string">`</span><span class="hl-delimiter">}</span>
+        <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}&gt;</span>
+          avg:
+          <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-delimiter">/&gt;</span>
+          <span class="hl-delimiter">{</span><span class="hl-string">`</span><span class="hl-special">${</span>averageMs<span class="hl-punctuation-delimiter">.</span><span class="hl-function">toFixed</span><span class="hl-delimiter">(</span><span class="hl-number">1</span><span class="hl-delimiter">)</span><span class="hl-special">}</span><span class="hl-string"> ms`</span><span class="hl-delimiter">}</span>
+        <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}&gt;</span>
+          max:
+          <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-delimiter">/&gt;</span>
+          <span class="hl-delimiter">{</span><span class="hl-string">`</span><span class="hl-special">${</span>maxMs<span class="hl-punctuation-delimiter">.</span><span class="hl-function">toFixed</span><span class="hl-delimiter">(</span><span class="hl-number">1</span><span class="hl-delimiter">)</span><span class="hl-special">}</span><span class="hl-string"> ms`</span><span class="hl-delimiter">}</span>
+        <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+      <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+    <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+
+    <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-label">height</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-label">margin</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">top</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)}&gt;</span>
+      <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span>
+        <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">96</span> <span class="hl-operator">+</span> <span class="hl-number">180</span> <span class="hl-operator">*</span> <span class="hl-function">wave</span><span class="hl-delimiter">(</span><span class="hl-number">1.1</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-delimiter">))}</span>
+        <span class="hl-label">height</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span>
+        <span class="hl-label">background</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">17</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">19</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">22</span><span class="hl-delimiter">))}</span>
+        <span class="hl-label">padding</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)}</span>
+        <span class="hl-label">direction</span><span class="hl-operator">=</span><span class="hl-string">&quot;vertical&quot;</span>
+        <span class="hl-label">margin</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">right</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)}</span>
+      <span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">{[</span><span class="hl-string">&quot;Inbox&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;Sent mail&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;Drafts and notes&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;Everything else&quot;</span><span class="hl-delimiter">]</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">map</span><span class="hl-delimiter">((</span>folder<span class="hl-delimiter">)</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">(</span>
+          <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span>
+            <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span>
+            <span class="hl-label">background</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">44</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">51</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">59</span><span class="hl-delimiter">))}</span>
+            <span class="hl-label">color</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">)}</span>
+            <span class="hl-label">padding</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)}</span>
+            <span class="hl-label">margin</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">bottom</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)}</span>
+          <span class="hl-delimiter">&gt;</span>
+            <span class="hl-delimiter">{</span>folder<span class="hl-delimiter">}</span>
+          <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">))}</span>
+      <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+
+      <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-label">height</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-label">margin</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">left</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)}</span> <span class="hl-label">direction</span><span class="hl-operator">=</span><span class="hl-string">&quot;vertical&quot;</span><span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-label">background</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">17</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">19</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">22</span><span class="hl-delimiter">))}</span> <span class="hl-label">padding</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">12</span><span class="hl-delimiter">)}&gt;</span>
+          Every frame, this whole window is laid out from scratch. The sidebar changes its width, so this paragraph has to wrap its words again, the cards below have to share what is left, and every bar has to find its new place. Nothing here is a transform, all of it is layout.
+        <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-label">margin</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">top</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)}&gt;</span>
+          <span class="hl-delimiter">{[</span>
+            <span class="hl-string">&quot;Each card takes a share of the width that is left.&quot;</span><span class="hl-punctuation-delimiter">,</span>
+            <span class="hl-string">&quot;The number above is the weight of that share.&quot;</span><span class="hl-punctuation-delimiter">,</span>
+            <span class="hl-string">&quot;When the weight changes, the text wraps again.&quot;</span><span class="hl-punctuation-delimiter">,</span>
+          <span class="hl-delimiter">]</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">map</span><span class="hl-delimiter">((</span>description<span class="hl-punctuation-delimiter">,</span> index<span class="hl-delimiter">)</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">{</span>
+            <span class="hl-statement">const</span> weight <span class="hl-operator">=</span> <span class="hl-number">1</span> <span class="hl-operator">+</span> <span class="hl-number">3</span> <span class="hl-operator">*</span> <span class="hl-function">wave</span><span class="hl-delimiter">(</span><span class="hl-number">0.9</span><span class="hl-punctuation-delimiter">,</span> index <span class="hl-operator">*</span> <span class="hl-number">2.1</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+            <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span>
+              <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">(</span>weight<span class="hl-delimiter">)}</span>
+              <span class="hl-label">height</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span>
+              <span class="hl-label">background</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">44</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">51</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">59</span><span class="hl-delimiter">))}</span>
+              <span class="hl-label">padding</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">10</span><span class="hl-delimiter">)}</span>
+              <span class="hl-label">margin</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">right</span><span class="hl-delimiter">(</span>index <span class="hl-operator">===</span> <span class="hl-number">2</span> <span class="hl-statement">?</span> <span class="hl-number">0</span> <span class="hl-statement">:</span> <span class="hl-number">8</span><span class="hl-delimiter">)}</span>
+            <span class="hl-delimiter">&gt;</span>
+              <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-label">direction</span><span class="hl-operator">=</span><span class="hl-string">&quot;vertical&quot;</span><span class="hl-delimiter">&gt;</span>
+                <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">color</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">184</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">163</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">106</span><span class="hl-delimiter">)}</span> <span class="hl-label">fontSize</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-number">18</span><span class="hl-delimiter">}&gt;</span>
+                  <span class="hl-delimiter">{</span><span class="hl-string">`grow(</span><span class="hl-special">${</span>weight<span class="hl-punctuation-delimiter">.</span><span class="hl-function">toFixed</span><span class="hl-delimiter">(</span><span class="hl-number">2</span><span class="hl-delimiter">)</span><span class="hl-special">}</span><span class="hl-string">)`</span><span class="hl-delimiter">}</span>
+                <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+                <span class="hl-delimiter">{</span>description<span class="hl-delimiter">}</span>
+              <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+            <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span><span class="hl-punctuation-delimiter">;</span>
+          <span class="hl-delimiter">})}</span>
+        <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">height</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-delimiter">/&gt;</span>
+        <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">margin</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">top</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)}</span> <span class="hl-label">color</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">)}</span> <span class="hl-label">direction</span><span class="hl-operator">=</span><span class="hl-string">&quot;vertical&quot;</span><span class="hl-delimiter">&gt;</span>
+          <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+            <span class="hl-delimiter">{</span><span class="hl-string">`height(x) = 61 + 45 · sin(0.35x + </span><span class="hl-special">${</span>phase<span class="hl-punctuation-delimiter">.</span><span class="hl-function">toFixed</span><span class="hl-delimiter">(</span><span class="hl-number">2</span><span class="hl-delimiter">)</span><span class="hl-special">}</span><span class="hl-string">), x from 0 to </span><span class="hl-special">${</span>bars<span class="hl-string"> </span><span class="hl-operator">-</span><span class="hl-string"> </span><span class="hl-number">1</span><span class="hl-special">}</span><span class="hl-string">`</span><span class="hl-delimiter">}</span>
+          <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+          <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+            ... and while all of this layouting is happening, here's the above function graphed
+          <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+        <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span> <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span> <span class="hl-label">height</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">106</span><span class="hl-delimiter">)}</span> <span class="hl-label">margin</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">bottom</span><span class="hl-delimiter">(</span><span class="hl-function">top</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">16</span><span class="hl-delimiter">)}</span> <span class="hl-label">yJustification</span><span class="hl-operator">=</span><span class="hl-string">&quot;end&quot;</span><span class="hl-delimiter">&gt;</span>
+          <span class="hl-delimiter">{</span><span class="hl-type">Array</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">from</span><span class="hl-delimiter">({</span> length<span class="hl-punctuation-delimiter">:</span> bars <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-delimiter">(</span>_<span class="hl-punctuation-delimiter">,</span> index<span class="hl-delimiter">)</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">(</span>
+            <span class="hl-delimiter">&lt;</span><span class="hl-special">element</span>
+              <span class="hl-label">width</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">grow</span><span class="hl-delimiter">()}</span>
+              <span class="hl-label">height</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">61</span> <span class="hl-operator">+</span> <span class="hl-number">45</span> <span class="hl-operator">*</span> <span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">sin</span><span class="hl-delimiter">(</span><span class="hl-number">0.35</span> <span class="hl-operator">*</span> index <span class="hl-operator">+</span> phase<span class="hl-delimiter">))}</span>
+              <span class="hl-label">background</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">184</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">163</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">106</span><span class="hl-delimiter">))}</span>
+              <span class="hl-label">margin</span><span class="hl-operator">=</span><span class="hl-delimiter">{</span><span class="hl-function">right</span><span class="hl-delimiter">(</span>index <span class="hl-operator">===</span> bars <span class="hl-operator">-</span> <span class="hl-number">1</span> <span class="hl-statement">?</span> <span class="hl-number">0</span> <span class="hl-statement">:</span> <span class="hl-number">3</span><span class="hl-delimiter">)}</span>
+            <span class="hl-delimiter">/&gt;</span>
+          <span class="hl-delimiter">))}</span>
+        <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+      <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+    <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span>
+  <span class="hl-delimiter">&lt;/</span><span class="hl-special">element</span><span class="hl-delimiter">&gt;</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+<pre class="hidden group-has-[#code-003-output:checked]:block my-0 h-[28rem] overflow-y-auto rounded-tl-none"><code><span class="hl-string">&quot;</span><span class="hl-preproc">use strict</span><span class="hl-string">&quot;</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-string-special-symbol">console</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">log</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;hey, this is nodejs, believe it or not!&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> fps <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> frames <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> last <span class="hl-operator">=</span> performance<span class="hl-punctuation-delimiter">.</span><span class="hl-function">now</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> previous <span class="hl-operator">=</span> last<span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> frameSum <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> frameMax <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> averageMs <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">let</span> maxMs <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-function">setRenderFunction</span><span class="hl-delimiter">(()</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">{</span>
+    <span class="hl-statement">const</span> now <span class="hl-operator">=</span> performance<span class="hl-punctuation-delimiter">.</span><span class="hl-function">now</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-statement">const</span> delta <span class="hl-operator">=</span> now <span class="hl-operator">-</span> previous<span class="hl-punctuation-delimiter">;</span>
+    previous <span class="hl-operator">=</span> now<span class="hl-punctuation-delimiter">;</span>
+    frames <span class="hl-operator">+=</span> <span class="hl-number">1</span><span class="hl-punctuation-delimiter">;</span>
+    frameSum <span class="hl-operator">+=</span> delta<span class="hl-punctuation-delimiter">;</span>
+    frameMax <span class="hl-operator">=</span> <span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">max</span><span class="hl-delimiter">(</span>frameMax<span class="hl-punctuation-delimiter">,</span> delta<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-statement">if</span> <span class="hl-delimiter">(</span>now <span class="hl-operator">-</span> last <span class="hl-operator">&gt;=</span> <span class="hl-number">1000</span><span class="hl-delimiter">)</span> <span class="hl-delimiter">{</span>
+        fps <span class="hl-operator">=</span> frames<span class="hl-punctuation-delimiter">;</span>
+        averageMs <span class="hl-operator">=</span> frameSum <span class="hl-operator">/</span> frames<span class="hl-punctuation-delimiter">;</span>
+        maxMs <span class="hl-operator">=</span> frameMax<span class="hl-punctuation-delimiter">;</span>
+        frames <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+        frameSum <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+        frameMax <span class="hl-operator">=</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">;</span>
+        last <span class="hl-operator">=</span> now<span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">}</span>
+    <span class="hl-statement">const</span> seconds <span class="hl-operator">=</span> now <span class="hl-operator">/</span> <span class="hl-number">1000</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-statement">const</span> <span class="hl-function">wave</span> <span class="hl-operator">=</span> <span class="hl-delimiter">(</span>speed<span class="hl-punctuation-delimiter">,</span> phase<span class="hl-delimiter">)</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">(</span><span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">sin</span><span class="hl-delimiter">(</span>seconds <span class="hl-operator">*</span> speed <span class="hl-operator">+</span> phase<span class="hl-delimiter">)</span> <span class="hl-operator">+</span> <span class="hl-number">1</span><span class="hl-delimiter">)</span> <span class="hl-operator">/</span> <span class="hl-number">2</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-statement">const</span> bars <span class="hl-operator">=</span> <span class="hl-number">8</span> <span class="hl-operator">+</span> <span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">floor</span><span class="hl-delimiter">(</span><span class="hl-number">40</span> <span class="hl-operator">*</span> <span class="hl-function">wave</span><span class="hl-delimiter">(</span><span class="hl-number">0.4</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-statement">const</span> phase <span class="hl-operator">=</span> <span class="hl-delimiter">(</span>seconds <span class="hl-operator">*</span> <span class="hl-number">2.3</span><span class="hl-delimiter">)</span> <span class="hl-operator">%</span> <span class="hl-delimiter">(</span><span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span>PI <span class="hl-operator">*</span> <span class="hl-number">2</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        height<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        background<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">28</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">31</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">35</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+        color<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">174</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">184</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">196</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        fontSize<span class="hl-punctuation-delimiter">:</span> <span class="hl-number">14</span><span class="hl-punctuation-delimiter">,</span>
+        padding<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        direction<span class="hl-punctuation-delimiter">:</span> <span class="hl-string">&quot;vertical&quot;</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:34:3&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        yJustification<span class="hl-punctuation-delimiter">:</span> <span class="hl-string">&quot;center&quot;</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:43:5&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        fontSize<span class="hl-punctuation-delimiter">:</span> <span class="hl-number">28</span><span class="hl-punctuation-delimiter">,</span>
+        color<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">)</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:44:7&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;forbear&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:47:7&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        background<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">17</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">19</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">22</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+        textWrapping<span class="hl-punctuation-delimiter">:</span> <span class="hl-string">&quot;none&quot;</span><span class="hl-punctuation-delimiter">,</span>
+        minWidth<span class="hl-punctuation-delimiter">:</span> <span class="hl-number">152</span><span class="hl-punctuation-delimiter">,</span>
+        padding<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        color<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">184</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">163</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">106</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        direction<span class="hl-punctuation-delimiter">:</span> <span class="hl-string">&quot;vertical&quot;</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:48:7&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:56:9&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;FPS:&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:58:11&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">`</span><span class="hl-special">${</span>fps<span class="hl-special">}</span><span class="hl-string">`</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:61:9&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;avg:&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:63:11&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">`</span><span class="hl-special">${</span>averageMs<span class="hl-punctuation-delimiter">.</span><span class="hl-function">toFixed</span><span class="hl-delimiter">(</span><span class="hl-number">1</span><span class="hl-delimiter">)</span><span class="hl-special">}</span><span class="hl-string"> ms`</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:66:9&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;max:&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:68:11&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">`</span><span class="hl-special">${</span>maxMs<span class="hl-punctuation-delimiter">.</span><span class="hl-function">toFixed</span><span class="hl-delimiter">(</span><span class="hl-number">1</span><span class="hl-delimiter">)</span><span class="hl-special">}</span><span class="hl-string"> ms`</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        height<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        margin<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">top</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:74:5&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">96</span> <span class="hl-operator">+</span> <span class="hl-number">180</span> <span class="hl-operator">*</span> <span class="hl-function">wave</span><span class="hl-delimiter">(</span><span class="hl-number">1.1</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+        height<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        background<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">17</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">19</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">22</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+        padding<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        direction<span class="hl-punctuation-delimiter">:</span> <span class="hl-string">&quot;vertical&quot;</span><span class="hl-punctuation-delimiter">,</span>
+        margin<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">right</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:75:7&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">[</span><span class="hl-string">&quot;Inbox&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;Sent mail&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;Drafts and notes&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;Everything else&quot;</span><span class="hl-delimiter">]</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">map</span><span class="hl-delimiter">((</span>folder<span class="hl-delimiter">)</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">{</span>
+        <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+            width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+            background<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">44</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">51</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">59</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+            color<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+            padding<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+            margin<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">bottom</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)</span>
+        <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:84:11&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">text</span><span class="hl-delimiter">(</span>folder<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        height<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        margin<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">left</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        direction<span class="hl-punctuation-delimiter">:</span> <span class="hl-string">&quot;vertical&quot;</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:96:7&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        background<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">17</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">19</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">22</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+        padding<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">12</span><span class="hl-delimiter">)</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:97:9&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;Every frame, this whole window is laid out from scratch. The sidebar changes its width, so this paragraph has to wrap its words again, the cards below have to share what is left, and every bar has to find its new place. Nothing here is a transform, all of it is layout.&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        margin<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">top</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:100:9&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">[</span>
+        <span class="hl-string">&quot;Each card takes a share of the width that is left.&quot;</span><span class="hl-punctuation-delimiter">,</span>
+        <span class="hl-string">&quot;The number above is the weight of that share.&quot;</span><span class="hl-punctuation-delimiter">,</span>
+        <span class="hl-string">&quot;When the weight changes, the text wraps again.&quot;</span><span class="hl-punctuation-delimiter">,</span>
+    <span class="hl-delimiter">]</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">map</span><span class="hl-delimiter">((</span>description<span class="hl-punctuation-delimiter">,</span> index<span class="hl-delimiter">)</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">{</span>
+        <span class="hl-statement">const</span> weight <span class="hl-operator">=</span> <span class="hl-number">1</span> <span class="hl-operator">+</span> <span class="hl-number">3</span> <span class="hl-operator">*</span> <span class="hl-function">wave</span><span class="hl-delimiter">(</span><span class="hl-number">0.9</span><span class="hl-punctuation-delimiter">,</span> index <span class="hl-operator">*</span> <span class="hl-number">2.1</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+            width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">(</span>weight<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+            height<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+            background<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">44</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">51</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">59</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+            padding<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">10</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+            margin<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">right</span><span class="hl-delimiter">(</span>index <span class="hl-operator">===</span> <span class="hl-number">2</span> <span class="hl-statement">?</span> <span class="hl-number">0</span> <span class="hl-statement">:</span> <span class="hl-number">8</span><span class="hl-delimiter">)</span>
+        <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:107:13&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+            width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+            direction<span class="hl-punctuation-delimiter">:</span> <span class="hl-string">&quot;vertical&quot;</span>
+        <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:114:15&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+            color<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">184</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">163</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">106</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+            fontSize<span class="hl-punctuation-delimiter">:</span> <span class="hl-number">18</span>
+        <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:115:17&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">`grow(</span><span class="hl-special">${</span>weight<span class="hl-punctuation-delimiter">.</span><span class="hl-function">toFixed</span><span class="hl-delimiter">(</span><span class="hl-number">2</span><span class="hl-delimiter">)</span><span class="hl-special">}</span><span class="hl-string">)`</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">text</span><span class="hl-delimiter">(</span>description<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        height<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:123:9&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        margin<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">top</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        color<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">255</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        direction<span class="hl-punctuation-delimiter">:</span> <span class="hl-string">&quot;vertical&quot;</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:124:9&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:125:11&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">`height(x) = 61 + 45 · sin(0.35x + </span><span class="hl-special">${</span>phase<span class="hl-punctuation-delimiter">.</span><span class="hl-function">toFixed</span><span class="hl-delimiter">(</span><span class="hl-number">2</span><span class="hl-delimiter">)</span><span class="hl-special">}</span><span class="hl-string">), x from 0 to </span><span class="hl-special">${</span>bars<span class="hl-string"> </span><span class="hl-operator">-</span><span class="hl-string"> </span><span class="hl-number">1</span><span class="hl-special">}</span><span class="hl-string">`</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:128:11&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;... and while all of this layouting is happening, here's the above function graphed&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+        width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+        height<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">106</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        margin<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">bottom</span><span class="hl-delimiter">(</span><span class="hl-function">top</span><span class="hl-delimiter">(</span><span class="hl-number">8</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">16</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+        yJustification<span class="hl-punctuation-delimiter">:</span> <span class="hl-string">&quot;end&quot;</span>
+    <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:132:9&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-type">Array</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">from</span><span class="hl-delimiter">({</span> length<span class="hl-punctuation-delimiter">:</span> bars <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-delimiter">(</span>_<span class="hl-punctuation-delimiter">,</span> index<span class="hl-delimiter">)</span> <span class="hl-operator">=&gt;</span> <span class="hl-delimiter">{</span>
+        <span class="hl-function">open</span><span class="hl-delimiter">({</span>
+            width<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">grow</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">,</span>
+            height<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">61</span> <span class="hl-operator">+</span> <span class="hl-number">45</span> <span class="hl-operator">*</span> <span class="hl-type">Math</span><span class="hl-punctuation-delimiter">.</span><span class="hl-function">sin</span><span class="hl-delimiter">(</span><span class="hl-number">0.35</span> <span class="hl-operator">*</span> index <span class="hl-operator">+</span> phase<span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+            background<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">184</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">163</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">106</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">,</span>
+            margin<span class="hl-punctuation-delimiter">:</span> <span class="hl-function">right</span><span class="hl-delimiter">(</span>index <span class="hl-operator">===</span> bars <span class="hl-operator">-</span> <span class="hl-number">1</span> <span class="hl-statement">?</span> <span class="hl-number">0</span> <span class="hl-statement">:</span> <span class="hl-number">3</span><span class="hl-delimiter">)</span>
+        <span class="hl-delimiter">}</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;/home/gabriel/programming/open-source/forbear-jai/apps/javascript/src/index.tsx:134:13&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">close</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+</div>
+
+<p>The central part of this is element definition, so let's talk about that first. Nodes are not defined in javascript
+here, as it might seem like it does. Nodes are all defines in jai, but the parameters all come from javascript. This
+also means, that, differently from React, elements are not values you can pass around and return. You just "define" the
+element and it gets pushed into the <code>Node_Tree</code> in jai.</p>
+
+<p>This is both a blessing and a curse, I think the pros outweigh the cons particularly because this makes it more
+viable to rerun everything every single frame instead of just reacting when things change like React does. This means
+you can do animations and all sorts of weird things across frames since you have access to all, and each one of them.</p>
+
+<p>The particular upside of this design is that users have access to all that they have in Node.js. They can use any
+libraries they're already used to, and they can use any Node APIs they might want.</p>
+
+<p>To actually support this JSX flavour we're compilling this JSX with a TypeScript transformer that converts the
+<code>element</code> definitions into the <code>open</code> and <code>close</code> function calls. It also keeps track
+of source code locations so that it can replicate the keying that's done by the <code>element</code> macro in Jai.</p>
+
+<p>But, if you've read any of the other posts, you'll know this is missing some of the important setup code that the
+previous applications already had, so here it follows:</p>
+
+<pre><code><span class="hl-statement">#import</span> <span class="hl-string">&quot;Basic&quot;</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">#import</span> <span class="hl-string">&quot;File&quot;</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-statement">#import</span>,file <span class="hl-string">&quot;../../forbear.jai&quot;</span><span class="hl-delimiter">(</span>JAVASCRIPT_ADAPTER <span class="hl-operator">=</span> <span class="hl-statement">true</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+
+<span class="hl-statement">#run</span> <span class="hl-delimiter">{</span>
+    <span class="hl-statement">#import</span> <span class="hl-string">&quot;Process&quot;</span><span class="hl-punctuation-delimiter">;</span>
+    result <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-function">run_command</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;npm&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;run&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;build&quot;</span><span class="hl-punctuation-delimiter">,</span> working_directory <span class="hl-operator">=</span> <span class="hl-statement">#filepath</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">assert</span><span class="hl-delimiter">(</span>result<span class="hl-punctuation-delimiter">.</span>type <span class="hl-operator">==</span> <span class="hl-punctuation-delimiter">.</span>EXITED <span class="hl-operator">&amp;&amp;</span> result<span class="hl-punctuation-delimiter">.</span>exit_code <span class="hl-operator">==</span> <span class="hl-number">0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;npm run build failed&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span>
+
+JAVASCRIPT_SOURCE <span class="hl-punctuation-delimiter">::</span> <span class="hl-statement">#run</span> <span class="hl-function">read_entire_file</span><span class="hl-delimiter">(</span><span class="hl-function">tprint</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;%dist/index.js&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-statement">#filepath</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+INTER_TTF <span class="hl-punctuation-delimiter">::</span> <span class="hl-statement">#run</span> <span class="hl-function">read_entire_file</span><span class="hl-delimiter">(</span><span class="hl-function">tprint</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;%../Inter.ttf&quot;</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-statement">#filepath</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+
+<span class="hl-function">main</span> <span class="hl-punctuation-delimiter">::</span> <span class="hl-delimiter">()</span> <span class="hl-delimiter">{</span>
+    backend<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Backend</span><span class="hl-punctuation-delimiter">;</span>
+    window<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Window</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-statement">#if</span> OS <span class="hl-operator">==</span> <span class="hl-punctuation-delimiter">.</span>LINUX <span class="hl-delimiter">{</span>
+        <span class="hl-function">init_backend</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">init_window</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">.</span>connection<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>window<span class="hl-punctuation-delimiter">,</span> <span class="hl-number">800</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">600</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;playground&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">}</span> <span class="hl-statement">else</span> <span class="hl-statement">#if</span> OS <span class="hl-operator">==</span> <span class="hl-punctuation-delimiter">.</span>MACOS <span class="hl-delimiter">{</span>
+        <span class="hl-function">init_backend</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">init_window</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>window<span class="hl-punctuation-delimiter">,</span> <span class="hl-number">800</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">600</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;playground&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">}</span>
+
+    inter<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Font</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">init_font</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>inter<span class="hl-punctuation-delimiter">,</span> INTER_TTF<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+
+    forbear<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Forbear</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">init_forbear</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>forbear<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>window<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">,</span> <span class="hl-type">Base_Style</span><span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+        font <span class="hl-operator">=</span> <span class="hl-operator">*</span>inter<span class="hl-punctuation-delimiter">,</span>
+    <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+
+    javascript_adapter<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Javascript_Adapter</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">init_adapter</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>javascript_adapter<span class="hl-punctuation-delimiter">,</span> JAVASCRIPT_SOURCE<span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;javascript-example&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+
+    <span class="hl-statement">while</span> window<span class="hl-punctuation-delimiter">.</span>running <span class="hl-delimiter">{</span>
+        <span class="hl-statement">#if</span> OS <span class="hl-operator">==</span> <span class="hl-punctuation-delimiter">.</span>LINUX <span class="hl-delimiter">{</span>
+            <span class="hl-statement">while</span> <span class="hl-statement">true</span> <span class="hl-delimiter">{</span>
+                event <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-function">next_event</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">.</span>connection<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">!</span><span class="hl-function">can_draw</span><span class="hl-delimiter">(</span>window<span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+                <span class="hl-statement">if</span> <span class="hl-operator">!</span>event<span class="hl-punctuation-delimiter">.</span>something <span class="hl-delimiter">{</span>
+                    <span class="hl-statement">break</span><span class="hl-punctuation-delimiter">;</span>
+                <span class="hl-delimiter">}</span>
+                <span class="hl-function">update_backend</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">,</span> event<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+                <span class="hl-function">update_window</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>window<span class="hl-punctuation-delimiter">,</span> event<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+            <span class="hl-delimiter">}</span>
+        <span class="hl-delimiter">}</span> <span class="hl-statement">else</span> <span class="hl-statement">#if</span> OS <span class="hl-operator">==</span> <span class="hl-punctuation-delimiter">.</span>MACOS <span class="hl-delimiter">{</span>
+            <span class="hl-function">update_backend</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+            <span class="hl-function">update_window</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>backend<span class="hl-punctuation-delimiter">,</span> <span class="hl-operator">*</span>window<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-delimiter">}</span>
+
+        <span class="hl-function">render_with_adapter</span><span class="hl-delimiter">(</span><span class="hl-operator">*</span>javascript_adapter<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">layout</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">draw_and_reset_node_tree</span><span class="hl-delimiter">(</span><span class="hl-function">rgb</span><span class="hl-delimiter">(</span><span class="hl-number">0.0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0.0</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-number">0.0</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-function">reset_temporary_storage</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">}</span>
+<span class="hl-delimiter">}</span></code></pre>
+
+<p>If you've seen the other code samples, you can see that this is not actually quite different. The main difference is
+that jai doesn't render the elements directly, but rather calls this <code>render_with_adapter</code>.</p>
+
+<p>The long term ideal is that every javascript application built with forbear will have this "escape hatch" of native
+code where they can just do about whatever they want. The reasoning for this is basically twofold:</p>
+
+<ol>
+  <li>so that all javascript develoeprs start naturally learning and understanding more of the fundamentals without
+    actually trying to learn them,</li>
+  <li>and so that advanced users of the library can have full control of everything without having to give up their
+    preferred convenience.</li>
+</ol>
+
+<p>Among the details, we're also defining some <code>.d.ts</code> definitions so that the code feels comfortable for
+javascript developers, and many utilities that are defined using <code>v8::FunctionTemplate</code> from C++ and
+sometimes calling jai code as well.</p>
+
+<h2>layout</h2>
+
+<p>In other news, you can clearly see we also have layouting implemented! This has the following features:</p>
+
+<ul>
+  <li>fitting</li>
+  <li>growing</li>
+  <li>shrinking</li>
+  <li>text wrapping</li>
+  <li>fixed, minimum and maximum sizes</li>
+  <li>padding and margins</li>
+  <li>horizontal and vertical direction</li>
+  <li>justification on both axes</li>
+  <li>flow, fixed and relative placement</li>
+</ul>
+
+<p>Overall it's actually not an extremely complicated algorithm, it's heavily based on <a
+  href="https://github.com/nicbarker/clay">Clay</a> implemented with improvements to the old Zig version, that was
+written from scratch based on Nic's <a href="https://www.youtube.com/watch?v=by9lQvpvMIc">awesome YouTube video</a>.
+It's only ~700 LOC on a single function.</p>
+
+<p>The most interesting part about it is the fact that it runs on multiple passes over the entire <code>Node_Tree</code>
+and that's done for two reasons 1) because it makes the algorithm much simpler (as Nic explains in much more detail, and
+more depth than I can possibly do) and 2) because it really is faster to do that, than to retroactively update nodes,
+which would be the alternative.</p>
+
+<p>The algorithm is also further made simpler because we use a single, flat array to store all nodes, which I call the
+<code>Node_Tree</code>, and since nodes are always inserted in the order parent -> children to iterate the entire tree
+we can literally just loop over it. If we want to go from children to parents, we can loop it in reverse, which makes
+this extremely cache coherent. In the long term, this layouting pass will be most likely optimized by a structure of
+arrays appraoch of doing things.</p>
+
+<p>In the future, I will write an explanation around this algorithm and keep it updated so that users of the library can
+also debug issues, and understand layouting without having to read the code.</p>
+
+<h2>remaining fixes</h2>
+
+<p>Alongisde all of these changes, I've also gone through doing a bunch of improvements to the wayland client
+implementation and the way we define buffers so that this library can start actually creating things that someone would
+actually use. It's now not crashing when screnshotting, it's respecting the monitor's refresh rate through the
+<code>frame</code> event from the Wayland compositor and also is using a double buffer instead of just one.</p>
+
+<p>Besides this, forbear now is based on </p>
+
+<ul>
+  <li>Before: the window rendered as fast as it could, with one buffer. Now it waits for the compositor's <code>frame</code> callback and uses two buffers.</li>
+  <li>Buffers come from gbm, with the formats and modifiers the compositor asks for.</li>
+  <li>Short list of fixes: resizing, uninitialized memory showing while resizing, the crash when taking a screenshot, answering <code>xdg_wm_base</code> pings, picking the compositor socket the way libwayland does.</li>
+  <li>The FPS counter, in both Jai and JavaScript, to check all of this.</li>
+</ul>
+
+<h2>smaller things</h2>
+
+<ul>
+  <li>A flat pool for per-frame allocations.</li>
+  <li>The memory debugger in the playground.</li>
+  <li>You can now subscribe to new entries on the site.</li>
+</ul>
+
+<h2>what's next</h2>
+
+<ul>
+  <li>Mouse and keyboard input.</li>
+  <li>Then a calculator, written in JSX. Maybe show a static screenshot of its layout here as a teaser.</li>
+  <li>Rounded corners and borders, so it stops looking like a 1995 web page.</li>
+</ul>
+
+<p><a href="https://github.com/gabrielmfern/forbear">https://github.com/gabrielmfern/forbear</a></p>
+
+<nav class="flex justify-between gap-4 mt-16 pt-6 border-t border-ui">
+<a href="/log/002-text-macos-and-nodes.html"><span class="block text-muted text-sm">previous</span>&larr; 002: text, macOS and nodes!</a>
+<span></span>
+</nav>
+</main>
+
+</body>
+</html>
