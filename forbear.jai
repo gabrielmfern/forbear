@@ -2144,6 +2144,14 @@ layout :: () {
             //
             changing: [..]*Node;
             for *node: node_tree {
+                if it_index == 0 {
+                    if node.style.width.kind == .GROW {
+                        node.size.x = xx window.width;
+                    }
+                    if node.style.height.kind == .GROW {
+                        node.size.y = xx window.height;
+                    }
+                }
                 if node.first_child != -1 && node.glyphs.array.count == 0 {
                     array_reset_keeping_memory(*changing);
                     layout_direction := node.style.direction;
@@ -2511,6 +2519,11 @@ layout :: () {
             //
             changing: [..]*Node;
             for *node: node_tree {
+                if it_index == 0 {
+                    if node.style.height.kind == .GROW {
+                        node.size.y = xx window.height;
+                    }
+                }
                 if node.first_child != -1 && node.glyphs.array.count == 0 {
                     array_reset_keeping_memory(*changing);
                     layout_direction := node.style.direction;
