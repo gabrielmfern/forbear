@@ -2055,7 +2055,7 @@ layout :: () {
             child_size := get(child.size, fit_direction);
             child_min_size := get(child.min_size, fit_direction);
             child_size_contribution := child_margins + child_size;
-            child_min_size_contribution := child_margins + ifx fit_direction == .VERTICAL then
+            child_min_size_contribution := child_margins + ifx fit_direction == .VERTICAL && preferred_size.kind != .GROW then
                 max(child_size, child_min_size)
             else
                 child_min_size;
