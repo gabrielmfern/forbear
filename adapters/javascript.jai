@@ -35,7 +35,6 @@
             tprint("-I%/deps/v8/include", node_root),
             tprint("-I%/deps/uv/include", node_root),
         ],
-        debug = true,
     );
 }
 
