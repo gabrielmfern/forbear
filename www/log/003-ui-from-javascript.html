@@ -71,19 +71,18 @@ pre .hl-preproc { color: #ffffff; }
 <video src="../assets/2026-10-11-jai-and-javascript-side-by-side.mp4" preload="metadata" controls autoplay muted loop playsinline class="block my-6 rounded-lg max-w-none w-[min(calc(100vw-2rem),1616px)] relative left-1/2 -translate-x-1/2"></video>
 
 <p>
-  This is realtime layouting happening every single frame, running every single frame, without any caching running in
-  both languages.
+  This is realtime layouting happening every single frame, without any caching, running in both languages.
 </p>
 
 <p>
-  To properly support javascript, I've decided to run through Node.js. This doesn't mean I spawn a separate subprocess
-  and then have to go communicating through a socket or IPC or whatever. It's in the same process by <a href="https://nodejs.org/api/embedding.html">embedding Node.js</a>
+  To properly support JavaScript, I've decided to run it through Node.js. This doesn't mean I spawn a separate subprocess
+  and then have to communicate through a socket or IPC or whatever. It's in the same process, by <a href="https://nodejs.org/api/embedding.html">embedding Node.js</a>
   and accessing the V8 memory mostly directly, which means we can keep the high bar for performance since most of the
-  work is still done through Jai.
+  work is still done through jai.
 </p>
 
 <p>
-  The actual javascript code looks like this:
+  The actual JavaScript code looks like this:
 </p>
 
 <div class="group my-6">
@@ -437,24 +436,24 @@ pre .hl-preproc { color: #ffffff; }
 <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span></code></pre>
 </div>
 
-<p>The central part of this is element definition, so let's talk about that first. Nodes are not defined in javascript
-here, as it might seem like it does. Nodes are all defines in jai, but the parameters all come from javascript. This
-also means, that, differently from React, elements are not values you can pass around and return. You just "define" the
+<p>The central part of this is element definition, so let's talk about that first. Nodes are not defined in JavaScript
+here, as it might seem. Nodes are all defined in jai, but the parameters all come from JavaScript. This
+also means that, unlike in React, elements are not values you can pass around and return. You just "define" the
 element and it gets pushed into the <code>Node_Tree</code> in jai.</p>
 
-<p>This is both a blessing and a curse, I think the pros outweigh the cons particularly because this makes it more
-viable to rerun everything every single frame instead of just reacting when things change like React does. This means
-you can do animations and all sorts of weird things across frames since you have access to all, and each one of them.</p>
+<p>This is both a blessing and a curse. I think the pros outweigh the cons, particularly because this makes it more
+viable to rerun everything every single frame instead of just reacting when things change, like React does. This means
+you can do animations and all sorts of weird things across frames, since you have access to each and every one of them.</p>
 
 <p>The particular upside of this design is that users have access to all that they have in Node.js. They can use any
 libraries they're already used to, and they can use any Node APIs they might want.</p>
 
-<p>To actually support this JSX flavour we're compilling this JSX with a TypeScript transformer that converts the
+<p>To actually support this JSX flavour, we're compiling this JSX with a TypeScript transformer that converts the
 <code>element</code> definitions into the <code>open</code> and <code>close</code> function calls. It also keeps track
-of source code locations so that it can replicate the keying that's done by the <code>element</code> macro in Jai.</p>
+of source code locations so that it can replicate the keying that's done by the <code>element</code> macro in jai.</p>
 
 <p>But, if you've read any of the other posts, you'll know this is missing some of the important setup code that the
-previous applications already had, so here it follows:</p>
+previous applications already had, so here it is:</p>
 
 <pre><code><span class="hl-statement">#import</span> <span class="hl-string">&quot;Basic&quot;</span><span class="hl-punctuation-delimiter">;</span>
 <span class="hl-statement">#import</span> <span class="hl-string">&quot;File&quot;</span><span class="hl-punctuation-delimiter">;</span>
@@ -513,21 +512,21 @@ INTER_TTF <span class="hl-punctuation-delimiter">::</span> <span class="hl-state
     <span class="hl-delimiter">}</span>
 <span class="hl-delimiter">}</span></code></pre>
 
-<p>If you've seen the other code samples, you can see that this is not actually quite different. The main difference is
+<p>If you've seen the other code samples, you can see that this is actually not that different. The main difference is
 that jai doesn't render the elements directly, but rather calls this <code>render_with_adapter</code>.</p>
 
-<p>The long term ideal is that every javascript application built with forbear will have this "escape hatch" of native
-code where they can just do about whatever they want. The reasoning for this is basically twofold:</p>
+<p>The long-term ideal is that every JavaScript application built with forbear will have this "escape hatch" of native
+code where they can do just about whatever they want. The reasoning for this is basically twofold:</p>
 
 <ol>
-  <li>so that all javascript develoeprs start naturally learning and understanding more of the fundamentals without
+  <li>so that all JavaScript developers start naturally learning and understanding more of the fundamentals without
     actually trying to learn them,</li>
   <li>and so that advanced users of the library can have full control of everything without having to give up their
     preferred convenience.</li>
 </ol>
 
 <p>Among the details, we're also defining some <code>.d.ts</code> definitions so that the code feels comfortable for
-javascript developers, and many utilities that are defined using <code>v8::FunctionTemplate</code> from C++ and
+JavaScript developers, and many utilities that are defined using <code>v8::FunctionTemplate</code> from C++,
 sometimes calling jai code as well.</p>
 
 <h2>layout</h2>
@@ -546,39 +545,39 @@ sometimes calling jai code as well.</p>
   <li>flow, fixed and relative placement</li>
 </ul>
 
-<p>Overall it's actually not an extremely complicated algorithm, it's heavily based on <a
-  href="https://github.com/nicbarker/clay">Clay</a> implemented with improvements to the old Zig version, that was
+<p>Overall, it's actually not an extremely complicated algorithm. It's heavily based on <a
+  href="https://github.com/nicbarker/clay">Clay</a>, implemented with improvements over the old Zig version, which was
 written from scratch based on Nic's <a href="https://www.youtube.com/watch?v=by9lQvpvMIc">awesome YouTube video</a>.
-It's only ~700 LOC on a single function.</p>
+It's only ~700 LOC in a single function.</p>
 
-<p>The most interesting part about it is the fact that it runs on multiple passes over the entire <code>Node_Tree</code>
-and that's done for two reasons 1) because it makes the algorithm much simpler (as Nic explains in much more detail, and
-more depth than I can possibly do) and 2) because it really is faster to do that, than to retroactively update nodes,
+<p>The most interesting part about it is the fact that it runs in multiple passes over the entire <code>Node_Tree</code>,
+and that's done for two reasons: 1) because it makes the algorithm much simpler (as Nic explains in much more detail and
+depth than I possibly can) and 2) because it really is faster to do that than to retroactively update nodes,
 which would be the alternative.</p>
 
-<p>The algorithm is also further made simpler because we use a single, flat array to store all nodes, which I call the
-<code>Node_Tree</code>, and since nodes are always inserted in the order parent -> children to iterate the entire tree
-we can literally just loop over it. If we want to go from children to parents, we can loop it in reverse, which makes
-this extremely cache coherent. In the long term, this layouting pass will be most likely optimized by a structure of
-arrays appraoch of doing things.</p>
+<p>The algorithm is also made simpler because we use a single, flat array to store all nodes, which I call the
+<code>Node_Tree</code>. Since nodes are always inserted in the order parent -> children, to iterate the entire tree
+we can literally just loop over it. If we want to go from children to parents, we can loop over it in reverse, which makes
+this extremely cache coherent. In the long term, this layouting pass will most likely be optimized with a
+structure-of-arrays approach.</p>
 
-<p>In the future, I will write an explanation around this algorithm and keep it updated so that users of the library can
-also debug issues, and understand layouting without having to read the code.</p>
+<p>In the future, I will write an explanation of this algorithm and keep it updated so that users of the library can
+also debug issues and understand layouting without having to read the code.</p>
 
 <h2>remaining fixes</h2>
 
-<p>Alongisde all of these changes, I've also gone through doing a bunch of improvements to the wayland client
-implementation and the way we define buffers so that this library can start actually creating things that someone would
-actually use. It's now not crashing when screnshotting, it's respecting the monitor's refresh rate through the
-<code>frame</code> event from the Wayland compositor and also is using a double buffer instead of just one.</p>
+<p>Alongside all of these changes, I've also made a bunch of improvements to the Wayland client
+implementation and the way we define buffers, so that this library can start actually creating things that someone would
+actually use. It no longer crashes when screenshotting, it respects the monitor's refresh rate through the
+<code>frame</code> event from the Wayland compositor, and it uses a double buffer instead of just one.</p>
 
-<p>Besides this, all forbear allocations through frames are done through a <code>Flat_Pool</code> which is a kind of allocator in jai that keeps a reserved space in RAM and resets and is reused across boundaries, frames in our case. This also also fixes a few leaks we had.</p>
+<p>Besides this, all forbear allocations within a frame are done through a <code>Flat_Pool</code>, which is a kind of allocator in jai that keeps a reserved space in RAM and is reset and reused across boundaries, frames in our case. This also fixes a few leaks we had.</p>
 
 <h2>what's next</h2>
 
-I'm really excited to start building some real applications with this to stress test the algorithsm and most importantly the JSX API. So, I plan on working on a calculator program. It should be a simple, instant to open, instant, beautiful and better than what's status quo for calculators. A simple app to start, then we can start working up to more thing.
+<p>I'm really excited to start building some real applications with this to stress test the algorithms and, most importantly, the JSX API. So, I plan on working on a calculator program. It should be simple, instant to open, beautiful and better than the status quo for calculators. A simple app to start, then we can start working up to more things.</p>
 
-Before I can do this, I'm planning on working on event handling first, then state management and components.
+<p>Before I can do this, I'm planning on working on event handling first, then state management and components.</p>
 
 <p>Also, you can now subscribe to entries on the website, so I can notify you when I write a new one!</p>
 
