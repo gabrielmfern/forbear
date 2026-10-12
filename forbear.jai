@@ -619,7 +619,6 @@ operator == :: Math.operator ==;
                 case Wl_Pointer_Event_Leave;
                     leave := cast(*Wl_Pointer_Event_Leave) event.data;
                     if window.wl_surface_id == leave.surface {
-                        window.pointer_serial = leave.serial;
                         window.pointer_inside = false;
                     }
                 case Wl_Pointer_Event_Warp;
@@ -1372,7 +1371,7 @@ get_measurement :: () -> measurement: Node_Measurement, defined: bool {
 is_mouse_inside :: () -> bool {
     using context.forbear;
     measurement, defined := get_measurement();
-    return defined &&
+    return defined && window.pointer_inside &&
         window.pointer_position.x >= measurement.position.x && 
         window.pointer_position.y >= measurement.position.y &&
         window.pointer_position.x <= measurement.position.x + measurement.size.x && 
@@ -2941,7 +2940,6 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     } else #if OS == .MACOS {
         NSOpenGLContext.flushBuffer(backend.gl_context);
     }
-    array_reset_keeping_memory(*measurements);
     {
         push_allocator(persistent_allocator);
         array_resize(*measurements, node_tree.count, false);
