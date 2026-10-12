@@ -44,6 +44,8 @@ operator == :: Math.operator ==;
         fd: s32;
         polling_fd: pollfd;
 
+        wl_pointer_id: u32;
+        wl_seat_id: u32;
         wl_display_id: u32;
         wl_registry_id: u32;
         wl_compositor_id: u32;
@@ -131,6 +133,8 @@ operator == :: Math.operator ==;
                     } else if global.interface_name == "zwp_linux_dmabuf_v1" {
                         // version 3 of this makes it easier for us to get the buffer types back
                         connection.zwp_dmabuf_id = bind_global(connection, Interface_Id.ZWP_LINUX_DMABUF_V1, global, 3);
+                    } else if global.interface_name == "wl_seat" {
+                        connection.wl_seat_id = bind_global(connection, Interface_Id.WL_SEAT, global);
                     }
                 case Wl_Callback_Event_Done;
                     synced = true;
@@ -159,10 +163,15 @@ operator == :: Math.operator ==;
                     );
                     exit(-1);
             }
-        }
-        if event.object_id == connection.xdg_wm_base_id && event.message.type == Xdg_Wm_Base_Event_Ping {
+        } else if event.object_id == connection.xdg_wm_base_id && event.message.type == Xdg_Wm_Base_Event_Ping {
             ping := cast(*Xdg_Wm_Base_Event_Ping) event.data;
             send_wayland_message(connection, connection.xdg_wm_base_id, Xdg_Wm_Base_Request_Pong.{ping.serial});
+        } else if event.object_id == connection.wl_seat_id && event.message.type == Wl_Seat_Event_Capabilities {
+            capabilities := cast(*Wl_Seat_Event_Capabilities) event.data;
+            if (capabilities.capabilities & .POINTER) && connection.wl_pointer_id == 0 {
+                connection.wl_pointer_id = new_wayland_client_object(connection, .WL_POINTER);
+                send_wayland_message(connection, connection.wl_seat_id, Wl_Seat_Request_Get_Pointer.{ id = connection.wl_pointer_id });
+            }
         }
     }
     poll :: (connection: *Wayland_Connection, timeout_ms: s32 = 1000) {
@@ -432,6 +441,10 @@ operator == :: Math.operator ==;
         // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
         scale: float64 = 1.0;
 
+        pointer_serial: u32;
+        pointer_inside: bool;
+        pointer_position: Vector2;
+
         buffers: [2]Wayland_EGL_Buffer;
         current: s64;
 
@@ -589,6 +602,50 @@ operator == :: Math.operator ==;
         } else if event.object_id == window.wl_buffer_params_id && event.message.type == Zwp_Linux_Buffer_Params_V1_Event_Failed {
             log_error("compositor failed to import the dmabuf (%x%)", window.width, window.height);
             exit(-1);
+        } else if event.object_id == backend.connection.wl_pointer_id {
+            if event.message.type == {
+                // TODO: support pointer gestures https://wayland.app/protocols/pointer-gestures-unstable-v1
+                case Wl_Pointer_Event_Enter;
+                    enter := cast(*Wl_Pointer_Event_Enter) event.data;
+                    if window.wl_surface_id == enter.surface {
+                        window.pointer_serial = enter.serial;
+                        window.pointer_inside = true;
+
+                        window.pointer_position = Vector2.{
+                            cast(float) enter.surface_x,
+                            cast(float) enter.surface_y,
+                        } / 256.0;
+                    }
+                case Wl_Pointer_Event_Leave;
+                    leave := cast(*Wl_Pointer_Event_Leave) event.data;
+                    if window.wl_surface_id == leave.surface {
+                        window.pointer_serial = leave.serial;
+                        window.pointer_inside = false;
+                    }
+                case Wl_Pointer_Event_Warp;
+                    warp := cast(*Wl_Pointer_Event_Warp) event.data;
+                    window.pointer_position = Vector2.{
+                        cast(float) warp.surface_x,
+                        cast(float) warp.surface_y,
+                    } / 256.0;
+                case Wl_Pointer_Event_Motion;
+                    motion := cast(*Wl_Pointer_Event_Motion) event.data;
+                    window.pointer_position = Vector2.{
+                        cast(float) motion.surface_x,
+                        cast(float) motion.surface_y,
+                    } / 256.0;
+                // case Wl_Pointer_Event_Button;
+                //     button := cast(*Wl_Pointer_Event_Button) event.data;
+                //     print("button %\n", FormatStruct.{value = button, use_long_form_if_more_than_this_many_members = -1});
+                // TODO: support all of the remaining pointer events:
+                // - wl_pointer::axis_relative_direction
+                // - wl_pointer::axis_value120
+                // - wl_pointer::axis_discrete
+                // - wl_pointer::axis_stop
+                // - wl_pointer::axis_source
+                // - wl_pointer::axis_frame
+                // - wl_pointer::axis
+            } 
         }
 
         for *buffer: window.buffers {
@@ -1283,6 +1340,37 @@ Node :: struct {
 
     tree: *Node_Tree;
 };
+Node_Measurement :: struct {
+    key: u64 = U64_MAX;
+    size: Vector2 = VECTOR2_NAN;
+    position: Vector2 = VECTOR2_NAN;
+    clipping_rectangle: Vector4 = VECTOR4_NAN;
+}
+get_measurement :: () -> measurement: Node_Measurement, defined: bool {
+    using context.forbear;
+    if parent_index != -1 && measurements.count > parent_index {
+        measurement := measurements[parent_index];
+        if measurement.key == scope_key {
+            return measurement, true;
+        } else {
+            for key: node_keys {
+                if key == scope_key {
+                    return measurements[parent_index], true;
+                }
+            }
+        }
+    }
+    return Node_Measurement.{}, false;
+}
+is_mouse_inside :: () -> bool {
+    using context.forbear;
+    measurement, defined := get_measurement();
+    return defined &&
+        window.pointer_position.x >= measurement.position.x && 
+        window.pointer_position.y >= measurement.position.y &&
+        window.pointer_position.x <= measurement.position.x + measurement.size.x && 
+        window.pointer_position.y <= measurement.position.y + measurement.size.y;
+}
 get_justification :: (node: *Node, direction: Direction) -> Alignment #expand {
     if direction == Direction.HORIZONTAL {
         return node.style.x_justification;
@@ -1400,6 +1488,7 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
             node.z = parent.z;
         }
     }
+    array_add(*context.forbear.node_keys, key);
     node.key = key;
     if node.style.width.kind == {
         // we don't handle FIT or GROW since the node already has the right width by default
@@ -1798,7 +1887,9 @@ glyph_atlas_place :: (glyph_atlas: *Glyph_Atlas, width: s32, height: s32) -> x: 
 }
 
 Forbear :: struct {
+    node_keys: [..]u64;
     node_tree: Node_Tree;
+    measurements: [..]Node_Measurement;
 
     persistent_allocator: Allocator;
     frame_allocator: Allocator;
@@ -2845,7 +2936,23 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     } else #if OS == .MACOS {
         NSOpenGLContext.flushBuffer(backend.gl_context);
     }
-
+    array_reset_keeping_memory(*node_keys);
+    array_reset_keeping_memory(*measurements);
+    {
+        push_allocator(persistent_allocator);
+        array_resize(*measurements, node_tree.count, false);
+        for node: node_tree {
+            // we can't just copy the entire Node_Tree with a mempcy here because it points into frame allocated data
+            // that was allocated in the frame pool. besides, in what I was able to measure, this copy tends to be more
+            // performant than if we were to copy the entire Node_Tree with memcpy. 
+            measurements[it_index] = Node_Measurement.{ 
+                key = node.key, 
+                size = node.size, 
+                position = node.position, 
+                clipping_rectangle = node.clipping_rectangle,
+            };
+        }
+    }
     array_reset_keeping_memory(*node_tree);
     reset(*frame_pool);
 }
