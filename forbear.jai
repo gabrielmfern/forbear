@@ -1349,13 +1349,20 @@ Node_Measurement :: struct {
 get_measurement :: () -> measurement: Node_Measurement, defined: bool {
     using context.forbear;
     if parent_index != -1 && measurements.count > parent_index {
-        measurement := measurements[parent_index];
-        if measurement.key == scope_key {
-            return measurement, true;
+        measurement_by_index := measurements[parent_index];
+        if measurement_by_index.key == scope_key {
+            return measurement_by_index, true;
         } else {
-            for key: node_keys {
-                if key == scope_key {
-                    return measurements[parent_index], true;
+            //
+            // I don't think we should sort these measurements by keys because that would be making the normal case
+            // slower in favour of a case that should be rare as I expect things to be.
+            //
+            // TODO: to improve the performance of this, we should store a contiguous array of the keys of the previous
+            // frame's node tree's keys
+            //
+            for measurement_by_index: measurements {
+                if measurement_by_index.key == scope_key {
+                    return measurement_by_index, true;
                 }
             }
         }
@@ -1488,7 +1495,6 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
             node.z = parent.z;
         }
     }
-    array_add(*context.forbear.node_keys, key);
     node.key = key;
     if node.style.width.kind == {
         // we don't handle FIT or GROW since the node already has the right width by default
@@ -1887,7 +1893,6 @@ glyph_atlas_place :: (glyph_atlas: *Glyph_Atlas, width: s32, height: s32) -> x: 
 }
 
 Forbear :: struct {
-    node_keys: [..]u64;
     node_tree: Node_Tree;
     measurements: [..]Node_Measurement;
 
@@ -2936,7 +2941,6 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     } else #if OS == .MACOS {
         NSOpenGLContext.flushBuffer(backend.gl_context);
     }
-    array_reset_keeping_memory(*node_keys);
     array_reset_keeping_memory(*measurements);
     {
         push_allocator(persistent_allocator);
