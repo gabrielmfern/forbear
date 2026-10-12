@@ -12,6 +12,7 @@
 - [ ] implement event handling
     - [ ] keyboard input
     - [ ] mouse input
+- [ ] state management
 - [ ] build a calculator through the jsx adapter 
 - [ ] handle wayland topbars protocol (this doesn't address gnome unfortunately)
 - [ ] handling the weird edge case of window decorations for Gnome :/
@@ -33,6 +34,9 @@
 - [ ] a macos program without a menu bar is a horrible experience (ex: cmd+q doesn't work)
     - how can we do this in a cross platform manner? perhaps a component that makes changes to the window to render the menu items?
 - [ ] windows backend
+- [ ] make javascript support async code
+    - when doing native code, one can simply use a thread for the async work, which doesn't stall frames. javascript
+      can't really do this, so how can we let it do async work?
 
 ## introspection 
 
