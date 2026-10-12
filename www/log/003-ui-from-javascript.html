@@ -614,18 +614,7 @@ actually use. It no longer crashes when screenshotting, it respects the monitor'
 <button class="text-muted hover:text-yellow cursor-pointer">get entries by email</button>
 </form>
 <div id="subscribe-msg" class="mt-2 text-sm text-muted"></div>
-<script>
-  document.getElementById('subscribe').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.target;
-    const response = await fetch('/api/subscribe', { method: 'POST', body: form.email.value });
-    document.getElementById('subscribe-msg').textContent = response.status === 409
-      ? "you're already subscribed"
-      : response.ok
-        ? 'check your inbox for a link to confirm.'
-        : 'something went wrong, try again later.';
-  });
-</script>
+<script src="/assets/subscribe.js"></script>
 
 <p><a href="https://github.com/gabrielmfern/forbear">https://github.com/gabrielmfern/forbear</a></p>
 
