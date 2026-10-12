@@ -1347,10 +1347,9 @@ Node_Measurement :: struct {
 }
 get_measurement :: () -> measurement: Node_Measurement, defined: bool {
     using context.forbear;
-    if parent_index != -1 && measurements.count > parent_index {
-        measurement_by_index := measurements[parent_index];
-        if measurement_by_index.key == scope_key {
-            return measurement_by_index, true;
+    if parent_index != -1 {
+        if parent_index < measurements.count && measurements[parent_index].key == scope_key {
+            return measurements[parent_index], true;
         } else {
             //
             // I don't think we should sort these measurements by keys because that would be making the normal case
