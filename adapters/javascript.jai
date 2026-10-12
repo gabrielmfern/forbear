@@ -362,9 +362,6 @@ forbear_open :: (adapter: *Javascript_Adapter, js_style_object: *void, manual_ke
         if context.forbear.scope_key != U64_MAX {
             key = fnv1a_hash(context.forbear.scope_key, key);
         }
-        if context.forbear.parent_index != -1 {
-            key = fnv1a_hash(cast(u64) context.forbear.parent_index, key);
-        }
         style := style_from(adapter, js_style_object);
         array_add(*adapter.openings_stack, open_element(style, key));
     }
@@ -390,9 +387,6 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
         key = fnv1a_hash(manual_key_data, manual_key_count);
         if context.forbear.scope_key != U64_MAX {
             key = fnv1a_hash(context.forbear.scope_key, key);
-        }
-        if context.forbear.parent_index != -1 {
-            key = fnv1a_hash(cast(u64) context.forbear.parent_index, key);
         }
         style := style_from(adapter, js_style_object);
 

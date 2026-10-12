@@ -1491,9 +1491,6 @@ element :: (
     if context.forbear.scope_key != U64_MAX {
         key = fnv1a_hash(context.forbear.scope_key, key);
     }
-    if context.forbear.parent_index != -1 {
-        key = fnv1a_hash(cast(u64) context.forbear.parent_index, key);
-    }
 
     opening := open_element(style, key);
     #insert body;
