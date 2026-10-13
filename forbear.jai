@@ -445,6 +445,7 @@ operator == :: Math.operator ==;
         pointer_inside: bool;
         pointer_position: Vector2;
 
+        pointer_press_position: [8]Vector2;
         pointer_pressed: [8]bool;
         pointer_released: [8]bool;
         pointer_held: [8]bool;
@@ -647,6 +648,7 @@ operator == :: Math.operator ==;
                             window.pointer_released[index] = true;
                             window.pointer_held[index] = false;
                         } else if button.state == .PRESSED {
+                            window.pointer_press_position[index] = window.pointer_position;
                             window.pointer_pressed[index] = true;
                             window.pointer_held[index] = true;
                         }
@@ -1412,6 +1414,20 @@ Mouse_Button :: enum {
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
     return window.pointer_held[button];
+}
+on_click :: (button := Mouse_Button.LEFT) -> bool {
+    using context.forbear;
+    if on_mouse_up(button) {
+        measurement, defined := get_measurement();
+        assert(defined, "the measurement should exist if is_mouse_inside is true");
+        press_position := window.pointer_press_position[button];
+        return press_position.x >= measurement.position.x && 
+               press_position.y >= measurement.position.y &&
+               press_position.x <= measurement.position.x + measurement.size.x && 
+               press_position.y <= measurement.position.y + measurement.size.y;
+    } else {
+        return false;
+    }
 }
 on_mouse_down :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
