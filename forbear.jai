@@ -255,6 +255,8 @@ operator == :: Math.operator ==;
             }
 
             if message_header.msg_controllen > 0 {
+                assert(control.header.cmsg_level == SOL_SOCKET && control.header.cmsg_type == xx SCM.RIGHTS);
+
                 new_fds_count := (cast(s64) control.header.cmsg_len - size_of(cmsghdr)) / size_of(s32);
                 assert(connection.pending_read_fds.count + new_fds_count <= connection.reading_fds_buffer.count, "too many file descriptors pending");
                 memcpy(*connection.reading_fds_buffer[connection.pending_read_fds.count], control.fds.data, new_fds_count * size_of(s32));
