@@ -31,14 +31,6 @@ main :: () {
     frames := 0;
     last := seconds_since_init();
     previous := last;
-    frame_sum: float64;
-    frame_max: float64;
-    average_ms: float64;
-    max_ms: float64;
-
-    wave :: (seconds: float, speed: float, phase: float) -> float {
-        return (Math.sin(seconds * speed + phase) + 1) / 2;
-    }
 
     while window.running {
         #if OS == .LINUX {
@@ -57,23 +49,11 @@ main :: () {
 
         frames += 1;
         now := seconds_since_init();
-        delta := (now - previous) * 1000;
-        previous = now;
-        frame_sum += delta;
-        frame_max = max(frame_max, delta);
         if now - last >= 1 {
             fps = frames;
-            average_ms = frame_sum / frames;
-            max_ms = frame_max;
             frames = 0;
-            frame_sum = 0;
-            frame_max = 0;
             last = now;
         }
-
-        seconds := cast(float) now;
-        bars := 8 + cast(int) (40 * wave(seconds, 0.4, 0));
-        phase := cast(float) Math.fmod_cycling(now * 2.3, Math.TAU64);
 
         element(Style.{
             width = grow(),
@@ -102,97 +82,26 @@ main :: () {
                         element(Style.{ width = grow() });
                         text(tprint("%", fps));
                     });
-                    element(Style.{ width = grow() }, #code {
-                        text("avg:");
-                        element(Style.{ width = grow() });
-                        text(tprint("% ms", formatFloat(average_ms, trailing_width = 1, zero_removal = .NO)));
-                    });
-                    element(Style.{ width = grow() }, #code {
-                        text("max:");
-                        element(Style.{ width = grow() });
-                        text(tprint("% ms", formatFloat(max_ms, trailing_width = 1, zero_removal = .NO)));
-                    });
                 });
             });
 
-            element(Style.{ width = grow(), height = grow(), margin = top(16) }, #code {
-                element(Style.{
-                    width = fixed(96 + 180 * wave(seconds, 1.1, 0)),
-                    height = grow(),
-                    background = color(rgb(17, 19, 22)),
-                    padding = all(8),
-                    direction = .VERTICAL,
-                    margin = right(16),
-                }, #code {
-                    for folder: string.["Inbox", "Sent mail", "Drafts and notes", "Everything else"] {
-                        element(Style.{
-                            width = grow(),
-                            background = color(rgb(44, 51, 59)),
-                            color = rgb(255, 255, 255),
-                            padding = all(8),
-                            margin = bottom(8),
-                        }, #code {
-                            text(folder);
-                        });
-                    }
-                });
+            for key: window.keys_held {
+                string_key := tprint("%", key);
+                text(string_key, manual_key = string_key);
+            }
 
-                element(Style.{ width = grow(), height = grow(), margin = left(16), direction = .VERTICAL }, #code {
-                    element(Style.{ width = grow(), background = color(rgb(17, 19, 22)), padding = all(12) }, #code {
-                        text("Every frame, this whole window is laid out from scratch. The sidebar changes its width, so this paragraph has to wrap its words again, the cards below have to share what is left, and every bar has to find its new place. Nothing here is a transform, all of it is layout.");
-                    });
-                    element(Style.{ width = grow(), margin = top(16) }, #code {
-                        for description, index: string.[
-                            "Each card takes a share of the width that is left.",
-                            "The number above is the weight of that share.",
-                            "When the weight changes, the text wraps again.",
-                        ] {
-                            weight := 1 + 3 * wave(seconds, 0.9, index * 2.1);
-                            element(Style.{
-                                width = grow(weight),
-                                height = grow(),
-                                background = color(rgb(44, 51, 59)),
-                                padding = all(10),
-                                margin = right(ifx index == 2 then 0.0 else 8.0),
-                            }, #code {
-                                element(Style.{ width = grow(), direction = .VERTICAL }, #code {
-                                    element(Style.{ color = rgb(184, 163, 106), font_size = 18 }, #code {
-                                        text(tprint("grow(%)", formatFloat(weight, trailing_width = 2, zero_removal = .NO)));
-                                    });
-                                    text(description);
-                                });
-                            });
-                        }
-                    });
-                    element(Style.{ height = grow() });
-                    element(Style.{ margin = top(16), color = rgb(255, 255, 255), direction = .VERTICAL }, #code {
-                        element(Style.{}, #code {
-                            text(tprint(
-                                "height(x) = 61 + 45 · sin(0.35x + %), x from 0 to %",
-                                formatFloat(phase, trailing_width = 2, zero_removal = .NO),
-                                bars - 1,
-                            ));
-                        });
-                        element(Style.{}, #code {
-                            text("... and while all of this layouting is happening, here's the above function graphed");
-                        });
-                    });
-                    element(Style.{
-                        width = grow(),
-                        height = fixed(106),
-                        margin = bottom(top(8), 16),
-                        y_justification = .END,
-                    }, #code {
-                        for index: 0..bars - 1 {
-                            element(Style.{
-                                width = grow(),
-                                height = fixed(61 + 45 * Math.sin(0.35 * index + phase)),
-                                background = color(rgb(184, 163, 106)),
-                                margin = right(ifx index == bars - 1 then 0.0 else 3.0),
-                            });
-                        }
-                    });
-                });
+            element(Style.{ 
+                background = color(rgb(255, 0, 0)), 
+                width = fixed(200), 
+                height = fixed(200) 
+            }, #code {
+                node := get_node();
+                if is_mouse_held() && is_mouse_inside() {
+                    node.style.background = color(rgb(255, 255, 255));
+                }
+                if is_key_held(.SHIFT_LEFT) {
+                    node.style.background = color(rgb(100, 100, 0));
+                }
             });
         });
 
