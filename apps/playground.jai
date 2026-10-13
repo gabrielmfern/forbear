@@ -85,9 +85,12 @@ main :: () {
                 });
             });
 
-            for key: window.keys_held {
-                string_key := tprint("%", key);
-                text(string_key, manual_key = string_key);
+            {
+                push_allocator(context.forbear.frame_allocator);
+                for key: window.keys_held {
+                    string_key := tprint("%", key);
+                    text(string_key, manual_key = string_key);
+                }
             }
 
             element(Style.{ 
