@@ -53,10 +53,22 @@ operator == :: Math.operator ==;
         zwp_dmabuf_id: u32;
         xdg_wm_base_id: u32;
 
+        //
+        // TODO(depessimization): I do not like that xkb allocates the structs and also does reference counting with
+        // them which is quite bad. 
+        //
+        // In the long-term, we should write our own implementation, but Wayland is already
+        // taking a lot of the code here which is unfortunate because Wayland is actually most likely not going to
+        // include most users.
+        //
+        xkb: *xkb_context;
+        keymap: *xkb_keymap;
+        key_state: *xkb_state;
+
         reading_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
+        pending_reads: []u8;
         reading_fds_buffer: [8]s32;
         pending_read_fds: []s32;
-        pending_reads: []u8;
 
         client_object_interfaces: [..]Interface_Id;
         free_client_object_interface_ids: [..]s64;
@@ -99,6 +111,8 @@ operator == :: Math.operator ==;
 
         connection.wl_display_id = new_wayland_client_object(connection, Interface_Id.WL_DISPLAY);
         connection.wl_registry_id = new_wayland_client_object(connection, Interface_Id.WL_REGISTRY);
+
+        connection.xkb = xkb_context_new(xkb_context_flags.XKB_CONTEXT_NO_FLAGS);
 
         send_wayland_message(connection, 1, Wl_Display_Request_Get_Registry.{ registry = connection.wl_registry_id });
         sync_id := new_wayland_client_object(connection, .WL_CALLBACK);
@@ -178,6 +192,38 @@ operator == :: Math.operator ==;
             if (capabilities.capabilities & .KEYBOARD) && connection.wl_keyboard_id == 0 {
                 connection.wl_keyboard_id = new_wayland_client_object(connection, .WL_KEYBOARD);
                 send_wayland_message(connection, connection.wl_seat_id, Wl_Seat_Request_Get_Keyboard.{ id = connection.wl_keyboard_id });
+            }
+        } else if event.object_id == connection.wl_keyboard_id {
+            if event.message.type == {
+                case Wl_Keyboard_Event_Keymap;
+                    keymap := cast(*Wl_Keyboard_Event_Keymap) event.data;
+                    defer close(cast(s32) keymap.fd);
+                    assert(keymap.format == .XKB_V1, "unsupported keymap format");
+                    memory := mmap(null, keymap.size, PROT_READ, MAP_PRIVATE, cast(s32) keymap.fd, 0);
+                    defer munmap(memory, keymap.size);
+                    assert(memory != MAP_FAILED, "could not map the keymap");
+                    if connection.key_state {
+                        xkb_state_unref(connection.key_state);
+                    }
+                    if connection.keymap {
+                        xkb_keymap_unref(connection.keymap);
+                    }
+                    connection.keymap = xkb_keymap_new_from_string(
+                        connection.xkb, 
+                        memory, 
+                        .XKB_KEYMAP_FORMAT_TEXT_V1, 
+                        .XKB_KEYMAP_COMPILE_NO_FLAGS
+                    );
+                    connection.key_state = xkb_state_new(connection.keymap);
+                case Wl_Keyboard_Event_Modifiers;
+                    modifiers := cast(*Wl_Keyboard_Event_Modifiers) event.data;
+                    xkb_state_update_mask(
+                        connection.key_state,
+                        modifiers.mods_depressed,
+                        modifiers.mods_latched,
+                        modifiers.mods_locked,
+                        0, 0, modifiers.group
+                    );
             }
         }
     }
@@ -475,6 +521,13 @@ operator == :: Math.operator ==;
         // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
         scale: float64 = 1.0;
 
+        keyboard_serial: u32;
+        keyboard_inside: bool;
+        keys_buffer: [32 * 3]Key;
+        keys_pressed: []Key;
+        keys_released: []Key;
+        keys_held: []Key;
+
         pointer_serial: u32;
         pointer_inside: bool;
         pointer_position: Vector2;
@@ -501,6 +554,10 @@ operator == :: Math.operator ==;
     init_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
         window.width = width;
         window.height = height;
+
+        window.keys_pressed.data = window.keys_buffer.data;
+        window.keys_released.data = window.keys_buffer.data + 32;
+        window.keys_held.data = window.keys_buffer.data + 64;
 
         window.wl_surface_id = new_wayland_client_object(connection, Interface_Id.WL_SURFACE);
         send_wayland_message(connection, connection.wl_compositor_id, Wl_Compositor_Request_Create_Surface.{ id = window.wl_surface_id });
@@ -695,7 +752,79 @@ operator == :: Math.operator ==;
                 // - wl_pointer::axis_source
                 // - wl_pointer::axis_frame
                 // - wl_pointer::axis
-            } 
+            }
+        } else if event.object_id == backend.connection.wl_keyboard_id {
+            add_key :: (array: *[]Key, key: Key) {
+                for array.* {
+                    if it == key {
+                        return;
+                    }
+                }
+                assert(array.count < 32);
+                array.count += 1;
+                array.*[array.count - 1] = key;
+            }
+
+            if event.message.type == {
+                case Wl_Keyboard_Event_Enter;
+                    enter := cast(*Wl_Keyboard_Event_Enter) event.data;
+                    if enter.surface == window.wl_surface_id {
+                        window.keyboard_inside = true;
+                        window.keyboard_serial = enter.serial;
+                        keys: []u32;
+                        keys.data = cast(*u32) enter.keys.data;
+                        keys.count = enter.keys.count / size_of(u32);
+                        for key: keys {
+                            xkb_key := key + 8;
+                            symbols: *xkb_keysym_t;
+                            if xkb_keymap_key_get_syms_by_level(
+                                backend.connection.keymap, 
+                                xkb_key, 
+                                xkb_state_key_get_layout(backend.connection.key_state, xkb_key), 
+                                0, 
+                                *symbols
+                            ) > 0 {
+                                key := cast(Key) symbols.*;
+                                add_key(*window.keys_held, key);
+                            }
+                        }
+                        // HANDLE: enter.keys
+                    }
+                case Wl_Keyboard_Event_Leave;
+                    leave := cast(*Wl_Keyboard_Event_Leave) event.data;
+                    if leave.surface == window.wl_surface_id {
+                        window.keyboard_inside = false;
+                        window.keys_held.count = 0;
+                    }
+                // TODO: case Wl_Keyboard_Event_Repeat_Info;
+                case Wl_Keyboard_Event_Key;
+                    key_event := cast(*Wl_Keyboard_Event_Key) event.data;
+                    xkb_key := key_event.key + 8;
+                    symbols: *xkb_keysym_t;
+                    if xkb_keymap_key_get_syms_by_level(
+                        backend.connection.keymap, 
+                        xkb_key, 
+                        xkb_state_key_get_layout(backend.connection.key_state, xkb_key), 
+                        0, 
+                        *symbols
+                    ) > 0 {
+                        key := cast(Key) symbols.*;
+                        if key_event.state == .RELEASED {
+                            add_key(*window.keys_released, key);
+                            for window.keys_held {
+                                if it == key {
+                                    array_unordered_remove_by_index(*window.keys_held, it_index);
+                                    break;
+                                }
+                            }
+                        } else if key_event.state == .PRESSED {
+                            add_key(*window.keys_pressed, key);
+                            add_key(*window.keys_held, key);
+                        } else if key_event.state == .REPEATED {
+                            add_key(*window.keys_pressed, key);
+                        }
+                    }
+            }
         }
 
         for *buffer: window.buffers {
@@ -1435,6 +1564,100 @@ is_mouse_inside :: () -> bool {
         window.pointer_position.x <= measurement.position.x + measurement.size.x && 
         window.pointer_position.y <= measurement.position.y + measurement.size.y;
 }
+Key :: enum {
+    #if OS == .LINUX {
+        A :: XKB_KEY_a;
+        B :: XKB_KEY_b;
+        C :: XKB_KEY_c;
+        D :: XKB_KEY_d;
+        E :: XKB_KEY_e;
+        F :: XKB_KEY_f;
+        G :: XKB_KEY_g;
+        H :: XKB_KEY_h;
+        I :: XKB_KEY_i;
+        J :: XKB_KEY_j;
+        K :: XKB_KEY_k;
+        L :: XKB_KEY_l;
+        M :: XKB_KEY_m;
+        N :: XKB_KEY_n;
+        O :: XKB_KEY_o;
+        P :: XKB_KEY_p;
+        Q :: XKB_KEY_q;
+        R :: XKB_KEY_r;
+        S :: XKB_KEY_s;
+        T :: XKB_KEY_t;
+        U :: XKB_KEY_u;
+        V :: XKB_KEY_v;
+        W :: XKB_KEY_w;
+        X :: XKB_KEY_x;
+        Y :: XKB_KEY_y;
+        Z :: XKB_KEY_z;
+
+        DIGIT_0 :: XKB_KEY_0;
+        DIGIT_1 :: XKB_KEY_1;
+        DIGIT_2 :: XKB_KEY_2;
+        DIGIT_3 :: XKB_KEY_3;
+        DIGIT_4 :: XKB_KEY_4;
+        DIGIT_5 :: XKB_KEY_5;
+        DIGIT_6 :: XKB_KEY_6;
+        DIGIT_7 :: XKB_KEY_7;
+        DIGIT_8 :: XKB_KEY_8;
+        DIGIT_9 :: XKB_KEY_9;
+
+        F1 :: XKB_KEY_F1;
+        F2 :: XKB_KEY_F2;
+        F3 :: XKB_KEY_F3;
+        F4 :: XKB_KEY_F4;
+        F5 :: XKB_KEY_F5;
+        F6 :: XKB_KEY_F6;
+        F7 :: XKB_KEY_F7;
+        F8 :: XKB_KEY_F8;
+        F9 :: XKB_KEY_F9;
+        F10 :: XKB_KEY_F10;
+        F11 :: XKB_KEY_F11;
+        F12 :: XKB_KEY_F12;
+
+        SHIFT_LEFT :: XKB_KEY_Shift_L;
+        SHIFT_RIGHT :: XKB_KEY_Shift_R;
+        SHIFT_LOCK :: XKB_KEY_Shift_Lock;
+        CONTROL_LEFT :: XKB_KEY_Control_L;
+        CONTROL_RIGHT :: XKB_KEY_Control_R;
+        ALT_LEFT :: XKB_KEY_Alt_L;
+        ALT_RIGHT :: XKB_KEY_Alt_R;
+        SUPER_LEFT :: XKB_KEY_Super_L;
+        SUPER_RIGHT :: XKB_KEY_Super_R;
+        CAPS_LOCK :: XKB_KEY_Caps_Lock;
+
+        ARROW_LEFT :: XKB_KEY_Left;
+        ARROW_RIGHT :: XKB_KEY_Right;
+        ARROW_UP :: XKB_KEY_Up;
+        ARROW_DOWN :: XKB_KEY_Down;
+        HOME :: XKB_KEY_Home;
+        END :: XKB_KEY_End;
+        PAGE_UP :: XKB_KEY_Page_Up;
+        PAGE_DOWN :: XKB_KEY_Page_Down;
+
+        TAB :: XKB_KEY_Tab;
+        ESCAPE :: XKB_KEY_Escape;
+        ENTER :: XKB_KEY_Return;
+        SPACE :: XKB_KEY_space;
+        BACKSPACE :: XKB_KEY_BackSpace;
+        DELETE :: XKB_KEY_Delete;
+        INSERT :: XKB_KEY_Insert;
+
+        MINUS :: XKB_KEY_minus;
+        EQUAL :: XKB_KEY_equal;
+        BRACKET_LEFT :: XKB_KEY_bracketleft;
+        BRACKET_RIGHT :: XKB_KEY_bracketright;
+        BACKSLASH :: XKB_KEY_backslash;
+        SEMICOLON :: XKB_KEY_semicolon;
+        APOSTROPHE :: XKB_KEY_apostrophe;
+        GRAVE :: XKB_KEY_grave;
+        COMMA :: XKB_KEY_comma;
+        PERIOD :: XKB_KEY_period;
+        SLASH :: XKB_KEY_slash;
+    }
+}
 Mouse_Button :: enum {
     LEFT;
     RIGHT;
@@ -1947,7 +2170,7 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
         }, manual_key);
     }
 }
-text :: (content: string, location := #caller_location) {
+text :: (content: string, manual_key := "", location := #caller_location) {
     text(Style.{}, content, "", location);
 }
 Glyph_Atlas :: struct {
@@ -3050,6 +3273,8 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
             };
         }
     }
+    window.keys_pressed.count = 0;
+    window.keys_released.count = 0;
     memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
     memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
     array_reset_keeping_memory(*node_tree);
