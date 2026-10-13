@@ -358,6 +358,17 @@ generate :: () {
         assert(gbm_ok, "could not generate gbm bindings");
         append_and_steal_buffers(*bindings_builder, *gbm_builder);
         append(*bindings_builder, "\n#scope_export\n");
+
+        // libxkbcommon bindings
+        xkb_bindings_opts: Generate_Bindings_Options;
+        array_add(*xkb_bindings_opts.system_include_paths, ..get_default_system_include_paths());
+        array_add(*xkb_bindings_opts.system_libraries, Library.{ filename = "libxkbcommon" });
+        array_add(*xkb_bindings_opts.path_fragments_to_treat_as_non_system_paths, "xkbcommon.h");
+        array_add(*xkb_bindings_opts.source_files, "/usr/include/xkbcommon/xkbcommon.h");
+        xkb_builder, xkb_ok := generate_bindings(xkb_bindings_opts);
+        assert(xkb_ok, "could not generate xkbcommon bindings");
+        append_and_steal_buffers(*bindings_builder, *xkb_builder);
+        append(*bindings_builder, "\n#scope_export\n");
     }
 
     {
