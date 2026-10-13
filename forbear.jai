@@ -45,6 +45,7 @@ operator == :: Math.operator ==;
         polling_fd: pollfd;
 
         wl_pointer_id: u32;
+        wl_keyboard_id: u32;
         wl_seat_id: u32;
         wl_display_id: u32;
         wl_registry_id: u32;
@@ -53,6 +54,8 @@ operator == :: Math.operator ==;
         xdg_wm_base_id: u32;
 
         reading_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
+        reading_fds_buffer: [8]s32;
+        pending_read_fds: []s32;
         pending_reads: []u8;
 
         client_object_interfaces: [..]Interface_Id;
@@ -171,6 +174,10 @@ operator == :: Math.operator ==;
             if (capabilities.capabilities & .POINTER) && connection.wl_pointer_id == 0 {
                 connection.wl_pointer_id = new_wayland_client_object(connection, .WL_POINTER);
                 send_wayland_message(connection, connection.wl_seat_id, Wl_Seat_Request_Get_Pointer.{ id = connection.wl_pointer_id });
+            } 
+            if (capabilities.capabilities & .KEYBOARD) && connection.wl_keyboard_id == 0 {
+                connection.wl_keyboard_id = new_wayland_client_object(connection, .WL_KEYBOARD);
+                send_wayland_message(connection, connection.wl_seat_id, Wl_Seat_Request_Get_Keyboard.{ id = connection.wl_keyboard_id });
             }
         }
     }
@@ -211,16 +218,26 @@ operator == :: Math.operator ==;
             leftover := connection.pending_reads.count;
             copy(connection.reading_buffer.data, connection.pending_reads.data, leftover);
 
-            flags: MSG;
+            flags: MSG = .CMSG_CLOEXEC;
             if !wait {
-                flags = .DONTWAIT;
+                flags |= .DONTWAIT;
             }
-            result := recv(
-                connection.fd,
-                cast(*void) (connection.reading_buffer.data + leftover),
-                xx (connection.reading_buffer.count - leftover),
-                flags
-            );
+            control: struct {
+                using header: cmsghdr;
+                fds: [8]s32;
+            };
+            iov := iovec.{ 
+                iov_base = connection.reading_buffer.data + leftover, 
+                iov_len = xx (connection.reading_buffer.count - leftover) 
+            };
+            message_header := msghdr.{
+                msg_iov = *iov,
+                msg_iovlen = 1,
+                msg_control = *control,
+                msg_controllen = size_of(type_of(control))
+            };
+            result := recvmsg(connection.fd, *message_header, flags);
+            assert(!(message_header.msg_flags & xx MSG.CTRUNC), "control buffer too small, file descriptors were dropped");
             if result == 0 {
                 log_error("compositor closed the connection");
                 exit(-1);
@@ -235,6 +252,14 @@ operator == :: Math.operator ==;
                 }
                 log_error("failed to read back from socket: %\n", error_code);
                 exit(-1);
+            }
+
+            if message_header.msg_controllen > 0 {
+                new_fds_count := (cast(s64) control.header.cmsg_len - size_of(cmsghdr)) / size_of(s32);
+                assert(connection.pending_read_fds.count + new_fds_count <= connection.reading_fds_buffer.count, "too many file descriptors pending");
+                memcpy(*connection.reading_fds_buffer[connection.pending_read_fds.count], control.fds.data, new_fds_count * size_of(s32));
+                connection.pending_read_fds.data = connection.reading_fds_buffer.data;
+                connection.pending_read_fds.count += new_fds_count;
             }
 
             connection.pending_reads = array_view(connection.reading_buffer, 0, result + leftover);
@@ -257,7 +282,7 @@ operator == :: Math.operator ==;
         connection.pending_reads.data += incoming_message_header.size;
         connection.pending_reads.count -= incoming_message_header.size;
 
-        data := parse_wayland_message(incoming_message, message_info);
+        data := parse_wayland_message(incoming_message, message_info, *connection.pending_read_fds);
 
         if WAYLAND_DEBUGGING {
             print("\n");
@@ -370,7 +395,7 @@ operator == :: Math.operator ==;
         assert(result == bytes.count, "incomplete message was sent. something went wrong");
     }
     parsing_buffer : [MAX_MESSAGE_STRUCT_SIZE]u8;
-    parse_wayland_message :: (bytes: []u8, message_info: Message_Info) -> *void {
+    parse_wayland_message :: (bytes: []u8, message_info: Message_Info, fds: *[]s32) -> *void {
         args := array_view(ARGS, message_info.first_arg, message_info.arg_count);
         message_type_info := cast(*Type_Info_Struct) message_info.type;
 
@@ -384,7 +409,14 @@ operator == :: Math.operator ==;
             arg_type_info := cast(*Type_Info) arg_member.type;
             if it == {
                 case ProtocolType.FILE_DESCRIPTOR;
-                    continue;
+                    assert(fds.count > 0, "a messaged named a file descriptor that never arrived");
+                    fd := fds.*[0];
+                    memcpy(*untyped_message_bytes[arg_member.offset_in_bytes], *fd, size_of(s32));
+                    for 0..fds.count - 2 {
+                        // move all fds one index down
+                        fds.*[it] = fds.*[it + 1];
+                    }
+                    fds.count -= 1;
                 case ProtocolType.STRING;
                     value: string;
                     // we subtract one because this is a C string, with a NULL terminator
