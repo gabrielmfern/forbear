@@ -1686,6 +1686,18 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
         return false;
     }
 }
+on_key_down :: (key: Key) -> bool {
+    using context.forbear;
+    return array_find(window.keys_pressed, key);
+}
+on_key_up :: (key: Key) -> bool {
+    using context.forbear;
+    return array_find(window.keys_released, key);
+}
+is_key_held :: (key: Key) -> bool {
+    using context.forbear;
+    return array_find(window.keys_held, key);
+}
 // TOOD: scrolling events
 on_mouse_down :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
