@@ -445,6 +445,10 @@ operator == :: Math.operator ==;
         pointer_inside: bool;
         pointer_position: Vector2;
 
+        pointer_pressed: [8]bool;
+        pointer_released: [8]bool;
+        pointer_held: [8]bool;
+
         buffers: [2]Wayland_EGL_Buffer;
         current: s64;
 
@@ -633,9 +637,20 @@ operator == :: Math.operator ==;
                         cast(float) motion.surface_x,
                         cast(float) motion.surface_y,
                     } / 256.0;
-                // case Wl_Pointer_Event_Button;
-                //     button := cast(*Wl_Pointer_Event_Button) event.data;
-                //     print("button %\n", FormatStruct.{value = button, use_long_form_if_more_than_this_many_members = -1});
+                case Wl_Pointer_Event_Button;
+                    button := cast(*Wl_Pointer_Event_Button) event.data;
+                    // 0x110 through 0x117 are the buttons defined in the enum, in the same order as these are
+                    // enumerated
+                    index: s64 = xx (button.button - 0x110);
+                    if index >= 0 && index < window.pointer_pressed.count {
+                        if button.state == .RELEASED {
+                            window.pointer_released[index] = true;
+                            window.pointer_held[index] = false;
+                        } else if button.state == .PRESSED {
+                            window.pointer_pressed[index] = true;
+                            window.pointer_held[index] = true;
+                        }
+                    }
                 // TODO: support all of the remaining pointer events:
                 // - wl_pointer::axis_relative_direction
                 // - wl_pointer::axis_value120
@@ -1367,6 +1382,14 @@ get_measurement :: () -> measurement: Node_Measurement, defined: bool {
     }
     return Node_Measurement.{}, false;
 }
+get_node :: () -> *Node {
+    using context.forbear;
+    if parent_index != -1 {
+        return *node_tree[parent_index];
+    } else {
+        return null;
+    }
+}
 is_mouse_inside :: () -> bool {
     using context.forbear;
     measurement, defined := get_measurement();
@@ -1375,6 +1398,28 @@ is_mouse_inside :: () -> bool {
         window.pointer_position.y >= measurement.position.y &&
         window.pointer_position.x <= measurement.position.x + measurement.size.x && 
         window.pointer_position.y <= measurement.position.y + measurement.size.y;
+}
+Mouse_Button :: enum {
+    LEFT;
+    RIGHT;
+    MIDDLE;
+    SIDE;
+    EXTRA;
+    FORWARD;
+    BACK;
+    TASK;
+};
+is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
+    using context.forbear;
+    return window.pointer_held[button];
+}
+on_mouse_down :: (button := Mouse_Button.LEFT) -> bool {
+    using context.forbear;
+    return window.pointer_pressed[button] && is_mouse_inside();
+}
+on_mouse_up :: (button := Mouse_Button.LEFT) -> bool {
+    using context.forbear;
+    return window.pointer_released[button] && is_mouse_inside();
 }
 get_justification :: (node: *Node, direction: Direction) -> Alignment #expand {
     if direction == Direction.HORIZONTAL {
@@ -2954,6 +2999,8 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
             };
         }
     }
+    memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
+    memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
     array_reset_keeping_memory(*node_tree);
     reset(*frame_pool);
 }
