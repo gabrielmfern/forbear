@@ -1,5 +1,6 @@
 #import "Basic";
 #import "File";
+#import "Flat_Pool";
 #import,file "../../forbear.jai"(JAVASCRIPT_ADAPTER = true);
 
 #run {
@@ -30,10 +31,16 @@ main :: () {
         font = *inter,
     });
 
+    frame_pool: Flat_Pool;
+    frame_allocator: Allocator;
+    frame_allocator.data = *frame_pool;
+    frame_allocator.proc = flat_pool_allocator_proc;
+
     javascript_adapter: Javascript_Adapter;
     init_adapter(*javascript_adapter, JAVASCRIPT_SOURCE, "javascript-example");
 
     while window.running {
+        push_allocator(frame_allocator);
         #if OS == .LINUX {
             while true {
                 event := next_event(*backend.connection, !can_draw(window));
@@ -52,5 +59,6 @@ main :: () {
         layout();
         draw_and_reset_node_tree(rgb(0.0, 0.0, 0.0));
         reset_temporary_storage();
+        reset(frame_allocator);
     }
 }

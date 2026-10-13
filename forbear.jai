@@ -1806,7 +1806,6 @@ Element_Opening_Data :: struct {
 };
 // intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
 open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Opening_Data {
-    push_allocator(context.forbear.frame_allocator);
     parent: *Node;
     if context.forbear.parent_index != -1 {
         parent = *context.forbear.node_tree[context.forbear.parent_index];
@@ -1888,7 +1887,6 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
     };
 }
 close_element :: (using data: Element_Opening_Data) {
-    push_allocator(context.forbear.frame_allocator);
     context.forbear.parent_index = parent_index;
     context.forbear.scope_key = scope_key;
     context.forbear.base_style = base_style;
@@ -2075,7 +2073,6 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
     glyphs.line_height = cast(float) font.raster_face.height;
     glyphs.ascent = cast(float) font.raster_face.ascender;
 
-    push_allocator(context.forbear.frame_allocator);
     // TODO(next): pass the language and direction down as styles
     kbts_ShapeBegin(
         shaping_context,
@@ -2226,8 +2223,6 @@ Forbear :: struct {
     measurements: [..]Node_Measurement;
 
     persistent_allocator: Allocator;
-    frame_allocator: Allocator;
-    frame_pool: Flat_Pool;
 
     parent_index: s64 = -1;
     scope_key: u64 = U64_MAX;
@@ -2260,9 +2255,7 @@ init_forbear :: (
 
     forbear.window = program_window;
     forbear.persistent_allocator = context.allocator;
-    forbear.glyph_atlas.table.allocator = context.allocator;
-    forbear.frame_allocator.proc = flat_pool_allocator_proc;
-    forbear.frame_allocator.data = *forbear.frame_pool;
+    forbear.glyph_atlas.table.allocator = forbear.persistent_allocator;
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -2467,7 +2460,6 @@ GLSL);
 // - https://www.youtube.com/watch?v=by9lQvpvMIc
 layout :: () {
     using context.forbear;
-    push_allocator(context.forbear.frame_allocator);
     if node_tree.count > 0 {
         fit_child :: (node: *Node, child: *Node, fit_direction: Direction) {
             preferred_size := get_preferred_size(node, fit_direction);
@@ -3154,7 +3146,6 @@ layout :: () {
 // TODO: this render should not take a window, instead it should determine the target window based on the nodes. we should include a root window, though
 draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
-    push_allocator(frame_allocator);
     #if OS == .LINUX {
         glBindFramebuffer(GL_FRAMEBUFFER, window.buffers[window.current].fbo);
     } else #if OS == .MACOS {
@@ -3290,7 +3281,6 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
     memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
     array_reset_keeping_memory(*node_tree);
-    reset(*frame_pool);
 }
 
 #scope_module

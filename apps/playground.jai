@@ -2,6 +2,7 @@ MEMORY_DEBUGGING :: false;
 
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 #import "File";
+#import "Flat_Pool";
 #import "GL";
 #import,file "../forbear.jai";
 
@@ -27,12 +28,18 @@ main :: () {
         color = rgb(255, 255, 255),
     });
 
+    frame_pool: Flat_Pool;
+    frame_allocator: Allocator;
+    frame_allocator.data = *frame_pool;
+    frame_allocator.proc = flat_pool_allocator_proc;
+
     fps := 0;
     frames := 0;
     last := seconds_since_init();
     previous := last;
 
     while window.running {
+        push_allocator(frame_allocator);
         #if OS == .LINUX {
             while true {
                 event := next_event(*backend.connection, !can_draw(window));
@@ -85,12 +92,9 @@ main :: () {
                 });
             });
 
-            {
-                push_allocator(context.forbear.frame_allocator);
-                for key: window.keys_held {
-                    string_key := tprint("%", key);
-                    text(string_key, manual_key = string_key);
-                }
+            for key: window.keys_held {
+                string_key := sprint("%", key);
+                text(string_key, manual_key = string_key);
             }
 
             element(Style.{ 
@@ -115,5 +119,6 @@ main :: () {
         if MEMORY_DEBUGGING {
             memory_visualizer_per_frame_update();
         }
+        reset(*frame_pool);
     }
 }
