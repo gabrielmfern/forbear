@@ -9,8 +9,8 @@
 - [x] fix wayland window rendering as fast as possible without any vsync
     - we should be using wayland's `frame` to render
 - [x] do double buffering in wayland
-- [ ] implement event handling
-    - [ ] keyboard input
+- [x] implement event handling
+    - [x] keyboard input
     - [x] mouse input
 - [ ] state management
 - [ ] build a calculator through the jsx adapter 
