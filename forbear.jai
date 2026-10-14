@@ -3550,6 +3550,10 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                 glyph_draw_instance.bearing /= cast(float) window.scale;
                 glyph_draw_instance.size /= cast(float) window.scale;
                 glyph_draw_instance.position = node.position + (Vector2.{0.0, node.glyphs.ascent} + glyph.position) * font_units_to_point;
+
+                scale := cast(float) window.scale;
+                glyph_draw_instance.position.x = floor(glyph_draw_instance.position.x * scale + 0.5) / scale;
+                glyph_draw_instance.position.y = floor(glyph_draw_instance.position.y * scale + 0.5) / scale;
                 glyph_draw_instance.color = node.style.color;
                 array_add(*glyph_instances, glyph_draw_instance);
             }
