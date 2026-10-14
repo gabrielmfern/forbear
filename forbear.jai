@@ -1046,20 +1046,8 @@ operator == :: Math.operator ==;
             if event {
                 event_type := NSEvent.type(event);
                 if event_type == {
-                    case NSEventTypeLeftMouseDown;
-                        window.pointer_press_position[Mouse_Button.LEFT] = window.pointer_position;
-                        window.pointer_pressed[Mouse_Button.LEFT] = true;
-                        window.pointer_held[Mouse_Button.LEFT] = true;
-                    case NSEventTypeLeftMouseUp;
-                        window.pointer_released[Mouse_Button.LEFT] = true;
-                        window.pointer_held[Mouse_Button.LEFT] = false;
-                    case NSEventTypeRightMouseDown;
-                        window.pointer_press_position[Mouse_Button.RIGHT] = window.pointer_position;
-                        window.pointer_pressed[Mouse_Button.RIGHT] = true;
-                        window.pointer_held[Mouse_Button.RIGHT] = true;
-                    case NSEventTypeRightMouseUp;
-                        window.pointer_released[Mouse_Button.RIGHT] = true;
-                        window.pointer_held[Mouse_Button.RIGHT] = false;
+                    case NSEventTypeRightMouseDown; #through;
+                    case NSEventTypeLeftMouseDown; #through;
                     case NSEventTypeOtherMouseDown;
                         button := NSEvent.buttonNumber(event);
                         if button < MOUSE_BUTTON_COUNT {
@@ -1069,6 +1057,8 @@ operator == :: Math.operator ==;
                         } else {
                             log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, BACK and FORWARD. button: %", button);
                         }
+                    case NSEventTypeLeftMouseUp; #through;
+                    case NSEventTypeRightMouseUp; #through;
                     case NSEventTypeOtherMouseUp;
                         button := NSEvent.buttonNumber(event);
                         if button < MOUSE_BUTTON_COUNT {
@@ -1734,7 +1724,7 @@ Mouse_Button :: enum {
 };
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
-    return window.pointer_held[button];
+    return window.pointer_held[button] && window.pointer_inside;
 }
 on_click :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
