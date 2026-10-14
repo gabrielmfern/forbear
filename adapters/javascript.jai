@@ -392,6 +392,7 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
 
 
         using opening := open_element(style, key);
+        node := *node_tree[node_index];
 
         // TODO: find out how to not have this code here duplicated with the one on for `text`
         rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));

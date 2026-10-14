@@ -17,6 +17,57 @@ operator * :: Math.operator *;
 operator / :: Math.operator /;
 operator == :: Math.operator ==;
 
+#scope_module
+
+min :: Math.min;
+max :: Math.max;
+FLOAT32_NAN :: Math.FLOAT32_NAN;
+FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
+U16_MAX :: Math.U16_MAX;
+U32_MAX :: Math.U32_MAX;
+U64_MAX :: Math.U64_MAX;
+floor :: Math.floor;
+abs :: Math.abs;
+isnan :: Math.isnan;
+make_vector2 :: Math.make_vector2;
+make_vector4 :: Math.make_vector4;
+
+isnan :: (value: Vector2) -> bool {
+    return isnan(value.x) || isnan(value.y);
+}
+
+compile_shader :: (kind: GLenum, source: string) -> u32 {
+    shader := glCreateShader(kind);
+    data := source.data;
+    length: GLint = xx source.count;
+    glShaderSource(shader, 1, *data, *length);
+    glCompileShader(shader);
+
+    status: GLint;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, *status);
+    if !status {
+        log: [1024]u8;
+        log_length: GLsizei;
+        glGetShaderInfoLog(shader, log.count, *log_length, log.data);
+        log_error("failed to compile shader: %\n", to_string(log.data, log_length));
+        exit(-1);
+    }
+    return shader;
+}
+
+add_key :: (array: *[]Key, key: Key) {
+    for array.* {
+        if it == key {
+            return;
+        }
+    }
+    assert(array.count < 32);
+    array.count += 1;
+    array.*[array.count - 1] = key;
+}
+
+#scope_export
+
 #module_parameters(JAVASCRIPT_ADAPTER := false);
 #if JAVASCRIPT_ADAPTER == true {
     #load "./adapters/javascript.jai";
@@ -751,17 +802,6 @@ operator == :: Math.operator ==;
                 // - wl_pointer::axis
             }
         } else if event.object_id == backend.connection.wl_keyboard_id {
-            add_key :: (array: *[]Key, key: Key) {
-                for array.* {
-                    if it == key {
-                        return;
-                    }
-                }
-                assert(array.count < 32);
-                array.count += 1;
-                array.*[array.count - 1] = key;
-            }
-
             if event.message.type == {
                 case Wl_Keyboard_Event_Enter;
                     enter := cast(*Wl_Keyboard_Event_Enter) event.data;
@@ -988,6 +1028,10 @@ operator == :: Math.operator ==;
         window.width = backing.size.width;
         window.height = backing.size.height;
         window.scale = backing.size.width / frame.size.width;
+
+        window.keys_pressed.data = window.keys_buffer.data;
+        window.keys_released.data = window.keys_buffer.data + 32;
+        window.keys_held.data = window.keys_buffer.data + 64;
     }
     update_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window) {
         is_visible: (*void, Selector) -> BOOL #c_call = xx objc_msgSend;
@@ -1856,7 +1900,7 @@ Element_Opening_Data :: struct {
     parent_index: s64; 
     scope_key: u64; 
     base_style: Base_Style;
-    node: *Node;
+    node_index: s64;
 };
 // intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
 open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Opening_Data {
@@ -1935,7 +1979,7 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
         base_style = previous_base_style, 
         scope_key = previous_scope_key,
         parent_index = previous_parent_index,
-        node = node,
+        node_index = index,
     };
 }
 close_element :: (using data: Element_Opening_Data) {
@@ -1943,6 +1987,7 @@ close_element :: (using data: Element_Opening_Data) {
     context.forbear.scope_key = scope_key;
     context.forbear.base_style = base_style;
 
+    node := *context.forbear.node_tree[node_index];
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 }
@@ -3334,42 +3379,3 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
     array_reset_keeping_memory(*node_tree);
 }
-
-#scope_module
-
-min :: Math.min;
-max :: Math.max;
-FLOAT32_NAN :: Math.FLOAT32_NAN;
-FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
-U16_MAX :: Math.U16_MAX;
-U32_MAX :: Math.U32_MAX;
-U64_MAX :: Math.U64_MAX;
-floor :: Math.floor;
-abs :: Math.abs;
-isnan :: Math.isnan;
-make_vector2 :: Math.make_vector2;
-make_vector4 :: Math.make_vector4;
-
-isnan :: (value: Vector2) -> bool {
-    return isnan(value.x) || isnan(value.y);
-}
-
-compile_shader :: (kind: GLenum, source: string) -> u32 {
-    shader := glCreateShader(kind);
-    data := source.data;
-    length: GLint = xx source.count;
-    glShaderSource(shader, 1, *data, *length);
-    glCompileShader(shader);
-
-    status: GLint;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, *status);
-    if !status {
-        log: [1024]u8;
-        log_length: GLsizei;
-        glGetShaderInfoLog(shader, log.count, *log_length, log.data);
-        log_error("failed to compile shader: %\n", to_string(log.data, log_length));
-        exit(-1);
-    }
-    return shader;
-}
-
