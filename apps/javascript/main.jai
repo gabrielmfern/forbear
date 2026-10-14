@@ -37,7 +37,7 @@ main :: () {
     frame_allocator.proc = flat_pool_allocator_proc;
 
     javascript_adapter: Javascript_Adapter;
-    init_adapter(*javascript_adapter, JAVASCRIPT_SOURCE, "javascript-example");
+    init_adapter(*javascript_adapter, frame_allocator, JAVASCRIPT_SOURCE, "javascript-example");
 
     while window.running {
         push_allocator(frame_allocator);
@@ -59,6 +59,6 @@ main :: () {
         layout();
         draw_and_reset_node_tree(rgb(0.0, 0.0, 0.0));
         reset_temporary_storage();
-        reset(frame_allocator);
+        reset(*frame_pool);
     }
 }
