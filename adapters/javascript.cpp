@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#undef OVERFLOW
 
 extern "C" void forbear_open(void* adapter, void* js_style_object, char* manual_key_data, int64_t manual_key_count);
 extern "C" void forbear_close(void* adapter);

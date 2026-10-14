@@ -1,6 +1,7 @@
 # compiled outputs
 *.a
 *.dSYM*
+*.dylib
 *.rdi
 *.so*
 .build/

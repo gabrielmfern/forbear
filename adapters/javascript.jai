@@ -18,8 +18,8 @@
             copy_file(src, copy);
         }
     } else #if OS == .MACOS {
-        src  := tprint("%/out/Release/lib/libnode.dylib", node_root);
-        dest := tprint("%/libnode.dylib", dest_dir);
+        src  := tprint("%/out/Release/libnode.137.dylib", node_root);
+        dest := tprint("%/libnode.137.dylib", dest_dir);
     }
     assert(file_exists(src), "libnode is missing; build vendor/node with --shared");
     if !file_exists(dest) {
@@ -39,8 +39,13 @@
 }
 
 libm :: #library,system,link_always "libm";
-libstdcpp :: #library,system,link_always "libstdc++";
-libnode :: #library,link_always "../vendor/node/out/Release/lib/libnode";
+#if OS == .MACOS {
+    libcpp :: #library,system,link_always "libc++";
+    libnode :: #library,link_always "../vendor/node/out/Release/libnode.137";
+} else #if OS == .LINUX {
+    libstdcpp :: #library,system,link_always "libstdc++";
+    libnode :: #library,link_always "../vendor/node/out/Release/lib/libnode";
+}
 javascript_shim :: #library,no_dll "./javascript";
 
 Javascript_Adapter :: struct {
@@ -389,9 +394,8 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
         }
         style := style_from(adapter, js_style_object);
 
-
         using opening := open_element(style, key);
-        node := *node_tree[node_index];
+        node := *context.forbear.node_tree[node_index];
 
         // TODO: find out how to not have this code here duplicated with the one on for `text`
         rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
