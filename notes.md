@@ -11,7 +11,7 @@
 - [x] do double buffering in wayland
 - [ ] implement event handling
     - [ ] keyboard input
-    - [ ] mouse input
+    - [x] mouse input
 - [ ] state management
 - [ ] build a calculator through the jsx adapter 
 - [ ] handle wayland topbars protocol (this doesn't address gnome unfortunately)

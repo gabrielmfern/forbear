@@ -857,9 +857,10 @@ add_key :: (array: *[]Key, key: Key) {
                         } else if key_event.state == .PRESSED {
                             add_key(*window.keys_pressed, key);
                             add_key(*window.keys_held, key);
-                        } else if key_event.state == .REPEATED {
-                            add_key(*window.keys_pressed, key);
-                        }
+                        } 
+                        // else if key_event.state == .REPEATED {
+                        //     add_key(*window.keys_pressed, key);
+                        // }
                     }
             }
         }
