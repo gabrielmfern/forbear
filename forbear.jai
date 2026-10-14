@@ -138,6 +138,8 @@ add_key :: (array: *[]Key, key: Key) {
         xkb: *xkb_context;
         keymap: *xkb_keymap;
         key_state: *xkb_state;
+        compose_table: *xkb_compose_table;
+        compose_state: *xkb_compose_state;
 
         reading_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
         pending_reads: []u8;
@@ -187,6 +189,23 @@ add_key :: (array: *[]Key, key: Key) {
         connection.wl_registry_id = new_wayland_client_object(connection, Interface_Id.WL_REGISTRY);
 
         connection.xkb = xkb_context_new(xkb_context_flags.XKB_CONTEXT_NO_FLAGS);
+
+        locale := getenv("LC_ALL");
+        if !locale || !locale[0] {
+            locale = getenv("LC_CTYPE");
+        }
+        if !locale || !locale[0] {
+            locale = getenv("LANG");
+        }
+        if !locale || !locale[0] {
+            locale = "C".data;
+        }
+        connection.compose_table = xkb_compose_table_new_from_locale(connection.xkb, locale, .XKB_COMPOSE_COMPILE_NO_FLAGS);
+        if connection.compose_table {
+            connection.compose_state = xkb_compose_state_new(connection.compose_table, .XKB_COMPOSE_STATE_NO_FLAGS);
+        } else {
+            log_error("no compose table for locale %, dead keys and compose sequences will not work", to_string(locale));
+        }
 
         send_wayland_message(connection, 1, Wl_Display_Request_Get_Registry.{ registry = connection.wl_registry_id });
         sync_id := new_wayland_client_object(connection, .WL_CALLBACK);
@@ -870,6 +889,7 @@ add_key :: (array: *[]Key, key: Key) {
                         window.keyboard_inside = false;
                         window.repeating_key_code = 0;
                         window.keys_held.count = 0;
+                        xkb_compose_state_reset(backend.connection.compose_state);
                     }
                 case Wl_Keyboard_Event_Repeat_Info;
                     repeat_info := cast(*Wl_Keyboard_Event_Repeat_Info) event.data;
@@ -902,7 +922,29 @@ add_key :: (array: *[]Key, key: Key) {
                             add_key(*window.keys_pressed, key);
                             add_key(*window.keys_held, key);
 
-                            add_key_text(*window.text, window.text_buffer, backend.connection.key_state, xkb_key_code);
+                            compose_handled := false;
+                            compose := backend.connection.compose_state;
+                            if compose {
+                                symbol := xkb_state_key_get_one_sym(backend.connection.key_state, xkb_key_code);
+                                if xkb_compose_state_feed(compose, symbol) == .XKB_COMPOSE_FEED_ACCEPTED {
+                                    status := xkb_compose_state_get_status(compose);
+                                    if status == .XKB_COMPOSE_COMPOSING {
+                                        compose_handled = true;
+                                    } else if status == .XKB_COMPOSE_COMPOSED {
+                                        utf8: [64]u8;
+                                        length := xkb_compose_state_get_utf8(compose, utf8.data, utf8.count);
+                                        append_to_buffered_destination(to_string(utf8.data, length), *window.text, window.text_buffer);
+                                        xkb_compose_state_reset(compose);
+                                        compose_handled = true;
+                                    } else if status == .XKB_COMPOSE_CANCELLED {
+                                        xkb_compose_state_reset(compose);
+                                        compose_handled = true;
+                                    }
+                                }
+                            }
+                            if !compose_handled {
+                                add_key_text(*window.text, window.text_buffer, backend.connection.key_state, xkb_key_code);
+                            }
                             if window.keyboard_repeat_rate > 0 && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
                                 window.repeating_key_code = xkb_key_code;
                                 window.next_repeat = seconds_since_init() + (cast(float)window.keyboard_repeat_delay) / 1000.0;
