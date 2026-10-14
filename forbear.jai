@@ -1,3 +1,5 @@
+#module_parameters(JAVASCRIPT_ADAPTER := false);
+
 #import "Basic";
 #import "Flat_Pool";
 #import "GL";
@@ -55,6 +57,34 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
     return shader;
 }
 
+add_key_text :: (text: *string, text_buffer: []u8, state: *xkb_state, key_code: u32) {
+    if xkb_state_mod_name_is_active(state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 && 
+        xkb_state_mod_name_is_active(state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 0 {
+        utf8: [64]u8;
+        length := xkb_state_key_get_utf8(state, key_code, utf8.data, utf8.count);
+        is_control_character := length == 1 && (utf8[0] < 0x20 || utf8[0] == 0x7f);
+        if length > 0 && length < utf8.count {
+            if !is_control_character {
+                if text.count + length > text_buffer.count {
+                    log_error("we support a % sized text buffer for each frame as text input, but this frame is trying to use %. any excess is going to be dropped", text_buffer.count, text.count + length);
+                }
+                length_to_append := min(
+                    text.count + length, 
+                    text_buffer.count
+                ) - text.count;
+                memcpy(
+                    text.data + text.count, 
+                    utf8.data, 
+                    length_to_append
+                );
+                text.count += length_to_append;
+            }
+        } else {
+            log_error("we separated a % sized utf8 buffer for the key %, but it required length %. it's going to just be droppped", utf8.count, key_code, length);
+        }
+    }
+}
+
 add_key :: (array: *[]Key, key: Key) {
     for array.* {
         if it == key {
@@ -68,12 +98,12 @@ add_key :: (array: *[]Key, key: Key) {
 
 #scope_export
 
-#module_parameters(JAVASCRIPT_ADAPTER := false);
 #if JAVASCRIPT_ADAPTER == true {
     #load "./adapters/javascript.jai";
 }
 
 #if OS == .LINUX {
+    #scope_module
     #load "bindings-linux.jai";
 
     WAYLAND_DEBUGGING :: false;
@@ -88,6 +118,7 @@ add_key :: (array: *[]Key, key: Key) {
         size: u16;
     } #no_padding;
     MAX_WAYLAND_MESSAGE_SIZE :: 4096;
+    #scope_export
     Wayland_Connection :: struct {
         fd: s32;
         polling_fd: pollfd;
@@ -569,12 +600,17 @@ add_key :: (array: *[]Key, key: Key) {
         // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
         scale: float64 = 1.0;
 
-        keyboard_serial: u32;
-        keyboard_inside: bool;
+        text_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
+        text: string;
+        repeating_key_code: u32;
+        next_repeat: float64;
         // in characters per second
         keyboard_repeat_rate: s32;
         // in milliseconds
         keyboard_repeat_delay: s32;
+
+        keyboard_serial: u32;
+        keyboard_inside: bool;
         keys_buffer: [32 * 3]Key;
         keys_pressed: []Key;
         keys_released: []Key;
@@ -610,6 +646,8 @@ add_key :: (array: *[]Key, key: Key) {
         window.keys_pressed.data = window.keys_buffer.data;
         window.keys_released.data = window.keys_buffer.data + 32;
         window.keys_held.data = window.keys_buffer.data + 64;
+
+        window.text.data = window.text_buffer.data;
 
         window.wl_surface_id = new_wayland_client_object(connection, Interface_Id.WL_SURFACE);
         send_wayland_message(connection, connection.wl_compositor_id, Wl_Compositor_Request_Create_Surface.{ id = window.wl_surface_id });
@@ -835,6 +873,7 @@ add_key :: (array: *[]Key, key: Key) {
                     leave := cast(*Wl_Keyboard_Event_Leave) event.data;
                     if leave.surface == window.wl_surface_id {
                         window.keyboard_inside = false;
+                        window.repeating_key_code = 0;
                         window.keys_held.count = 0;
                     }
                 case Wl_Keyboard_Event_Repeat_Info;
@@ -843,12 +882,12 @@ add_key :: (array: *[]Key, key: Key) {
                     window.keyboard_repeat_delay = repeat_info.delay;
                 case Wl_Keyboard_Event_Key;
                     key_event := cast(*Wl_Keyboard_Event_Key) event.data;
-                    xkb_key := key_event.key + 8;
+                    xkb_key_code := key_event.key + 8;
                     symbols: *xkb_keysym_t;
                     if xkb_keymap_key_get_syms_by_level(
                         backend.connection.keymap, 
-                        xkb_key, 
-                        xkb_state_key_get_layout(backend.connection.key_state, xkb_key), 
+                        xkb_key_code, 
+                        xkb_state_key_get_layout(backend.connection.key_state, xkb_key_code), 
                         0, 
                         *symbols
                     ) > 0 {
@@ -861,13 +900,21 @@ add_key :: (array: *[]Key, key: Key) {
                                     break;
                                 }
                             }
+                            if xkb_key_code == window.repeating_key_code {
+                                window.repeating_key_code = 0;
+                            }
                         } else if key_event.state == .PRESSED {
                             add_key(*window.keys_pressed, key);
                             add_key(*window.keys_held, key);
-                        } 
-                        // else if key_event.state == .REPEATED {
-                        //     add_key(*window.keys_pressed, key);
-                        // }
+
+                            add_key_text(*window.text, window.text_buffer, backend.connection.key_state, xkb_key_code);
+                            if window.keyboard_repeat_rate > 0 && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
+                                window.repeating_key_code = xkb_key_code;
+                                window.next_repeat = seconds_since_init() + (cast(float)window.keyboard_repeat_delay) / 1000.0;
+                            }
+                        } else if key_event.state == .REPEATED {
+                            add_key_text(*window.text, window.text_buffer, backend.connection.key_state, xkb_key_code);
+                        }
                     }
             }
         }
@@ -1973,6 +2020,10 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
     } else {
         return false;
     }
+}
+text_input :: () -> string {
+    using context.forbear;
+    return window.text; 
 }
 on_key_down :: (key: Key) -> bool {
     using context.forbear;
@@ -3431,7 +3482,7 @@ layout :: () {
 }
 
 // TODO: this render should not take a window, instead it should determine the target window based on the nodes. we should include a root window, though
-draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
+draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
     #if OS == .LINUX {
         glBindFramebuffer(GL_FRAMEBUFFER, window.buffers[window.current].fbo);
@@ -3548,6 +3599,10 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     } else #if OS == .MACOS {
         NSOpenGLContext.flushBuffer(backend.gl_context);
     }
+}
+
+prepare_frame :: () {
+    using context.forbear;
     {
         push_allocator(persistent_allocator);
         array_resize(*measurements, node_tree.count, false);
@@ -3565,7 +3620,15 @@ draw_and_reset_node_tree :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     }
     window.keys_pressed.count = 0;
     window.keys_released.count = 0;
+    window.text.count = 0;
     memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
     memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
+    if window.repeating_key_code != 0 {
+        now := seconds_since_init();
+        while now >= window.next_repeat {
+            add_key_text(*window.text, window.text_buffer, backend.connection.key_state, window.repeating_key_code);
+            window.next_repeat += 1.0 / window.keyboard_repeat_rate;
+        }
+    }
     array_reset_keeping_memory(*node_tree);
 }

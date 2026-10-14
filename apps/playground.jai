@@ -38,8 +38,14 @@ main :: () {
     last := seconds_since_init();
     previous := last;
 
+    input_buffer: [4096]u8;
+    input: string;
+    input.data = input_buffer.data;
+
     while window.running {
         push_allocator(frame_allocator);
+        prepare_frame();
+
         #if OS == .LINUX {
             while true {
                 event := next_event(*backend.connection, !can_draw(window));
@@ -92,11 +98,6 @@ main :: () {
                 });
             });
 
-            for key: window.keys_held {
-                string_key := sprint("%", key);
-                text(string_key, manual_key = string_key);
-            }
-
             element(Style.{ 
                 background = color(rgb(255, 0, 0)), 
                 width = fixed(200), 
@@ -110,10 +111,23 @@ main :: () {
                     node.style.background = color(rgb(100, 100, 0));
                 }
             });
+            frame_input := text_input();
+            if frame_input.count > 0 {
+                print("frame_input: %\n", frame_input);
+                memcpy(input.data + input.count, frame_input.data, frame_input.count);
+                input.count += frame_input.count;
+                print("input: %\n", input);
+            }
+            text(sprint("this was the input text until now: '%'", input));
+
+            for key: window.keys_held {
+                string_key := sprint("%", key);
+                text(string_key, manual_key = string_key);
+            }
         });
 
         layout();
-        draw_and_reset_node_tree(rgb(0.0, 0.0, 0.0));
+        draw(rgb(0.0, 0.0, 0.0));
 
         reset_temporary_storage();
         if MEMORY_DEBUGGING {

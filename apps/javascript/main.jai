@@ -41,6 +41,7 @@ main :: () {
 
     while window.running {
         push_allocator(frame_allocator);
+        prepare_frame();
         #if OS == .LINUX {
             while true {
                 event := next_event(*backend.connection, !can_draw(window));
@@ -57,7 +58,7 @@ main :: () {
 
         render_with_adapter(*javascript_adapter);
         layout();
-        draw_and_reset_node_tree(rgb(0.0, 0.0, 0.0));
+        draw(rgb(0.0, 0.0, 0.0));
         reset_temporary_storage();
         reset(*frame_pool);
     }
