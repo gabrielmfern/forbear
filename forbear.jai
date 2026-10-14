@@ -2777,7 +2777,8 @@ GLSL);
         glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
         // TOOD: keep track of whether subpixel rendering is enabled to create the texture atlas here accordingly
         glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, Glyph_Atlas.SIZE, Glyph_Atlas.SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, buffer.data);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
 
     backend = program_backend;
