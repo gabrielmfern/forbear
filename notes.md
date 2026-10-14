@@ -37,6 +37,8 @@
 - [ ] make javascript support async code
     - when doing native code, one can simply use a thread for the async work, which doesn't stall frames. javascript
       can't really do this, so how can we let it do async work?
+- [ ] metal rendering instead of opengl for macos
+    - this is mainly because it looks like the fps is limimted to ~100, while the actual forbear work is 0.5ms which should lead to about 2000 and it all points to OpenGL not working very well which leads to the low FPs 
 
 ## introspection 
 
