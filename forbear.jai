@@ -57,30 +57,25 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
     return shader;
 }
 
+append_to_buffered_destination :: (source: string, destination: *string, buffer: []u8) {
+    if destination.count + source.count <= buffer.count {
+        memcpy(destination.data + destination.count, source.data, source.count);
+        destination.count += source.count;
+    } else {
+        log_error("trying to append to a buffered string of size %, which exceeds the buffer size %. dropping it entirely.", source.count, buffer.count);
+    }
+}
+
 add_key_text :: (text: *string, text_buffer: []u8, state: *xkb_state, key_code: u32) {
     if xkb_state_mod_name_is_active(state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 && 
         xkb_state_mod_name_is_active(state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 0 {
         utf8: [64]u8;
         length := xkb_state_key_get_utf8(state, key_code, utf8.data, utf8.count);
         is_control_character := length == 1 && (utf8[0] < 0x20 || utf8[0] == 0x7f);
-        if length > 0 && length < utf8.count {
-            if !is_control_character {
-                if text.count + length > text_buffer.count {
-                    log_error("we support a % sized text buffer for each frame as text input, but this frame is trying to use %. any excess is going to be dropped", text_buffer.count, text.count + length);
-                }
-                length_to_append := min(
-                    text.count + length, 
-                    text_buffer.count
-                ) - text.count;
-                memcpy(
-                    text.data + text.count, 
-                    utf8.data, 
-                    length_to_append
-                );
-                text.count += length_to_append;
-            }
-        } else {
-            log_error("we separated a % sized utf8 buffer for the key %, but it required length %. it's going to just be droppped", utf8.count, key_code, length);
+        if length > 0 && length < utf8.count && !is_control_character {
+            append_to_buffered_destination(to_string(utf8.data, length), text, text_buffer);
+        } else if length >= utf8.count {
+            log_error("we separated a % sized utf8 buffer for the key %, but it required length %. dropping it entirely.", utf8.count, key_code, length);
         }
     }
 }
