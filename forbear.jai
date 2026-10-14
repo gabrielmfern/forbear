@@ -571,6 +571,10 @@ add_key :: (array: *[]Key, key: Key) {
 
         keyboard_serial: u32;
         keyboard_inside: bool;
+        // in characters per second
+        keyboard_repeat_rate: s32;
+        // in milliseconds
+        keyboard_repeat_delay: s32;
         keys_buffer: [32 * 3]Key;
         keys_pressed: []Key;
         keys_released: []Key;
@@ -833,7 +837,10 @@ add_key :: (array: *[]Key, key: Key) {
                         window.keyboard_inside = false;
                         window.keys_held.count = 0;
                     }
-                // TODO: case Wl_Keyboard_Event_Repeat_Info;
+                case Wl_Keyboard_Event_Repeat_Info;
+                    repeat_info := cast(*Wl_Keyboard_Event_Repeat_Info) event.data;
+                    window.keyboard_repeat_rate = repeat_info.rate;
+                    window.keyboard_repeat_delay = repeat_info.delay;
                 case Wl_Keyboard_Event_Key;
                     key_event := cast(*Wl_Keyboard_Event_Key) event.data;
                     xkb_key := key_event.key + 8;
