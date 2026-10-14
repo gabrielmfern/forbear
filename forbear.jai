@@ -1047,6 +1047,9 @@ add_key :: (array: *[]Key, key: Key) {
             window.scale = backing.size.width / frame.size.width;
             NSOpenGLContext.update(backend.gl_context);
         }
+        if NSApplication.keyWindow(backend.app) != window.ns_window {
+            window.keys_held.count = 0;
+        }
     }
 
     MacOS_GL_Backend :: struct {
@@ -1094,13 +1097,16 @@ add_key :: (array: *[]Key, key: Key) {
                     case NSEventTypeLeftMouseDown; #through;
                     case NSEventTypeOtherMouseDown;
                         button := NSEvent.buttonNumber(event);
-                        if button < MOUSE_BUTTON_COUNT {
-                            window.pointer_press_position[button] = window.pointer_position;
-                            window.pointer_pressed[button] = true;
-                            window.pointer_held[button] = true;
-                        } else {
-                            log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, BACK and FORWARD. button: %", button);
+                        if window.pointer_inside {
+                            if button < MOUSE_BUTTON_COUNT {
+                                window.pointer_press_position[button] = window.pointer_position;
+                                window.pointer_pressed[button] = true;
+                                window.pointer_held[button] = true;
+                            } else {
+                                log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, MIDDLE, BACK and FORWARD. button: %", button);
+                            }
                         }
+                        backend.app.sendEvent(backend.app, event);
                     case NSEventTypeLeftMouseUp; #through;
                     case NSEventTypeRightMouseUp; #through;
                     case NSEventTypeOtherMouseUp;
@@ -1109,10 +1115,63 @@ add_key :: (array: *[]Key, key: Key) {
                             window.pointer_released[button] = true;
                             window.pointer_held[button] = false;
                         } else {
-                            log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, BACK and FORWARD. button: %", button);
+                            log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, MIDDLE, BACK and FORWARD. button: %", button);
                         }
+                        backend.app.sendEvent(backend.app, event);
+                    case NSEventTypeKeyDown;
+                        key: Key = xx NSEvent.keyCode(event);
+                        if !NSEvent.isARepeat(event) {
+                            add_key(*window.keys_pressed, key);
+                            add_key(*window.keys_held, key);
+                        }
+                    case NSEventTypeKeyUp;
+                        key: Key = xx NSEvent.keyCode(event);
+                        add_key(*window.keys_released, key);
+                        for window.keys_held {
+                            if it == key {
+                                array_unordered_remove_by_index(*window.keys_held, it_index);
+                                break;
+                            }
+                        }
+                    case NSEventTypeFlagsChanged;
+                        key: Key = xx NSEvent.keyCode(event);
+                        flags := NSEvent.modifierFlags(event);
+                        mask: NSEventModifierFlags;
+                        if key == {
+                            case .SHIFT_RIGHT; #through;
+                            case .SHIFT_LEFT;
+                                mask = .NSEventModifierFlagShift;
+                            case .OPTION_RIGHT; #through;
+                            case .OPTION_LEFT;
+                                mask = .NSEventModifierFlagOption;
+                            case .CAPS_LOCK;
+                                mask = .NSEventModifierFlagCapsLock;
+                            case .FUNCTION;
+                                mask = .NSEventModifierFlagFunction;
+                            case .CONTROL_RIGHT; #through;
+                            case .CONTROL_LEFT;
+                                mask = .NSEventModifierFlagControl;
+                            case .COMMAND_RIGHT; #through;
+                            case .COMMAND_LEFT;
+                                mask = .NSEventModifierFlagCommand;
+                        }
+                        if (flags & mask) && !array_find(window.keys_held, key) {
+                            add_key(*window.keys_pressed, key);
+                            add_key(*window.keys_held, key);
+                        } else if mask != 0 {
+                            add_key(*window.keys_released, key);
+                            for window.keys_held {
+                                if it == key {
+                                    array_unordered_remove_by_index(*window.keys_held, it_index);
+                                    break;
+                                }
+                            }
+                        } else {
+                            backend.app.sendEvent(backend.app, event);
+                        }
+                    case;
+                        backend.app.sendEvent(backend.app, event);
                 }
-                backend.app.sendEvent(backend.app, event);
             } else {
                 break;
             }
@@ -1745,6 +1804,129 @@ Key :: enum {
         PERIOD :: XKB_KEY_period;
         SLASH :: XKB_KEY_slash;
     } else #if OS == .MACOS {
+        ANSI_A :: 0x00;
+        ANSI_S :: 0x01;
+        ANSI_D :: 0x02;
+        ANSI_F :: 0x03;
+        ANSI_H :: 0x04;
+        ANSI_G :: 0x05;
+        ANSI_Z :: 0x06;
+        ANSI_X :: 0x07;
+        ANSI_C :: 0x08;
+        ANSI_V :: 0x09;
+        ANSI_B :: 0x0B;
+        ANSI_Q :: 0x0C;
+        ANSI_W :: 0x0D;
+        ANSI_E :: 0x0E;
+        ANSI_R :: 0x0F;
+        ANSI_Y :: 0x10;
+        ANSI_T :: 0x11;
+        ANSI_1 :: 0x12;
+        ANSI_2 :: 0x13;
+        ANSI_3 :: 0x14;
+        ANSI_4 :: 0x15;
+        ANSI_6 :: 0x16;
+        ANSI_5 :: 0x17;
+        ANSI_EQUAL :: 0x18;
+        ANSI_9 :: 0x19;
+        ANSI_7 :: 0x1A;
+        ANSI_MINUS :: 0x1B;
+        ANSI_8 :: 0x1C;
+        ANSI_0 :: 0x1D;
+        ANSI_RIGHT_BRACKET :: 0x1E;
+        ANSI_O :: 0x1F;
+        ANSI_U :: 0x20;
+        ANSI_LEFT_BRACKET :: 0x21;
+        ANSI_I :: 0x22;
+        ANSI_P :: 0x23;
+        ANSI_L :: 0x25;
+        ANSI_J :: 0x26;
+        ANSI_QUOTE :: 0x27;
+        ANSI_K :: 0x28;
+        ANSI_SEMICOLON :: 0x29;
+        ANSI_BACKSLASH :: 0x2A;
+        ANSI_COMMA :: 0x2B;
+        ANSI_SLASH :: 0x2C;
+        ANSI_N :: 0x2D;
+        ANSI_M :: 0x2E;
+        ANSI_PERIOD :: 0x2F;
+        ANSI_GRAVE :: 0x32;
+        ANSI_KEYPAD_DECIMAL :: 0x41;
+        ANSI_KEYPAD_MULTIPLY :: 0x43;
+        ANSI_KEYPAD_PLUS :: 0x45;
+        ANSI_KEYPAD_CLEAR :: 0x47;
+        ANSI_KEYPAD_DIVIDE :: 0x4B;
+        ANSI_KEYPAD_ENTER :: 0x4C;
+        ANSI_KEYPAD_MINUS :: 0x4E;
+        ANSI_KEYPAD_EQUALS :: 0x51;
+        ANSI_KEYPAD0 :: 0x52;
+        ANSI_KEYPAD1 :: 0x53;
+        ANSI_KEYPAD2 :: 0x54;
+        ANSI_KEYPAD3 :: 0x55;
+        ANSI_KEYPAD4 :: 0x56;
+        ANSI_KEYPAD5 :: 0x57;
+        ANSI_KEYPAD6 :: 0x58;
+        ANSI_KEYPAD7 :: 0x59;
+        ANSI_KEYPAD8 :: 0x5B;
+        ANSI_KEYPAD9 :: 0x5C;
+
+        RETURN :: 0x24;
+        TAB :: 0x30;
+        SPACE :: 0x31;
+        DELETE :: 0x33;
+        ESCAPE :: 0x35;
+        COMMAND_LEFT :: 0x37;
+        SHIFT_LEFT :: 0x38;
+        CAPS_LOCK :: 0x39;
+        OPTION_LEFT :: 0x3A;
+        CONTROL_LEFT :: 0x3B;
+        COMMAND_RIGHT :: 0x36;
+        SHIFT_RIGHT :: 0x3C;
+        OPTION_RIGHT :: 0x3D;
+        CONTROL_RIGHT :: 0x3E;
+        FUNCTION :: 0x3F;
+        F17 :: 0x40;
+        VOLUME_UP :: 0x48;
+        VOLUME_DOWN :: 0x49;
+        MUTE :: 0x4A;
+        F18 :: 0x4F;
+        F19 :: 0x50;
+        F20 :: 0x5A;
+        F5 :: 0x60;
+        F6 :: 0x61;
+        F7 :: 0x62;
+        F3 :: 0x63;
+        F8 :: 0x64;
+        F9 :: 0x65;
+        F11 :: 0x67;
+        F13 :: 0x69;
+        F16 :: 0x6A;
+        F14 :: 0x6B;
+        F10 :: 0x6D;
+        CONTEXTUAL_MENU :: 0x6E;
+        F12 :: 0x6F;
+        F15 :: 0x71;
+        HELP :: 0x72;
+        HOME :: 0x73;
+        PAGE_UP :: 0x74;
+        FORWARD_DELETE :: 0x75;
+        F4 :: 0x76;
+        END :: 0x77;
+        F2 :: 0x78;
+        PAGE_DOWN :: 0x79;
+        F1 :: 0x7A;
+        LEFT_ARROW :: 0x7B;
+        RIGHT_ARROW :: 0x7C;
+        DOWN_ARROW :: 0x7D;
+        UP_ARROW :: 0x7E;
+
+        ISO_SECTION :: 0x0A;
+
+        JIS_YEN :: 0x5D;
+        JIS_UNDERSCORE :: 0x5E;
+        JIS_KEYPAD_COMMA :: 0x5F;
+        JIS_EISU :: 0x66;
+        JIS_KANA :: 0x68;
     }
 }
 MOUSE_BUTTON_COUNT :: #run enum_highest_value(Mouse_Button) + 1;
