@@ -9,13 +9,13 @@ cd vendor/node
 for linux:
 ```bash
 export CFLAGS="-include $PWD/../old-libm.h" CXXFLAGS="-include $PWD/../old-libm.h"
-./configure --ninja
+./configure --ninja --shared
 make
 ```
 
 for macos:
 ```bash
-./configure --ninja
+./configure --ninja --shared
 make
 ```
 
