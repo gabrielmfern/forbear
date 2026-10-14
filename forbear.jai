@@ -8,11 +8,6 @@
 #import "Socket";
 #import "String";
 Math :: #import "Math";
-#if OS == .LINUX {
-    #load "bindings-linux.jai";
-} else #if OS == .MACOS {
-    #load "bindings-darwin.jai";
-}
 
 Vector2 :: Math.Vector2;
 Vector4 :: Math.Vector4;
@@ -28,6 +23,8 @@ operator == :: Math.operator ==;
 }
 
 #if OS == .LINUX {
+    #load "bindings-linux.jai";
+
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
     EXIT_ON_FIRST_FRAME :: false;
@@ -532,10 +529,10 @@ operator == :: Math.operator ==;
         pointer_inside: bool;
         pointer_position: Vector2;
 
-        pointer_press_position: [8]Vector2;
-        pointer_pressed: [8]bool;
-        pointer_released: [8]bool;
-        pointer_held: [8]bool;
+        pointer_press_position: [MOUSE_BUTTON_COUNT]Vector2;
+        pointer_pressed: [MOUSE_BUTTON_COUNT]bool;
+        pointer_released: [MOUSE_BUTTON_COUNT]bool;
+        pointer_held: [MOUSE_BUTTON_COUNT]bool;
 
         buffers: [2]Wayland_EGL_Buffer;
         current: s64;
@@ -939,6 +936,7 @@ operator == :: Math.operator ==;
     Backend :: Wayland_EGL_Backend;
     Window :: Wayland_EGL_Window;
 } else #if OS == .MACOS {
+    #load "bindings-darwin.jai";
     #import "Objective_C";
     #import "Objective_C/AppKit";
 
@@ -949,6 +947,19 @@ operator == :: Math.operator ==;
 
         ns_window: *NSWindow;
         view: *NSView;
+
+        keys_buffer: [32 * 3]Key;
+        keys_pressed: []Key;
+        keys_released: []Key;
+        keys_held: []Key;
+
+        pointer_inside: bool;
+        pointer_position: Vector2;
+
+        pointer_press_position: [MOUSE_BUTTON_COUNT]Vector2;
+        pointer_pressed: [MOUSE_BUTTON_COUNT]bool;
+        pointer_released: [MOUSE_BUTTON_COUNT]bool;
+        pointer_held: [MOUSE_BUTTON_COUNT]bool;
 
         running := true;
     };
@@ -1024,10 +1035,53 @@ operator == :: Math.operator ==;
     }
     update_backend :: (backend: *MacOS_GL_Backend) {
         pool := objc_init(objc_alloc(NSAutoreleasePool));
+        window := context.forbear.window;
+        frame := NSView.frame(window.view);
+        location := NSWindow.mouseLocationOutsideOfEventStream(window.ns_window);
+        window.pointer_inside = location.x >= 0 && location.y >= 0 &&
+                                location.x < frame.size.width && location.y < frame.size.height;
+        window.pointer_position = Vector2.{ xx location.x, xx (frame.size.height - location.y) };
         while true {
             event := NSApplication.nextEventMatchingMask(backend.app, NSEventMaskAny, NSDate.distantPast(), NSDefaultRunLoopMode, YES);
-            if !event break;
-            backend.app.sendEvent(backend.app, event);
+            if event {
+                event_type := NSEvent.type(event);
+                if event_type == {
+                    case NSEventTypeLeftMouseDown;
+                        window.pointer_press_position[Mouse_Button.LEFT] = window.pointer_position;
+                        window.pointer_pressed[Mouse_Button.LEFT] = true;
+                        window.pointer_held[Mouse_Button.LEFT] = true;
+                    case NSEventTypeLeftMouseUp;
+                        window.pointer_released[Mouse_Button.LEFT] = true;
+                        window.pointer_held[Mouse_Button.LEFT] = false;
+                    case NSEventTypeRightMouseDown;
+                        window.pointer_press_position[Mouse_Button.RIGHT] = window.pointer_position;
+                        window.pointer_pressed[Mouse_Button.RIGHT] = true;
+                        window.pointer_held[Mouse_Button.RIGHT] = true;
+                    case NSEventTypeRightMouseUp;
+                        window.pointer_released[Mouse_Button.RIGHT] = true;
+                        window.pointer_held[Mouse_Button.RIGHT] = false;
+                    case NSEventTypeOtherMouseDown;
+                        button := NSEvent.buttonNumber(event);
+                        if button < MOUSE_BUTTON_COUNT {
+                            window.pointer_press_position[button] = window.pointer_position;
+                            window.pointer_pressed[button] = true;
+                            window.pointer_held[button] = true;
+                        } else {
+                            log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, BACK and FORWARD. button: %", button);
+                        }
+                    case NSEventTypeOtherMouseUp;
+                        button := NSEvent.buttonNumber(event);
+                        if button < MOUSE_BUTTON_COUNT {
+                            window.pointer_released[button] = true;
+                            window.pointer_held[button] = false;
+                        } else {
+                            log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, BACK and FORWARD. button: %", button);
+                        }
+                }
+                backend.app.sendEvent(backend.app, event);
+            } else {
+                break;
+            }
         }
         NSAutoreleasePool.drain(pool);
     }
@@ -1656,17 +1710,27 @@ Key :: enum {
         COMMA :: XKB_KEY_comma;
         PERIOD :: XKB_KEY_period;
         SLASH :: XKB_KEY_slash;
+    } else #if OS == .MACOS {
     }
 }
+MOUSE_BUTTON_COUNT :: #run enum_highest_value(Mouse_Button) + 1;
 Mouse_Button :: enum {
-    LEFT;
-    RIGHT;
-    MIDDLE;
-    SIDE;
-    EXTRA;
-    FORWARD;
-    BACK;
-    TASK;
+    #if OS == .LINUX {
+        LEFT;
+        RIGHT;
+        MIDDLE;
+        SIDE;
+        EXTRA;
+        FORWARD;
+        BACK;
+        TASK;
+    } else #if OS == .MACOS {
+        LEFT;
+        RIGHT;
+        MIDDLE;
+        BACK;
+        FORWARD;
+    }
 };
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
@@ -1806,17 +1870,15 @@ Element_Opening_Data :: struct {
 };
 // intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
 open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Opening_Data {
-    parent: *Node;
-    if context.forbear.parent_index != -1 {
-        parent = *context.forbear.node_tree[context.forbear.parent_index];
-    }
-    node, index := append_to_node_tree(*context.forbear.node_tree, context.forbear.parent_index);
+    parent_index := context.forbear.parent_index;
+    node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
     previous_base_style := context.forbear.base_style;
     complete_with(style, context.forbear.base_style, *node.style);
     context.forbear.base_style = from(node.style);
     if style.z_index < U16_MAX {
         node.z = style.z_index;
-    } else if context.forbear.parent_index != -1 {
+    } else if parent_index != -1 {
+        parent := context.forbear.node_tree[parent_index];
         if parent.z < U16_MAX {
             node.z = parent.z + 1;
         } else {
@@ -1858,7 +1920,7 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 
-    previous_parent_index := context.forbear.parent_index;
+    previous_parent_index := parent_index;
     previous_scope_key := context.forbear.scope_key;
     context.forbear.parent_index = index;
     context.forbear.scope_key = node.key;
