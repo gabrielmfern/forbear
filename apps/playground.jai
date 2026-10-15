@@ -111,14 +111,16 @@ main :: () {
                     node.style.background = color(rgb(100, 100, 0));
                 }
             });
-            frame_input := text_input();
-            if frame_input.count > 0 {
-                print("frame_input: %\n", frame_input);
-                memcpy(input.data + input.count, frame_input.data, frame_input.count);
-                input.count += frame_input.count;
-                print("input: %\n", input);
+            #if OS == .LINUX {
+                frame_input := text_input();
+                if frame_input.count > 0 {
+                    print("frame_input: %\n", frame_input);
+                    memcpy(input.data + input.count, frame_input.data, frame_input.count);
+                    input.count += frame_input.count;
+                    print("input: %\n", input);
+                }
+                text(sprint("this was the input text until now: '%'", input));
             }
-            text(sprint("this was the input text until now: '%'", input));
 
             for key: window.keys_held {
                 string_key := sprint("%", key);

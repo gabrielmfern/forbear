@@ -66,16 +66,18 @@ append_to_buffered_destination :: (source: string, destination: *string, buffer:
     }
 }
 
-add_key_text :: (text: *string, text_buffer: []u8, state: *xkb_state, key_code: u32) {
-    if xkb_state_mod_name_is_active(state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 && 
-        xkb_state_mod_name_is_active(state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 0 {
-        utf8: [64]u8;
-        length := xkb_state_key_get_utf8(state, key_code, utf8.data, utf8.count);
-        is_control_character := length == 1 && (utf8[0] < 0x20 || utf8[0] == 0x7f);
-        if length > 0 && length < utf8.count && !is_control_character {
-            append_to_buffered_destination(to_string(utf8.data, length), text, text_buffer);
-        } else if length >= utf8.count {
-            log_error("we separated a % sized utf8 buffer for the key %, but it required length %. dropping it entirely.", utf8.count, key_code, length);
+#if OS == .LINUX {
+    add_key_text :: (text: *string, text_buffer: []u8, state: *xkb_state, key_code: u32) {
+        if xkb_state_mod_name_is_active(state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 && 
+            xkb_state_mod_name_is_active(state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 0 {
+            utf8: [64]u8;
+            length := xkb_state_key_get_utf8(state, key_code, utf8.data, utf8.count);
+            is_control_character := length == 1 && (utf8[0] < 0x20 || utf8[0] == 0x7f);
+            if length > 0 && length < utf8.count && !is_control_character {
+                append_to_buffered_destination(to_string(utf8.data, length), text, text_buffer);
+            } else if length >= utf8.count {
+                log_error("we separated a % sized utf8 buffer for the key %, but it required length %. dropping it entirely.", utf8.count, key_code, length);
+            }
         }
     }
 }
@@ -1080,6 +1082,9 @@ add_key :: (array: *[]Key, key: Key) {
         ns_window: *NSWindow;
         view: *NSView;
 
+        text_buffer: [256]u8;
+        text: string;
+
         keys_buffer: [32 * 3]Key;
         keys_pressed: []Key;
         keys_released: []Key;
@@ -2058,6 +2063,7 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
         return false;
     }
 }
+// currently only supported on wayland
 text_input :: () -> string {
     using context.forbear;
     return window.text; 
@@ -3665,11 +3671,13 @@ prepare_frame :: () {
     window.text.count = 0;
     memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
     memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
-    if window.repeating_key_code != 0 {
-        now := seconds_since_init();
-        while now >= window.next_repeat {
-            add_key_text(*window.text, window.text_buffer, backend.connection.key_state, window.repeating_key_code);
-            window.next_repeat += 1.0 / window.keyboard_repeat_rate;
+    #if OS == .LINUX {
+        if window.repeating_key_code != 0 {
+            now := seconds_since_init();
+            while now >= window.next_repeat {
+                add_key_text(*window.text, window.text_buffer, backend.connection.key_state, window.repeating_key_code);
+                window.next_repeat += 1.0 / window.keyboard_repeat_rate;
+            }
         }
     }
     array_reset_keeping_memory(*node_tree);
