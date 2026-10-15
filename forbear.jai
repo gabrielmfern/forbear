@@ -655,7 +655,7 @@ add_key :: (array: *[]Key, key: Key) {
         fbo: GLuint;
         busy: bool;
     };
-    init_window :: (connection: *Wayland_Connection, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
+    init_window :: (backend: *Backend, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
         window.width = width;
         window.height = height;
 
@@ -665,6 +665,7 @@ add_key :: (array: *[]Key, key: Key) {
 
         window.text.data = window.text_buffer.data;
 
+        connection := *backend.connection;
         window.wl_surface_id = new_wayland_client_object(connection, Interface_Id.WL_SURFACE);
         send_wayland_message(connection, connection.wl_compositor_id, Wl_Compositor_Request_Create_Surface.{ id = window.wl_surface_id });
         window.xdg_surface_id = new_wayland_client_object(connection, Interface_Id.XDG_SURFACE);

@@ -15,13 +15,8 @@ INTER_TTF :: #run read_entire_file(tprint("%../Inter.ttf", #filepath));
 main :: () {
     backend: Backend;
     window: Window;
-    #if OS == .LINUX {
-        init_backend(*backend);
-        init_window(*backend.connection, *window, 800, 600, "playground");
-    } else #if OS == .MACOS {
-        init_backend(*backend);
-        init_window(*backend, *window, 800, 600, "playground");
-    }
+    init_backend(*backend);
+    init_window(*backend.connection, *window, 800, 600, "playground");
 
     inter: Font;
     init_font(*inter, INTER_TTF);
