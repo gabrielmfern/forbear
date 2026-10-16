@@ -14,7 +14,8 @@ dist
 ## binaries
 main
 playground
-calculator
+tests
+apps/calculator/calculator
 
 # javascript
 node_modules
