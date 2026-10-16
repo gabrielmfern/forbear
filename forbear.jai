@@ -57,28 +57,31 @@ compile_shader :: (kind: GLenum, source: string) -> u32 {
     return shader;
 }
 
-append_to_buffered_destination :: (source: string, destination: *string, buffer: []u8) {
-    if destination.count + source.count <= buffer.count {
-        memcpy(destination.data + destination.count, source.data, source.count);
-        destination.count += source.count;
-    } else {
-        log_error("trying to append to a buffered string of size %, which exceeds the buffer size %. dropping it entirely.", source.count, buffer.count);
+append_text :: (source: string, destination: *string, buffer: []u8) {
+    is_control_character := source.count == 1 && (source[0] < 0x20 || source[0] == 0x7f);
+    if !is_control_character {
+        if destination.count + source.count <= buffer.count {
+            memcpy(destination.data + destination.count, source.data, source.count);
+            destination.count += source.count;
+        } else {
+            log_error("trying to append to a buffered string of size %, which exceeds the buffer size %. dropping it entirely.", source.count, buffer.count);
+        }
     }
 }
 
 #if OS == .LINUX {
-    add_key_text :: (text: *string, text_buffer: []u8, state: *xkb_state, key_code: u32) {
-        if xkb_state_mod_name_is_active(state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 && 
+    key_text :: (state: *xkb_state, key_code: u32, utf8: []u8) -> string {
+        text: string;
+        if xkb_state_mod_name_is_active(state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 &&
             xkb_state_mod_name_is_active(state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 0 {
-            utf8: [64]u8;
-            length := xkb_state_key_get_utf8(state, key_code, utf8.data, utf8.count);
-            is_control_character := length == 1 && (utf8[0] < 0x20 || utf8[0] == 0x7f);
-            if length > 0 && length < utf8.count && !is_control_character {
-                append_to_buffered_destination(to_string(utf8.data, length), text, text_buffer);
-            } else if length >= utf8.count {
+            length := xkb_state_key_get_utf8(state, key_code, utf8.data, xx utf8.count);
+            if length < utf8.count {
+                text = to_string(utf8.data, length);
+            } else {
                 log_error("we separated a % sized utf8 buffer for the key %, but it required length %. dropping it entirely.", utf8.count, key_code, length);
             }
         }
+        return text;
     }
 }
 
@@ -910,6 +913,18 @@ add_key :: (array: *[]Key, key: Key) {
                         *symbols
                     ) > 0 {
                         key := cast(Key) symbols.*;
+                        utf8: [64]u8;
+                        text: string;
+                        if xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 &&
+                            xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 0 {
+                            length := xkb_state_key_get_utf8(backend.connection.key_state, xkb_key_code, utf8.data, xx utf8.count);
+                            if length < utf8.count {
+                                text = to_string(utf8.data, length);
+                            } else {
+                                log_error("we separated a % sized utf8 buffer for the key %, but it required length %. dropping it entirely.", utf8.count, xkb_key_code, length);
+                            }
+                        }
+
                         if key_event.state == .RELEASED {
                             add_key(*window.keys_released, key);
                             for window.keys_held {
@@ -934,9 +949,8 @@ add_key :: (array: *[]Key, key: Key) {
                                     if status == .XKB_COMPOSE_COMPOSING {
                                         compose_handled = true;
                                     } else if status == .XKB_COMPOSE_COMPOSED {
-                                        utf8: [64]u8;
                                         length := xkb_compose_state_get_utf8(compose, utf8.data, utf8.count);
-                                        append_to_buffered_destination(to_string(utf8.data, length), *window.text, window.text_buffer);
+                                        append_text(to_string(utf8.data, length), *window.text, window.text_buffer);
                                         xkb_compose_state_reset(compose);
                                         compose_handled = true;
                                     } else if status == .XKB_COMPOSE_CANCELLED {
@@ -946,14 +960,16 @@ add_key :: (array: *[]Key, key: Key) {
                                 }
                             }
                             if !compose_handled {
-                                add_key_text(*window.text, window.text_buffer, backend.connection.key_state, xkb_key_code);
+                                utf8: [64]u8;
+                                append_text(text, *window.text, window.text_buffer);
                             }
                             if window.keyboard_repeat_rate > 0 && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
                                 window.repeating_key_code = xkb_key_code;
                                 window.next_repeat = seconds_since_init() + (cast(float)window.keyboard_repeat_delay) / 1000.0;
                             }
                         } else if key_event.state == .REPEATED {
-                            add_key_text(*window.text, window.text_buffer, backend.connection.key_state, xkb_key_code);
+                            utf8: [64]u8;
+                            append_text(text, *window.text, window.text_buffer);
                         }
                     }
             }
@@ -4620,7 +4636,7 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
     }
 }
 // currently only supported on wayland
-text_input :: () -> string {
+get_text_input :: () -> string {
     using context.forbear;
     return window.text; 
 }
@@ -6231,7 +6247,8 @@ prepare_frame :: () {
         if window.repeating_key_code != 0 {
             now := seconds_since_init();
             while now >= window.next_repeat {
-                add_key_text(*window.text, window.text_buffer, backend.connection.key_state, window.repeating_key_code);
+                utf8: [64]u8;
+                append_text(key_text(backend.connection.key_state, window.repeating_key_code, utf8), *window.text, window.text_buffer);
                 window.next_repeat += 1.0 / window.keyboard_repeat_rate;
             }
         }
