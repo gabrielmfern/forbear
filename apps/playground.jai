@@ -107,7 +107,7 @@ main :: () {
                 }
             });
             #if OS == .LINUX {
-                frame_input := text_input();
+                frame_input := get_text_input();
                 if frame_input.count > 0 {
                     print("frame_input: %\n", frame_input);
                     memcpy(input.data + input.count, frame_input.data, frame_input.count);

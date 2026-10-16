@@ -4762,6 +4762,11 @@ append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointe
     array_add(node_tree, node);
     return *node_tree.*[index], index;
 }
+// beware that this pointer might be come invalid if you define one more element
+get_node :: (node_index: s64) -> *Node {
+    using context.forbear;
+    return *node_tree[node_index];
+}
 
 Element_Opening_Data :: struct {
     parent_index: s64; 
@@ -4864,7 +4869,7 @@ element :: (
     body: Code = #code {},
     manual_key := "",
     location := #caller_location
-) #expand {
+) -> s64 #expand {
     key: u64;
     if manual_key.count > 0 {
         key = fnv1a_hash(manual_key.data, manual_key.count);
@@ -4881,12 +4886,13 @@ element :: (
     opening := open_element(style, key);
     #insert body;
     close_element(opening);
+    return opening.node_index;
 }
-element :: (body: Code, location := #caller_location) #expand {
-    element(body = body, location = location);
+element :: (body: Code, location := #caller_location) -> s64 #expand {
+    return element(body = body, location = location);
 }
-element :: (style: Style, key: string, location := #caller_location) #expand {
-    element(style = style, manual_key = key, location = location);
+element :: (style: Style, key: string, location := #caller_location) -> s64 #expand {
+    return element(style = style, manual_key = key, location = location);
 }
 
 freetype_library: FT_Library;
@@ -5014,6 +5020,10 @@ round_font_size :: (size: float) -> u16 #expand {
    assert(size <= 0xFFFF, "font sizes need to be packed to u16");
    return xx floor(size + 0.5);
 }
+get_font_units_to_point :: (font: *Font, rounded_font_size: u16) -> float {
+    using context.forbear;
+    return (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) font.raster_face.units_per_EM);
+}
 font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
     FT_Load_Glyph(font.raster_face, xx glyph_index, FT_LOAD_RENDER);
     glyph := font.raster_face.glyph;
@@ -5119,32 +5129,30 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
 free_font :: (font: *Font) {
     FT_Done_Face(font.raster_face);
 }
-text :: (style := Style.{}, content := "", manual_key := "", location := #caller_location) #expand {
-    if content.count > 0 {
-        element(style, #code {
-            node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
-            rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
-            set_weight(node.style.font, node.style.font_weight);
-            set_font_size(node.style.font, rounded_font_size);
-            node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
-            font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
-            node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
-            node.min_size = node.glyphs.min_size * font_units_to_point;
-            node.max_size = node.glyphs.max_size * font_units_to_point;
+text :: (style := Style.{}, content := "", manual_key := "", location := #caller_location) -> s64 #expand {
+    return element(style, #code {
+        node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
+        rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
+        set_weight(node.style.font, node.style.font_weight);
+        set_font_size(node.style.font, rounded_font_size);
+        node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
+        font_units_to_point := get_font_units_to_point(node.style.font, rounded_font_size);
+        node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
+        node.min_size = node.glyphs.min_size * font_units_to_point;
+        node.max_size = node.glyphs.max_size * font_units_to_point;
 
-            if node.parent != -1 {
-                parent := context.forbear.node_tree[node.parent];
-                if parent.style.cursor == .DEFAULT {
-                    node.style.cursor = .TEXT;
-                }
-                node.style.x_justification = parent.style.x_justification;
-                node.style.y_justification = parent.style.y_justification;
+        if node.parent != -1 {
+            parent := context.forbear.node_tree[node.parent];
+            if parent.style.cursor == .DEFAULT {
+                node.style.cursor = .TEXT;
             }
-        }, manual_key);
-    }
+            node.style.x_justification = parent.style.x_justification;
+            node.style.y_justification = parent.style.y_justification;
+        }
+    }, manual_key, location);
 }
-text :: (content: string, manual_key := "", location := #caller_location) {
-    text(Style.{}, content, "", location);
+text :: (content: string, manual_key := "", location := #caller_location) -> s64 #expand {
+    return text(Style.{}, content, "", location);
 }
 Glyph_Atlas :: struct {
     // TODO: change this based on the render API that's selected. currently we only support OpenGL, though.
@@ -5723,7 +5731,7 @@ layout :: () {
             //
             for <*node: node_tree {
                 rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
-                font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
+                font_units_to_point := get_font_units_to_point(node.style.font, rounded_font_size);
                 base := Vector2.{
                     node.style.border_width.x.x + node.style.padding.x.x,
                     node.style.border_width.y.x + node.style.padding.y.x,
@@ -6133,7 +6141,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     for node: node_tree {
         if node.glyphs.array.count != 0 {
             rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
-            font_units_to_point := (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
+            font_units_to_point := get_font_units_to_point(node.style.font, rounded_font_size);
 
             for glyph: node.glyphs.array {
                 atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
