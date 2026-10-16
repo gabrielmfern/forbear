@@ -621,6 +621,7 @@ add_key :: (array: *[]Key, key: Key) {
 
         text_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
         text: string;
+        repeating_key: Key;
         repeating_key_code: u32;
         next_repeat: float64;
         // in characters per second
@@ -630,10 +631,11 @@ add_key :: (array: *[]Key, key: Key) {
 
         keyboard_serial: u32;
         keyboard_inside: bool;
-        keys_buffer: [32 * 3]Key;
+        keys_buffer: [32 * 4]Key;
         keys_pressed: []Key;
         keys_released: []Key;
         keys_held: []Key;
+        keys_repeated: []Key;
 
         pointer_serial: u32;
         pointer_inside: bool;
@@ -665,6 +667,7 @@ add_key :: (array: *[]Key, key: Key) {
         window.keys_pressed.data = window.keys_buffer.data;
         window.keys_released.data = window.keys_buffer.data + 32;
         window.keys_held.data = window.keys_buffer.data + 64;
+        window.keys_repeated.data = window.keys_buffer.data + 96;
 
         window.text.data = window.text_buffer.data;
 
@@ -964,10 +967,12 @@ add_key :: (array: *[]Key, key: Key) {
                                 append_text(text, *window.text, window.text_buffer);
                             }
                             if window.keyboard_repeat_rate > 0 && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
+                                window.repeating_key = key;
                                 window.repeating_key_code = xkb_key_code;
                                 window.next_repeat = seconds_since_init() + (cast(float)window.keyboard_repeat_delay) / 1000.0;
                             }
                         } else if key_event.state == .REPEATED {
+                            add_key(*window.keys_repeated, key);
                             utf8: [64]u8;
                             append_text(text, *window.text, window.text_buffer);
                         }
@@ -4640,9 +4645,15 @@ get_text_input :: () -> string {
     using context.forbear;
     return window.text; 
 }
-on_key_down :: (key: Key) -> bool {
+on_key_down :: (
+    key: Key, 
+    // an operating-system defined repetition rate was reached for the given key. on_key_down only runs once, this runs
+    // every few frames depending on the operating system seettings.
+    on_repeat := false
+) -> bool {
     using context.forbear;
-    return array_find(window.keys_pressed, key);
+    return array_find(window.keys_pressed, key) || 
+        (on_repeat && array_find(window.keys_repeated, key));
 }
 on_key_up :: (key: Key) -> bool {
     using context.forbear;
@@ -6240,6 +6251,7 @@ prepare_frame :: () {
     }
     window.keys_pressed.count = 0;
     window.keys_released.count = 0;
+    window.keys_repeated.count = 0;
     window.text.count = 0;
     memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
     memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
@@ -6247,6 +6259,7 @@ prepare_frame :: () {
         if window.repeating_key_code != 0 {
             now := seconds_since_init();
             while now >= window.next_repeat {
+                add_key(*window.keys_repeated, window.repeating_key);
                 utf8: [64]u8;
                 append_text(key_text(backend.connection.key_state, window.repeating_key_code, utf8), *window.text, window.text_buffer);
                 window.next_repeat += 1.0 / window.keyboard_repeat_rate;
