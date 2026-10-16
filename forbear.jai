@@ -2449,7 +2449,9 @@ font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
     raster_glyph.pitch = glyph.bitmap.pitch;
     return raster_glyph;
 }
-shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Glyphs {
+shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: $T) -> Glyphs
+#modify { return T == string || T == *String_Builder; }
+{
     // TODO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
     glyphs: Glyphs;
     glyphs.line_height = cast(float) font.raster_face.height;
@@ -2465,12 +2467,30 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
     if font.weight != U16_MAX {
         kbts_ShapePushGlobalVariation(shaping_context, WGHT, cast(float) font.weight);
     }
-    kbts_ShapeUtf8(
-        shaping_context,
-        content.data,
-        xx content.count,
-        xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX
-    );
+    builder: String_Builder;
+    builder.
+    #if T == string {
+        kbts_ShapeUtf8(
+            shaping_context,
+            content.data,
+            xx content.count,
+            xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX
+        );
+    } else {
+        buffer := get_base_buffer(content);
+        while buffer {
+            // TODO(long-term): since each buffer here can contain an incomplete unicode character, this can actually
+            // break given long enough text that is also utf8, we should be addressing this somehow, but it seems to me
+            // this wuold not be a common case to hit.
+            kbts_ShapeUtf8(
+                shaping_context,
+                get_buffer_data(buffer),
+                xx buffer.count,
+                xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX
+            );
+            buffer = buffer.next;
+        }
+    }
     if font.weight != U16_MAX {
         kbts_ShapePopGlobalVariation(shaping_context, WGHT);
     }
@@ -2537,29 +2557,39 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
 free_font :: (font: *Font) {
     FT_Done_Face(font.raster_face);
 }
-text :: (style := Style.{}, content := "", manual_key := "", location := #caller_location) #expand {
-    if content.count > 0 {
-        element(style, #code {
-            node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
-            rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
-            set_weight(node.style.font, node.style.font_weight);
-            set_font_size(node.style.font, rounded_font_size);
-            node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
-            font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
-            node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
-            node.min_size = node.glyphs.min_size * font_units_to_point;
-            node.max_size = node.glyphs.max_size * font_units_to_point;
-
-            if node.parent != -1 {
-                parent := context.forbear.node_tree[node.parent];
-                if parent.style.cursor == .DEFAULT {
-                    node.style.cursor = .TEXT;
-                }
-                node.style.x_justification = parent.style.x_justification;
-                node.style.y_justification = parent.style.y_justification;
-            }
-        }, manual_key);
+text :: (style := Style.{}, content: $T = "", manual_key := "", location := #caller_location) #expand 
+#modify { return T == string || T == *String_Builder; }
+{
+    #if T == string {
+        if content.count == 0 {
+            return;
+        }
+    } else {
+        if builder_string_length(content) == 0 {
+            return;
+        }
     }
+
+    element(style, #code {
+        node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
+        rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
+        set_weight(node.style.font, node.style.font_weight);
+        set_font_size(node.style.font, rounded_font_size);
+        node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
+        font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
+        node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
+        node.min_size = node.glyphs.min_size * font_units_to_point;
+        node.max_size = node.glyphs.max_size * font_units_to_point;
+
+        if node.parent != -1 {
+            parent := context.forbear.node_tree[node.parent];
+            if parent.style.cursor == .DEFAULT {
+                node.style.cursor = .TEXT;
+            }
+            node.style.x_justification = parent.style.x_justification;
+            node.style.y_justification = parent.style.y_justification;
+        }
+    }, manual_key);
 }
 text :: (content: string, manual_key := "", location := #caller_location) {
     text(Style.{}, content, "", location);
