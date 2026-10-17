@@ -1,23 +1,28 @@
 MEMORY_DEBUGGING :: false;
 
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
+Math :: #import "Math";
 #import "File";
 #import "String";
 #import "Flat_Pool";
 #import "GL";
 #import,file "../../forbear.jai";
 
+isnan :: Math.isnan;
+FLOAT64_NAN :: Math.FLOAT64_NAN;
+U64_MAX :: Math.U64_MAX;
+
 INTER_TTF :: #run read_entire_file(tprint("%../Inter.ttf", #filepath));
 
 WIDTH :: 360;
 HEIGHT :: 512;
 
+Operator :: enum {
+    NONE; ADD; SUBTRACT; MULTIPLY; DIVIDE;
+};
 Token :: struct {
     Kind :: enum {
         NUMBER; OPERATOR;
-    };
-    Operator :: enum {
-        ADD; SUBTRACT; MULTIPLY; DIVIDE;
     };
 
     kind: Kind;
@@ -213,6 +218,14 @@ main :: () {
                         }
                     }
                 }
+                Cursor_Step :: enum {
+                    CHARACTER;
+                    WORD;
+                };
+                cursor_step: Cursor_Step;
+                if on_key_down(.CONTROL_LEFT) {
+                    cursor_step = .WORD;
+                }
                 // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
                 // and operators, we can simply remove by index as all characters are only going to be one byte.
                 if on_key_down(.BACKSPACE, true) && cursor_index > 0 {
@@ -266,13 +279,59 @@ main :: () {
                 input.style.border_color.w = 1.0;
             }
 
-            if expression.count > 0 {
-                if parse_success {
-                    text("parsing succeeded, we can calculate the expression");
+            left: float64 = FLOAT64_NAN;
+            operator_ := Operator.NONE;
+            right: float64 = FLOAT64_NAN;
+            for token: tokens {
+                if isnan(left) {
+                    if token.kind == .OPERATOR {
+                        left = 0; // we take left to be an implicit zero when the user just types in an operator
+                        operator_ = token.operator_;
+                    } else {
+                        left = token.number;
+                    }
+                } else if opera
+                    if token.kind == .OPERATOR {
+                        operator_ = token.operator_;
+                    } else {
+                        // TODO: what should we do here? assign this to the right operand?
+                    }
+                } else if isnan(right) {
+                    if token.kind == .OPERATOR {
+                        operator_ = token.operator_;
+                    } else {
+                        right = token.number;
+                    }
                 } else {
-                    text("parsing failed, we can't calculate the expression");
+                    assert(operator_ != .NONE);
+                    if operator_ == {
+                        case .ADD;
+                            left += right;
+                        case .SUBTRACT;
+                            left -= right;
+                        case .MULTIPLY;
+                            left *= right;
+                        case .DIVIDE;
+                            left /= right;
+                    }
+                    operator_ = .NONE;
+                    right = FLOAT64_NAN;
                 }
             }
+            if !isnan(left) && operator_ != .NONE && !isnan(right) {
+                if operator_ == {
+                    case .ADD;
+                        left += right;
+                    case .SUBTRACT;
+                        left -= right;
+                    case .MULTIPLY;
+                        left *= right;
+                    case .DIVIDE;
+                        left /= right;
+                }
+            }
+
+            text(Style.{ x_justification = .END }, sprint("= %", left));
         });
 
         layout();
