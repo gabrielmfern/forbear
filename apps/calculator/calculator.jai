@@ -8,15 +8,6 @@ Math :: #import "Math";
 #import "GL";
 #import,file "../../forbear.jai";
 
-isnan :: Math.isnan;
-FLOAT64_NAN :: Math.FLOAT64_NAN;
-U64_MAX :: Math.U64_MAX;
-
-INTER_TTF :: #run read_entire_file(tprint("%../Inter.ttf", #filepath));
-
-WIDTH :: 360;
-HEIGHT :: 512;
-
 Operator :: enum {
     NONE; ADD; SUBTRACT; MULTIPLY; DIVIDE;
 };
@@ -28,7 +19,7 @@ Token :: struct {
     kind: Kind;
     union {
         number: float64;
-        operator_: Operator;
+        op: Operator;
     }
 
 };
@@ -39,15 +30,14 @@ tokens_equal :: (a: Token, b: Token) -> bool {
     if a.kind == .NUMBER {
         return a.number == b.number;
     } else {
-        return a.operator_ == b.operator_;
+        return a.op == b.op;
     }
 }
 operator == :: tokens_equal;
-ADD :: Token.{ kind = .OPERATOR, operator_ = .ADD };
-SUBTRACT :: Token.{ kind = .OPERATOR, operator_ = .SUBTRACT };
-MULTIPLY :: Token.{ kind = .OPERATOR, operator_ = .MULTIPLY };
-DIVIDE :: Token.{ kind = .OPERATOR, operator_ = .DIVIDE };
-
+ADD :: Token.{ kind = .OPERATOR, op = .ADD };
+SUBTRACT :: Token.{ kind = .OPERATOR, op = .SUBTRACT };
+MULTIPLY :: Token.{ kind = .OPERATOR, op = .MULTIPLY };
+DIVIDE :: Token.{ kind = .OPERATOR, op = .DIVIDE };
 parse_expression :: (expression: string, tokens: *[..]Token) -> success: bool {
     array_reset_keeping_memory(tokens);
     in_progress: string = ---;
@@ -87,6 +77,9 @@ parse_expression :: (expression: string, tokens: *[..]Token) -> success: bool {
                 // it must be a number at this point, so we assume so
                 number, success := string_to_float(trimmed);
                 if success {
+                    if tokens.count > 0 && tokens.*[tokens.count - 1].kind == .NUMBER {
+                        return false;
+                    }
                     array_add(tokens, Token.{ kind = .NUMBER, number = number });
                 } else {
                     return false;
@@ -98,7 +91,6 @@ parse_expression :: (expression: string, tokens: *[..]Token) -> success: bool {
     }
     return true;
 }
-
 parse_expression_should_handle_basic_expression :: () {
     tokens: [..]Token;
     expression := "5 + 10 - 12 / 4 * 19";
@@ -115,6 +107,38 @@ parse_expression_should_handle_basic_expression :: () {
     assert(tokens[8] == Token.{kind=.NUMBER,number=19});
 } @Test
 
+previous_word_boundary :: (text: []u8, cursor: s64) -> s64 {
+    c := cursor;
+    while c > 0 && !is_digit(text[c - 1]) {
+        c -= 1;
+    }
+    while c > 0 && is_digit(text[c - 1]) {
+        c -= 1;
+    }
+    return c;
+}
+
+next_word_boundary :: (text: []u8, cursor: s64) -> s64 {
+    c := cursor;
+    while c < text.count && !is_digit(text[c]) {
+        c += 1;
+    }
+    while c < text.count && is_digit(text[c]) {
+        c += 1;
+    }
+    return c;
+}
+
+isnan :: Math.isnan;
+FLOAT64_NAN :: Math.FLOAT64_NAN;
+U64_MAX :: Math.U64_MAX;
+
+//
+// ===== program styles =====
+//
+INTER_TTF :: #run read_entire_file(tprint("%../Inter.ttf", #filepath));
+WIDTH :: 360;
+HEIGHT :: 512;
 BACKGROUND :: #run rgb(28, 31, 35);
 FLOATING_BACKGROUND :: #run rgb(17, 19, 22);
 ERROR :: #run rgb(232, 91, 91);
@@ -147,10 +171,6 @@ main :: () {
     frames := 0;
     last := seconds_since_init();
     previous := last;
-
-    input_buffer: [4096]u8;
-    input: string;
-    input.data = input_buffer.data;
 
     expression: [..]u8;
     expression.allocator = context.allocator;
@@ -196,21 +216,18 @@ main :: () {
         }, #code {
             input_index := element(Style.{
                 background = color(FLOATING_BACKGROUND),
-                border_radius = 4.0,
-                border_width = all(1.0),
-                border_color = ERROR * TRANSPARENT,
                 margin = bottom(20),
                 padding = in_line(block(20), 15),
                 width = grow(),
             }, #code {
                 // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
-                expression_count_before := expression.count;
+                //
+                // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
+                // and operators, we can simply remove by index as all characters are only going to be one byte.
                 text_input := get_text_input();
                 if text_input.count > 0 {
                     for character: text_input {
-                        if character == #char "+" || character == #char "-" || character == #char "*" || character == #char "/" || character == #char " " || character == #char "0" ||
-                            character == #char "1" || character == #char "2" || character == #char "3" || character == #char "4" || character == #char "5" || character == #char "6" ||
-                            character == #char "7" || character == #char "8" || character == #char "9" {
+                        if is_digit(character) || is_any(character, "+-*/ .") {
                             array_insert_at(*expression, character, cursor_index);
                             cursor_index += 1;
                         } else {
@@ -218,35 +235,27 @@ main :: () {
                         }
                     }
                 }
-                Cursor_Step :: enum {
-                    CHARACTER;
-                    WORD;
-                };
-                cursor_step: Cursor_Step;
-                if on_key_down(.CONTROL_LEFT) {
-                    cursor_step = .WORD;
-                }
-                // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
-                // and operators, we can simply remove by index as all characters are only going to be one byte.
-                if on_key_down(.BACKSPACE, true) && cursor_index > 0 {
-                    array_ordered_remove_by_index(*expression, cursor_index);
-                    cursor_index -= 1;
-                }
-                if on_key_down(.DELETE, true) && cursor_index < expression.count {
-                    array_ordered_remove_by_index(*expression, cursor_index + 1);
-                }
-                if on_key_down(.ARROW_LEFT, true) {
-                    cursor_index = max(cursor_index - 1, 0);
-                } else if on_key_down(.ARROW_RIGHT, true) {
-                    cursor_index = min(cursor_index + 1, expression.count);
+                by_word := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
+                left  := ifx by_word then previous_word_boundary(expression, cursor_index) else max(cursor_index - 1, 0);
+                right := ifx by_word then next_word_boundary(expression, cursor_index) else min(cursor_index + 1, expression.count);
+                removal_start, removal_end := cursor_index;
+                if on_key_down(.BACKSPACE, true)        removal_start = left;
+                else if on_key_down(.DELETE, true)      removal_end = right;
+                else if on_key_down(.ARROW_LEFT, true)  cursor_index = left;
+                else if on_key_down(.ARROW_RIGHT, true) cursor_index = right;
+                else if on_key_down(.HOME)              cursor_index = 0;
+                else if on_key_down(.END)               cursor_index = expression.count;
+
+                removed := removal_end - removal_start;
+                if removed > 0 {
+                    for i: removal_start..expression.count - removed - 1 {
+                        expression[i] = expression[i + removed];
+                    }
+                    expression.count -= removed;
+                    cursor_index = min(cursor_index, removal_start);
                 }
 
-                if on_key_down(.HOME) {
-                    cursor_index = 0;
-                } else if on_key_down(.END) {
-                    cursor_index = expression.count;
-                }
-                if expression_count_before != expression.count {
+                if removed > 0 || text_input.count > 0 {
                     parse_success = parse_expression(to_string(expression.data, expression.count), *tokens);
                 }
 
@@ -276,62 +285,63 @@ main :: () {
 
             if !parse_success && expression.count > 0 {
                 input := get_node(input_index);
-                input.style.border_color.w = 1.0;
+                input.style.border_radius = 4.0;
+                input.style.border_width = all(1.0);
+                input.style.border_color = ERROR;
             }
 
-            left: float64 = FLOAT64_NAN;
-            operator_ := Operator.NONE;
-            right: float64 = FLOAT64_NAN;
+            value_left: float64 = FLOAT64_NAN;
+            op := Operator.NONE;
+            value_right: float64 = FLOAT64_NAN;
             for token: tokens {
-                if isnan(left) {
+                if isnan(value_left) {
                     if token.kind == .OPERATOR {
-                        left = 0; // we take left to be an implicit zero when the user just types in an operator
-                        operator_ = token.operator_;
+                        value_left = 0; // we take left to be an implicit zero when the user just types in an operator
+                        op = token.op;
                     } else {
-                        left = token.number;
+                        value_left = token.number;
                     }
-                } else if opera
+                } else if op == .NONE {
+                    assert(token.kind == .OPERATOR);
+                    op = token.op;
+                } else if isnan(value_right) {
                     if token.kind == .OPERATOR {
-                        operator_ = token.operator_;
+                        op = token.op;
                     } else {
-                        // TODO: what should we do here? assign this to the right operand?
-                    }
-                } else if isnan(right) {
-                    if token.kind == .OPERATOR {
-                        operator_ = token.operator_;
-                    } else {
-                        right = token.number;
+                        value_right = token.number;
                     }
                 } else {
-                    assert(operator_ != .NONE);
-                    if operator_ == {
+                    assert(op != .NONE);
+                    if op == {
                         case .ADD;
-                            left += right;
+                            value_left += value_right;
                         case .SUBTRACT;
-                            left -= right;
+                            value_left -= value_right;
                         case .MULTIPLY;
-                            left *= right;
+                            value_left *= value_right;
                         case .DIVIDE;
-                            left /= right;
+                            value_left /= value_right;
                     }
-                    operator_ = .NONE;
-                    right = FLOAT64_NAN;
+                    op = .NONE;
+                    value_right = FLOAT64_NAN;
                 }
             }
-            if !isnan(left) && operator_ != .NONE && !isnan(right) {
-                if operator_ == {
+            if !isnan(value_left) && op != .NONE && !isnan(value_right) {
+                if op == {
                     case .ADD;
-                        left += right;
+                        value_left += value_right;
                     case .SUBTRACT;
-                        left -= right;
+                        value_left -= value_right;
                     case .MULTIPLY;
-                        left *= right;
+                        value_left *= value_right;
                     case .DIVIDE;
-                        left /= right;
+                        value_left /= value_right;
                 }
             }
 
-            text(Style.{ x_justification = .END }, sprint("= %", left));
+            element(Style.{ width = grow(), padding = right(12), font_size = 32, x_justification = .END }, #code {
+                text(sprint("= %", ifx isnan(value_left) then 0 else value_left));
+            });
         });
 
         layout();
