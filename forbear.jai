@@ -6275,23 +6275,24 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
             }
         }
 
-        node_instances.count += 1;
-        node_instance := *node_instances[node_instances.count - 1];
-
-        node_instance.position = node.position,
-        node_instance.size = node.size,
+        node_instance: Node_Draw_Instance;
+        node_instance.position = node.position;
+        node_instance.size = node.size;
         // TODO: write out the instance gathering for the other types of backgrounds
         if node.style.background.kind == .COLOR {
-            node_instance.background_color = node.style.background.color,
+            node_instance.background_color = node.style.background.color;
         }
         node_instance.border_width = Vector4.{
             node.style.border_width.x.x, // left
             node.style.border_width.x.y, // right
             node.style.border_width.y.x, // top
             node.style.border_width.y.y  // bottom
-        },
-        node_instance.border_color = node.style.border_color,
-        node_instance.border_radius = max(node.style.border_radius, min(node.size.x, node.size.y)),
+        };
+        node_instance.border_color = node.style.border_color;
+        node_instance.border_radius = min(node.style.border_radius, min(node.size.x, node.size.y));
+
+        node_instances.count += 1;
+        node_instances[node_instances.count - 1] = node_instance;
     }
 
     point_width: float = (cast(float) window.width) / (cast(float) window.scale);
