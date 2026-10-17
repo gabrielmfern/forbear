@@ -1,5 +1,15 @@
 #module_parameters(JAVASCRIPT_ADAPTER := false);
 
+Vector2 :: Math.Vector2;
+Vector4 :: Math.Vector4;
+operator + :: Math.operator +;
+operator - :: Math.operator -;
+operator * :: Math.operator *;
+operator / :: Math.operator /;
+operator == :: Math.operator ==;
+
+#scope_module
+
 #import "Basic";
 #import "Flat_Pool";
 #import "GL";
@@ -10,16 +20,6 @@
 #import "Socket";
 #import "String";
 Math :: #import "Math";
-
-Vector2 :: Math.Vector2;
-Vector4 :: Math.Vector4;
-operator + :: Math.operator +;
-operator - :: Math.operator -;
-operator * :: Math.operator *;
-operator / :: Math.operator /;
-operator == :: Math.operator ==;
-
-#scope_module
 
 min :: Math.min;
 max :: Math.max;
