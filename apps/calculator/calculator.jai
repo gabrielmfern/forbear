@@ -191,9 +191,9 @@ main :: () {
         }, #code {
             input_index := element(Style.{
                 background = color(FLOATING_BACKGROUND),
-                border_radius = 12.0,
+                border_radius = 4.0,
                 border_width = all(1.0),
-                border_color = ERROR,
+                border_color = ERROR * TRANSPARENT,
                 margin = bottom(20),
                 padding = in_line(block(20), 15),
                 width = grow(),
