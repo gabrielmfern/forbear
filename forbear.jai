@@ -903,6 +903,87 @@ add_key :: (array: *[]Key, key: Key) {
                     repeat_info := cast(*Wl_Keyboard_Event_Repeat_Info) event.data;
                     window.keyboard_repeat_rate = repeat_info.rate;
                     window.keyboard_repeat_delay = repeat_info.delay;
+                case Wl_Keyboard_Event_Modifiers;
+                    control_active := xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+                    alt_active := xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+                    caps_active := xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CAPS.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+                    super_active := xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+                    control_held: bool;
+                    alt_held: bool;
+                    caps_held: bool;
+                    super_held: bool;
+                    for key: window.keys_held {
+                        if key == {
+                            case Key.CONTROL_LEFT; #through;
+                            case Key.CONTROL_RIGHT;
+                            control_held = true;
+                            case Key.ALT_LEFT; #through;
+                            case Key.ALT_RIGHT;
+                            alt_held = true;
+                            case Key.CAPS_LOCK;
+                            caps_held = true;
+                            case Key.SUPER_LEFT; #through;
+                            case Key.SUPER_RIGHT;
+                            super_held = true;
+                        }
+                    }
+                    if control_active && !control_held {
+                        add_key(*window.keys_pressed, .CONTROL_LEFT);
+                        add_key(*window.keys_held, .CONTROL_LEFT);
+                        add_key(*window.keys_pressed, .CONTROL_RIGHT);
+                        add_key(*window.keys_held, .CONTROL_RIGHT);
+                    } else if !control_active && control_held {
+                        add_key(*window.keys_released, .CONTROL_LEFT);
+                        add_key(*window.keys_released, .CONTROL_RIGHT);
+                        for window.keys_held {
+                            if it == .CONTROL_LEFT || it == .CONTROL_RIGHT {
+                                array_unordered_remove_by_index(*window.keys_held, it_index);
+                                break;
+                            }
+                        }
+                    }
+                    if caps_active && !caps_held {
+                        add_key(*window.keys_pressed, .CAPS_LOCK);
+                        add_key(*window.keys_held, .CAPS_LOCK);
+                    } else if !alt_active && alt_held {
+                        add_key(*window.keys_released, .CAPS_LOCK);
+                        for window.keys_held {
+                            if it == .CAPS_LOCK {
+                                array_unordered_remove_by_index(*window.keys_held, it_index);
+                                break;
+                            }
+                        }
+                    }
+                    if alt_active && !alt_held {
+                        add_key(*window.keys_pressed, .ALT_LEFT);
+                        add_key(*window.keys_held, .ALT_LEFT);
+                        add_key(*window.keys_pressed, .ALT_RIGHT);
+                        add_key(*window.keys_held, .ALT_RIGHT);
+                    } else if !alt_active && alt_held {
+                        add_key(*window.keys_released, .ALT_LEFT);
+                        add_key(*window.keys_released, .ALT_RIGHT);
+                        for window.keys_held {
+                            if it == .ALT_LEFT || it == .ALT_RIGHT {
+                                array_unordered_remove_by_index(*window.keys_held, it_index);
+                                break;
+                            }
+                        }
+                    }
+                    if super_active && !super_held {
+                        add_key(*window.keys_pressed, .SUPER_LEFT);
+                        add_key(*window.keys_held, .SUPER_LEFT);
+                        add_key(*window.keys_pressed, .SUPER_RIGHT);
+                        add_key(*window.keys_held, .SUPER_RIGHT);
+                    } else if !super_active && super_held {
+                        add_key(*window.keys_released, .SUPER_LEFT);
+                        add_key(*window.keys_released, .SUPER_RIGHT);
+                        for window.keys_held {
+                            if it == .SUPER_LEFT || it == .SUPER_RIGHT {
+                                array_unordered_remove_by_index(*window.keys_held, it_index);
+                                break;
+                            }
+                        }
+                    }
                 case Wl_Keyboard_Event_Key;
                     key_event := cast(*Wl_Keyboard_Event_Key) event.data;
                     xkb_key_code := key_event.key + 8;
