@@ -6351,6 +6351,7 @@ prepare_frame :: () {
     }
     window.keys_pressed.count = 0;
     window.keys_released.count = 0;
+    window.text.count = 0;
     memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
     memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
     #if OS == .LINUX {
