@@ -344,6 +344,10 @@ main :: () {
             });
         });
 
+        if on_key_down(.ESCAPE) {
+            window.running = false;
+        }
+
         layout();
         draw(BACKGROUND);
 
