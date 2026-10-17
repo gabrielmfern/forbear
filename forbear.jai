@@ -134,7 +134,7 @@ add_key :: (array: *[]Key, key: Key) {
 
         //
         // TODO(depessimization): I do not like that xkb allocates the structs and also does reference counting with
-        // them which is quite bad. 
+        // them which is quite bad.
         //
         // In the long-term, we should write our own implementation, but Wayland is already
         // taking a lot of the code here which is unfortunate because Wayland is actually most likely not going to
@@ -179,8 +179,8 @@ add_key :: (array: *[]Key, key: Key) {
         if connect(connection.fd, cast(*sockaddr) *address, size_of(sockaddr_un)) != 0 {
             // I once got an errno 2 here and the WAYLAND_DISPLAY env undefined when I started a tmux session in x11 and then
             // reattached to it from Wayland. In that case I was able to fix by setting the env in the rnuning tmux session
-            // 
-            // tmux set-environment -t [SESSION_NAME] WAYLAND_DISPLAY "$WAYLAND_DISPLAY" 
+            //
+            // tmux set-environment -t [SESSION_NAME] WAYLAND_DISPLAY "$WAYLAND_DISPLAY"
             // tmux set-environment -t [SESSION_NAME] XDG_RUNTIME_DIR "$XDG_RUNTIME_DIR"
             //
             log_error("connection failed: %\n", errno());
@@ -231,8 +231,8 @@ add_key :: (array: *[]Key, key: Key) {
                         send_wayland_message(connection, connection.wl_registry_id, Wl_Registry_Request_Bind.{
                             name = global.name,
                             interface_name = global.interface_name,
-                            version = ifx version == U32_MAX then 
-                                min(INTERFACES[interface_id].version, global.version) 
+                            version = ifx version == U32_MAX then
+                                min(INTERFACES[interface_id].version, global.version)
                             else
                                 min(version, global.version),
                             id = id,
@@ -286,7 +286,7 @@ add_key :: (array: *[]Key, key: Key) {
             if (capabilities.capabilities & .POINTER) && connection.wl_pointer_id == 0 {
                 connection.wl_pointer_id = new_wayland_client_object(connection, .WL_POINTER);
                 send_wayland_message(connection, connection.wl_seat_id, Wl_Seat_Request_Get_Pointer.{ id = connection.wl_pointer_id });
-            } 
+            }
             if (capabilities.capabilities & .KEYBOARD) && connection.wl_keyboard_id == 0 {
                 connection.wl_keyboard_id = new_wayland_client_object(connection, .WL_KEYBOARD);
                 send_wayland_message(connection, connection.wl_seat_id, Wl_Seat_Request_Get_Keyboard.{ id = connection.wl_keyboard_id });
@@ -307,9 +307,9 @@ add_key :: (array: *[]Key, key: Key) {
                         xkb_keymap_unref(connection.keymap);
                     }
                     connection.keymap = xkb_keymap_new_from_string(
-                        connection.xkb, 
-                        memory, 
-                        .XKB_KEYMAP_FORMAT_TEXT_V1, 
+                        connection.xkb,
+                        memory,
+                        .XKB_KEYMAP_FORMAT_TEXT_V1,
                         .XKB_KEYMAP_COMPILE_NO_FLAGS
                     );
                     connection.key_state = xkb_state_new(connection.keymap);
@@ -370,9 +370,9 @@ add_key :: (array: *[]Key, key: Key) {
                 using header: cmsghdr;
                 fds: [8]s32;
             };
-            iov := iovec.{ 
-                iov_base = connection.reading_buffer.data + leftover, 
-                iov_len = xx (connection.reading_buffer.count - leftover) 
+            iov := iovec.{
+                iov_base = connection.reading_buffer.data + leftover,
+                iov_len = xx (connection.reading_buffer.count - leftover)
             };
             message_header := msghdr.{
                 msg_iov = *iov,
@@ -397,7 +397,6 @@ add_key :: (array: *[]Key, key: Key) {
                 log_error("failed to read back from socket: %\n", error_code);
                 exit(-1);
             }
-
             if message_header.msg_controllen > 0 {
                 assert(control.header.cmsg_level == SOL_SOCKET && control.header.cmsg_type == xx SCM.RIGHTS);
 
@@ -616,7 +615,7 @@ add_key :: (array: *[]Key, key: Key) {
 
         width: s32;
         height: s32;
-        // TOOD: handle scale set coming from the compositor, we have no handling here yet. 
+        // TOOD: handle scale set coming from the compositor, we have no handling here yet.
         scale: float64 = 1.0;
 
         text_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
@@ -681,7 +680,7 @@ add_key :: (array: *[]Key, key: Key) {
         send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Title.{ title = title });
         send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
 
-        for *buffer: window.buffers { 
+        for *buffer: window.buffers {
             glGenTextures(1, *buffer.texture);
             glGenFramebuffers(1, *buffer.fbo);
             glBindFramebuffer(GL_FRAMEBUFFER, buffer.fbo);
@@ -697,8 +696,8 @@ add_key :: (array: *[]Key, key: Key) {
             send_wayland_message(*backend.connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
 
             for *buffer: window.buffers {
-                should_create_buffer := buffer.gbm_buffer_object == null || 
-                                        gbm_bo_get_width(buffer.gbm_buffer_object) != xx window.width || 
+                should_create_buffer := buffer.gbm_buffer_object == null ||
+                                        gbm_bo_get_width(buffer.gbm_buffer_object) != xx window.width ||
                                         gbm_bo_get_height(buffer.gbm_buffer_object) != xx window.height;
 
                 if should_create_buffer {
@@ -713,8 +712,8 @@ add_key :: (array: *[]Key, key: Key) {
                     }
 
                     buffer.gbm_buffer_object = gbm_bo_create_with_modifiers2(
-                        backend.device, xx window.width, xx window.height, 
-                        GBM_FORMAT_ABGR8888, backend.dmabuf_modifiers.data, 
+                        backend.device, xx window.width, xx window.height,
+                        GBM_FORMAT_ABGR8888, backend.dmabuf_modifiers.data,
                         xx backend.dmabuf_modifiers.count, xx gbm_bo_flags.USE_RENDERING
                     );
                     if buffer.gbm_buffer_object == null {
@@ -734,13 +733,13 @@ add_key :: (array: *[]Key, key: Key) {
                     stride      = xx gbm_bo_get_stride_for_plane(buffer.gbm_buffer_object, 0);
 
                     attributes := EGLAttrib.[
-                        EGL_WIDTH,                          xx window.width, 
-                        EGL_HEIGHT,                         xx window.height, 
+                        EGL_WIDTH,                          xx window.width,
+                        EGL_HEIGHT,                         xx window.height,
                         EGL_LINUX_DRM_FOURCC_EXT,           GBM_FORMAT_ABGR8888,
-                        EGL_DMA_BUF_PLANE0_FD_EXT,          fd, 
-                        EGL_DMA_BUF_PLANE0_OFFSET_EXT,      offset, 
+                        EGL_DMA_BUF_PLANE0_FD_EXT,          fd,
+                        EGL_DMA_BUF_PLANE0_OFFSET_EXT,      offset,
                         EGL_DMA_BUF_PLANE0_PITCH_EXT,       stride,
-                        EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, modifier_lo, 
+                        EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, modifier_lo,
                         EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, modifier_hi,
                         EGL_NONE,
                     ];
@@ -765,7 +764,7 @@ add_key :: (array: *[]Key, key: Key) {
                         plane_idx   = 0,
                         offset      = xx offset,
                         stride      = xx stride,
-                        modifier_lo = xx modifier_lo, 
+                        modifier_lo = xx modifier_lo,
                         modifier_hi = xx modifier_hi,
                     });
 
@@ -880,10 +879,10 @@ add_key :: (array: *[]Key, key: Key) {
                             xkb_key := key + 8;
                             symbols: *xkb_keysym_t;
                             if xkb_keymap_key_get_syms_by_level(
-                                backend.connection.keymap, 
-                                xkb_key, 
-                                xkb_state_key_get_layout(backend.connection.key_state, xkb_key), 
-                                0, 
+                                backend.connection.keymap,
+                                xkb_key,
+                                xkb_state_key_get_layout(backend.connection.key_state, xkb_key),
+                                0,
                                 *symbols
                             ) > 0 {
                                 key := cast(Key) symbols.*;
@@ -909,10 +908,10 @@ add_key :: (array: *[]Key, key: Key) {
                     xkb_key_code := key_event.key + 8;
                     symbols: *xkb_keysym_t;
                     if xkb_keymap_key_get_syms_by_level(
-                        backend.connection.keymap, 
-                        xkb_key_code, 
-                        xkb_state_key_get_layout(backend.connection.key_state, xkb_key_code), 
-                        0, 
+                        backend.connection.keymap,
+                        xkb_key_code,
+                        xkb_state_key_get_layout(backend.connection.key_state, xkb_key_code),
+                        0,
                         *symbols
                     ) > 0 {
                         key := cast(Key) symbols.*;
@@ -1069,7 +1068,7 @@ add_key :: (array: *[]Key, key: Key) {
                 case Zwp_Linux_Dmabuf_V1_Event_Modifier;
                     m := cast(*Zwp_Linux_Dmabuf_V1_Event_Modifier) event.data;
                     modifier := ((cast(u64) m.modifier_hi) << 32) | m.modifier_lo;
-                    if m.format == GBM_FORMAT_ABGR8888 && 
+                    if m.format == GBM_FORMAT_ABGR8888 &&
                     gbm_device_get_format_modifier_plane_count(backend.device, GBM_FORMAT_ABGR8888, modifier) == 1 {
                         array_add(*backend.dmabuf_modifiers, modifier);
                     }
@@ -1126,11 +1125,11 @@ add_key :: (array: *[]Key, key: Key) {
         rectangle := NSRect.{ size = .{ width = width, height = height } };
 
         window.ns_window = NSWindow.initWithContentRect(
-            objc_alloc(NSWindow), 
-            rectangle, 
-            NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable, 
-            NSBackingStoreBuffered, 
-            NO, 
+            objc_alloc(NSWindow),
+            rectangle,
+            NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable,
+            NSBackingStoreBuffered,
+            NO,
             NSScreen.mainScreen()
         );
         NSWindow.setReleasedWhenClosed(window.ns_window, NO);
@@ -1187,9 +1186,9 @@ add_key :: (array: *[]Key, key: Key) {
         NSApplication.activateIgnoringOtherApps(backend.app, YES);
 
         attributes := NSOpenGLPixelFormatAttribute.[
-            NSOpenGLPFADoubleBuffer, 
+            NSOpenGLPFADoubleBuffer,
             NSOpenGLPFAAccelerated,
-            NSOpenGLPFAColorSize, 24, 
+            NSOpenGLPFAColorSize, 24,
             NSOpenGLPFAAlphaSize, 8,
             NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core,
             0,
@@ -1753,7 +1752,10 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
 Node_Draw_Instance :: struct {
     position: Vector2;
     size: Vector2;
-    color: Vector4;
+    background_color: Vector4;
+    border_width: Vector4;
+    border_color: Vector4;
+    border_radius: float;
 };
 Node :: struct {
     size: Vector2;
@@ -1825,9 +1827,9 @@ is_mouse_inside :: () -> bool {
     using context.forbear;
     measurement, defined := get_measurement();
     return defined && window.pointer_inside &&
-        window.pointer_position.x >= measurement.position.x && 
+        window.pointer_position.x >= measurement.position.x &&
         window.pointer_position.y >= measurement.position.y &&
-        window.pointer_position.x <= measurement.position.x + measurement.size.x && 
+        window.pointer_position.x <= measurement.position.x + measurement.size.x &&
         window.pointer_position.y <= measurement.position.y + measurement.size.y;
 }
 Key :: enum {
@@ -4632,9 +4634,9 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
         measurement, defined := get_measurement();
         assert(defined, "the measurement should exist if is_mouse_inside is true");
         press_position := window.pointer_press_position[button];
-        return press_position.x >= measurement.position.x && 
+        return press_position.x >= measurement.position.x &&
                press_position.y >= measurement.position.y &&
-               press_position.x <= measurement.position.x + measurement.size.x && 
+               press_position.x <= measurement.position.x + measurement.size.x &&
                press_position.y <= measurement.position.y + measurement.size.y;
     } else {
         return false;
@@ -4643,16 +4645,16 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
 // currently only supported on wayland
 get_text_input :: () -> string {
     using context.forbear;
-    return window.text; 
+    return window.text;
 }
 on_key_down :: (
-    key: Key, 
+    key: Key,
     // an operating-system defined repetition rate was reached for the given key. on_key_down only runs once, this runs
     // every few frames depending on the operating system seettings.
     on_repeat := false
 ) -> bool {
     using context.forbear;
-    return array_find(window.keys_pressed, key) || 
+    return array_find(window.keys_pressed, key) ||
         (on_repeat && array_find(window.keys_repeated, key));
 }
 on_key_up :: (key: Key) -> bool {
@@ -4769,8 +4771,8 @@ get_node :: (node_index: s64) -> *Node {
 }
 
 Element_Opening_Data :: struct {
-    parent_index: s64; 
-    scope_key: u64; 
+    parent_index: s64;
+    scope_key: u64;
     base_style: Base_Style;
     node_index: s64;
 };
@@ -4848,7 +4850,7 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
     // }
 
     return Element_Opening_Data.{
-        base_style = previous_base_style, 
+        base_style = previous_base_style,
         scope_key = previous_scope_key,
         parent_index = previous_parent_index,
         node_index = index,
@@ -4948,7 +4950,7 @@ Font :: struct {
     shaping_font: *kbts_font;
     key: u16;
 
-    // kept track of so that this can be set during kbts text shaping 
+    // kept track of so that this can be set during kbts text shaping
     weight: u16 = U16_MAX;
 
     // prev_cache: Shaping_Cache;
@@ -5233,7 +5235,9 @@ init_forbear :: (
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     {
-        // node rendering setup
+        //
+        // ==== node rendering setup ====
+        //
         glGenVertexArrays(1, *node_vao);
         glBindVertexArray(node_vao);
         glGenBuffers(1, *node_vbo);
@@ -5252,15 +5256,38 @@ init_forbear :: (
         glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
         glVertexAttribDivisor(2, 1);
 
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 32);
+        glVertexAttribDivisor(3, 1);
+
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 48);
+        glVertexAttribDivisor(4, 1);
+
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, stride, cast(*void) 64);
+        glVertexAttribDivisor(5, 1);
+
+        //
+        // === node shaders ===
+        //
         vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
             #version 330 core
             layout(location = 0) in vec2 position;
             layout(location = 1) in vec2 size;
-            layout(location = 2) in vec4 color;
+            layout(location = 2) in vec4 background_color;
+            layout(location = 3) in vec4 border_width;
+            layout(location = 4) in vec4 border_color;
+            layout(location = 5) in float border_radius;
 
             uniform vec2 viewport;
 
-            out vec4 v_color;
+            out vec2 v_position;
+            out vec2 v_size;
+            out vec4 v_background_color;
+            out vec4 v_border_width;
+            out vec4 v_border_color;
+            out float v_border_radius;
 
             const vec2 corners[6] = vec2[](
               vec2(0, 0), vec2(1, 0), vec2(0, 1),
@@ -5269,7 +5296,12 @@ init_forbear :: (
 
             void main() {
                 vec2 corner = corners[gl_VertexID];
-                v_color = color;
+                v_position = corner * size.xy;
+                v_size = size.xy;
+                v_background_color = background_color;
+                v_border_width = border_width;
+                v_border_color = border_color;
+                v_border_radius = border_radius;
 
                 gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
                 gl_Position.y = -gl_Position.y;
@@ -5279,12 +5311,57 @@ GLSL);
         fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
             #version 330 core
 
-            in vec4 v_color;
+            in vec2 v_position;
+            in vec2 v_size;
+            in vec4 v_background_color;
+            in vec4 v_border_width;
+            in vec4 v_border_color;
+            in float v_border_radius;
+
             out vec4 out_color;
 
             void main() {
-                // TODO: render rounded corners and borders
-                out_color = v_color;
+                out_color = v_background_color;
+
+                vec2 p = v_position - v_size / 2.0;
+                vec2 q = abs(p);
+                vec2 circle_center = v_size / 2.0 - v_border_radius;
+
+                float horizontal_width = p.x < 0.0 ? v_border_width.x : v_border_width.y;
+                float vertical_width = p.y < 0.0 ? v_border_width.z : v_border_width.w;
+
+                float ellipse_radius_a = max(v_border_radius - horizontal_width, 0);
+                float ellipse_radius_b = max(v_border_radius - vertical_width, 0);
+
+                vec2 d = q - circle_center;
+                float outer_border_distance = length(d) - v_border_radius;
+                float outer_border_coverage = clamp(0.5 - outer_border_distance / fwidth(outer_border_distance), 0.0, 1.0);
+
+                vec2 e = vec2(0.0);
+                if (ellipse_radius_a != 0 && ellipse_radius_b != 0) {
+                    e = d / vec2(ellipse_radius_a, ellipse_radius_b);
+                }
+                float inner_border_distance = length(e) - 1;
+                float inner_border_coverage = clamp(0.5 - inner_border_distance / fwidth(inner_border_distance), 0.0, 1.0);
+
+                if (d.x > 0.0 && d.y > 0.0) {
+                    if (ellipse_radius_a != 0 && ellipse_radius_b != 0) {
+                        out_color = mix(v_border_color, v_background_color, inner_border_coverage);
+                    } else {
+                        out_color = v_border_color;
+                    }
+
+                    out_color *= outer_border_coverage;
+                } else {
+                    float to_left = v_position.x;
+                    float to_top = v_position.y;
+                    float to_right = v_size.x - v_position.x;
+                    float to_bottom = v_size.y - v_position.y;
+                    if (to_left <= v_border_width.x || to_right <= v_border_width.y ||
+                        to_top <= v_border_width.z || to_bottom <= v_border_width.w) {
+                        out_color = v_border_color;
+                    }
+                }
             }
 GLSL);
         defer glDeleteShader(fragment_shader);
@@ -5306,7 +5383,9 @@ GLSL);
     }
 
     {
-        // glyph rendering setup
+        //
+        // ==== glyph rendering setup ====
+        //
         glGenVertexArrays(1, *glyph_vao);
         glBindVertexArray(glyph_vao);
         glGenBuffers(1, *glyph_vbo);
@@ -5343,6 +5422,9 @@ GLSL);
         glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 40);
         glVertexAttribDivisor(5, 1);
 
+        //
+        // === text shaders ===
+        //
         vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
             #version 330 core
             layout(location = 0) in vec2 position;
@@ -5406,7 +5488,7 @@ GLSL);
         }
 
         buffer: [Glyph_Atlas.SIZE * Glyph_Atlas.SIZE]u8;
-        
+
         glGenTextures(1, *glyph_atlas.texture);
         glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
         // TOOD: keep track of whether subpixel rendering is enabled to create the texture atlas here accordingly
@@ -5419,7 +5501,7 @@ GLSL);
     base_style = program_base_style;
 }
 
-// 
+//
 // ======== frame lifecycle functions ========
 //
 
@@ -5468,10 +5550,10 @@ layout :: () {
                 if should_accumulate {
                     // TODO: ensure the max and min sizes here
                     set(
-                        *node.size, 
-                        fit_direction, 
+                        *node.size,
+                        fit_direction,
                         max(
-                            child_size_contribution + fitting_base(node, fit_direction), 
+                            child_size_contribution + fitting_base(node, fit_direction),
                             get(node.size, fit_direction)
                         )
                     );
@@ -5507,9 +5589,9 @@ layout :: () {
                     while child_index != -1 {
                         child := *node_tree[child_index];
                         defer child_index = child.next_sibling;
-                        if child.style.placement.kind == .FLOW && 
-                        (node.style.width.kind == .FIT || node.style.width.kind == .GROW || 
-                        should_fit_min(node, .HORIZONTAL) || node.style.height.kind == .FIT || 
+                        if child.style.placement.kind == .FLOW &&
+                        (node.style.width.kind == .FIT || node.style.width.kind == .GROW ||
+                        should_fit_min(node, .HORIZONTAL) || node.style.height.kind == .FIT ||
                         node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL)) {
                             fit_child(node, child, .HORIZONTAL);
                             fit_child(node, child, .VERTICAL);
@@ -5566,15 +5648,15 @@ layout :: () {
                                 // == cross-axis growth ==
                                 //
                                 child_opposite_margin := get(child.style.margin, opposite_direction);
-                                available := get(node.size, opposite_direction) 
-                                    - fitting_base(node, opposite_direction) 
+                                available := get(node.size, opposite_direction)
+                                    - fitting_base(node, opposite_direction)
                                     - child_opposite_margin.x - child_opposite_margin.y;
                                 preferred_size := get_preferred_size(child, opposite_direction);
                                 size := get(child.size, opposite_direction);
                                 min_size := get(child.min_size, opposite_direction);
                                 max_size := get(child.max_size, opposite_direction);
-                                if preferred_size.kind == .GROW || 
-                                    (child.style.placement.kind == .FLOW && 
+                                if preferred_size.kind == .GROW ||
+                                    (child.style.placement.kind == .FLOW &&
                                     size > available && min_size < size) {
                                     set(*child.size, opposite_direction, clamp(
                                         available, min_size, max_size
@@ -5585,13 +5667,13 @@ layout :: () {
                             preferred_size := get_preferred_size(child, layout_direction);
                             child_margin := get(child.style.margin, layout_direction);
 
-                            if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED) 
+                            if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED)
                                 && preferred_size.kind == .GROW {
                                 // growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
                                 // siblings.
                                 available := inner_size(node, layout_direction) - child_margin.x - child_margin.y;
                                 set(*child.size, layout_direction, clamp(
-                                    available, 
+                                    available,
                                     get(child.min_size, layout_direction),
                                     get(child.max_size, layout_direction),
                                 ));
@@ -5619,7 +5701,7 @@ layout :: () {
                                 size := get(child.size, layout_direction);
                                 if approximately_equal(size, max_size) {
                                     array_unordered_remove_by_index(*changing, index);
-                                    // since the remove moves another child over to this same index, we go to the next iteration with the same index 
+                                    // since the remove moves another child over to this same index, we go to the next iteration with the same index
                                     continue;
                                 }
                                 preferred_size := get_preferred_size(child, layout_direction);
@@ -5657,7 +5739,7 @@ layout :: () {
 
 
                     if remaining < -EPSILON {
-                        // 
+                        //
                         // === nodes shrinking ===
                         //
                         // we shrink children so that nodes don't overflow the parent, but fit to the largest size possible that's bigger than
@@ -5667,7 +5749,7 @@ layout :: () {
                         while child_index != -1 {
                             child := *node_tree[child_index];
                             defer child_index = child.next_sibling;
-                            if child.style.placement.kind == .FLOW && 
+                            if child.style.placement.kind == .FLOW &&
                                 get(child.size, layout_direction) > get(child.min_size, layout_direction) {
                                 array_add(*changing, child);
                             }
@@ -5685,7 +5767,7 @@ layout :: () {
                                     if index == 0 && changing.count > 0 {
                                         largest = get(changing[0].size, layout_direction);
                                     }
-                                    // since the remove moves another child over to this same index, we go to the next iteration with the same index 
+                                    // since the remove moves another child over to this same index, we go to the next iteration with the same index
                                     continue;
                                 }
                                 if size > largest {
@@ -5788,7 +5870,7 @@ layout :: () {
                             }
                             last_space: Space;
                             for *glyph: array {
-                                while break_cursor < pre_break_indices.count && 
+                                while break_cursor < pre_break_indices.count &&
                                 pre_break_indices[break_cursor] == it_index {
                                     defer break_cursor += 1;
                                     if it_index > line_start_index {
@@ -5938,15 +6020,15 @@ layout :: () {
                                 // == cross-axis growth ==
                                 //
                                 child_opposite_margin := get(child.style.margin, opposite_direction);
-                                available := get(node.size, opposite_direction) 
-                                    - fitting_base(node, opposite_direction) 
+                                available := get(node.size, opposite_direction)
+                                    - fitting_base(node, opposite_direction)
                                     - child_opposite_margin.x - child_opposite_margin.y;
                                 preferred_size := get_preferred_size(child, opposite_direction);
                                 size := get(child.size, opposite_direction);
                                 min_size := get(child.min_size, opposite_direction);
                                 max_size := get(child.max_size, opposite_direction);
-                                if preferred_size.kind == .GROW || 
-                                    (child.style.placement.kind == .FLOW && 
+                                if preferred_size.kind == .GROW ||
+                                    (child.style.placement.kind == .FLOW &&
                                     size > available && min_size < size) {
                                     set(*child.size, opposite_direction, clamp(
                                         available, min_size, max_size
@@ -5958,13 +6040,13 @@ layout :: () {
                                 preferred_size := get_preferred_size(child, layout_direction);
                                 child_margin := get(child.style.margin, layout_direction);
 
-                                if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED) 
+                                if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED)
                                     && preferred_size.kind == .GROW {
                                     // growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
                                     // siblings.
                                     available := inner_size(node, layout_direction) - child_margin.x - child_margin.y;
                                     set(*child.size, layout_direction, clamp(
-                                        available, 
+                                        available,
                                         get(child.min_size, layout_direction),
                                         get(child.max_size, layout_direction),
                                     ));
@@ -5994,7 +6076,7 @@ layout :: () {
                                     size := get(child.size, layout_direction);
                                     if approximately_equal(size, max_size) {
                                         array_unordered_remove_by_index(*changing, index);
-                                        // since the remove moves another child over to this same index, we go to the next iteration with the same index 
+                                        // since the remove moves another child over to this same index, we go to the next iteration with the same index
                                         continue;
                                     }
                                     preferred_size := get_preferred_size(child, layout_direction);
@@ -6168,12 +6250,12 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                     new_entry: Glyph_Atlas_Entry;
                     new_entry.bearing = .{ xx raster.left, xx -raster.top };
                     new_entry.size    = .{ xx raster.width, xx raster.height };
-                    new_entry.uv_min  = .{ 
-                        x = x / (cast(float) Glyph_Atlas.SIZE), 
+                    new_entry.uv_min  = .{
+                        x = x / (cast(float) Glyph_Atlas.SIZE),
                         y = y / (cast(float) Glyph_Atlas.SIZE)
                     };
-                    new_entry.uv_max  = .{ 
-                        x = ((cast(float)x) + (cast(float)raster.width)) / (cast(float) Glyph_Atlas.SIZE), 
+                    new_entry.uv_max  = .{
+                        x = ((cast(float)x) + (cast(float)raster.width)) / (cast(float) Glyph_Atlas.SIZE),
                         y = ((cast(float)y) + (cast(float)raster.height)) / (cast(float) Glyph_Atlas.SIZE)
                     };
                     entry = table_add(*glyph_atlas.table, atlas_key, new_entry);
@@ -6193,15 +6275,23 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
             }
         }
 
+        node_instances.count += 1;
+        node_instance := *node_instances[node_instances.count - 1];
+
+        node_instance.position = node.position,
+        node_instance.size = node.size,
         // TODO: write out the instance gathering for the other types of backgrounds
         if node.style.background.kind == .COLOR {
-            node_instances.count += 1;
-            node_instances[node_instances.count - 1] = Node_Draw_Instance.{
-                position = node.position,
-                size = node.size,
-                color = node.style.background.color
-            };
+            node_instance.background_color = node.style.background.color,
         }
+        node_instance.border_width = Vector4.{
+            node.style.border_width.x.x, // left
+            node.style.border_width.x.y, // right
+            node.style.border_width.y.x, // top
+            node.style.border_width.y.y  // bottom
+        },
+        node_instance.border_color = node.style.border_color,
+        node_instance.border_radius = max(node.style.border_radius, min(node.size.x, node.size.y)),
     }
 
     point_width: float = (cast(float) window.width) / (cast(float) window.scale);
@@ -6210,7 +6300,8 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     glUseProgram(node_program);
     glUniform2f(glGetUniformLocation(node_program, "viewport"), point_width, point_height);
     glBindVertexArray(node_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, node_vbo); glBufferData(GL_ARRAY_BUFFER, node_instances.count * size_of(Node_Draw_Instance), node_instances.data, GL_STREAM_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, node_vbo);
+    glBufferData(GL_ARRAY_BUFFER, node_instances.count * size_of(Node_Draw_Instance), node_instances.data, GL_STREAM_DRAW);
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx node_instances.count);
 
     glUseProgram(glyph_program);
@@ -6248,19 +6339,17 @@ prepare_frame :: () {
         for node: node_tree {
             // we can't just copy the entire Node_Tree with a mempcy here because it points into frame allocated data
             // that was allocated in the frame pool. besides, in what I was able to measure, this copy tends to be more
-            // performant than if we were to copy the entire Node_Tree with memcpy. 
-            measurements[it_index] = Node_Measurement.{ 
-                key = node.key, 
-                size = node.size, 
-                position = node.position, 
+            // performant than if we were to copy the entire Node_Tree with memcpy.
+            measurements[it_index] = Node_Measurement.{
+                key = node.key,
+                size = node.size,
+                position = node.position,
                 clipping_rectangle = node.clipping_rectangle,
             };
         }
     }
     window.keys_pressed.count = 0;
     window.keys_released.count = 0;
-    window.keys_repeated.count = 0;
-    window.text.count = 0;
     memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
     memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
     #if OS == .LINUX {

@@ -112,6 +112,8 @@ parse_expression_should_handle_basic_expression :: () {
 
 BACKGROUND :: #run rgb(28, 31, 35);
 FLOATING_BACKGROUND :: #run rgb(17, 19, 22);
+ERROR :: #run rgb(232, 91, 91);
+TRANSPARENT :: #run rgba(1.0, 1.0, 1.0, 0.0);
 
 main :: () {
     backend: Backend;
@@ -183,22 +185,26 @@ main :: () {
         element(Style.{
             width = grow(),
             height = grow(),
+            padding = all(5),
             direction = .VERTICAL,
             text_wrapping = .NONE,
         }, #code {
-            element(Style.{
+            input_index := element(Style.{
                 background = color(FLOATING_BACKGROUND),
-                width = grow(),
-                padding = in_line(block(20), 15),
+                border_radius = 12.0,
+                border_width = all(1.0),
+                border_color = ERROR,
                 margin = bottom(20),
+                padding = in_line(block(20), 15),
+                width = grow(),
             }, #code {
                 // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
                 expression_count_before := expression.count;
                 text_input := get_text_input();
                 if text_input.count > 0 {
                     for character: text_input {
-                        if character == #char "+" || character == #char "-" || character == #char "*" || character == #char "/" || character == #char " " || character == #char "0" || 
-                            character == #char "1" || character == #char "2" || character == #char "3" || character == #char "4" || character == #char "5" || character == #char "6" || 
+                        if character == #char "+" || character == #char "-" || character == #char "*" || character == #char "/" || character == #char " " || character == #char "0" ||
+                            character == #char "1" || character == #char "2" || character == #char "3" || character == #char "4" || character == #char "5" || character == #char "6" ||
                             character == #char "7" || character == #char "8" || character == #char "9" {
                             array_insert_at(*expression, character, cursor_index);
                             cursor_index += 1;
@@ -220,7 +226,7 @@ main :: () {
                     cursor_index = max(cursor_index - 1, 0);
                 } else if on_key_down(.ARROW_RIGHT, true) {
                     cursor_index = min(cursor_index + 1, expression.count);
-                } 
+                }
 
                 if on_key_down(.HOME) {
                     cursor_index = 0;
@@ -255,6 +261,11 @@ main :: () {
                 });
             });
 
+            if !parse_success && expression.count > 0 {
+                input := get_node(input_index);
+                input.style.border_color.w = 1.0;
+            }
+
             if expression.count > 0 {
                 if parse_success {
                     text("parsing succeeded, we can calculate the expression");
@@ -268,9 +279,8 @@ main :: () {
         draw(BACKGROUND);
 
         reset_temporary_storage();
-        if MEMORY_DEBUGGING {
-            memory_visualizer_per_frame_update();
-        }
+
+        memory_visualizer_per_frame_update();
         reset(*frame_pool);
     }
 }
