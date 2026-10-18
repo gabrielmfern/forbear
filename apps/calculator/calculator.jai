@@ -149,8 +149,14 @@ main :: () {
     window: Window;
     init_backend(*backend);
     init_window(*backend, *window, WIDTH, HEIGHT, "playground");
-    send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Max_Size.{ width = WIDTH, height = HEIGHT });
-    send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Min_Size.{ width = WIDTH, height = HEIGHT });
+    #if OS == .LINUX {
+        send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Max_Size.{ width = WIDTH, height = HEIGHT });
+        send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Min_Size.{ width = WIDTH, height = HEIGHT });
+    } else #if OS == .MACOS {
+        set_size: (*void, Selector, NSSize) #c_call = xx objc_msgSend;
+        set_size(window.ns_window, selector("setContentMinSize:"), .{ width = WIDTH, height = HEIGHT });
+        set_size(window.ns_window, selector("setContentMaxSize:"), .{ width = WIDTH, height = HEIGHT });
+    }
 
     inter: Font;
     init_font(*inter, INTER_TTF);
