@@ -6206,9 +6206,9 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     glClear(GL_COLOR_BUFFER_BIT);
 
     unsorted_draw_instances: [..]Draw_Instance;
-    z_counts: [..]u16;
+    z_buckets: [..]u32;
     array_reserve(*unsorted_draw_instances, node_tree.count);
-    array_reserve(*z_counts, node_tree.count);
+    array_reserve(*z_buckets, node_tree.count);
     for node: node_tree {
         instance: Draw_Instance;
         {
@@ -6232,10 +6232,10 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         }
 
         array_add(*unsorted_draw_instances, instance);
-        if instance.z >= z_counts.count {
-            array_resize(*z_counts, instance.z + 1);
+        if instance.z >= z_buckets.count {
+            array_resize(*z_buckets, instance.z + 1);
         }
-        z_counts[instance.z] += 1;
+        z_buckets[instance.z] += 1;
 
         if node.glyphs.array.count != 0 {
             rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
@@ -6243,7 +6243,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 
             extra_capacity := unsorted_draw_instances.allocated - unsorted_draw_instances.count;
             if extra_capacity < node.glyphs.array.count {
-                array_reserve(*unsorted_draw_instances, extra_capacity - node.glyphs.array.count);
+                array_resize(*unsorted_draw_instances, extra_capacity - node.glyphs.array.count);
             }
             for glyph: node.glyphs.array {
                 atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
@@ -6298,24 +6298,23 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                     uv_max = entry.uv_max;
                 }
                 array_add(*unsorted_draw_instances, instance);
-                if instance.z >= z_counts.count {
-                    array_resize(*z_counts, instance.z + 1);
+                if instance.z >= z_buckets.count {
+                    array_resize(*z_buckets, instance.z + 1);
                 }
-                z_counts[instance.z] += 1;
+                z_buckets[instance.z] += 1;
             }
         }
     }
-
     sorted_draw_instance := NewArray(unsorted_draw_instances.count, Draw_Instance, false);
-    offset: u16;
-    for *z: z_counts {
-        count := z.*;
-        z.* = offset;
+    offset: u32;
+    for *start: z_buckets {
+        count := start.*;
+        start.* = xx soffset;
         offset += count;
     }
     for instance: unsorted_draw_instances {
-        sorted_draw_instance[z_counts[instance.z]] = instance;
-        z_counts[instance.z] += 1;
+        sorted_draw_instance[z_buckets[instance.z]] = instance;
+        z_buckets[instance.z] += 1;
     }
 
     point_width: float = (cast(float) window.width) / (cast(float) window.scale);
