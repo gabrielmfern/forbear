@@ -6254,7 +6254,6 @@ layout :: () {
     }
 }
 
-// TODO: this render should not take a window, instead it should determine the target window based on the nodes. we should include a root window, though
 draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
     #if OS == .LINUX {
