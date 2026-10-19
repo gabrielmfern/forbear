@@ -225,11 +225,13 @@ main :: () {
             direction = .VERTICAL,
             text_wrapping = .NONE,
         }, #code {
+            DIGITS_SIZE :: 32;
             input_index := element(Style.{
                 border_width = bottom(2.0),
                 background = color(BG_SECONDARY),
                 padding = in_line(block(20), 15),
                 y_justification = .CENTER,
+                font_size = DIGITS_SIZE,
                 width = grow(),
             }, #code {
                 // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
@@ -295,7 +297,7 @@ main :: () {
 
                 expression_node := get_node(expression_index);
                 expression_glyphs := expression_node.glyphs;
-                font_units_to_pixel := get_font_units_to_pixel(*inter, 16);
+                font_units_to_pixel := get_font_units_to_pixel(*inter, DIGITS_SIZE);
 
                 cursor_position: Vector2;
                 if expression.count > 0 {
@@ -338,7 +340,6 @@ main :: () {
                     op := Operator.NONE;
                     value_right: float64 = FLOAT64_NAN;
                     for token: tokens {
-                        print("%: %\n", it_index, token);
                         if isnan(value_left) {
                             if token.kind == .NUMBER {
                                 value_left = token.number;
