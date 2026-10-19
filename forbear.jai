@@ -1805,14 +1805,6 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
     out.y_justification = ifx style.y_justification == xx UNSET then .START else style.y_justification;
 }
 
-Node_Draw_Instance :: struct {
-    position: Vector2;
-    size: Vector2;
-    background_color: Vector4;
-    border_width: Vector4;
-    border_color: Vector4;
-    border_radius: float;
-};
 Node :: struct {
     size: Vector2;
     position: Vector2;
@@ -4992,11 +4984,6 @@ Glyph_Atlas_Entry :: struct {
     uv_min:  Vector2;
     uv_max:  Vector2;
 };
-Glyph_Draw_Instance :: struct {
-    position: Vector2;
-    using entry: Glyph_Atlas_Entry;
-    color: Vector4;
-};
 // Shaping_Cache :: struct {
 //     slots: [4096]Glyphs;
 //     arena: Flat_Pool;
@@ -5258,14 +5245,10 @@ Forbear :: struct {
     scope_key: u64 = U64_MAX;
     base_style: Base_Style;
 
-    node_program: u32;
-    node_vao: u32;
+    shader_program: u32;
+    shader_vao: u32;
     node_vbo: u32;
-
     glyph_atlas: Glyph_Atlas;
-    glyph_program: u32;
-    glyph_vao: u32;
-    glyph_vbo: u32;
 
     // TODO: we're going to have to change this once we support multiple windows
     window: *Window;
@@ -5290,94 +5273,126 @@ init_forbear :: (
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    {
-        //
-        // ==== node rendering setup ====
-        //
-        glGenVertexArrays(1, *node_vao);
-        glBindVertexArray(node_vao);
-        glGenBuffers(1, *node_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, node_vbo);
+    //
+    // ==== node rendering setup ====
+    //
+    glGenVertexArrays(1, *shader_vao);
+    glBindVertexArray(shader_vao);
+    glGenBuffers(1, *node_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, node_vbo);
 
-        stride :: size_of(Node_Draw_Instance);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 0);
-        glVertexAttribDivisor(0, 1);
+    stride :: size_of(Draw_Instance);
+    // position
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 0);
+    glVertexAttribDivisor(0, 1);
 
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 8);
-        glVertexAttribDivisor(1, 1);
+    // size
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 8);
+    glVertexAttribDivisor(1, 1);
 
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
-        glVertexAttribDivisor(2, 1);
+    // color
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
+    glVertexAttribDivisor(2, 1);
 
-        glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 32);
-        glVertexAttribDivisor(3, 1);
+    // border_width
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 32);
+    glVertexAttribDivisor(3, 1);
 
-        glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 48);
-        glVertexAttribDivisor(4, 1);
+    // border_color
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 48);
+    glVertexAttribDivisor(4, 1);
 
-        glEnableVertexAttribArray(5);
-        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, stride, cast(*void) 64);
-        glVertexAttribDivisor(5, 1);
+    // border_radius
+    glEnableVertexAttribArray(5);
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, stride, cast(*void) 64);
+    glVertexAttribDivisor(5, 1);
 
-        //
-        // === node shaders ===
-        //
-        vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
-            #version 330 core
-            layout(location = 0) in vec2 position;
-            layout(location = 1) in vec2 size;
-            layout(location = 2) in vec4 background_color;
-            layout(location = 3) in vec4 border_width;
-            layout(location = 4) in vec4 border_color;
-            layout(location = 5) in float border_radius;
+    // uv_min
+    glEnableVertexAttribArray(6);
+    glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 68);
+    glVertexAttribDivisor(6, 1);
 
-            uniform vec2 viewport;
+    // uv_max
+    glEnableVertexAttribArray(7);
+    glVertexAttribPointer(7, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 76);
+    glVertexAttribDivisor(7, 1);
 
-            out vec2 v_position;
-            out vec2 v_size;
-            out vec4 v_background_color;
-            out vec4 v_border_width;
-            out vec4 v_border_color;
-            out float v_border_radius;
+    // kind
+    glEnableVertexAttribArray(8);
+    glVertexAttribIPointer(8, 1, GL_UNSIGNED_INT, stride, cast(*void) 84);
+    glVertexAttribDivisor(8, 1);
 
-            const vec2 corners[6] = vec2[](
-              vec2(0, 0), vec2(1, 0), vec2(0, 1),
-              vec2(0, 1), vec2(1, 0), vec2(1, 1)
-            );
+    //
+    // === node shaders ===
+    //
+    vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
+        #version 330 core
+        layout(location = 0) in vec2 position;
+        layout(location = 1) in vec2 size;
+        layout(location = 2) in vec4 color;
+        layout(location = 3) in vec4 border_width;
+        layout(location = 4) in vec4 border_color;
+        layout(location = 5) in float border_radius;
+        layout(location = 6) in vec2 uv_min;
+        layout(location = 7) in vec2 uv_max;
+        layout(location = 8) in uint kind;
 
-            void main() {
-                vec2 corner = corners[gl_VertexID];
-                v_position = corner * size.xy;
-                v_size = size.xy;
-                v_background_color = background_color;
-                v_border_width = border_width;
-                v_border_color = border_color;
-                v_border_radius = border_radius;
+        uniform vec2 viewport;
 
-                gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
-                gl_Position.y = -gl_Position.y;
-            }
+        out vec2 v_position;
+        out vec2 v_size;
+        out vec4 v_color;
+        out vec4 v_border_width;
+        out vec4 v_border_color;
+        out float v_border_radius;
+        out vec2 v_uv;
+        flat out uint v_kind;
+
+        const vec2 corners[6] = vec2[](
+          vec2(0, 0), vec2(1, 0), vec2(0, 1),
+          vec2(0, 1), vec2(1, 0), vec2(1, 1)
+        );
+
+        void main() {
+            vec2 corner = corners[gl_VertexID];
+            v_position = corner * size.xy;
+            v_size = size.xy;
+            v_color = color;
+            v_border_width = border_width;
+            v_border_color = border_color;
+            v_border_radius = border_radius;
+            v_uv = mix(uv_min, uv_max, corner);
+            v_kind = kind;
+
+            gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
+            gl_Position.y = -gl_Position.y;
+        }
 GLSL);
-        defer glDeleteShader(vertex_shader);
-        fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
-            #version 330 core
+    defer glDeleteShader(vertex_shader);
+    fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
+        #version 330 core
 
-            in vec2 v_position;
-            in vec2 v_size;
-            in vec4 v_background_color;
-            in vec4 v_border_width;
-            in vec4 v_border_color;
-            in float v_border_radius;
+        in vec2 v_position;
+        in vec2 v_size;
+        in vec4 v_color;
+        in vec4 v_border_width;
+        in vec4 v_border_color;
+        in float v_border_radius;
+        in vec2 v_uv;
+        flat in uint v_kind;
 
-            out vec4 out_color;
+        uniform sampler2D atlas;
 
-            void main() {
-                out_color = v_background_color;
+        out vec4 out_color;
+
+        void main() {
+            if (v_kind == 1u) {
+                out_color = v_color;
 
                 vec2 p = v_position - v_size / 2.0;
                 vec2 q = abs(p);
@@ -5402,7 +5417,7 @@ GLSL);
 
                 if (d.x > 0.0 && d.y > 0.0) {
                     if (ellipse_radius_a != 0 && ellipse_radius_b != 0) {
-                        out_color = mix(v_border_color, v_background_color, inner_border_coverage);
+                        out_color = mix(v_border_color, v_color, inner_border_coverage);
                     } else {
                         out_color = v_border_color;
                     }
@@ -5418,140 +5433,38 @@ GLSL);
                         out_color = v_border_color;
                     }
                 }
-            }
-GLSL);
-        defer glDeleteShader(fragment_shader);
-
-        node_program = glCreateProgram();
-        glAttachShader(node_program, vertex_shader);
-        glAttachShader(node_program, fragment_shader);
-        glLinkProgram(node_program);
-
-        status: GLint;
-        glGetProgramiv(node_program, GL_LINK_STATUS, *status);
-        if !status {
-            log: [1024]u8;
-            log_length: GLsizei;
-            glGetProgramInfoLog(node_program, log.count, *log_length, log.data);
-            log_error("failed to link program: %\n", to_string(log.data, log_length));
-            exit(-1);
-        }
-    }
-
-    {
-        //
-        // ==== glyph rendering setup ====
-        //
-        glGenVertexArrays(1, *glyph_vao);
-        glBindVertexArray(glyph_vao);
-        glGenBuffers(1, *glyph_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, glyph_vbo);
-
-        stride :: size_of(Glyph_Draw_Instance);
-        // position
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 0);
-        glVertexAttribDivisor(0, 1);
-
-        // bearing
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 8);
-        glVertexAttribDivisor(1, 1);
-
-        // size
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
-        glVertexAttribDivisor(2, 1);
-
-        // uv_min
-        glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 24);
-        glVertexAttribDivisor(3, 1);
-
-        // uv_max
-        glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 32);
-        glVertexAttribDivisor(4, 1);
-
-        // color
-        glEnableVertexAttribArray(5);
-        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 40);
-        glVertexAttribDivisor(5, 1);
-
-        //
-        // === text shaders ===
-        //
-        vertex_shader := compile_shader(GL_VERTEX_SHADER, #string GLSL
-            #version 330 core
-            layout(location = 0) in vec2 position;
-            layout(location = 1) in vec2 bearing;
-            layout(location = 2) in vec2 size;
-            layout(location = 3) in vec2 uv_min;
-            layout(location = 4) in vec2 uv_max;
-            layout(location = 5) in vec4 color;
-
-            uniform vec2 viewport;
-
-            out vec4 v_color;
-            out vec2 v_uv;
-
-            const vec2 corners[6] = vec2[](
-              vec2(0, 0), vec2(1, 0), vec2(0, 1),
-              vec2(0, 1), vec2(1, 0), vec2(1, 1)
-            );
-
-            void main() {
-                vec2 corner = corners[gl_VertexID];
-                v_color = color;
-                v_uv = mix(uv_min, uv_max, corner);
-
-                gl_Position = vec4((position + bearing + corner * size) / viewport * 2.0 - 1.0, 0.0, 1.0);
-                gl_Position.y = -gl_Position.y;
-            }
-GLSL);
-        defer glDeleteShader(vertex_shader);
-        fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
-            #version 330 core
-
-            in vec4 v_color;
-            in vec2 v_uv;
-
-            uniform sampler2D atlas;
-
-            out vec4 out_color;
-
-            void main() {
+            } else if (v_kind == 2u) {
                 // TODO: handle subpixel rendering
                 float a = texture(atlas, v_uv).r * v_color.a;
                 out_color = vec4(v_color.rgb * a, a);
             }
-GLSL);
-        defer glDeleteShader(fragment_shader);
-
-        glyph_program = glCreateProgram();
-        glAttachShader(glyph_program, vertex_shader);
-        glAttachShader(glyph_program, fragment_shader);
-        glLinkProgram(glyph_program);
-
-        status: GLint;
-        glGetProgramiv(glyph_program, GL_LINK_STATUS, *status);
-        if !status {
-            log: [1024]u8;
-            log_length: GLsizei;
-            glGetProgramInfoLog(glyph_program, log.count, *log_length, log.data);
-            log_error("failed to link program: %\n", to_string(log.data, log_length));
-            exit(-1);
         }
+GLSL);
+    defer glDeleteShader(fragment_shader);
 
-        buffer: [Glyph_Atlas.SIZE * Glyph_Atlas.SIZE]u8;
+    shader_program = glCreateProgram();
+    glAttachShader(shader_program, vertex_shader);
+    glAttachShader(shader_program, fragment_shader);
+    glLinkProgram(shader_program);
 
-        glGenTextures(1, *glyph_atlas.texture);
-        glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
-        // TOOD: keep track of whether subpixel rendering is enabled to create the texture atlas here accordingly
-        glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, Glyph_Atlas.SIZE, Glyph_Atlas.SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, buffer.data);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    status: GLint;
+    glGetProgramiv(shader_program, GL_LINK_STATUS, *status);
+    if !status {
+        log: [1024]u8;
+        log_length: GLsizei;
+        glGetProgramInfoLog(shader_program, log.count, *log_length, log.data);
+        log_error("failed to link program: %\n", to_string(log.data, log_length));
+        exit(-1);
     }
+
+    buffer: [Glyph_Atlas.SIZE * Glyph_Atlas.SIZE]u8;
+
+    glGenTextures(1, *glyph_atlas.texture);
+    glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
+    // TOOD: keep track of whether subpixel rendering is enabled to create the texture atlas here accordingly
+    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, Glyph_Atlas.SIZE, Glyph_Atlas.SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, buffer.data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     backend = program_backend;
     base_style = program_base_style;
@@ -6199,7 +6112,7 @@ layout :: () {
                         node.style.border_width.x.x + node.style.padding.x.x,
                         node.style.border_width.y.x + node.style.padding.y.x,
                     };
-                   
+
                     // TODO: when the direction is horizontal, we should also handle node overflow wrapping here.
                     pen := base;
                     direction := node.style.direction;
@@ -6255,6 +6168,28 @@ layout :: () {
     }
 }
 
+Draw_Instance :: struct {
+    Draw_Instance_Kind :: enum u32 {
+        NODE :: 1;
+        GLYPH :: 2;
+    };
+
+    position: Vector2;
+    size: Vector2;
+    color: Vector4;
+
+    // node
+    border_width: Vector4;
+    border_color: Vector4;
+    border_radius: float;
+
+    // glyph
+    uv_min:  Vector2;
+    uv_max:  Vector2;
+
+    kind: Draw_Instance_Kind;
+    z: u16;
+};
 draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
     #if OS == .LINUX {
@@ -6270,17 +6205,19 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     glClearColor(clearing_color.x, clearing_color.y, clearing_color.z, clearing_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glyph_instances: [..]Glyph_Draw_Instance;
-    defer array_reset(*glyph_instances);
-
-    node_instances_buffer := NewArray(node_tree.count, Node_Draw_Instance);
-    node_instances := array_view(node_instances_buffer, 0, 0);
-    defer free(node_instances_buffer.data);
+    unsorted_draw_instances: [..]Draw_Instance;
+    z_counts: [..]u16;
+    array_reserve(*unsorted_draw_instances, node_tree.count);
+    array_reserve(*z_counts, node_tree.count);
     for node: node_tree {
         if node.glyphs.array.count != 0 {
             rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
             font_units_to_point := get_font_units_to_pixel(node.style.font, rounded_font_size) / (cast(float) window.scale);
 
+            extra_capacity := unsorted_draw_instances.allocated - unsorted_draw_instances.count;
+            if extra_capacity < node.glyphs.array.count {
+                array_reserve(*unsorted_draw_instances, extra_capacity - node.glyphs.array.count);
+            }
             for glyph: node.glyphs.array {
                 atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
@@ -6317,58 +6254,81 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                     entry = table_add(*glyph_atlas.table, atlas_key, new_entry);
                 }
 
-                glyph_draw_instance: Glyph_Draw_Instance;
-                glyph_draw_instance.entry = entry;
-                glyph_draw_instance.bearing /= cast(float) window.scale;
-                glyph_draw_instance.size /= cast(float) window.scale;
-                glyph_draw_instance.position = node.position + (Vector2.{0.0, node.glyphs.ascent} + glyph.position) * font_units_to_point;
-
+                instance: Draw_Instance;
                 scale := cast(float) window.scale;
-                glyph_draw_instance.position.x = floor(glyph_draw_instance.position.x * scale + 0.5) / scale;
-                glyph_draw_instance.position.y = floor(glyph_draw_instance.position.y * scale + 0.5) / scale;
-                glyph_draw_instance.color = node.style.color;
-                array_add(*glyph_instances, glyph_draw_instance);
+                {
+                    using instance;
+                    kind = .GLYPH;
+                    z = node.z;
+                    position = node.position + (Vector2.{0.0, node.glyphs.ascent} + glyph.position) * font_units_to_point;
+                    size = entry.size / scale;
+                    position += entry.bearing / scale;
+                    position.x = floor(position.x * scale + 0.5) / scale;
+                    position.y = floor(position.y * scale + 0.5) / scale;
+                    color = node.style.color;
+
+                    uv_min = entry.uv_min;
+                    uv_max = entry.uv_max;
+                }
+                array_add(*unsorted_draw_instances, instance);
+                if node_draw_instance.z >= z_counts.count {
+                    array_resize(*z_counts, node_draw_instance.z + 1);
+                }
+                z_counts[node_draw_instance.z] += 1;
             }
         }
 
-        node_instance: Node_Draw_Instance;
-        node_instance.position = node.position;
-        node_instance.size = node.size;
-        // TODO: write out the instance gathering for the other types of backgrounds
-        if node.style.background.kind == .COLOR {
-            node_instance.background_color = node.style.background.color;
+        instance: Draw_Instance;
+        {
+            using instance;
+            kind = .NODE;
+            z = node.z;
+            position = node.position;
+            size = node.size;
+            // TODO: write out the instance gathering for the other types of backgrounds
+            if node.style.background.kind == .COLOR {
+                color = node.style.background.color;
+            }
+            border_width = Vector4.{
+                node.style.border_width.x.x, // left
+                node.style.border_width.x.y, // right
+                node.style.border_width.y.x, // top
+                node.style.border_width.y.y  // bottom
+            };
+            border_color = node.style.border_color;
+            border_radius = min(node.style.border_radius, min(node.size.x, node.size.y));
         }
-        node_instance.border_width = Vector4.{
-            node.style.border_width.x.x, // left
-            node.style.border_width.x.y, // right
-            node.style.border_width.y.x, // top
-            node.style.border_width.y.y  // bottom
-        };
-        node_instance.border_color = node.style.border_color;
-        node_instance.border_radius = min(node.style.border_radius, min(node.size.x, node.size.y));
 
-        node_instances.count += 1;
-        node_instances[node_instances.count - 1] = node_instance;
+        array_add(*unsorted_draw_instances, instance);
+        if instance.z >= z_counts.count {
+            array_resize(*z_counts, instance.z + 1);
+        }
+        z_counts[instance.z] += 1;
+    }
+
+    sorted_draw_instance := NewArray(unsorted_draw_instances.count, Draw_Instance, false);
+    offset: u16;
+    for *z: z_counts {
+        count := z.*;
+        z.* = offset;
+        offset += count;
+    }
+    for instance: unsorted_draw_instances {
+        sorted_draw_instance[z_counts[instance.z]] = instance;
+        z_counts[instance.z] += 1;
     }
 
     point_width: float = (cast(float) window.width) / (cast(float) window.scale);
     point_height: float = (cast(float) window.height) / (cast(float) window.scale);
 
-    glUseProgram(node_program);
-    glUniform2f(glGetUniformLocation(node_program, "viewport"), point_width, point_height);
-    glBindVertexArray(node_vao);
+    glUseProgram(shader_program);
+    glUniform2f(glGetUniformLocation(shader_program, "viewport"), point_width, point_height);
+    glBindVertexArray(shader_vao);
     glBindBuffer(GL_ARRAY_BUFFER, node_vbo);
-    glBufferData(GL_ARRAY_BUFFER, node_instances.count * size_of(Node_Draw_Instance), node_instances.data, GL_STREAM_DRAW);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx node_instances.count);
-
-    glUseProgram(glyph_program);
-    glUniform2f(glGetUniformLocation(glyph_program, "viewport"), point_width, point_height);
+    glBufferData(GL_ARRAY_BUFFER, sorted_draw_instance.count * size_of(Draw_Instance), sorted_draw_instance.data, GL_STREAM_DRAW);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
-    glBindVertexArray(glyph_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, glyph_vbo);
-    glBufferData(GL_ARRAY_BUFFER, glyph_instances.count * size_of(Glyph_Draw_Instance), glyph_instances.data, GL_STREAM_DRAW);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx glyph_instances.count);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx sorted_draw_instance.count);
 
     #if OS == .LINUX {
         glFlush();
