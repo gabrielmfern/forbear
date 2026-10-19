@@ -904,86 +904,41 @@ add_key :: (array: *[]Key, key: Key) {
                     window.keyboard_repeat_rate = repeat_info.rate;
                     window.keyboard_repeat_delay = repeat_info.delay;
                 case Wl_Keyboard_Event_Modifiers;
-                    control_active := xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-                    alt_active := xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-                    caps_active := xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CAPS.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-                    super_active := xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-                    control_held: bool;
-                    alt_held: bool;
-                    caps_held: bool;
-                    super_held: bool;
-                    for key: window.keys_held {
-                        if key == {
-                            case Key.CONTROL_LEFT; #through;
-                            case Key.CONTROL_RIGHT;
-                            control_held = true;
-                            case Key.ALT_LEFT; #through;
-                            case Key.ALT_RIGHT;
-                            alt_held = true;
-                            case Key.CAPS_LOCK;
-                            caps_held = true;
-                            case Key.SUPER_LEFT; #through;
-                            case Key.SUPER_RIGHT;
-                            super_held = true;
-                        }
-                    }
-                    if control_active && !control_held {
-                        add_key(*window.keys_pressed, .CONTROL_LEFT);
-                        add_key(*window.keys_held, .CONTROL_LEFT);
-                        add_key(*window.keys_pressed, .CONTROL_RIGHT);
-                        add_key(*window.keys_held, .CONTROL_RIGHT);
-                    } else if !control_active && control_held {
-                        add_key(*window.keys_released, .CONTROL_LEFT);
-                        add_key(*window.keys_released, .CONTROL_RIGHT);
+                    update_held_keys_from_modifiers :: (
+                        modifier: *u8,
+                        key: Key,
+                        backend: *Backend,
+                        window: *Window,
+                    ) {
+                        active := xkb_state_mod_name_is_active(backend.connection.key_state, modifier, .XKB_STATE_MODS_EFFECTIVE) == 1;
+                        held: bool;
                         for window.keys_held {
-                            if it == .CONTROL_LEFT || it == .CONTROL_RIGHT {
-                                array_unordered_remove_by_index(*window.keys_held, it_index);
+                            if it == key {
+                                held = true;
                                 break;
                             }
                         }
-                    }
-                    if caps_active && !caps_held {
-                        add_key(*window.keys_pressed, .CAPS_LOCK);
-                        add_key(*window.keys_held, .CAPS_LOCK);
-                    } else if !alt_active && alt_held {
-                        add_key(*window.keys_released, .CAPS_LOCK);
-                        for window.keys_held {
-                            if it == .CAPS_LOCK {
-                                array_unordered_remove_by_index(*window.keys_held, it_index);
-                                break;
+                        if active && !held {
+                            add_key(*window.keys_pressed, key);
+                            add_key(*window.keys_held, key);
+                        } else if !active && held {
+                            add_key(*window.keys_released, key);
+                            for window.keys_held {
+                                if it == key {
+                                    array_unordered_remove_by_index(*window.keys_held, it_index);
+                                    break;
+                                }
                             }
                         }
                     }
-                    if alt_active && !alt_held {
-                        add_key(*window.keys_pressed, .ALT_LEFT);
-                        add_key(*window.keys_held, .ALT_LEFT);
-                        add_key(*window.keys_pressed, .ALT_RIGHT);
-                        add_key(*window.keys_held, .ALT_RIGHT);
-                    } else if !alt_active && alt_held {
-                        add_key(*window.keys_released, .ALT_LEFT);
-                        add_key(*window.keys_released, .ALT_RIGHT);
-                        for window.keys_held {
-                            if it == .ALT_LEFT || it == .ALT_RIGHT {
-                                array_unordered_remove_by_index(*window.keys_held, it_index);
-                                break;
-                            }
-                        }
-                    }
-                    if super_active && !super_held {
-                        add_key(*window.keys_pressed, .SUPER_LEFT);
-                        add_key(*window.keys_held, .SUPER_LEFT);
-                        add_key(*window.keys_pressed, .SUPER_RIGHT);
-                        add_key(*window.keys_held, .SUPER_RIGHT);
-                    } else if !super_active && super_held {
-                        add_key(*window.keys_released, .SUPER_LEFT);
-                        add_key(*window.keys_released, .SUPER_RIGHT);
-                        for window.keys_held {
-                            if it == .SUPER_LEFT || it == .SUPER_RIGHT {
-                                array_unordered_remove_by_index(*window.keys_held, it_index);
-                                break;
-                            }
-                        }
-                    }
+                    update_held_keys_from_modifiers(XKB_MOD_NAME_SHIFT.data, .SHIFT_LEFT, backend, window);
+                    update_held_keys_from_modifiers(XKB_MOD_NAME_SHIFT.data, .SHIFT_RIGHT, backend, window);
+                    update_held_keys_from_modifiers(XKB_MOD_NAME_CTRL.data, .CONTROL_LEFT, backend, window);
+                    update_held_keys_from_modifiers(XKB_MOD_NAME_CTRL.data, .CONTROL_RIGHT, backend, window);
+                    update_held_keys_from_modifiers(XKB_MOD_NAME_ALT.data, .ALT_LEFT, backend, window);
+                    update_held_keys_from_modifiers(XKB_MOD_NAME_ALT.data, .ALT_RIGHT, backend, window);
+                    update_held_keys_from_modifiers(XKB_MOD_NAME_LOGO.data, .SUPER_LEFT, backend, window);
+                    update_held_keys_from_modifiers(XKB_MOD_NAME_LOGO.data, .SUPER_RIGHT, backend, window);
                 case Wl_Keyboard_Event_Key;
                     key_event := cast(*Wl_Keyboard_Event_Key) event.data;
                     xkb_key_code := key_event.key + 8;
@@ -1253,6 +1208,47 @@ add_key :: (array: *[]Key, key: Key) {
         if NSApplication.keyWindow(backend.app) != window.ns_window {
             window.keys_held.count = 0;
         }
+
+        update_held_keys_from_modifiers :: (
+            flags: NSEventModifierFlags,
+            modifier: NSEventModifierFlags,
+            key: Key,
+            window: *Window,
+        ) {
+            active := flags & modifier;
+            held: bool;
+            for window.keys_held {
+                if it == key {
+                    held = true;
+                    break;
+                }
+            }
+            if active && !held {
+                add_key(*window.keys_pressed, key);
+                add_key(*window.keys_held, key);
+            } else if !active && held {
+                add_key(*window.keys_released, key);
+                for window.keys_held {
+                    if it == key {
+                        array_unordered_remove_by_index(*window.keys_held, it_index);
+                        break;
+                    }
+                }
+            }
+        }
+
+        flags: NSEventModifierFlags = xx objc_msgSend_typed(class(NSEvent), sel_registerName("modifierFlags".data));
+
+        // these constants come from IOLLEvent.h
+        update_held_keys_from_modifiers(flags, NSEventModifierFlagControl, Key.CONTROL_LEFT, window);
+        update_held_keys_from_modifiers(flags, NSEventModifierFlagControl, Key.CONTROL_RIGHT, window);
+        update_held_keys_from_modifiers(flags, NSEventModifierFlagShift, Key.SHIFT_LEFT, window);
+        update_held_keys_from_modifiers(flags, NSEventModifierFlagShift, Key.SHIFT_RIGHT, window);
+        update_held_keys_from_modifiers(flags, NSEventModifierFlagOption, Key.ALT_LEFT, window);
+        update_held_keys_from_modifiers(flags, NSEventModifierFlagOption, Key.ALT_RIGHT, window);
+        update_held_keys_from_modifiers(flags, NSEventModifierFlagCommand, Key.SUPER_LEFT, window);
+        update_held_keys_from_modifiers(flags, NSEventModifierFlagCommand, Key.SUPER_RIGHT, window);
+        update_held_keys_from_modifiers(flags, xx NSEventModifierFlagFunction, Key.FUNCTION, window);
     }
 
     MacOS_GL_Backend :: struct {
@@ -1346,42 +1342,6 @@ add_key :: (array: *[]Key, key: Key) {
                                 array_unordered_remove_by_index(*window.keys_held, it_index);
                                 break;
                             }
-                        }
-                    case NSEventTypeFlagsChanged;
-                        key: Key = xx NSEvent.keyCode(event);
-                        flags := NSEvent.modifierFlags(event);
-                        mask: NSEventModifierFlags;
-                        if key == {
-                            case .SHIFT_RIGHT; #through;
-                            case .SHIFT_LEFT;
-                                mask = .NSEventModifierFlagShift;
-                            case .ALT_RIGHT; #through;
-                            case .ALT_LEFT;
-                                mask = .NSEventModifierFlagOption;
-                            case .CAPS_LOCK;
-                                mask = .NSEventModifierFlagCapsLock;
-                            case .FUNCTION;
-                                mask = .NSEventModifierFlagFunction;
-                            case .CONTROL_RIGHT; #through;
-                            case .CONTROL_LEFT;
-                                mask = .NSEventModifierFlagControl;
-                            case .SUPER_RIGHT; #through;
-                            case .SUPER_LEFT;
-                                mask = .NSEventModifierFlagCommand;
-                        }
-                        if (flags & mask) && !array_find(window.keys_held, key) {
-                            add_key(*window.keys_pressed, key);
-                            add_key(*window.keys_held, key);
-                        } else if mask != 0 {
-                            add_key(*window.keys_released, key);
-                            for window.keys_held {
-                                if it == key {
-                                    array_unordered_remove_by_index(*window.keys_held, it_index);
-                                    break;
-                                }
-                            }
-                        } else {
-                            backend.app.sendEvent(backend.app, event);
                         }
                     case;
                         backend.app.sendEvent(backend.app, event);
