@@ -6194,11 +6194,12 @@ layout :: () {
                             node.position.y += node.style.margin.y.x;
                     }
                 }
-                base := node.position + Vector2.{
-                    node.style.border_width.x.x + node.style.padding.x.x,
-                    node.style.border_width.y.x + node.style.padding.y.x,
-                };
                 if node.first_child != -1 {
+                    base := node.position + Vector2.{
+                        node.style.border_width.x.x + node.style.padding.x.x,
+                        node.style.border_width.y.x + node.style.padding.y.x,
+                    };
+                   
                     // TODO: when the direction is horizontal, we should also handle node overflow wrapping here.
                     pen := base;
                     direction := node.style.direction;
@@ -6211,7 +6212,7 @@ layout :: () {
                             case .FIXED;
                                 child.position = child.style.placement.fixed + child.style.translate;
                             case .RELATIVE;
-                                child.position = base + child.style.placement.relative + child.style.translate;
+                                child.position = node.position + child.style.placement.relative + child.style.translate;
                             case .FLOW;
                                 margin := get(child.style.margin, direction);
                                 add(*pen, direction, margin.x);
