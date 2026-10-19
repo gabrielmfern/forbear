@@ -232,7 +232,7 @@ main :: () {
                 padding = in_line(block(20), 15),
                 y_justification = .CENTER,
                 font_size = DIGITS_SIZE,
-                width = grow(),
+                width = fixed(cast(float) window.width),
             }, #code {
                 // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
                 //
@@ -366,8 +366,14 @@ main :: () {
                         value_left = compute(value_left, op, value_right);
                     }
 
-                    element(Style.{ width = grow(), padding = right(12), x_justification = .END }, #code {
-                        text(sprint("= %", ifx isnan(value_left) then 0 else value_left));
+                    element(Style.{
+                        background = color(BG_SECONDARY),
+                        height = grow(),
+                        padding = right(block(20), 15),
+                    }, #code {
+                        text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
+                        text_node := get_node(text_index);
+                        get_node().style.placement = relative(Vector2.{ (cast(float) window.width) - text_node.size.x - 15.0, 0.0 });
                     });
                 }
             });
