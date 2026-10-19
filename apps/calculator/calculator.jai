@@ -8,6 +8,10 @@ Math :: #import "Math";
 #import "GL";
 #import,file "../../forbear.jai";
 
+#if OS == .MACOS {
+    #import "Objective_C";
+}
+
 Operator :: enum {
     NONE; ADD; SUBTRACT; MULTIPLY; DIVIDE;
 };
@@ -241,9 +245,22 @@ main :: () {
                         }
                     }
                 }
-                by_word := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
-                left  := ifx by_word then previous_word_boundary(expression, cursor_index) else max(cursor_index - 1, 0);
-                right := ifx by_word then next_word_boundary(expression, cursor_index) else min(cursor_index + 1, expression.count);
+                left := max(cursor_index - 1, 0);
+                right := min(cursor_index + 1, expression.count);
+                by_word := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
+                #if OS == .LINUX {
+                    by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
+                }
+                if by_word {
+                    left = previous_word_boundary(expression, cursor_index);
+                    right = next_word_boundary(expression, cursor_index);
+                }
+                #if OS == .MACOS {
+                    if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
+                        left = previous_word_boundary(expression, 0);
+                        right = next_word_boundary(expression, expression.count);
+                    }
+                }
                 removal_start, removal_end := cursor_index;
                 if on_key_down(.BACKSPACE, true)        removal_start = left;
                 else if on_key_down(.DELETE, true)      removal_end = right;
@@ -269,14 +286,14 @@ main :: () {
 
                 expression_node := get_node(expression_index);
                 expression_glyphs := expression_node.glyphs;
-                font_units_to_point := get_font_units_to_point(*inter, 16);
+                font_units_to_pixel := get_font_units_to_pixel(*inter, 16);
 
                 cursor_position: Vector2;
                 if expression.count > 0 {
                     if cursor_index == expression.count {
-                        cursor_position = (expression_glyphs.array[expression.count - 1].position + expression_glyphs.array[expression.count - 1].advance) * font_units_to_point;
+                        cursor_position = (expression_glyphs.array[expression.count - 1].position + expression_glyphs.array[expression.count - 1].advance) * font_units_to_pixel;
                     } else {
-                        cursor_position = expression_glyphs.array[cursor_index].position * font_units_to_point;
+                        cursor_position = expression_glyphs.array[cursor_index].position * font_units_to_pixel;
                     }
                 }
 
@@ -285,7 +302,7 @@ main :: () {
                     placement = relative(cursor_position),
                     background = color(rgb(255, 255, 255)),
                     width = fixed(1.0),
-                    height = fixed(expression_glyphs.line_height * font_units_to_point),
+                    height = fixed(expression_glyphs.line_height * font_units_to_pixel),
                 });
             });
 

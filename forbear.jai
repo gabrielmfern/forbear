@@ -1229,6 +1229,8 @@ add_key :: (array: *[]Key, key: Key) {
         window.height = backing.size.height;
         window.scale = backing.size.width / frame.size.width;
 
+        window.text.data = window.text_buffer.data;
+
         window.keys_pressed.data = window.keys_buffer.data;
         window.keys_released.data = window.keys_buffer.data + 32;
         window.keys_held.data = window.keys_buffer.data + 64;
@@ -1326,6 +1328,15 @@ add_key :: (array: *[]Key, key: Key) {
                             add_key(*window.keys_held, key);
                         } else {
                             add_key(*window.keys_repeated, key);
+                        }
+                        if !(NSEvent.modifierFlags(event) & .NSEventModifierFlagCommand) {
+                            characters := NSEvent.characters(event);
+                            if characters {
+                                text := to_string(NSString.UTF8String(characters));
+                                if text.count != 3 || text[0] == 0xEF && text[1] >= 0x9C && text[1] <= 0xA3 {
+                                    append_text(text, *window.text, window.text_buffer);
+                                }
+                            }
                         }
                     case NSEventTypeKeyUp;
                         key: Key = xx NSEvent.keyCode(event);
@@ -5107,9 +5118,9 @@ round_font_size :: (size: float) -> u16 #expand {
    assert(size <= 0xFFFF, "font sizes need to be packed to u16");
    return xx floor(size + 0.5);
 }
-get_font_units_to_point :: (font: *Font, rounded_font_size: u16) -> float {
+get_font_units_to_pixel :: (font: *Font, rounded_font_size: u16) -> float {
     using context.forbear;
-    return (cast(float) rounded_font_size) / (cast(float) window.scale) / (cast(float) font.raster_face.units_per_EM);
+    return (cast(float) rounded_font_size) / (cast(float) font.raster_face.units_per_EM);
 }
 font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
     FT_Load_Glyph(font.raster_face, xx glyph_index, FT_LOAD_RENDER);
@@ -5223,7 +5234,7 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
         set_weight(node.style.font, node.style.font_weight);
         set_font_size(node.style.font, rounded_font_size);
         node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
-        font_units_to_point := get_font_units_to_point(node.style.font, rounded_font_size);
+        font_units_to_point := get_font_units_to_pixel(node.style.font, rounded_font_size) / (cast(float) context.forbear.window.scale);
         node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
         node.min_size = node.glyphs.min_size * font_units_to_point;
         node.max_size = node.glyphs.max_size * font_units_to_point;
@@ -5898,7 +5909,7 @@ layout :: () {
             //
             for <*node: node_tree {
                 rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
-                font_units_to_point := get_font_units_to_point(node.style.font, rounded_font_size);
+                font_units_to_point := get_font_units_to_pixel(node.style.font, rounded_font_size) / (cast(float) window.scale);
                 base := Vector2.{
                     node.style.border_width.x.x + node.style.padding.x.x,
                     node.style.border_width.y.x + node.style.padding.y.x,
@@ -6308,7 +6319,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     for node: node_tree {
         if node.glyphs.array.count != 0 {
             rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
-            font_units_to_point := get_font_units_to_point(node.style.font, rounded_font_size);
+            font_units_to_point := get_font_units_to_pixel(node.style.font, rounded_font_size) / (cast(float) window.scale);
 
             for glyph: node.glyphs.array {
                 atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
