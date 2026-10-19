@@ -219,6 +219,8 @@ main :: () {
             last = now;
         }
 
+        viewport_width := (cast(float)window.width) / (cast(float)window.scale);
+
         element(Style.{
             width = grow(),
             height = grow(),
@@ -232,7 +234,7 @@ main :: () {
                 padding = in_line(block(20), 15),
                 y_justification = .CENTER,
                 font_size = DIGITS_SIZE,
-                width = fixed(cast(float) window.width),
+                width = fixed(viewport_width),
             }, #code {
                 // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
                 //
@@ -307,6 +309,9 @@ main :: () {
                         cursor_position = expression_glyphs.array[cursor_index].position * font_units_to_pixel;
                     }
                 }
+                input := get_node();
+                cursor_position.x += input.style.padding.x.x + input.style.border_width.x.x;
+                cursor_position.y += input.style.padding.y.x + input.style.border_width.y.x;
 
                 // cursor
                 element(Style.{
@@ -368,12 +373,13 @@ main :: () {
 
                     element(Style.{
                         background = color(BG_SECONDARY),
-                        height = grow(),
                         padding = right(block(20), 15),
+                        height = grow(),
                     }, #code {
                         text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
                         text_node := get_node(text_index);
-                        get_node().style.placement = relative(Vector2.{ (cast(float) window.width) - text_node.size.x - 15.0, 0.0 });
+                        result_node := get_node();
+                        result_node.style.placement = relative(Vector2.{ viewport_width - text_node.size.x - 15.0, 0.0 });
                     });
                 }
             });
