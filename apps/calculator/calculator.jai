@@ -262,12 +262,19 @@ main :: () {
                     }
                 }
                 removal_start, removal_end := cursor_index;
-                if on_key_down(.BACKSPACE, true)        removal_start = left;
-                else if on_key_down(.DELETE, true)      removal_end = right;
-                else if on_key_down(.ARROW_LEFT, true)  cursor_index = left;
-                else if on_key_down(.ARROW_RIGHT, true) cursor_index = right;
-                else if on_key_down(.HOME)              cursor_index = 0;
-                else if on_key_down(.END)               cursor_index = expression.count;
+                if on_key_down(.BACKSPACE, true) {
+                    removal_start = left;
+                } else if on_key_down(.DELETE, true) {
+                    removal_end = right;
+                } else if on_key_down(.ARROW_LEFT, true) {
+                    cursor_index = left;
+                } else if on_key_down(.ARROW_RIGHT, true) {
+                    cursor_index = right;
+                } else if on_key_down(.HOME) {
+                    cursor_index = 0;
+                } else if on_key_down(.END) {
+                    cursor_index = expression.count;
+                }
 
                 removed := removal_end - removal_start;
                 if removed > 0 {
