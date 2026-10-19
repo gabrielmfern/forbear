@@ -6210,6 +6210,33 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     array_reserve(*unsorted_draw_instances, node_tree.count);
     array_reserve(*z_counts, node_tree.count);
     for node: node_tree {
+        instance: Draw_Instance;
+        {
+            using instance;
+            kind = .NODE;
+            z = node.z;
+            position = node.position;
+            size = node.size;
+            // TODO: write out the instance gathering for the other types of backgrounds
+            if node.style.background.kind == .COLOR {
+                color = node.style.background.color;
+            }
+            border_width = Vector4.{
+                node.style.border_width.x.x, // left
+                node.style.border_width.x.y, // right
+                node.style.border_width.y.x, // top
+                node.style.border_width.y.y  // bottom
+            };
+            border_color = node.style.border_color;
+            border_radius = min(node.style.border_radius, min(node.size.x, node.size.y));
+        }
+
+        array_add(*unsorted_draw_instances, instance);
+        if instance.z >= z_counts.count {
+            array_resize(*z_counts, instance.z + 1);
+        }
+        z_counts[instance.z] += 1;
+
         if node.glyphs.array.count != 0 {
             rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
             font_units_to_point := get_font_units_to_pixel(node.style.font, rounded_font_size) / (cast(float) window.scale);
@@ -6271,39 +6298,12 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                     uv_max = entry.uv_max;
                 }
                 array_add(*unsorted_draw_instances, instance);
-                if node_draw_instance.z >= z_counts.count {
-                    array_resize(*z_counts, node_draw_instance.z + 1);
+                if instance.z >= z_counts.count {
+                    array_resize(*z_counts, instance.z + 1);
                 }
-                z_counts[node_draw_instance.z] += 1;
+                z_counts[instance.z] += 1;
             }
         }
-
-        instance: Draw_Instance;
-        {
-            using instance;
-            kind = .NODE;
-            z = node.z;
-            position = node.position;
-            size = node.size;
-            // TODO: write out the instance gathering for the other types of backgrounds
-            if node.style.background.kind == .COLOR {
-                color = node.style.background.color;
-            }
-            border_width = Vector4.{
-                node.style.border_width.x.x, // left
-                node.style.border_width.x.y, // right
-                node.style.border_width.y.x, // top
-                node.style.border_width.y.y  // bottom
-            };
-            border_color = node.style.border_color;
-            border_radius = min(node.style.border_radius, min(node.size.x, node.size.y));
-        }
-
-        array_add(*unsorted_draw_instances, instance);
-        if instance.z >= z_counts.count {
-            array_resize(*z_counts, instance.z + 1);
-        }
-        z_counts[instance.z] += 1;
     }
 
     sorted_draw_instance := NewArray(unsorted_draw_instances.count, Draw_Instance, false);
