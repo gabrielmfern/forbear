@@ -144,8 +144,8 @@ U64_MAX :: Math.U64_MAX;
 INTER_TTF :: #run read_entire_file(tprint("%../Inter.ttf", #filepath));
 WIDTH :: 360;
 HEIGHT :: 512;
-BG :: #run rgb(17, 19, 22);
-BG_SECONDARY :: #run rgb(28, 31, 35);
+BG :: #run rgb(28, 31, 35);
+BG_SECONDARY :: #run rgb(17, 19, 22);
 ERROR :: #run rgb(232, 91, 91);
 TRANSPARENT :: #run rgba(1.0, 1.0, 1.0, 0.0);
 
@@ -169,7 +169,7 @@ main :: () {
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *inter,
-        color = rgb(255, 255, 255),
+        color = rgb(230, 232, 235),
         font_size = 16,
     });
 
@@ -221,15 +221,14 @@ main :: () {
         element(Style.{
             width = grow(),
             height = grow(),
-            padding = all(5),
             direction = .VERTICAL,
             text_wrapping = .NONE,
         }, #code {
             input_index := element(Style.{
                 border_width = bottom(2.0),
-                border_color = BG_SECONDARY,
-                border_radius = 2.0,
-                padding = in_line(block(15), 10),
+                background = color(BG_SECONDARY),
+                padding = in_line(block(20), 15),
+                y_justification = .CENTER,
                 width = grow(),
             }, #code {
                 // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
@@ -247,31 +246,31 @@ main :: () {
                         }
                     }
                 }
-                left := max(cursor_index - 1, 0);
-                right := min(cursor_index + 1, expression.count);
+                previous := max(cursor_index - 1, 0);
+                next := min(cursor_index + 1, expression.count);
                 by_word := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
                 #if OS == .LINUX {
                     by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
                 }
                 if by_word {
-                    left = previous_word_boundary(expression, cursor_index);
-                    right = next_word_boundary(expression, cursor_index);
+                    previous = previous_word_boundary(expression, cursor_index);
+                    next = next_word_boundary(expression, cursor_index);
                 }
                 #if OS == .MACOS {
                     if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
-                        left = previous_word_boundary(expression, 0);
-                        right = next_word_boundary(expression, expression.count);
+                        previous = previous_word_boundary(expression, 0);
+                        next = next_word_boundary(expression, expression.count);
                     }
                 }
                 removal_start, removal_end := cursor_index;
                 if on_key_down(.BACKSPACE, true) {
-                    removal_start = left;
+                    removal_start = previous;
                 } else if on_key_down(.DELETE, true) {
-                    removal_end = right;
+                    removal_end = next;
                 } else if on_key_down(.ARROW_LEFT, true) {
-                    cursor_index = left;
+                    cursor_index = previous;
                 } else if on_key_down(.ARROW_RIGHT, true) {
-                    cursor_index = right;
+                    cursor_index = next;
                 } else if on_key_down(.HOME) {
                     cursor_index = 0;
                 } else if on_key_down(.END) {
@@ -313,6 +312,59 @@ main :: () {
                     width = fixed(1.0),
                     height = fixed(expression_glyphs.line_height * font_units_to_pixel),
                 });
+
+                value_left: float64 = FLOAT64_NAN;
+                op := Operator.NONE;
+                value_right: float64 = FLOAT64_NAN;
+                for token: tokens {
+                    if isnan(value_left) {
+                        if token.kind == .OPERATOR {
+                            value_left = 0; // we take left to be an implicit zero when the user just types in an operator
+                            op = token.op;
+                        } else {
+                            value_left = token.number;
+                        }
+                    } else if op == .NONE {
+                        assert(token.kind == .OPERATOR);
+                        op = token.op;
+                    } else if isnan(value_right) {
+                        if token.kind == .OPERATOR {
+                            op = token.op;
+                        } else {
+                            value_right = token.number;
+                        }
+                    } else {
+                        assert(op != .NONE);
+                        if op == {
+                            case .ADD;
+                            value_left += value_right;
+                            case .SUBTRACT;
+                            value_left -= value_right;
+                            case .MULTIPLY;
+                            value_left *= value_right;
+                            case .DIVIDE;
+                            value_left /= value_right;
+                        }
+                        op = .NONE;
+                        value_right = FLOAT64_NAN;
+                    }
+                }
+                if !isnan(value_left) && op != .NONE && !isnan(value_right) {
+                    if op == {
+                        case .ADD;
+                        value_left += value_right;
+                        case .SUBTRACT;
+                        value_left -= value_right;
+                        case .MULTIPLY;
+                        value_left *= value_right;
+                        case .DIVIDE;
+                        value_left /= value_right;
+                    }
+                }
+
+                element(Style.{ width = grow(), padding = right(12), x_justification = .END }, #code {
+                    text(sprint("= %", ifx isnan(value_left) then 0 else value_left));
+                });
             });
 
             if parse_result != .SUCCESS && expression.count > 0 {
@@ -328,63 +380,10 @@ main :: () {
                     case .COULD_NOT_PARSE_FLOAT;
                         message = "Could not parse what should be a number";
                 }
-                text(Style.{ color = ERROR, font_size = 12 }, message);
+                text(Style.{ color = ERROR, margin = in_line(5), font_size = 12 }, message);
             }
             element(Style.{
                 height = fixed(20),
-            });
-
-            value_left: float64 = FLOAT64_NAN;
-            op := Operator.NONE;
-            value_right: float64 = FLOAT64_NAN;
-            for token: tokens {
-                if isnan(value_left) {
-                    if token.kind == .OPERATOR {
-                        value_left = 0; // we take left to be an implicit zero when the user just types in an operator
-                        op = token.op;
-                    } else {
-                        value_left = token.number;
-                    }
-                } else if op == .NONE {
-                    assert(token.kind == .OPERATOR);
-                    op = token.op;
-                } else if isnan(value_right) {
-                    if token.kind == .OPERATOR {
-                        op = token.op;
-                    } else {
-                        value_right = token.number;
-                    }
-                } else {
-                    assert(op != .NONE);
-                    if op == {
-                        case .ADD;
-                            value_left += value_right;
-                        case .SUBTRACT;
-                            value_left -= value_right;
-                        case .MULTIPLY;
-                            value_left *= value_right;
-                        case .DIVIDE;
-                            value_left /= value_right;
-                    }
-                    op = .NONE;
-                    value_right = FLOAT64_NAN;
-                }
-            }
-            if !isnan(value_left) && op != .NONE && !isnan(value_right) {
-                if op == {
-                    case .ADD;
-                        value_left += value_right;
-                    case .SUBTRACT;
-                        value_left -= value_right;
-                    case .MULTIPLY;
-                        value_left *= value_right;
-                    case .DIVIDE;
-                        value_left /= value_right;
-                }
-            }
-
-            element(Style.{ width = grow(), padding = right(12), font_size = 32, x_justification = .END }, #code {
-                text(sprint("= %", ifx isnan(value_left) then 0 else value_left));
             });
         });
 
