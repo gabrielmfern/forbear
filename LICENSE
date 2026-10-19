@@ -1,4 +1,4 @@
-forbear License v0
+forbear License v0.1
 
 Copyright (c) 2025-2026 Gabriel Miranda
 
@@ -32,6 +32,8 @@ their own software, subject to the conditions below.
 
 4. COMMERCIAL USE AND ROYALTY
 
+   4.1 Scope
+
    This section applies to your use of the Software in any Product if
    any of the following is true:
 
@@ -43,21 +45,41 @@ their own software, subject to the conditions below.
    available as a service to third parties, or operate internally for
    commercial purposes.
 
-   Royalty: a royalty applies to commercial use of the Software once
-   a Product exceeds a revenue threshold. The specific revenue
-   threshold and royalty rate are being calibrated and will be
-   finalized by the copyright holder before forbear v1.0. Royalty
-   terms will be communicated to commercial users at the time of
-   notification (see below) and will not exceed customary industry
-   practice for application UI frameworks.
+   "Product Revenue" means the gross revenue attributable to the
+   Product during a calendar year, including sales, subscriptions,
+   licensing, advertising, and in-app purchases. For Products used
+   internally under (b), Product Revenue means the gross revenue of
+   the activity the Product supports.
 
-   Notification: if your Product crosses USD $100,000 in gross revenue
-   during any trailing 12-month period, you must contact the copyright
-   holder at gabriel.readme@hey.com within 30 days. No payment is due 
-   at this stage — this notification establishes communication before the
-   royalty threshold is reached, allows the copyright holder to provide
-   any applicable support, and confirms acceptance of the license terms
+   4.2 Royalty terms
+
+   (a) Threshold: no royalty is due on the first USD $100,000 of
+       Product Revenue in any calendar year.
+
+   (b) Rate: a royalty of 1% (one percent) is due on all Product
+       Revenue above the Threshold in that calendar year.
+
+   (c) Cap: the total royalty due for a single Product in a single
+       calendar year will not exceed USD $600,000.
+
+   Example: a Product with USD $2,100,000 in Product Revenue in a
+   calendar year owes 1% of USD $2,000,000, i.e. USD $20,000. A
+   Product with USD $100,000,000 in Product Revenue owes the Cap,
+   USD $600,000.
+
+   4.3 Notification and payment
+
+   Within 30 days of a Product first exceeding the Threshold, you
+   must notify the copyright holder at gabriel.readme@hey.com,
+   identifying the Product and confirming acceptance of these terms
    in writing.
+
+   Royalties are self-reported and paid annually, within 60 days of
+   the end of each calendar year, together with a statement of
+   Product Revenue for that year. The copyright holder may request
+   reasonable documentation supporting the statement.
+
+   4.4 Exemptions
 
    This section does not apply, and the Software remains free, when:
 
@@ -65,17 +87,21 @@ their own software, subject to the conditions below.
        license;
    (ii) the user is a natural person, or a group of natural persons,
         using the Product for personal or non-commercial purposes, AND
-        no organization meeting criterion (b) has any ownership or
+        no organization meeting criterion 4.1(b) has any ownership or
         operational interest in the Product; or
    (iii) the user is a non-profit organization using the Product in
          furtherance of its non-profit mission.
 
-   Royalties are self-reported and paid quarterly to the copyright
-   holder. Contact gabriel.readme@hey.com to arrange payment.
+   4.5 Changes to terms
+
+   The Threshold, Rate and Cap above apply to the version of the
+   Software you adopted. The copyright holder may change them in
+   future versions of this license, but such changes apply only to
+   versions of the Software released under the changed license.
 
 5. LIMITED MAINTENANCE COMMITMENT
 
-   For users whose Product has earned qualifying revenue under §4 and
+   For users whose Product has exceeded the Threshold under §4 and
    whose royalty payments are current, the copyright holder commits to:
 
    (a) shipping bug fixes in regular releases of the Software; and
