@@ -183,12 +183,13 @@ main :: () {
     last := seconds_since_init();
     previous := last;
 
-    expression: [..]u8;
-    expression.allocator = context.allocator;
-
     tokens: [..]Token;
     parse_result: Parse_Result;
     tokens.allocator = context.allocator;
+
+    expression: [..]u8;
+    parse_result = parse_expression(to_string(expression.data, expression.count), *tokens);
+    expression.allocator = context.allocator;
 
     cursor_index: s64;
 
@@ -313,58 +314,61 @@ main :: () {
                     height = fixed(expression_glyphs.line_height * font_units_to_pixel),
                 });
 
-                value_left: float64 = FLOAT64_NAN;
-                op := Operator.NONE;
-                value_right: float64 = FLOAT64_NAN;
-                for token: tokens {
-                    if isnan(value_left) {
-                        if token.kind == .OPERATOR {
-                            value_left = 0; // we take left to be an implicit zero when the user just types in an operator
-                            op = token.op;
-                        } else {
-                            value_left = token.number;
-                        }
-                    } else if op == .NONE {
-                        assert(token.kind == .OPERATOR);
-                        op = token.op;
-                    } else if isnan(value_right) {
-                        if token.kind == .OPERATOR {
-                            op = token.op;
-                        } else {
-                            value_right = token.number;
-                        }
-                    } else {
+                {
+                    //
+                    // === computing and showing the results of the typed out expression ===
+                    //
+                    compute :: (left: float64, op: Operator, right: float64) -> float64 {
                         assert(op != .NONE);
                         if op == {
                             case .ADD;
-                            value_left += value_right;
+                                return left + right;
                             case .SUBTRACT;
-                            value_left -= value_right;
+                                return left - right;
                             case .MULTIPLY;
-                            value_left *= value_right;
+                                return left * right;
                             case .DIVIDE;
-                            value_left /= value_right;
+                                return left / right;
                         }
-                        op = .NONE;
-                        value_right = FLOAT64_NAN;
+                        log_error("looks like we added a new opreator, but didn't actually handle it");
+                        return left;
                     }
-                }
-                if !isnan(value_left) && op != .NONE && !isnan(value_right) {
-                    if op == {
-                        case .ADD;
-                        value_left += value_right;
-                        case .SUBTRACT;
-                        value_left -= value_right;
-                        case .MULTIPLY;
-                        value_left *= value_right;
-                        case .DIVIDE;
-                        value_left /= value_right;
-                    }
-                }
 
-                element(Style.{ width = grow(), padding = right(12), x_justification = .END }, #code {
-                    text(sprint("= %", ifx isnan(value_left) then 0 else value_left));
-                });
+                    value_left: float64 = FLOAT64_NAN;
+                    op := Operator.NONE;
+                    value_right: float64 = FLOAT64_NAN;
+                    for token: tokens {
+                        print("%: %\n", it_index, token);
+                        if isnan(value_left) {
+                            if token.kind == .NUMBER {
+                                value_left = token.number;
+                            } else {
+                                // we take left to be an implicit zero when the user just types in an operator
+                                value_left = 0;
+                                op = token.op;
+                            }
+                        } else if op == .NONE {
+                            assert(token.kind == .OPERATOR);
+                            op = token.op;
+                        } else if isnan(value_right) {
+                            if token.kind == .NUMBER {
+                                value_right = token.number;
+                            } else {
+                                op = token.op;
+                            }
+                            value_left = compute(value_left, op, value_right);
+                            op = .NONE;
+                            value_right = FLOAT64_NAN;
+                        }
+                    }
+                    if !isnan(value_left) && op != .NONE && !isnan(value_right) {
+                        value_left = compute(value_left, op, value_right);
+                    }
+
+                    element(Style.{ width = grow(), padding = right(12), x_justification = .END }, #code {
+                        text(sprint("= %", ifx isnan(value_left) then 0 else value_left));
+                    });
+                }
             });
 
             if parse_result != .SUCCESS && expression.count > 0 {
