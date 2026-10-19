@@ -42,7 +42,12 @@ ADD :: Token.{ kind = .OPERATOR, op = .ADD };
 SUBTRACT :: Token.{ kind = .OPERATOR, op = .SUBTRACT };
 MULTIPLY :: Token.{ kind = .OPERATOR, op = .MULTIPLY };
 DIVIDE :: Token.{ kind = .OPERATOR, op = .DIVIDE };
-parse_expression :: (expression: string, tokens: *[..]Token) -> success: bool {
+Parse_Result :: enum {
+    SUCCESS;
+    TWO_NUMBERS_IN_A_ROW;
+    COULD_NOT_PARSE_FLOAT;
+};
+parse_expression :: (expression: string, tokens: *[..]Token) -> Parse_Result {
     array_reset_keeping_memory(tokens);
     in_progress: string = ---;
     in_progress.data = expression.data;
@@ -52,54 +57,50 @@ parse_expression :: (expression: string, tokens: *[..]Token) -> success: bool {
         if trimmed.count == 0 {
             in_progress.data += 1;
         } else {
-            if trimmed == "+" {
-                array_add(tokens, ADD);
-            } else if trimmed == "-" {
-                array_add(tokens, SUBTRACT);
-            } else if trimmed == "*" {
-                array_add(tokens, MULTIPLY);
-            } else if trimmed == "/" {
-                array_add(tokens, DIVIDE);
-            } else {
-                // I have to keep accumulating in progress until the next is either an operator, or it's a space. The
-                // number might continue on after this is hit.
-                while in_progress.data + in_progress.count - 1 < expression.data + expression.count - 1 {
-                    next_character := (in_progress.data + in_progress.count).*;
-                    if next_character == {
-                        case #char "+"; #through;
-                        case #char "-"; #through;
-                        case #char "*"; #through;
-                        case #char "/"; #through;
-                        case #char " ";
+            if trimmed == {
+                case "+";
+                    array_add(tokens, ADD);
+                case "-";
+                    array_add(tokens, SUBTRACT);
+                case "*";
+                    array_add(tokens, MULTIPLY);
+                case "/";
+                    array_add(tokens, DIVIDE);
+                case;
+                    // I have to keep accumulating in progress until the next is either an operator, or it's a space. The
+                    // number might continue on after this is hit.
+                    while in_progress.data + in_progress.count - 1 < expression.data + expression.count - 1 {
+                        next_character := (in_progress.data + in_progress.count).*;
+                        if is_any(next_character, "+-*/ ") {
                             break;
-                        case;
+                        } else {
                             in_progress.count += 1;
+                        }
                     }
-                }
-                trimmed = trim(in_progress);
+                    trimmed = trim(in_progress);
 
-                // it must be a number at this point, so we assume so
-                number, success := string_to_float(trimmed);
-                if success {
-                    if tokens.count > 0 && tokens.*[tokens.count - 1].kind == .NUMBER {
-                        return false;
+                    // it must be a number at this point, so we assume so
+                    number, success := string_to_float(trimmed);
+                    if success {
+                        if tokens.count > 0 && tokens.*[tokens.count - 1].kind == .NUMBER {
+                            return .TWO_NUMBERS_IN_A_ROW;
+                        }
+                        array_add(tokens, Token.{ kind = .NUMBER, number = number });
+                    } else {
+                        return .COULD_NOT_PARSE_FLOAT;
                     }
-                    array_add(tokens, Token.{ kind = .NUMBER, number = number });
-                } else {
-                    return false;
-                }
             }
             in_progress.data += in_progress.count;
             in_progress.count = 1;
         }
     }
-    return true;
+    return .SUCCESS;
 }
 parse_expression_should_handle_basic_expression :: () {
     tokens: [..]Token;
     expression := "5 + 10 - 12 / 4 * 19";
-    success := parse_expression(expression, *tokens);
-    assert(success);
+    result := parse_expression(expression, *tokens);
+    assert(result == .SUCCESS);
     assert(tokens[0] == Token.{kind=.NUMBER,number=5});
     assert(tokens[1] == ADD);
     assert(tokens[2] == Token.{kind=.NUMBER,number=10});
@@ -143,8 +144,8 @@ U64_MAX :: Math.U64_MAX;
 INTER_TTF :: #run read_entire_file(tprint("%../Inter.ttf", #filepath));
 WIDTH :: 360;
 HEIGHT :: 512;
-BACKGROUND :: #run rgb(28, 31, 35);
-FLOATING_BACKGROUND :: #run rgb(17, 19, 22);
+BG :: #run rgb(17, 19, 22);
+BG_SECONDARY :: #run rgb(28, 31, 35);
 ERROR :: #run rgb(232, 91, 91);
 TRANSPARENT :: #run rgba(1.0, 1.0, 1.0, 0.0);
 
@@ -186,7 +187,7 @@ main :: () {
     expression.allocator = context.allocator;
 
     tokens: [..]Token;
-    parse_success: bool;
+    parse_result: Parse_Result;
     tokens.allocator = context.allocator;
 
     cursor_index: s64;
@@ -225,9 +226,10 @@ main :: () {
             text_wrapping = .NONE,
         }, #code {
             input_index := element(Style.{
-                background = color(FLOATING_BACKGROUND),
-                margin = bottom(20),
-                padding = in_line(block(20), 15),
+                border_width = bottom(2.0),
+                border_color = BG_SECONDARY,
+                border_radius = 2.0,
+                padding = in_line(block(15), 10),
                 width = grow(),
             }, #code {
                 // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
@@ -286,7 +288,7 @@ main :: () {
                 }
 
                 if removed > 0 || text_input.count > 0 {
-                    parse_success = parse_expression(to_string(expression.data, expression.count), *tokens);
+                    parse_result = parse_expression(to_string(expression.data, expression.count), *tokens);
                 }
 
                 expression_index := text(to_string(expression.data, expression.count));
@@ -313,12 +315,24 @@ main :: () {
                 });
             });
 
-            if !parse_success && expression.count > 0 {
+            if parse_result != .SUCCESS && expression.count > 0 {
                 input := get_node(input_index);
                 input.style.border_radius = 4.0;
                 input.style.border_width = all(1.0);
                 input.style.border_color = ERROR;
+
+                message := "";
+                if parse_result == {
+                    case .TWO_NUMBERS_IN_A_ROW;
+                        message = "Two numbers in a row can't be calculated";
+                    case .COULD_NOT_PARSE_FLOAT;
+                        message = "Could not parse what should be a number";
+                }
+                text(Style.{ color = ERROR, font_size = 12 }, message);
             }
+            element(Style.{
+                height = fixed(20),
+            });
 
             value_left: float64 = FLOAT64_NAN;
             op := Operator.NONE;
@@ -379,7 +393,7 @@ main :: () {
         }
 
         layout();
-        draw(BACKGROUND);
+        draw(BG);
 
         reset_temporary_storage();
 
