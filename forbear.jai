@@ -6205,10 +6205,26 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     glClearColor(clearing_color.x, clearing_color.y, clearing_color.z, clearing_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    unsorted_draw_instances: [..]Draw_Instance;
     z_buckets: [..]u32;
-    array_reserve(*unsorted_draw_instances, node_tree.count);
+    instance_count: s64;
     array_reserve(*z_buckets, node_tree.count);
+    for node: node_tree {
+        if node.z >= z_buckets.count {
+            array_resize(*z_buckets, node.z + 1);
+        }
+        z_buckets[node.z] += xx (1 + node.glyphs.array.count);
+        instance_count += 1 + node.glyphs.array.count;
+    }
+
+    draw_instances := NewArray(instance_count, Draw_Instance, false);
+
+    offset: u32;
+    for *start: z_buckets {
+        count := start.*;
+        start.* = xx offset;
+        offset += count;
+    }
+    assert(offset == draw_instances.count);
     for node: node_tree {
         instance: Draw_Instance;
         {
@@ -6230,18 +6246,13 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
             border_color = node.style.border_color;
             border_radius = min(node.style.border_radius, min(node.size.x, node.size.y));
         }
-
-        array_add(*unsorted_draw_instances, instance);
-        if instance.z >= z_buckets.count {
-            array_resize(*z_buckets, instance.z + 1);
-        }
+        draw_instances[z_buckets[instance.z]] = instance;
         z_buckets[instance.z] += 1;
 
         if node.glyphs.array.count != 0 {
             rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
             font_units_to_point := get_font_units_to_pixel(node.style.font, rounded_font_size) / (cast(float) window.scale);
 
-            array_reserve(*unsorted_draw_instances, unsorted_draw_instances.count + node.glyphs.array.count);
             for glyph: node.glyphs.array {
                 atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
@@ -6294,25 +6305,10 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                     uv_min = entry.uv_min;
                     uv_max = entry.uv_max;
                 }
-                array_add(*unsorted_draw_instances, instance);
-                if instance.z >= z_buckets.count {
-                    array_resize(*z_buckets, instance.z + 1);
-                }
+                draw_instances[z_buckets[instance.z]] = instance;
                 z_buckets[instance.z] += 1;
             }
         }
-    }
-    sorted_draw_instance := NewArray(unsorted_draw_instances.count, Draw_Instance, false);
-    offset: u32;
-    for *start: z_buckets {
-        count := start.*;
-        start.* = xx offset;
-        offset += count;
-    }
-    assert(offset == unsorted_draw_instances.count);
-    for instance: unsorted_draw_instances {
-        sorted_draw_instance[z_buckets[instance.z]] = instance;
-        z_buckets[instance.z] += 1;
     }
 
     point_width: float = (cast(float) window.width) / (cast(float) window.scale);
@@ -6322,10 +6318,10 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     glUniform2f(glGetUniformLocation(shader_program, "viewport"), point_width, point_height);
     glBindVertexArray(shader_vao);
     glBindBuffer(GL_ARRAY_BUFFER, node_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sorted_draw_instance.count * size_of(Draw_Instance), sorted_draw_instance.data, GL_STREAM_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, draw_instances.count * size_of(Draw_Instance), draw_instances.data, GL_STREAM_DRAW);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx sorted_draw_instance.count);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx draw_instances.count);
 
     #if OS == .LINUX {
         glFlush();
