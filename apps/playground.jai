@@ -53,6 +53,7 @@ main :: () {
             color = rgb(174, 184, 196),
             font_size = 14,
             padding = all(16),
+            text_wrapping = .CHARACTER,
             direction = .VERTICAL,
         }, #code {
             frames := state(cast(float64)0.0);
