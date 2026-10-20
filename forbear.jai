@@ -1921,6 +1921,7 @@ Please get in touch with us to judge which one it is.
 }
 state :: ($T: Type, initial: T) -> *T {
     using context.forbear;
+
     assert(parent_index != -1, "state(initial: $T) must be called from inside an element");
     node := *node_tree[parent_index];
     if node.state_size == 0 {
@@ -1935,6 +1936,13 @@ state :: ($T: Type, initial: T) -> *T {
 
     result := cast(*T) *state_buffers[state_current][state_used];
     result.* = initial;
+    is_resizable :: (T: Type) -> bool {
+        info := cast(*Type_Info) T;
+        return info.type == .ARRAY && (cast(*Type_Info_Array) info).array_type == .RESIZABLE;
+    }
+    #if #run is_resizable(T) {
+        result.allocator = node_pool();
+    }
     measurement, defined := get_measurement();
     if defined && node.state_size + size <= measurement.state_size {
         memcpy(result, *state_buffers[1 - state_current][measurement.state_offset + node.state_size], size_of(T));
@@ -6447,7 +6455,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 
 prepare_frame :: () {
     using context.forbear;
-   
+
     {
         push_allocator(persistent_allocator);
         array_resize(*measurements, node_tree.count, false);

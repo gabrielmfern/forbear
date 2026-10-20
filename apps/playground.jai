@@ -28,10 +28,6 @@ main :: () {
     frame_allocator.data = *frame_pool;
     frame_allocator.proc = flat_pool_allocator_proc;
 
-    input_buffer: [4096]u8;
-    input: string;
-    input.data = input_buffer.data;
-
     while window.running {
         push_allocator(frame_allocator);
         prepare_frame();
@@ -105,15 +101,16 @@ main :: () {
                     node.style.background = color(rgb(100, 100, 0));
                 }
             });
-           
+
+            input := state([..]u8);
+
             frame_input := get_text_input();
             if frame_input.count > 0 {
                 print("frame_input: %\n", frame_input);
-                memcpy(input.data + input.count, frame_input.data, frame_input.count);
-                input.count += frame_input.count;
-                print("input: %\n", input);
+                array_add(input, ..(cast([] u8) frame_input));
+                print("input: %\n", to_string(input.data, input.count));
             }
-            text(sprint("this was the input text until now: '%'", input));
+            text(sprint("this was the input text until now: '%'", to_string(input.data, input.count)));
 
             for key: window.keys_held {
                 string_key := sprint("%", key);
