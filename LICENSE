@@ -1,121 +1,56 @@
-forbear License v0.1
+forbear License v0.3
 
 Copyright (c) 2025-2026 Gabriel Miranda
 
-Permission is hereby granted, free of charge, to any person or
-organization obtaining a copy of this software and associated files
-(the "Software") to use, modify, and incorporate the Software into
-their own software, subject to the conditions below.
+You may use, copy, and modify forbear (the "Software") and build it
+into your own software, for free, under these rules:
 
-1. ATTRIBUTION
-
-   This license and the copyright notice above must be included in
-   all copies or substantial portions of the Software.
-
-2. NO REDISTRIBUTION AS A COMPETING PRODUCT
-
-   You may not distribute the Software, or any substantial portion or
-   derivative of it, as a standalone library, framework, SDK, or
-   product, whether free or paid.
-
-   Permitted: forks for personal use, forks contributed back to this
-   project, and vendoring the Software inside your own application.
-
-3. NO AI-ASSISTED RECREATION
-
-   You may not use the Software, its source code, or its tests as
-   input — directly or indirectly — to any automated code-generation
-   system (including but not limited to machine-learning models and
-   large language models) for the purpose of producing software
-   substantially similar in interface, behavior, or function to the
+1. Keep this license and the copyright notice with any copy of the
    Software.
 
-4. COMMERCIAL USE AND ROYALTY
+2. Do not distribute the Software, or a modified version of it, as a
+   standalone library, framework, or SDK. Forking it for yourself,
+   contributing back, and shipping it inside your own app are fine.
 
-   4.1 Scope
+   Building on top of the Software is fully allowed: you may create
+   and distribute your own libraries, components, bindings, or
+   frameworks that use the Software, free or paid, as long as the
+   Software itself stays under this license.
 
-   This section applies to your use of the Software in any Product if
-   any of the following is true:
+3. Do not feed the Software, its code, or its tests into an AI or
+   other code-generation tool to produce a similar framework.
 
-   (a) the Product generates revenue, directly or indirectly;
-   (b) the Product is used internally by a for-profit organization to
-       support a revenue-generating activity.
+4. Royalty. If you sell or offer a product to others that is built
+   with the Software, you pay 1% of that product's revenue above
+   USD $100,000 per calendar year, counted from January 1. Royalties
+   for a single product never exceed USD $600,000 per year.
 
-   "Product" means any software you distribute, sell, license, make
-   available as a service to third parties.
+   - If your product also has versions not built with the Software
+     (such as a web app), only count revenue from customers who used
+     the version built with the Software.
+   - Once a product first passes USD $100,000 in a year, email
+     gabriel.readme@hey.com within 30 days to let us know.
+   - Report revenue and pay each quarter, within 45 days of the
+     quarter's end. We may ask for reasonable proof of revenue.
 
-   "Product Revenue" means the gross revenue attributable to the
-   Product during a calendar year, including sales, subscriptions,
-   licensing, advertising, and in-app purchases.
+   No royalty is owed for:
+   - software used only inside your own organization;
+   - open-source products under an OSI-approved license;
+   - personal or non-commercial use by individuals; or
+   - non-profits using it for their mission.
 
-   4.2 Royalty terms
+   Future versions of this license may change these numbers, but
+   only for versions of the Software released under the new terms.
 
-   (a) Threshold: no royalty is due on the first USD $100,000 of
-       Product Revenue in any calendar year.
+5. While your royalties are paid up, we will ship bug fixes in
+   regular releases and security patches for your major version for
+   18 months after its release.
 
-   (b) Rate: a royalty of 1% (one percent) is due on all Product
-       Revenue above the Threshold in that calendar year.
-
-   (c) Cap: the total royalty due for a single Product in a single
-       calendar year will not exceed USD $600,000.
-
-   Example: a Product with USD $2,100,000 in Product Revenue in a
-   calendar year owes 1% of USD $2,000,000, i.e. USD $20,000. A
-   Product with USD $100,000,000 in Product Revenue owes the Cap,
-   USD $600,000.
-
-   4.3 Notification and payment
-
-   Within 30 days of a Product first exceeding the Threshold, you
-   must notify the copyright holder at gabriel.readme@hey.com,
-   identifying the Product and confirming acceptance of these terms
-   in writing.
-
-   Royalties are self-reported and paid annually, within 60 days of
-   the end of each calendar year, together with a statement of
-   Product Revenue for that year. The copyright holder may request
-   reasonable documentation supporting the statement.
-
-   4.4 Exemptions
-
-   This section does not apply, and the Software remains free, when:
-
-   (i) the Product is distributed under an OSI-approved open-source
-       license;
-   (ii) the user is a natural person, or a group of natural persons,
-        using the Product for personal or non-commercial purposes, AND
-        no organization meeting criterion 4.1(b) has any ownership or
-        operational interest in the Product; or
-   (iii) the user is a non-profit organization using the Product in
-         furtherance of its non-profit mission.
-
-   4.5 Changes to terms
-
-   The Threshold, Rate and Cap above apply to the version of the
-   Software you adopted. The copyright holder may change them in
-   future versions of this license, but such changes apply only to
-   versions of the Software released under the changed license.
-
-5. LIMITED MAINTENANCE COMMITMENT
-
-   For users whose Product has exceeded the Threshold under §4 and
-   whose royalty payments are current, the copyright holder commits to:
-
-   (a) shipping bug fixes in regular releases of the Software; and
-   (b) issuing security patches for the major version the user has
-       adopted, for 18 months after that version's release.
-
-   No other warranty, support obligation, response-time guarantee, or
-   service-level commitment is granted, express or implied. This
-   commitment lapses if royalty payments are more than 60 days overdue.
-
-6. NO WARRANTY (BEYOND §5)
-
-   Except for the limited commitment in §5, THE SOFTWARE IS PROVIDED
-   "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT
-   SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR
-   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
-   OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
-   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+NONINFRINGEMENT, EXCEPT AS STATED IN SECTION 5. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE,
+ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
