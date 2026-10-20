@@ -1830,16 +1830,20 @@ Node :: struct {
     // If NAN, no clipping is applied.
     clipping_rectangle: Vector4 = VECTOR4_NAN;
     glyphs: Glyphs;
+    state_offset: s64;
+    state_size: s64;
     key: u64;
     z: u16;
 
     tree: *Node_Tree;
 };
 Node_Measurement :: struct {
-    key: u64 = U64_MAX;
     size: Vector2 = VECTOR2_NAN;
     position: Vector2 = VECTOR2_NAN;
     clipping_rectangle: Vector4 = VECTOR4_NAN;
+    state_offset: s64;
+    state_size: s64;
+    key: u64 = U64_MAX;
 }
 get_measurement :: () -> measurement: Node_Measurement, defined: bool {
     using context.forbear;
@@ -1862,6 +1866,30 @@ get_measurement :: () -> measurement: Node_Measurement, defined: bool {
         }
     }
     return Node_Measurement.{}, false;
+}
+state :: (initial: $T) -> *T {
+    using context.forbear;
+    assert(parent_index != -1, "state(initial: $T) must be called from inside an element");
+    node := *node_tree[parent_index];
+    if node.state_size == 0 {
+        node.state_offset = state_used;
+    }
+    assert(node.state_offset + node.state_size == state_used, "call state() before any child element that uses state");
+    size := (size_of(T) + 7) & ~7;
+    if state_used + size > state_buffers[0].count {
+        log_error("state buffer is full: % bytes used, % more requested", state_used, size);
+        exit(-1);
+    }
+
+    result := cast(*T) *state_buffers[state_current][state_used];
+    result.* = initial;
+    measurement, defined := get_measurement();
+    if defined && node.state_size + size <= measurement.state_size {
+        memcpy(result, *state_buffers[1 - state_current][measurement.state_offset + node.state_size], size_of(T));
+    }
+    node.state_size += size;
+    state_used += size;
+    return result;
 }
 get_node :: () -> *Node {
     using context.forbear;
@@ -4904,7 +4932,7 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
         node_index = index,
     };
 }
-close_element :: (using data: Element_Opening_Data) {
+close_element :: (using data: Element_Opening_Data, source_location := "") {
     context.forbear.parent_index = parent_index;
     context.forbear.scope_key = scope_key;
     context.forbear.base_style = base_style;
@@ -4912,12 +4940,25 @@ close_element :: (using data: Element_Opening_Data) {
     node := *context.forbear.node_tree[node_index];
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
+
+    measurement, defined := get_measurement();
+    if defined && node.state_size != measurement.state_size {
+        if source_location.count > 0 {
+            log_error(
+                "%: this element called state() a different number of times than last frame",
+                source_location
+            );
+        } else {
+            log_error("an element called state() a different number of times than last frame");
+        }
+        exit(-1);
+    }
 }
 // API used when building UIs straight from jai
 element :: (
     style := Style.{},
-    body: Code = #code {},
     manual_key := "",
+    body: Code = #code {},
     location := #caller_location
 ) -> s64 #expand {
     key: u64;
@@ -4935,14 +4976,14 @@ element :: (
 
     opening := open_element(style, key);
     #insert body;
-    close_element(opening);
+    close_element(opening, tprint("%:%:%", location.fully_pathed_filename, location.line_number, location.character_number));
     return opening.node_index;
 }
 element :: (body: Code, location := #caller_location) -> s64 #expand {
     return element(body = body, location = location);
 }
-element :: (style: Style, key: string, location := #caller_location) -> s64 #expand {
-    return element(style = style, manual_key = key, location = location);
+element :: (style: Style, body: Code, location := #caller_location) -> s64 #expand {
+    return element(style = style, manual_key = "", body = body, location = location);
 }
 
 freetype_library: FT_Library;
@@ -4950,6 +4991,9 @@ shaping_context: *kbts_shape_context;
 // TODO: should this be a global? the idea is mainly that we have a unique id for all fonts created we can keep caching and
 // such apart between different fonts that might all be used for rendering
 font_counter: u16;
+state_buffers: [2][16 * 1024 * 1024]u8 #align 16;
+state_current: s64;
+state_used: s64;
 Glyph :: struct {
     index: s32;
     utf8: kbts_encode_utf8;
@@ -5175,7 +5219,7 @@ free_font :: (font: *Font) {
     FT_Done_Face(font.raster_face);
 }
 text :: (style := Style.{}, content := "", manual_key := "", location := #caller_location) -> s64 #expand {
-    return element(style, #code {
+    return element(style, manual_key, #code {
         node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
         rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
         set_weight(node.style.font, node.style.font_weight);
@@ -5194,7 +5238,7 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
             node.style.x_justification = parent.style.x_justification;
             node.style.y_justification = parent.style.y_justification;
         }
-    }, manual_key, location);
+    }, location);
 }
 text :: (content: string, manual_key := "", location := #caller_location) -> s64 #expand {
     return text(Style.{}, content, "", location);
@@ -6355,6 +6399,8 @@ prepare_frame :: () {
                 size = node.size,
                 position = node.position,
                 clipping_rectangle = node.clipping_rectangle,
+                state_offset = node.state_offset,
+                state_size = node.state_size,
             };
         }
     }
@@ -6375,5 +6421,7 @@ prepare_frame :: () {
             }
         }
     }
+    state_current = 1 - state_current;
+    state_used = 0;
     array_reset_keeping_memory(*node_tree);
 }

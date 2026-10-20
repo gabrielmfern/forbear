@@ -28,11 +28,6 @@ main :: () {
     frame_allocator.data = *frame_pool;
     frame_allocator.proc = flat_pool_allocator_proc;
 
-    fps := 0;
-    frames := 0;
-    last := seconds_since_init();
-    previous := last;
-
     input_buffer: [4096]u8;
     input: string;
     input.data = input_buffer.data;
@@ -55,14 +50,6 @@ main :: () {
             update_window(*backend, *window);
         }
 
-        frames += 1;
-        now := seconds_since_init();
-        if now - last >= 1 {
-            fps = frames;
-            frames = 0;
-            last = now;
-        }
-
         element(Style.{
             width = grow(),
             height = grow(),
@@ -72,6 +59,18 @@ main :: () {
             padding = all(16),
             direction = .VERTICAL,
         }, #code {
+            frames := state(cast(float64)0.0);
+            fps := state(cast(float64)0.0);
+            last := state(cast(float64)0.0);
+
+            frames.* += 1;
+            now := seconds_since_init();
+            if now - last.* >= 1 {
+                fps.* = frames.*;
+                frames.* = 0;
+                last.* = now;
+            }
+
             element(Style.{ width = grow(), y_justification = .CENTER }, #code {
                 element(Style.{ font_size = 28, color = rgb(255, 255, 255) }, #code {
                     text("forbear");
@@ -93,10 +92,10 @@ main :: () {
                 });
             });
 
-            element(Style.{ 
-                background = color(rgb(255, 0, 0)), 
-                width = fixed(200), 
-                height = fixed(200) 
+            element(Style.{
+                background = color(rgb(255, 0, 0)),
+                width = fixed(200),
+                height = fixed(200)
             }, #code {
                 node := get_node();
                 if is_mouse_held() && is_mouse_inside() {
@@ -121,6 +120,16 @@ main :: () {
                 string_key := sprint("%", key);
                 text(string_key, manual_key = string_key);
             }
+
+            // for label: string.["a", "b"] {
+            //     element(Style.{}, manual_key = label, #code {
+            //         count := state(0);
+            //         if on_click() {
+            //             count.* += 1;
+            //         }
+            //         text(tprint("% %", label, count.*));
+            //     });
+            // }
         });
 
         layout();

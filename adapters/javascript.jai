@@ -56,18 +56,18 @@ Javascript_Adapter :: struct {
 };
 
 init_adapter :: (
-    adapter: *Javascript_Adapter, 
+    adapter: *Javascript_Adapter,
     frame_pool_allocator: Allocator,
-    main_javascript_source: string, 
-    main_javascript_source_name: string, 
+    main_javascript_source: string,
+    main_javascript_source_name: string,
 ) {
     adapter.frame_context = context;
     adapter.frame_context.allocator = frame_pool_allocator;
     adapter.runtime = javascript_init(
         adapter,
-        main_javascript_source.data, 
-        main_javascript_source.count, 
-        main_javascript_source_name.data, 
+        main_javascript_source.data,
+        main_javascript_source.count,
+        main_javascript_source_name.data,
         main_javascript_source_name.count
     );
     adapter.openings_stack.allocator = context.forbear.persistent_allocator;
@@ -377,6 +377,7 @@ forbear_open :: (adapter: *Javascript_Adapter, js_style_object: *void, manual_ke
 forbear_close :: (adapter: *Javascript_Adapter) #c_call {
     push_context adapter.frame_context {
         opening := pop(*adapter.openings_stack);
+        // TODO: pass down the location to the jaascript code here so that close_element can show where which element's state as misused
         close_element(opening);
     }
 }
