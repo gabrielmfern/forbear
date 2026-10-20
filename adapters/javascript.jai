@@ -396,7 +396,7 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
         style := style_from(adapter, js_style_object);
 
         using opening := open_element(style, key);
-        node := *context.forbear.node_tree[node_index];
+        node := *context.forbear.element_tree[element_index];
 
         // TODO: find out how to not have this code here duplicated with the one on for `text`
         rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
@@ -409,7 +409,7 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
         node.max_size = node.glyphs.max_size * font_units_to_point;
 
         if node.parent != -1 {
-            parent := context.forbear.node_tree[node.parent];
+            parent := context.forbear.element_tree[node.parent];
             if parent.style.cursor == .DEFAULT {
                 node.style.cursor = .TEXT;
             }
