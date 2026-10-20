@@ -1865,9 +1865,9 @@ get_measurement :: (element_index: s64 = -1) -> measurement: Element_Measurement
             // I don't think we should sort these measurements by keys because that would be making the normal case
             // slower in favour of a case that should be rare as I expect things to be.
             //
-            // TODO: to improve the performance of this, we should store a contiguous array of the keys of the previous
-            // frame's element tree's keys
-            //
+            // TODO(depessimization): we should store a contiguous array of the keys of the previous frame's element tree's keys
+            // TOOD(depessimization): we should store the previous_index in open_element(), then look up based on that here.
+            // There, if the indices don't match, we should iterate to find the index
             for measurement_by_index: measurements {
                 if measurement_by_index.key == scope_key {
                     return measurement_by_index, true;

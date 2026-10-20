@@ -377,7 +377,6 @@ forbear_open :: (adapter: *Javascript_Adapter, js_style_object: *void, manual_ke
 forbear_close :: (adapter: *Javascript_Adapter) #c_call {
     push_context adapter.frame_context {
         opening := pop(*adapter.openings_stack);
-        // TODO: pass down the location to the jaascript code here so that close_element can show where which element's state as misused
         close_element(opening);
     }
 }
