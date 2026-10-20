@@ -105,31 +105,30 @@ main :: () {
                     node.style.background = color(rgb(100, 100, 0));
                 }
             });
-            #if OS == .LINUX {
-                frame_input := get_text_input();
-                if frame_input.count > 0 {
-                    print("frame_input: %\n", frame_input);
-                    memcpy(input.data + input.count, frame_input.data, frame_input.count);
-                    input.count += frame_input.count;
-                    print("input: %\n", input);
-                }
-                text(sprint("this was the input text until now: '%'", input));
+           
+            frame_input := get_text_input();
+            if frame_input.count > 0 {
+                print("frame_input: %\n", frame_input);
+                memcpy(input.data + input.count, frame_input.data, frame_input.count);
+                input.count += frame_input.count;
+                print("input: %\n", input);
             }
+            text(sprint("this was the input text until now: '%'", input));
 
             for key: window.keys_held {
                 string_key := sprint("%", key);
                 text(string_key, manual_key = string_key);
             }
 
-            // for label: string.["a", "b"] {
-            //     element(Style.{}, manual_key = label, #code {
-            //         count := state(0);
-            //         if on_click() {
-            //             count.* += 1;
-            //         }
-            //         text(tprint("% %", label, count.*));
-            //     });
-            // }
+            for label: string.["a", "b"] {
+                element(Style.{}, manual_key = label, #code {
+                    count := state(0);
+                    if on_click() {
+                        count.* += 1;
+                    }
+                    text(tprint("% %", label, count.*));
+                });
+            }
         });
 
         layout();
