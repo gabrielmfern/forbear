@@ -6309,6 +6309,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         start.* = xx offset;
         offset += count;
     }
+    assert(offset == unsorted_draw_instances.count);
     for instance: unsorted_draw_instances {
         sorted_draw_instance[z_buckets[instance.z]] = instance;
         z_buckets[instance.z] += 1;
