@@ -1845,11 +1845,12 @@ Node_Measurement :: struct {
     state_size: s64;
     key: u64 = U64_MAX;
 }
-get_measurement :: () -> measurement: Node_Measurement, defined: bool {
+get_measurement :: (node_index: s64 = -1) -> measurement: Node_Measurement, defined: bool {
     using context.forbear;
-    if parent_index != -1 {
-        if parent_index < measurements.count && measurements[parent_index].key == scope_key {
-            return measurements[parent_index], true;
+    measurement_index := ifx node_index == -1 then parent_index else node_index;
+    if measurement_index != -1 {
+        if measurement_index < measurements.count && measurements[measurement_index].key == scope_key {
+            return measurements[measurement_index], true;
         } else {
             //
             // I don't think we should sort these measurements by keys because that would be making the normal case
@@ -1863,9 +1864,11 @@ get_measurement :: () -> measurement: Node_Measurement, defined: bool {
                     return measurement_by_index, true;
                 }
             }
+            return Node_Measurement.{}, false;
         }
+    } else {
+        return Node_Measurement.{}, false;
     }
-    return Node_Measurement.{}, false;
 }
 state :: (initial: $T) -> *T {
     using context.forbear;
@@ -4933,10 +4936,6 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
     };
 }
 close_element :: (using data: Element_Opening_Data, source_location := "") {
-    context.forbear.parent_index = parent_index;
-    context.forbear.scope_key = scope_key;
-    context.forbear.base_style = base_style;
-
     node := *context.forbear.node_tree[node_index];
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
@@ -4953,6 +4952,10 @@ close_element :: (using data: Element_Opening_Data, source_location := "") {
         }
         exit(-1);
     }
+
+    context.forbear.parent_index = parent_index;
+    context.forbear.scope_key = scope_key;
+    context.forbear.base_style = base_style;
 }
 // API used when building UIs straight from jai
 element :: (

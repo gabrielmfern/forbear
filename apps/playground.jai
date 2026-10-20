@@ -87,7 +87,7 @@ main :: () {
                     element(Style.{ width = grow() }, #code {
                         text("FPS:");
                         element(Style.{ width = grow() });
-                        text(tprint("%", fps));
+                        text(tprint("%", fps.*));
                     });
                 });
             });
