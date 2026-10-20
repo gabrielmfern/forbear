@@ -6241,10 +6241,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
             rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
             font_units_to_point := get_font_units_to_pixel(node.style.font, rounded_font_size) / (cast(float) window.scale);
 
-            extra_capacity := unsorted_draw_instances.allocated - unsorted_draw_instances.count;
-            if extra_capacity < node.glyphs.array.count {
-                array_resize(*unsorted_draw_instances, extra_capacity - node.glyphs.array.count);
-            }
+            array_reserve(*unsorted_draw_instances, unsorted_draw_instances.count + node.glyphs.array.count);
             for glyph: node.glyphs.array {
                 atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
@@ -6309,7 +6306,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     offset: u32;
     for *start: z_buckets {
         count := start.*;
-        start.* = xx soffset;
+        start.* = xx offset;
         offset += count;
     }
     for instance: unsorted_draw_instances {
