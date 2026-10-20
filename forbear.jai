@@ -1805,17 +1805,26 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
     out.y_justification = ifx style.y_justification == xx UNSET then .START else style.y_justification;
 }
 
+Pool_Slot :: struct {
+    pool: Flat_Pool;
+    allocator: Allocator;
+    last_frame: s64;
+    used: bool;
+};
+pool_slots: [256]Pool_Slot;
 Node :: struct {
     size: Vector2;
     position: Vector2;
     min_size: Vector2;
     max_size: Vector2 = Vector2.{FLOAT32_INFINITY, FLOAT32_INFINITY};
+    z: u16;
 
     first_child: s64 = -1;
     last_child: s64 = -1;
     next_sibling: s64 = -1;
     previous_sibling: s64 = -1;
     parent: s64 = -1;
+    glyphs: Glyphs;
 
     style: Complete_Style;
 
@@ -1829,11 +1838,10 @@ Node :: struct {
     // Clip rect inherited from ancestors that have constrained size with overflowing children. Format: [x, y, width, height].
     // If NAN, no clipping is applied.
     clipping_rectangle: Vector4 = VECTOR4_NAN;
-    glyphs: Glyphs;
     state_offset: s64;
     state_size: s64;
+    pool_slot: s64 = -1;
     key: u64;
-    z: u16;
 
     tree: *Node_Tree;
 };
@@ -1843,6 +1851,7 @@ Node_Measurement :: struct {
     clipping_rectangle: Vector4 = VECTOR4_NAN;
     state_offset: s64;
     state_size: s64;
+    pool_slot: s64 = -1;
     key: u64 = U64_MAX;
 }
 get_measurement :: (node_index: s64 = -1) -> measurement: Node_Measurement, defined: bool {
@@ -1869,6 +1878,46 @@ get_measurement :: (node_index: s64 = -1) -> measurement: Node_Measurement, defi
     } else {
         return Node_Measurement.{}, false;
     }
+}
+node_pool :: () -> Allocator {
+    using context.forbear;
+    assert(parent_index != -1, "node_pool() must be called from inside an element");
+    node := *node_tree[parent_index];
+    pool_slot := node.pool_slot;
+    if pool_slot == -1 {
+        measurement, defined := get_measurement();
+        if defined {
+            pool_slot = measurement.pool_slot;
+        }
+    }
+    if pool_slot == -1 {
+        for *slot: pool_slots {
+            if !slot.used {
+                pool_slot = it_index;
+                if slot.pool.memory_base == null {
+                    init(*slot.pool, 64 * 1024 * 1024);
+                    slot.allocator.proc = flat_pool_allocator_proc;
+                    slot.allocator.data = *slot.pool;
+                }
+                slot.used = true;
+                break;
+            }
+        }
+    }
+    if pool_slot == -1 {
+        log_error(#string END
+There are no more pool slots available (256). This means one of three things:
+1) you have a bug in your using more pool than you need;
+2) you're abusing pools, and you should not;
+3) we should increase our pool count to more than 256.
+
+Please get in touch with us to judge which one it is.
+        END);
+        exit(-1);
+    }
+    node.pool_slot = pool_slot;
+    pool_slots[node.pool_slot].last_frame = frame;
+    return pool_slots[node.pool_slot].allocator;
 }
 state :: ($T: Type, initial: T) -> *T {
     using context.forbear;
@@ -5293,6 +5342,7 @@ Forbear :: struct {
     node_tree: Node_Tree;
     measurements: [..]Node_Measurement;
 
+    frame: s64;
     persistent_allocator: Allocator;
 
     parent_index: s64 = -1;
@@ -6397,6 +6447,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 
 prepare_frame :: () {
     using context.forbear;
+   
     {
         push_allocator(persistent_allocator);
         array_resize(*measurements, node_tree.count, false);
@@ -6405,15 +6456,27 @@ prepare_frame :: () {
             // that was allocated in the frame pool. besides, in what I was able to measure, this copy tends to be more
             // performant than if we were to copy the entire Node_Tree with memcpy.
             measurements[it_index] = Node_Measurement.{
-                key = node.key,
                 size = node.size,
                 position = node.position,
                 clipping_rectangle = node.clipping_rectangle,
                 state_offset = node.state_offset,
                 state_size = node.state_size,
+                pool_slot = node.pool_slot,
+                key = node.key,
             };
         }
     }
+
+    for *slot: pool_slots {
+        if slot.used && slot.last_frame != frame {
+            if slot.pool.current_point != slot.pool.memory_base {
+                madvise(slot.pool.memory_base, cast(u64) (slot.pool.current_point - slot.pool.memory_base), MADV_DONTNEED);
+            }
+            reset(*slot.pool);
+            slot.used = false;
+        }
+    }
+
     window.keys_pressed.count = 0;
     window.keys_released.count = 0;
     window.keys_repeated.count = 0;
@@ -6434,4 +6497,6 @@ prepare_frame :: () {
     state_current = 1 - state_current;
     state_used = 0;
     array_reset_keeping_memory(*node_tree);
+
+    frame += 1;
 }

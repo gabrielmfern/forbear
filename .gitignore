@@ -12,10 +12,11 @@ introspection
 dist
 
 ## binaries
-main
-playground
-tests
 apps/calculator/calculator
+apps/calculator/tests
+apps/javascript/main
+apps/playground
+apps/pools
 
 # javascript
 node_modules
