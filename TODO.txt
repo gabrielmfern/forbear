@@ -12,8 +12,8 @@
     - [x] mouse input
 - [x] draw rounded corners
 - [x] draw in the z order
-- [ ] state management
-- [ ] support for element arenas, allowing for users to allocate growable arrays in state
+- [x] state management
+- [x] support for element arenas, allowing for users to allocate growable arrays in state
 - [ ] support for components
 - [ ] build a calculator program
 - [ ] implement C ABI and C adapter
