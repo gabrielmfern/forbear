@@ -1870,7 +1870,7 @@ get_measurement :: (node_index: s64 = -1) -> measurement: Node_Measurement, defi
         return Node_Measurement.{}, false;
     }
 }
-state :: (initial: $T) -> *T {
+state :: ($T: Type, initial: T) -> *T {
     using context.forbear;
     assert(parent_index != -1, "state(initial: $T) must be called from inside an element");
     node := *node_tree[parent_index];
@@ -1893,6 +1893,13 @@ state :: (initial: $T) -> *T {
     node.state_size += size;
     state_used += size;
     return result;
+}
+state :: (initial: $T) -> *T {
+    return state(T, initial);
+}
+state :: ($T: Type) -> *T {
+    initial: T;
+    return state(T, initial);
 }
 get_node :: () -> *Node {
     using context.forbear;
