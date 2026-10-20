@@ -112,23 +112,23 @@ parse_expression_should_handle_basic_expression :: () {
     assert(tokens[8] == Token.{kind=.NUMBER,number=19});
 } @Test
 
-previous_word_boundary :: (text: []u8, cursor: s64) -> s64 {
+previous_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
     c := cursor;
-    while c > 0 && !is_digit(text[c - 1]) {
+    while c > 0 && !is_digit(text.*[c - 1]) {
         c -= 1;
     }
-    while c > 0 && is_digit(text[c - 1]) {
+    while c > 0 && is_digit(text.*[c - 1]) {
         c -= 1;
     }
     return c;
 }
 
-next_word_boundary :: (text: []u8, cursor: s64) -> s64 {
+next_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
     c := cursor;
-    while c < text.count && !is_digit(text[c]) {
+    while c < text.count && !is_digit(text.*[c]) {
         c += 1;
     }
-    while c < text.count && is_digit(text[c]) {
+    while c < text.count && is_digit(text.*[c]) {
         c += 1;
     }
     return c;
@@ -178,12 +178,6 @@ main :: () {
     frame_allocator.data = *frame_pool;
     frame_allocator.proc = flat_pool_allocator_proc;
 
-    tokens: [..]Token;
-    tokens.allocator = context.allocator;
-
-    expression: [..]u8;
-    expression.allocator = context.allocator;
-
     while window.running {
         push_allocator(frame_allocator);
         prepare_frame();
@@ -210,6 +204,8 @@ main :: () {
             direction = .VERTICAL,
             text_wrapping = .NONE,
         }, #code {
+            expression := state([..]u8);
+            tokens := state([..]Token);
             parse_result := state(Parse_Result);
 
             DIGITS_SIZE :: 32;
@@ -231,7 +227,7 @@ main :: () {
                 if text_input.count > 0 {
                     for character: text_input {
                         if is_digit(character) || is_any(character, "+-*/ .") {
-                            array_insert_at(*expression, character, cursor_index.*);
+                            array_insert_at(expression, character, cursor_index.*);
                             cursor_index.* += 1;
                         } else {
                             log("ignoring input character %, since it's not in the ones we defined as supporting", character);
@@ -272,14 +268,14 @@ main :: () {
                 removed := removal_end - removal_start;
                 if removed > 0 {
                     for i: removal_start..expression.count - removed - 1 {
-                        expression[i] = expression[i + removed];
+                        expression.*[i] = expression.*[i + removed];
                     }
                     expression.count -= removed;
                     cursor_index.* = min(cursor_index.*, removal_start);
                 }
 
                 if removed > 0 || text_input.count > 0 {
-                    parse_result.* = parse_expression(to_string(expression.data, expression.count), *tokens);
+                    parse_result.* = parse_expression(to_string(expression.data, expression.count), tokens);
                 }
 
                 expression_index := text(to_string(expression.data, expression.count));
@@ -331,7 +327,7 @@ main :: () {
                     value_left: float64 = FLOAT64_NAN;
                     op := Operator.NONE;
                     value_right: float64 = FLOAT64_NAN;
-                    for token: tokens {
+                    for token: tokens.* {
                         if isnan(value_left) {
                             if token.kind == .NUMBER {
                                 value_left = token.number;
