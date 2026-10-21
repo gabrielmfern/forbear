@@ -4,8 +4,6 @@
 #import "GL";
 #import,file "../forbear.jai";
 
-inter := #run create_font(read_entire_file(tprint("%Inter.ttf", #filepath)));
-
 counter :: (label: string, tag: u64) {
     before := state(u64);
     if before.* == 0 {
@@ -39,6 +37,8 @@ main :: () {
     window: Window;
     init_backend(*backend);
     init_window(*backend, *window, 900, 600, "scopes");
+
+    inter := #run create_font(read_entire_file(tprint("%Inter.ttf", #filepath)));
 
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{

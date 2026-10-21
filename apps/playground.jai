@@ -6,20 +6,19 @@ MEMORY_DEBUGGING :: false;
 #import "GL";
 #import,file "../forbear.jai";
 
-inter := #run create_font(read_entire_file(tprint("%Inter.ttf", #filepath)));
-
 main :: () {
     backend: Backend;
     window: Window;
     init_backend(*backend);
     init_window(*backend, *window, 800, 600, "playground");
 
+    inter := #run create_font(read_entire_file(tprint("%Inter.ttf", #filepath)));
+
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *inter,
         color = rgb(255, 255, 255),
     });
-
     init_font(*inter);
 
     frame_pool: Flat_Pool;

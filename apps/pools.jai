@@ -6,13 +6,14 @@
 POSIX :: #import "POSIX";
 #import,file "../forbear.jai";
 
-inter := #run create_font(read_entire_file(tprint("%Inter.ttf", #filepath)));
 
 main :: () {
     backend: Backend;
     window: Window;
     init_backend(*backend);
     init_window(*backend, *window, 900, 600, "pools");
+
+    inter := #run create_font(read_entire_file(tprint("%Inter.ttf", #filepath)));
 
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
@@ -58,7 +59,7 @@ main :: () {
             swapped := state(false);
 
             slots_in_use := 0;
-            for pool_slots {
+            for forbear.pool_slots {
                 if it.used {
                     slots_in_use += 1;
                 }
@@ -121,7 +122,7 @@ main :: () {
                         }
 
                         slot := get_node().pool_slot;
-                        pool := *pool_slots[slot].pool;
+                        pool := *forbear.pool_slots[slot].pool;
                         text(tprint(
                             "%: slot %   % evens   % odds   % KB in pool   %",
                             label, slot, evens.count, odds.count,

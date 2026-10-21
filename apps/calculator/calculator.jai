@@ -120,7 +120,7 @@ U64_MAX :: Math.U64_MAX;
 //
 // ===== program styles =====
 //
-inter := #run create_font(read_entire_file(tprint("%../Inter.ttf", #filepath)));
+#add_context inter: Font;
 WIDTH :: 360;
 HEIGHT :: 512;
 BG :: #run rgb(28, 31, 35);
@@ -128,7 +128,7 @@ BG_SECONDARY :: #run rgb(17, 19, 22);
 ERROR :: #run rgb(232, 91, 91);
 TRANSPARENT :: #run rgba(1.0, 1.0, 1.0, 0.0);
 
-Button :: (body: #code) -> bool #expand {
+Button :: (body: Code) -> bool #expand {
     element(Style.{
         background = color(BG_SECONDARY),
         border_width = 1.0,
@@ -247,7 +247,7 @@ App :: () {
 
             expression_node := get_node(expression_index);
             expression_glyphs := expression_node.glyphs;
-            font_units_to_pixel := get_font_units_to_pixel(*inter, DIGITS_SIZE);
+            font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
 
             cursor_position: Vector2;
             if expression.count > 0 {
@@ -319,16 +319,20 @@ App :: () {
                     value_left = compute(value_left, op, value_right);
                 }
 
-                element(Style.{
-                    background = color(BG_SECONDARY),
-                    padding = right(block(20), 15),
-                    height = grow(),
-                }, #code {
-                    text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
-                    text_node := get_node(text_index);
-                    result_node := get_node();
-                    result_node.style.placement = relative(Vector2.{ viewport.x - text_node.size.x - 15.0, 0.0 });
-                });
+                input_measurement, defined := get_measurement();
+
+                if defined {
+                    element(Style.{
+                        background = color(BG_SECONDARY),
+                        padding = all(5.0),
+                        font_size = 12,
+                    }, #code {
+                        text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
+                        text_node := get_node(text_index);
+                        result_node := get_node();
+                        result_node.style.placement = relative(Vector2.{ viewport.x - text_node.size.x - 15.0, input_measurement.size.y - text_node.size.y - 20.0 });
+                    });
+                }
             }
         });
 
@@ -364,14 +368,16 @@ main :: () {
         set_size(window.ns_window, selector("setContentMaxSize:"), .{ width = WIDTH, height = HEIGHT });
     }
 
+    context.inter = #run create_font(read_entire_file(tprint("%../Inter.ttf", #filepath)));
+
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
-        font = *inter,
+        font = *context.inter,
         color = rgb(230, 232, 235),
         font_size = 16,
     });
 
-    init_font(*inter);
+    init_font(*context.inter);
 
     frame_pool: Flat_Pool;
     frame_allocator: Allocator;
