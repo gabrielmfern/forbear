@@ -5043,7 +5043,7 @@ element :: (body: Code, location := #caller_location) -> s64 #expand {
 element :: (style: Style, body: Code, location := #caller_location) -> s64 #expand {
     return element(style = style, manual_key = "", body = body, location = location);
 }
-scope :: (manual_key := "", body: Code := #code {}, location := #caller_location) #expand {
+scope :: (manual_key := "", body := #code {}, location := #caller_location) #expand {
     key: u64;
     if manual_key.count > 0 {
         key = fnv1a_hash(manual_key.data, manual_key.count);
@@ -5077,6 +5077,9 @@ scope :: (manual_key := "", body: Code := #code {}, location := #caller_location
 
     context.forbear.parent_index = previous_parent_index;
     context.forbear.scope_key = previous_scope_key;
+}
+scope :: (body: Code, location := #caller_location) #expand {
+    scope("", body, location);
 }
 
 freetype_library: FT_Library;

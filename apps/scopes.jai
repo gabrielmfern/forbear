@@ -84,8 +84,12 @@ main :: () {
             }, #code {
                 show_a := state(true);
                 auto_toggle := state(true);
+                rotation := state(s64);
                 if auto_toggle.* && context.forbear.frame % 120 == 0 {
                     show_a.* = !show_a.*;
+                }
+                if auto_toggle.* && context.forbear.frame % 90 == 0 {
+                    rotation.* += 1;
                 }
 
                 text(tprint("frame %   nodes %", context.forbear.frame, context.forbear.node_tree.count));
@@ -101,7 +105,14 @@ main :: () {
                         if on_click() {
                             auto_toggle.* = !auto_toggle.*;
                         }
-                        text(ifx auto_toggle.* then "auto toggle A: on" else "auto toggle A: off");
+                        text(ifx auto_toggle.* then "auto toggle A and rotate: on" else "auto toggle A and rotate: off");
+                    });
+                    element(Style.{ width = fixed(8) });
+                    element(Style.{ background = color(rgb(60, 66, 74)), padding = all(8) }, #code {
+                        if on_click() {
+                            rotation.* += 1;
+                        }
+                        text("rotate G H I");
                     });
                 });
 
@@ -122,6 +133,14 @@ main :: () {
                     scope(#code counter("E", 5));
                     scope(#code counter("F", 6));
                 });
+
+                text("G, H and I are keyed scopes from one loop; rotating must move their clicks with them.");
+                labels := string.["G", "H", "I"];
+                for 0..labels.count - 1 {
+                    index := (it + rotation.*) % labels.count;
+                    label := labels[index];
+                    scope(label, #code counter(label, cast(u64) (7 + index)));
+                }
             });
         });
 
