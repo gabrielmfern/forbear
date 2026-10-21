@@ -5032,10 +5032,7 @@ element :: (
     if manual_key.count > 0 {
         key = fnv1a_hash(manual_key.data, manual_key.count);
     } else {
-        // we use the caller location here
-        key = fnv1a_hash(location.fully_pathed_filename.data, location.fully_pathed_filename.count);
-        key = fnv1a_hash(cast(u64) location.line_number, key);
-        key = fnv1a_hash(cast(u64) location.character_number, key);
+        key = fnv1a_hash(*location);
     }
     if context.forbear.scope_key != U64_MAX {
         key = fnv1a_hash(context.forbear.scope_key, key);
