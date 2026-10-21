@@ -1,7 +1,7 @@
 build :: () {
     set_build_options_dc(.{do_output = false});
 
-    w := compiler_create_workspace("Tests");
+    w := compiler_create_workspace("tests");
     options := get_build_options(w);
     options.output_executable_name = "tests";
     options.entry_point_name = "__run_tests";
@@ -20,7 +20,7 @@ build :: () {
             typechecked := cast(*Message_Typechecked) message;
             for typechecked.procedure_headers {
                 for note: it.expression.notes {
-                    if note.text == "Test"  array_add(*tests, it.expression.name);
+                    if note.text == "test"  array_add(*tests, it.expression.name);
                 }
             }
 

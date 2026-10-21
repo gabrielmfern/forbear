@@ -8,6 +8,8 @@ Math :: #import "Math";
 #import "GL";
 #import,file "../../forbear.jai";
 
+BUILD_FLAGS :: "+forbear";
+
 #if OS == .MACOS {
     #import "Objective_C";
 }
@@ -25,7 +27,6 @@ Token :: struct {
         number: float64;
         op: Operator;
     }
-
 };
 tokens_equal :: (a: Token, b: Token) -> bool {
     if a.kind != b.kind {
@@ -110,29 +111,7 @@ parse_expression_should_handle_basic_expression :: () {
     assert(tokens[6] == Token.{kind=.NUMBER,number=4});
     assert(tokens[7] == MULTIPLY);
     assert(tokens[8] == Token.{kind=.NUMBER,number=19});
-} @Test
-
-previous_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
-    c := cursor;
-    while c > 0 && !is_digit(text.*[c - 1]) {
-        c -= 1;
-    }
-    while c > 0 && is_digit(text.*[c - 1]) {
-        c -= 1;
-    }
-    return c;
-}
-
-next_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
-    c := cursor;
-    while c < text.count && !is_digit(text.*[c]) {
-        c += 1;
-    }
-    while c < text.count && is_digit(text.*[c]) {
-        c += 1;
-    }
-    return c;
-}
+} @test
 
 isnan :: Math.isnan;
 FLOAT64_NAN :: Math.FLOAT64_NAN;
@@ -141,13 +120,227 @@ U64_MAX :: Math.U64_MAX;
 //
 // ===== program styles =====
 //
-INTER_TTF :: #run read_entire_file(tprint("%../Inter.ttf", #filepath));
+inter := #run create_font(read_entire_file(tprint("%../Inter.ttf", #filepath)));
 WIDTH :: 360;
 HEIGHT :: 512;
 BG :: #run rgb(28, 31, 35);
 BG_SECONDARY :: #run rgb(17, 19, 22);
 ERROR :: #run rgb(232, 91, 91);
 TRANSPARENT :: #run rgba(1.0, 1.0, 1.0, 0.0);
+
+App :: () {
+    window := context.forbear.window;
+    viewport_width := (cast(float)window.width) / (cast(float)window.scale);
+
+    element(Style.{
+        width = grow(),
+        height = grow(),
+        direction = .VERTICAL,
+        text_wrapping = .NONE,
+    }, #code {
+        expression := state([..]u8);
+        tokens := state([..]Token);
+        parse_result := state(Parse_Result);
+
+        DIGITS_SIZE :: 32;
+        input_index := element(Style.{
+            border_width = bottom(2.0),
+            background = color(BG_SECONDARY),
+            padding = in_line(block(20), 15),
+            y_justification = .CENTER,
+            font_size = DIGITS_SIZE,
+            width = fixed(viewport_width),
+        }, #code {
+            cursor_index := state(s64, 0);
+
+            // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
+            //
+            // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
+            // and operators, we can simply remove by index as all characters are only going to be one byte.
+            text_input := get_text_input();
+            if text_input.count > 0 {
+                for character: text_input {
+                    if is_digit(character) || is_any(character, "+-*/ .") {
+                        array_insert_at(expression, character, cursor_index.*);
+                        cursor_index.* += 1;
+                    } else {
+                        log("ignoring input character %, since it's not in the ones we defined as supporting", character);
+                    }
+                }
+            }
+            previous := max(cursor_index.* - 1, 0);
+            next := min(cursor_index.* + 1, expression.count);
+            by_word := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
+            #if OS == .LINUX {
+                by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
+            }
+            previous_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
+                c := cursor;
+                while c > 0 && !is_digit(text.*[c - 1]) {
+                    c -= 1;
+                }
+                while c > 0 && is_digit(text.*[c - 1]) {
+                    c -= 1;
+                }
+                return c;
+            }
+            next_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
+                c := cursor;
+                while c < text.count && !is_digit(text.*[c]) {
+                    c += 1;
+                }
+                while c < text.count && is_digit(text.*[c]) {
+                    c += 1;
+                }
+                return c;
+            }
+            if by_word {
+                previous = previous_word_boundary(expression, cursor_index.*);
+                next = next_word_boundary(expression, cursor_index.*);
+            }
+            #if OS == .MACOS {
+                if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
+                    previous = previous_word_boundary(expression, 0);
+                    next = next_word_boundary(expression, expression.count);
+                }
+            }
+            removal_start, removal_end := cursor_index.*;
+            if on_key_down(.BACKSPACE, true) {
+                removal_start = previous;
+            } else if on_key_down(.DELETE, true) {
+                removal_end = next;
+            } else if on_key_down(.ARROW_LEFT, true) {
+                cursor_index.* = previous;
+            } else if on_key_down(.ARROW_RIGHT, true) {
+                cursor_index.* = next;
+            } else if on_key_down(.HOME) {
+                cursor_index.* = 0;
+            } else if on_key_down(.END) {
+                cursor_index.* = expression.count;
+            }
+
+            removed := removal_end - removal_start;
+            if removed > 0 {
+                for i: removal_start..expression.count - removed - 1 {
+                    expression.*[i] = expression.*[i + removed];
+                }
+                expression.count -= removed;
+                cursor_index.* = min(cursor_index.*, removal_start);
+            }
+
+            if removed > 0 || text_input.count > 0 {
+                parse_result.* = parse_expression(to_string(expression.data, expression.count), tokens);
+            }
+
+            expression_index := text(to_string(expression.data, expression.count));
+
+            expression_node := get_node(expression_index);
+            expression_glyphs := expression_node.glyphs;
+            font_units_to_pixel := get_font_units_to_pixel(*inter, DIGITS_SIZE);
+
+            cursor_position: Vector2;
+            if expression.count > 0 {
+                if cursor_index.* == expression.count {
+                    cursor_position = (expression_glyphs.array[expression.count - 1].position + expression_glyphs.array[expression.count - 1].advance) * font_units_to_pixel;
+                } else {
+                    cursor_position = expression_glyphs.array[cursor_index.*].position * font_units_to_pixel;
+                }
+            }
+            input := get_node();
+            cursor_position.x += input.style.padding.x.x + input.style.border_width.x.x;
+            cursor_position.y += input.style.padding.y.x + input.style.border_width.y.x;
+
+            // cursor
+            element(Style.{
+                placement = relative(cursor_position),
+                background = color(rgb(255, 255, 255)),
+                width = fixed(1.0),
+                height = fixed(expression_glyphs.line_height * font_units_to_pixel),
+            });
+
+            {
+                //
+                // === computing and showing the results of the typed out expression ===
+                //
+                compute :: (left: float64, op: Operator, right: float64) -> float64 {
+                    assert(op != .NONE);
+                    if op == {
+                        case .ADD;
+                            return left + right;
+                        case .SUBTRACT;
+                            return left - right;
+                        case .MULTIPLY;
+                            return left * right;
+                        case .DIVIDE;
+                            return left / right;
+                    }
+                    log_error("looks like we added a new opreator, but didn't actually handle it");
+                    return left;
+                }
+
+                value_left: float64 = FLOAT64_NAN;
+                op := Operator.NONE;
+                value_right: float64 = FLOAT64_NAN;
+                for token: tokens.* {
+                    if isnan(value_left) {
+                        if token.kind == .NUMBER {
+                            value_left = token.number;
+                        } else {
+                            // we take left to be an implicit zero when the user just types in an operator
+                            value_left = 0;
+                            op = token.op;
+                        }
+                    } else if op == .NONE {
+                        assert(token.kind == .OPERATOR);
+                        op = token.op;
+                    } else if isnan(value_right) {
+                        if token.kind == .NUMBER {
+                            value_right = token.number;
+                        } else {
+                            op = token.op;
+                        }
+                        value_left = compute(value_left, op, value_right);
+                        op = .NONE;
+                        value_right = FLOAT64_NAN;
+                    }
+                }
+                if !isnan(value_left) && op != .NONE && !isnan(value_right) {
+                    value_left = compute(value_left, op, value_right);
+                }
+
+                element(Style.{
+                    background = color(BG_SECONDARY),
+                    padding = right(block(20), 15),
+                    height = grow(),
+                }, #code {
+                    text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
+                    text_node := get_node(text_index);
+                    result_node := get_node();
+                    result_node.style.placement = relative(Vector2.{ viewport_width - text_node.size.x - 15.0, 0.0 });
+                });
+            }
+        });
+
+        if parse_result.* != .SUCCESS && expression.count > 0 {
+            input := get_node(input_index);
+            input.style.border_radius = 4.0;
+            input.style.border_width = all(1.0);
+            input.style.border_color = ERROR;
+
+            message := "";
+            if parse_result.* == {
+                case .TWO_NUMBERS_IN_A_ROW;
+                    message = "Two numbers in a row can't be calculated";
+                case .COULD_NOT_PARSE_FLOAT;
+                    message = "Could not parse what should be a number";
+            }
+            text(Style.{ color = ERROR, margin = in_line(5), font_size = 12 }, message);
+        }
+        element(Style.{
+            height = fixed(20),
+        });
+    });
+} @component
 
 main :: () {
     backend: Backend;
@@ -163,8 +356,7 @@ main :: () {
         set_size(window.ns_window, selector("setContentMaxSize:"), .{ width = WIDTH, height = HEIGHT });
     }
 
-    inter: Font;
-    init_font(*inter, INTER_TTF);
+    init_font(*inter);
 
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
@@ -196,196 +388,7 @@ main :: () {
             update_window(*backend, *window);
         }
 
-        viewport_width := (cast(float)window.width) / (cast(float)window.scale);
-
-        element(Style.{
-            width = grow(),
-            height = grow(),
-            direction = .VERTICAL,
-            text_wrapping = .NONE,
-        }, #code {
-            expression := state([..]u8);
-            tokens := state([..]Token);
-            parse_result := state(Parse_Result);
-
-            DIGITS_SIZE :: 32;
-            input_index := element(Style.{
-                border_width = bottom(2.0),
-                background = color(BG_SECONDARY),
-                padding = in_line(block(20), 15),
-                y_justification = .CENTER,
-                font_size = DIGITS_SIZE,
-                width = fixed(viewport_width),
-            }, #code {
-                cursor_index := state(s64, 0);
-
-                // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
-                //
-                // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
-                // and operators, we can simply remove by index as all characters are only going to be one byte.
-                text_input := get_text_input();
-                if text_input.count > 0 {
-                    for character: text_input {
-                        if is_digit(character) || is_any(character, "+-*/ .") {
-                            array_insert_at(expression, character, cursor_index.*);
-                            cursor_index.* += 1;
-                        } else {
-                            log("ignoring input character %, since it's not in the ones we defined as supporting", character);
-                        }
-                    }
-                }
-                previous := max(cursor_index.* - 1, 0);
-                next := min(cursor_index.* + 1, expression.count);
-                by_word := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
-                #if OS == .LINUX {
-                    by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
-                }
-                if by_word {
-                    previous = previous_word_boundary(expression, cursor_index.*);
-                    next = next_word_boundary(expression, cursor_index.*);
-                }
-                #if OS == .MACOS {
-                    if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
-                        previous = previous_word_boundary(expression, 0);
-                        next = next_word_boundary(expression, expression.count);
-                    }
-                }
-                removal_start, removal_end := cursor_index.*;
-                if on_key_down(.BACKSPACE, true) {
-                    removal_start = previous;
-                } else if on_key_down(.DELETE, true) {
-                    removal_end = next;
-                } else if on_key_down(.ARROW_LEFT, true) {
-                    cursor_index.* = previous;
-                } else if on_key_down(.ARROW_RIGHT, true) {
-                    cursor_index.* = next;
-                } else if on_key_down(.HOME) {
-                    cursor_index.* = 0;
-                } else if on_key_down(.END) {
-                    cursor_index.* = expression.count;
-                }
-
-                removed := removal_end - removal_start;
-                if removed > 0 {
-                    for i: removal_start..expression.count - removed - 1 {
-                        expression.*[i] = expression.*[i + removed];
-                    }
-                    expression.count -= removed;
-                    cursor_index.* = min(cursor_index.*, removal_start);
-                }
-
-                if removed > 0 || text_input.count > 0 {
-                    parse_result.* = parse_expression(to_string(expression.data, expression.count), tokens);
-                }
-
-                expression_index := text(to_string(expression.data, expression.count));
-
-                expression_node := get_node(expression_index);
-                expression_glyphs := expression_node.glyphs;
-                font_units_to_pixel := get_font_units_to_pixel(*inter, DIGITS_SIZE);
-
-                cursor_position: Vector2;
-                if expression.count > 0 {
-                    if cursor_index.* == expression.count {
-                        cursor_position = (expression_glyphs.array[expression.count - 1].position + expression_glyphs.array[expression.count - 1].advance) * font_units_to_pixel;
-                    } else {
-                        cursor_position = expression_glyphs.array[cursor_index.*].position * font_units_to_pixel;
-                    }
-                }
-                input := get_node();
-                cursor_position.x += input.style.padding.x.x + input.style.border_width.x.x;
-                cursor_position.y += input.style.padding.y.x + input.style.border_width.y.x;
-
-                // cursor
-                element(Style.{
-                    placement = relative(cursor_position),
-                    background = color(rgb(255, 255, 255)),
-                    width = fixed(1.0),
-                    height = fixed(expression_glyphs.line_height * font_units_to_pixel),
-                });
-
-                {
-                    //
-                    // === computing and showing the results of the typed out expression ===
-                    //
-                    compute :: (left: float64, op: Operator, right: float64) -> float64 {
-                        assert(op != .NONE);
-                        if op == {
-                            case .ADD;
-                                return left + right;
-                            case .SUBTRACT;
-                                return left - right;
-                            case .MULTIPLY;
-                                return left * right;
-                            case .DIVIDE;
-                                return left / right;
-                        }
-                        log_error("looks like we added a new opreator, but didn't actually handle it");
-                        return left;
-                    }
-
-                    value_left: float64 = FLOAT64_NAN;
-                    op := Operator.NONE;
-                    value_right: float64 = FLOAT64_NAN;
-                    for token: tokens.* {
-                        if isnan(value_left) {
-                            if token.kind == .NUMBER {
-                                value_left = token.number;
-                            } else {
-                                // we take left to be an implicit zero when the user just types in an operator
-                                value_left = 0;
-                                op = token.op;
-                            }
-                        } else if op == .NONE {
-                            assert(token.kind == .OPERATOR);
-                            op = token.op;
-                        } else if isnan(value_right) {
-                            if token.kind == .NUMBER {
-                                value_right = token.number;
-                            } else {
-                                op = token.op;
-                            }
-                            value_left = compute(value_left, op, value_right);
-                            op = .NONE;
-                            value_right = FLOAT64_NAN;
-                        }
-                    }
-                    if !isnan(value_left) && op != .NONE && !isnan(value_right) {
-                        value_left = compute(value_left, op, value_right);
-                    }
-
-                    element(Style.{
-                        background = color(BG_SECONDARY),
-                        padding = right(block(20), 15),
-                        height = grow(),
-                    }, #code {
-                        text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
-                        text_node := get_node(text_index);
-                        result_node := get_node();
-                        result_node.style.placement = relative(Vector2.{ viewport_width - text_node.size.x - 15.0, 0.0 });
-                    });
-                }
-            });
-
-            if parse_result.* != .SUCCESS && expression.count > 0 {
-                input := get_node(input_index);
-                input.style.border_radius = 4.0;
-                input.style.border_width = all(1.0);
-                input.style.border_color = ERROR;
-
-                message := "";
-                if parse_result.* == {
-                    case .TWO_NUMBERS_IN_A_ROW;
-                        message = "Two numbers in a row can't be calculated";
-                    case .COULD_NOT_PARSE_FLOAT;
-                        message = "Could not parse what should be a number";
-                }
-                text(Style.{ color = ERROR, margin = in_line(5), font_size = 12 }, message);
-            }
-            element(Style.{
-                height = fixed(20),
-            });
-        });
+        App();
 
         if on_key_down(.ESCAPE) {
             window.running = false;

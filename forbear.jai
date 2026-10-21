@@ -5043,7 +5043,7 @@ element :: (body: Code, location := #caller_location) -> s64 #expand {
 element :: (style: Style, body: Code, location := #caller_location) -> s64 #expand {
     return element(style = style, manual_key = "", body = body, location = location);
 }
-scope :: (manual_key := "", body := #code {}, location := #caller_location) #expand {
+scope :: (manual_key := "", $body := #code {}, location := #caller_location) -> body.type #expand {
     key: u64;
     if manual_key.count > 0 {
         key = fnv1a_hash(manual_key.data, manual_key.count);
@@ -5069,17 +5069,22 @@ scope :: (manual_key := "", body := #code {}, location := #caller_location) #exp
         context.forbear.parent_index = index;
         context.forbear.scope_key = key;
     }
+    defer {
+        measurement, defined := get_measurement();
+        assert(!defined || context.forbear.node_tree[index].state_size == measurement.state_size, "scope called state() a different number of times than last frame");
 
-    #insert body;
+        context.forbear.parent_index = previous_parent_index;
+        context.forbear.scope_key = previous_scope_key;
+    }
 
-    measurement, defined := get_measurement();
-    assert(!defined || context.forbear.node_tree[index].state_size == measurement.state_size, "scope called state() a different number of times than last frame");
-
-    context.forbear.parent_index = previous_parent_index;
-    context.forbear.scope_key = previous_scope_key;
+    #if body.type == void {
+        #insert body;
+    } else {
+        return #insert body;
+    }
 }
-scope :: (body: Code, location := #caller_location) #expand {
-    scope("", body, location);
+scope :: ($body: Code, location := #caller_location) -> body.type #expand {
+    return scope("", body, location);
 }
 
 freetype_library: FT_Library;
@@ -5129,6 +5134,8 @@ Glyph_Atlas_Entry :: struct {
 //     arena: Flat_Pool;
 // };
 Font :: struct {
+    memory: string;
+
     raster_face: FT_Face;
     shaping_font: *kbts_font;
     key: u16;
@@ -5139,8 +5146,17 @@ Font :: struct {
     // prev_cache: Shaping_Cache;
     // next_cache: Shaping_Cache;
 };
+create_font :: (memory: string) -> Font {
+    #import "File";
+
+    font: Font;
+    font.memory = memory;
+    font.key = font_counter;
+    font_counter += 1;
+    return font;
+}
 // TOOD: handle errors for all of the freetype calls
-init_font :: (font: *Font, memory: string) {
+init_font :: (using font: *Font) {
     if freetype_library == null {
         FT_Init_FreeType(*freetype_library);
         // TODO: implement subpixel font rendering and auto enable in lower DPI
@@ -5151,13 +5167,10 @@ init_font :: (font: *Font, memory: string) {
     if shaping_context == null {
         shaping_context = kbts_CreateShapeContext(null, null);
     }
-    FT_New_Memory_Face(freetype_library, memory.data, memory.count, 0, *font.raster_face);
+    FT_New_Memory_Face(freetype_library, memory.data, memory.count, 0, *raster_face);
     // TODO: judege if we should support more than unicode here
-    assert(font.raster_face.charmap.encoding == FT_Encoding.UNICODE);
-
-    font.shaping_font = kbts_ShapePushFontFromMemory(shaping_context, memory.data, xx memory.count, 0);
-    font.key = font_counter;
-    font_counter += 1;
+    assert(raster_face.charmap.encoding == FT_Encoding.UNICODE);
+    shaping_font = kbts_ShapePushFontFromMemory(shaping_context, memory.data, xx memory.count, 0);
 }
 Raster_Glyph :: struct {
     // might be null
@@ -6534,4 +6547,61 @@ prepare_frame :: () {
     array_reset_keeping_memory(*node_tree);
 
     frame += 1;
+}
+
+#scope_export
+
+#import "Compiler";
+get_plugin :: () -> *Metaprogram_Plugin {
+    using plugin := New(Metaprogram_Plugin);
+    message = (plugin: *Metaprogram_Plugin, message: *Message) {
+        if message.kind == .TYPECHECKED {
+            typechecked := cast(*Message_Typechecked) message;
+            for typechecked.procedure_bodies {
+                body := it.expression;
+                if !(body.body_flags & .ALREADY_MODIFIED) {
+                    modified := false;
+                    for sub: it.subexpressions if sub.kind == .PROCEDURE_CALL {
+                        call := cast(*Code_Procedure_Call) sub;
+                        callee := call.resolved_procedure_expression;
+                        if callee && callee.kind == .PROCEDURE_HEADER {
+                            header := cast(*Code_Procedure_Header) callee;
+                            for note: header.notes if note.text == "scope" || note.text == "hook" || note.text == "component" {
+                                inner_call := New(Code_Procedure_Call);
+                                inner_call.* = call.*;
+                                inner_call.resolved_procedure_expression = null;
+                                inner_call.macro_expansion_block = null;
+
+                                code := New(Code_Directive_Code);
+                                code.kind = .DIRECTIVE_CODE;
+                                code.location = call.location;
+                                code.expression = inner_call;
+
+                                ident := New(Code_Ident);
+                                ident.kind = .IDENT;
+                                ident.location = call.location;
+                                ident.name = "scope";
+
+                                arguments: [..]Code_Argument;
+                                array_add(*arguments, .{expression = code});
+
+                                call.procedure_expression = ident;
+                                call.resolved_procedure_expression = null;
+                                call.overloads = null;
+                                call.arguments_unsorted = arguments;
+                                call.arguments_sorted = .[];
+                                call.macro_expansion_block = null;
+
+                                modified = true;
+                            }
+                        }
+                    }
+                    if modified {
+                        compiler_modify_procedure(message.workspace, body);
+                    }
+                }
+            }
+        }
+    }
+    return plugin;
 }
