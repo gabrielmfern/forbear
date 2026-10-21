@@ -1813,6 +1813,11 @@ Pool_Slot :: struct {
 };
 pool_slots: [256]Pool_Slot;
 Node :: struct {
+    Kind :: enum {
+        ELEMENT; SCOPE;
+    }
+    kind: Kind = .ELEMENT;
+
     size: Vector2;
     position: Vector2;
     min_size: Vector2;
@@ -4884,11 +4889,6 @@ append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointe
     push_allocator(context.forbear.persistent_allocator);
 
     index := node_tree.count;
-    if index != 0 && parent_index == -1 {
-        log_error("multiple root nodes are not allowed");
-        exit(-1);
-    }
-
     node := Node.{
         parent = parent_index,
         tree = node_tree,
@@ -4921,15 +4921,20 @@ Element_Opening_Data :: struct {
 };
 // intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
 open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Opening_Data {
-    parent_index := context.forbear.parent_index;
-    node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
+    element_ancestor_index := context.forbear.parent_index;
+    previous_parent_index := context.forbear.parent_index;
+    while element_ancestor_index != -1 && context.forbear.node_tree[element_ancestor_index].kind == .SCOPE {
+        element_ancestor_index = context.forbear.node_tree[element_ancestor_index].parent;
+    }
+
+    node, index := append_to_node_tree(*context.forbear.node_tree, element_ancestor_index);
     previous_base_style := context.forbear.base_style;
     complete_with(style, context.forbear.base_style, *node.style);
     context.forbear.base_style = from(node.style);
     if style.z_index < U16_MAX {
         node.z = style.z_index;
-    } else if parent_index != -1 {
-        parent := context.forbear.node_tree[parent_index];
+    } else if element_ancestor_index != -1 {
+        parent := context.forbear.node_tree[element_ancestor_index];
         if parent.z < U16_MAX {
             node.z = parent.z + 1;
         } else {
@@ -4971,7 +4976,6 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 
-    previous_parent_index := parent_index;
     previous_scope_key := context.forbear.scope_key;
     context.forbear.parent_index = index;
     context.forbear.scope_key = node.key;
@@ -4999,23 +5003,13 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
         node_index = index,
     };
 }
-close_element :: (using data: Element_Opening_Data, source_location := "") {
+close_element :: (using data: Element_Opening_Data) {
     node := *context.forbear.node_tree[node_index];
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 
     measurement, defined := get_measurement();
-    if defined && node.state_size != measurement.state_size {
-        if source_location.count > 0 {
-            log_error(
-                "%: this element called state() a different number of times than last frame",
-                source_location
-            );
-        } else {
-            log_error("an element called state() a different number of times than last frame");
-        }
-        exit(-1);
-    }
+    assert(!defined || node.state_size == measurement.state_size, "element called state() a different number of times than last frame");
 
     context.forbear.parent_index = parent_index;
     context.forbear.scope_key = scope_key;
@@ -5032,7 +5026,7 @@ element :: (
     if manual_key.count > 0 {
         key = fnv1a_hash(manual_key.data, manual_key.count);
     } else {
-        key = fnv1a_hash(*location);
+        key = fnv1a_hash(*location, size_of(Source_Code_Location));
     }
     if context.forbear.scope_key != U64_MAX {
         key = fnv1a_hash(context.forbear.scope_key, key);
@@ -5040,7 +5034,7 @@ element :: (
 
     opening := open_element(style, key);
     #insert body;
-    close_element(opening, tprint("%:%:%", location.fully_pathed_filename, location.line_number, location.character_number));
+    close_element(opening);
     return opening.node_index;
 }
 element :: (body: Code, location := #caller_location) -> s64 #expand {
@@ -5048,6 +5042,41 @@ element :: (body: Code, location := #caller_location) -> s64 #expand {
 }
 element :: (style: Style, body: Code, location := #caller_location) -> s64 #expand {
     return element(style = style, manual_key = "", body = body, location = location);
+}
+scope :: (manual_key := "", body: Code := #code {}, location := #caller_location) #expand {
+    key: u64;
+    if manual_key.count > 0 {
+        key = fnv1a_hash(manual_key.data, manual_key.count);
+    } else {
+        key = fnv1a_hash(*location, size_of(Source_Code_Location));
+    }
+    if context.forbear.scope_key != U64_MAX {
+        key = fnv1a_hash(context.forbear.scope_key, key);
+    }
+
+    parent_index := context.forbear.parent_index;
+    index := context.forbear.node_tree.count;
+    previous_parent_index := parent_index;
+    previous_scope_key := context.forbear.scope_key;
+    {
+        node := Node.{
+            parent = parent_index,
+            tree = *context.forbear.node_tree,
+        };
+        node.kind = .SCOPE;
+        node.key = key;
+        array_add(*context.forbear.node_tree, node,, allocator = context.forbear.persistent_allocator);
+        context.forbear.parent_index = index;
+        context.forbear.scope_key = key;
+    }
+
+    #insert body;
+
+    measurement, defined := get_measurement();
+    assert(!defined || context.forbear.node_tree[index].state_size == measurement.state_size, "scope called state() a different number of times than last frame");
+
+    context.forbear.parent_index = previous_parent_index;
+    context.forbear.scope_key = previous_scope_key;
 }
 
 freetype_library: FT_Library;
@@ -5649,34 +5678,32 @@ layout :: () {
             //
             // ==== fitting nodes ====
             //
-            for <*node: node_tree {
-                if node.first_child != -1 && node.glyphs.array.count == 0 {
-                    if node.style.width.kind == .FIT {
-                        node.size.x = fitting_base(node, .HORIZONTAL);
-                    }
-                    if isnan(node.style.min_width) && node.style.width.kind != .FIXED {
-                        node.min_size.x = fitting_base(node, .HORIZONTAL);
-                    }
-                    if node.style.height.kind == .FIT {
-                        node.size.y = fitting_base(node, .VERTICAL);
-                    }
-                    if isnan(node.style.min_height) && node.style.height.kind != .FIXED {
-                        node.min_size.y = fitting_base(node, .VERTICAL);
-                    }
-                    child_index := node.first_child;
-                    while child_index != -1 {
-                        child := *node_tree[child_index];
-                        defer child_index = child.next_sibling;
-                        if child.style.placement.kind == .FLOW &&
-                        (node.style.width.kind == .FIT || node.style.width.kind == .GROW ||
-                        should_fit_min(node, .HORIZONTAL) || node.style.height.kind == .FIT ||
-                        node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL)) {
-                            fit_child(node, child, .HORIZONTAL);
-                            fit_child(node, child, .VERTICAL);
-                        }
-                    }
-                    clamp(*node.size, node.min_size, node.max_size);
+            for <*node: node_tree if node.kind == .ELEMENT && node.first_child != -1 && node.glyphs.array.count == 0 {
+                if node.style.width.kind == .FIT {
+                    node.size.x = fitting_base(node, .HORIZONTAL);
                 }
+                if isnan(node.style.min_width) && node.style.width.kind != .FIXED {
+                    node.min_size.x = fitting_base(node, .HORIZONTAL);
+                }
+                if node.style.height.kind == .FIT {
+                    node.size.y = fitting_base(node, .VERTICAL);
+                }
+                if isnan(node.style.min_height) && node.style.height.kind != .FIXED {
+                    node.min_size.y = fitting_base(node, .VERTICAL);
+                }
+                child_index := node.first_child;
+                while child_index != -1 {
+                    child := *node_tree[child_index];
+                    defer child_index = child.next_sibling;
+                    if child.style.placement.kind == .FLOW &&
+                    (node.style.width.kind == .FIT || node.style.width.kind == .GROW ||
+                    should_fit_min(node, .HORIZONTAL) || node.style.height.kind == .FIT ||
+                    node.style.height.kind == .GROW || should_fit_min(node, .VERTICAL)) {
+                        fit_child(node, child, .HORIZONTAL);
+                        fit_child(node, child, .VERTICAL);
+                    }
+                }
+                clamp(*node.size, node.min_size, node.max_size);
             }
         }
 
@@ -5690,8 +5717,8 @@ layout :: () {
             // ==== growing and shrinking nodes ====
             //
             changing: [..]*Node;
-            for *node: node_tree {
-                if it_index == 0 {
+            for *node: node_tree if node.kind == .ELEMENT {
+                if node.parent == -1 {
                     if node.style.width.kind == .GROW {
                         node.size.x = (cast(float) window.width) / (cast(float) window.scale);
                     }
@@ -5889,7 +5916,7 @@ layout :: () {
             //
             // ==== wrapping glyphs ====
             //
-            for <*node: node_tree {
+            for <*node: node_tree if node.kind == .ELEMENT {
                 rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
                 font_units_to_point := get_font_units_to_pixel(node.style.font, rounded_font_size) / (cast(float) window.scale);
                 base := Vector2.{
@@ -6040,7 +6067,7 @@ layout :: () {
             //
             // ==== refit heights ====
             //
-            for <*node: node_tree {
+            for <*node: node_tree if node.kind == .ELEMENT {
                 if node.first_child != -1 && node.glyphs.array.count == 0 {
                     if node.style.height.kind == .FIT {
                         node.size.y = fitting_base(node, .VERTICAL);
@@ -6065,8 +6092,8 @@ layout :: () {
             // ==== regrowing nodes veritcally ====
             //
             changing: [..]*Node;
-            for *node: node_tree {
-                if it_index == 0 {
+            for *node: node_tree if node.kind == .ELEMENT {
+                if node.parent == -1 {
                     if node.style.height.kind == .GROW {
                         node.size.y = (cast(float) window.height) / (cast(float) window.scale);
                     }
@@ -6201,8 +6228,8 @@ layout :: () {
             //
             // === place nodes and justifying them in both directions ===
             //
-            for *node: node_tree {
-                if it_index == 0 {
+            for *node: node_tree if node.kind == .ELEMENT {
+                if node.parent == -1 {
                     if node.style.placement.kind == {
                         case .FLOW;
                             node.position = node.style.translate;
@@ -6317,7 +6344,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     z_buckets: [..]u32;
     instance_count: s64;
     array_reserve(*z_buckets, node_tree.count);
-    for node: node_tree {
+    for node: node_tree if node.kind == .ELEMENT {
         if node.z >= z_buckets.count {
             array_resize(*z_buckets, node.z + 1);
         }
@@ -6334,7 +6361,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         offset += count;
     }
     assert(offset == draw_instances.count);
-    for node: node_tree {
+    for node: node_tree if node.kind == .ELEMENT {
         instance: Draw_Instance;
         {
             using instance;

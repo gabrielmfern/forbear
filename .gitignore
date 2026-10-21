@@ -17,6 +17,7 @@ apps/calculator/tests
 apps/javascript/main
 apps/playground
 apps/pools
+apps/scopes
 
 # javascript
 node_modules
