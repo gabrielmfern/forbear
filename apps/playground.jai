@@ -14,13 +14,13 @@ main :: () {
     init_backend(*backend);
     init_window(*backend, *window, 800, 600, "playground");
 
-    init_font(*inter);
-
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *inter,
         color = rgb(255, 255, 255),
     });
+
+    init_font(*inter);
 
     frame_pool: Flat_Pool;
     frame_allocator: Allocator;

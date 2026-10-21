@@ -128,9 +128,20 @@ BG_SECONDARY :: #run rgb(17, 19, 22);
 ERROR :: #run rgb(232, 91, 91);
 TRANSPARENT :: #run rgba(1.0, 1.0, 1.0, 0.0);
 
+Button :: (body: #code) -> bool #expand {
+    element(Style.{
+        background = color(BG_SECONDARY),
+        border_width = 1.0,
+        border_color =
+        border_radius = 4.0,
+    }, #code {
+        #insert body;
+    });
+} @component
+
 App :: () {
     window := context.forbear.window;
-    viewport_width := (cast(float)window.width) / (cast(float)window.scale);
+    viewport := get_viewport_size();
 
     element(Style.{
         width = grow(),
@@ -149,7 +160,7 @@ App :: () {
             padding = in_line(block(20), 15),
             y_justification = .CENTER,
             font_size = DIGITS_SIZE,
-            width = fixed(viewport_width),
+            width = fixed(viewport.x),
         }, #code {
             cursor_index := state(s64, 0);
 
@@ -316,7 +327,7 @@ App :: () {
                     text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
                     text_node := get_node(text_index);
                     result_node := get_node();
-                    result_node.style.placement = relative(Vector2.{ viewport_width - text_node.size.x - 15.0, 0.0 });
+                    result_node.style.placement = relative(Vector2.{ viewport.x - text_node.size.x - 15.0, 0.0 });
                 });
             }
         });
@@ -336,9 +347,6 @@ App :: () {
             }
             text(Style.{ color = ERROR, margin = in_line(5), font_size = 12 }, message);
         }
-        element(Style.{
-            height = fixed(20),
-        });
     });
 } @component
 
@@ -356,14 +364,14 @@ main :: () {
         set_size(window.ns_window, selector("setContentMaxSize:"), .{ width = WIDTH, height = HEIGHT });
     }
 
-    init_font(*inter);
-
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *inter,
         color = rgb(230, 232, 235),
         font_size = 16,
     });
+
+    init_font(*inter);
 
     frame_pool: Flat_Pool;
     frame_allocator: Allocator;

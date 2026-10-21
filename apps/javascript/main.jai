@@ -18,12 +18,12 @@ main :: () {
     init_backend(*backend);
     init_window(*backend.connection, *window, 800, 600, "playground");
 
-    init_font(*inter);
-
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *inter,
     });
+
+    init_font(*inter);
 
     frame_pool: Flat_Pool;
     frame_allocator: Allocator;

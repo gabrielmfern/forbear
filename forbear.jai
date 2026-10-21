@@ -1811,7 +1811,6 @@ Pool_Slot :: struct {
     last_frame: s64;
     used: bool;
 };
-pool_slots: [256]Pool_Slot;
 Node :: struct {
     Kind :: enum {
         ELEMENT; SCOPE;
@@ -1934,12 +1933,12 @@ state :: ($T: Type, initial: T) -> *T {
     }
     assert(node.state_offset + node.state_size == state_used, "call state() before any child element that uses state");
     size := (size_of(T) + 7) & ~7;
-    if state_used + size > state_buffers[0].count {
+    if state_used + size > state_buffers.*[0].count {
         log_error("state buffer is full: % bytes used, % more requested", state_used, size);
         exit(-1);
     }
 
-    result := cast(*T) *state_buffers[state_current][state_used];
+    result := cast(*T) *state_buffers.*[state_current][state_used];
     result.* = initial;
     is_resizable :: (T: Type) -> bool {
         info := cast(*Type_Info) T;
@@ -1950,7 +1949,7 @@ state :: ($T: Type, initial: T) -> *T {
     }
     measurement, defined := get_measurement();
     if defined && node.state_size + size <= measurement.state_size {
-        memcpy(result, *state_buffers[1 - state_current][measurement.state_offset + node.state_size], size_of(T));
+        memcpy(result, *state_buffers.*[1 - state_current][measurement.state_offset + node.state_size], size_of(T));
     }
     node.state_size += size;
     state_used += size;
@@ -5092,14 +5091,6 @@ scope :: ($body: Code, location := #caller_location) -> body.type #expand {
     return scope("", body, location);
 }
 
-freetype_library: FT_Library;
-shaping_context: *kbts_shape_context;
-// TODO: should this be a global? the idea is mainly that we have a unique id for all fonts created we can keep caching and
-// such apart between different fonts that might all be used for rendering
-font_counter: u16;
-state_buffers: [2][16 * 1024 * 1024]u8 #align 16;
-state_current: s64;
-state_used: s64;
 Glyph :: struct {
     index: s32;
     utf8: kbts_encode_utf8;
@@ -5156,26 +5147,26 @@ create_font :: (memory: string) -> Font {
 
     font: Font;
     font.memory = memory;
-    font.key = font_counter;
-    font_counter += 1;
     return font;
 }
 // TOOD: handle errors for all of the freetype calls
 init_font :: (using font: *Font) {
-    if freetype_library == null {
-        FT_Init_FreeType(*freetype_library);
+    if context.forbear.freetype_library == null {
+        FT_Init_FreeType(*context.forbear.freetype_library);
         // TODO: implement subpixel font rendering and auto enable in lower DPI
         // environments to match browser behavior.
         //
         // FT_Library_SetLcdFilter(freetype_library, FT_LCD_FILTER_DEFAULT);
     }
-    if shaping_context == null {
-        shaping_context = kbts_CreateShapeContext(null, null);
+    if context.forbear.shaping_context == null {
+        context.forbear.shaping_context = kbts_CreateShapeContext(null, null);
     }
-    FT_New_Memory_Face(freetype_library, memory.data, memory.count, 0, *raster_face);
+    FT_New_Memory_Face(context.forbear.freetype_library, memory.data, memory.count, 0, *raster_face);
     // TODO: judege if we should support more than unicode here
     assert(raster_face.charmap.encoding == FT_Encoding.UNICODE);
-    shaping_font = kbts_ShapePushFontFromMemory(shaping_context, memory.data, xx memory.count, 0);
+    font.key = context.forbear.font_counter;
+    context.forbear.font_counter += 1;
+    shaping_font = kbts_ShapePushFontFromMemory(context.forbear.shaping_context, memory.data, xx memory.count, 0);
 }
 Raster_Glyph :: struct {
     // might be null
@@ -5194,7 +5185,7 @@ set_weight :: (font: *Font, weight: u16) {
         log_error("cannot set weight - font does not support multiple masters. this is most likely not a variable font, doing nothing.");
         return;
     }
-    defer FT_Done_MM_Var(freetype_library, mm);
+    defer FT_Done_MM_Var(context.forbear.freetype_library, mm);
 
     coords := NewArray(xx mm.num_axis, FT_Fixed);
     defer free(coords.data);
@@ -5252,34 +5243,34 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
 
     // TODO(next): pass the language and direction down as styles
     kbts_ShapeBegin(
-        shaping_context,
+        context.forbear.shaping_context,
         xx kbts_direction_enum.KBTS_DIRECTION_LTR,
         xx kbts_language_enum.KBTS_LANGUAGE_DONT_KNOW
     );
     WGHT : u32 : 0x77676874;
     if font.weight != U16_MAX {
-        kbts_ShapePushGlobalVariation(shaping_context, WGHT, cast(float) font.weight);
+        kbts_ShapePushGlobalVariation(context.forbear.shaping_context, WGHT, cast(float) font.weight);
     }
     kbts_ShapeUtf8(
-        shaping_context,
+        context.forbear.shaping_context,
         content.data,
         xx content.count,
         xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX
     );
     if font.weight != U16_MAX {
-        kbts_ShapePopGlobalVariation(shaping_context, WGHT);
+        kbts_ShapePopGlobalVariation(context.forbear.shaping_context, WGHT);
     }
-    kbts_ShapeEnd(shaping_context);
+    kbts_ShapeEnd(context.forbear.shaping_context);
 
     run: kbts_run;
     pen: Vector2;
     // the advance local to this word
     word_advance: Vector2;
-    while (kbts_ShapeRun(shaping_context, *run) != 0) {
+    while (kbts_ShapeRun(context.forbear.shaping_context, *run) != 0) {
         shaping_glyph: *kbts_glyph;
         while (kbts_GlyphIteratorNext(*run.Glyphs, *shaping_glyph) != 0) {
             shape_codepoint: kbts_shape_codepoint;
-            if kbts_ShapeGetShapeCodepoint(shaping_context, shaping_glyph.UserIdOrCodepointIndex, *shape_codepoint) == 0 {
+            if kbts_ShapeGetShapeCodepoint(context.forbear.shaping_context, shaping_glyph.UserIdOrCodepointIndex, *shape_codepoint) == 0 {
                 log_error("Could not get original codeopint for glyph with user id %", shaping_glyph.UserIdOrCodepointIndex);
                 continue;
             }
@@ -5393,6 +5384,7 @@ glyph_atlas_place :: (glyph_atlas: *Glyph_Atlas, width: s32, height: s32) -> x: 
     return x, y, true;
 }
 
+static_state_buffers: [2][16 * 1024 * 1024]u8 #align 16;
 Forbear :: struct {
     node_tree: Node_Tree;
     measurements: [..]Node_Measurement;
@@ -5401,8 +5393,15 @@ Forbear :: struct {
     persistent_allocator: Allocator;
 
     parent_index: s64 = -1;
+    state_buffers := *static_state_buffers;
+    pool_slots: [256]Pool_Slot;
     scope_key: u64 = U64_MAX;
     base_style: Base_Style;
+    font_counter: u16;
+    state_current: s64;
+    state_used: s64;
+    freetype_library: FT_Library;
+    shaping_context: *kbts_shape_context;
 
     shader_program: u32;
     shader_vao: u32;
