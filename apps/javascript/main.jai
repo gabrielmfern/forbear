@@ -16,7 +16,7 @@ main :: () {
     backend: Backend;
     window: Window;
     init_backend(*backend);
-    init_window(*backend, *window, 800, 600, "playground");
+    init_window(*backend.connection, *window, 800, 600, "playground");
 
     inter: Font;
     init_font(*inter, INTER_TTF);

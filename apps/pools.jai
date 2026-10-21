@@ -105,9 +105,9 @@ main :: () {
                         direction = .VERTICAL,
                     }, manual_key = label, #code {
                         evens := state([..]s64);
-                        evens.allocator = element_pool();
+                        evens.allocator = node_pool();
                         odds := state([..]s64);
-                        odds.allocator = element_pool();
+                        odds.allocator = node_pool();
 
                         broken := 0;
                         for evens.* {
@@ -121,7 +121,7 @@ main :: () {
                             }
                         }
 
-                        slot := get_element().pool_slot;
+                        slot := get_node().pool_slot;
                         pool := *pool_slots[slot].pool;
                         text(tprint(
                             "%: slot %   % evens   % odds   % KB in pool   %",

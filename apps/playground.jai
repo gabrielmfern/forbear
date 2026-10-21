@@ -94,12 +94,12 @@ main :: () {
                 width = fixed(200),
                 height = fixed(200)
             }, #code {
-                el := get_element();
+                node := get_node();
                 if is_mouse_held() && is_mouse_inside() {
-                    el.style.background = color(rgb(255, 255, 255));
+                    node.style.background = color(rgb(255, 255, 255));
                 }
                 if is_key_held(.SHIFT_LEFT) {
-                    el.style.background = color(rgb(100, 100, 0));
+                    node.style.background = color(rgb(100, 100, 0));
                 }
             });
 
@@ -107,7 +107,9 @@ main :: () {
 
             frame_input := get_text_input();
             if frame_input.count > 0 {
+                print("frame_input: %\n", frame_input);
                 array_add(input, ..(cast([] u8) frame_input));
+                print("input: %\n", to_string(input.data, input.count));
             }
             text(sprint("this was the input text until now: '%'", to_string(input.data, input.count)));
 

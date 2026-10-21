@@ -1,7 +1,7 @@
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 
@@ -1338,7 +1338,7 @@ libegl :: #library,system "libEGL";
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 
@@ -1709,7 +1709,7 @@ libgbm :: #library,system "libgbm";
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 
@@ -7090,7 +7090,7 @@ libxkbcommon :: #library,system "libxkbcommon";
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 
@@ -9922,7 +9922,7 @@ kb_text_shape :: #library,no_dll "vendor/kb_text_shape";
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 

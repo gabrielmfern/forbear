@@ -280,8 +280,8 @@ main :: () {
 
                 expression_index := text(to_string(expression.data, expression.count));
 
-                expression_el := get_element(expression_index);
-                expression_glyphs := expression_el.glyphs;
+                expression_node := get_node(expression_index);
+                expression_glyphs := expression_node.glyphs;
                 font_units_to_pixel := get_font_units_to_pixel(*inter, DIGITS_SIZE);
 
                 cursor_position: Vector2;
@@ -292,7 +292,7 @@ main :: () {
                         cursor_position = expression_glyphs.array[cursor_index.*].position * font_units_to_pixel;
                     }
                 }
-                input := get_element();
+                input := get_node();
                 cursor_position.x += input.style.padding.x.x + input.style.border_width.x.x;
                 cursor_position.y += input.style.padding.y.x + input.style.border_width.y.x;
 
@@ -360,15 +360,15 @@ main :: () {
                         height = grow(),
                     }, #code {
                         text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
-                        text_el := get_element(text_index);
-                        result_el := get_element();
-                        result_el.style.placement = relative(Vector2.{ viewport_width - text_el.size.x - 15.0, 0.0 });
+                        text_node := get_node(text_index);
+                        result_node := get_node();
+                        result_node.style.placement = relative(Vector2.{ viewport_width - text_node.size.x - 15.0, 0.0 });
                     });
                 }
             });
 
             if parse_result.* != .SUCCESS && expression.count > 0 {
-                input := get_element(input_index);
+                input := get_node(input_index);
                 input.style.border_radius = 4.0;
                 input.style.border_width = all(1.0);
                 input.style.border_color = ERROR;
