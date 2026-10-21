@@ -1963,6 +1963,12 @@ state :: ($T: Type) -> *T {
     initial: T;
     return state(T, initial);
 }
+// beware that this pointer might be come invalid if you define one more element
+get_node :: (node_index: s64) -> *Node {
+    using context.forbear;
+    return *node_tree[node_index];
+}
+// beware that this pointer might be come invalid if you define one more element
 get_node :: () -> *Node {
     using context.forbear;
     if parent_index != -1 {
@@ -4772,6 +4778,10 @@ Mouse_Button :: enum {
         FORWARD;
     }
 };
+get_viewport_size :: () -> Vector2 {
+    using context.forbear;
+    return Vector2.{cast(float)window.width, cast(float)window.height} / (cast(float)window.scale);
+}
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
     return window.pointer_held[button] && window.pointer_inside;
@@ -4906,11 +4916,6 @@ append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointe
     }
     array_add(node_tree, node);
     return *node_tree.*[index], index;
-}
-// beware that this pointer might be come invalid if you define one more element
-get_node :: (node_index: s64) -> *Node {
-    using context.forbear;
-    return *node_tree[node_index];
 }
 
 Element_Opening_Data :: struct {
@@ -5611,12 +5616,10 @@ GLSL);
         exit(-1);
     }
 
-    buffer: [Glyph_Atlas.SIZE * Glyph_Atlas.SIZE]u8;
-
     glGenTextures(1, *glyph_atlas.texture);
     glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
     // TOOD: keep track of whether subpixel rendering is enabled to create the texture atlas here accordingly
-    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, Glyph_Atlas.SIZE, Glyph_Atlas.SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, buffer.data);
+    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, Glyph_Atlas.SIZE, Glyph_Atlas.SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, null);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -6463,11 +6466,10 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         }
     }
 
-    point_width: float = (cast(float) window.width) / (cast(float) window.scale);
-    point_height: float = (cast(float) window.height) / (cast(float) window.scale);
+    viewport_size := get_viewport_size();
 
     glUseProgram(shader_program);
-    glUniform2f(glGetUniformLocation(shader_program, "viewport"), point_width, point_height);
+    glUniform2f(glGetUniformLocation(shader_program, "viewport"), viewport_size.x, viewport_size.y);
     glBindVertexArray(shader_vao);
     glBindBuffer(GL_ARRAY_BUFFER, node_vbo);
     glBufferData(GL_ARRAY_BUFFER, draw_instances.count * size_of(Draw_Instance), draw_instances.data, GL_STREAM_DRAW);
@@ -6551,6 +6553,10 @@ prepare_frame :: () {
 
 #scope_export
 
+// This introduces a compiler plugin so that users can do +forbear in their compiliation command,
+// and automatically get scope(#code Function(...)) for all of their components or hooks. The proper
+// name is `@scope`, but there's also the two aliases `@component` or @hook` for what people
+// might prefer.
 #import "Compiler";
 get_plugin :: () -> *Metaprogram_Plugin {
     using plugin := New(Metaprogram_Plugin);
