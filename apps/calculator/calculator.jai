@@ -1,8 +1,12 @@
 MEMORY_DEBUGGING :: false;
+HOT_RELOADING :: true;
 
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 Math :: #import "Math";
 #import "File";
+#import "File_Utilities";
+#import "System";
+#import "POSIX";
 #import "String";
 #import "Flat_Pool";
 #import "GL";
@@ -123,6 +127,8 @@ U64_MAX :: Math.U64_MAX;
 #add_context inter: Font;
 WIDTH :: 360;
 HEIGHT :: 512;
+BASE :: 16;
+LARGE :: 32;
 BG :: #run rgb(28, 31, 35);
 BG_SECONDARY :: #run rgb(17, 19, 22);
 ERROR :: #run rgb(232, 91, 91);
@@ -131,6 +137,8 @@ TRANSPARENT :: #run rgba(1.0, 1.0, 1.0, 0.0);
 Button :: (body: Code) -> bool #expand {
     element(Style.{
         background = color(BG_SECONDARY),
+        padding = block(10.0, 10.0),
+        font_size = BASE,
         border_width = 1.0,
         border_color =
         border_radius = 4.0,
@@ -153,13 +161,12 @@ App :: () {
         tokens := state([..]Token);
         parse_result := state(Parse_Result);
 
-        DIGITS_SIZE :: 32;
         input_index := element(Style.{
             border_width = bottom(2.0),
             background = color(BG_SECONDARY),
             padding = in_line(block(20), 15),
             y_justification = .CENTER,
-            font_size = DIGITS_SIZE,
+            font_size = LARGE,
             width = fixed(viewport.x),
         }, #code {
             cursor_index := state(s64, 0);
@@ -247,7 +254,7 @@ App :: () {
 
             expression_node := get_node(expression_index);
             expression_glyphs := expression_node.glyphs;
-            font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
+            font_units_to_pixel := get_font_units_to_pixel(*context.inter, LARGE);
 
             cursor_position: Vector2;
             if expression.count > 0 {
@@ -325,7 +332,7 @@ App :: () {
                     element(Style.{
                         background = color(BG_SECONDARY),
                         padding = all(5.0),
-                        font_size = 12,
+                        font_size = BASE,
                     }, #code {
                         text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
                         text_node := get_node(text_index);
@@ -353,6 +360,15 @@ App :: () {
         }
     });
 } @component
+
+#program_export
+render :: () {
+    App();
+
+    if on_key_down(.ESCAPE) {
+        context.forbear.window.running = false;
+    }
+}
 
 main :: () {
     backend: Backend;
@@ -384,6 +400,13 @@ main :: () {
     frame_allocator.data = *frame_pool;
     frame_allocator.proc = flat_pool_allocator_proc;
 
+    #if HOT_RELOADING {
+        library_path := sprint("%calculator_library.so", path_strip_filename(get_path_of_running_executable()));
+        library_modtime: Apollo_Time;
+        library_version := 0;
+        loaded_render: #type ();
+    }
+
     while window.running {
         push_allocator(frame_allocator);
         prepare_frame();
@@ -402,10 +425,30 @@ main :: () {
             update_window(*backend, *window);
         }
 
-        App();
-
-        if on_key_down(.ESCAPE) {
-            window.running = false;
+        #if HOT_RELOADING {
+            modtime, _, exists := file_modtime_and_size(library_path);
+            if exists && modtime != library_modtime {
+                copy_path := tprint("/tmp/calculator_library_%.so", library_version);
+                library_version += 1;
+                if copy_file(library_path, copy_path) {
+                    library := dlopen(temp_c_string(copy_path), RTLD_NOW);
+                    if library {
+                        symbol := dlsym(library, "render");
+                        if symbol {
+                            loaded_render = cast(#type ()) symbol;
+                            library_modtime = modtime;
+                        }
+                    } else {
+                        log_error("could not load %: %", copy_path, to_string(dlerror()));
+                        exit(-1);
+                    }
+                }
+            }
+            if loaded_render {
+                loaded_render();
+            }
+        } else {
+            render();
         }
 
         layout();
@@ -415,5 +458,63 @@ main :: () {
 
         memory_visualizer_per_frame_update();
         reset(*frame_pool);
+    }
+}
+
+#if HOT_RELOADING {
+    #run {
+        #import "Compiler";
+        #import "Hash";
+        build_options := get_build_options();
+        if build_options.output_type == .EXECUTABLE {
+            w := compiler_create_workspace("calculator_library");
+            options := get_build_options(w);
+            copy_commonly_propagated_fields(get_build_options(), *options);
+            options.output_type = .DYNAMIC_LIBRARY;
+            options.output_executable_name = "calculator_library";
+            set_build_options(options, w);
+
+            plugin := get_plugin();
+            plugin.workspace = w;
+            {
+                compiler_begin_intercept(w);
+                defer compiler_end_intercept(w);
+                add_build_file(#file, w);
+
+                host_hash: u64;
+                while true {
+                    message := compiler_wait_for_message();
+                    plugin.message(plugin, message);
+                    if message.kind == .FILE {
+                        file := cast(*Message_File) message;
+                        if !file.from_a_string && file.fully_pathed_filename != #file {
+                            contents := read_entire_file(file.fully_pathed_filename);
+                            host_hash += fnv1a_hash(contents.data, contents.count);
+                        }
+                    } else if message.kind == .TYPECHECKED {
+                        typechecked := cast(*Message_Typechecked) message;
+                        for typechecked.procedure_bodies if it.expression.header.name == "main" {
+                            lines := split(read_entire_file(#file), "\n");
+                            main_hash := FNV_64_OFFSET_BIAS;
+                            block := it.expression.block;
+                            for line: array_view(lines, block.l0 - 1, block.l1 - block.l0 + 1) {
+                                main_hash = fnv1a_hash(line.data, line.count, main_hash);
+                            }
+                            host_hash += main_hash;
+                        }
+                    } else if message.kind == .COMPLETE {
+                        break;
+                    }
+                }
+            }
+
+            hash_path := tprint("%/calculator_host_hash", options.intermediate_path);
+            previous_hash := read_entire_file(hash_path, log_errors = false);
+            if previous_hash == tprint("%", host_hash) {
+                set_build_options_dc(.{do_output = false});
+            } else {
+                write_entire_file(hash_path, tprint("%", host_hash));
+            }
+        }
     }
 }
