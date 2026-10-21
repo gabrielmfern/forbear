@@ -14,7 +14,7 @@
 - [x] draw in the z order
 - [x] state management
 - [x] support for element arenas, allowing for users to allocate growable arrays in state
-- [ ] support for components
+- [x] support for components
 - [ ] build a calculator program
 - [ ] implement C ABI and C adapter
 - [ ] gather all of the current pessimizations in the code
