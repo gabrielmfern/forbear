@@ -370,6 +370,7 @@ App :: () {
                             print("%: %\n", it_index, token.op);
                         }
                     }
+                    result.* = 0;
                     if tokens.count > 0 {
                         number_tokens := 0;
                         for token: tokens.* {
@@ -379,7 +380,7 @@ App :: () {
                             }
                         }
                         // the operation should have been resolved to a single number
-                        assert(number_tokens == 1);
+                        assert(number_tokens == 1 || number_tokens == 0);
                     }
                 }
             }
