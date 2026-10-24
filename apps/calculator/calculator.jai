@@ -152,6 +152,7 @@ App :: () {
         expression := state([..]u8);
         tokens := state([..]Token);
         parse_result := state(Parse_Result);
+        result := state(float64);
 
         DIGITS_SIZE :: 32;
         input_index := element(Style.{
@@ -239,10 +240,6 @@ App :: () {
                 cursor_index.* = min(cursor_index.*, removal_start);
             }
 
-            if removed > 0 || text_input.count > 0 {
-                parse_result.* = parse_expression(to_string(expression.data, expression.count), tokens);
-            }
-
             expression_index := text(to_string(expression.data, expression.count));
 
             expression_node := get_node(expression_index);
@@ -269,70 +266,136 @@ App :: () {
                 height = fixed(expression_glyphs.line_height * font_units_to_pixel),
             });
 
-            {
-                //
-                // === computing and showing the results of the typed out expression ===
-                //
-                compute :: (left: float64, op: Operator, right: float64) -> float64 {
-                    assert(op != .NONE);
-                    if op == {
-                        case .ADD;
-                            return left + right;
-                        case .SUBTRACT;
-                            return left - right;
-                        case .MULTIPLY;
-                            return left * right;
-                        case .DIVIDE;
-                            return left / right;
-                    }
-                    log_error("looks like we added a new opreator, but didn't actually handle it");
-                    return left;
-                }
+            if removed > 0 || text_input.count > 0 {
+                parse_result.* = parse_expression(to_string(expression.data, expression.count), tokens);
 
-                value_left: float64 = FLOAT64_NAN;
-                op := Operator.NONE;
-                value_right: float64 = FLOAT64_NAN;
-                for token: tokens.* {
-                    if isnan(value_left) {
+                if parse_result.* == .SUCCESS {
+                    Pass :: enum {
+                        DIVIDE_MULTIPLY;
+                        ADD_SUBTRACT;
+                    };
+                    print("\n\nbefore any compute pass:\n");
+                    for token: tokens.* {
                         if token.kind == .NUMBER {
-                            value_left = token.number;
+                            print("%: %\n", it_index, token.number);
                         } else {
-                            // we take left to be an implicit zero when the user just types in an operator
-                            value_left = 0;
-                            op = token.op;
+                            print("%: %\n", it_index, token.op);
                         }
-                    } else if op == .NONE {
-                        assert(token.kind == .OPERATOR);
-                        op = token.op;
-                    } else if isnan(value_right) {
+                    }
+                    index := 0;
+                    pass: Pass = .DIVIDE_MULTIPLY;
+                    while index < tokens.count {
+                        left: float64 = FLOAT64_NAN;
+                        op: Operator = .NONE;
+                        right: float64 = FLOAT64_NAN;
+                        operation_size: s64 = 0;
+                        while isnan(left) || op == .NONE || isnan(right) {
+                            if index >= tokens.count {
+                                break;
+                            }
+                            token := tokens.*[index];
+                            if isnan(left) {
+                                if token.kind == .NUMBER {
+                                    left = token.number;
+                                } else if token.kind == .OPERATOR {
+                                    // operation with implicit left number, assumed to be 0
+                                    left = 0;
+                                    op = token.op;
+                                }
+                            } else if op == .NONE {
+                                assert(token.kind == .OPERATOR);
+                                op = token.op;
+                            } else if isnan(right) {
+                                if token.kind == .NUMBER {
+                                    right = token.number;
+                                    break;
+                                } else if token.kind == .OPERATOR {
+                                    // takes precedence over previous operator. might be confusing?
+                                    op = token.op;
+                                }
+                            }
+                            index += 1;
+                            operation_size += 1;
+                        }
+                        print("  % (%) %\n", left, op, right);
+                        if !isnan(left) && op != .NONE && !isnan(right) {
+                            if pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE) {
+                                if op == .MULTIPLY {
+                                    tokens.*[index] = Token.{kind = .NUMBER, number = left * right};
+                                } else if op == .DIVIDE {
+                                    tokens.*[index] = Token.{kind = .NUMBER, number = left / right};
+                                }
+                            } else if pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT) {
+                                if op == .ADD {
+                                    tokens.*[index] = Token.{kind = .NUMBER, number = left + right};
+                                } else if op == .SUBTRACT {
+                                    tokens.*[index] = Token.{kind = .NUMBER, number = left - right};
+                                }
+                            }
+                            if (pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE))
+                            || (pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT)) {
+                                print("\n\nafter adding things up:\n");
+                                for token: tokens.* {
+                                    if token.kind == .NUMBER {
+                                        print("%: %\n", it_index, token.number);
+                                    } else {
+                                        print("%: %\n", it_index, token.op);
+                                    }
+                                }
+                                for j : index-operation_size..tokens.count-operation_size-1{
+                                    tokens.*[j] = tokens.*[j + operation_size];
+                                }
+                                tokens.count -= operation_size;
+                                index -= operation_size;
+                                print("\n\nafter ordered removals:\n");
+                                for token: tokens.* {
+                                    if token.kind == .NUMBER {
+                                        print("%: %\n", it_index, token.number);
+                                    } else {
+                                        print("%: %\n", it_index, token.op);
+                                    }
+                                }
+                            }
+                        }
+                        if pass == .DIVIDE_MULTIPLY && index >= tokens.count - 1 {
+                            pass = .ADD_SUBTRACT;
+                            index = 0;
+                        }
+                    }
+                    print("\n\nafter all compute passes:\n");
+                    for token: tokens.* {
                         if token.kind == .NUMBER {
-                            value_right = token.number;
+                            print("%: %\n", it_index, token.number);
                         } else {
-                            op = token.op;
+                            print("%: %\n", it_index, token.op);
                         }
-                        value_left = compute(value_left, op, value_right);
-                        op = .NONE;
-                        value_right = FLOAT64_NAN;
+                    }
+                    if tokens.count > 0 {
+                        number_tokens := 0;
+                        for token: tokens.* {
+                            if token.kind == .NUMBER {
+                                number_tokens += 1;
+                                result.* = token.number;
+                            }
+                        }
+                        // the operation should have been resolved to a single number
+                        assert(number_tokens == 1);
                     }
                 }
-                if !isnan(value_left) && op != .NONE && !isnan(value_right) {
-                    value_left = compute(value_left, op, value_right);
-                }
+            }
 
-                input_measurement, defined := get_measurement();
-
-                if defined {
-                    element(Style.{
-                        background = color(BG_SECONDARY),
-                        padding = all(5.0),
-                        font_size = 12,
-                    }, #code {
-                        text_index := text(sprint("= %", ifx isnan(value_left) then 0.0 else value_left));
-                        text_node := get_node(text_index);
-                        result_node := get_node();
-                        result_node.style.placement = relative(Vector2.{ viewport.x - text_node.size.x - 15.0, input_measurement.size.y - text_node.size.y - 20.0 });
-                    });
-                }
+            input_measurement, defined := get_measurement();
+            if defined {
+                element(Style.{
+                    background = color(BG_SECONDARY),
+                    padding = all(5.0),
+                    font_size = 12,
+                }, #code {
+                    text_index := text(sprint("= %", result.*));
+                    text_node := get_node(text_index);
+                    result_node := get_node();
+                    result_node.style.placement = relative(Vector2.{ viewport.x - text_node.size.x - 15.0, input_measurement.size.y - text_node.size.y - 20.0 });
+                });
             }
         });
 
