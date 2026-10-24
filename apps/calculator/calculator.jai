@@ -62,6 +62,8 @@ parse_expression :: (expression: string, tokens: *[..]Token) -> Parse_Result {
                 case "+";
                     array_add(tokens, ADD);
                 case "-";
+                    // TODO: handle negative numbers, it should just parse to a negative
+                    // number instead of a `-` operator token
                     array_add(tokens, SUBTRACT);
                 case "*";
                     array_add(tokens, MULTIPLY);
