@@ -8,8 +8,6 @@ Math :: #import "Math";
 #import "GL";
 #import,file "../../forbear.jai";
 
-BUILD_FLAGS :: "+forbear";
-
 #if OS == .MACOS {
     #import "Objective_C";
 }
