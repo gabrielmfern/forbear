@@ -1161,6 +1161,7 @@ add_key :: (array: *[]Key, key: Key) {
     init_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window, width: float64, height: float64, title: string) {
         rectangle := NSRect.{ size = .{ width = width, height = height } };
 
+        backend.pasteboard = NSPasteboard.generalPasteboard();
         window.ns_window = NSWindow.initWithContentRect(
             objc_alloc(NSWindow),
             rectangle,
@@ -1256,6 +1257,11 @@ add_key :: (array: *[]Key, key: Key) {
         pixel_format: *NSOpenGLPixelFormat;
         gl_context: *NSOpenGLContext;
 
+        pasteboard: *NSPasteboard;
+        clipboard_change_count: NSInteger = -1;
+        clipboard_text_buffer: string;
+        clipboard_text: string;
+
         attached_view: *NSView;
     };
     init_backend :: (backend: *MacOS_GL_Backend) {
@@ -1281,12 +1287,39 @@ add_key :: (array: *[]Key, key: Key) {
     }
     update_backend :: (backend: *MacOS_GL_Backend) {
         pool := objc_init(objc_alloc(NSAutoreleasePool));
+        defer NSAutoreleasePool.drain(pool);
         window := context.forbear.window;
         frame := NSView.frame(window.view);
         location := NSWindow.mouseLocationOutsideOfEventStream(window.ns_window);
+
         window.pointer_inside = location.x >= 0 && location.y >= 0 &&
                                 location.x < frame.size.width && location.y < frame.size.height;
         window.pointer_position = Vector2.{ xx location.x, xx (frame.size.height - location.y) };
+
+        change_count: (*void, Selector) -> NSInteger #c_call = xx objc_msgSend;
+        count := change_count(backend.pasteboard, selector("changeCount"));
+        if count != backend.clipboard_change_count {
+            backend.clipboard_text.count = 0;
+            backend.clipboard_change_count = count;
+            nsstring := backend.pasteboard.stringForType(backend.pasteboard, NSPasteboardTypeString);
+            if nsstring != null {
+                utf8 := to_string(NSString.UTF8String(nsstring));
+                if utf8.count > backend.clipboard_text_buffer.count {
+                    backend.clipboard_text_buffer.data = realloc(
+                        backend.clipboard_text_buffer.data,
+                        utf8.count,
+                        backend.clipboard_text_buffer.count,,
+                        context.forbear.persistent_allocator
+                    );
+                    backend.clipboard_text_buffer.count = utf8.count;
+                }
+                memcpy(backend.clipboard_text_buffer.data, utf8.data, utf8.count);
+
+                backend.clipboard_text.data = backend.clipboard_text_buffer.data;
+                backend.clipboard_text.count = utf8.count;
+            }
+        }
+
         while true {
             event := NSApplication.nextEventMatchingMask(backend.app, NSEventMaskAny, NSDate.distantPast(), NSDefaultRunLoopMode, YES);
             if event {
@@ -1352,7 +1385,6 @@ add_key :: (array: *[]Key, key: Key) {
                 break;
             }
         }
-        NSAutoreleasePool.drain(pool);
     }
 
     Backend :: MacOS_GL_Backend;
@@ -4799,6 +4831,43 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
                press_position.y <= measurement.position.y + measurement.size.y;
     } else {
         return false;
+    }
+}
+get_clipboard_text :: () -> string {
+    using context.forbear;
+    #if OS == .MACOS {
+        return backend.clipboard_text;
+    } else #if OS == .LINUX {
+        return "";
+    }
+}
+copy_to_clipboard :: (text: string) {
+    using context.forbear;
+    // TOOD: implment this for wayland
+    #if OS == .MACOS {
+        pool := objc_init(objc_alloc(NSAutoreleasePool));
+        defer NSAutoreleasePool.drain(pool);
+
+        // TODO(depessimization): this also applies in other places where we use Apple's APIs, but we should be looking
+        // for ways to minimize the amount of stupid heap allocations Apple forces us to do. This is kind of impossible
+        // because of Objective C, though.
+        nsstring := NSString.initWithBytes(objc_alloc(NSString), text.data, xx text.count, NSUTF8StringEncoding);
+        defer release(nsstring);
+        backend.clipboard_change_count = backend.pasteboard.clearContents(backend.pasteboard);
+        backend.pasteboard.setString(backend.pasteboard, nsstring, NSPasteboardTypeString);
+
+        if text.count > backend.clipboard_text_buffer.count {
+            backend.clipboard_text_buffer.data = realloc(
+                backend.clipboard_text_buffer.data,
+                text.count,
+                backend.clipboard_text_buffer.count,,
+                persistent_allocator
+            );
+            backend.clipboard_text_buffer.count = text.count;
+        }
+        memcpy(backend.clipboard_text_buffer.data, text.data, text.count);
+        backend.clipboard_text.data = backend.clipboard_text_buffer.data;
+        backend.clipboard_text.count = text.count;
     }
 }
 get_text_input :: () -> string {
