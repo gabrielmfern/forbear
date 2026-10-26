@@ -124,15 +124,14 @@ U64_MAX :: Math.U64_MAX;
 //
 #add_context inter: Font;
 WIDTH :: 360;
-HEIGHT :: 512;
-BG :: #run rgb(28, 31, 35);
-BG_SECONDARY :: #run rgb(17, 19, 22);
+HEIGHT :: 120;
+BG :: #run rgb(17, 19, 22);
 ERROR :: #run rgb(232, 91, 91);
 TRANSPARENT :: #run rgba(1.0, 1.0, 1.0, 0.0);
 
 Button :: (body: Code) -> bool #expand {
     element(Style.{
-        background = color(BG_SECONDARY),
+        background = color(BG),
         border_width = 1.0,
         border_color =
         border_radius = 4.0,
@@ -145,286 +144,270 @@ App :: () {
     window := context.forbear.window;
     viewport := get_viewport_size();
 
+    expression := state([..]u8);
+    tokens := state([..]Token);
+    parse_result := state(Parse_Result);
+    result := state(float64);
+
+    DIGITS_SIZE :: 32;
     element(Style.{
-        width = grow(),
-        height = grow(),
+        background = color(BG),
+        padding = in_line(block(20), 15),
         direction = .VERTICAL,
         text_wrapping = .NONE,
+        y_justification = .CENTER,
+        font_size = DIGITS_SIZE,
+        width = fixed(viewport.x),
+        height = fixed(viewport.y),
     }, #code {
-        expression := state([..]u8);
-        tokens := state([..]Token);
-        parse_result := state(Parse_Result);
-        result := state(float64);
+        input := get_node();
+        cursor_index := state(s64, 0);
 
-        DIGITS_SIZE :: 32;
-        input_index := element(Style.{
-            border_width = bottom(2.0),
-            background = color(BG_SECONDARY),
-            padding = in_line(block(20), 15),
-            y_justification = .CENTER,
-            font_size = DIGITS_SIZE,
-            width = fixed(viewport.x),
-        }, #code {
-            cursor_index := state(s64, 0);
-
-            // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
-            //
-            // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
-            // and operators, we can simply remove by index as all characters are only going to be one byte.
-            text_input := get_text_input();
-            if text_input.count > 0 {
-                for character: text_input {
-                    if is_digit(character) || is_any(character, "+-*/ .") {
-                        array_insert_at(expression, character, cursor_index.*);
-                        cursor_index.* += 1;
-                    } else {
-                        log("ignoring input character %, since it's not in the ones we defined as supporting", character);
-                    }
-                }
-            }
-            previous := max(cursor_index.* - 1, 0);
-            next := min(cursor_index.* + 1, expression.count);
-            by_word := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
-            #if OS == .LINUX {
-                by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
-            }
-            previous_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
-                c := cursor;
-                while c > 0 && !is_digit(text.*[c - 1]) {
-                    c -= 1;
-                }
-                while c > 0 && is_digit(text.*[c - 1]) {
-                    c -= 1;
-                }
-                return c;
-            }
-            next_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
-                c := cursor;
-                while c < text.count && !is_digit(text.*[c]) {
-                    c += 1;
-                }
-                while c < text.count && is_digit(text.*[c]) {
-                    c += 1;
-                }
-                return c;
-            }
-            if by_word {
-                previous = previous_word_boundary(expression, cursor_index.*);
-                next = next_word_boundary(expression, cursor_index.*);
-            }
-            #if OS == .MACOS {
-                if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
-                    previous = previous_word_boundary(expression, 0);
-                    next = next_word_boundary(expression, expression.count);
-                }
-            }
-            removal_start, removal_end := cursor_index.*;
-            if on_key_down(.BACKSPACE, true) {
-                removal_start = previous;
-            } else if on_key_down(.DELETE, true) {
-                removal_end = next;
-            } else if on_key_down(.ARROW_LEFT, true) {
-                cursor_index.* = previous;
-            } else if on_key_down(.ARROW_RIGHT, true) {
-                cursor_index.* = next;
-            } else if on_key_down(.HOME) {
-                cursor_index.* = 0;
-            } else if on_key_down(.END) {
-                cursor_index.* = expression.count;
-            }
-
-            removed := removal_end - removal_start;
-            if removed > 0 {
-                for i: removal_start..expression.count - removed - 1 {
-                    expression.*[i] = expression.*[i + removed];
-                }
-                expression.count -= removed;
-                cursor_index.* = min(cursor_index.*, removal_start);
-            }
-
-            expression_index := text(to_string(expression.data, expression.count));
-
-            expression_node := get_node(expression_index);
-            expression_glyphs := expression_node.glyphs;
-            font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
-
-            cursor_position: Vector2;
-            if expression.count > 0 {
-                if cursor_index.* == expression.count {
-                    cursor_position = (expression_glyphs.array[expression.count - 1].position + expression_glyphs.array[expression.count - 1].advance) * font_units_to_pixel;
+        // there are also interemediate steps, like typing in a number that's not an integer through the dots "."
+        //
+        // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
+        // and operators, we can simply remove by index as all characters are only going to be one byte.
+        text_input := get_text_input();
+        if text_input.count > 0 {
+            for character: text_input {
+                if is_digit(character) || is_any(character, "+-*/ .") {
+                    array_insert_at(expression, character, cursor_index.*);
+                    cursor_index.* += 1;
                 } else {
-                    cursor_position = expression_glyphs.array[cursor_index.*].position * font_units_to_pixel;
+                    log("ignoring input character %, since it's not in the ones we defined as supporting", character);
                 }
             }
-            input := get_node();
-            cursor_position.x += input.style.padding.x.x + input.style.border_width.x.x;
-            cursor_position.y += input.style.padding.y.x + input.style.border_width.y.x;
-
-            // cursor
-            element(Style.{
-                placement = relative(cursor_position),
-                background = color(rgb(255, 255, 255)),
-                width = fixed(1.0),
-                height = fixed(expression_glyphs.line_height * font_units_to_pixel),
-            });
-
-            if removed > 0 || text_input.count > 0 {
-                parse_result.* = parse_expression(to_string(expression.data, expression.count), tokens);
-
-                if parse_result.* == .SUCCESS {
-                    Pass :: enum {
-                        DIVIDE_MULTIPLY;
-                        ADD_SUBTRACT;
-                    };
-                    print("\n\nbefore any compute pass:\n");
-                    for token: tokens.* {
-                        if token.kind == .NUMBER {
-                            print("%: %\n", it_index, token.number);
-                        } else {
-                            print("%: %\n", it_index, token.op);
-                        }
-                    }
-                    index := 0;
-                    pass: Pass = .DIVIDE_MULTIPLY;
-                    while index < tokens.count {
-                        left: float64 = FLOAT64_NAN;
-                        op: Operator = .NONE;
-                        right: float64 = FLOAT64_NAN;
-                        operation_size: s64 = 0;
-                        while isnan(left) || op == .NONE || isnan(right) {
-                            if index >= tokens.count {
-                                break;
-                            }
-                            token := tokens.*[index];
-                            if isnan(left) {
-                                if token.kind == .NUMBER {
-                                    left = token.number;
-                                } else if token.kind == .OPERATOR {
-                                    // operation with implicit left number, assumed to be 0
-                                    left = 0;
-                                    op = token.op;
-                                }
-                            } else if op == .NONE {
-                                assert(token.kind == .OPERATOR);
-                                op = token.op;
-                            } else if isnan(right) {
-                                if token.kind == .NUMBER {
-                                    right = token.number;
-                                    break;
-                                } else if token.kind == .OPERATOR {
-                                    // takes precedence over previous operator. might be confusing?
-                                    op = token.op;
-                                }
-                            }
-                            index += 1;
-                            operation_size += 1;
-                        }
-                        print("  % (%) %\n", left, op, right);
-                        if !isnan(left) && op != .NONE && !isnan(right) {
-                            if pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE) {
-                                if op == .MULTIPLY {
-                                    tokens.*[index] = Token.{kind = .NUMBER, number = left * right};
-                                } else if op == .DIVIDE {
-                                    tokens.*[index] = Token.{kind = .NUMBER, number = left / right};
-                                }
-                            } else if pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT) {
-                                if op == .ADD {
-                                    tokens.*[index] = Token.{kind = .NUMBER, number = left + right};
-                                } else if op == .SUBTRACT {
-                                    tokens.*[index] = Token.{kind = .NUMBER, number = left - right};
-                                }
-                            }
-                            if (pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE))
-                            || (pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT)) {
-                                print("\n\nafter adding things up:\n");
-                                for token: tokens.* {
-                                    if token.kind == .NUMBER {
-                                        print("%: %\n", it_index, token.number);
-                                    } else {
-                                        print("%: %\n", it_index, token.op);
-                                    }
-                                }
-                                for j : index-operation_size..tokens.count-operation_size-1{
-                                    tokens.*[j] = tokens.*[j + operation_size];
-                                }
-                                tokens.count -= operation_size;
-                                index -= operation_size;
-                                print("\n\nafter ordered removals:\n");
-                                for token: tokens.* {
-                                    if token.kind == .NUMBER {
-                                        print("%: %\n", it_index, token.number);
-                                    } else {
-                                        print("%: %\n", it_index, token.op);
-                                    }
-                                }
-                            }
-                        }
-                        if pass == .DIVIDE_MULTIPLY && index >= tokens.count - 1 {
-                            pass = .ADD_SUBTRACT;
-                            index = 0;
-                        }
-                    }
-                    print("\n\nafter all compute passes:\n");
-                    for token: tokens.* {
-                        if token.kind == .NUMBER {
-                            print("%: %\n", it_index, token.number);
-                        } else {
-                            print("%: %\n", it_index, token.op);
-                        }
-                    }
-                    result.* = 0;
-                    if tokens.count > 0 {
-                        number_tokens := 0;
-                        for token: tokens.* {
-                            if token.kind == .NUMBER {
-                                number_tokens += 1;
-                                result.* = token.number;
-                            }
-                        }
-                        // the operation should have been resolved to a single number
-                        assert(number_tokens == 1 || number_tokens == 0);
-                    }
-                }
+        }
+        previous := max(cursor_index.* - 1, 0);
+        next := min(cursor_index.* + 1, expression.count);
+        by_word := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
+        #if OS == .LINUX {
+            by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
+        }
+        previous_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
+            c := cursor;
+            while c > 0 && !is_digit(text.*[c - 1]) {
+                c -= 1;
             }
-
-            input_measurement, defined := get_measurement();
-            if defined {
-                element(Style.{
-                    background = color(BG_SECONDARY),
-                    padding = all(5.0),
-                    font_size = 12,
-                }, #code {
-                    text_index := text(sprint("= %", result.*));
-                    text_node := get_node(text_index);
-                    result_node := get_node();
-                    result_node.style.placement = relative(Vector2.{ viewport.x - text_node.size.x - 15.0, input_measurement.size.y - text_node.size.y - 20.0 });
-                });
+            while c > 0 && is_digit(text.*[c - 1]) {
+                c -= 1;
             }
+            return c;
+        }
+        next_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
+            c := cursor;
+            while c < text.count && !is_digit(text.*[c]) {
+                c += 1;
+            }
+            while c < text.count && is_digit(text.*[c]) {
+                c += 1;
+            }
+            return c;
+        }
+        if by_word {
+            previous = previous_word_boundary(expression, cursor_index.*);
+            next = next_word_boundary(expression, cursor_index.*);
+        }
+        #if OS == .MACOS {
+            if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
+                previous = previous_word_boundary(expression, 0);
+                next = next_word_boundary(expression, expression.count);
+            }
+        }
+        removal_start, removal_end := cursor_index.*;
+        if on_key_down(.BACKSPACE, true) {
+            removal_start = previous;
+        } else if on_key_down(.DELETE, true) {
+            removal_end = next;
+        } else if on_key_down(.ARROW_LEFT, true) {
+            cursor_index.* = previous;
+        } else if on_key_down(.ARROW_RIGHT, true) {
+            cursor_index.* = next;
+        } else if on_key_down(.HOME) {
+            cursor_index.* = 0;
+        } else if on_key_down(.END) {
+            cursor_index.* = expression.count;
+        }
+
+        removed := removal_end - removal_start;
+        if removed > 0 {
+            for i: removal_start..expression.count - removed - 1 {
+                expression.*[i] = expression.*[i + removed];
+            }
+            expression.count -= removed;
+            cursor_index.* = min(cursor_index.*, removal_start);
+        }
+
+        expression_index := text(to_string(expression.data, expression.count));
+
+        expression_node := get_node(expression_index);
+        expression_glyphs := expression_node.glyphs;
+        font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
+
+        cursor_position: Vector2;
+        if expression.count > 0 {
+            if cursor_index.* == expression.count {
+                cursor_position = (expression_glyphs.array[expression.count - 1].position + expression_glyphs.array[expression.count - 1].advance) * font_units_to_pixel;
+            } else {
+                cursor_position = expression_glyphs.array[cursor_index.*].position * font_units_to_pixel;
+            }
+        }
+        cursor_position.x += input.style.padding.x.x;
+        cursor_position.y += input.style.padding.y.x;
+
+        // cursor
+        element(Style.{
+            placement = relative(cursor_position),
+            background = color(rgb(255, 255, 255)),
+            width = fixed(1.0),
+            height = fixed(expression_glyphs.line_height * font_units_to_pixel),
         });
 
-        if parse_result.* != .SUCCESS && expression.count > 0 {
-            input := get_node(input_index);
-            input.style.border_radius = 4.0;
-            input.style.border_width = all(1.0);
-            input.style.border_color = ERROR;
+        if removed > 0 || text_input.count > 0 {
+            parse_result.* = parse_expression(to_string(expression.data, expression.count), tokens);
 
-            message := "";
-            if parse_result.* == {
-                case .TWO_NUMBERS_IN_A_ROW;
-                    message = "Two numbers in a row can't be calculated";
-                case .COULD_NOT_PARSE_FLOAT;
-                    message = "Could not parse what should be a number";
+            if parse_result.* == .SUCCESS {
+                Pass :: enum {
+                    DIVIDE_MULTIPLY;
+                    ADD_SUBTRACT;
+                };
+                index := 0;
+                pass: Pass = .DIVIDE_MULTIPLY;
+                while index < tokens.count {
+                    left: float64 = FLOAT64_NAN;
+                    op: Operator = .NONE;
+                    right: float64 = FLOAT64_NAN;
+                    operation_size: s64 = 0;
+                    while isnan(left) || op == .NONE || isnan(right) {
+                        if index >= tokens.count {
+                            break;
+                        }
+                        token := tokens.*[index];
+                        if isnan(left) {
+                            if token.kind == .NUMBER {
+                                left = token.number;
+                            } else if token.kind == .OPERATOR {
+                                // operation with implicit left number, assumed to be 0
+                                left = 0;
+                                op = token.op;
+                            }
+                        } else if op == .NONE {
+                            assert(token.kind == .OPERATOR);
+                            op = token.op;
+                        } else if isnan(right) {
+                            if token.kind == .NUMBER {
+                                right = token.number;
+                                break;
+                            } else if token.kind == .OPERATOR {
+                                // takes precedence over previous operator. might be confusing?
+                                op = token.op;
+                            }
+                        }
+                        index += 1;
+                        operation_size += 1;
+                    }
+                    if !isnan(left) && op != .NONE && !isnan(right) {
+                        if pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE) {
+                            if op == .MULTIPLY {
+                                tokens.*[index] = Token.{kind = .NUMBER, number = left * right};
+                            } else if op == .DIVIDE {
+                                tokens.*[index] = Token.{kind = .NUMBER, number = left / right};
+                            }
+                        } else if pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT) {
+                            if op == .ADD {
+                                tokens.*[index] = Token.{kind = .NUMBER, number = left + right};
+                            } else if op == .SUBTRACT {
+                                tokens.*[index] = Token.{kind = .NUMBER, number = left - right};
+                            }
+                        }
+                        if (pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE))
+                        || (pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT)) {
+                            for j : index-operation_size..tokens.count-operation_size-1{
+                                tokens.*[j] = tokens.*[j + operation_size];
+                            }
+                            tokens.count -= operation_size;
+                            index -= operation_size;
+                        }
+                    }
+                    if pass == .DIVIDE_MULTIPLY && index >= tokens.count - 1 {
+                        pass = .ADD_SUBTRACT;
+                        index = 0;
+                    }
+                }
+                result.* = 0;
+                if tokens.count > 0 {
+                    number_tokens := 0;
+                    for token: tokens.* {
+                        if token.kind == .NUMBER {
+                            number_tokens += 1;
+                            result.* = token.number;
+                        }
+                    }
+                    // the operation should have been resolved to a single number
+                    assert(number_tokens == 1 || number_tokens == 0);
+                }
             }
-            text(Style.{ color = ERROR, margin = in_line(5), font_size = 12 }, message);
+        }
+
+        input_measurement, defined := get_measurement();
+        if defined {
+            element(Style.{
+                background = color(BG),
+                padding = all(5.0),
+                font_size = 12,
+            }, #code {
+                text_index := text(sprint("= %", result.*));
+                text_node := get_node(text_index);
+                result_node := get_node();
+                result_node.style.placement = relative(Vector2.{
+                    viewport.x - text_node.size.x - 15.0,
+                    input_measurement.size.y - text_node.size.y - 20.0
+                });
+            });
+        }
+
+        if parse_result.* != .SUCCESS && expression.count > 0 && defined {
+            // is this really useful? should we remove this?
+            element(Style.{
+                font_size = 12,
+            }, #code {
+                message := "";
+                if parse_result.* == {
+                    case .TWO_NUMBERS_IN_A_ROW;
+                        message = "Two numbers in a row can't be calculated";
+                    case .COULD_NOT_PARSE_FLOAT;
+                        message = "Could not parse what should be a number";
+                }
+
+                text_node := get_node(text(Style.{
+                    color = ERROR,
+                    margin = in_line(5),
+                    font_size = 12
+                }, message));
+
+                error_node := get_node();
+                error_node.style.placement = relative(Vector2.{
+                    0.0,
+                    input_measurement.size.y - text_node.size.y - 5
+                });
+            });
         }
     });
+
+    if on_key_down(.ESCAPE) {
+        window.running = false;
+    }
+    if on_key_down(.ENTER) {
+        // TODO: copy the result to the clipboard
+        window.running = false;
+    }
 } @component
 
 main :: () {
     backend: Backend;
     window: Window;
     init_backend(*backend);
-    init_window(*backend, *window, WIDTH, HEIGHT, "playground");
+    init_window(*backend, *window, WIDTH, HEIGHT, "Calculator");
     #if OS == .LINUX {
         send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Max_Size.{ width = WIDTH, height = HEIGHT });
         send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Min_Size.{ width = WIDTH, height = HEIGHT });
@@ -469,10 +452,6 @@ main :: () {
         }
 
         App();
-
-        if on_key_down(.ESCAPE) {
-            window.running = false;
-        }
 
         layout();
         draw(BG);
