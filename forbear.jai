@@ -5606,9 +5606,9 @@ init_forbear :: (
             vec2 corner = corners[gl_VertexID];
             v_position = corner * size.xy;
             v_size = size.xy;
-            v_color = color;
+            v_color = vec4(color.rgb * color.a, color.a);
             v_border_width = border_width;
-            v_border_color = border_color;
+            v_border_color = vec4(border_color.rgb * border_color.a, border_color.a);
             v_border_radius = border_radius;
             v_uv = mix(uv_min, uv_max, corner);
             v_kind = kind;
@@ -5679,8 +5679,7 @@ GLSL);
                 }
             } else if (v_kind == 2u) {
                 // TODO: handle subpixel rendering
-                float a = texture(atlas, v_uv).r * v_color.a;
-                out_color = vec4(v_color.rgb * a, a);
+                out_color = v_color * texture(atlas, v_uv).r;
             }
         }
 GLSL);
