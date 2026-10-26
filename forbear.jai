@@ -1172,6 +1172,7 @@ add_key :: (array: *[]Key, key: Key) {
         );
         NSWindow.setReleasedWhenClosed(window.ns_window, NO);
         NSWindow.setTitle(window.ns_window, title);
+        NSWindow.center(window.ns_window);
         NSWindow.makeKeyAndOrderFront(window.ns_window, null);
 
         window.view = NSWindow.contentView(window.ns_window);
