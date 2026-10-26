@@ -1329,6 +1329,8 @@ add_key :: (array: *[]Key, key: Key) {
                             characters := NSEvent.characters(event);
                             if characters {
                                 text := to_string(NSString.UTF8String(characters));
+                                // TODO(bug): this is currently accepting the text version of stuff like CTRL, which doensn't make any sense.
+                                // We should be using NSTextInputClient instead.
                                 if text.count != 3 || text[0] == 0xEF && text[1] >= 0x9C && text[1] <= 0xA3 {
                                     append_text(text, *window.text, window.text_buffer);
                                 }
@@ -4799,7 +4801,6 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
         return false;
     }
 }
-// currently only supported on wayland
 get_text_input :: () -> string {
     using context.forbear;
     return window.text;
