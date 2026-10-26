@@ -125,9 +125,10 @@ U64_MAX :: Math.U64_MAX;
 #add_context inter: Font;
 WIDTH :: 360;
 HEIGHT :: 120;
-BG :: #run rgb(17, 19, 22);
-ERROR :: #run rgb(232, 91, 91);
-TRANSPARENT :: #run rgba(1.0, 1.0, 1.0, 0.0);
+BG :: #run hex("#111316");
+SUCCESS :: #run hex("#6FDD6F40");
+ERROR :: #run hex("#E85B5B");
+TRANSPARENT :: #run hex("#01010100");
 
 Button :: (body: Code) -> bool #expand {
     element(Style.{
@@ -178,6 +179,24 @@ App :: () {
                 }
             }
         }
+        // should_paste := false;
+        // #if OS == .MACOS {
+        //     should_paste = (is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT)) && on_key_down(.V);
+        // } else #if OS == .LINUX {
+        //     should_paste = is_key_held(.CONTROL_LEFT) && on_key_down(.V);
+        // }
+        // if should_paste {
+        //     clipboard_text := get_clipboard_text();
+        //     if clipboard_text.count > 0 {
+        //         if array.count >= array.allocated {
+        //             reserve := max(8, 2 * array.count);
+        //             array_reserve(cast(*Resizable_Array) array, reserve, element_size);
+        //         }
+        //         array_insert_at(expression, clipboard_text, cursor_index.*);
+        //         cursor_index.* += 1;
+        //     }
+        // }
+
         previous := max(cursor_index.* - 1, 0);
         next := min(cursor_index.* + 1, expression.count);
         by_word := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
@@ -252,15 +271,17 @@ App :: () {
                 cursor_position = expression_glyphs.array[cursor_index.*].position * font_units_to_pixel;
             }
         }
+        line_height := expression_glyphs.line_height * font_units_to_pixel;
+        inner_height := viewport.y - input.style.padding.y.x - input.style.padding.y.y;
         cursor_position.x += input.style.padding.x.x;
-        cursor_position.y += input.style.padding.y.x;
+        cursor_position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
 
         // cursor
         element(Style.{
             placement = relative(cursor_position),
-            background = color(rgb(255, 255, 255)),
+            background = color(hex("#FFFFFF")),
             width = fixed(1.0),
-            height = fixed(expression_glyphs.line_height * font_units_to_pixel),
+            height = fixed(line_height),
         });
 
         if removed > 0 || text_input.count > 0 {
@@ -397,8 +418,9 @@ App :: () {
     if on_key_down(.ESCAPE) {
         window.running = false;
     }
+
     if on_key_down(.ENTER) {
-        // TODO: copy the result to the clipboard
+        copy_to_clipboard(tprint("%", result.*));
         window.running = false;
     }
 } @component
@@ -422,7 +444,7 @@ main :: () {
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *context.inter,
-        color = rgb(230, 232, 235),
+        color = hex("#E6E8EB"),
         font_size = 16,
     });
 
