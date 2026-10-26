@@ -1130,6 +1130,9 @@ add_key :: (array: *[]Key, key: Key) {
     #load "bindings-darwin.jai";
     #import "Objective_C";
     #import "Objective_C/AppKit";
+    #import "Process";
+    #import "File";
+    #import "File_Utilities";
 
     MacOS_GL_Window :: struct {
         width: float64;
@@ -1390,6 +1393,32 @@ add_key :: (array: *[]Key, key: Key) {
 
     Backend :: MacOS_GL_Backend;
     Window :: MacOS_GL_Window;
+
+    create_application :: (name: string, executable: string) {
+        app := tprint("%/%.app", get_working_directory(), name);
+        make_directory_if_it_does_not_exist(tprint("%/Contents/MacOS", app), recursive = true);
+        bundled := tprint("%/Contents/MacOS/%", app, name);
+        copy_file(executable, bundled);
+        chmod(temp_c_string(bundled), 0x1ED);
+        write_entire_file(
+            tprint("%/Contents/Info.plist", app),
+            tprint(#string PLIST
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                <plist version="1.0">
+                <dict>
+                <key>CFBundleExecutable</key><string>%1</string>
+                <key>CFBundleIdentifier</key><string>com.forbear.%1</string>
+                <key>CFBundleName</key><string>%1</string>
+                <key>CFBundlePackageType</key><string>APPL</string>
+                <key>NSHighResolutionCapable</key><true/>
+                </dict>
+                </plist>
+                PLIST,
+            name)
+        );
+        run_command("codesign", "--force", "--deep", "-s", "-", app);
+    }
 }
 
 Direction :: enum u8 { HORIZONTAL; VERTICAL; };
