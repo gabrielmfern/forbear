@@ -4939,12 +4939,7 @@ open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Openin
     if style.z_index < U16_MAX {
         node.z = style.z_index;
     } else if element_ancestor_index != -1 {
-        parent := context.forbear.node_tree[element_ancestor_index];
-        if parent.z < U16_MAX {
-            node.z = parent.z + 1;
-        } else {
-            node.z = parent.z;
-        }
+        node.z = context.forbear.node_tree[element_ancestor_index].z;
     }
     node.key = key;
     if node.style.width.kind == {
