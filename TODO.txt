@@ -15,7 +15,7 @@
 - [x] state management
 - [x] support for element arenas, allowing for users to allocate growable arrays in state
 - [x] support for components
-- [ ] build a calculator program
+- [x] build a calculator program
 - [ ] implement C ABI and C adapter
 - [ ] gather all of the current pessimizations in the code
 - [ ] handle wayland topbars protocol (this doesn't address gnome unfortunately)
