@@ -1678,6 +1678,27 @@ rgba :: (r: float, g: float, b: float) -> Vector4 {
 rgba :: (r: float, g: float, b: float, a: float) -> Vector4 {
     return Vector4.{r / 255.0, g / 255.0, b / 255.0, a};
 }
+hex :: ($code: string) -> Vector4 {
+    COLOR :: #run -> Vector4 {
+        digits := code;
+        if digits.count > 0 && digits[0] == #char "#" then advance(*digits);
+        assert(digits.count == 6 || digits.count == 8, "hex: expected #RRGGBB or #RRGGBBAA, got \"%\"", code);
+        channels := Vector4.{w = 1};
+        for i: 0..digits.count / 2 - 1 {
+            value := 0;
+            for j: 0..1 {
+                c := digits[i * 2 + j];
+                if c >= #char "0" && c <= #char "9" value = value * 16 + c - #char "0";
+                else if c >= #char "a" && c <= #char "f" value = value * 16 + c - #char "a" + 10;
+                else if c >= #char "A" && c <= #char "F" value = value * 16 + c - #char "A" + 10;
+                else assert(false, "hex: '%' is not a hexadecimal digit in \"%\"", string.{1, *digits[i * 2 + j]}, code);
+            }
+            channels.component[i] = value / 255.0;
+        }
+        return channels;
+    };
+    return COLOR;
+}
 color :: (value: Vector4) -> Background {
     return Background.{ kind = .COLOR, color = value };
 }
