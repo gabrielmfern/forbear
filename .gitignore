@@ -13,7 +13,7 @@ introspection
 dist
 
 ## binaries
-apps/calculator/calculator
+apps/calculator/Calculator
 apps/calculator/tests
 apps/javascript/main
 apps/playground
