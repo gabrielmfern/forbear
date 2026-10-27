@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>forbear log</title>
+  <subtitle>Notes from building forbear, a GUI framework, from scratch.</subtitle>
+  <link href="https://www.forbear.dev/"/>
+  <link rel="self" href="https://www.forbear.dev/feed.xml"/>
+  <id>https://www.forbear.dev/</id>
+  <updated>2026-10-11T00:00:00Z</updated>
+  <author><name>Gabriel Miranda</name></author>
+
+  <entry>
+    <title>Rendering JSX without a browser by embedding Node.js in a native program</title>
+    <link href="https://www.forbear.dev/log/003-ui-from-javascript.html"/>
+    <id>https://www.forbear.dev/log/003-ui-from-javascript.html</id>
+    <published>2026-10-11T00:00:00Z</published>
+    <updated>2026-10-11T00:00:00Z</updated>
+    <summary>forbear now runs JSX on an embedded Node, lays nodes out, and renders in sync with the compositor on Wayland.</summary>
+  </entry>
+
+  <entry>
+    <title>text, macOS and nodes!</title>
+    <link href="https://www.forbear.dev/log/002-text-macos-and-nodes.html"/>
+    <id>https://www.forbear.dev/log/002-text-macos-and-nodes.html</id>
+    <published>2026-10-03T00:00:00Z</published>
+    <updated>2026-10-03T00:00:00Z</updated>
+    <summary>forbear in Jai draws its first nodes and text, on Linux and on macOS.</summary>
+  </entry>
+
+  <entry>
+    <title>i'm rewriting everything (again)</title>
+    <link href="https://www.forbear.dev/log/001-im-rewriting-everything-again.html"/>
+    <id>https://www.forbear.dev/log/001-im-rewriting-everything-again.html</id>
+    <published>2026-09-25T00:00:00Z</published>
+    <updated>2026-09-25T00:00:00Z</updated>
+    <summary>why I'm rewriting forbear, my GUI framework, from Zig in Jai, and what I'm doing differently this time.</summary>
+  </entry>
+</feed>
