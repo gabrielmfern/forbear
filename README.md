@@ -105,9 +105,9 @@ There are two reasons for this kind of licensing:
 1) I believe that with something being paid for, the incentives are set up so that I can build the best UI library that has ever existed, by also freeing me up to work on it;
 2) this UI library has become a bigger undertaking than I originally thought it would be, and I've invested a substantial amount of time into it.
 
-## Remarks
+## Roadmap
 
-Beware forbear has been in heavy development since early 2025. The current roadmap is:
+Beware forbear has been in heavy development since early 2025. The roadmap of the near future is:
 - C ABI and C bindings.
 - Windows and Linux's X11.
 - Various graphics backends such as Metal and DirectX.
