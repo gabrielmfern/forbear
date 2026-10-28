@@ -322,17 +322,9 @@ generate :: () {
 
     set_build_options_dc(.{do_output=false});
 
-    // Executable + the shared libraries it needs at runtime, side by side.
-    #if OS == .WINDOWS {
-        platform :: "win32";
-    } else #if OS == .LINUX {
-        platform :: "linux";
-    } else #if OS == .MACOS {
-        platform :: "darwin";
-    }
     arch :: #ifx CPU == .ARM64 then "arm64" else "x64";
 
-    BINDINGS_PATH :: #run tprint("%bindings-%.jai", #filepath, platform);
+    BINDINGS_PATH :: #run tprint("%bindings.jai", #filepath);
 
     bindings_builder: String_Builder;
     #if OS == .LINUX {
@@ -447,5 +439,17 @@ generate :: () {
         }
     }
 
-    assert(write_entire_file(BINDINGS_PATH, *bindings_builder), "could not write %", BINDINGS_PATH);
+    begin := tprint("#if OS == .% {", OS);
+    end := tprint("} // .%", OS);
+    section := tprint("%\n%\n%", begin, builder_to_string(*bindings_builder), end);
+    existing := read_entire_file(BINDINGS_PATH, log_errors = false);
+    begin_index := find_index_from_left(existing, begin);
+    if begin_index == -1 {
+        existing = tprint("%\n%\n", existing, section);
+    } else {
+        end_index := find_index_from_left(existing, end, begin_index);
+        assert(end_index != -1, "could not find \"%\" in %", end, BINDINGS_PATH);
+        existing = tprint("%%%", slice(existing, 0, begin_index), section, slice(existing, end_index + end.count, existing.count));
+    }
+    assert(write_entire_file(BINDINGS_PATH, existing), "could not write %", BINDINGS_PATH);
 }

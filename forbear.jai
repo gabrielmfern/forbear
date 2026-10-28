@@ -104,10 +104,10 @@ add_key :: (array: *[]Key, key: Key) {
     #load "./adapters/javascript.jai";
 }
 
+#load "bindings.jai";
+
 #if OS == .LINUX {
     #scope_module
-    #load "bindings-linux.jai";
-
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
     EXIT_ON_FIRST_FRAME :: false;
@@ -1129,7 +1129,6 @@ add_key :: (array: *[]Key, key: Key) {
     Backend :: Wayland_EGL_Backend;
     Window :: Wayland_EGL_Window;
 } else #if OS == .MACOS {
-    #load "bindings-darwin.jai";
     #import "Objective_C";
     #import "Objective_C/AppKit";
     #import "Process";
@@ -1423,7 +1422,6 @@ add_key :: (array: *[]Key, key: Key) {
     }
 } else #if OS == .WINDOWS {
     // TODO: temporary backend for testing on Windows
-    #load "bindings-win32.jai";
     #import "Windows";
     #import "Windows_Utf8";
 
