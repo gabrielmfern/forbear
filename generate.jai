@@ -324,7 +324,7 @@ generate :: () {
 
     arch :: #ifx CPU == .ARM64 then "arm64" else "x64";
 
-    FORBEAR_PATH :: #run tprint("%forbear.jai", #filepath);
+    BINDINGS_PATH :: #run tprint("%bindings.jai", #filepath);
 
     bindings_builder: String_Builder;
     #if OS == .LINUX {
@@ -439,17 +439,17 @@ generate :: () {
         }
     }
 
-    marker := tprint("// ======== % bindings ========", OS);
-    section := tprint("%\n#if OS == .% {\n%\n}\n%", marker, OS, builder_to_string(*bindings_builder), marker);
-    forbear, read_ok := read_entire_file(FORBEAR_PATH);
-    assert(read_ok, "could not read %", FORBEAR_PATH);
-    begin_index := find_index_from_left(forbear, marker);
+    begin := tprint("#if OS == .% {", OS);
+    end := tprint("} // .%", OS);
+    section := tprint("%\n%\n%", begin, builder_to_string(*bindings_builder), end);
+    existing := read_entire_file(BINDINGS_PATH, log_errors = false);
+    begin_index := find_index_from_left(existing, begin);
     if begin_index == -1 {
-        forbear = tprint("%\n%\n", forbear, section);
+        existing = tprint("%\n%\n", existing, section);
     } else {
-        end_index := find_index_from_left(forbear, marker, begin_index + marker.count);
-        assert(end_index != -1, "could not find closing \"%\" in %", marker, FORBEAR_PATH);
-        forbear = tprint("%%%", slice(forbear, 0, begin_index), section, slice(forbear, end_index + marker.count, forbear.count));
+        end_index := find_index_from_left(existing, end, begin_index);
+        assert(end_index != -1, "could not find \"%\" in %", end, BINDINGS_PATH);
+        existing = tprint("%%%", slice(existing, 0, begin_index), section, slice(existing, end_index + end.count, existing.count));
     }
-    assert(write_entire_file(FORBEAR_PATH, forbear), "could not write %", FORBEAR_PATH);
+    assert(write_entire_file(BINDINGS_PATH, existing), "could not write %", BINDINGS_PATH);
 }
