@@ -8,6 +8,7 @@ introspection
 *.rdi
 *.so*
 *.app
+*.lib
 .build/
 .vercel
 dist
