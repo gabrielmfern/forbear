@@ -6,7 +6,7 @@ BUILD_FLAGS :: "+forbear";
 #import "File";
 #import "Flat_Pool";
 #import "GL";
-#import,file "../forbear.jai";
+#import "forbear";
 
 Fps_Monitor :: () {
     frames := state(cast(float64)0.0);
@@ -49,7 +49,7 @@ Counter :: () {
     // State is stored in a 16MB static buffer with no heap allocations.
     counter := state(s64);
 
-    // `text` defines a node with glyphs inside of it. It inherits style in its parent.
+    // `text` defines a node with glyphs inside of it. It inherits style from its parent.
     text("PLUS (+): increases the counter by one");
     text("MINUS (-): decreases the counter by one");
     if on_key_down(.PLUS) {
@@ -61,7 +61,7 @@ Counter :: () {
     }
 
     text("LEFT CLICK in the button: increases the counter by one");
-    text("RIGH CLICK in the button: decreases the counter by one");
+    text("RIGHT CLICK in the button: decreases the counter by one");
     element(Style.{
         background = color(rgb(44, 49, 56)),
         color = rgb(230, 234, 239),
@@ -79,9 +79,9 @@ Counter :: () {
             }
         }
 
-        // The children of an element is defined through passing
+        // The children of an element are defined through passing
         // around Code by the `#code` directive.
-        text("Increase");
+        text("Click me");
 
         if on_click(.LEFT) {
             counter.* += 1;

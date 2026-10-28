@@ -6,7 +6,7 @@ Math :: #import "Math";
 #import "String";
 #import "Flat_Pool";
 #import "GL";
-#import,file "../../forbear.jai";
+#import "forbear";
 
 #if OS == .MACOS {
     #import "Objective_C";

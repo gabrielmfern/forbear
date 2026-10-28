@@ -1,7 +1,7 @@
 #import "Basic";
 #import "File";
 #import "Flat_Pool";
-#import,file "../../forbear.jai"(JAVASCRIPT_ADAPTER = true);
+#import "forbear"(JAVASCRIPT_ADAPTER = true);
 
 #run {
     #import "Process";
@@ -16,7 +16,7 @@ main :: () {
     window: Window;
     init_backend(*backend);
     init_window(*backend.connection, *window, 800, 600, "playground");
-   
+
     inter := #run create_font(read_entire_file(tprint("%../Inter.ttf", #filepath)));
 
     forbear: Forbear;

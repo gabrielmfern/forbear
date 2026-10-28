@@ -6,7 +6,7 @@ BUILD_FLAGS :: "+forbear";
 #import "File";
 #import "Flat_Pool";
 #import "GL";
-#import,file "../forbear.jai";
+#import "forbear";
 
 main :: () {
     backend: Backend;
