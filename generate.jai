@@ -332,8 +332,6 @@ generate :: () {
     }
     arch :: #ifx CPU == .ARM64 then "arm64" else "x64";
 
-    BINDINGS_PATH :: #run tprint("%bindings-%.jai", #filepath, platform);
-
     bindings_builder: String_Builder;
     #if OS == .LINUX {
         // egl bindings
@@ -447,5 +445,20 @@ generate :: () {
         }
     }
 
-    assert(write_entire_file(BINDINGS_PATH, *bindings_builder), "could not write %", BINDINGS_PATH);
+    FORBEAR_PATH :: #run tprint("%forbear.jai", #filepath);
+    forbear, read_ok := read_entire_file(FORBEAR_PATH);
+    assert(read_ok, "could not read %", FORBEAR_PATH);
+    begin_marker := tprint("// BEGIN GENERATED %", platform);
+    end_marker := tprint("// END GENERATED %", platform);
+    begin := find_index_from_left(forbear, begin_marker);
+    end := find_index_from_left(forbear, end_marker);
+    assert(begin != -1 && end != -1, "could not find \"%\" and \"%\" in %", begin_marker, end_marker, FORBEAR_PATH);
+    begin = find_index_from_left(forbear, #char "\n", begin) + 1;
+    end = find_index_from_right(slice(forbear, 0, end), #char "\n") + 1;
+
+    output: String_Builder;
+    append(*output, slice(forbear, 0, begin));
+    append_and_steal_buffers(*output, *bindings_builder);
+    append(*output, slice(forbear, end, forbear.count - end));
+    assert(write_entire_file(FORBEAR_PATH, *output), "could not write %", FORBEAR_PATH);
 }
