@@ -1,3 +1,4 @@
+
 # private
 introspection
 
@@ -14,6 +15,8 @@ introspection
 .build/
 .vercel
 dist
+!vendor/**/*.a
+!vendor/**/*.lib
 
 ## binaries
 apps/calculator/Calculator

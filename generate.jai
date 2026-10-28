@@ -374,12 +374,12 @@ generate :: () {
 
     {
         // kbts bindings
-        build_kb_text_shape_ok := build_cpp_static_lib("vendor/kb_text_shape", "vendor/kb_text_shape.c", extra = .["-fPIC"], debug = debug);
+        build_kb_text_shape_ok := build_cpp_static_lib(tprint("vendor/kb_text_shape-%", platform), "vendor/kb_text_shape.c", extra = .["-fPIC"], debug = debug);
         assert(build_kb_text_shape_ok, "could not compile kb_text_shape");
         kbts_bindings_opts: Generate_Bindings_Options;
         array_add(*kbts_bindings_opts.system_include_paths, ..get_default_system_include_paths());
         array_add(*kbts_bindings_opts.library_search_paths, "vendor");
-        array_add(*kbts_bindings_opts.libraries, .{ filename = "kb_text_shape" });
+        array_add(*kbts_bindings_opts.libraries, .{ filename = tprint("kb_text_shape-%", platform), identifier = "kb_text_shape" });
         array_add(*kbts_bindings_opts.source_files, "vendor/kb_text_shape.h");
         kbts_bindings_opts.generate_library_declarations = false;
         kbts_bindings_opts.generate_compile_time_struct_checks = false;
@@ -388,14 +388,14 @@ generate :: () {
         kbts_builder, kbts_ok := generate_bindings(kbts_bindings_opts);
         assert(kbts_ok, "could not generate kb_text_shape bindings");
         append_and_steal_buffers(*bindings_builder, *kbts_builder);
-        append(*bindings_builder, "\nkb_text_shape :: #library,no_dll \"vendor/kb_text_shape\";\n");
+        print_to_builder(*bindings_builder, "\nkb_text_shape :: #library,no_dll \"vendor/kb_text_shape-%\";\n", platform);
         append(*bindings_builder, "\n#scope_export\n");
     }
 
     {
         // freetype bindings
         build_freetype_ok := build_cpp_static_lib(
-            "vendor/freetype",
+            tprint("vendor/freetype-%", platform),
             "vendor/freetype/src/base/ftsystem.c",
             "vendor/freetype/src/base/ftinit.c",
             "vendor/freetype/src/base/ftdebug.c",
@@ -432,7 +432,7 @@ generate :: () {
         array_add(*freetype_bindings_opts.system_include_paths, ..get_default_system_include_paths());
         array_add(*freetype_bindings_opts.include_paths, "vendor/freetype/include");
         array_add(*freetype_bindings_opts.library_search_paths, "vendor");
-        array_add(*freetype_bindings_opts.libraries, .{ filename = "freetype" });
+        array_add(*freetype_bindings_opts.libraries, .{ filename = tprint("freetype-%", platform), identifier = "freetype" });
         array_add(*freetype_bindings_opts.source_files, "vendor/freetype/include/freetype/freetype.h", "vendor/freetype/include/freetype/ftmm.h");
         freetype_bindings_opts.generate_library_declarations = false;
         freetype_bindings_opts.generate_compile_time_struct_checks = false;
@@ -440,7 +440,7 @@ generate :: () {
         freetype_builder, freetype_ok := generate_bindings(freetype_bindings_opts);
         assert(freetype_ok, "could not generate freetype bindings");
         append_and_steal_buffers(*bindings_builder, *freetype_builder);
-        append(*bindings_builder, "\nfreetype :: #library,no_dll \"vendor/freetype\";\nptrdiff_t :: s64;\n");
+        print_to_builder(*bindings_builder, "\nfreetype :: #library,no_dll \"vendor/freetype-%\";\nptrdiff_t :: s64;\n", platform);
         append(*bindings_builder, "\n#scope_export\n");
         #if OS == .LINUX {
             generate_wayland_bindings(*bindings_builder);

@@ -2827,7 +2827,7 @@ kbts_ScriptTagToScript :: (Tag: kbts_script_tag) -> kbts_script #foreign kb_text
 #scope_file
 
 
-kb_text_shape :: #library,no_dll "vendor/kb_text_shape";
+kb_text_shape :: #library,no_dll "vendor/kb_text_shape-win32";
 
 #scope_export
 //
@@ -10742,7 +10742,7 @@ FT_Get_Default_Named_Instance :: (face: FT_Face, instance_index: *FT_UInt) -> FT
 #scope_file
 
 
-freetype :: #library,no_dll "vendor/freetype";
+freetype :: #library,no_dll "vendor/freetype-win32";
 ptrdiff_t :: s64;
 
 #scope_export
