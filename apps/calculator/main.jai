@@ -466,7 +466,7 @@ main :: () {
                 update_backend(*backend, event);
                 update_window(*backend, *window, event);
             }
-        } else #if OS == .MACOS {
+        } else #if OS == .MACOS || OS == .WINDOWS {
             update_backend(*backend);
             update_window(*backend, *window);
         }

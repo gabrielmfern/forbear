@@ -3,12 +3,14 @@ introspection
 
 # compiled outputs
 *.a
+*.app
 *.dSYM*
 *.dylib
+*.exe
+*.lib
+*.pdb
 *.rdi
 *.so*
-*.app
-*.lib
 .build/
 .vercel
 dist

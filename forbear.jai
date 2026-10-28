@@ -16,8 +16,10 @@ operator == :: Math.operator ==;
 #import "Hash";
 #import "Hash_Table";
 #import "Memory";
-#import "POSIX";
-#import "Socket";
+#if OS != .WINDOWS {
+    #import "POSIX";
+    #import "Socket";
+}
 #import "String";
 Math :: #import "Math";
 
@@ -1419,6 +1421,204 @@ add_key :: (array: *[]Key, key: Key) {
         );
         run_command("codesign", "--force", "--deep", "-s", "-", app);
     }
+} else #if OS == .WINDOWS {
+    // TODO: temporary backend for testing on Windows
+    #load "bindings-win32.jai";
+    #import "Windows";
+    #import "Windows_Utf8";
+
+    win32_user32 :: #library,system "user32";
+    GetDpiForWindow :: (hwnd: HWND) -> u32 #foreign win32_user32;
+    SetProcessDpiAwarenessContext :: (value: HANDLE) -> BOOL #foreign win32_user32;
+    IsWindow :: (hwnd: HWND) -> BOOL #foreign win32_user32;
+    MapVirtualKeyW :: (code: u32, map_type: u32) -> u32 #foreign win32_user32;
+    AdjustWindowRectExForDpi :: (rect: *RECT, style: u32, menu: BOOL, extended_style: u32, dpi: u32) -> BOOL #foreign win32_user32;
+    win32_kernel32 :: #library,system "kernel32";
+    DiscardVirtualMemory :: (address: *void, size: u64) -> u32 #foreign win32_kernel32;
+
+    Win32_GL_Window :: struct {
+        width: s32;
+        height: s32;
+        scale: float64;
+
+        hwnd: HWND;
+        hdc: HDC;
+
+        text_buffer: [256]u8;
+        text: string;
+
+        keys_buffer: [32 * 4]Key;
+        keys_repeated: []Key;
+        keys_pressed: []Key;
+        keys_released: []Key;
+        keys_held: []Key;
+
+        pointer_inside: bool;
+        pointer_position: Vector2;
+
+        pointer_press_position: [MOUSE_BUTTON_COUNT]Vector2;
+        pointer_pressed: [MOUSE_BUTTON_COUNT]bool;
+        pointer_released: [MOUSE_BUTTON_COUNT]bool;
+        pointer_held: [MOUSE_BUTTON_COUNT]bool;
+
+        running := true;
+    };
+    init_window :: (backend: *Win32_GL_Backend, window: *Win32_GL_Window, width: float64, height: float64, title: string) {
+        class: WNDCLASSEXW;
+        class.cbSize = size_of(WNDCLASSEXW);
+        class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+        class.lpfnWndProc = DefWindowProcW;
+        class.hInstance = GetModuleHandleW(null);
+        class.hCursor = LoadCursorW(null, IDC_ARROW);
+        class.lpszClassName = utf8_to_wide("forbear",, temp);
+        RegisterClassExW(*class);
+
+        window.hwnd = CreateWindowExW(
+            0,
+            class.lpszClassName,
+            utf8_to_wide(title,, temp),
+            WS_OVERLAPPEDWINDOW,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+            null, null, class.hInstance, null
+        );
+        dpi := GetDpiForWindow(window.hwnd);
+        window.scale = dpi / 96.0;
+        rectangle := RECT.{ right = xx (width * window.scale), bottom = xx (height * window.scale) };
+        AdjustWindowRectExForDpi(*rectangle, WS_OVERLAPPEDWINDOW, 0, 0, dpi);
+        SetWindowPos(window.hwnd, null, 0, 0, rectangle.right - rectangle.left, rectangle.bottom - rectangle.top, SWP_NOMOVE | SWP_NOZORDER);
+        ShowWindow(window.hwnd, SW_SHOW);
+
+        _, window.hdc = wgl_create_context(window.hwnd, null, 3, 3);
+        gl_load(*gl);
+        if gl.wglSwapIntervalEXT {
+            gl.wglSwapIntervalEXT(1);
+        }
+
+        client: RECT;
+        GetClientRect(window.hwnd, *client);
+        window.width = client.right;
+        window.height = client.bottom;
+
+        window.text.data = window.text_buffer.data;
+
+        window.keys_pressed.data = window.keys_buffer.data;
+        window.keys_released.data = window.keys_buffer.data + 32;
+        window.keys_held.data = window.keys_buffer.data + 64;
+        window.keys_repeated.data = window.keys_buffer.data + 96;
+    }
+    update_window :: (backend: *Win32_GL_Backend, window: *Win32_GL_Window) {
+        if !IsWindow(window.hwnd) {
+            window.running = false;
+            return;
+        }
+
+        client: RECT;
+        GetClientRect(window.hwnd, *client);
+        if client.right > 0 && client.bottom > 0 {
+            window.width = client.right;
+            window.height = client.bottom;
+        }
+        window.scale = GetDpiForWindow(window.hwnd) / 96.0;
+
+        if GetForegroundWindow() != window.hwnd {
+            window.keys_held.count = 0;
+        }
+    }
+
+    Win32_GL_Backend :: struct {
+        high_surrogate: u16;
+    };
+    init_backend :: (backend: *Win32_GL_Backend) {
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 :: cast(HANDLE) -4;
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+    update_backend :: (backend: *Win32_GL_Backend) {
+        window := context.forbear.window;
+
+        cursor: POINT;
+        GetCursorPos(*cursor);
+        window.pointer_inside = WindowFromPoint(cursor) == window.hwnd;
+        ScreenToClient(window.hwnd, *cursor);
+        window.pointer_position = Vector2.{ xx cursor.x, xx cursor.y } / cast(float) window.scale;
+
+        message: MSG;
+        while PeekMessageW(*message, null, 0, 0, PM_REMOVE) {
+            if message.message == {
+                case WM_KEYDOWN; #through;
+                case WM_SYSKEYDOWN; #through;
+                case WM_KEYUP; #through;
+                case WM_SYSKEYUP;
+                    virtual_key := cast(u32) message.wParam;
+                    extended := (message.lParam >> 24) & 1;
+                    if virtual_key == {
+                        case VK_SHIFT;
+                            MAPVK_VSC_TO_VK_EX :: 3;
+                            virtual_key = MapVirtualKeyW(xx ((message.lParam >> 16) & 0xFF), MAPVK_VSC_TO_VK_EX);
+                        case VK_CONTROL;
+                            virtual_key = xx ifx extended then VK_RCONTROL else VK_LCONTROL;
+                        case VK_MENU;
+                            virtual_key = xx ifx extended then VK_RMENU else VK_LMENU;
+                    }
+                    key: Key = xx virtual_key;
+                    if message.message == WM_KEYDOWN || message.message == WM_SYSKEYDOWN {
+                        if message.lParam & (1 << 30) {
+                            add_key(*window.keys_repeated, key);
+                        } else {
+                            add_key(*window.keys_pressed, key);
+                            add_key(*window.keys_held, key);
+                        }
+                    } else {
+                        add_key(*window.keys_released, key);
+                        for window.keys_held {
+                            if it == key {
+                                array_unordered_remove_by_index(*window.keys_held, it_index);
+                                break;
+                            }
+                        }
+                    }
+                case WM_CHAR;
+                    unit := cast(u16) message.wParam;
+                    if unit >= 0xD800 && unit < 0xDC00 {
+                        backend.high_surrogate = unit;
+                    } else {
+                        units := u16.[backend.high_surrogate, unit];
+                        start := ifx unit >= 0xDC00 && unit < 0xE000 then 0 else 1;
+                        append_text(wide_to_utf8(units.data + start, xx (2 - start),, temp), *window.text, window.text_buffer);
+                        backend.high_surrogate = 0;
+                    }
+                case WM_LBUTTONDOWN; #through;
+                case WM_LBUTTONUP; #through;
+                case WM_RBUTTONDOWN; #through;
+                case WM_RBUTTONUP; #through;
+                case WM_MBUTTONDOWN; #through;
+                case WM_MBUTTONUP; #through;
+                case WM_XBUTTONDOWN; #through;
+                case WM_XBUTTONUP;
+                    // the button messages come in groups of three (down, up, double click) ordered left, right, middle, x
+                    index := message.message - WM_LBUTTONDOWN;
+                    button: Mouse_Button = xx (index / 3);
+                    XBUTTON2 :: 2;
+                    if button == .BACK && ((message.wParam >> 16) & 0xFFFF) == XBUTTON2 {
+                        button = .FORWARD;
+                    }
+                    if index % 3 == 0 {
+                        SetCapture(window.hwnd);
+                        window.pointer_press_position[button] = window.pointer_position;
+                        window.pointer_pressed[button] = true;
+                        window.pointer_held[button] = true;
+                    } else {
+                        ReleaseCapture();
+                        window.pointer_released[button] = true;
+                        window.pointer_held[button] = false;
+                    }
+            }
+            TranslateMessage(*message);
+            DispatchMessageW(*message);
+        }
+    }
+
+    Backend :: Win32_GL_Backend;
+    Window :: Win32_GL_Window;
 }
 
 Direction :: enum u8 { HORIZONTAL; VERTICAL; };
@@ -4841,6 +5041,97 @@ Key :: enum {
         KP_SEPARATOR :: 0x5F;
         EISU_TOGGLE :: 0x66;
         KANA_SWITCH :: 0x68;
+    } else #if OS == .WINDOWS {
+        A :: 0x41;
+        B :: 0x42;
+        C :: 0x43;
+        D :: 0x44;
+        E :: 0x45;
+        F :: 0x46;
+        G :: 0x47;
+        H :: 0x48;
+        I :: 0x49;
+        J :: 0x4A;
+        K :: 0x4B;
+        L :: 0x4C;
+        M :: 0x4D;
+        N :: 0x4E;
+        O :: 0x4F;
+        P :: 0x50;
+        Q :: 0x51;
+        R :: 0x52;
+        S :: 0x53;
+        T :: 0x54;
+        U :: 0x55;
+        V :: 0x56;
+        W :: 0x57;
+        X :: 0x58;
+        Y :: 0x59;
+        Z :: 0x5A;
+
+        DIGIT_0 :: 0x30;
+        DIGIT_1 :: 0x31;
+        DIGIT_2 :: 0x32;
+        DIGIT_3 :: 0x33;
+        DIGIT_4 :: 0x34;
+        DIGIT_5 :: 0x35;
+        DIGIT_6 :: 0x36;
+        DIGIT_7 :: 0x37;
+        DIGIT_8 :: 0x38;
+        DIGIT_9 :: 0x39;
+
+        F1 :: 0x70;
+        F2 :: 0x71;
+        F3 :: 0x72;
+        F4 :: 0x73;
+        F5 :: 0x74;
+        F6 :: 0x75;
+        F7 :: 0x76;
+        F8 :: 0x77;
+        F9 :: 0x78;
+        F10 :: 0x79;
+        F11 :: 0x7A;
+        F12 :: 0x7B;
+
+        SHIFT_LEFT :: 0xA0;
+        SHIFT_RIGHT :: 0xA1;
+        CONTROL_LEFT :: 0xA2;
+        CONTROL_RIGHT :: 0xA3;
+        ALT_LEFT :: 0xA4;
+        ALT_RIGHT :: 0xA5;
+        SUPER_LEFT :: 0x5B;
+        SUPER_RIGHT :: 0x5C;
+        CAPS_LOCK :: 0x14;
+
+        ARROW_LEFT :: 0x25;
+        ARROW_UP :: 0x26;
+        ARROW_RIGHT :: 0x27;
+        ARROW_DOWN :: 0x28;
+        HOME :: 0x24;
+        END :: 0x23;
+        PAGE_UP :: 0x21;
+        PAGE_DOWN :: 0x22;
+
+        TAB :: 0x09;
+        ESCAPE :: 0x1B;
+        ENTER :: 0x0D;
+        SPACE :: 0x20;
+        BACKSPACE :: 0x08;
+        DELETE :: 0x2E;
+        INSERT :: 0x2D;
+
+        MINUS :: 0xBD;
+        EQUAL :: 0xBB;
+        PLUS :: 0xBB;
+        BRACKET_LEFT :: 0xDB;
+        BRACKET_RIGHT :: 0xDD;
+        BACKSLASH :: 0xDC;
+        SEMICOLON :: 0xBA;
+        APOSTROPHE :: 0xDE;
+        GRAVE :: 0xC0;
+        COMMA :: 0xBC;
+        PERIOD :: 0xBE;
+        SLASH :: 0xBF;
     }
 }
 MOUSE_BUTTON_COUNT :: #run enum_highest_value(Mouse_Button) + 1;
@@ -4854,7 +5145,7 @@ Mouse_Button :: enum {
         FORWARD;
         BACK;
         TASK;
-    } else #if OS == .MACOS {
+    } else #if OS == .MACOS || OS == .WINDOWS {
         LEFT;
         RIGHT;
         MIDDLE;
@@ -4888,7 +5179,7 @@ get_clipboard_text :: () -> string {
     using context.forbear;
     #if OS == .MACOS {
         return backend.clipboard_text;
-    } else #if OS == .LINUX {
+    } else {
         return "";
     }
 }
@@ -5277,7 +5568,7 @@ init_font :: (using font: *Font) {
     if context.forbear.shaping_context == null {
         context.forbear.shaping_context = kbts_CreateShapeContext(null, null);
     }
-    FT_New_Memory_Face(context.forbear.freetype_library, memory.data, memory.count, 0, *raster_face);
+    FT_New_Memory_Face(context.forbear.freetype_library, memory.data, xx memory.count, 0, *raster_face);
     // TODO: judege if we should support more than unicode here
     assert(raster_face.charmap.encoding == FT_Encoding.UNICODE);
     font.key = context.forbear.font_counter;
@@ -5315,7 +5606,7 @@ set_weight :: (font: *Font, weight: u16) {
         t: u64 = #char "t";
         wght := (w << 24) | (g << 16) | (h << 8) | t;
         if a.tag == wght {
-            coords[i] = clamp(cast(s64)weight * 65536, xx a.minimum, xx a.maximum);
+            coords[i] = xx clamp(cast(s64)weight * 65536, xx a.minimum, xx a.maximum);
             break;
         }
     }
@@ -6606,6 +6897,8 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         window.current = (window.current + 1) % 2;
     } else #if OS == .MACOS {
         NSOpenGLContext.flushBuffer(backend.gl_context);
+    } else #if OS == .WINDOWS {
+        SwapBuffers(window.hdc);
     }
 }
 
@@ -6634,7 +6927,11 @@ prepare_frame :: () {
     for *slot: pool_slots {
         if slot.used && slot.last_frame != frame {
             if slot.pool.current_point != slot.pool.memory_base {
-                madvise(slot.pool.memory_base, cast(u64) (slot.pool.current_point - slot.pool.memory_base), MADV_DONTNEED);
+                #if OS == .WINDOWS {
+                    DiscardVirtualMemory(slot.pool.memory_base, cast(u64) ((slot.pool.current_point - slot.pool.memory_base + 4095) & ~4095));
+                } else {
+                    madvise(slot.pool.memory_base, cast(u64) (slot.pool.current_point - slot.pool.memory_base), MADV_DONTNEED);
+                }
             }
             reset(*slot.pool);
             slot.used = false;
