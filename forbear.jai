@@ -879,15 +879,9 @@ add_key :: (array: *[]Key, key: Key) {
                         keys.count = enter.keys.count / size_of(u32);
                         for key: keys {
                             xkb_key := key + 8;
-                            symbols: *xkb_keysym_t;
-                            if xkb_keymap_key_get_syms_by_level(
-                                backend.connection.keymap,
-                                xkb_key,
-                                xkb_state_key_get_layout(backend.connection.key_state, xkb_key),
-                                0,
-                                *symbols
-                            ) > 0 {
-                                key := cast(Key) symbols.*;
+                            symbol := xkb_state_key_get_one_sym(backend.connection.key_state, xkb_key_code);
+                            if symbol > 0 {
+                                key := cast(Key) symbol;
                                 add_key(*window.keys_held, key);
                             }
                         }
@@ -944,15 +938,9 @@ add_key :: (array: *[]Key, key: Key) {
                 case Wl_Keyboard_Event_Key;
                     key_event := cast(*Wl_Keyboard_Event_Key) event.data;
                     xkb_key_code := key_event.key + 8;
-                    symbols: *xkb_keysym_t;
-                    if xkb_keymap_key_get_syms_by_level(
-                        backend.connection.keymap,
-                        xkb_key_code,
-                        xkb_state_key_get_layout(backend.connection.key_state, xkb_key_code),
-                        0,
-                        *symbols
-                    ) > 0 {
-                        key := cast(Key) symbols.*;
+                    symbol := xkb_state_key_get_one_sym(backend.connection.key_state, xkb_key_code);
+                    if symbol > 0 {
+                        key := cast(Key) symbol;
                         utf8: [64]u8;
                         text: string;
                         if xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 &&
