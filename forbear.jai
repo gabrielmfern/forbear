@@ -1435,6 +1435,7 @@ add_key :: (array: *[]Key, key: Key) {
     AdjustWindowRectExForDpi :: (rect: *RECT, style: u32, menu: BOOL, extended_style: u32, dpi: u32) -> BOOL #foreign win32_user32;
     win32_kernel32 :: #library,system "kernel32";
     DiscardVirtualMemory :: (address: *void, size: u64) -> u32 #foreign win32_kernel32;
+    SetProcessWorkingSetSize :: (process: HANDLE, minimum: u64, maximum: u64) -> BOOL #foreign win32_kernel32;
 
     Win32_GL_Window :: struct {
         width: s32;
@@ -6899,6 +6900,9 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         NSOpenGLContext.flushBuffer(backend.gl_context);
     } else #if OS == .WINDOWS {
         SwapBuffers(window.hdc);
+        if frame == 3 {
+            SetProcessWorkingSetSize(GetCurrentProcess(), U64_MAX, U64_MAX);
+        }
     }
 }
 
