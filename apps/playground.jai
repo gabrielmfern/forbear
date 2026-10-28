@@ -1,5 +1,7 @@
 MEMORY_DEBUGGING :: false;
 
+BUILD_FLAGS :: "+forbear";
+
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 #import "File";
 #import "Flat_Pool";
