@@ -10,12 +10,11 @@ forbear, is a GUI library meant to be what operating systems should have given u
 <!-- TODO: provide a way to download some of what's in ./apps so that people can easily see what forbear is capable of. -->
 <!-- TODO: in the future, add screenshots of programs built by the community with the library -->
 
-<!--
 ## Quick start
 
 <img alt="The quick start program: a counter with an Increase button and an FPS monitor" src="www/assets/2026-10-28-quick-start.png">
 
-Requirements: the JAI programming language, which is in private beta.
+Requirements: the JAI programming language, which is in private beta and a Linux or macOS machine.
 ```sh
 curl -fsSL https://forbear.dev/quick-start.sh | sh -s -- untitled-program
 ```
@@ -23,7 +22,6 @@ To build:
 ```sh
 cd untitled-program && jai main.jai +forbear
 ```
--->
 
 ### At a glance
 

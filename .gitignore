@@ -19,12 +19,12 @@ dist
 !vendor/**/*.lib
 
 ## binaries
-apps/quick-start
 apps/calculator/Calculator
 apps/calculator/tests
 apps/javascript/main
 apps/playground
 apps/pools
+apps/quick-start
 apps/scopes
 
 # javascript
