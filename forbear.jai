@@ -87,15 +87,10 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
     }
 }
 
-add_key :: (array: *[]Key, key: Key) {
-    for array.* {
-        if it == key {
-            return;
-        }
-    }
-    assert(array.count < 32);
-    array.count += 1;
-    array.*[array.count - 1] = key;
+add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
+    assert(events.count < 32 * 3);
+    events.count += 1;
+    events.*[events.count - 1] = key_event;
 }
 
 #scope_export
@@ -622,21 +617,7 @@ add_key :: (array: *[]Key, key: Key) {
 
         text_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
         text: string;
-        repeating_key: Key;
-        repeating_key_code: u32;
-        next_repeat: float64;
-        // in characters per second
-        keyboard_repeat_rate: s32;
-        // in milliseconds
-        keyboard_repeat_delay: s32;
-
-        keyboard_serial: u32;
-        keyboard_inside: bool;
-        keys_buffer: [32 * 4]Key;
-        keys_pressed: []Key;
-        keys_released: []Key;
-        keys_held: []Key;
-        keys_repeated: []Key;
+        keyboard_state: Keyboard_State;
 
         pointer_serial: u32;
         pointer_inside: bool;
@@ -665,10 +646,7 @@ add_key :: (array: *[]Key, key: Key) {
         window.width = width;
         window.height = height;
 
-        window.keys_pressed.data = window.keys_buffer.data;
-        window.keys_released.data = window.keys_buffer.data + 32;
-        window.keys_held.data = window.keys_buffer.data + 64;
-        window.keys_repeated.data = window.keys_buffer.data + 96;
+        init_keyboard_state(*window.keyboard_state);
 
         window.text.data = window.text_buffer.data;
 
@@ -868,110 +846,77 @@ add_key :: (array: *[]Key, key: Key) {
                 // - wl_pointer::axis
             }
         } else if event.object_id == backend.connection.wl_keyboard_id {
+            using window.keyboard_state;
             if event.message.type == {
                 case Wl_Keyboard_Event_Enter;
                     enter := cast(*Wl_Keyboard_Event_Enter) event.data;
                     if enter.surface == window.wl_surface_id {
-                        window.keyboard_inside = true;
-                        window.keyboard_serial = enter.serial;
+                        inside = true;
+                        serial = enter.serial;
+
                         keys: []u32;
                         keys.data = cast(*u32) enter.keys.data;
                         keys.count = enter.keys.count / size_of(u32);
-                        for key: keys {
-                            xkb_key := key + 8;
+                        for code: keys {
+                            xkb_key_code := code + 8;
                             symbol := xkb_state_key_get_one_sym(backend.connection.key_state, xkb_key_code);
                             if symbol > 0 {
                                 key := cast(Key) symbol;
-                                add_key(*window.keys_held, key);
+                                held[xkb_key_code] = key;
                             }
                         }
-                        // HANDLE: enter.keys
                     }
                 case Wl_Keyboard_Event_Leave;
                     leave := cast(*Wl_Keyboard_Event_Leave) event.data;
                     if leave.surface == window.wl_surface_id {
-                        window.keyboard_inside = false;
-                        window.repeating_key_code = 0;
-                        window.keys_held.count = 0;
+                        inside = false;
+                        repeating_key_code = 0;
                         xkb_compose_state_reset(backend.connection.compose_state);
+                        memset(held.data, 0, size_of(type_of(held)));
                     }
                 case Wl_Keyboard_Event_Repeat_Info;
                     repeat_info := cast(*Wl_Keyboard_Event_Repeat_Info) event.data;
-                    window.keyboard_repeat_rate = repeat_info.rate;
-                    window.keyboard_repeat_delay = repeat_info.delay;
+                    repeat_rate = repeat_info.rate;
+                    repeat_delay = repeat_info.delay;
                 case Wl_Keyboard_Event_Modifiers;
-                    update_held_keys_from_modifiers :: (
-                        modifier: *u8,
-                        key: Key,
-                        backend: *Backend,
-                        window: *Window,
-                    ) {
-                        active := xkb_state_mod_name_is_active(backend.connection.key_state, modifier, .XKB_STATE_MODS_EFFECTIVE) == 1;
-                        held: bool;
-                        for window.keys_held {
-                            if it == key {
-                                held = true;
-                                break;
-                            }
-                        }
-                        if active && !held {
-                            add_key(*window.keys_pressed, key);
-                            add_key(*window.keys_held, key);
-                        } else if !active && held {
-                            add_key(*window.keys_released, key);
-                            for window.keys_held {
-                                if it == key {
-                                    array_unordered_remove_by_index(*window.keys_held, it_index);
-                                    break;
+                    for key, code: held {
+                        if key != 0 {
+                            new_key := cast(Key) xkb_state_key_get_one_sym(backend.connection.key_state, xx code);
+                            if new_key != 0 && key != new_key {
+                                // This means that this key changes with some modifier on or off, so, we need to replace the previous
+                                // key it represented in favour of a new one. We also need to trigger the release and pressed key events
+                                // for both keys.
+                                add_key_event(*events, Key_Event.{.RELEASED, key});
+                                held[code] = new_key;
+                                if repeating_key_code == code {
+                                    repeating_key = new_key;
                                 }
                             }
                         }
                     }
-                    update_held_keys_from_modifiers(XKB_MOD_NAME_SHIFT.data, .SHIFT_LEFT, backend, window);
-                    update_held_keys_from_modifiers(XKB_MOD_NAME_SHIFT.data, .SHIFT_RIGHT, backend, window);
-                    update_held_keys_from_modifiers(XKB_MOD_NAME_CTRL.data, .CONTROL_LEFT, backend, window);
-                    update_held_keys_from_modifiers(XKB_MOD_NAME_CTRL.data, .CONTROL_RIGHT, backend, window);
-                    update_held_keys_from_modifiers(XKB_MOD_NAME_ALT.data, .ALT_LEFT, backend, window);
-                    update_held_keys_from_modifiers(XKB_MOD_NAME_ALT.data, .ALT_RIGHT, backend, window);
-                    update_held_keys_from_modifiers(XKB_MOD_NAME_LOGO.data, .SUPER_LEFT, backend, window);
-                    update_held_keys_from_modifiers(XKB_MOD_NAME_LOGO.data, .SUPER_RIGHT, backend, window);
                 case Wl_Keyboard_Event_Key;
                     key_event := cast(*Wl_Keyboard_Event_Key) event.data;
                     xkb_key_code := key_event.key + 8;
-                    symbol := xkb_state_key_get_one_sym(backend.connection.key_state, xkb_key_code);
-                    if symbol > 0 {
-                        key := cast(Key) symbol;
-                        utf8: [64]u8;
-                        text: string;
-                        if xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 &&
-                            xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 0 {
-                            length := xkb_state_key_get_utf8(backend.connection.key_state, xkb_key_code, utf8.data, xx utf8.count);
-                            if length < utf8.count {
-                                text = to_string(utf8.data, length);
-                            } else {
-                                log_error("we separated a % sized utf8 buffer for the key %, but it required length %. dropping it entirely.", utf8.count, xkb_key_code, length);
+                    if key_event.state == .RELEASED {
+                        key := held[xkb_key_code];
+                        if key != 0 {
+                            add_key_event(*events, Key_Event.{.RELEASED, key});
+                            held[xkb_key_code] = 0;
+                            if xkb_key_code == repeating_key_code {
+                                repeating_key_code = 0;
                             }
                         }
+                    } else if key_event.state == .PRESSED {
+                        symbol := xkb_state_key_get_one_sym(backend.connection.key_state, xkb_key_code);
+                        if symbol > 0 {
+                            key := cast(Key) symbol;
+                            add_key_event(*events, Key_Event.{.PRESSED, key});
+                            held[xkb_key_code] = key;
 
-                        if key_event.state == .RELEASED {
-                            add_key(*window.keys_released, key);
-                            for window.keys_held {
-                                if it == key {
-                                    array_unordered_remove_by_index(*window.keys_held, it_index);
-                                    break;
-                                }
-                            }
-                            if xkb_key_code == window.repeating_key_code {
-                                window.repeating_key_code = 0;
-                            }
-                        } else if key_event.state == .PRESSED {
-                            add_key(*window.keys_pressed, key);
-                            add_key(*window.keys_held, key);
-
+                            utf8: [64]u8;
                             compose_handled := false;
                             compose := backend.connection.compose_state;
                             if compose {
-                                symbol := xkb_state_key_get_one_sym(backend.connection.key_state, xkb_key_code);
                                 if xkb_compose_state_feed(compose, symbol) == .XKB_COMPOSE_FEED_ACCEPTED {
                                     status := xkb_compose_state_get_status(compose);
                                     if status == .XKB_COMPOSE_COMPOSING {
@@ -988,18 +933,20 @@ add_key :: (array: *[]Key, key: Key) {
                                 }
                             }
                             if !compose_handled {
-                                utf8: [64]u8;
-                                append_text(text, *window.text, window.text_buffer);
+                                append_text(key_text(backend.connection.key_state, xkb_key_code, utf8), *window.text, window.text_buffer);
                             }
-                            if window.keyboard_repeat_rate > 0 && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
-                                window.repeating_key = key;
-                                window.repeating_key_code = xkb_key_code;
-                                window.next_repeat = seconds_since_init() + (cast(float)window.keyboard_repeat_delay) / 1000.0;
+                            if repeat_rate > 0 && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
+                                repeating_key = key;
+                                repeating_key_code = xkb_key_code;
+                                next_repeat = seconds_since_init() + (cast(float)repeat_delay) / 1000.0;
                             }
-                        } else if key_event.state == .REPEATED {
-                            add_key(*window.keys_repeated, key);
+                        }
+                    } else if key_event.state == .REPEATED {
+                        key := held[xkb_key_code];
+                        if key != 0 {
+                            add_key_event(*events, Key_Event.{.REPEATED, key});
                             utf8: [64]u8;
-                            append_text(text, *window.text, window.text_buffer);
+                            append_text(key_text(backend.connection.key_state, xkb_key_code, utf8), *window.text, window.text_buffer);
                         }
                     }
             }
@@ -2258,6 +2205,39 @@ is_mouse_inside :: () -> bool {
         window.pointer_position.y >= measurement.position.y &&
         window.pointer_position.x <= measurement.position.x + measurement.size.x &&
         window.pointer_position.y <= measurement.position.y + measurement.size.y;
+}
+Keyboard_State :: struct {
+    #if OS == .LINUX {
+        serial: u32;
+        inside: bool;
+
+        // The Wayland protocol does not handle keys repeating and their rates, they
+        // just inform you how they should be repeated.
+        //
+        // There is no alternative to this in Linux, so we have to handle it ourselves.
+        repeating_key: Key;
+        repeating_key_code: u32;
+        next_repeat: float64;
+        // in characters per second
+        repeat_rate: s32;
+        // in milliseconds
+        repeat_delay: s32;
+    }
+    events_buffer: [32 * 3]Key_Event;
+    events: []Key_Event;
+    held: [768 + 8]Key;
+};
+init_keyboard_state :: (using state: *Keyboard_State) {
+    events.data = events_buffer.data;
+    events.count = 0;
+}
+Key_Event :: struct {
+    Kind :: enum {
+        REPEATED; RELEASED; PRESSED;
+    };
+
+    kind: Kind;
+    key: Key;
 }
 Key :: enum {
     #if OS == .LINUX {
@@ -5211,17 +5191,51 @@ on_key_down :: (
     // every few frames depending on the operating system seettings.
     on_repeat := false
 ) -> bool {
-    using context.forbear;
-    return array_find(window.keys_pressed, key) ||
-        (on_repeat && array_find(window.keys_repeated, key));
+    using context.forbear.window.keyboard_state;
+    for event: events {
+        if (event.kind == .PRESSED || (on_repeat && event.kind == .REPEATED))
+         && event.key == key {
+            return true;
+        }
+    }
+    return false;
 }
 on_key_up :: (key: Key) -> bool {
-    using context.forbear;
-    return array_find(window.keys_released, key);
+    using context.forbear.window.keyboard_state;
+    for event: events {
+        if event.kind == .RELEASED && event.key == key {
+            return true;
+        }
+    }
+    return false;
 }
 is_key_held :: (key: Key) -> bool {
     using context.forbear;
-    return array_find(window.keys_held, key);
+    #if OS == .LINUX {
+        if key == {
+            // TODO(depessimization): for all modifiers here we're lookgin them up by name when we should instead store the index of the modifier and just look it up
+            case .SHIFT_LEFT; #through;
+            case .SHIFT_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_SHIFT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+            case .ALT_LEFT; #through;
+            case .ALT_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+            case .CONTROL_LEFT; #through;
+            case .CONTROL_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+            case .SUPER_LEFT; #through;
+            case .SUPER_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+        }
+    }
+
+    using window.keyboard_state;
+    for held {
+        if it == key {
+            return true;
+        }
+    }
+    return false;
 }
 // TOOD: scrolling events
 on_mouse_down :: (button := Mouse_Button.LEFT) -> bool {
@@ -6930,20 +6944,19 @@ prepare_frame :: () {
         }
     }
 
-    window.keys_pressed.count = 0;
-    window.keys_released.count = 0;
-    window.keys_repeated.count = 0;
+    window.keyboard_state.events.count = 0;
     window.text.count = 0;
     memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
     memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
     #if OS == .LINUX {
-        if window.repeating_key_code != 0 {
+        using window.keyboard_state;
+        if repeating_key_code != 0 {
             now := seconds_since_init();
-            while now >= window.next_repeat {
-                add_key(*window.keys_repeated, window.repeating_key);
+            while now >= next_repeat {
+                add_key_event(*events, Key_Event.{.REPEATED, repeating_key});
                 utf8: [64]u8;
-                append_text(key_text(backend.connection.key_state, window.repeating_key_code, utf8), *window.text, window.text_buffer);
-                window.next_repeat += 1.0 / window.keyboard_repeat_rate;
+                append_text(key_text(backend.connection.key_state, repeating_key_code, utf8), *window.text, window.text_buffer);
+                next_repeat += 1.0 / repeat_rate;
             }
         }
     }
