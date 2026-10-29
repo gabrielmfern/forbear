@@ -113,9 +113,11 @@ main :: () {
             }
             text(sprint("this was the input text until now: '%'", to_string(input.data, input.count)));
 
-            for key: window.keys_held {
-                string_key := sprint("%", key);
-                text(string_key, manual_key = string_key);
+            for key: window.keyboard_state.held {
+                if key != 0 {
+                    string_key := sprint("%", key);
+                    text(string_key, manual_key = string_key);
+                }
             }
 
             for label: string.["a", "b"] {
