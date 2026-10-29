@@ -1082,11 +1082,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
         text_buffer: [256]u8;
         text: string;
 
-        keys_buffer: [32 * 4]Key;
-        keys_repeated: []Key;
-        keys_pressed: []Key;
-        keys_released: []Key;
-        keys_held: []Key;
+        keyboard_state: Keyboard_State;
 
         pointer_inside: bool;
         pointer_position: Vector2;
@@ -1128,10 +1124,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
 
         window.text.data = window.text_buffer.data;
 
-        window.keys_pressed.data = window.keys_buffer.data;
-        window.keys_released.data = window.keys_buffer.data + 32;
-        window.keys_held.data = window.keys_buffer.data + 64;
-        window.keys_repeated.data = window.keys_buffer.data + 96;
+        init_keyboard_state(*window.keyboard_state);
     }
     update_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window) {
         is_visible: (*void, Selector) -> BOOL #c_call = xx objc_msgSend;
@@ -1148,49 +1141,8 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
             NSOpenGLContext.update(backend.gl_context);
         }
         if NSApplication.keyWindow(backend.app) != window.ns_window {
-            window.keys_held.count = 0;
+            memset(window.keyboard_state.held.data, 0, size_of(type_of(window.keyboard_state.held)));
         }
-
-        update_held_keys_from_modifiers :: (
-            flags: NSEventModifierFlags,
-            modifier: NSEventModifierFlags,
-            key: Key,
-            window: *Window,
-        ) {
-            active := flags & modifier;
-            held: bool;
-            for window.keys_held {
-                if it == key {
-                    held = true;
-                    break;
-                }
-            }
-            if active && !held {
-                add_key(*window.keys_pressed, key);
-                add_key(*window.keys_held, key);
-            } else if !active && held {
-                add_key(*window.keys_released, key);
-                for window.keys_held {
-                    if it == key {
-                        array_unordered_remove_by_index(*window.keys_held, it_index);
-                        break;
-                    }
-                }
-            }
-        }
-
-        flags: NSEventModifierFlags = xx objc_msgSend_typed(class(NSEvent), sel_registerName("modifierFlags".data));
-
-        // these constants come from IOLLEvent.h
-        update_held_keys_from_modifiers(flags, NSEventModifierFlagControl, Key.CONTROL_LEFT, window);
-        update_held_keys_from_modifiers(flags, NSEventModifierFlagControl, Key.CONTROL_RIGHT, window);
-        update_held_keys_from_modifiers(flags, NSEventModifierFlagShift, Key.SHIFT_LEFT, window);
-        update_held_keys_from_modifiers(flags, NSEventModifierFlagShift, Key.SHIFT_RIGHT, window);
-        update_held_keys_from_modifiers(flags, NSEventModifierFlagOption, Key.ALT_LEFT, window);
-        update_held_keys_from_modifiers(flags, NSEventModifierFlagOption, Key.ALT_RIGHT, window);
-        update_held_keys_from_modifiers(flags, NSEventModifierFlagCommand, Key.SUPER_LEFT, window);
-        update_held_keys_from_modifiers(flags, NSEventModifierFlagCommand, Key.SUPER_RIGHT, window);
-        update_held_keys_from_modifiers(flags, xx NSEventModifierFlagFunction, Key.FUNCTION, window);
     }
 
     MacOS_GL_Backend :: struct {
@@ -1230,6 +1182,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
         pool := objc_init(objc_alloc(NSAutoreleasePool));
         defer NSAutoreleasePool.drain(pool);
         window := context.forbear.window;
+        using window.keyboard_state;
         frame := NSView.frame(window.view);
         location := NSWindow.mouseLocationOutsideOfEventStream(window.ns_window);
 
@@ -1292,12 +1245,13 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                         }
                         backend.app.sendEvent(backend.app, event);
                     case NSEventTypeKeyDown;
-                        key: Key = xx NSEvent.keyCode(event);
+                        code := NSEvent.keyCode(event);
+                        key: Key = xx code;
                         if !NSEvent.isARepeat(event) {
-                            add_key(*window.keys_pressed, key);
-                            add_key(*window.keys_held, key);
+                            add_key_event(*events, Key_Event.{.PRESSED, key});
+                            held[code] = key;
                         } else {
-                            add_key(*window.keys_repeated, key);
+                            add_key_event(*events, Key_Event.{.REPEATED, key});
                         }
                         if !(NSEvent.modifierFlags(event) & .NSEventModifierFlagCommand) {
                             characters := NSEvent.characters(event);
@@ -1311,14 +1265,39 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                             }
                         }
                     case NSEventTypeKeyUp;
-                        key: Key = xx NSEvent.keyCode(event);
-                        add_key(*window.keys_released, key);
-                        for window.keys_held {
-                            if it == key {
-                                array_unordered_remove_by_index(*window.keys_held, it_index);
-                                break;
-                            }
+                        code := NSEvent.keyCode(event);
+                        add_key_event(*events, Key_Event.{.RELEASED, xx code});
+                        held[code] = 0;
+                    case NSEventTypeFlagsChanged;
+                        code := NSEvent.keyCode(event);
+                        key: Key = xx code;
+                        flag: NSEventModifierFlags;
+                        if key == {
+                            case .SHIFT_LEFT; #through;
+                            case .SHIFT_RIGHT;
+                                flag = .NSEventModifierFlagShift;
+                            case .CONTROL_LEFT; #through;
+                            case .CONTROL_RIGHT;
+                                flag = .NSEventModifierFlagControl;
+                            case .ALT_LEFT; #through;
+                            case .ALT_RIGHT;
+                                flag = .NSEventModifierFlagOption;
+                            case .SUPER_LEFT; #through;
+                            case .SUPER_RIGHT;
+                                flag = .NSEventModifierFlagCommand;
+                            case .CAPS_LOCK;
+                                flag = .NSEventModifierFlagCapsLock;
+                            case .FUNCTION;
+                                flag = .NSEventModifierFlagFunction;
                         }
+                        if held[code] != 0 {
+                            add_key_event(*events, Key_Event.{.RELEASED, key});
+                            held[code] = 0;
+                        } else if NSEvent.modifierFlags(event) & flag {
+                            add_key_event(*events, Key_Event.{.PRESSED, key});
+                            held[code] = key;
+                        }
+                        backend.app.sendEvent(backend.app, event);
                     case;
                         backend.app.sendEvent(backend.app, event);
                 }
@@ -2225,7 +2204,9 @@ Keyboard_State :: struct {
     }
     events_buffer: [32 * 3]Key_Event;
     events: []Key_Event;
-    held: [768 + 8]Key;
+    #if OS == .LINUX        held: [768 + 8]Key;
+    else #if OS == .MACOS   held: [128]Key;
+    else                    held: [256]Key;
 };
 init_keyboard_state :: (using state: *Keyboard_State) {
     events.data = events_buffer.data;
