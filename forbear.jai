@@ -1364,20 +1364,29 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
     GetKeyboardState :: (lpKeyState: *u8) -> BOOL #foreign user32;
     GetKeyboardLayout :: (idThread: DWORD) -> *void #foreign user32;
     MapVirtualKeyW :: (uCode: u32, uMapType: u32) -> u32 #foreign user32;
+    SetTimer :: (hWnd: HWND, nIDEvent: u64, uElapse: u32, lpTimerFunc: *void) -> u64 #foreign user32;
+    KillTimer :: (hWnd: HWND, uIDEvent: u64) -> BOOL #foreign user32;
+
+    MODAL_TAKEOVER_TIMER :: 1;
 
     MAPVK_VSC_TO_VK_EX :: 3;
     GWLP_USERDATA :: -21;
     TME_LEAVE :: 0x00000002;
     WM_MOUSELEAVE :: 0x02A3;
+    WM_ENTERMENULOOP :: 0x0211;
+    WM_EXITMENULOOP :: 0x0212;
     WM_CAPTURECHANGED :: 0x0215;
 
     Windows_GL_Backend :: struct {
         message: (window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> s64;
+        render: (data: *void);
+        render_data: *void;
         wndproc_context: *#Context;
     };
     init_backend :: (using backend: *Windows_GL_Backend) {
         wndproc_context = *context;
 
+        timeBeginPeriod(1);
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 :: cast(HANDLE) -4;
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
@@ -1419,10 +1428,26 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                         case WM_CLOSE;
                             window.running = false;
                         case WM_SIZE;
-                            // TODO: re-render the entire UI from here
                             if wparam != SIZE_MINIMIZED {
                                 window.width = cast(float64)(lparam & 0xFFFF);
                                 window.height = cast(float64)((lparam >> 16) & 0xFFFF);
+                                if window.backend.render != null {
+                                    window.backend.render(window.backend.render_data);
+                                }
+                            }
+                        case WM_MOVE;
+                            if window.backend.render != null {
+                                window.backend.render(window.backend.render_data);
+                            }
+                        case WM_ENTERMENULOOP; #through;
+                        case WM_ENTERSIZEMOVE;
+                            SetTimer(hwnd, MODAL_TAKEOVER_TIMER, 1, null);
+                        case WM_EXITMENULOOP; #through;
+                        case WM_EXITSIZEMOVE;
+                            KillTimer(hwnd, MODAL_TAKEOVER_TIMER);
+                        case WM_TIMER;
+                            if wparam == MODAL_TAKEOVER_TIMER && window.backend.render {
+                                window.backend.render(window.backend.render_data);
                             }
                         case WM_MOUSEMOVE;
                             if window.mouse_state.inside == false {
@@ -1594,7 +1619,11 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                                 result = DefWindowProcW(hwnd, message, wparam, lparam);
                             }
                         case WM_DPICHANGED;
-                            window.scale = (wparam & 0xFFFF) / 96.0;
+                            window.scale = cast(float64) (wparam & 0xFFFF) / 96.0;
+                            suggested := cast(*RECT) lparam;
+                            SetWindowPos(hwnd, null, suggested.left, suggested.top,
+                                suggested.right - suggested.left, suggested.bottom - suggested.top,
+                                SWP_NOZORDER | SWP_NOACTIVATE);
                         case WM_KEYUP; #through;
                         case WM_SYSKEYUP;
                             using window.keyboard_state;
@@ -4259,7 +4288,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     }
 }
 
-prepare_frame :: () {
+begin_frame :: () {
     using context.forbear;
 
     {
@@ -4295,10 +4324,6 @@ prepare_frame :: () {
         }
     }
 
-    window.keyboard_state.events.count = 0;
-    window.text.count = 0;
-    memset(*window.mouse_state.released, 0, size_of(type_of(window.mouse_state.released)));
-    memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
     #if OS == .LINUX {
         using window.keyboard_state;
         if repeating_key_code != 0 {
@@ -4316,6 +4341,14 @@ prepare_frame :: () {
     array_reset_keeping_memory(*node_tree);
 
     frame += 1;
+}
+
+end_frame :: () {
+    using context.forbear;
+    window.keyboard_state.events.count = 0;
+    window.text.count = 0;
+    memset(*window.mouse_state.released, 0, size_of(type_of(window.mouse_state.released)));
+    memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
 }
 
 #scope_export

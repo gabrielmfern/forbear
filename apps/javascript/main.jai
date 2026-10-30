@@ -11,6 +11,19 @@
 
 JAVASCRIPT_SOURCE :: #run read_entire_file(tprint("%dist/index.js", #filepath));
 
+frame_pool: Flat_Pool;
+
+render :: (data: *void) {
+    begin_frame();
+    defer end_frame();
+
+    render_with_adapter(cast(*Javascript_Adapter) data);
+    layout();
+    draw(rgb(0.0, 0.0, 0.0));
+    reset_temporary_storage();
+    reset(*frame_pool);
+}
+
 main :: () {
     backend: Backend;
     window: Window;
@@ -26,17 +39,17 @@ main :: () {
 
     init_font(*inter);
 
-    frame_pool: Flat_Pool;
     frame_allocator: Allocator;
     frame_allocator.data = *frame_pool;
     frame_allocator.proc = flat_pool_allocator_proc;
 
     javascript_adapter: Javascript_Adapter;
     init_adapter(*javascript_adapter, frame_allocator, JAVASCRIPT_SOURCE, "javascript-example");
+    backend.render = render;
+    backend.render_data = *javascript_adapter;
 
     while window.running {
         push_allocator(frame_allocator);
-        prepare_frame();
         #if OS == .LINUX {
             while true {
                 event := next_event(*backend.connection, !can_draw(window));
@@ -53,10 +66,6 @@ main :: () {
             update_backend(*backend);
         }
 
-        render_with_adapter(*javascript_adapter);
-        layout();
-        draw(rgb(0.0, 0.0, 0.0));
-        reset_temporary_storage();
-        reset(*frame_pool);
+        render(*javascript_adapter);
     }
 }

@@ -113,6 +113,24 @@ App :: () {
     });
 } @component
 
+frame_pool: Flat_Pool;
+
+render :: (data: *void) {
+    begin_frame();
+    defer end_frame();
+   
+    App();
+
+    layout();
+    draw(rgb(0.0, 0.0, 0.0));
+
+    reset_temporary_storage();
+    if MEMORY_DEBUGGING {
+        memory_visualizer_per_frame_update();
+    }
+    reset(*frame_pool);
+}
+
 main :: () {
     backend: Backend;
     window: Window;
@@ -128,14 +146,13 @@ main :: () {
     });
     init_font(*inter);
 
-    frame_pool: Flat_Pool;
     frame_allocator: Allocator;
     frame_allocator.data = *frame_pool;
     frame_allocator.proc = flat_pool_allocator_proc;
+    backend.render = render;
 
     while window.running {
         push_allocator(frame_allocator);
-        prepare_frame();
 
         #if OS == .LINUX {
             while true {
@@ -153,15 +170,6 @@ main :: () {
             update_backend(*backend);
         }
 
-        App();
-
-        layout();
-        draw(rgb(0.0, 0.0, 0.0));
-
-        reset_temporary_storage();
-        if MEMORY_DEBUGGING {
-            memory_visualizer_per_frame_update();
-        }
-        reset(*frame_pool);
+        render(null);
     }
 }

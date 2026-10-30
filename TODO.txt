@@ -1,7 +1,7 @@
 - [ ] complete windowing code
     - [x] proper Windows backend
     - [ ] clipboard handling for Windows
-    - [ ] handle re-rendering during resizing for Windows
+    - [x] handle re-rendering during resizing for Windows
     - [ ] handle window scale in wayland
     - [ ] use virtual keys for key checking, and check logical keys through text input on Wayland
     - [ ] clipboard handling for wayland
