@@ -100,9 +100,9 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
 }
 
 #if OS == .LINUX {
-    #scope_module
     #load "bindings-linux.jai";
 
+    #scope_module
     WAYLAND_DEBUGGING :: false;
     EGL_DEBUGGING :: false;
     EXIT_ON_FIRST_FRAME :: false;
@@ -1336,70 +1336,187 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
         run_command("codesign", "--force", "--deep", "-s", "-", app);
     }
 } else #if OS == .WINDOWS {
-    // TODO: temporary backend for testing on Windows
     #load "bindings-win32.jai";
     #import "Windows";
     #import "Windows_Utf8";
+    user32 :: #library,system "user32";
+    kernel32 :: #library,system "kernel32";
 
-    win32_user32 :: #library,system "user32";
-    GetDpiForWindow :: (hwnd: HWND) -> u32 #foreign win32_user32;
-    SetProcessDpiAwarenessContext :: (value: HANDLE) -> BOOL #foreign win32_user32;
-    IsWindow :: (hwnd: HWND) -> BOOL #foreign win32_user32;
-    MapVirtualKeyW :: (code: u32, map_type: u32) -> u32 #foreign win32_user32;
-    AdjustWindowRectExForDpi :: (rect: *RECT, style: u32, menu: BOOL, extended_style: u32, dpi: u32) -> BOOL #foreign win32_user32;
-    win32_kernel32 :: #library,system "kernel32";
-    DiscardVirtualMemory :: (address: *void, size: u64) -> u32 #foreign win32_kernel32;
-    SetProcessWorkingSetSize :: (process: HANDLE, minimum: u64, maximum: u64) -> BOOL #foreign win32_kernel32;
+    AdjustWindowRectExForDpi :: (rect: *RECT, style: u32, menu: BOOL, extended_style: u32, dpi: u32) -> BOOL #foreign user32;
+    DiscardVirtualMemory :: (VirtualAddress: *void, Size: SIZE_T) -> DWORD #foreign kernel32;
+    GetDpiForWindow :: (hwnd: HWND) -> u32 #foreign user32;
+    GetWindowLongPtrW :: (hwnd: HWND, index: s32) -> s64 #foreign user32;
+    SetProcessDpiAwarenessContext :: (value: HANDLE) -> BOOL #foreign user32;
+    SetProcessWorkingSetSize :: (hProcess: HANDLE, dwMinimumWorkingSetSize: SIZE_T, dwMaximumWorkingSetSize: SIZE_T) -> BOOL #foreign kernel32;
+    TRACKMOUSEEVENT :: struct {
+        cbSize: DWORD;
+        dwFlags: DWORD;
+        hwndTrack: HWND;
+        dwHoverTime: DWORD;
+    };
+    TrackMouseEvent :: (lpEventTrack: *TRACKMOUSEEVENT) -> BOOL #foreign user32;
 
-    Win32_GL_Window :: struct {
-        width: s32;
-        height: s32;
-        scale: float64;
+    GWLP_USERDATA :: -21;
+    TME_LEAVE :: 0x00000002;
+    WM_MOUSELEAVE :: 0x02A3;
+    WM_CAPTURECHANGED :: 0x0215;
 
+    Windows_GL_Backend :: struct {
+        message: (window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> s64;
+        wndproc_context: *#Context;
+    };
+    init_backend :: (using backend: *Windows_GL_Backend) {
+        wndproc_context = *context;
+
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 :: cast(HANDLE) -4;
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+        class: WNDCLASSEXW;
+        class.cbSize = size_of(WNDCLASSEXW);
+        class.style = CS_OWNDC;
+        class.lpfnWndProc = wndproc;
+        class.hInstance = GetModuleHandleW(null);
+        class.hCursor = LoadCursorW(null, xx IDC_ARROW);
+        class.lpszClassName = utf8_to_wide("forbear",, temp);
+        RegisterClassExW(*class);
+    }
+    wndproc :: (hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> s64 #c_call {
+        result: s64;
+        if message != WM_NCCREATE {
+            window := cast(*Windows_GL_Window) GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+            if window != null {
+                push_context window.backend.wndproc_context.* {
+                    if window.backend.message != null {
+                        window.backend.message(window, hwnd, message, wparam, lparam);
+                    }
+                    if message == {
+                        case WM_CLOSE;
+                            window.running = false;
+                        case WM_SIZE;
+                            // TODO: re-render the entire UI from here
+                            if wparam != SIZE_MINIMIZED {
+                                window.width = cast(float64)(lparam & 0xFFFF);
+                                window.height = cast(float64)((lparam >> 16) & 0xFFFF);
+                            }
+                        case WM_MOUSEMOVE;
+                            if window.mouse_state.inside == false {
+                                window.mouse_state.inside = true;
+                                track := TRACKMOUSEEVENT.{
+                                    cbSize = size_of(TRACKMOUSEEVENT),
+                                    dwFlags = TME_LEAVE,
+                                    hwndTrack = hwnd,
+                                };
+                                TrackMouseEvent(*track);
+                            }
+                            window.mouse_state.position = Vector2.{
+                                cast(float) cast,trunc(s16) (lparam & 0xFFFF),
+                                cast(float) cast,trunc(s16) ((lparam >> 16) & 0xFFFF),
+                            } / cast(float) window.scale;
+                        case WM_MOUSELEAVE;
+                            window.mouse_state.inside = false;
+                        case WM_KILLFOCUS;
+                            memset(window.keyboard_state.held.data, 0, size_of(type_of(window.keyboard_state.held)));
+                        case WM_CAPTURECHANGED;
+                            memset(window.mouse_state.held.data, 0, size_of(type_of(window.mouse_state.held)));
+                        // TODO: handle double click events
+                        case WM_LBUTTONDOWN; #through;
+                        case WM_RBUTTONDOWN; #through;
+                        case WM_MBUTTONDOWN; #through;
+                        case WM_XBUTTONDOWN;
+                            button: Mouse_Button = xx ((message - WM_LBUTTONDOWN) / 3);
+                            if button == .BACK && ((wparam >> 16) & 0xFFFF) == 2 {
+                                button = .FORWARD;
+                            }
+                            mouse_press(*window.mouse_state, button, Vector2.{
+                                cast(float) cast,trunc(s16) (lparam & 0xFFFF),
+                                cast(float) cast,trunc(s16) ((lparam >> 16) & 0xFFFF),
+                            } / cast(float) window.scale);
+                            SetCapture(hwnd);
+                            if message == WM_XBUTTONDOWN {
+                                result = 1;
+                            }
+                        case WM_LBUTTONUP; #through;
+                        case WM_RBUTTONUP; #through;
+                        case WM_MBUTTONUP; #through;
+                        case WM_XBUTTONUP;
+                            button: Mouse_Button = xx ((message - WM_LBUTTONUP) / 3);
+                            if button == .BACK && ((wparam >> 16) & 0xFFFF) == 2 {
+                                button = .FORWARD;
+                            }
+                            mouse_release(*window.mouse_state, button);
+                            any_held := false;
+                            for window.mouse_state.held {
+                                if it {
+                                    any_held = true;
+                                    break;
+                                }
+                            }
+                            if !any_held {
+                                ReleaseCapture();
+                            }
+                            if message == WM_XBUTTONUP {
+                                result = 1;
+                            }
+                        case;
+                            result = DefWindowProcW(hwnd, message, wparam, lparam);
+                    }
+                }
+            } else {
+                result = DefWindowProcW(hwnd, message, wparam, lparam);
+            }
+        } else {
+            // lpCreateParams is the first field of CREATESTRUCTW
+            create_params := (cast(**void) lparam).*;
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, xx create_params);
+            result = DefWindowProcW(hwnd, message, wparam, lparam);
+        }
+        return result;
+    }
+    update_backend :: (backend: *Backend) {
+        backend.wndproc_context = *context;
+        message: MSG;
+        while PeekMessageW(*message, null, 0, 0, PM_REMOVE) {
+            TranslateMessage(*message);
+            DispatchMessageW(*message);
+        }
+    }
+
+    Windows_GL_Window :: struct {
         hwnd: HWND;
         hdc: HDC;
+        backend: *Windows_GL_Backend;
+
+        width: float64;
+        height: float64;
+        scale: float64;
 
         text_buffer: [256]u8;
         text: string;
 
-        keys_buffer: [32 * 4]Key;
-        keys_repeated: []Key;
-        keys_pressed: []Key;
-        keys_released: []Key;
-        keys_held: []Key;
-
-        pointer_inside: bool;
-        pointer_position: Vector2;
-
-        pointer_press_position: [MOUSE_BUTTON_COUNT]Vector2;
-        pointer_pressed: [MOUSE_BUTTON_COUNT]bool;
-        pointer_released: [MOUSE_BUTTON_COUNT]bool;
-        pointer_held: [MOUSE_BUTTON_COUNT]bool;
+        keyboard_state: Keyboard_State;
+        mouse_state: Mouse_State;
 
         running := true;
     };
-    init_window :: (backend: *Win32_GL_Backend, window: *Win32_GL_Window, width: float64, height: float64, title: string) {
-        class: WNDCLASSEXW;
-        class.cbSize = size_of(WNDCLASSEXW);
-        class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-        class.lpfnWndProc = DefWindowProcW;
-        class.hInstance = GetModuleHandleW(null);
-        class.hCursor = LoadCursorW(null, IDC_ARROW);
-        class.lpszClassName = utf8_to_wide("forbear",, temp);
-        RegisterClassExW(*class);
+    init_window :: (backend: *Windows_GL_Backend, window: *Windows_GL_Window, width: float64, height: float64, title: string) {
+        window.text.data = window.text_buffer.data;
+        window.backend = backend;
+        init_keyboard_state(*window.keyboard_state);
 
+        style :: WS_OVERLAPPEDWINDOW;
         window.hwnd = CreateWindowExW(
             0,
-            class.lpszClassName,
+            utf8_to_wide("forbear",, temp),
             utf8_to_wide(title,, temp),
-            WS_OVERLAPPEDWINDOW,
+            style,
             CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-            null, null, class.hInstance, null
+            null, null, GetModuleHandleW(null), window
         );
+
         dpi := GetDpiForWindow(window.hwnd);
         window.scale = dpi / 96.0;
         rectangle := RECT.{ right = xx (width * window.scale), bottom = xx (height * window.scale) };
-        AdjustWindowRectExForDpi(*rectangle, WS_OVERLAPPEDWINDOW, 0, 0, dpi);
+        AdjustWindowRectExForDpi(*rectangle, style, 0, 0, dpi);
         SetWindowPos(window.hwnd, null, 0, 0, rectangle.right - rectangle.left, rectangle.bottom - rectangle.top, SWP_NOMOVE | SWP_NOZORDER);
         ShowWindow(window.hwnd, SW_SHOW);
 
@@ -1411,129 +1528,12 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
 
         client: RECT;
         GetClientRect(window.hwnd, *client);
-        window.width = client.right;
-        window.height = client.bottom;
-
-        window.text.data = window.text_buffer.data;
-
-        window.keys_pressed.data = window.keys_buffer.data;
-        window.keys_released.data = window.keys_buffer.data + 32;
-        window.keys_held.data = window.keys_buffer.data + 64;
-        window.keys_repeated.data = window.keys_buffer.data + 96;
-    }
-    update_window :: (backend: *Win32_GL_Backend, window: *Win32_GL_Window) {
-        if !IsWindow(window.hwnd) {
-            window.running = false;
-            return;
-        }
-
-        client: RECT;
-        GetClientRect(window.hwnd, *client);
-        if client.right > 0 && client.bottom > 0 {
-            window.width = client.right;
-            window.height = client.bottom;
-        }
-        window.scale = GetDpiForWindow(window.hwnd) / 96.0;
-
-        if GetForegroundWindow() != window.hwnd {
-            window.keys_held.count = 0;
-        }
+        window.width = xx client.right;
+        window.height = xx client.bottom;
     }
 
-    Win32_GL_Backend :: struct {
-        high_surrogate: u16;
-    };
-    init_backend :: (backend: *Win32_GL_Backend) {
-        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 :: cast(HANDLE) -4;
-        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
-    update_backend :: (backend: *Win32_GL_Backend) {
-        window := context.forbear.window;
-
-        cursor: POINT;
-        GetCursorPos(*cursor);
-        window.pointer_inside = WindowFromPoint(cursor) == window.hwnd;
-        ScreenToClient(window.hwnd, *cursor);
-        window.pointer_position = Vector2.{ xx cursor.x, xx cursor.y } / cast(float) window.scale;
-
-        message: MSG;
-        while PeekMessageW(*message, null, 0, 0, PM_REMOVE) {
-            if message.message == {
-                case WM_KEYDOWN; #through;
-                case WM_SYSKEYDOWN; #through;
-                case WM_KEYUP; #through;
-                case WM_SYSKEYUP;
-                    virtual_key := cast(u32) message.wParam;
-                    extended := (message.lParam >> 24) & 1;
-                    if virtual_key == {
-                        case VK_SHIFT;
-                            MAPVK_VSC_TO_VK_EX :: 3;
-                            virtual_key = MapVirtualKeyW(xx ((message.lParam >> 16) & 0xFF), MAPVK_VSC_TO_VK_EX);
-                        case VK_CONTROL;
-                            virtual_key = xx ifx extended then VK_RCONTROL else VK_LCONTROL;
-                        case VK_MENU;
-                            virtual_key = xx ifx extended then VK_RMENU else VK_LMENU;
-                    }
-                    key: Key = xx virtual_key;
-                    if message.message == WM_KEYDOWN || message.message == WM_SYSKEYDOWN {
-                        if message.lParam & (1 << 30) {
-                            add_key(*window.keys_repeated, key);
-                        } else {
-                            add_key(*window.keys_pressed, key);
-                            add_key(*window.keys_held, key);
-                        }
-                    } else {
-                        add_key(*window.keys_released, key);
-                        for window.keys_held {
-                            if it == key {
-                                array_unordered_remove_by_index(*window.keys_held, it_index);
-                                break;
-                            }
-                        }
-                    }
-                case WM_CHAR;
-                    unit := cast(u16) message.wParam;
-                    if unit >= 0xD800 && unit < 0xDC00 {
-                        backend.high_surrogate = unit;
-                    } else {
-                        units := u16.[backend.high_surrogate, unit];
-                        start := ifx unit >= 0xDC00 && unit < 0xE000 then 0 else 1;
-                        append_text(wide_to_utf8(units.data + start, xx (2 - start),, temp), *window.text, window.text_buffer);
-                        backend.high_surrogate = 0;
-                    }
-                case WM_LBUTTONDOWN; #through;
-                case WM_LBUTTONUP; #through;
-                case WM_RBUTTONDOWN; #through;
-                case WM_RBUTTONUP; #through;
-                case WM_MBUTTONDOWN; #through;
-                case WM_MBUTTONUP; #through;
-                case WM_XBUTTONDOWN; #through;
-                case WM_XBUTTONUP;
-                    // the button messages come in groups of three (down, up, double click) ordered left, right, middle, x
-                    index := message.message - WM_LBUTTONDOWN;
-                    button: Mouse_Button = xx (index / 3);
-                    XBUTTON2 :: 2;
-                    if button == .BACK && ((message.wParam >> 16) & 0xFFFF) == XBUTTON2 {
-                        button = .FORWARD;
-                    }
-                    if index % 3 == 0 {
-                        SetCapture(window.hwnd);
-                        window.pointer_press_position[button] = window.pointer_position;
-                        window.pointer_pressed[button] = true;
-                        window.pointer_held[button] = true;
-                    } else {
-                        ReleaseCapture();
-                        window.pointer_released[button] = true;
-                        window.pointer_held[button] = false;
-                    }
-            }
-            TranslateMessage(*message);
-            DispatchMessageW(*message);
-        }
-    }
-
-    Backend :: Win32_GL_Backend;
-    Window :: Win32_GL_Window;
+    Backend :: Windows_GL_Backend;
+    Window :: Windows_GL_Window;
 }
 
 Direction :: enum u8 { HORIZONTAL; VERTICAL; };
@@ -2179,11 +2179,30 @@ get_node :: () -> *Node {
 is_mouse_inside :: () -> bool {
     using context.forbear;
     measurement, defined := get_measurement();
-    return defined && window.pointer_inside &&
-        window.pointer_position.x >= measurement.position.x &&
-        window.pointer_position.y >= measurement.position.y &&
-        window.pointer_position.x <= measurement.position.x + measurement.size.x &&
-        window.pointer_position.y <= measurement.position.y + measurement.size.y;
+    return defined && window.mouse_state.inside &&
+        window.mouse_state.position.x >= measurement.position.x &&
+        window.mouse_state.position.y >= measurement.position.y &&
+        window.mouse_state.position.x <= measurement.position.x + measurement.size.x &&
+        window.mouse_state.position.y <= measurement.position.y + measurement.size.y;
+}
+Mouse_State :: struct {
+    inside: bool;
+    position: Vector2;
+
+    press_position: [MOUSE_BUTTON_COUNT]Vector2;
+    pressed: [MOUSE_BUTTON_COUNT]bool;
+    released: [MOUSE_BUTTON_COUNT]bool;
+    held: [MOUSE_BUTTON_COUNT]bool;
+};
+mouse_press :: (using state: *Mouse_State, button: Mouse_Button, new_position: Vector2) {
+    position = new_position;
+    press_position[button] = new_position;
+    pressed[button] = true;
+    held[button] = true;
+}
+mouse_release :: (using state: *Mouse_State, button: Mouse_Button) {
+    released[button] = true;
+    held[button] = false;
 }
 Keyboard_State :: struct {
     #if OS == .LINUX {
@@ -5095,7 +5114,7 @@ Mouse_Button :: enum {
         FORWARD;
         BACK;
         TASK;
-    } else #if OS == .MACOS || OS == .WINDOWS {
+    } else {
         LEFT;
         RIGHT;
         MIDDLE;
@@ -5109,14 +5128,14 @@ get_viewport_size :: () -> Vector2 {
 }
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
-    return window.pointer_held[button] && window.pointer_inside;
+    return window.mouse_state.held[button] && window.mouse_state.inside;
 }
 on_click :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
     if on_mouse_up(button) {
         measurement, defined := get_measurement();
         assert(defined, "the measurement should exist if is_mouse_inside is true");
-        press_position := window.pointer_press_position[button];
+        press_position := window.mouse_state.press_position[button];
         return press_position.x >= measurement.position.x &&
                press_position.y >= measurement.position.y &&
                press_position.x <= measurement.position.x + measurement.size.x &&
@@ -5221,11 +5240,11 @@ is_key_held :: (key: Key) -> bool {
 // TOOD: scrolling events
 on_mouse_down :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
-    return window.pointer_pressed[button] && is_mouse_inside();
+    return window.mouse_state.pressed[button] && is_mouse_inside();
 }
 on_mouse_up :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
-    return window.pointer_released[button] && is_mouse_inside();
+    return window.mouse_state.released[button] && is_mouse_inside();
 }
 get_justification :: (node: *Node, direction: Direction) -> Alignment #expand {
     if direction == Direction.HORIZONTAL {
@@ -6927,8 +6946,8 @@ prepare_frame :: () {
 
     window.keyboard_state.events.count = 0;
     window.text.count = 0;
-    memset(*window.pointer_released, 0, size_of(type_of(window.pointer_released)));
-    memset(*window.pointer_pressed, 0, size_of(type_of(window.pointer_pressed)));
+    memset(*window.mouse_state.released, 0, size_of(type_of(window.mouse_state.released)));
+    memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
     #if OS == .LINUX {
         using window.keyboard_state;
         if repeating_key_code != 0 {
