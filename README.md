@@ -107,9 +107,10 @@ There are two reasons for this kind of licensing:
 
 Beware forbear has been in heavy development since early 2025. The roadmap of the near future is:
 - C ABI and C bindings.
-- Windows and Linux's X11.
-- Various graphics backends such as Metal and DirectX.
 - Async API that works with the immediate mode nature of the library and the different adapters.
+- Complete Windows, Wayland and macOS windowing.
+- Metal rendering on macOS.
+- Native font rendering through FreeType, DirectWrite and CoreText.
 
 For more of the planned work, see [TODO.txt](./TODO.txt).
 
