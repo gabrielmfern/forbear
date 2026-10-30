@@ -14,13 +14,20 @@ forbear is a GUI library meant to be what operating systems should have given us
 
 <img alt="The quick start program: a counter with an Increase button and an FPS monitor" src="www/assets/2026-10-28-quick-start.png">
 
-Requirements: the Jai programming language, which is in private beta, and a Linux or macOS machine.
+Requirements: the Jai programming language, which is in private beta.
+
+On Linux or macOS:
 ```sh
-curl -fsSL https://forbear.dev/quick-start.sh | sh -s -- untitled-program
+curl -fsSL https://forbear.dev/quick-start.sh | sh
+```
+On Windows, in PowerShell:
+```powershell
+irm https://forbear.dev/quick-start.ps1 | iex
 ```
 To build:
 ```sh
-cd untitled-program && jai main.jai +forbear
+cd untitled-program
+jai main.jai +forbear
 ```
 
 ### At a glance

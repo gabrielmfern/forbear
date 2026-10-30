@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
-dir=${1:-.}
+printf 'Project name (untitled-program): '
+read -r dir < /dev/tty
+dir=${dir:-untitled-program}
 base=https://raw.githubusercontent.com/gabrielmfern/forbear/${FORBEAR_REF:-main}
 os=$(uname -s | sed 's/Darwin/darwin/; s/Linux/linux/')
 mkdir -p "$dir"
