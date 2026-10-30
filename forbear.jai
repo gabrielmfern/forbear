@@ -1369,6 +1369,8 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
     WaitMessage :: () -> BOOL #foreign user32;
     IsIconic :: (hWnd: HWND) -> BOOL #foreign user32;
     GetMessageTime :: () -> s32 #foreign user32;
+    GetClipboardSequenceNumber :: () -> DWORD #foreign user32;
+    GlobalFree :: (hMem: HGLOBAL) -> HGLOBAL #foreign kernel32;
 
     MODAL_TAKEOVER_TIMER :: 1;
 
@@ -1382,9 +1384,14 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
 
     Windows_GL_Backend :: struct {
         message: (window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> s64;
+        wndproc_context: *#Context;
+
         render: (data: *void);
         render_data: *void;
-        wndproc_context: *#Context;
+
+        clipboard_sequence: DWORD;
+        clipboard_text_buffer: string;
+        clipboard_text: string;
     };
     init_backend :: (using backend: *Windows_GL_Backend) {
         wndproc_context = *context;
@@ -1683,6 +1690,27 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                 break;
             }
             WaitMessage();
+        }
+
+        sequence := GetClipboardSequenceNumber();
+        if sequence != backend.clipboard_sequence && OpenClipboard(window.hwnd) {
+            defer CloseClipboard();
+            backend.clipboard_sequence = sequence;
+            backend.clipboard_text.count = 0;
+
+            handle := GetClipboardData(CF_UNICODETEXT);
+            wide := cast(*u16) GlobalLock(handle);
+            if wide {
+                defer GlobalUnlock(handle);
+                // with -1, the count includes the null terminator
+                count := WideCharToMultiByte(CP_UTF8, 0, wide, -1, null, 0, null, null);
+                if count + 1 > backend.clipboard_text_buffer.count {
+                    backend.clipboard_text_buffer.data = realloc(backend.clipboard_text_buffer.data, count, backend.clipboard_text_buffer.count,, context.forbear.persistent_allocator);
+                    backend.clipboard_text_buffer.count = count;
+                }
+                WideCharToMultiByte(CP_UTF8, 0, wide, -1, backend.clipboard_text_buffer.data, count, null, null);
+                backend.clipboard_text = .{ count, backend.clipboard_text_buffer.data };
+            }
         }
     }
 
@@ -2549,7 +2577,7 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
 }
 get_clipboard_text :: () -> string {
     using context.forbear;
-    #if OS == .MACOS {
+    #if OS == .MACOS || OS == .WINDOWS {
         return backend.clipboard_text;
     } else {
         return "";
@@ -2582,6 +2610,23 @@ copy_to_clipboard :: (text: string) {
         memcpy(backend.clipboard_text_buffer.data, text.data, text.count);
         backend.clipboard_text.data = backend.clipboard_text_buffer.data;
         backend.clipboard_text.count = text.count;
+    } else #if OS == .WINDOWS {
+        units := MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, null, 0);
+        memory := GlobalAlloc(GMEM_MOVEABLE, cast(u64) (units + 1) * size_of(u16));
+        wide := cast(*u16) GlobalLock(memory);
+        MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, wide, units);
+        wide[units] = 0;
+        GlobalUnlock(memory);
+
+        if OpenClipboard(window.hwnd) {
+            EmptyClipboard();
+            if !SetClipboardData(CF_UNICODETEXT, memory) {
+                GlobalFree(memory);
+            }
+            CloseClipboard();
+        } else {
+            GlobalFree(memory);
+        }
     }
 }
 get_text_input :: () -> string {

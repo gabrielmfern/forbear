@@ -1,6 +1,6 @@
 - [ ] complete windowing code
     - [x] proper Windows backend
-    - [ ] clipboard handling for Windows
+    - [x] clipboard handling for Windows
     - [x] handle re-rendering during resizing for Windows
     - [ ] handle window scale in wayland
     - [ ] use virtual keys for key checking, and check logical keys through text input on Wayland
@@ -12,18 +12,22 @@
     - [ ] menu bar for macOS
         - we need to at least have cmd+q working
 - [ ] implement C ABI and C adapter
+- [ ] transition hooks
+- [ ] scrolling builtins
+- [ ] text input builtins
 - [ ] gather all of the current pessimizations in the code
-- [ ] handling the weird edge case of window decorations for Gnome :/
 - [ ] draw background images
-    - I'm removing aspect ratio sizings and instead we should draw images by clipping them into the given node,
-      keeping its aspect ratio
-- [ ] we're using the single kbts_context which uses the font in the top of the stack
-- [ ] program just doesn't do anything if the atlas is full
+    - I'm removing aspect ratio sizings and instead we should draw images by clipping them into
+    the given node, keeping its aspect ratio
+- [ ] text shaping is not handling multiple fonts
+- [ ] do something when the glyph atlas is full
 - [ ] glyphs are sitting on fractional pixels on the texture atlas
 - [ ] subpixel text rendering
-- [ ] make javascript support async code
+- [ ] async code primitives
+- [ ] make javascript adapter support async code
     - when doing native code, one can simply use a thread for the async work, which doesn't stall frames. javascript
       can't really do this, so how can we let it do async work?
-- [ ] metal rendering instead of opengl for macos
+- [ ] metal rendering instead of opengl for macOS
     - this is mainly because it looks like the fps is limimted to ~100, while the actual forbear work is 0.5ms which should lead to about 2000 and it all points to OpenGL not working very well which leads to the low FPs
+- [ ] directx rendering instead of opengl for Windows
 - [ ] use dynamically linked freetype on Linux, DirectWrite on Windows and CoreText on macOS
