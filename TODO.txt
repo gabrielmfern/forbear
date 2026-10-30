@@ -1,3 +1,14 @@
+- [ ] complete windowing code
+    - [ ] proper Windows backend
+    - [ ] clipboard handling for Windows
+    - [ ] handle re-rendering during resizing for Windows
+    - [ ] handle window scale in wayland
+    - [ ] clipboard handling for wayland
+    - [ ] handle the menu bar protocol in wayland, and render the Gnome menu bar
+    - [ ] does macOS actually trigger logical keys?
+    - [ ] handle re-rendering during resizing for macOS
+    - [ ] menu bar for macOS
+        - we need to at least have cmd+q working
 - [ ] implement C ABI and C adapter
 - [ ] gather all of the current pessimizations in the code
 - [ ] handle wayland topbars protocol (this doesn't address gnome unfortunately)
@@ -6,19 +17,12 @@
     - I'm removing aspect ratio sizings and instead we should draw images by clipping them into the given node,
       keeping its aspect ratio
 - [ ] we're using the single kbts_context which uses the font in the top of the stack
-- [ ] wayland is not handling window scale
-    - [ ] handle window scales changing at runtime in macos
 - [ ] program just doesn't do anything if the atlas is full
 - [ ] glyphs are sitting on fractional pixels on the texture atlas
 - [ ] subpixel text rendering
-- [ ] macos window resizing freezes (and the same will happen for windows) the rendering
-    - this will require some drastic changes that allows us to run the UI definition every time the resize event comes back in macos and windows
-- [ ] a macos program without a menu bar is a horrible experience (ex: cmd+q doesn't work)
-    - how can we do this in a cross platform manner? perhaps a component that makes changes to the window to render the menu items?
-- [ ] windows backend
 - [ ] make javascript support async code
     - when doing native code, one can simply use a thread for the async work, which doesn't stall frames. javascript
       can't really do this, so how can we let it do async work?
 - [ ] metal rendering instead of opengl for macos
     - this is mainly because it looks like the fps is limimted to ~100, while the actual forbear work is 0.5ms which should lead to about 2000 and it all points to OpenGL not working very well which leads to the low FPs
-
+- [ ] use dynamically linked freetype on Linux, DirectWrite on Windows and CoreText on macOS
