@@ -49,6 +49,8 @@ main :: () {
         } else #if OS == .MACOS {
             update_backend(*backend);
             update_window(*backend, *window);
+        } else #if OS == .WINDOWS {
+            update_backend(*backend);
         }
 
         render_with_adapter(*javascript_adapter);

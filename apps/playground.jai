@@ -41,9 +41,11 @@ main :: () {
                 update_backend(*backend, event);
                 update_window(*backend, *window, event);
             }
-        } else #if OS == .MACOS || OS == .WINDOWS {
+        } else #if OS == .MACOS {
             update_backend(*backend);
             update_window(*backend, *window);
+        } else #if OS == .WINDOWS {
+            update_backend(*backend);
         }
 
         element(Style.{
