@@ -5,7 +5,7 @@ forbear is a GUI library meant to be what operating systems should have given us
 - JSX bindings;
 - easily embeddable and customizable;
 - HTML-like element styling and flexbox-like layout;
-- Cross-platform: Linux (wayland) and macOS.
+- Cross-platform: Windows, Linux (wayland) and macOS.
 
 <!-- TODO: provide a way to download some of what's in ./apps so that people can easily see what forbear is capable of. -->
 <!-- TODO: in the future, add screenshots of programs built by the community with the library -->
@@ -108,7 +108,7 @@ There are two reasons for this kind of licensing:
 Beware forbear has been in heavy development since early 2025. The roadmap of the near future is:
 - C ABI and C bindings.
 - Async API that works with the immediate mode nature of the library and the different adapters.
-- Complete Windows, Wayland and macOS windowing.
+- Complete Wayland and macOS windowing.
 - Metal rendering on macOS.
 - Native font rendering through FreeType, DirectWrite and CoreText.
 
