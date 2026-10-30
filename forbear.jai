@@ -1366,6 +1366,9 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
     MapVirtualKeyW :: (uCode: u32, uMapType: u32) -> u32 #foreign user32;
     SetTimer :: (hWnd: HWND, nIDEvent: u64, uElapse: u32, lpTimerFunc: *void) -> u64 #foreign user32;
     KillTimer :: (hWnd: HWND, uIDEvent: u64) -> BOOL #foreign user32;
+    WaitMessage :: () -> BOOL #foreign user32;
+    IsIconic :: (hWnd: HWND) -> BOOL #foreign user32;
+    GetMessageTime :: () -> s32 #foreign user32;
 
     MODAL_TAKEOVER_TIMER :: 1;
 
@@ -1427,6 +1430,10 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                     if message == {
                         case WM_CLOSE;
                             window.running = false;
+                        case WM_SYSCOMMAND;
+                            if (wparam & 0xFFF0) != SC_KEYMENU || lparam != 0 {
+                                result = DefWindowProcW(hwnd, message, wparam, lparam);
+                            }
                         case WM_SIZE;
                             if wparam != SIZE_MINIMIZED {
                                 window.width = cast(float64)(lparam & 0xFFFF);
@@ -1536,12 +1543,22 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                         case WM_SYSKEYDOWN; #through;
                         case WM_KEYDOWN;
                             using window.keyboard_state;
-                            if wparam != VK_PROCESSKEY { // ignores keys typed during an IME compose event
+                            if wparam != VK_PROCESSKEY && wparam != VK_PACKET { // ignores keys typed during an IME compose event
                                 repeated := (lparam >> 30) & 1;
                                 scancode := cast(u32) ((lparam >> 16) & 0xFF);
                                 extended := (lparam >> 24) & 1;
                                 index    := scancode | (extended << 8);
-                                if repeated && held[index] != 0 {
+                                altgr_control := false;
+                                if wparam == VK_CONTROL && extended == 0 {
+                                    next: MSG;
+                                    altgr_control = PeekMessageW(*next, null, 0, 0, PM_NOREMOVE) != 0 &&
+                                        (next.message == WM_KEYDOWN || next.message == WM_SYSKEYDOWN) &&
+                                        next.wParam == VK_MENU &&
+                                        ((next.lParam >> 24) & 1) == 1 &&
+                                        next.time == GetMessageTime();
+                                }
+                                if altgr_control {
+                                } else if repeated && held[index] != 0 {
                                     add_key_event(*events, Key_Event.{ .REPEATED, held[index] });
                                 } else {
                                     key: Key = 0;
@@ -1655,10 +1672,17 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
     }
     update_backend :: (backend: *Backend) {
         backend.wndproc_context = *context;
-        message: MSG;
-        while PeekMessageW(*message, null, 0, 0, PM_REMOVE) {
-            TranslateMessage(*message);
-            DispatchMessageW(*message);
+        window := context.forbear.window;
+        while true {
+            message: MSG;
+            while PeekMessageW(*message, null, 0, 0, PM_REMOVE) {
+                TranslateMessage(*message);
+                DispatchMessageW(*message);
+            }
+            if !window.running || !IsIconic(window.hwnd) {
+                break;
+            }
+            WaitMessage();
         }
     }
 
