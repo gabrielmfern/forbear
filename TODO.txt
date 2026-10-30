@@ -3,10 +3,10 @@
     - [x] clipboard handling for Windows
     - [x] handle re-rendering during resizing for Windows
     - [ ] handle window scale in wayland
-    - [ ] use virtual keys for key checking, and check logical keys through text input on Wayland
+    - [ ] use characters for keys that are "printable" on wayland
     - [ ] clipboard handling for wayland
     - [ ] handle the menu bar protocol in wayland, and render the Gnome menu bar
-    - [ ] use virtual keys for key checking, and check logical keys through text input on macOS
+    - [ ] use characters for keys that are "printable" on macOS
     - [ ] use proper event handlers in macOS instead of polling
     - [ ] handle re-rendering during resizing for macOS
     - [ ] menu bar for macOS
