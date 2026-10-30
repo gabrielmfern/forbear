@@ -1594,6 +1594,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                                 result = DefWindowProcW(hwnd, message, wparam, lparam);
                             }
                         case WM_DPICHANGED;
+                            window.scale = (wparam & 0xFFFF) / 96.0;
                         case WM_KEYUP; #through;
                         case WM_SYSKEYUP;
                             using window.keyboard_state;
