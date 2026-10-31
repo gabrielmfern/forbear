@@ -4708,6 +4708,7 @@ get_plugin :: () -> *Metaprogram_Plugin {
                                 code.kind = .DIRECTIVE_CODE;
                                 code.location = call.location;
                                 code.expression = inner_call;
+                                code.code_flags = .TYPED;
 
                                 ident := New(Code_Ident);
                                 ident.kind = .IDENT;
