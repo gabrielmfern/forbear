@@ -85,12 +85,80 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
         }
         return text;
     }
-}
-
-add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
-    assert(events.count < 32 * 3);
-    events.count += 1;
-    events.*[events.count - 1] = key_event;
+    key_from_keysym :: (symbol: xkb_keysym_t) -> Key {
+        key: Key;
+        if symbol == {
+            case XKB_KEY_Escape;       key = .ESCAPE;
+            case XKB_KEY_Return;       #through;
+            case XKB_KEY_KP_Enter;     key = .ENTER;
+            case XKB_KEY_Tab;          #through;
+            case XKB_KEY_ISO_Left_Tab; key = .TAB;
+            case XKB_KEY_BackSpace;    key = .BACKSPACE;
+            case XKB_KEY_Delete;       key = .DELETE;
+            case XKB_KEY_Insert;       key = .INSERT;
+            case XKB_KEY_Left;         key = .ARROW_LEFT;
+            case XKB_KEY_Right;        key = .ARROW_RIGHT;
+            case XKB_KEY_Up;           key = .ARROW_UP;
+            case XKB_KEY_Down;         key = .ARROW_DOWN;
+            case XKB_KEY_Home;         key = .HOME;
+            case XKB_KEY_End;          key = .END;
+            case XKB_KEY_Page_Up;      key = .PAGE_UP;
+            case XKB_KEY_Page_Down;    key = .PAGE_DOWN;
+            case XKB_KEY_Shift_L;      key = .SHIFT_LEFT;
+            case XKB_KEY_Shift_R;      key = .SHIFT_RIGHT;
+            case XKB_KEY_Control_L;    key = .CONTROL_LEFT;
+            case XKB_KEY_Control_R;    key = .CONTROL_RIGHT;
+            case XKB_KEY_Alt_L;        key = .ALT_LEFT;
+            case XKB_KEY_Alt_R;        key = .ALT_RIGHT;
+            case XKB_KEY_Super_L;      key = .SUPER_LEFT;
+            case XKB_KEY_Super_R;      key = .SUPER_RIGHT;
+            case XKB_KEY_Caps_Lock;    key = .CAPS_LOCK;
+            case;
+                if symbol >= XKB_KEY_F1 && symbol <= XKB_KEY_F12 {
+                    key = Key.F1 + cast(Key) (symbol - XKB_KEY_F1);
+                } else {
+                    key = xx xkb_keysym_to_utf32(xkb_keysym_to_lower(symbol));
+                }
+        }
+        return key;
+    }
+} else #if OS == .WINDOWS {
+    is_high_surrogate :: (unit: u16) -> bool {
+        return unit >= 0xD800 && unit <= 0xDBFF;
+    }
+    is_low_surrogate :: (unit: u16) -> bool {
+        return unit >= 0xDC00 && unit <= 0xDFFF;
+    }
+    utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
+        assert(units.count >= 2);
+        code_point: u32;
+        if count == 1 && !is_high_surrogate(units[0]) && !is_low_surrogate(units[0]) {
+            code_point = units[0];
+        } else if count == 2 && is_high_surrogate(units[0]) && is_low_surrogate(units[1]) {
+            code_point = 0x10000 + ((cast(u32) units[0] - 0xD800) << 10) + (units[1] - 0xDC00);
+        }
+        return code_point;
+    }
+    key_from_virtual_key :: (vk: u32, scancode: u32) -> Key {
+        state: [256]u8;
+        GetKeyboardState(state.data);
+        if !(state[VK_MENU] & 0x80) {
+            state[VK_CONTROL] = 0;
+            state[VK_LCONTROL] = 0;
+            state[VK_RCONTROL] = 0;
+        }
+        units: [4]u16;
+        count := ToUnicodeEx(vk, scancode, state.data, units.data, units.count, 0x4, GetKeyboardLayout(0));
+        code_point := utf16_to_code_point(units, count);
+        if (code_point >= #char "A" && code_point <= #char "Z")
+        || (code_point >= 0xC0 && code_point <= 0xDE && code_point != 0xD7) {
+            // lowercases all of the LATIN-1 uppercase characters
+            //
+            // TODO: should we use some builtin function that has a wider reach than this?
+            code_point += 32;
+        }
+        return xx code_point;
+    }
 }
 
 #scope_export
@@ -850,7 +918,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                             xkb_key_code := code + 8;
                             symbol := xkb_state_key_get_one_sym(backend.connection.key_state, xkb_key_code);
                             if symbol > 0 {
-                                key := cast(Key) symbol;
+                                key := key_from_keysym(symbol);
                                 held[xkb_key_code] = key;
                             }
                         }
@@ -868,21 +936,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                     repeat_rate = repeat_info.rate;
                     repeat_delay = repeat_info.delay;
                 case Wl_Keyboard_Event_Modifiers;
-                    for key, code: held {
-                        if key != 0 {
-                            new_key := cast(Key) xkb_state_key_get_one_sym(backend.connection.key_state, xx code);
-                            if new_key != 0 && key != new_key {
-                                // This means that this key changes with some modifier on or off, so, we need to replace the previous
-                                // key it represented in favour of a new one. We also need to trigger the release and pressed key events
-                                // for both keys.
-                                add_key_event(*events, Key_Event.{.RELEASED, key});
-                                held[code] = new_key;
-                                if repeating_key_code == code {
-                                    repeating_key = new_key;
-                                }
-                            }
-                        }
-                    }
+                    update_held_keys_by_modifiers(backend, *window.keyboard_state);
                 case Wl_Keyboard_Event_Key;
                     key_event := cast(*Wl_Keyboard_Event_Key) event.data;
                     xkb_key_code := key_event.key + 8;
@@ -896,15 +950,13 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                             }
                         }
                     } else if key_event.state == .PRESSED {
-                        // TODO: go back to using the virtual key instead of the logical key here.
-                        //
-                        // For users to check if a logical key is pressed, they should look into input instead,
-                        // which is the more cross-platform safe way of doing things.
                         symbol := xkb_state_key_get_one_sym(backend.connection.key_state, xkb_key_code);
                         if symbol > 0 {
-                            key := cast(Key) symbol;
-                            add_key_event(*events, Key_Event.{.PRESSED, key});
-                            held[xkb_key_code] = key;
+                            key := key_from_keysym(symbol);
+                            if key != 0 {
+                                add_key_event(*events, Key_Event.{.PRESSED, key});
+                                held[xkb_key_code] = key;
+                            }
 
                             utf8: [64]u8;
                             compose_handled := false;
@@ -928,7 +980,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                             if !compose_handled {
                                 append_text(key_text(backend.connection.key_state, xkb_key_code, utf8), *window.text, window.text_buffer);
                             }
-                            if repeat_rate > 0 && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
+                            if key != 0 && repeat_rate > 0 && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
                                 repeating_key = key;
                                 repeating_key_code = xkb_key_code;
                                 next_repeat = seconds_since_init() + (cast(float)repeat_delay) / 1000.0;
@@ -1397,22 +1449,6 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                     if window.backend.message != null {
                         window.backend.message(window, hwnd, message, wparam, lparam);
                     }
-                    is_high_surrogate :: (unit: u16) -> bool {
-                        return unit >= 0xD800 && unit <= 0xDBFF;
-                    }
-                    is_low_surrogate :: (unit: u16) -> bool {
-                        return unit >= 0xDC00 && unit <= 0xDFFF;
-                    }
-                    utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
-                        assert(units.count >= 2);
-                        code_point: u32;
-                        if count == 1 && !is_high_surrogate(units[0]) && !is_low_surrogate(units[0]) {
-                            code_point = units[0];
-                        } else if count == 2 && is_high_surrogate(units[0]) && is_low_surrogate(units[1]) {
-                            code_point = 0x10000 + ((cast(u32) units[0] - 0xD800) << 10) + (units[1] - 0xDC00);
-                        }
-                        return code_point;
-                    }
                     if message == {
                         case WM_CLOSE;
                             window.running = false;
@@ -1590,31 +1626,16 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                                         case VK_LWIN;    key = .SUPER_LEFT;
                                         case VK_RWIN;    key = .SUPER_RIGHT;
                                         case VK_CAPITAL; key = .CAPS_LOCK;
-                                    }
-                                    if key == 0 {
-                                        // the key could not be found, meaning it's not in the named ones, so we're going to write ti as a character instead
-                                        state: [256]u8;
-                                        GetKeyboardState(state.data);
-                                        if !(state[VK_MENU] & 0x80) {
-                                            state[VK_CONTROL] = 0;
-                                            state[VK_LCONTROL] = 0;
-                                            state[VK_RCONTROL] = 0;
-                                        }
-                                        units: [4]u16;
-                                        count := ToUnicodeEx(xx wparam, scancode, state.data, units.data, units.count, 0x4, GetKeyboardLayout(0));
-                                        code_point := utf16_to_code_point(units, count);
-                                        if (code_point >= #char "A" && code_point <= #char "Z")
-                                        || (code_point >= 0xC0 && code_point <= 0xDE && code_point != 0xD7) {
-                                            // lowercases all of the LATIN-1 uppercase characters
-                                            //
-                                            // TODO: should we use some builtin function that has a wider reach than this?
-                                            code_point += 32;
-                                        }
-                                        key = xx code_point;
+                                        case;
+                                            // the key could not be found, meaning it's not in the named ones, so we're going to write it as a character instead
+                                            key = key_from_virtual_key(xx wparam, scancode);
                                     }
                                     if key != 0 {
                                         held[index] = key;
                                         add_key_event(*events, Key_Event.{ .PRESSED, key });
+                                    }
+                                    if wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU || wparam == VK_CAPITAL {
+                                        update_held_keys_by_modifiers(window.backend, *window.keyboard_state);
                                     }
                                 }
                             }
@@ -1637,6 +1658,9 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                             if key != 0 {
                                 add_key_event(*events, .{.RELEASED, key});
                                 held[index] = 0;
+                            }
+                            if wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU || wparam == VK_CAPITAL {
+                                update_held_keys_by_modifiers(window.backend, *window.keyboard_state);
                             }
                             if message == WM_SYSKEYUP {
                                 result = DefWindowProcW(hwnd, message, wparam, lparam);
@@ -2449,6 +2473,37 @@ Keyboard_State :: struct {
 init_keyboard_state :: (using state: *Keyboard_State) {
     events.data = events_buffer.data;
     events.count = 0;
+}
+add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
+    assert(events.count < 32 * 3);
+    events.count += 1;
+    events.*[events.count - 1] = key_event;
+}
+// This ensures that the keys held are updated as the modifiers change, so that, in a US Keyboard Layout doing SHIFT+EQUALS holds PLUS, and then releasing SHIFT makes it hold EQUALS. This only applies for keys that
+update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_State) {
+    for key, code: held {
+        // only update the keys that correspond to unicode characters
+        if key != 0 && key < .ESCAPE {
+            #if OS == .LINUX {
+                new_key := key_from_keysym(xkb_state_key_get_one_sym(backend.connection.key_state, xx code));
+            } else #if OS == .WINDOWS {
+                vk := MapVirtualKeyW((cast(u32) code & 0xFF) | (ifx code & 0x100 then 0xE000 else 0), MAPVK_VSC_TO_VK_EX);
+                new_key := key_from_virtual_key(vk, cast(u32) code & 0xFF);
+            }
+            if new_key != 0 && key != new_key {
+                // This means that this key changes with some modifier on or off, so, we need to replace the previous
+                // key it represented in favour of a new one. We also need to trigger the release and pressed key events
+                // for both keys.
+                add_key_event(*events, Key_Event.{.RELEASED, key});
+                held[code] = new_key;
+                #if OS == .LINUX {
+                    if repeating_key_code == code {
+                        repeating_key = new_key;
+                    }
+                }
+            }
+        }
+    }
 }
 Key_Event :: struct {
     Kind :: enum {
