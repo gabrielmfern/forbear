@@ -14,8 +14,6 @@ Major features:
 
 ## Quick start
 
-<img alt="The quick start program: a counter with an Increase button and an FPS monitor" src="www/assets/2026-10-28-quick-start.png">
-
 Requirements: the Jai programming language, which is in private beta.
 
 On Linux or macOS:
@@ -31,6 +29,10 @@ To build:
 cd untitled-program
 jai main.jai +forbear
 ```
+
+The quick start program should show this:
+
+<img alt="The quick start program: a counter with an Increase button and an FPS monitor" src="www/assets/2026-10-28-quick-start.png">
 
 ### At a glance
 
