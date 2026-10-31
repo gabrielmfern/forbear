@@ -2668,7 +2668,7 @@ update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_Stat
             #if OS == .LINUX {
                 new_key := key_from_keysym(xkb_state_key_get_one_sym(backend.connection.key_state, xx code));
             } else #if OS == .WINDOWS {
-                vk := MapVirtualKeyW((cast(u32) code & 0xFF) | (ifx code & 0x100 then 0xE000 else 0), MAPVK_VSC_TO_VK_EX);
+                vk := MapVirtualKeyW(xx ((code & 0xFF) | (ifx code & 0x100 then 0xE000 else 0)), MAPVK_VSC_TO_VK_EX);
                 new_key := key_from_virtual_key(vk, cast(u32) code & 0xFF);
             } else #if OS == .MACOS {
                 new_key := key_from_key_code(xx code);
