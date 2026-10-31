@@ -81,7 +81,7 @@ parse_expression :: (expression: string, tokens: *[..]Token) -> Parse_Result {
                     trimmed = trim(in_progress);
 
                     // it must be a number at this point, so we assume so
-                    number, success := string_to_float(trimmed);
+                    number, success := string_to_float64(trimmed);
                     if success {
                         if tokens.count > 0 && tokens.*[tokens.count - 1].kind == .NUMBER {
                             return .TWO_NUMBERS_IN_A_ROW;
