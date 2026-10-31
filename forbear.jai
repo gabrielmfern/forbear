@@ -71,6 +71,22 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
     }
 }
 
+is_high_surrogate :: (unit: u16) -> bool {
+    return unit >= 0xD800 && unit <= 0xDBFF;
+}
+is_low_surrogate :: (unit: u16) -> bool {
+    return unit >= 0xDC00 && unit <= 0xDFFF;
+}
+utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
+    assert(units.count >= 2);
+    code_point: u32;
+    if count == 1 && !is_high_surrogate(units[0]) && !is_low_surrogate(units[0]) {
+        code_point = units[0];
+    } else if count == 2 && is_high_surrogate(units[0]) && is_low_surrogate(units[1]) {
+        code_point = 0x10000 + ((cast(u32) units[0] - 0xD800) << 10) + (units[1] - 0xDC00);
+    }
+    return code_point;
+}
 #if OS == .LINUX {
     key_text :: (state: *xkb_state, key_code: u32, utf8: []u8) -> string {
         text: string;
@@ -123,22 +139,6 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
         return key;
     }
 } else #if OS == .WINDOWS {
-    is_high_surrogate :: (unit: u16) -> bool {
-        return unit >= 0xD800 && unit <= 0xDBFF;
-    }
-    is_low_surrogate :: (unit: u16) -> bool {
-        return unit >= 0xDC00 && unit <= 0xDFFF;
-    }
-    utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
-        assert(units.count >= 2);
-        code_point: u32;
-        if count == 1 && !is_high_surrogate(units[0]) && !is_low_surrogate(units[0]) {
-            code_point = units[0];
-        } else if count == 2 && is_high_surrogate(units[0]) && is_low_surrogate(units[1]) {
-            code_point = 0x10000 + ((cast(u32) units[0] - 0xD800) << 10) + (units[1] - 0xDC00);
-        }
-        return code_point;
-    }
     key_from_virtual_key :: (vk: u32, scancode: u32) -> Key {
         state: [256]u8;
         GetKeyboardState(state.data);
@@ -158,6 +158,144 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
             code_point += 32;
         }
         return xx code_point;
+    }
+} else #if OS == .MACOS {
+    carbon :: #library,system "Carbon";
+    core_foundation :: #library,system "CoreFoundation";
+    TISCopyCurrentKeyboardLayoutInputSource :: () -> *void #foreign carbon;
+    TISGetInputSourceProperty :: (source: *void, key: *void) -> *void #foreign carbon;
+    kTISPropertyUnicodeKeyLayoutData: *void #elsewhere carbon;
+    LMGetKbdType :: () -> u8 #foreign carbon;
+    UCKeyTranslate :: (layout: *void, code: u16, action: u16, modifiers: u32, keyboard_type: u32, options: u32, dead_key_state: *u32, max_length: u64, length: *u64, characters: *u16) -> s32 #foreign carbon;
+    CFDataGetBytePtr :: (data: *void) -> *void #foreign core_foundation;
+    CFRelease :: (object: *void) #foreign core_foundation;
+
+    // Copied over from Carbon.framework/Frameworks/HIToolbox.framework/Headers/Events.h,
+    // these are keycodes for keys that are independent of keyboard layout
+    kVK_Return                    :: 0x24;
+    kVK_Tab                       :: 0x30;
+    kVK_Delete                    :: 0x33;
+    kVK_Escape                    :: 0x35;
+    kVK_Command                   :: 0x37;
+    kVK_Shift                     :: 0x38;
+    kVK_CapsLock                  :: 0x39;
+    kVK_Option                    :: 0x3A;
+    kVK_Control                   :: 0x3B;
+    kVK_RightCommand              :: 0x36;
+    kVK_RightShift                :: 0x3C;
+    kVK_RightOption               :: 0x3D;
+    kVK_RightControl              :: 0x3E;
+    kVK_Function                  :: 0x3F; // TODO: also include this in the Key enum
+    kVK_F17                       :: 0x40;
+    kVK_VolumeUp                  :: 0x48; // TODO: also include this in the Key enum
+    kVK_VolumeDown                :: 0x49; // TODO: also include this in the Key enum
+    kVK_Mute                      :: 0x4A; // TODO: also include this in the Key enum
+    kVK_F18                       :: 0x4F;
+    kVK_F19                       :: 0x50;
+    kVK_F20                       :: 0x5A;
+    kVK_F5                        :: 0x60;
+    kVK_F6                        :: 0x61;
+    kVK_F7                        :: 0x62;
+    kVK_F3                        :: 0x63;
+    kVK_F8                        :: 0x64;
+    kVK_F9                        :: 0x65;
+    kVK_F11                       :: 0x67;
+    kVK_F13                       :: 0x69;
+    kVK_F16                       :: 0x6A;
+    kVK_F14                       :: 0x6B;
+    kVK_F10                       :: 0x6D;
+    kVK_ContextualMenu            :: 0x6E; // TODO: also include this in the Key enum
+    kVK_F12                       :: 0x6F;
+    kVK_F15                       :: 0x71;
+    kVK_Help                      :: 0x72; // TODO: also include this in the Key enum
+    kVK_Home                      :: 0x73;
+    kVK_PageUp                    :: 0x74;
+    kVK_ForwardDelete             :: 0x75;
+    kVK_F4                        :: 0x76;
+    kVK_End                       :: 0x77;
+    kVK_F2                        :: 0x78;
+    kVK_PageDown                  :: 0x79;
+    kVK_F1                        :: 0x7A;
+    kVK_LeftArrow                 :: 0x7B;
+    kVK_RightArrow                :: 0x7C;
+    kVK_DownArrow                 :: 0x7D;
+    kVK_UpArrow                   :: 0x7E;
+
+    // In macOS there's no such thing as a virtual key, it's either the physical key or the logical key.
+    // Carbon does call the physical key like it was virtual, though.
+    key_from_key_code :: (code: u16) -> Key {
+        key: Key;
+        if code == {
+            case kVK_Escape;        key = .ESCAPE;
+            case kVK_Return;        key = .ENTER;
+            case kVK_Tab;           key = .TAB;
+            case kVK_Delete;        key = .BACKSPACE;
+            case kVK_ForwardDelete; key = .DELETE;
+            case kVK_LeftArrow;     key = .ARROW_LEFT;
+            case kVK_RightArrow;    key = .ARROW_RIGHT;
+            case kVK_UpArrow;       key = .ARROW_UP;
+            case kVK_DownArrow;     key = .ARROW_DOWN;
+            case kVK_Home;          key = .HOME;
+            case kVK_End;           key = .END;
+            case kVK_PageUp;        key = .PAGE_UP;
+            case kVK_PageDown;      key = .PAGE_DOWN;
+            case kVK_F1;            key = .F1;
+            case kVK_F2;            key = .F2;
+            case kVK_F3;            key = .F3;
+            case kVK_F4;            key = .F4;
+            case kVK_F5;            key = .F5;
+            case kVK_F6;            key = .F6;
+            case kVK_F7;            key = .F7;
+            case kVK_F8;            key = .F8;
+            case kVK_F9;            key = .F9;
+            case kVK_F10;           key = .F10;
+            case kVK_F11;           key = .F11;
+            case kVK_F12;           key = .F12;
+            case kVK_Shift;         key = .SHIFT_LEFT;
+            case kVK_RightShift;    key = .SHIFT_RIGHT;
+            case kVK_Control;       key = .CONTROL_LEFT;
+            case kVK_RightControl;  key = .CONTROL_RIGHT;
+            case kVK_Option;        key = .ALT_LEFT;
+            case kVK_RightOption;   key = .ALT_RIGHT;
+            case kVK_Command;       key = .SUPER_LEFT;
+            case kVK_RightCommand;  key = .SUPER_RIGHT;
+            case kVK_CapsLock;      key = .CAPS_LOCK;
+            case kVK_Function;       #through;
+            case kVK_F13;            #through;
+            case kVK_F14;            #through;
+            case kVK_F15;            #through;
+            case kVK_F16;            #through;
+            case kVK_F17;            #through;
+            case kVK_F18;            #through;
+            case kVK_F19;            #through;
+            case kVK_F20;            #through;
+            case kVK_VolumeUp;       #through;
+            case kVK_VolumeDown;     #through;
+            case kVK_Mute;           #through;
+            case kVK_ContextualMenu; #through;
+            case kVK_Help;           return 0;
+        }
+        if key == 0 {
+            source := TISCopyCurrentKeyboardLayoutInputSource();
+            defer CFRelease(source);
+            layout := TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData);
+            if layout {
+                current_flags: (*void, Selector) -> NSEventModifierFlags #c_call = xx objc_msgSend;
+                flags := current_flags(xx class(NSEvent), selector("modifierFlags"));
+                modifiers: u32 = xx ifx flags & .NSEventModifierFlagShift then cast(u32)0x02 else 0;
+                dead_key_state: u32;
+                units: [4]u16;
+                length: u64;
+                UCKeyTranslate(CFDataGetBytePtr(layout), code, 0, modifiers, LMGetKbdType(), 1, *dead_key_state, xx units.count, *length, units.data);
+                code_point := utf16_to_code_point(units, xx length);
+                if (code_point >= #char "A" && code_point <= #char "Z")
+                || (code_point >= 0xC0 && code_point <= 0xDE && code_point != 0xD7) {
+                    code_point += 32;
+                }
+                key = xx code_point;
+            }
+        }
+        return key;
     }
 }
 
@@ -1211,6 +1349,8 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
     }
     update_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window) {
         is_visible: (*void, Selector) -> BOOL #c_call = xx objc_msgSend;
+        // TODO: this isVisible is not the right way to do it, this also becomes true when
+        // the program is minimized so the program just stops then which is a bug.
         if !is_visible(window.ns_window, selector("isVisible")) {
             window.running = false;
         }
@@ -1229,6 +1369,9 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
     }
 
     MacOS_GL_Backend :: struct {
+        render: (data: *void);
+        render_data: *void;
+
         app: *NSApplication;
         pixel_format: *NSOpenGLPixelFormat;
         gl_context: *NSOpenGLContext;
@@ -1264,8 +1407,10 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
     update_backend :: (backend: *MacOS_GL_Backend) {
         pool := objc_init(objc_alloc(NSAutoreleasePool));
         defer NSAutoreleasePool.drain(pool);
+
         window := context.forbear.window;
         using window.keyboard_state;
+
         frame := NSView.frame(window.view);
         location := NSWindow.mouseLocationOutsideOfEventStream(window.ns_window);
 
@@ -1326,12 +1471,14 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
                         backend.app.sendEvent(backend.app, event);
                     case NSEventTypeKeyDown;
                         code := NSEvent.keyCode(event);
-                        key: Key = xx code;
-                        if !NSEvent.isARepeat(event) {
-                            add_key_event(*events, Key_Event.{.PRESSED, key});
-                            held[code] = key;
+                        if NSEvent.isARepeat(event) && held[code] != 0 {
+                            add_key_event(*events, Key_Event.{.REPEATED, held[code]});
                         } else {
-                            add_key_event(*events, Key_Event.{.REPEATED, key});
+                            key := key_from_key_code(code);
+                            if key != 0 {
+                                add_key_event(*events, Key_Event.{.PRESSED, key});
+                                held[code] = key;
+                            }
                         }
                         if !(NSEvent.modifierFlags(event) & .NSEventModifierFlagCommand) {
                             characters := NSEvent.characters(event);
@@ -1346,37 +1493,28 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
                         }
                     case NSEventTypeKeyUp;
                         code := NSEvent.keyCode(event);
-                        add_key_event(*events, Key_Event.{.RELEASED, xx code});
-                        held[code] = 0;
+                        key := held[code];
+                        if key != 0 {
+                            add_key_event(*events, Key_Event.{.RELEASED, held[code]});
+                            held[code] = 0;
+                        }
                     case NSEventTypeFlagsChanged;
                         code := NSEvent.keyCode(event);
-                        key: Key = xx code;
-                        flag: NSEventModifierFlags;
-                        if key == {
-                            case .SHIFT_LEFT; #through;
-                            case .SHIFT_RIGHT;
-                                flag = .NSEventModifierFlagShift;
-                            case .CONTROL_LEFT; #through;
-                            case .CONTROL_RIGHT;
-                                flag = .NSEventModifierFlagControl;
-                            case .ALT_LEFT; #through;
-                            case .ALT_RIGHT;
-                                flag = .NSEventModifierFlagOption;
-                            case .SUPER_LEFT; #through;
-                            case .SUPER_RIGHT;
-                                flag = .NSEventModifierFlagCommand;
-                            case .CAPS_LOCK;
-                                flag = .NSEventModifierFlagCapsLock;
-                            case .FUNCTION;
-                                flag = .NSEventModifierFlagFunction;
+                        key := key_from_key_code(code);
+                        if key != 0 {
+                            down := ifx key == .CAPS_LOCK
+                                then (NSEvent.modifierFlags(event) & .NSEventModifierFlagCapsLock) != 0
+                                else is_key_held(key);
+                               
+                            if down && held[code] == 0 {
+                                add_key_event(*events, Key_Event.{.PRESSED, key});
+                                held[code] = key;
+                            } else if !down && held[code] != 0 {
+                                add_key_event(*events, Key_Event.{.RELEASED, key});
+                                held[code] = 0;
+                            }
                         }
-                        if held[code] != 0 {
-                            add_key_event(*events, Key_Event.{.RELEASED, key});
-                            held[code] = 0;
-                        } else if NSEvent.modifierFlags(event) & flag {
-                            add_key_event(*events, Key_Event.{.PRESSED, key});
-                            held[code] = key;
-                        }
+                        update_held_keys_by_modifiers(backend, *window.keyboard_state);
                         backend.app.sendEvent(backend.app, event);
                     case;
                         backend.app.sendEvent(backend.app, event);
@@ -2511,9 +2649,7 @@ Keyboard_State :: struct {
     }
     events_buffer: [32 * 3]Key_Event;
     events: []Key_Event;
-    #if OS == .LINUX        held: [768 + 8]Key;
-    else #if OS == .MACOS   held: [128]Key;
-    else                    held: [512]Key;
+    held: [776]Key;
 };
 init_keyboard_state :: (using state: *Keyboard_State) {
     events.data = events_buffer.data;
@@ -2534,6 +2670,8 @@ update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_Stat
             } else #if OS == .WINDOWS {
                 vk := MapVirtualKeyW((cast(u32) code & 0xFF) | (ifx code & 0x100 then 0xE000 else 0), MAPVK_VSC_TO_VK_EX);
                 new_key := key_from_virtual_key(vk, cast(u32) code & 0xFF);
+            } else #if OS == .MACOS {
+                new_key := key_from_key_code(xx code);
             }
             if new_key != 0 && key != new_key {
                 // This means that this key changes with some modifier on or off, so, we need to replace the previous
@@ -2614,7 +2752,7 @@ Key :: enum u32 {
     F1; F2; F3; F4; F5; F6; F7; F8; F9; F10; F11; F12;
     SHIFT_LEFT; SHIFT_RIGHT; CONTROL_LEFT; CONTROL_RIGHT;
     ALT_LEFT; ALT_RIGHT; SUPER_LEFT; SUPER_RIGHT;
-    CAPS_LOCK;
+    CAPS_LOCK; FUNCTION;
 }
 MOUSE_BUTTON_COUNT :: #run enum_highest_value(Mouse_Button) + 1;
 Mouse_Button :: enum {
@@ -2755,6 +2893,45 @@ is_key_held :: (key: Key) -> bool {
             case .SUPER_LEFT; #through;
             case .SUPER_RIGHT;
                 return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+        }
+    } else #if OS == .WINDOWS {
+        vk: s32;
+        if key == {
+            case .SHIFT_LEFT;    vk = VK_LSHIFT;
+            case .SHIFT_RIGHT;   vk = VK_RSHIFT;
+            case .CONTROL_LEFT;  vk = VK_LCONTROL;
+            case .CONTROL_RIGHT; vk = VK_RCONTROL;
+            case .ALT_LEFT;      vk = VK_LMENU;
+            case .ALT_RIGHT;     vk = VK_RMENU;
+            case .SUPER_LEFT;    vk = VK_LWIN;
+            case .SUPER_RIGHT;   vk = VK_RWIN;
+        }
+        if vk != 0 {
+            return GetKeyState(vk) < 0;
+        }
+    } else #if OS == .MACOS {
+        NX_DEVICELCTLKEYMASK   :: 0x00000001;
+        NX_DEVICELSHIFTKEYMASK :: 0x00000002;
+        NX_DEVICERSHIFTKEYMASK :: 0x00000004;
+        NX_DEVICELCMDKEYMASK   :: 0x00000008;
+        NX_DEVICERCMDKEYMASK   :: 0x00000010;
+        NX_DEVICELALTKEYMASK   :: 0x00000020;
+        NX_DEVICERALTKEYMASK   :: 0x00000040;
+        NX_DEVICERCTLKEYMASK   :: 0x00002000;
+
+        if key >= .SHIFT_LEFT && key <= .SUPER_RIGHT {
+            current_flags: (*void, Selector) -> NSUInteger #c_call = xx objc_msgSend;
+            flags := current_flags(xx class(NSEvent), selector("modifierFlags"));
+            if key == {
+                case .CONTROL_LEFT;  return (flags & NX_DEVICELCTLKEYMASK) != 0;
+                case .SHIFT_LEFT;    return (flags & NX_DEVICELSHIFTKEYMASK) != 0;
+                case .SHIFT_RIGHT;   return (flags & NX_DEVICERSHIFTKEYMASK) != 0;
+                case .SUPER_LEFT;    return (flags & NX_DEVICELCMDKEYMASK) != 0;
+                case .SUPER_RIGHT;   return (flags & NX_DEVICERCMDKEYMASK) != 0;
+                case .ALT_LEFT;      return (flags & NX_DEVICELALTKEYMASK) != 0;
+                case .ALT_RIGHT;     return (flags & NX_DEVICERALTKEYMASK) != 0;
+                case .CONTROL_RIGHT; return (flags & NX_DEVICERCTLKEYMASK) != 0;
+            }
         }
     }
 

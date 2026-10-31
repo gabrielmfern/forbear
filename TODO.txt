@@ -17,7 +17,6 @@
 - [ ] complete windowing code
     - [ ] clipboard handling for wayland
     - [ ] handle the menu bar protocol in wayland, and render the Gnome menu bar
-    - [ ] use characters for keys that are "printable" on macOS
     - [ ] use proper event handlers in macOS instead of polling
     - [ ] handle re-rendering during resizing for macOS
     - [ ] menu bar for macOS
