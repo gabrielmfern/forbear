@@ -1,6 +1,8 @@
 # forbear
 
-forbear is a GUI library meant to be what operating systems should have given us. A high performance, handmade, cross-language immediate mode GUI library.
+forbear is a high performance, immediate mode GUI library that looks like the web.
+
+Major features:
 - React-like declarative elements, components and hooks;
 - JSX bindings;
 - easily embeddable and customizable;
@@ -34,15 +36,9 @@ jai main.jai +forbear
 
 ```jai
 Counter :: () {
-    // This gives us back a pointer to the counter's value. Since no initial value
-    // is defined, the function just zeroes out the given type.
-    //
     // State is stored in a 16MB static buffer with no heap allocations.
     counter := state(s64);
 
-    // `text` defines a node with glyphs inside of it. It inherits style from its parent.
-    text("PLUS (+): increases the counter by one");
-    text("MINUS (-): decreases the counter by one");
     if on_key_down(.PLUS) {
         // Since this is immediate mode, there's no need for callbacks/event handlers,
         // we can simply check for the key being down through an if-statement.
@@ -51,9 +47,8 @@ Counter :: () {
         counter.* -= 1;
     }
 
-    text("LEFT CLICK in the button: increases the counter by one");
-    text("RIGHT CLICK in the button: decreases the counter by one");
     element(Style.{
+        // styling familiar to HTML
         background = color(rgb(44, 49, 56)),
         color = rgb(230, 234, 239),
         border_width = all(1),
@@ -61,7 +56,8 @@ Counter :: () {
         border_radius = 6,
         padding = in_line(block(8), 16),
         margin = block(8),
-    }, #code {
+    }, #code { // The children of an element are defined through passing
+               // around Code by the `#code` directive.
         node := get_node();
         if is_mouse_inside() {
             node.style.background = color(rgb(56, 62, 71));
@@ -70,8 +66,6 @@ Counter :: () {
             }
         }
 
-        // The children of an element are defined through passing
-        // around Code by the `#code` directive.
         text("Click me");
 
         if on_click(.LEFT) {
@@ -83,19 +77,17 @@ Counter :: () {
 
     text(Style.{font_size = 32}, sprint("Count: %", counter.*));
 } @component
-  // The `@component` is handled by a compiler plugin that's defined in the
-  // `forbear.jai` as well. It goes through all calls of functions with this
-  // annotation and wraps them in a `scope(#code ...)` which makes these handle
-  // state properly.
 ```
 
 ## Why?
 
-Among all current GUI framework options there seems to always be a trade-off between: beautiful, flexible, bare metal fast and DX.
-The most famous pick for established programs people use every day is Electron. And Electron also picks its trade-off to not be bare metal fast.
+Among all current GUI framework options there seems to always be a trade-off between: beauty, performance and developer experience. The most famous pick for established programs people use every day is Electron. Electron is famous for not having great performance and hogging way too many resources.
 
-forbear is meant to change this. forbear is meant to be the UI library that a proper operating system should have provided. The idea of it is
-also to bring forth the possibility of defining UIs through any language you might already be familiar with.
+We have a vision of a world where, just like Electron programs are widespread, we have programs that use minimal resources, open and close instantly, run using the hardware effectively wide spread.
+
+To reach this vision of the future, I believe there's the need for an ease of development that has never gotten to before for UI libraries. Something that operating systems should have provided us from the beginning.
+
+This is why forbear exists, it's meant to fuse the best of all worlds and make it accessible to all. High performance shouldn't be for only those who can bear the weight of extreme complexity, and beautiful UIs shouldn't be for only those who compromise for subpar performance.
 
 ## License
 
@@ -112,14 +104,16 @@ There are two reasons for this kind of licensing:
 
 ## Roadmap
 
-Beware forbear has been in heavy development since early 2025. The roadmap of the near future is:
+Beware forbear has been in heavy development since early 2025 and the API that is established in the code will most likely change.
+
+The roadmap for the near future is:
 - C ABI and C bindings.
 - Async API that works with the immediate mode nature of the library and the different adapters.
 - Complete Wayland and macOS windowing.
 - Metal rendering on macOS.
-- Native font rendering through FreeType, DirectWrite and CoreText.
+- Native font rendering through dynamically linked FreeType, DirectWrite and CoreText.
 
-For more of the planned work, see [TODO.txt](./TODO.txt).
+For more details, see [TODO.txt](./TODO.txt).
 
 ---
 
