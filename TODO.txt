@@ -14,8 +14,6 @@
     - [ ] let the user resize it so that we can showcase how smooth it feels
     - [ ] have a light and dark theme that is applied based on the system theme
 - [ ] complete windowing code
-    - [ ] handle window scale in wayland
-    - [ ] use characters for keys that are "printable" on wayland
     - [ ] clipboard handling for wayland
     - [ ] handle the menu bar protocol in wayland, and render the Gnome menu bar
     - [ ] use characters for keys that are "printable" on macOS

@@ -196,6 +196,8 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
         wl_compositor_id: u32;
         zwp_dmabuf_id: u32;
         xdg_wm_base_id: u32;
+        wp_viewporter_id: u32;
+        wp_fractional_scale_manager_id: u32;
 
         //
         // TODO(depessimization): I do not like that xkb allocates the structs and also does reference counting with
@@ -315,6 +317,10 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
                         connection.zwp_dmabuf_id = bind_global(connection, Interface_Id.ZWP_LINUX_DMABUF_V1, global, 3);
                     } else if global.interface_name == "wl_seat" {
                         connection.wl_seat_id = bind_global(connection, Interface_Id.WL_SEAT, global);
+                    } else if global.interface_name == "wp_viewporter" {
+                        connection.wp_viewporter_id = bind_global(connection, Interface_Id.WP_VIEWPORTER, global);
+                    } else if global.interface_name == "wp_fractional_scale_manager_v1" {
+                        connection.wp_fractional_scale_manager_id = bind_global(connection, Interface_Id.WP_FRACTIONAL_SCALE_MANAGER_V1, global);
                     }
                 case Wl_Callback_Event_Done;
                     synced = true;
@@ -673,14 +679,17 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
         wl_surface_id: u32;
         wl_buffer_params_id: u32;
         wl_frame_callback_id: u32;
+        wp_viewport_id: u32;
+        wp_fractional_scale_id: u32;
 
         xdg_surface_id: u32;
         // only top level windows are supported. there are also popups
         xdg_toplevel_id: u32;
 
         width: s32;
+        logical_width: s32;
         height: s32;
-        // TOOD: handle scale set coming from the compositor, we have no handling here yet.
+        logical_height: s32;
         scale: float64 = 1.0;
 
         text_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
@@ -703,8 +712,8 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
         busy: bool;
     };
     init_window :: (backend: *Backend, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
-        window.width = width;
-        window.height = height;
+        window.logical_width = width;
+        window.logical_height = height;
 
         init_keyboard_state(*window.keyboard_state);
 
@@ -713,6 +722,12 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
         connection := *backend.connection;
         window.wl_surface_id = new_wayland_client_object(connection, Interface_Id.WL_SURFACE);
         send_wayland_message(connection, connection.wl_compositor_id, Wl_Compositor_Request_Create_Surface.{ id = window.wl_surface_id });
+        if connection.wp_viewporter_id != 0 && connection.wp_fractional_scale_manager_id != 0 {
+            window.wp_viewport_id = new_wayland_client_object(connection, .WP_VIEWPORT);
+            send_wayland_message(connection, connection.wp_viewporter_id, Wp_Viewporter_Request_Get_Viewport.{ id = window.wp_viewport_id, surface = window.wl_surface_id });
+            window.wp_fractional_scale_id = new_wayland_client_object(connection, .WP_FRACTIONAL_SCALE_V1);
+            send_wayland_message(connection, connection.wp_fractional_scale_manager_id, Wp_Fractional_Scale_Manager_V1_Request_Get_Fractional_Scale.{ id = window.wp_fractional_scale_id, surface = window.wl_surface_id });
+        }
         window.xdg_surface_id = new_wayland_client_object(connection, Interface_Id.XDG_SURFACE);
         send_wayland_message(connection, connection.xdg_wm_base_id, Xdg_Wm_Base_Request_Get_Xdg_Surface.{ id = window.xdg_surface_id, surface = window.wl_surface_id });
         window.xdg_toplevel_id = new_wayland_client_object(connection, Interface_Id.XDG_TOPLEVEL);
@@ -731,14 +746,14 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
         return !window.waiting_for_vblank && window.buffers[window.current].wl_buffer_id != 0 && !window.buffers[window.current].busy;
     }
     update_window :: (backend: *Backend, window: *Wayland_EGL_Window, event: Wayland_Event) {
-        if event.object_id == window.xdg_surface_id && event.message.type == Xdg_Surface_Event_Configure {
-            configure := cast(*Xdg_Surface_Event_Configure) event.data;
-            send_wayland_message(*backend.connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
-
+        probably_create_buffers :: (backend: *Backend, window: *Wayland_EGL_Window) {
+            scale_120 := cast(s64)(window.scale * 120 + 0.5);
+            window.width  = xx ((window.logical_width  * scale_120 + 60) / 120);
+            window.height = xx ((window.logical_height * scale_120 + 60) / 120);
             for *buffer: window.buffers {
                 should_create_buffer := buffer.gbm_buffer_object == null ||
-                                        gbm_bo_get_width(buffer.gbm_buffer_object) != xx window.width ||
-                                        gbm_bo_get_height(buffer.gbm_buffer_object) != xx window.height;
+                gbm_bo_get_width(buffer.gbm_buffer_object) != xx window.width ||
+                gbm_bo_get_height(buffer.gbm_buffer_object) != xx window.height;
 
                 if should_create_buffer {
                     if buffer.egl_image != null {
@@ -783,7 +798,7 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
                         EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, modifier_hi,
                         EGL_NONE,
                     ];
-                    buffer.egl_image = eglCreateImage(context.forbear.backend.egl_display, null, EGL_LINUX_DMA_BUF_EXT, null, attributes.data);
+                    buffer.egl_image = eglCreateImage(backend.egl_display, null, EGL_LINUX_DMA_BUF_EXT, null, attributes.data);
                     if buffer.egl_image == null {
                         log_error("failed to create frame buffer: %\n", eglGetError());
                         exit(-1);
@@ -822,11 +837,24 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
                     send_wayland_message(*backend.connection, window.wl_buffer_params_id, Zwp_Linux_Buffer_Params_V1_Request_Destroy.{ });
                     window.wl_buffer_params_id = 0;
 
+
+                    if window.wp_viewport_id != 0 {
+                        send_wayland_message(*backend.connection, window.wp_viewport_id, Wp_Viewport_Request_Set_Destination.{ width = window.logical_width, height = window.logical_height });
+                    } else {
+                        send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Set_Buffer_Scale.{ scale = xx window.scale });
+                    }
+
                     if previous_buffer_id != 0 {
                         send_wayland_message(*backend.connection, previous_buffer_id, Wl_Buffer_Request_Destroy.{});
                     }
                 }
             }
+        }
+
+        if event.object_id == window.xdg_surface_id && event.message.type == Xdg_Surface_Event_Configure {
+            configure := cast(*Xdg_Surface_Event_Configure) event.data;
+            send_wayland_message(*backend.connection, window.xdg_surface_id, Xdg_Surface_Request_Ack_Configure.{ serial = configure.serial });
+            probably_create_buffers(backend, window);
         } else if event.object_id == window.xdg_toplevel_id {
             if event.message.type == {
                 case Xdg_Toplevel_Event_Close;
@@ -835,11 +863,25 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
                 case Xdg_Toplevel_Event_Configure;
                     configure := cast(*Xdg_Toplevel_Event_Configure) event.data;
                     if configure.width {
-                        window.width = configure.width;
+                        window.logical_width = configure.width;
                     }
                     if configure.height {
-                        window.height = configure.height;
+                        window.logical_height = configure.height;
                     }
+            }
+        } else if event.object_id == window.wp_fractional_scale_id && event.message.type == Wp_Fractional_Scale_V1_Event_Preferred_Scale {
+            preferred_scale := cast(*Wp_Fractional_Scale_V1_Event_Preferred_Scale) event.data;
+            window.scale = (cast(float64)preferred_scale.scale) / 120.0;
+            if window.buffers[0].gbm_buffer_object != null {
+                // this should only ever recreate a buffer, never create one
+                probably_create_buffers(backend, window);
+            }
+        } else if event.object_id == window.wl_surface_id && event.message.type == Wl_Surface_Event_Preferred_Buffer_Scale && window.wp_fractional_scale_id == 0 {
+            preferred_scale := cast(*Wl_Surface_Event_Preferred_Buffer_Scale) event.data;
+            window.scale = xx preferred_scale.factor;
+            if window.buffers[0].gbm_buffer_object != null {
+                // this should only ever recreate a buffer, never create one
+                probably_create_buffers(backend, window);
             }
         } else if event.object_id == window.wl_frame_callback_id && event.message.type == Wl_Callback_Event_Done {
             window.waiting_for_vblank = false;

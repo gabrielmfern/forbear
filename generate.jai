@@ -14,6 +14,8 @@
         "/usr/share/wayland/wayland.xml",
         "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
         "/usr/share/wayland-protocols/stable/linux-dmabuf/linux-dmabuf-v1.xml",
+        "/usr/share/wayland-protocols/stable/viewporter/viewporter.xml",
+        "/usr/share/wayland-protocols/staging/fractional-scale/fractional-scale-v1.xml",
     ];
 
     ProtocolType :: enum {

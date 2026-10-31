@@ -1,7 +1,7 @@
 //
 // This file was auto-generated using the following command:
 //
-// jai generate.jai
+// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
 //
 
 
@@ -1338,7 +1338,7 @@ libegl :: #library,system "libEGL";
 //
 // This file was auto-generated using the following command:
 //
-// jai generate.jai
+// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
 //
 
 
@@ -1709,7 +1709,7 @@ libgbm :: #library,system "libgbm";
 //
 // This file was auto-generated using the following command:
 //
-// jai generate.jai
+// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
 //
 
 
@@ -7090,7 +7090,7 @@ libxkbcommon :: #library,system "libxkbcommon";
 //
 // This file was auto-generated using the following command:
 //
-// jai generate.jai
+// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
 //
 
 
@@ -9922,7 +9922,7 @@ kb_text_shape :: #library,no_dll "vendor/kb_text_shape-linux";
 //
 // This file was auto-generated using the following command:
 //
-// jai generate.jai
+// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
 //
 
 
@@ -17881,6 +17881,10 @@ Interface_Id :: enum u32 {
     ZWP_LINUX_DMABUF_V1;
     ZWP_LINUX_BUFFER_PARAMS_V1;
     ZWP_LINUX_DMABUF_FEEDBACK_V1;
+    WP_VIEWPORTER;
+    WP_VIEWPORT;
+    WP_FRACTIONAL_SCALE_MANAGER_V1;
+    WP_FRACTIONAL_SCALE_V1;
 }
 
 Wl_Display_Error :: enum u32 {
@@ -19633,6 +19637,77 @@ Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Flags :: struct {
     flags: Zwp_Linux_Dmabuf_Feedback_V1_Tranche_Flags;
 }
 
+Wp_Viewporter_Error :: enum u32 {
+    VIEWPORT_EXISTS :: 0;
+}
+
+Wp_Viewporter_Request_Destroy :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Wp_Viewporter_Request_Get_Viewport :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[.NEW_ID, .OBJECT];
+    id: u32;
+    surface: u32;
+}
+
+Wp_Viewport_Error :: enum u32 {
+    BAD_VALUE :: 0;
+    BAD_SIZE :: 1;
+    OUT_OF_BUFFER :: 2;
+    NO_SURFACE :: 3;
+}
+
+Wp_Viewport_Request_Destroy :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Wp_Viewport_Request_Set_Source :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[.FIXED, .FIXED, .FIXED, .FIXED];
+    x: Fixed;
+    y: Fixed;
+    width: Fixed;
+    height: Fixed;
+}
+
+Wp_Viewport_Request_Set_Destination :: struct {
+    OPCODE :: 2;
+    ARGS :: ProtocolType.[.INT, .INT];
+    width: s32;
+    height: s32;
+}
+
+Wp_Fractional_Scale_Manager_V1_Error :: enum u32 {
+    FRACTIONAL_SCALE_EXISTS :: 0;
+}
+
+Wp_Fractional_Scale_Manager_V1_Request_Destroy :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Wp_Fractional_Scale_Manager_V1_Request_Get_Fractional_Scale :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[.NEW_ID, .OBJECT];
+    id: u32;
+    surface: u32;
+}
+
+Wp_Fractional_Scale_V1_Request_Destroy :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Wp_Fractional_Scale_V1_Event_Preferred_Scale :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[.UINT];
+    scale: u32;
+}
+
     Interface_Info :: struct {
         name: string;
         version: u32;
@@ -19680,6 +19755,10 @@ INTERFACES :: Interface_Info.[
     .{ "zwp_linux_dmabuf_v1", 6, 179, 4, 183, 2 },
     .{ "zwp_linux_buffer_params_v1", 6, 185, 5, 190, 2 },
     .{ "zwp_linux_dmabuf_feedback_v1", 6, 192, 1, 193, 7 },
+    .{ "wp_viewporter", 1, 200, 2, 202, 0 },
+    .{ "wp_viewport", 1, 202, 3, 205, 0 },
+    .{ "wp_fractional_scale_manager_v1", 1, 205, 2, 207, 0 },
+    .{ "wp_fractional_scale_v1", 1, 207, 1, 208, 1 },
 ];
 
 Message_Id :: enum u32 {
@@ -19883,6 +19962,15 @@ Message_Id :: enum u32 {
     ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_TARGET_DEVICE :: 197;
     ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FORMATS :: 198;
     ZWP_LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS :: 199;
+    WP_VIEWPORTER_DESTROY :: 200;
+    WP_VIEWPORTER_GET_VIEWPORT :: 201;
+    WP_VIEWPORT_DESTROY :: 202;
+    WP_VIEWPORT_SET_SOURCE :: 203;
+    WP_VIEWPORT_SET_DESTINATION :: 204;
+    WP_FRACTIONAL_SCALE_MANAGER_V1_DESTROY :: 205;
+    WP_FRACTIONAL_SCALE_MANAGER_V1_GET_FRACTIONAL_SCALE :: 206;
+    WP_FRACTIONAL_SCALE_V1_DESTROY :: 207;
+    WP_FRACTIONAL_SCALE_V1_PREFERRED_SCALE :: 208;
 }
 
 MESSAGES :: Message_Info.[
@@ -20086,6 +20174,15 @@ MESSAGES :: Message_Info.[
     .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Target_Device, 308, 1 },
     .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Formats, 309, 1 },
     .{ Zwp_Linux_Dmabuf_Feedback_V1_Event_Tranche_Flags, 310, 1 },
+    .{ Wp_Viewporter_Request_Destroy, 311, 0 },
+    .{ Wp_Viewporter_Request_Get_Viewport, 311, 2 },
+    .{ Wp_Viewport_Request_Destroy, 313, 0 },
+    .{ Wp_Viewport_Request_Set_Source, 313, 4 },
+    .{ Wp_Viewport_Request_Set_Destination, 317, 2 },
+    .{ Wp_Fractional_Scale_Manager_V1_Request_Destroy, 319, 0 },
+    .{ Wp_Fractional_Scale_Manager_V1_Request_Get_Fractional_Scale, 319, 2 },
+    .{ Wp_Fractional_Scale_V1_Request_Destroy, 321, 0 },
+    .{ Wp_Fractional_Scale_V1_Event_Preferred_Scale, 321, 1 },
 ];
 
     MAX_MESSAGE_STRUCT_SIZE :: #run () -> s64 {
@@ -20408,5 +20505,16 @@ ARGS :: ProtocolType.[
     .ARRAY,
     .ARRAY,
     .ARRAY,
+    .UINT,
+    .NEW_ID,
+    .OBJECT,
+    .FIXED,
+    .FIXED,
+    .FIXED,
+    .FIXED,
+    .INT,
+    .INT,
+    .NEW_ID,
+    .OBJECT,
     .UINT,
 ];
