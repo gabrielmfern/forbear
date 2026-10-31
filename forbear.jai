@@ -1058,6 +1058,9 @@ append_text :: (source: string, destination: *string, buffer: []u8) {
         dri_fd: s32;
         device: *gbm_device;
 
+        clipboard_text_buffer: string;
+        clipboard_text: string;
+
         dmabuf_modifiers: [..]u64;
 
         connection: Wayland_Connection;
@@ -2654,13 +2657,11 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
         return false;
     }
 }
+// TODO: Currently, this only supports text, but we should support other clipboard content types. Each operating system defines the type in the clipboard in a different manner, which make this quite difficult.
 get_clipboard_text :: () -> string {
     using context.forbear;
-    #if OS == .MACOS || OS == .WINDOWS {
-        return backend.clipboard_text;
-    } else {
-        return "";
-    }
+
+    return backend.clipboard_text;
 }
 copy_to_clipboard :: (text: string) {
     using context.forbear;
