@@ -618,15 +618,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
         text_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
         text: string;
         keyboard_state: Keyboard_State;
-
-        pointer_serial: u32;
-        pointer_inside: bool;
-        pointer_position: Vector2;
-
-        pointer_press_position: [MOUSE_BUTTON_COUNT]Vector2;
-        pointer_pressed: [MOUSE_BUTTON_COUNT]bool;
-        pointer_released: [MOUSE_BUTTON_COUNT]bool;
-        pointer_held: [MOUSE_BUTTON_COUNT]bool;
+        mouse_state: Mouse_State;
 
         buffers: [2]Wayland_EGL_Buffer;
         current: s64;
@@ -791,15 +783,16 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
             log_error("compositor failed to import the dmabuf (%x%)", window.width, window.height);
             exit(-1);
         } else if event.object_id == backend.connection.wl_pointer_id {
+            using window.mouse_state;
             if event.message.type == {
                 // TODO: support pointer gestures https://wayland.app/protocols/pointer-gestures-unstable-v1
                 case Wl_Pointer_Event_Enter;
                     enter := cast(*Wl_Pointer_Event_Enter) event.data;
                     if window.wl_surface_id == enter.surface {
-                        window.pointer_serial = enter.serial;
-                        window.pointer_inside = true;
+                        serial = enter.serial;
+                        inside = true;
 
-                        window.pointer_position = Vector2.{
+                        position = Vector2.{
                             cast(float) enter.surface_x,
                             cast(float) enter.surface_y,
                         } / 256.0;
@@ -807,36 +800,32 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                 case Wl_Pointer_Event_Leave;
                     leave := cast(*Wl_Pointer_Event_Leave) event.data;
                     if window.wl_surface_id == leave.surface {
-                        window.pointer_inside = false;
+                        inside = false;
                     }
                 case Wl_Pointer_Event_Warp;
                     warp := cast(*Wl_Pointer_Event_Warp) event.data;
-                    window.pointer_position = Vector2.{
+                    position = Vector2.{
                         cast(float) warp.surface_x,
                         cast(float) warp.surface_y,
                     } / 256.0;
                 case Wl_Pointer_Event_Motion;
                     motion := cast(*Wl_Pointer_Event_Motion) event.data;
-                    window.pointer_position = Vector2.{
+                    position = Vector2.{
                         cast(float) motion.surface_x,
                         cast(float) motion.surface_y,
                     } / 256.0;
                 case Wl_Pointer_Event_Button;
                     button := cast(*Wl_Pointer_Event_Button) event.data;
-                    // 0x110 through 0x117 are the buttons defined in the enum, in the same order as these are
-                    // enumerated
+                    // 0x110 through 0x117 are the buttons defined in the enum, in the same order as these are enumerated
                     index: s64 = xx (button.button - 0x110);
-                    if index >= 0 && index < window.pointer_pressed.count {
+                    if index >= 0 && index < pressed.count {
                         if button.state == .RELEASED {
-                            window.pointer_released[index] = true;
-                            window.pointer_held[index] = false;
+                            mouse_release(*window.mouse_state, xx index);
                         } else if button.state == .PRESSED {
-                            window.pointer_press_position[index] = window.pointer_position;
-                            window.pointer_pressed[index] = true;
-                            window.pointer_held[index] = true;
+                            mouse_press(*window.mouse_state, xx index, window.mouse_state.position);
                         }
                     }
-                // TODO: support all of the remaining pointer events:
+                // TODO: handle all of the remaining pointer events:
                 // - wl_pointer::axis_relative_direction
                 // - wl_pointer::axis_value120
                 // - wl_pointer::axis_discrete
@@ -2419,6 +2408,9 @@ is_mouse_inside :: () -> bool {
         window.mouse_state.position.y <= measurement.position.y + measurement.size.y;
 }
 Mouse_State :: struct {
+    #if OS == .LINUX {
+        serial: u32;
+    }
     inside: bool;
     position: Vector2;
 
