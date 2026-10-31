@@ -45,8 +45,10 @@ main :: () {
 
     javascript_adapter: Javascript_Adapter;
     init_adapter(*javascript_adapter, frame_allocator, JAVASCRIPT_SOURCE, "javascript-example");
-    backend.render = render;
-    backend.render_data = *javascript_adapter;
+    #if OS == .WINDOWS || OS == .MACOS {
+        backend.render = render;
+        backend.render_data = *javascript_adapter;
+    }
 
     while window.running {
         push_allocator(frame_allocator);

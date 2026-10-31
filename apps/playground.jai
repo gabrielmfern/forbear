@@ -127,7 +127,9 @@ main :: () {
     frame_allocator: Allocator;
     frame_allocator.data = *frame_pool;
     frame_allocator.proc = flat_pool_allocator_proc;
-    backend.render = render;
+    #if OS == .WINDOWS || OS == .MACOS {
+        backend.render = render;
+    }
 
     while window.running {
         push_allocator(frame_allocator);
