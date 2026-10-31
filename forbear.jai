@@ -1076,14 +1076,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
         text: string;
 
         keyboard_state: Keyboard_State;
-
-        pointer_inside: bool;
-        pointer_position: Vector2;
-
-        pointer_press_position: [MOUSE_BUTTON_COUNT]Vector2;
-        pointer_pressed: [MOUSE_BUTTON_COUNT]bool;
-        pointer_released: [MOUSE_BUTTON_COUNT]bool;
-        pointer_held: [MOUSE_BUTTON_COUNT]bool;
+        mouse_state: Mouse_State;
 
         running := true;
     };
@@ -1179,9 +1172,9 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
         frame := NSView.frame(window.view);
         location := NSWindow.mouseLocationOutsideOfEventStream(window.ns_window);
 
-        window.pointer_inside = location.x >= 0 && location.y >= 0 &&
-                                location.x < frame.size.width && location.y < frame.size.height;
-        window.pointer_position = Vector2.{ xx location.x, xx (frame.size.height - location.y) };
+        window.mouse_state.inside = location.x >= 0 && location.y >= 0 &&
+                                    location.x < frame.size.width && location.y < frame.size.height;
+        window.mouse_state.position = Vector2.{ xx location.x, xx (frame.size.height - location.y) };
 
         change_count: (*void, Selector) -> NSInteger #c_call = xx objc_msgSend;
         count := change_count(backend.pasteboard, selector("changeCount"));
@@ -1216,11 +1209,9 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                     case NSEventTypeLeftMouseDown; #through;
                     case NSEventTypeOtherMouseDown;
                         button := NSEvent.buttonNumber(event);
-                        if window.pointer_inside {
+                        if window.mouse_state.inside {
                             if button < MOUSE_BUTTON_COUNT {
-                                window.pointer_press_position[button] = window.pointer_position;
-                                window.pointer_pressed[button] = true;
-                                window.pointer_held[button] = true;
+                                mouse_press(*window.mouse_state, xx button, window.mouse_state.position);
                             } else {
                                 log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, MIDDLE, BACK and FORWARD. button: %", button);
                             }
@@ -1231,8 +1222,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
                     case NSEventTypeOtherMouseUp;
                         button := NSEvent.buttonNumber(event);
                         if button < MOUSE_BUTTON_COUNT {
-                            window.pointer_released[button] = true;
-                            window.pointer_held[button] = false;
+                            mouse_release(*window.mouse_state, xx button);
                         } else {
                             log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, MIDDLE, BACK and FORWARD. button: %", button);
                         }
