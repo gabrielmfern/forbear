@@ -12,6 +12,7 @@
     - [ ] selection in the input: with the mouse and with the keyboard
     - [ ] history of calculations, when reopening show the previous state of everything (history, expression being typed out, result)
     - [ ] let the user resize it so that we can showcase how smooth it feels
+    - [ ] find a way so that numbers typed in never loose precision
     - [ ] have a light and dark theme that is applied based on the system theme
 - [ ] complete windowing code
     - [ ] clipboard handling for wayland
