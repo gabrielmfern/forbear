@@ -21,6 +21,7 @@ dist
 ## binaries
 apps/calculator/Calculator
 apps/calculator/tests
+apps/components-demo
 apps/javascript/main
 apps/playground
 apps/pools
