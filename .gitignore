@@ -22,6 +22,7 @@ dist
 apps/calculator/Calculator
 apps/calculator/tests
 apps/components-demo
+apps/demos/components
 apps/javascript/main
 apps/playground
 apps/pools
