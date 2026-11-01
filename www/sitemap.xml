@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://www.forbear.dev/</loc>
-    <lastmod>2026-10-11</lastmod>
+    <lastmod>2026-11-01</lastmod>
   </url>
   <url>
     <loc>https://www.forbear.dev/log/001-im-rewriting-everything-again.html</loc>
@@ -14,6 +14,10 @@
   </url>
   <url>
     <loc>https://www.forbear.dev/log/003-ui-from-javascript.html</loc>
-    <lastmod>2026-10-11</lastmod>
+    <lastmod>2026-10-31</lastmod>
+  </url>
+  <url>
+    <loc>https://www.forbear.dev/log/004-react-like-state-without-the-heap.html</loc>
+    <lastmod>2026-11-01</lastmod>
   </url>
 </urlset>

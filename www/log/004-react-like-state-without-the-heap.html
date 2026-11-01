@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>forbear log, entry 004: React-like state (mostly) without the heap, events without callbacks</title>
+<meta name="description" content="forbear now has state and components that feel like React, keyboard and mouse events, and runs on Windows">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="forbear">
+<meta property="og:url" content="https://www.forbear.dev/log/004-react-like-state-without-the-heap.html">
+<link rel="alternate" type="application/atom+xml" title="forbear log" href="/feed.xml">
+<meta property="og:title" content="React-like state (mostly) without the heap, events without callbacks">
+<meta property="og:description" content="forbear now has state and components that feel like React, keyboard and mouse events, and runs on Windows">
+<meta property="og:image" content="https://www.forbear.dev/assets/og-004.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="React-like state (mostly) without the heap, events without callbacks">
+<meta name="twitter:description" content="forbear now has state and components that feel like React, keyboard and mouse events, and runs on Windows">
+<meta name="twitter:image" content="https://www.forbear.dev/assets/og-004.png">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+@theme {
+  --color-bg: #1C1F23;
+  --color-float: #111316;
+  --color-ui: #2C333B;
+  --color-fg: #AEB8C4;
+  --color-muted: #6E7A87;
+  --color-bright: #FFFFFF;
+  --color-yellow: #B8A36A;
+  --color-bright-yellow: #CFBA78;
+}
+@layer base {
+  html { @apply overflow-x-clip; }
+  body { @apply bg-bg text-fg leading-relaxed; }
+  h1 { @apply text-bright text-3xl font-bold mb-8; }
+  h2 { @apply text-bright text-2xl font-bold mt-12 mb-4; }
+  h3 { @apply text-bright text-xl font-bold mt-8 mb-3; }
+  p { @apply my-4; }
+  ul { @apply list-disc pl-6 my-4; }
+  ol { @apply list-decimal pl-6 my-4; }
+  a { @apply text-yellow hover:text-bright-yellow; }
+  code { @apply bg-float text-bright px-1 rounded; }
+  pre { @apply bg-float text-fg text-sm p-4 rounded-lg overflow-x-auto my-6; }
+  pre code { @apply bg-transparent text-fg p-0; }
+}
+pre .hl-function { color: #b8a36a; }
+pre .hl-delimiter { color: #c8d0d8; }
+pre .hl-type { color: #ffffff; }
+pre .hl-punctuation-delimiter { color: #c8d0d8; }
+pre .hl-operator { color: #e0e2ea; }
+pre .hl-statement { color: #ffffff; }
+pre .hl-number { color: #7fa0b8; }
+pre .hl-string { font-style: italic; color: #b8a36a; }
+pre .hl-comment { color: #4ebe4e; font-style: italic; }
+pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
+pre .hl-special { color: #b8a36a; }
+pre .hl-label { color: #86a5bf; }
+pre .hl-preproc { color: #ffffff; }
+</style>
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+</head>
+<body>
+<main class="max-w-2xl mx-auto px-4 py-16">
+<p class="mt-0 mb-8"><a href="/">&larr; forbear</a></p>
+<h1>forbear log, entry 004: React-like state (mostly) without the heap, events without callbacks</h1>
+<p class="text-muted tabular-nums -mt-6"><time datetime="2026-11-01">2026-11-01</time></p>
+
+<video src="../assets/2026-10-31-state-and-components.mp4" preload="metadata" controls autoplay muted loop playsinline class="block my-6 rounded-lg max-w-none w-[min(calc(100vw-2rem),1500px)] relative left-1/2 -translate-x-1/2"></video>
+
+<p>TL;DR:</p>
+<ul>
+  <li>React-like state and components</li>
+  <li>Keyboard and mouse events</li>
+  <li>Windows support</li>
+  <li>Other things: quick start script, borders, clipboard and sharpter text</li>
+</ul>
+
+<p><a href="../assets/2026-10-31-forbear-components-demo.zip" download>Download the demo from above</a> to try it yourself.</p>
+
+<h2>Components and hooks</h2>
+
+<p>Here's a Counter component with forbear:</p>
+
+<pre><code><span class="hl-function">Counter</span> <span class="hl-punctuation-delimiter">::</span> <span class="hl-delimiter">()</span> <span class="hl-delimiter">{</span>
+    count <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-function">state</span><span class="hl-delimiter">(</span>s64<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">element</span><span class="hl-delimiter">(</span><span class="hl-statement">#code</span> <span class="hl-delimiter">{</span>
+        <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-function">sprint</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;Count: %&quot;</span><span class="hl-punctuation-delimiter">,</span> count<span class="hl-punctuation-delimiter">.</span><span class="hl-operator">*</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-statement">if</span> <span class="hl-function">on_click</span><span class="hl-delimiter">()</span> <span class="hl-delimiter">{</span>
+            count<span class="hl-punctuation-delimiter">.</span><span class="hl-operator">*</span> <span class="hl-operator">+=</span> <span class="hl-number">1</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-delimiter">}</span>
+    <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span> <span class="hl-string">@component</span></code></pre>
+
+<p>Components are now defined through functions. The challenge with components as functions for a UI library such as forbear is keying. Keying here is the fact that we stamp each element with what's supposed to be a unique key so that we can safely keep state for them in between frames.</p>
+
+<p>Say you render two counters side by side:</p>
+
+<pre><code><span class="hl-function">Counter</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-function">Counter</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<p>The keys of the elements in both instances are going to collide. The reason for this is that the key for each element is mainly defined by its source location, and between the instances, that's going to be the same: some line inside of the component function.</p>
+
+<p>To sidestep this problem, we have <code>@component</code>. The basic way it works is that we now have a compiler plugin that finds all of the calls to a function with this annotation, and then wraps them with a new function we're introducing called <code>scope</code>. In practice, what it does is:</p>
+
+<pre><code><span class="hl-function">Counter</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+
+<span class="hl-comment">// becomes</span>
+<span class="hl-function">scope</span><span class="hl-delimiter">(</span><span class="hl-statement">#code</span> <span class="hl-function">Counter</span><span class="hl-delimiter">())</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<p>Then, <code>scope</code> can capture its caller location to define a new key that's unique across component instances.</p>
+
+<p>Another basic use of components is having children. This was a particularly hard problem in Zig because Zig doesn't have macros, and I had to resort to lots of weird complex stacks of nodes back and forth, but Jai does. So, in Jai, all a user has to do to support children for a component is:</p>
+
+<pre><code><span class="hl-function">Button</span> <span class="hl-punctuation-delimiter">::</span> <span class="hl-delimiter">(</span>$body<span class="hl-punctuation-delimiter">:</span> <span class="hl-type">Code</span><span class="hl-delimiter">)</span> <span class="hl-punctuation-delimiter">-&gt;</span> <span class="hl-type">bool</span> <span class="hl-statement">#expand</span> <span class="hl-delimiter">{</span>
+    clicked <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-statement">false</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-function">element</span><span class="hl-delimiter">(</span><span class="hl-statement">#code</span> <span class="hl-delimiter">{</span>
+        <span class="hl-statement">#insert</span> body<span class="hl-punctuation-delimiter">;</span>
+
+        <span class="hl-statement">if</span> <span class="hl-function">on_click</span><span class="hl-delimiter">()</span> <span class="hl-delimiter">{</span>
+            clicked <span class="hl-operator">=</span> <span class="hl-statement">true</span><span class="hl-punctuation-delimiter">;</span>
+        <span class="hl-delimiter">}</span>
+    <span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-statement">return</span> clicked<span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span> <span class="hl-string">@component</span>
+
+<span class="hl-statement">if</span> <span class="hl-function">Button</span><span class="hl-delimiter">(</span><span class="hl-statement">#code</span> <span class="hl-delimiter">{</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;click me, dude!&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">})</span> <span class="hl-delimiter">{</span>
+    <span class="hl-function">print</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;hey, you clicked the button!&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span></code></pre>
+
+<p>There is still one very downside to this, though, which is that component instances in a loop are now quite annoying to handle. Loops with elements will require you to define a manual key, so that there are no collisions. For components though, the manual key would need to go in the <code>scope</code> function call, which only shows up after the compiler plugin actually runs. A workaround that I have been using is simply to define the <code>scope</code> manually:</p>
+
+<pre><code><span class="hl-statement">for</span> <span class="hl-punctuation-delimiter">...</span> <span class="hl-delimiter">{</span>
+    <span class="hl-function">scope</span><span class="hl-delimiter">(</span><span class="hl-function">sprint</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;%&quot;</span><span class="hl-punctuation-delimiter">,</span> it_index<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-statement">#code</span> <span class="hl-function">MyComponent</span><span class="hl-delimiter">(</span><span class="hl-operator">..</span><span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span></code></pre>
+
+<p>This is definitely something I want to improve, so open to any ideas!</p>
+
+<h2>State (mostly) without the heap</h2>
+
+<p>I firmly believe that the best developer experience for building a UI is achieved only when you can define its state right beside the UI itself. This is exactly what React got right with its <code>useState</code> in my view. But, one of the biggest problems with this idea is that it requires the heap for simple data, while doing the more obvious thing, which is defining a global state <code>struct</code> and drilling it down through parameters, doesn't.</p>
+
+<p>This was a problem that I painstakingly thought through during the Zig to Jai rewrite, and I think I found a good solution.</p>
+
+<p>The way I made it work was through a pair of static 16MB buffers. One buffer for the previous frame, and another for the current frame. During the frame, we basically keep track of the amount of state used so far, which is just an offset into the current buffer.</p>
+
+<pre><code>toggled <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-function">state</span><span class="hl-delimiter">(</span>bool<span class="hl-punctuation-delimiter">,</span> <span class="hl-statement">false</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<p>Once the user calls the <code>state</code> function, we basically reserve the next few bytes of the current buffer, rounded up to 8 bytes, and move the offset forward. The element that called it remembers where its state starts and how many bytes it used. Then, we look up the same element in the previous frame's tree, through its key, and copy its value from the previous buffer into the new slot. If there's no previous value, because the element just appeared, the slot gets the initial value instead.</p>
+
+<p>At the end of the frame, the two buffers swap: the current one becomes the previous one, and the offset goes back to zero. The buffer from two frames ago is simply written over by the next frame. This means that there's nothing to free. If an element stops being rendered, nobody copies its state forward, so it's gone after one frame, without a single call to <code>free</code>.</p>
+
+<pre><code>          frame N                        frame N + 1
+┌───────────────────────┐      ┌───────────────────────┐
+│ A: previous (N - 1)   │      │ A: current            │
+└───────────┬───────────┘      └───────────▲───────────┘
+            │ state() copies               │ state() copies
+┌───────────▼───────────┐      ┌───────────┴───────────┐
+│ B: current            │      │ B: previous (N)       │
+└───────────────────────┘      └───────────────────────┘</code></pre>
+
+<p>The caveat to this approach I've picked for state is that the rules of hooks for React also apply here. We can't define state after children that also use state, and we can't define state inside if-statements. forbear asserts on both: when an element calls <code>state</code> after a child used it, and when it calls <code>state</code> a different number of times than in the last frame. So, you find out right away instead of getting someone else's state. I think it's a worth it trade-off.</p>
+
+<p>There is one case that this idea doesn't solve, though, and that I also couldn't figure out in the Zig version, but now I've found a way. The case is resizable arrays. Say you have a TO-DO list and you want to append a new item, or you want to keep the contents of an input field. Their size has no upper bound, so they're states of varying size, which require the heap.</p>
+
+<pre><code>tasks <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-function">state</span><span class="hl-delimiter">([</span><span class="hl-operator">..</span><span class="hl-delimiter">]</span><span class="hl-type">string</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<p>To support this, we define a fixed list of 256 <code>Flat_Pool</code>s that each element can claim for itself when it defines a state of varying size. Then, since a resizable array carries its own allocator, we just set it to the <code>Flat_Pool</code>'s allocator.</p>
+
+<p>Each pool slot also keeps track of the last frame in which it was used. At the end of each frame, any pool whose element didn't render gives its pages back to the operating system, and becomes free for another element to claim.</p>
+
+<p>Both the static buffers and the pools reserve a lot of virtual memory, which sounds bad at first, but most of it never turns into actual memory usage. There are three levels to how the operating system deals with memory:</p>
+
+<ul>
+<li><strong>Reserved</strong>: a range of addresses is set aside for you. It doesn't use any RAM.</li>
+<li><strong>Committed</strong>: the operating system promises it can back those pages if you write to them. It counts against a system-wide limit (RAM plus the page file), but still doesn't use any RAM.</li>
+<li><strong>Resident</strong>: the pages you actually wrote to. This is the RAM your program uses.</li>
+</ul>
+
+<p>Each pool reserves 64MB the first time an element claims it, and only commits pages as the array actually grows. So, even if all 256 pools were claimed, that's 16GB of addresses out of the roughly 128TB a 64-bit process has, and the RAM used is only what your arrays hold. When a pool is released, its pages stop using RAM.</p>
+
+<p>The 64MB is also the real limit of this design: a single resizable array in state can't grow past it. When it tries to, the pool runs out of reserved addresses and hits an assert. For a list of tasks or the text in an input, that's plenty, but don't keep a huge dataset in state.</p>
+
+<p>The static buffers work the same way, even though no allocation is involved. They're zero-initialized, so they don't take any space in the executable, and when the program loads, the operating system maps the 32MB without loading any of it into RAM. A page only becomes resident once <code>state</code> first writes to it. So, if your program only ever uses 2KB of state, that's about one page of RAM per buffer, not 32MB.</p>
+
+<p>There are some trade-offs, though:</p>
+
+<ul>
+<li>On Windows, the static buffers count as committed from the start, and a pool's pages stay committed after it's released, until the program exits. They don't use RAM, but they do take a share of the system's commit limit.</li>
+<li>Tools that show virtual memory or commit size, like the VIRT column in <code>top</code>, are going to show big numbers. The number that actually matters is the resident memory, or the working set on Windows.</li>
+</ul>
+
+<h2>Events</h2>
+
+<p>Events in forbear have no callbacks. Handling one is just an if-statement, right where the element is defined:</p>
+
+<pre><code><span class="hl-function">element</span><span class="hl-delimiter">(</span><span class="hl-statement">#code</span> <span class="hl-delimiter">{</span>
+    <span class="hl-function">text</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;+1&quot;</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-statement">if</span> <span class="hl-function">on_click</span><span class="hl-delimiter">()</span> <span class="hl-delimiter">{</span>
+        counter<span class="hl-punctuation-delimiter">.</span><span class="hl-operator">*</span> <span class="hl-operator">+=</span> <span class="hl-number">1</span><span class="hl-punctuation-delimiter">;</span>
+    <span class="hl-delimiter">}</span>
+<span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<p>These are the ones forbear has now:</p>
+
+<ul>
+  <li><code>on_click</code>: the mouse was pressed and released inside the current element</li>
+  <li><code>on_mouse_down</code> and <code>on_mouse_up</code>: a button was pressed or released inside the current element this frame</li>
+  <li><code>is_mouse_held</code> and <code>is_mouse_inside</code></li>
+  <li><code>on_key_down</code>, which can optionally include key repeats, <code>on_key_up</code> and <code>is_key_held</code></li>
+  <li><code>get_text_input</code>: the text typed this frame</li>
+</ul>
+
+<p>Since these are all plain functions over data forbear already has, nothing stops you from writing your own on top of them, like a double click or a drag.</p>
+
+<p>When you call <code>on_click</code>, the element you're in was only just opened, and its children and the rest of the tree don't exist yet, so forbear can't know its position and size. Instead, hit testing uses the element's position and size from the previous frame. forbear already keeps these around for state, as the element's "measurement", and you can read it yourself through <code>get_measurement</code>.</p>
+
+<p>This means a click is tested against where the element was one frame ago. If the layout changes between two frames, a click right at that moment could land on where the element used to be. This is a common trade-off in immediate mode GUIs, and it's mostly fine: UIs rarely move under the mouse, and one frame is at most about 16ms at 60 Hz.</p>
+
+<p><code>get_text_input</code> is most likely going to change a lot. It doesn't support <a href="https://en.wikipedia.org/wiki/Input_method">input methods</a> yet, which people need to type in languages like Chinese or Japanese, and supporting them is going to require a different API. Text input on macOS also doesn't work very well yet.</p>
+
+<h2>Other things</h2>
+
+<p>We're also now supporting borders and border radii:</p>
+
+<pre><code><span class="hl-function">element</span><span class="hl-delimiter">(</span><span class="hl-type">Style</span><span class="hl-punctuation-delimiter">.</span><span class="hl-delimiter">{</span>
+    width <span class="hl-operator">=</span> <span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+    height <span class="hl-operator">=</span> <span class="hl-function">fixed</span><span class="hl-delimiter">(</span><span class="hl-number">16</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+    border_radius <span class="hl-operator">=</span> <span class="hl-number">4</span><span class="hl-punctuation-delimiter">,</span>
+    border_width <span class="hl-operator">=</span> <span class="hl-function">all</span><span class="hl-delimiter">(</span><span class="hl-number">1</span><span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+    border_color <span class="hl-operator">=</span> <span class="hl-statement">ifx</span> task<span class="hl-punctuation-delimiter">.</span>done <span class="hl-statement">then</span> YELLOW <span class="hl-statement">else</span> MUTED<span class="hl-punctuation-delimiter">,</span>
+    background <span class="hl-operator">=</span> <span class="hl-function">color</span><span class="hl-delimiter">(</span><span class="hl-statement">ifx</span> task<span class="hl-punctuation-delimiter">.</span>done <span class="hl-statement">then</span> YELLOW <span class="hl-statement">else</span> PANEL<span class="hl-delimiter">)</span><span class="hl-punctuation-delimiter">,</span>
+<span class="hl-delimiter">})</span><span class="hl-punctuation-delimiter">;</span></code></pre>
+
+<p>Clipboard text reading and writing is also now supported:</p>
+
+<pre><code><span class="hl-statement">if</span> <span class="hl-function">is_key_held</span><span class="hl-delimiter">(</span><span class="hl-punctuation-delimiter">.</span>CONTROL_LEFT<span class="hl-delimiter">)</span> <span class="hl-operator">&amp;&amp;</span> <span class="hl-function">on_key_down</span><span class="hl-delimiter">(</span><span class="hl-punctuation-delimiter">.</span>C<span class="hl-delimiter">)</span> <span class="hl-delimiter">{</span>
+    <span class="hl-function">copy_to_clipboard</span><span class="hl-delimiter">(</span><span class="hl-function">tprint</span><span class="hl-delimiter">(</span><span class="hl-string">&quot;%&quot;</span><span class="hl-punctuation-delimiter">,</span> result<span class="hl-punctuation-delimiter">.</span><span class="hl-operator">*</span><span class="hl-delimiter">))</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span>
+<span class="hl-statement">if</span> <span class="hl-function">is_key_held</span><span class="hl-delimiter">(</span><span class="hl-punctuation-delimiter">.</span>CONTROL_LEFT<span class="hl-delimiter">)</span> <span class="hl-operator">&amp;&amp;</span> <span class="hl-function">on_key_down</span><span class="hl-delimiter">(</span><span class="hl-punctuation-delimiter">.</span>V<span class="hl-delimiter">)</span> <span class="hl-delimiter">{</span>
+    pasted <span class="hl-punctuation-delimiter">:</span><span class="hl-operator">=</span> <span class="hl-function">get_clipboard_text</span><span class="hl-delimiter">()</span><span class="hl-punctuation-delimiter">;</span>
+<span class="hl-delimiter">}</span></code></pre>
+
+<p>There were also some touches to how glyp positioning so they are more readable now.</p>
+
+<img src="../assets/2026-11-01-glyph-snapping.png" alt="The same text at fractional pixel offsets, zoomed in 3x: in Chrome, in forbear before, blurry, and in forbear now, sharp" class="block my-6 rounded-lg">
+
+<p>The main difference is now that we don't have <a href="https://en.wikipedia.org/wiki/Subpixel_rendering">subpixel LCD rendering</a> which means the horizontal resolution is slightly lower.</p>
+
+<p>We also now have a quick start so anyone with access to the Jai programming language can try it!</p>
+<p>On Linux:</p>
+<pre><code>curl <span class="hl-special">-fsSL</span> https://forbear.dev/quick-start.sh</code></pre>
+<p>On Windows:</p>
+<pre><code>irm https://forbear.dev/quick-start.ps1 | iex</code></pre>
+
+<p>Next up I'm going to be working on the C adapter and C bindings so that anyone outside of the Jai beta can have access to the library. If time also allows, I'll be sharing more about the first program built with forbear, otherwise that's going to be for the other week.</p>
+
+<form class="subscribe flex items-center gap-2 my-4 text-sm text-muted">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="text-muted hover:text-yellow cursor-pointer">email me new entries</button>
+</form>
+<div class="mt-2 text-sm text-muted"></div>
+<script src="/assets/subscribe.js"></script>
+
+<p><a href="https://github.com/gabrielmfern/forbear">https://github.com/gabrielmfern/forbear</a></p>
+
+<nav class="flex justify-between gap-4 mt-16 pt-6 border-t border-ui">
+<a href="/log/003-ui-from-javascript.html"><span class="block text-muted text-sm">previous</span>&larr; 003: Rendering JSX without a browser by embedding Node.js in a native program</a>
+<span></span>
+</nav>
+</main>
+
+</body>
+</html>

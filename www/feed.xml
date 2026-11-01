@@ -5,8 +5,17 @@
   <link href="https://www.forbear.dev/"/>
   <link rel="self" href="https://www.forbear.dev/feed.xml"/>
   <id>https://www.forbear.dev/</id>
-  <updated>2026-10-11T00:00:00Z</updated>
+  <updated>2026-11-01T00:00:00Z</updated>
   <author><name>Gabriel Miranda</name></author>
+
+  <entry>
+    <title>React-like state (mostly) without the heap, events without callbacks</title>
+    <link href="https://www.forbear.dev/log/004-react-like-state-without-the-heap.html"/>
+    <id>https://www.forbear.dev/log/004-react-like-state-without-the-heap.html</id>
+    <published>2026-11-01T00:00:00Z</published>
+    <updated>2026-11-01T00:00:00Z</updated>
+    <summary>forbear now has state and components that feel like React, keyboard and mouse events, and runs on Windows.</summary>
+  </entry>
 
   <entry>
     <title>Rendering JSX without a browser by embedding Node.js in a native program</title>
