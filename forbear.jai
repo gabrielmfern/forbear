@@ -1505,7 +1505,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             down := ifx key == .CAPS_LOCK
                                 then (NSEvent.modifierFlags(event) & .NSEventModifierFlagCapsLock) != 0
                                 else is_key_held(key);
-                               
+
                             if down && held[code] == 0 {
                                 add_key_event(*events, Key_Event.{.PRESSED, key});
                                 held[code] = key;
@@ -2530,12 +2530,12 @@ node_pool :: () -> Allocator {
     if pool_slot == -1 {
         log_error(#string END
 There are no more pool slots available (256). This means one of three things:
-1) you have a bug in your using more pool than you need;
+1) you have a bug in your code using more pools than you need;
 2) you're abusing pools, and you should not;
 3) we should increase our pool count to more than 256.
 
-Please get in touch with us to judge which one it is.
-        END);
+If you think it is 3), get in touch with us to know if we should.
+END);
         exit(-1);
     }
     node.pool_slot = pool_slot;
@@ -3158,10 +3158,10 @@ element :: (
     return opening.node_index;
 }
 element :: (body: Code, location := #caller_location) -> s64 #expand {
-    return element(body = body, location = location);
+    return element(Style.{}, "", body, location);
 }
 element :: (style: Style, body: Code, location := #caller_location) -> s64 #expand {
-    return element(style = style, manual_key = "", body = body, location = location);
+    return element(style, "", body, location);
 }
 scope :: (manual_key := "", $body := #code {}, location := #caller_location) -> body.type #expand {
     key: u64;
@@ -3438,8 +3438,11 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
     return glyphs;
 }
 free_font :: (font: *Font) {
+    // TODO: should we delete this function?
     FT_Done_Face(font.raster_face);
 }
+// TODO: Support receiving any number of arguments that are passed down to sprint to then be rendered into text.
+// TODO: Support building multiple text runs for the same node's glyphs. This is quite important for text-heavy applications might have, say, emphasis on text.
 text :: (style := Style.{}, content := "", manual_key := "", location := #caller_location) -> s64 #expand {
     return element(style, manual_key, #code {
         node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
