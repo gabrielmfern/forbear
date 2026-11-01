@@ -3335,7 +3335,8 @@ get_font_units_to_pixel :: (font: *Font, rounded_font_size: u16) -> float {
     return (cast(float) rounded_font_size) / (cast(float) font.raster_face.units_per_EM);
 }
 font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
-    FT_Load_Glyph(font.raster_face, xx glyph_index, FT_LOAD_RENDER);
+    FT_LOAD_TARGET_LIGHT :: 1 << 16;
+    FT_Load_Glyph(font.raster_face, xx glyph_index, FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT);
     glyph := font.raster_face.glyph;
     // FT_LOAD_RENDER already renders the glyph
     // FT_Render_Glyph(glyph, FT_Render_Mode.NORMAL);
