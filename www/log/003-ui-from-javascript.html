@@ -80,6 +80,12 @@ pre .hl-preproc { color: #ffffff; }
   the time the work takes.
 </p>
 
+<form class="subscribe flex items-center gap-2 mt-8 text-sm">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
+</form>
+<div class="mt-2 mb-8 text-sm text-muted"></div>
+
 <p>
   To properly support JavaScript, I've decided to run it through Node.js. This doesn't mean I spawn a separate subprocess
   and then have to communicate through a socket or IPC or whatever. It's in the same process, by <a href="https://nodejs.org/api/embedding.html">embedding Node.js</a>
@@ -608,9 +614,9 @@ actually use. It no longer crashes when screenshotting, it respects the monitor'
 
 <p>Before I can do this, I'm planning on working on event handling first, then state management and components.</p>
 
-<form class="subscribe flex items-center gap-2 my-4 text-sm text-muted">
+<form class="subscribe flex items-center gap-2 my-4 text-sm">
 <input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
-<button class="text-muted hover:text-yellow cursor-pointer">email me new entries</button>
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
 </form>
 <div class="mt-2 text-sm text-muted"></div>
 <script src="/assets/subscribe.js"></script>

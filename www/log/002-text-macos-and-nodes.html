@@ -71,6 +71,12 @@ pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
 <img src="../assets/2026-10-03-linux-window.png" alt="The forbear playground on Linux under Hyprland: the same magenta rectangle with &quot;hello lisa&quot; in its top left corner" class="h-[30rem] w-auto max-w-none rounded-lg">
 </div>
 
+<form class="subscribe flex items-center gap-2 mt-8 text-sm">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
+</form>
+<div class="mt-2 mb-8 text-sm text-muted"></div>
+
 <h2>nodes</h2>
 
 <p>This is the whole playground app right now:</p>
@@ -209,9 +215,9 @@ NSWindow<span class="hl-punctuation-delimiter">.</span>makeKeyAndOrderFront<span
 
 <p>Now, I plan to start working on the beginnings of what will be forbear rendering from JSX.</p>
 
-<form class="subscribe flex items-center gap-2 my-4 text-sm text-muted">
+<form class="subscribe flex items-center gap-2 my-4 text-sm">
 <input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
-<button class="text-muted hover:text-yellow cursor-pointer">email me new entries</button>
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
 </form>
 <div class="mt-2 text-sm text-muted"></div>
 <script src="/assets/subscribe.js"></script>

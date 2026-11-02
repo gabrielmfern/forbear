@@ -81,6 +81,12 @@ pre .hl-preproc { color: #ffffff; }
 
 <p><a href="../assets/2026-10-31-forbear-components-demo.zip" download>Download the demo from above</a> to try it yourself.</p>
 
+<form class="subscribe flex items-center gap-2 mt-8 text-sm">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
+</form>
+<div class="mt-2 mb-8 text-sm text-muted"></div>
+
 <h2>Components and hooks</h2>
 
 <p>Here's a Counter component with forbear:</p>
@@ -260,9 +266,9 @@ pre .hl-preproc { color: #ffffff; }
 
 <p>Next up I'm going to be working on the C adapter and C bindings so that anyone outside of the Jai beta can have access to the library. If time also allows, I'll be sharing more about the first program built with forbear, otherwise that's going to be for the other week.</p>
 
-<form class="subscribe flex items-center gap-2 my-4 text-sm text-muted">
+<form class="subscribe flex items-center gap-2 my-4 text-sm">
 <input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
-<button class="text-muted hover:text-yellow cursor-pointer">email me new entries</button>
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
 </form>
 <div class="mt-2 text-sm text-muted"></div>
 <script src="/assets/subscribe.js"></script>

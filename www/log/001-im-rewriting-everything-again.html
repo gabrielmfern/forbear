@@ -72,6 +72,12 @@ pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
 
 <p>I believe all software has become putrid, slow and unnecessarily wasteful with resources. This has been the only economically viable option because it's so insanely hard to build a desktop app, especially for web developers, who I perceive to be most of the programmers today. forbear is meant to change that.</p>
 
+<form class="subscribe flex items-center gap-2 mt-8 text-sm">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
+</form>
+<div class="mt-2 mb-8 text-sm text-muted"></div>
+
 <h2>looking back</h2>
 
 <p>I had the idea to write a Bible program. I wanted to read on my computer without ads and such, so I tried Tauri, since I thought Electron would be slow. It turned out to be very slow on Linux too, because the webviews there aren't very good. That's when the idea for forbear started:</p>
@@ -231,9 +237,9 @@ pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
 
 <p>I'll keep writing about it in new log entries as I go.</p>
 
-<form class="subscribe flex items-center gap-2 my-4 text-sm text-muted">
+<form class="subscribe flex items-center gap-2 my-4 text-sm">
 <input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
-<button class="text-muted hover:text-yellow cursor-pointer">email me new entries</button>
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
 </form>
 <div class="mt-2 text-sm text-muted"></div>
 <script src="/assets/subscribe.js"></script>
