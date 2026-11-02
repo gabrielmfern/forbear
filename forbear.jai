@@ -2598,8 +2598,6 @@ get_node :: () -> *Node {
     }
 }
 Mouse_State :: struct {
-
-#
     #if OS == .LINUX {
         serial: u32;
     }
@@ -2773,15 +2771,6 @@ Mouse_Button :: enum {
     }
 };
 get_viewport_size :: () -> Vector2 {
-    is_mouse_inside :: () -> bool {
-        using context.forbear;
-        measurement, defined := get_measurement();
-        return defined && window.mouse_state.inside &&
-        window.mouse_state.position.x >= measurement.position.x &&
-        window.mouse_state.position.y >= measurement.position.y &&
-        window.mouse_state.position.x <= measurement.position.x + measurement.size.x &&
-        window.mouse_state.position.y <= measurement.position.y + measurement.size.y;
-    }
     using context.forbear;
     return Vector2.{cast(float)window.width, cast(float)window.height} / (cast(float)window.scale);
 }
