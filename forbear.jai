@@ -302,7 +302,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 #scope_export
 
 #if JAVASCRIPT_ADAPTER == true {
-    #load "./adapters/javascript.jai";
+    #load "./adapters/javascript/javascript.jai";
 }
 
 #if OS == .LINUX {
@@ -2018,6 +2018,7 @@ Sides :: struct {
     x: Vector2;
     y: Vector2;
 };
+#scope_module
 get :: (sides: Sides, direction: Direction) -> Vector2 {
     if direction == .HORIZONTAL {
         return sides.x;
@@ -2025,6 +2026,7 @@ get :: (sides: Sides, direction: Direction) -> Vector2 {
         return sides.y;
     }
 }
+#scope_export
 all :: (value: float) -> Sides {
     return Sides.{
         x = make_vector2(value),
@@ -2595,16 +2597,9 @@ get_node :: () -> *Node {
         return null;
     }
 }
-is_mouse_inside :: () -> bool {
-    using context.forbear;
-    measurement, defined := get_measurement();
-    return defined && window.mouse_state.inside &&
-        window.mouse_state.position.x >= measurement.position.x &&
-        window.mouse_state.position.y >= measurement.position.y &&
-        window.mouse_state.position.x <= measurement.position.x + measurement.size.x &&
-        window.mouse_state.position.y <= measurement.position.y + measurement.size.y;
-}
 Mouse_State :: struct {
+
+#
     #if OS == .LINUX {
         serial: u32;
     }
@@ -2616,6 +2611,7 @@ Mouse_State :: struct {
     released: [MOUSE_BUTTON_COUNT]bool;
     held: [MOUSE_BUTTON_COUNT]bool;
 };
+#scope_module
 mouse_press :: (using state: *Mouse_State, button: Mouse_Button, new_position: Vector2) {
     position = new_position;
     press_position[button] = new_position;
@@ -2626,6 +2622,7 @@ mouse_release :: (using state: *Mouse_State, button: Mouse_Button) {
     released[button] = true;
     held[button] = false;
 }
+#scope_export
 Keyboard_State :: struct {
     #if OS == .LINUX {
         serial: u32;
@@ -2651,6 +2648,7 @@ Keyboard_State :: struct {
     events: []Key_Event;
     held: [776]Key;
 };
+#scope_module
 init_keyboard_state :: (using state: *Keyboard_State) {
     events.data = events_buffer.data;
     events.count = 0;
@@ -2688,6 +2686,7 @@ update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_Stat
         }
     }
 }
+#scope_export
 Key_Event :: struct {
     Kind :: enum {
         REPEATED; RELEASED; PRESSED;
@@ -2774,12 +2773,39 @@ Mouse_Button :: enum {
     }
 };
 get_viewport_size :: () -> Vector2 {
+    is_mouse_inside :: () -> bool {
+        using context.forbear;
+        measurement, defined := get_measurement();
+        return defined && window.mouse_state.inside &&
+        window.mouse_state.position.x >= measurement.position.x &&
+        window.mouse_state.position.y >= measurement.position.y &&
+        window.mouse_state.position.x <= measurement.position.x + measurement.size.x &&
+        window.mouse_state.position.y <= measurement.position.y + measurement.size.y;
+    }
     using context.forbear;
     return Vector2.{cast(float)window.width, cast(float)window.height} / (cast(float)window.scale);
+}
+is_mouse_inside :: () -> bool {
+    using context.forbear;
+    measurement, defined := get_measurement();
+    return defined && window.mouse_state.inside &&
+    window.mouse_state.position.x >= measurement.position.x &&
+    window.mouse_state.position.y >= measurement.position.y &&
+    window.mouse_state.position.x <= measurement.position.x + measurement.size.x &&
+    window.mouse_state.position.y <= measurement.position.y + measurement.size.y;
 }
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
     return window.mouse_state.held[button] && window.mouse_state.inside;
+}
+// TOOD: scrolling events
+on_mouse_down :: (button := Mouse_Button.LEFT) -> bool {
+    using context.forbear;
+    return window.mouse_state.pressed[button] && is_mouse_inside();
+}
+on_mouse_up :: (button := Mouse_Button.LEFT) -> bool {
+    using context.forbear;
+    return window.mouse_state.released[button] && is_mouse_inside();
 }
 on_click :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
@@ -2943,15 +2969,7 @@ is_key_held :: (key: Key) -> bool {
     }
     return false;
 }
-// TOOD: scrolling events
-on_mouse_down :: (button := Mouse_Button.LEFT) -> bool {
-    using context.forbear;
-    return window.mouse_state.pressed[button] && is_mouse_inside();
-}
-on_mouse_up :: (button := Mouse_Button.LEFT) -> bool {
-    using context.forbear;
-    return window.mouse_state.released[button] && is_mouse_inside();
-}
+#scope_module
 get_justification :: (node: *Node, direction: Direction) -> Alignment #expand {
     if direction == Direction.HORIZONTAL {
         return node.style.x_justification;
@@ -3013,6 +3031,7 @@ fitting_base :: (node: Node, direction: Direction) -> float {
     border := border_axis.x + border_axis.y;
     return padding + border;
 }
+#scope_export
 
 Node_Tree :: [..]Node;
 append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointer: *Node, index: s64 {
@@ -3045,7 +3064,7 @@ Element_Opening_Data :: struct {
     node_index: s64;
 };
 // intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
-open_element :: (style: Style, key: u64) -> previous_stack_state: Element_Opening_Data {
+open_element :: (style: Style, key: u64) -> Element_Opening_Data {
     element_ancestor_index := context.forbear.parent_index;
     previous_parent_index := context.forbear.parent_index;
     while element_ancestor_index != -1 && context.forbear.node_tree[element_ancestor_index].kind == .SCOPE {
@@ -4440,7 +4459,6 @@ layout :: () {
         }
     }
 }
-
 Draw_Instance :: struct {
     Draw_Instance_Kind :: enum u32 {
         NODE :: 1;
@@ -4617,7 +4635,6 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         }
     }
 }
-
 begin_frame :: () {
     using context.forbear;
 
@@ -4672,7 +4689,6 @@ begin_frame :: () {
 
     frame += 1;
 }
-
 end_frame :: () {
     using context.forbear;
     window.keyboard_state.events.count = 0;
@@ -4680,8 +4696,6 @@ end_frame :: () {
     memset(*window.mouse_state.released, 0, size_of(type_of(window.mouse_state.released)));
     memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
 }
-
-#scope_export
 
 // This introduces a compiler plugin so that users can do +forbear in their compiliation command,
 // and automatically get scope(#code Function(...)) for all of their components or hooks. The proper

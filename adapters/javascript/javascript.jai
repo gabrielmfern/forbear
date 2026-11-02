@@ -9,7 +9,7 @@
     if !dest_dir.count {
         dest_dir = ".";
     }
-    node_root := tprint("%/../vendor/node", #filepath);
+    node_root := tprint("%/../../vendor/node", #filepath);
     #if OS == .LINUX {
         src  := tprint("%/out/Release/lib/libnode.so.137", node_root);
         dest := tprint("%/libnode.so.137", dest_dir);
@@ -41,10 +41,10 @@
 libm :: #library,system,link_always "libm";
 #if OS == .MACOS {
     libcpp :: #library,system,link_always "libc++";
-    libnode :: #library,link_always "../vendor/node/out/Release/libnode.137";
+    libnode :: #library,link_always "../../vendor/node/out/Release/libnode.137";
 } else #if OS == .LINUX {
     libstdcpp :: #library,system,link_always "libstdc++";
-    libnode :: #library,link_always "../vendor/node/out/Release/lib/libnode";
+    libnode :: #library,link_always "../../vendor/node/out/Release/lib/libnode";
 }
 javascript_shim :: #library,no_dll "./javascript";
 
@@ -384,9 +384,8 @@ forbear_close :: (adapter: *Javascript_Adapter) #c_call {
 #program_export
 forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_data: *u8, content_count: s64, manual_key_data: *u8, manual_key_count: s64) #c_call {
     push_context adapter.frame_context {
-        content: string;
-        content.data = content_data;
-        content.count = content_count;
+        // TODO: can't this just be a text wrapper?
+        content := to_string(content_data, content_count);
         key: u64;
         key = fnv1a_hash(manual_key_data, manual_key_count);
         if context.forbear.scope_key != U64_MAX {
