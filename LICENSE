@@ -1,50 +1,63 @@
-forbear License v0.3
+forbear License v0.4
 
 Copyright (c) 2025-2026 Gabriel Miranda
 
 You may use, copy, and modify forbear (the "Software") and build it
 into your own software, for free, under these rules:
 
-1. Keep this license and the copyright notice with any copy of the
+1. Keep this license and the copyright notice with every copy of the
    Software.
 
-2. Do not distribute the Software, or a modified version of it, as a
-   standalone library, framework, or SDK. Forking it for yourself,
-   contributing back, and shipping it inside your own app are fine.
+2. Do not distribute the Software, or a modified version of it, on
+   its own as a library, framework, or SDK. You may fork it for
+   yourself, contribute back, and ship it inside your own Product.
 
-   Building on top of the Software is fully allowed: you may create
-   and distribute your own libraries, components, bindings, or
-   frameworks that use the Software, free or paid, as long as the
-   Software itself stays under this license.
+   You may build and distribute your own libraries, components,
+   bindings, or frameworks on top of the Software, free or paid, as
+   long as the Software inside them stays under this license.
 
-3. Do not feed the Software, its code, or its tests into an AI or
-   other code-generation tool to produce a similar framework.
+3. Do not give the Software, its code, or its tests to an AI or other
+   code-generation tool to produce a framework that competes with it.
 
-4. Royalty. If you sell or offer a product to others that is built
-   with the Software, you pay 1% of that product's revenue above
-   USD $100,000 per calendar year, counted from January 1. Royalties
-   for a single product never exceed USD $600,000 per year.
+4. Royalty. If you earn Revenue from a Product, you pay 1% of its
+   Revenue above USD $100,000 in each calendar year. Royalties for
+   one Product never exceed USD $600,000 per year.
 
-   - If your product also has versions not built with the Software
-     (such as a web app), only count revenue from customers who used
-     the version built with the Software.
-   - Once a product first passes USD $100,000 in a year, email
-     gabriel.readme@hey.com within 30 days to let us know.
-   - Report revenue and pay each quarter, within 45 days of the
-     quarter's end. We may ask for reasonable proof of revenue.
+   A "Product" is software, or a hardware device, that you distribute
+   with the Software inside it. All editions, platforms, and versions
+   of the same software are one Product. If you and companies you
+   control, or that control you, sell the same Product, add up the
+   Revenue of all of them.
+
+   "Revenue" is what customers pay for the Product, after sales tax,
+   VAT, refunds, chargebacks, and fees kept by app stores or payment
+   processors. It includes sales, subscriptions, in-app purchases,
+   and ad income from the Product. For a hardware device, Revenue is
+   the price of the device.
+
+   If customers can get the Product both with and without the
+   Software (for example, a desktop app built with it and a web app
+   that is not), count Revenue in proportion to the share of active
+   customers using a version built with the Software. If you cannot
+   tell, count all of it.
+
+   - Once a Product passes USD $100,000 in a year, email
+     gabriel.readme@hey.com within 30 days.
+   - Report Revenue and pay each quarter, within 45 days of the
+     quarter's end. We may ask for reasonable proof of Revenue.
 
    No royalty is owed for:
    - software used only inside your own organization;
    - open-source products under an OSI-approved license;
-   - personal or non-commercial use by individuals; or
+   - personal projects by individuals that earn no money; or
    - non-profits using it for their mission.
 
    Future versions of this license may change these numbers, but
    only for versions of the Software released under the new terms.
 
-5. While your royalties are paid up, we will ship bug fixes in
-   regular releases and security patches for your major version for
-   18 months after its release.
+5. While your royalties are paid up, we ship bug fixes in regular
+   releases, and security patches for your major version for 18
+   months after its release.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
