@@ -2342,45 +2342,45 @@ Style :: struct {
     direction: Direction = UNSET;
 };
 
-overwrite :: (style: Style, other: Style) -> Style {
-    result := style;
+overwrite :: (overwriter: Style, overwritten: Style) -> Style {
+    result := overwriter;
 
-    if result.background.kind == xx UNSET  result.background = other.background;
+    if result.background.kind == xx UNSET  result.background = overwritten.background;
 
-    if isnan(result.color.x)  result.color = other.color;
-    if isnan(result.border_radius)  result.border_radius = other.border_radius;
-    if isnan(result.border_color.x)  result.border_color = other.border_color;
-    if isnan(result.border_width.x.x)  result.border_width = other.border_width;
-    if result.border_style == xx UNSET  result.border_style = other.border_style;
+    if isnan(result.color.x)  result.color = overwritten.color;
+    if isnan(result.border_radius)  result.border_radius = overwritten.border_radius;
+    if isnan(result.border_color.x)  result.border_color = overwritten.border_color;
+    if isnan(result.border_width.x.x)  result.border_width = overwritten.border_width;
+    if result.border_style == xx UNSET  result.border_style = overwritten.border_style;
 
-    if isnan(result.shadow.blur_radius)  result.shadow = other.shadow;
+    if isnan(result.shadow.blur_radius)  result.shadow = overwritten.shadow;
 
-    if result.font == null  result.font = other.font;
-    if result.font_weight == 0  result.font_weight = other.font_weight;
-    if isnan(result.font_size)  result.font_size = other.font_size;
-    if isnan(result.line_height)  result.line_height = other.line_height;
-    if result.text_wrapping == xx UNSET  result.text_wrapping = other.text_wrapping;
-    if result.cursor == xx UNSET  result.cursor = other.cursor;
+    if result.font == null  result.font = overwritten.font;
+    if result.font_weight == 0  result.font_weight = overwritten.font_weight;
+    if isnan(result.font_size)  result.font_size = overwritten.font_size;
+    if isnan(result.line_height)  result.line_height = overwritten.line_height;
+    if result.text_wrapping == xx UNSET  result.text_wrapping = overwritten.text_wrapping;
+    if result.cursor == xx UNSET  result.cursor = overwritten.cursor;
 
-    if result.overflow == xx UNSET  result.overflow = other.overflow;
-    if result.placement.kind == xx UNSET  result.placement = other.placement;
-    if result.z_index == U16_MAX  result.z_index = other.z_index;
+    if result.overflow == xx UNSET  result.overflow = overwritten.overflow;
+    if result.placement.kind == xx UNSET  result.placement = overwritten.placement;
+    if result.z_index == U16_MAX  result.z_index = overwritten.z_index;
 
-    if isnan(result.min_width)  result.min_width = other.min_width;
-    if isnan(result.max_width)  result.max_width = other.max_width;
-    if result.width.kind == xx UNSET  result.width = other.width;
-    if isnan(result.min_height)  result.min_height = other.min_height;
-    if isnan(result.max_height)  result.max_height = other.max_height;
-    if result.height.kind == xx UNSET  result.height = other.height;
+    if isnan(result.min_width)  result.min_width = overwritten.min_width;
+    if isnan(result.max_width)  result.max_width = overwritten.max_width;
+    if result.width.kind == xx UNSET  result.width = overwritten.width;
+    if isnan(result.min_height)  result.min_height = overwritten.min_height;
+    if isnan(result.max_height)  result.max_height = overwritten.max_height;
+    if result.height.kind == xx UNSET  result.height = overwritten.height;
 
-    if isnan(result.translate.x)  result.translate = other.translate;
+    if isnan(result.translate.x)  result.translate = overwritten.translate;
 
-    if isnan(result.padding.x.x)  result.padding = other.padding;
-    if isnan(result.margin.x.x)  result.margin = other.margin;
+    if isnan(result.padding.x.x)  result.padding = overwritten.padding;
+    if isnan(result.margin.x.x)  result.margin = overwritten.margin;
 
-    if result.x_justification == xx UNSET  result.x_justification = other.x_justification;
-    if result.y_justification == xx UNSET  result.y_justification = other.y_justification;
-    if result.direction == xx UNSET  result.direction = other.direction;
+    if result.x_justification == xx UNSET  result.x_justification = overwritten.x_justification;
+    if result.y_justification == xx UNSET  result.y_justification = overwritten.y_justification;
+    if result.direction == xx UNSET  result.direction = overwritten.direction;
 
     return result;
 }
@@ -2479,9 +2479,12 @@ Node_Measurement :: struct {
     pool_slot: s64 = -1;
     key: u64 = U64_MAX;
 }
-get_measurement :: (node_index: s64 = -1) -> measurement: Node_Measurement, defined: bool {
+get_measurement :: (node_index: s64 = -1, include_scopes := false) -> measurement: Node_Measurement, defined: bool {
     using context.forbear;
     measurement_index := ifx node_index == -1 then parent_index else node_index;
+    if !include_scopes && node_index == -1 {
+        measurement_index = get_parent_element_index();
+    }
     if measurement_index != -1 {
         if measurement_index < measurements.count && measurements[measurement_index].key == scope_key {
             return measurements[measurement_index], true;
@@ -2510,7 +2513,7 @@ node_pool :: () -> Allocator {
     node := *node_tree[parent_index];
     pool_slot := node.pool_slot;
     if pool_slot == -1 {
-        measurement, defined := get_measurement();
+        measurement, defined := get_measurement(include_scopes = true);
         if defined {
             pool_slot = measurement.pool_slot;
         }
@@ -2544,7 +2547,7 @@ END);
     pool_slots[node.pool_slot].last_frame = frame;
     return pool_slots[node.pool_slot].allocator;
 }
-state :: ($T: Type, initial: T) -> *T {
+state :: ($T: Type, initial: T) -> *T, first_frame: bool {
     using context.forbear;
 
     assert(parent_index != -1, "state(initial: $T) must be called from inside an element");
@@ -2568,20 +2571,23 @@ state :: ($T: Type, initial: T) -> *T {
     #if #run is_resizable(T) {
         result.allocator = node_pool();
     }
-    measurement, defined := get_measurement();
-    if defined && node.state_size + size <= measurement.state_size {
+    measurement, defined := get_measurement(include_scopes = true);
+    copy_forward := defined && node.state_size + size <= measurement.state_size;
+    if copy_forward {
         memcpy(result, *state_buffers.*[1 - state_current][measurement.state_offset + node.state_size], size_of(T));
     }
     node.state_size += size;
     state_used += size;
-    return result;
+    return result, !copy_forward;
 }
-state :: (initial: $T) -> *T {
-    return state(T, initial);
+state :: (initial: $T) -> *T, first_frame: bool {
+    data, first_frame := state(T, initial);
+    return data, first_frame;
 }
-state :: ($T: Type) -> *T {
+state :: ($T: Type) -> *T, first_frame: bool {
     initial: T;
-    return state(T, initial);
+    data, first_frame := state(T, initial);
+    return data, first_frame;
 }
 // beware that this pointer might be come invalid if you define one more element
 get_node :: (node_index: s64) -> *Node {
@@ -2591,8 +2597,9 @@ get_node :: (node_index: s64) -> *Node {
 // beware that this pointer might be come invalid if you define one more element
 get_node :: () -> *Node {
     using context.forbear;
-    if parent_index != -1 {
-        return *node_tree[parent_index];
+    parent_element_index := get_parent_element_index();
+    if parent_element_index != -1 {
+        return *node_tree[parent_element_index];
     } else {
         return null;
     }
@@ -2774,14 +2781,19 @@ get_viewport_size :: () -> Vector2 {
     using context.forbear;
     return Vector2.{cast(float)window.width, cast(float)window.height} / (cast(float)window.scale);
 }
+get_mouse_position :: () -> Vector2 {
+    using context.forbear;
+    return window.mouse_state.position;
+}
 is_mouse_inside :: () -> bool {
     using context.forbear;
     measurement, defined := get_measurement();
+    position := get_mouse_position();
     return defined && window.mouse_state.inside &&
-    window.mouse_state.position.x >= measurement.position.x &&
-    window.mouse_state.position.y >= measurement.position.y &&
-    window.mouse_state.position.x <= measurement.position.x + measurement.size.x &&
-    window.mouse_state.position.y <= measurement.position.y + measurement.size.y;
+           position.x >= measurement.position.x &&
+           position.y >= measurement.position.y &&
+           position.x <= measurement.position.x + measurement.size.x &&
+           position.y <= measurement.position.y + measurement.size.y;
 }
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
@@ -3052,22 +3064,32 @@ Element_Opening_Data :: struct {
     base_style: Base_Style;
     node_index: s64;
 };
-// intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
-open_element :: (style: Style, key: u64) -> Element_Opening_Data {
+// Since components/hooks/scopes (all the same thing) are actually nodes, this function is used so that element
+// creation, get_node and get_measurement calls are all properly using the closest parent that's an element instead
+// of the direct parent which might be a scope.
+//
+// TODO: This is a terrible trade-off of using a single fat struct for both scopes and elements.
+get_parent_element_index :: () -> s64 {
     element_ancestor_index := context.forbear.parent_index;
     previous_parent_index := context.forbear.parent_index;
     while element_ancestor_index != -1 && context.forbear.node_tree[element_ancestor_index].kind == .SCOPE {
         element_ancestor_index = context.forbear.node_tree[element_ancestor_index].parent;
     }
+    return element_ancestor_index;
+}
+// intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
+open_element :: (style: Style, key: u64) -> Element_Opening_Data {
+    previous_parent_index := context.forbear.parent_index;
+    parent_index := get_parent_element_index();
 
-    node, index := append_to_node_tree(*context.forbear.node_tree, element_ancestor_index);
+    node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
     previous_base_style := context.forbear.base_style;
     complete_with(style, context.forbear.base_style, *node.style);
     context.forbear.base_style = from(node.style);
     if style.z_index < U16_MAX {
         node.z = style.z_index;
-    } else if element_ancestor_index != -1 {
-        node.z = context.forbear.node_tree[element_ancestor_index].z;
+    } else if parent_index != -1 {
+        node.z = context.forbear.node_tree[parent_index].z;
     }
     node.key = key;
     if node.style.width.kind == {
@@ -3198,7 +3220,7 @@ scope :: (manual_key := "", $body := #code {}, location := #caller_location) -> 
         context.forbear.scope_key = key;
     }
     defer {
-        measurement, defined := get_measurement();
+        measurement, defined := get_measurement(include_scopes = true);
         assert(!defined || context.forbear.node_tree[index].state_size == measurement.state_size, "scope called state() a different number of times than last frame");
 
         context.forbear.parent_index = previous_parent_index;
