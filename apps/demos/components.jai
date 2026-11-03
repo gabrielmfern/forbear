@@ -340,8 +340,7 @@ App :: () {
 
 frame_pool: Flat_Pool;
 render :: (data: *void) {
-    begin_frame();
-    defer end_frame();
+    defer prepare_for_next_frame();
 
     App();
 

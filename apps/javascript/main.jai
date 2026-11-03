@@ -14,8 +14,7 @@ JAVASCRIPT_SOURCE :: #run read_entire_file(tprint("%dist/index.js", #filepath));
 frame_pool: Flat_Pool;
 
 render :: (data: *void) {
-    begin_frame();
-    defer end_frame();
+    defer prepare_for_next_frame();
 
     render_with_adapter(cast(*Javascript_Adapter) data);
     layout();

@@ -2485,19 +2485,20 @@ get_measurement :: (node_index: s64 = -1, include_scopes := false) -> measuremen
     if !include_scopes && node_index == -1 {
         measurement_index = get_parent_element_index();
     }
+    expected_key := node_tree[measurement_index].key;
     if measurement_index != -1 {
-        if measurement_index < measurements.count && measurements[measurement_index].key == scope_key {
+        if measurement_index < measurements.count && measurements[measurement_index].key == expected_key {
             return measurements[measurement_index], true;
         } else {
             //
             // I don't think we should sort these measurements by keys because that would be making the normal case
             // slower in favour of a case that should be rare as I expect things to be.
             //
-            // TODO(depessimization): we should store a contiguous array of the keys of the previous frame's node tree's keys
             // TOOD(depessimization): we should store the previous_index in open_element(), then look up based on that here.
             // There, if the indices don't match, we should iterate to find the index
+            // TODO(optimization): we should store a contiguous array of the keys of the previous frame's node tree's keys
             for measurement_by_index: measurements {
-                if measurement_by_index.key == scope_key {
+                if measurement_by_index.key == expected_key {
                     return measurement_by_index, true;
                 }
             }
@@ -3036,8 +3037,6 @@ fitting_base :: (node: Node, direction: Direction) -> float {
 
 Node_Tree :: [..]Node;
 append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointer: *Node, index: s64 {
-    push_allocator(context.forbear.persistent_allocator);
-
     index := node_tree.count;
     node := Node.{
         parent = parent_index,
@@ -3215,7 +3214,7 @@ scope :: (manual_key := "", $body := #code {}, location := #caller_location) -> 
         };
         node.kind = .SCOPE;
         node.key = key;
-        array_add(*context.forbear.node_tree, node,, allocator = context.forbear.persistent_allocator);
+        array_add(*context.forbear.node_tree, node);
         context.forbear.parent_index = index;
         context.forbear.scope_key = key;
     }
@@ -3559,6 +3558,8 @@ Forbear :: struct {
     glyph_atlas: Glyph_Atlas;
 
     // TODO: we're going to have to change this once we support multiple windows
+    // Perhaps we can have a Window_Manager struct that can keep track of multiple windows,
+    // and give one specific window back.
     window: *Window;
     backend: *Backend;
 };
@@ -3577,6 +3578,8 @@ init_forbear :: (
     forbear.window = program_window;
     forbear.persistent_allocator = context.allocator;
     forbear.glyph_atlas.table.allocator = forbear.persistent_allocator;
+    forbear.node_tree.allocator = forbear.persistent_allocator;
+    forbear.measurements.allocator = forbear.persistent_allocator;
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -4646,40 +4649,28 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         }
     }
 }
-begin_frame :: () {
+prepare_for_next_frame :: () {
     using context.forbear;
+    window.keyboard_state.events.count = 0;
+    window.text.count = 0;
+    memset(*window.mouse_state.released, 0, size_of(type_of(window.mouse_state.released)));
+    memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
 
-    {
-        push_allocator(persistent_allocator);
-        array_resize(*measurements, node_tree.count, false);
-        for node: node_tree {
-            // we can't just copy the entire Node_Tree with a mempcy here because it points into frame allocated data
-            // that was allocated in the frame pool. besides, in what I was able to measure, this copy tends to be more
-            // performant than if we were to copy the entire Node_Tree with memcpy.
-            measurements[it_index] = Node_Measurement.{
-                size = node.size,
-                position = node.position,
-                clipping_rectangle = node.clipping_rectangle,
-                state_offset = node.state_offset,
-                state_size = node.state_size,
-                pool_slot = node.pool_slot,
-                key = node.key,
-            };
-        }
-    }
 
-    for *slot: pool_slots {
-        if slot.used && slot.last_frame != frame {
-            if slot.pool.current_point != slot.pool.memory_base {
-                #if OS == .WINDOWS {
-                    DiscardVirtualMemory(slot.pool.memory_base, cast(u64) ((slot.pool.current_point - slot.pool.memory_base + 4095) & ~4095));
-                } else {
-                    madvise(slot.pool.memory_base, cast(u64) (slot.pool.current_point - slot.pool.memory_base), MADV_DONTNEED);
-                }
-            }
-            reset(*slot.pool);
-            slot.used = false;
-        }
+    array_resize(*measurements, node_tree.count, false);
+    for node: node_tree {
+        // we can't just copy the entire Node_Tree with a mempcy here because it points into frame allocated data
+        // that was allocated in the frame pool. besides, in what I was able to measure, this copy tends to be more
+        // performant than if we were to copy the entire Node_Tree with memcpy.
+        measurements[it_index] = Node_Measurement.{
+            size = node.size,
+            position = node.position,
+            clipping_rectangle = node.clipping_rectangle,
+            state_offset = node.state_offset,
+            state_size = node.state_size,
+            pool_slot = node.pool_slot,
+            key = node.key,
+        };
     }
 
     #if OS == .LINUX {
@@ -4698,14 +4689,21 @@ begin_frame :: () {
     state_used = 0;
     array_reset_keeping_memory(*node_tree);
 
+    for *slot: pool_slots {
+        if slot.used && slot.last_frame != frame {
+            if slot.pool.current_point != slot.pool.memory_base {
+                #if OS == .WINDOWS {
+                    DiscardVirtualMemory(slot.pool.memory_base, cast(u64) ((slot.pool.current_point - slot.pool.memory_base + 4095) & ~4095));
+                } else {
+                    madvise(slot.pool.memory_base, cast(u64) (slot.pool.current_point - slot.pool.memory_base), MADV_DONTNEED);
+                }
+            }
+            reset(*slot.pool);
+            slot.used = false;
+        }
+    }
+
     frame += 1;
-}
-end_frame :: () {
-    using context.forbear;
-    window.keyboard_state.events.count = 0;
-    window.text.count = 0;
-    memset(*window.mouse_state.released, 0, size_of(type_of(window.mouse_state.released)));
-    memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
 }
 
 // This introduces a compiler plugin so that users can do +forbear in their compiliation command,
