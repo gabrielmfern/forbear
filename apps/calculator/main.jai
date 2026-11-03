@@ -12,19 +12,11 @@ Math :: #import "Math";
     #import "Objective_C";
 }
 
-Operator :: enum {
-    NONE; ADD; SUBTRACT; MULTIPLY; DIVIDE;
-};
+Operator :: enum { NONE; ADD; SUBTRACT; MULTIPLY; DIVIDE; };
 Token :: struct {
-    Kind :: enum {
-        NUMBER; OPERATOR;
-    };
-
+    Kind :: enum { NUMBER; OPERATOR; };
     kind: Kind;
-    union {
-        number: float64;
-        op: Operator;
-    }
+    union { number: float64; op: Operator; }
 };
 tokens_equal :: (a: Token, b: Token) -> bool {
     if a.kind != b.kind {
@@ -41,11 +33,7 @@ ADD :: Token.{ kind = .OPERATOR, op = .ADD };
 SUBTRACT :: Token.{ kind = .OPERATOR, op = .SUBTRACT };
 MULTIPLY :: Token.{ kind = .OPERATOR, op = .MULTIPLY };
 DIVIDE :: Token.{ kind = .OPERATOR, op = .DIVIDE };
-Parse_Result :: enum {
-    SUCCESS;
-    TWO_NUMBERS_IN_A_ROW;
-    COULD_NOT_PARSE_FLOAT;
-};
+Parse_Result :: enum { SUCCESS; TWO_NUMBERS_IN_A_ROW; COULD_NOT_PARSE_FLOAT; };
 parse_expression :: (expression: string, tokens: *[..]Token) -> Parse_Result {
     array_reset_keeping_memory(tokens);
     in_progress: string = ---;
@@ -121,8 +109,8 @@ U64_MAX :: Math.U64_MAX;
 // ===== program styles =====
 //
 #add_context inter: Font;
-WIDTH :: 360;
-HEIGHT :: 120;
+WIDTH :: 300;
+HEIGHT :: 500;
 DIGITS_SIZE :: 32;
 BG :: #run hex("#111316");
 SUCCESS :: #run hex("#6FDD6F40");
@@ -372,10 +360,7 @@ App :: () {
                 parse_result.* = parse_expression(to_string(input_state.contents.data, input_state.contents.count), tokens);
 
                 if parse_result.* == .SUCCESS {
-                    Pass :: enum {
-                        DIVIDE_MULTIPLY;
-                        ADD_SUBTRACT;
-                    };
+                    Pass :: enum { DIVIDE_MULTIPLY; ADD_SUBTRACT; };
                     index := 0;
                     pass: Pass = .DIVIDE_MULTIPLY;
                     while index < tokens.count {
