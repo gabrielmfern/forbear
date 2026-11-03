@@ -255,28 +255,29 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
         //
         // === mouse event handling ===
         //
-        if on_mouse_down(.LEFT) || on_mouse_down(.RIGHT) {
-            mouse := get_mouse_position();
-
-            text_node := get_node(text_node_index);
+        text_node := get_node(text_node_index);
+        text_measurement, defined := get_measurement(text_node_index);
+        if defined && (on_mouse_down(.LEFT) || on_mouse_down(.RIGHT)) {
             text_node_glyphs := text_node.glyphs;
-            // TODO: should we be taking window scale into account for this conversion?
             font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
             line_height := text_node_glyphs.line_height * font_units_to_pixel;
 
-            left_edge := text_node.position + text_node_glyphs.array[0].position * font_units_to_pixel;
-            closest_distance := Math.distance(left_edge, mouse);
+            mouse := get_mouse_position();
+            closest_distance: float;
             for text_node_glyphs.array {
-                left_edge = text_node.position + it.position * font_units_to_pixel;
-                distance := Math.distance(left_edge, mouse);
-                if distance < closest_distance {
+                left_edge := text_measurement.position.x + it.position.x * font_units_to_pixel;
+                // TOOD: to make this work with mulitple lines, we will need to have the glyphs already wrapped here,
+                // but then we will also need to find the closest line, to finally compare the x coordinates
+                distance := Math.abs(left_edge - mouse.x);
+                if it_index == 0 || distance < closest_distance {
                     closest_distance = distance;
                     cursor_index = it_index;
                 }
                 if it_index == text_node_glyphs.array.count - 1 {
-                    right_edge := left_edge + it.advance * font_units_to_pixel;
-
-                    distance := Math.distance(right_edge, mouse);
+                    right_edge := left_edge + it.advance.x * font_units_to_pixel;
+                    // TOOD: to make this work with mulitple lines, we will need to have the glyphs already wrapped here,
+                    // but then we will also need to find the closest line, to finally compare the x coordinates
+                    distance := Math.abs(right_edge - mouse.x);
                     if distance < closest_distance {
                         closest_distance = distance;
                         cursor_index = text_node_glyphs.array.count;
@@ -293,6 +294,7 @@ Input_Caret :: (style: Style, using input_state: *Input_State, text_node_index: 
     input_measurement, defined := get_measurement();
     if defined {
         text_node := get_node(text_node_index);
+        text_measurement := get_measurement(text_node_index);
         input_glyphs := text_node.glyphs;
         // TODO: should we be taking window scale into account for this conversion?
         font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
