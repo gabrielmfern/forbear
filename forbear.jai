@@ -834,6 +834,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         text: string;
         keyboard_state: Keyboard_State;
         mouse_state: Mouse_State;
+        scroll_delta: Vector2;
 
         buffers: [2]Wayland_EGL_Buffer;
         current: s64;
@@ -1073,6 +1074,13 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             mouse_press(*window.mouse_state, xx index, window.mouse_state.position);
                         }
                     }
+                case Wl_Pointer_Event_Axis;
+                    axis := cast(*Wl_Pointer_Event_Axis) event.data;
+                    if axis.axis == .HORIZONTAL_SCROLL {
+                        scroll_delta.x += cast(float) axis.value / 256.0;
+                    } else if axis.axis == .VERTICAL_SCROLL {
+                        scroll_delta.y += cast(float) axis.value / 256.0;
+                    }
                 // TODO: handle all of the remaining pointer events:
                 // - wl_pointer::axis_relative_direction
                 // - wl_pointer::axis_value120
@@ -1080,7 +1088,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                 // - wl_pointer::axis_stop
                 // - wl_pointer::axis_source
                 // - wl_pointer::axis_frame
-                // - wl_pointer::axis
             }
         } else if event.object_id == backend.connection.wl_keyboard_id {
             using window.keyboard_state;
@@ -1469,6 +1476,15 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, MIDDLE, BACK and FORWARD. button: %", button);
                         }
                         backend.app.sendEvent(backend.app, event);
+                    case NSEventTypeScrollWheel;
+                        dy := cast(float) NSEvent.scrollingDeltaY(event);
+                        dx := cast(float) NSEvent.scrollingDeltaX(event);
+                        if !NSEvent.hasPreciseScrollingDeltas(event) {
+                            dy *= 48;
+                        }
+                        window.mouse_state.scroll_delta.y -= dy;
+                        window.mouse_state.scroll_delta.x -= dx;
+                        backend.app.sendEvent(backend.app, event);
                     case NSEventTypeKeyDown;
                         code := NSEvent.keyCode(event);
                         if NSEvent.isARepeat(event) && held[code] != 0 {
@@ -1677,6 +1693,12 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                                 cast(float) cast,trunc(s16) (lparam & 0xFFFF),
                                 cast(float) cast,trunc(s16) ((lparam >> 16) & 0xFFFF),
                             } / cast(float) window.scale;
+                        case WM_MOUSEWHEEL;
+                            wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
+                            window.mouse_state.scroll_delta.y -= (cast(float)wheel) / 120.0 * 48;
+                        case WM_MOUSEHWHEEL;
+                            wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
+                            window.mouse_state.scroll_delta.x -= (cast(float)wheel) / 120.0 * 48;
                         case WM_MOUSELEAVE;
                             window.mouse_state.inside = false;
                         case WM_KILLFOCUS;
@@ -2613,6 +2635,7 @@ Mouse_State :: struct {
     }
     inside: bool;
     position: Vector2;
+    scroll_delta: Vector2;
 
     press_position: [MOUSE_BUTTON_COUNT]Vector2;
     pressed: [MOUSE_BUTTON_COUNT]bool;
@@ -2785,8 +2808,7 @@ get_viewport_size :: () -> Vector2 {
     return Vector2.{cast(float)window.width, cast(float)window.height} / (cast(float)window.scale);
 }
 get_mouse_position :: () -> Vector2 {
-    using context.forbear;
-    return window.mouse_state.position;
+    return context.forbear.window.mouse_state.position;
 }
 is_mouse_inside :: () -> bool {
     using context.forbear;
@@ -2802,14 +2824,14 @@ is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
     return window.mouse_state.held[button] && window.mouse_state.inside;
 }
-// TOOD: scrolling events
+get_scroll_delta :: () -> Vector2 {
+    return context.forbear.window.mouse_state.scroll_delta;
+}
 on_mouse_down :: (button := Mouse_Button.LEFT) -> bool {
-    using context.forbear;
-    return window.mouse_state.pressed[button] && is_mouse_inside();
+    return context.forbear.window.mouse_state.pressed[button] && is_mouse_inside();
 }
 on_mouse_up :: (button := Mouse_Button.LEFT) -> bool {
-    using context.forbear;
-    return window.mouse_state.released[button] && is_mouse_inside();
+    return context.forbear.window.mouse_state.released[button] && is_mouse_inside();
 }
 on_click :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
@@ -2825,11 +2847,10 @@ on_click :: (button := Mouse_Button.LEFT) -> bool {
         return false;
     }
 }
-// TODO: Currently, this only supports text, but we should support other clipboard content types. Each operating system defines the type in the clipboard in a different manner, which make this quite difficult.
+// TODO: Currently, this only supports text, but we should support other clipboard content types.
+// Each operating system defines the type in the clipboard in a different manner, which make this quite difficult.
 get_clipboard_text :: () -> string {
-    using context.forbear;
-
-    return backend.clipboard_text;
+    return context.forbear.backend.clipboard_text;
 }
 copy_to_clipboard :: (text: string) {
     using context.forbear;
@@ -2878,8 +2899,7 @@ copy_to_clipboard :: (text: string) {
     }
 }
 get_text_input :: () -> string {
-    using context.forbear;
-    return window.text;
+    return context.forbear.window.text;
 }
 on_key_down :: (code_point: u32, on_repeat := false) -> bool {
     return on_key_down(cast(Key) code_point, on_repeat);
@@ -4655,6 +4675,7 @@ prepare_for_next_frame :: () {
     using context.forbear;
     window.keyboard_state.events.count = 0;
     window.text.count = 0;
+    window.mouse_state.scroll_delta = Vector2.{0.0, 0.0};
     memset(*window.mouse_state.released, 0, size_of(type_of(window.mouse_state.released)));
     memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
 
