@@ -2625,8 +2625,11 @@ transition :: (value: $T, duration: float, easing: (float) -> float) -> T
     current := start.* + (target.* - start.*) * easing(progress.*);
 
     retarget: bool;
-    #if T == float retarget = abs(value - target.*) > 0.0001;
-    else retarget = Math.length(value - target.*) > 0.0001;
+    #if T == float {
+        retarget = abs(value - target.*) > 0.0001;
+    } else {
+        retarget = Math.length(value - target.*) > 0.0001;
+    }
     if retarget {
         start.* = current;
         target.* = value;
@@ -2644,28 +2647,30 @@ Spring_Config :: struct (T: Type) {
 spring_transition :: (target: $T, config: Spring_Config(T)) -> T
 #modify { return T == float || T == Vector2 || T == Vector3 || T == Vector4, "spring_transition only supports float, Vector2, Vector3 and Vector4"; } {
     value := config.current;
-    if !value value = state(target);
+    if !value {
+        value = state(target);
+    }
     velocity := state(T);
 
     dt := context.forbear.delta_time;
-    if dt == 0.0 return value.*;
+    if dt != 0.0 {
+        N :: size_of(T) / size_of(float);
+        values := cast(*[N]float) value;
+        velocities := cast(*[N]float) velocity;
+        targets := cast(*[N]float) *target;
+        for i: 0..N-1 {
+            displacement := targets.*[i] - values.*[i];
+            if (displacement > 0.0 && velocities.*[i] < 0.0) || (displacement < 0.0 && velocities.*[i] > 0.0) {
+                velocities.*[i] = 0.0;
+            }
+            acceleration := (config.stiffness * displacement - config.damping * velocities.*[i]) / config.mass;
+            velocities.*[i] += acceleration * dt;
+            values.*[i] += velocities.*[i] * dt;
 
-    N :: size_of(T) / size_of(float);
-    values := cast(*[N]float) value;
-    velocities := cast(*[N]float) velocity;
-    targets := cast(*[N]float) *target;
-    for i: 0..N-1 {
-        displacement := targets.*[i] - values.*[i];
-        if (displacement > 0.0 && velocities.*[i] < 0.0) || (displacement < 0.0 && velocities.*[i] > 0.0) {
-            velocities.*[i] = 0.0;
-        }
-        acceleration := (config.stiffness * displacement - config.damping * velocities.*[i]) / config.mass;
-        velocities.*[i] += acceleration * dt;
-        values.*[i] += velocities.*[i] * dt;
-
-        if abs(displacement) <= 0.0001 && abs(velocities.*[i]) <= 0.0001 {
-            values.*[i] = targets.*[i];
-            velocities.*[i] = 0.0;
+            if abs(displacement) <= 0.0001 && abs(velocities.*[i]) <= 0.0001 {
+                values.*[i] = targets.*[i];
+                velocities.*[i] = 0.0;
+            }
         }
     }
     return value.*;
