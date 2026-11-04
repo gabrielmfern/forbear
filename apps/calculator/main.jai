@@ -161,7 +161,7 @@ Input_State :: struct {
     contents: [..]u8;
     cursor_index: s64;
 }
-use_input :: (using input_state: *Input_State, text_node_index: s64, input_character_filter: #type (input: u8) -> bool = null) -> on_change: bool {
+use_input :: (using input_state: *Input_State, text_node_index: s64, input_character_filter: #type (input: u8) -> bool = null) {
     append :: (using input_state: *Input_State, input: string, input_character_filter: #type (input: u8) -> bool) {
         if input_character_filter != null {
             for character: input {
@@ -216,9 +216,6 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
         previous_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
             c := cursor;
             while c > 0 && !is_digit(text.*[c - 1]) {
-                c -= 1;
-            }
-            while c > 0 && is_digit(text.*[c - 1]) {
                 c -= 1;
             }
             return c;
@@ -303,10 +300,7 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
             }
         }
     }
-
-    return removed > 0 || text_input.count > 0;
 } @hook
-
 Input_Caret :: (style: Style, using input_state: *Input_State, text_node_index: s64) {
     input_measurement, defined := get_measurement();
     if defined {
@@ -345,7 +339,6 @@ Input_Caret :: (style: Style, using input_state: *Input_State, text_node_index: 
         }));
     }
 } @component
-
 // TODO: There's a compiler bug with this somehow, we should report this to Jon. Apparently when this function is defined beside the use_input
 // call inline, the compiler throws a warning saying not all control paths are handled, and the function body doesn't seem to run proplery,
 // as in not run at all.
@@ -359,6 +352,28 @@ number_input_filter :: (input: u8) -> bool {
         return false;
     }
 }
+Input :: (input_state: *Input_State, body: Code) #expand {
+    viewport := get_viewport_size();
+    element(Style.{
+        background = color(BG),
+        padding = in_line(bottom(top(10), 30), 5),
+        direction = .VERTICAL,
+        text_wrapping = .NONE,
+        y_justification = .CENTER,
+        font_size = DIGITS_SIZE,
+        width = fixed(viewport.x),
+    }, #code {
+        text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
+        Input_Caret(Style.{}, input_state, text_node_index);
+        use_input(input_state, text_node_index, number_input_filter);
+
+        delta := get_scroll_delta();
+        if delta.x > 0 {
+        }
+
+        #insert body;
+    });
+} @component
 
 reverse_number_sign :: (text: *[..]u8) -> s64 {
     number_start := -1;
@@ -440,19 +455,7 @@ App :: () {
         width = fixed(viewport.x),
         height = fixed(viewport.y),
     }, #code {
-        element(Style.{
-            background = color(BG),
-            padding = in_line(bottom(top(10), 30), 5),
-            direction = .VERTICAL,
-            text_wrapping = .NONE,
-            y_justification = .CENTER,
-            font_size = DIGITS_SIZE,
-            width = fixed(viewport.x),
-        }, #code {
-            text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
-            Input_Caret(Style.{}, input_state, text_node_index);
-            on_change := use_input(input_state, text_node_index, number_input_filter);
-
+        Input(input_state, #code {
             parse_result.* = parse_expression(to_string(input_state.contents.data, input_state.contents.count), tokens);
             if parse_result.* == .SUCCESS {
                 Pass :: enum { DIVIDE_MULTIPLY; ADD_SUBTRACT; };
@@ -549,34 +552,35 @@ App :: () {
                     });
                 });
             }
-
-            if parse_result.* != .SUCCESS && input_state.contents.count > 0 && defined {
-                // is this really useful? should we remove this?
-                element(Style.{
-                    font_size = 12,
-                }, #code {
-                    message := "";
-                    if parse_result.* == {
-                        case .TWO_NUMBERS_IN_A_ROW;
-                            message = "Two numbers in a row can't be calculated";
-                        case .COULD_NOT_PARSE_FLOAT;
-                            message = "Could not parse what should be a number";
-                    }
-
-                    text_node := get_node(text(Style.{
-                        color = ERROR,
-                        margin = in_line(5),
-                        font_size = 12
-                    }, message));
-
-                    error_node := get_node();
-                    error_node.style.placement = relative(Vector2.{
-                        0.0,
-                        input_measurement.size.y - text_node.size.y - 5
-                    });
-                });
-            }
         });
+
+        // TODO: how can we handle this error so that it's not even shown to the user?
+        // if parse_result.* != .SUCCESS && input_state.contents.count > 0 && defined {
+        //     // TODO: is this really useful? should we remove this?
+        //     element(Style.{
+        //         font_size = 12,
+        //     }, #code {
+        //         message := "";
+        //         if parse_result.* == {
+        //             case .TWO_NUMBERS_IN_A_ROW;
+        //                 message = "Two numbers in a row can't be calculated";
+        //             case .COULD_NOT_PARSE_FLOAT;
+        //                 message = "Could not parse what should be a number";
+        //         }
+        //
+        //         text_node := get_node(text(Style.{
+        //             color = ERROR,
+        //             margin = in_line(5),
+        //             font_size = 12
+        //         }, message));
+        //
+        //         error_node := get_node();
+        //         error_node.style.placement = relative(Vector2.{
+        //             0.0,
+        //             input_measurement.size.y - text_node.size.y - 5
+        //         });
+        //     });
+        // }
 
         element(Style.{
             direction = .VERTICAL,
