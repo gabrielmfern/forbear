@@ -301,7 +301,12 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
         }
     }
 } @hook
-Input_Caret :: (style: Style, using input_state: *Input_State, text_node_index: s64) {
+Input_Caret :: (
+    style: Style,
+    using input_state: *Input_State,
+    scrolling_offset: float,
+    text_node_index: s64
+) {
     input_measurement, defined := get_measurement();
     if defined {
         text_node := get_node(text_node_index);
@@ -310,26 +315,27 @@ Input_Caret :: (style: Style, using input_state: *Input_State, text_node_index: 
         // TODO: should we be taking window scale into account for this conversion?
         font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
 
-        cursor_position: Vector2;
+        caret_position: Vector2;
         if contents.count > 0 {
             if cursor_index == contents.count {
-                cursor_position = (input_glyphs.array[contents.count - 1].position + input_glyphs.array[contents.count - 1].advance) * font_units_to_pixel;
+                caret_position = (input_glyphs.array[contents.count - 1].position + input_glyphs.array[contents.count - 1].advance) * font_units_to_pixel;
             } else {
-                cursor_position = input_glyphs.array[cursor_index].position * font_units_to_pixel;
+                caret_position = input_glyphs.array[cursor_index].position * font_units_to_pixel;
             }
         }
         line_height := input_glyphs.line_height * font_units_to_pixel;
         // TODO: support multi-line inputs, because we're currently only comparing against there being no wrapping in the input
         input := get_node();
         inner_height := input_measurement.size.y - input.style.padding.y.x - input.style.padding.y.y;
-        cursor_position.x += input.style.padding.x.x;
-        cursor_position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
+        caret_position.x -= scrolling_offset;
+        caret_position.x += input.style.padding.x.x;
+        caret_position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
 
         // TODO: while typing, the blinking should reset
         blinking := cast(s64)Math.floor(seconds_since_init() * 2) % 2 != 1;
 
         element(overwrite(style, Style.{
-            placement = relative(cursor_position),
+            placement = relative(caret_position),
             background = ifx blinking then
                 color(hex("#FFFFFF"))
             else
@@ -363,13 +369,32 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         font_size = DIGITS_SIZE,
         width = fixed(viewport.x),
     }, #code {
-        text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
-        Input_Caret(Style.{}, input_state, text_node_index);
-        use_input(input_state, text_node_index, number_input_filter);
-
-        delta := get_scroll_delta();
-        if delta.x > 0 {
+        scrolling_offset := state(float);
+        scrolling_effective_offset := state(float);
+        if is_mouse_inside() {
+            scrolling_offset.* += get_scroll_delta().x;
         }
+
+        text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
+        use_input(input_state, text_node_index, number_input_filter);
+        Input_Caret(Style.{}, input_state, scrolling_effective_offset.*, text_node_index);
+
+        input := get_node();
+        input_measurement, defined := get_measurement();
+        if defined {
+            scrolling_offset.* = clamp(
+                scrolling_offset.*,
+                0,
+                max(input_measurement.content_size.x - input_measurement.size.x + input.style.padding.x.x + input.style.padding.x.x, 0.0)
+            );
+        }
+        scrolling_effective_offset.* = spring_transition(scrolling_offset.*, .{
+            stiffness = 320.0,
+            damping = 32.0,
+            mass = 1.0,
+            current = scrolling_effective_offset,
+        });
+        input.children_offset.x = -scrolling_effective_offset.*;
 
         #insert body;
     });
