@@ -1,6 +1,7 @@
 #module_parameters(JAVASCRIPT_ADAPTER := false);
 
 Vector2 :: Math.Vector2;
+Vector3 :: Math.Vector3;
 Vector4 :: Math.Vector4;
 operator + :: Math.operator +;
 operator - :: Math.operator -;
@@ -2614,6 +2615,61 @@ state :: ($T: Type) -> *T, first_frame: bool {
     data, first_frame := state(T, initial);
     return data, first_frame;
 }
+transition :: (value: $T, duration: float, easing: (float) -> float) -> T
+#modify { return T == float || T == Vector2 || T == Vector3 || T == Vector4, "transition only supports float, Vector2, Vector3 and Vector4"; } {
+    start := state(value);
+    target := state(value);
+    progress := state(1.0);
+
+    progress.* = min(1.0, progress.* + context.forbear.delta_time / duration);
+    current := start.* + (target.* - start.*) * easing(progress.*);
+
+    retarget: bool;
+    #if T == float retarget = abs(value - target.*) > 0.0001;
+    else retarget = Math.length(value - target.*) > 0.0001;
+    if retarget {
+        start.* = current;
+        target.* = value;
+        progress.* = 0.0;
+    }
+    return current;
+} @hook
+Spring_Config :: struct (T: Type) {
+    stiffness: float;
+    damping: float;
+    mass: float;
+
+    current: *T;
+}
+spring_transition :: (target: $T, config: Spring_Config(T)) -> T
+#modify { return T == float || T == Vector2 || T == Vector3 || T == Vector4, "spring_transition only supports float, Vector2, Vector3 and Vector4"; } {
+    value := config.current;
+    if !value value = state(target);
+    velocity := state(T);
+
+    dt := context.forbear.delta_time;
+    if dt == 0.0 return value.*;
+
+    N :: size_of(T) / size_of(float);
+    values := cast(*[N]float) value;
+    velocities := cast(*[N]float) velocity;
+    targets := cast(*[N]float) *target;
+    for i: 0..N-1 {
+        displacement := targets.*[i] - values.*[i];
+        if (displacement > 0.0 && velocities.*[i] < 0.0) || (displacement < 0.0 && velocities.*[i] > 0.0) {
+            velocities.*[i] = 0.0;
+        }
+        acceleration := (config.stiffness * displacement - config.damping * velocities.*[i]) / config.mass;
+        velocities.*[i] += acceleration * dt;
+        values.*[i] += velocities.*[i] * dt;
+
+        if abs(displacement) <= 0.0001 && abs(velocities.*[i]) <= 0.0001 {
+            values.*[i] = targets.*[i];
+            velocities.*[i] = 0.0;
+        }
+    }
+    return value.*;
+} @hook
 // beware that this pointer might be come invalid if you define one more element
 get_node :: (node_index: s64) -> *Node {
     using context.forbear;
@@ -2803,6 +2859,12 @@ Mouse_Button :: enum {
         FORWARD;
     }
 };
+get_delta_time :: () -> float {
+    return context.forbear.delta_time;
+}
+get_last_frame_time :: () -> float {
+    return context.forbear.last_frame_time;
+}
 get_viewport_size :: () -> Vector2 {
     using context.forbear;
     return Vector2.{cast(float)window.width, cast(float)window.height} / (cast(float)window.scale);
@@ -3561,6 +3623,8 @@ Forbear :: struct {
     measurements: [..]Node_Measurement;
 
     frame: s64;
+    delta_time: float;
+    last_frame_time: float64;
     persistent_allocator: Allocator;
 
     parent_index: s64 = -1;
@@ -4673,6 +4737,10 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 }
 prepare_for_next_frame :: () {
     using context.forbear;
+    now := seconds_since_init();
+    delta_time = xx min(now - last_frame_time, 1.0 / 30.0);
+    last_frame_time = now;
+
     window.keyboard_state.events.count = 0;
     window.text.count = 0;
     window.mouse_state.scroll_delta = Vector2.{0.0, 0.0};
@@ -4699,7 +4767,6 @@ prepare_for_next_frame :: () {
     #if OS == .LINUX {
         using window.keyboard_state;
         if repeating_key_code != 0 {
-            now := seconds_since_init();
             while now >= next_repeat {
                 add_key_event(*events, Key_Event.{.REPEATED, repeating_key});
                 utf8: [64]u8;

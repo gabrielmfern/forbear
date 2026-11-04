@@ -21,7 +21,6 @@
     - [ ] menu bar for macOS
         - we need to at least have cmd+q working
 - [ ] implement C ABI and C adapter
-- [ ] transition hooks
 - [ ] scrolling builtins
 - [ ] text input builtins
 - [ ] gather all of the current pessimizations in the code
