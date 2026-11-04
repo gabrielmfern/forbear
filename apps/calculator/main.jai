@@ -132,8 +132,8 @@ Column :: (body: Code) #expand {
 Row :: (body: Code) #expand {
     element(Style.{width = grow(), height = fixed(64)}, body);
 } @component
-Button :: (contents: string, is_operator := false) -> pressing: bool {
-    pressing := false;
+Button :: (contents: string, is_operator := false) -> clicked: bool {
+    clicked := false;
     element(Style.{
         border_radius = 6.0,
         background = color(ifx is_operator then OP else BG_TERTIARY),
@@ -148,13 +148,13 @@ Button :: (contents: string, is_operator := false) -> pressing: bool {
         if is_mouse_inside() {
             button.style.background = color(ifx is_operator then OP_HOVER else BG_HOVER);
         }
-        pressing = is_mouse_held() && is_mouse_inside();
-        if pressing {
+        clicked = on_click();
+        if is_mouse_held() && is_mouse_inside() {
             button.style.background = color(ifx is_operator then OP_PRESSED else BG_PRESSED);
         }
         text(contents);
     });
-    return pressing;
+    return clicked;
 } @component
 
 Input_State :: struct {
@@ -360,6 +360,68 @@ number_input_filter :: (input: u8) -> bool {
     }
 }
 
+reverse_number_sign :: (text: *[..]u8) -> s64 {
+    number_start := -1;
+    if text.count > 0 {
+        number_start = text.count - 1;
+        if !is_any(text.*[number_start], " /+-*") {
+            while number_start > 0 && !is_any(text.*[number_start - 1], " /+-*") {
+                number_start -= 1;
+            }
+            if number_start < text.count - 1 && is_digit(text.*[number_start]) {
+                if number_start > 0 && text.*[number_start - 1] == #char "-" {
+                    array_ordered_remove_by_index(text, number_start - 1);
+                    number_start -= 1;
+                } else {
+                    array_insert_at(text, #char "-", number_start);
+                }
+            }
+        }
+    }
+    return number_start;
+}
+test_reverse_number_sign :: () {
+    text: [..]u8;
+    reverse_number_sign(*text);
+    assert(to_string(text.data, text.count) == "");
+
+    array_add(*text, #char "1");
+    array_add(*text, #char "2");
+    array_add(*text, #char "3");
+    reverse_number_sign(*text);
+    assert(to_string(text.data, text.count) == "-123");
+
+    array_reset_keeping_memory(*text);
+    array_add(*text, #char "-");
+    array_add(*text, #char "1");
+    array_add(*text, #char "2");
+    array_add(*text, #char "3");
+    reverse_number_sign(*text);
+    assert(to_string(text.data, text.count) == "123");
+
+    array_reset_keeping_memory(*text);
+    array_add(*text, #char "-");
+    reverse_number_sign(*text);
+    assert(to_string(text.data, text.count) == "-");
+
+    array_reset_keeping_memory(*text);
+    array_add(*text, #char "1");
+    array_add(*text, #char "2");
+    array_add(*text, #char "3");
+    array_add(*text, #char "-");
+    reverse_number_sign(*text);
+    assert(to_string(text.data, text.count) == "123-");
+
+    array_reset_keeping_memory(*text);
+    array_add(*text, #char "1");
+    array_add(*text, #char "2");
+    array_add(*text, #char "3");
+    array_add(*text, #char " ");
+    array_add(*text, #char "-");
+    reverse_number_sign(*text);
+    assert(to_string(text.data, text.count) == "123 -");
+} @test
+
 App :: () {
     window := context.forbear.window;
     viewport := get_viewport_size();
@@ -367,6 +429,10 @@ App :: () {
     tokens := state([..]Token);
     parse_result := state(Parse_Result);
     result := state(float64);
+
+    input_state := state(Input_State);
+    // TODO: find some way that this allocator could be set automatically too
+    input_state.contents.allocator = node_pool();
 
     element(Style.{
         direction = .VERTICAL,
@@ -376,108 +442,101 @@ App :: () {
     }, #code {
         element(Style.{
             background = color(BG),
-            padding = in_line(block(20), 15),
+            padding = in_line(bottom(top(10), 30), 5),
             direction = .VERTICAL,
             text_wrapping = .NONE,
             y_justification = .CENTER,
             font_size = DIGITS_SIZE,
             width = fixed(viewport.x),
         }, #code {
-            input_state := state(Input_State);
-            // TODO: find some way that this allocator could be set automatically too
-            input_state.contents.allocator = node_pool();
-
             text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
             Input_Caret(Style.{}, input_state, text_node_index);
             on_change := use_input(input_state, text_node_index, number_input_filter);
 
-            if on_change {
-                parse_result.* = parse_expression(to_string(input_state.contents.data, input_state.contents.count), tokens);
-
-                if parse_result.* == .SUCCESS {
-                    Pass :: enum { DIVIDE_MULTIPLY; ADD_SUBTRACT; };
-                    index := 0;
-                    pass: Pass = .DIVIDE_MULTIPLY;
-                    while index < tokens.count {
-                        left: float64 = FLOAT64_NAN;
-                        op: Operator = .NONE;
-                        right: float64 = FLOAT64_NAN;
-                        operation_size: s64 = 0;
-                        while isnan(left) || op == .NONE || isnan(right) {
-                            if index >= tokens.count {
-                                break;
-                            }
-                            token := tokens.*[index];
-                            if isnan(left) {
-                                if token.kind == .NUMBER {
-                                    left = token.number;
-                                } else if token.kind == .OPERATOR {
-                                    // operation with implicit left number, assumed to be 0
-                                    left = 0;
-                                    op = token.op;
-                                }
-                            } else if op == .NONE {
-                                assert(token.kind == .OPERATOR);
-                                op = token.op;
-                            } else if isnan(right) {
-                                if token.kind == .NUMBER {
-                                    right = token.number;
-                                    break;
-                                } else if token.kind == .OPERATOR {
-                                    // takes precedence over previous operator. might be confusing?
-                                    op = token.op;
-                                }
-                            }
-                            index += 1;
-                            operation_size += 1;
+            parse_result.* = parse_expression(to_string(input_state.contents.data, input_state.contents.count), tokens);
+            if parse_result.* == .SUCCESS {
+                Pass :: enum { DIVIDE_MULTIPLY; ADD_SUBTRACT; };
+                index := 0;
+                pass: Pass = .DIVIDE_MULTIPLY;
+                while index < tokens.count {
+                    left: float64 = FLOAT64_NAN;
+                    op: Operator = .NONE;
+                    right: float64 = FLOAT64_NAN;
+                    operation_size: s64 = 0;
+                    while isnan(left) || op == .NONE || isnan(right) {
+                        if index >= tokens.count {
+                            break;
                         }
-                        if !isnan(left) && op != .NONE && !isnan(right) {
-                            if pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE) {
-                                if op == .MULTIPLY {
-                                    tokens.*[index] = Token.{kind = .NUMBER, number = left * right};
-                                } else if op == .DIVIDE {
-                                    tokens.*[index] = Token.{kind = .NUMBER, number = left / right};
-                                }
-                            } else if pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT) {
-                                if op == .ADD {
-                                    tokens.*[index] = Token.{kind = .NUMBER, number = left + right};
-                                } else if op == .SUBTRACT {
-                                    tokens.*[index] = Token.{kind = .NUMBER, number = left - right};
-                                }
-                            }
-                            if (pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE))
-                            || (pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT)) {
-                                for j : index-operation_size..tokens.count-operation_size-1{
-                                    tokens.*[j] = tokens.*[j + operation_size];
-                                }
-                                tokens.count -= operation_size;
-                                index -= operation_size;
-                            }
-                        }
-                        if pass == .DIVIDE_MULTIPLY && index >= tokens.count - 1 {
-                            pass = .ADD_SUBTRACT;
-                            index = 0;
-                        }
-                    }
-                    result.* = 0;
-                    if tokens.count > 0 {
-                        number_tokens := 0;
-                        for token: tokens.* {
+                        token := tokens.*[index];
+                        if isnan(left) {
                             if token.kind == .NUMBER {
-                                number_tokens += 1;
-                                result.* = token.number;
+                                left = token.number;
+                            } else if token.kind == .OPERATOR {
+                                // operation with implicit left number, assumed to be 0
+                                left = 0;
+                                op = token.op;
+                            }
+                        } else if op == .NONE {
+                            assert(token.kind == .OPERATOR);
+                            op = token.op;
+                        } else if isnan(right) {
+                            if token.kind == .NUMBER {
+                                right = token.number;
+                                break;
+                            } else if token.kind == .OPERATOR {
+                                // takes precedence over previous operator. might be confusing?
+                                op = token.op;
                             }
                         }
-                        // the operation should have been resolved to a single number
-                        assert(number_tokens == 1 || number_tokens == 0);
+                        index += 1;
+                        operation_size += 1;
                     }
+                    if !isnan(left) && op != .NONE && !isnan(right) {
+                        if pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE) {
+                            if op == .MULTIPLY {
+                                tokens.*[index] = Token.{kind = .NUMBER, number = left * right};
+                            } else if op == .DIVIDE {
+                                tokens.*[index] = Token.{kind = .NUMBER, number = left / right};
+                            }
+                        } else if pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT) {
+                            if op == .ADD {
+                                tokens.*[index] = Token.{kind = .NUMBER, number = left + right};
+                            } else if op == .SUBTRACT {
+                                tokens.*[index] = Token.{kind = .NUMBER, number = left - right};
+                            }
+                        }
+                        if (pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE))
+                        || (pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT)) {
+                            for j : index-operation_size..tokens.count-operation_size-1{
+                                tokens.*[j] = tokens.*[j + operation_size];
+                            }
+                            tokens.count -= operation_size;
+                            index -= operation_size;
+                        }
+                    }
+                    if pass == .DIVIDE_MULTIPLY && index >= tokens.count - 1 {
+                        pass = .ADD_SUBTRACT;
+                        index = 0;
+                    }
+                }
+                result.* = 0;
+                if tokens.count > 0 {
+                    number_tokens := 0;
+                    for token: tokens.* {
+                        if token.kind == .NUMBER {
+                            number_tokens += 1;
+                            result.* = token.number;
+                        }
+                    }
+                    // the operation should have been resolved to a single number
+                    assert(number_tokens == 1 || number_tokens == 0);
                 }
             }
 
             input_measurement, defined := get_measurement();
             if defined {
                 element(Style.{
-                    background = color(BG_TERTIARY),
+                    background = color(BG),
                     padding = all(5.0),
                     font_size = 12,
                 }, #code {
@@ -526,28 +585,75 @@ App :: () {
             height = grow(),
         }, #code {
             Row(#code {
-                Column(#code { Button("7"); });
-                Column(#code { Button("8"); });
-                Column(#code { Button("9"); });
-                Column(#code { Button("÷", is_operator = true); });
+                Column(#code { if Button("7") {
+                    array_add(*input_state.contents, #char "7");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("8") {
+                    array_add(*input_state.contents, #char "8");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("9") {
+                    array_add(*input_state.contents, #char "9");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("÷", is_operator = true) {
+                    array_add(*input_state.contents, #char " ", #char "/", #char " ");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
             });
             Row(#code {
-                Column(#code { Button("4"); });
-                Column(#code { Button("5"); });
-                Column(#code { Button("6"); });
-                Column(#code { Button("×", is_operator = true); });
+                Column(#code { if Button("4") {
+                    array_add(*input_state.contents, #char "4");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("5") {
+                    array_add(*input_state.contents, #char "5");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("6") {
+                    array_add(*input_state.contents, #char "6");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("×", is_operator = true) {
+                    array_add(*input_state.contents, #char " ", #char "*", #char " ");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
             });
             Row(#code {
-                Column(#code { Button("1"); });
-                Column(#code { Button("2"); });
-                Column(#code { Button("3"); });
-                Column(#code { Button("+", is_operator = true); });
+                Column(#code { if Button("1") {
+                    array_add(*input_state.contents, #char "1");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("2") {
+                    array_add(*input_state.contents, #char "2");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("3") {
+                    array_add(*input_state.contents, #char "3");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("+", is_operator = true) {
+                    array_add(*input_state.contents, #char " ", #char "+", #char " ");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
             });
             Row(#code {
-                Column(#code { Button("+/-"); });
-                Column(#code { Button("0"); });
-                Column(#code { Button("."); });
-                Column(#code { Button("-", is_operator = true); });
+                Column(#code { if Button("+/-") {
+                    input_state.cursor_index = reverse_number_sign(*input_state.contents);
+                } });
+                Column(#code { if Button("0") {
+                    array_add(*input_state.contents, #char "0");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button(".") {
+                    array_add(*input_state.contents, #char ".");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("-", is_operator = true) {
+                    array_add(*input_state.contents, #char " ", #char "-", #char " ");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
             });
         });
     });
