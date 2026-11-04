@@ -1696,10 +1696,15 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             } / cast(float) window.scale;
                         case WM_MOUSEWHEEL;
                             wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
-                            window.mouse_state.scroll_delta.y -= (cast(float)wheel) / 120.0 * 48;
+                            MK_SHIFT :: 0x0004;
+                            if wparam & MK_SHIFT {
+                                window.mouse_state.scroll_delta.x -= (cast(float)wheel) / 120.0 * 48;
+                            } else {
+                                window.mouse_state.scroll_delta.y -= (cast(float)wheel) / 120.0 * 48;
+                            }
                         case WM_MOUSEHWHEEL;
                             wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
-                            window.mouse_state.scroll_delta.x -= (cast(float)wheel) / 120.0 * 48;
+                            window.mouse_state.scroll_delta.x += (cast(float)wheel) / 120.0 * 48;
                         case WM_MOUSELEAVE;
                             window.mouse_state.inside = false;
                         case WM_KILLFOCUS;
