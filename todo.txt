@@ -1,5 +1,6 @@
 - [ ] polish calculator
     - [ ] add buttons to use the calculator
+    - [ ] support other cursor types
     - [ ] support parenthesis, square barckets
     - [ ] support exponentiation
     - [ ] support scrolling in the input
@@ -11,7 +12,8 @@
     - [ ] support ctrl+z and ctrl+shift+z
     - [ ] selection in the input: with the mouse and with the keyboard
     - [ ] history of calculations, when reopening show the previous state of everything (history, expression being typed out, result)
-    - [ ] let the user resize it so that we can showcase how smooth it feels
+    - [x] let the user resize it so that we can showcase how smooth it feels
+    - [x] add minimum width and height for the window for all opreating systems
     - [ ] find a way so that numbers typed in never loose precision
     - [ ] have a light and dark theme that is applied based on the system theme
 - [ ] complete windowing code

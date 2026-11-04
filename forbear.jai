@@ -1597,7 +1597,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     WM_CAPTURECHANGED :: 0x0215;
 
     Windows_GL_Backend :: struct {
-        message: (window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> s64;
+        message: (data: *void, window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> result: s64, handled: bool;
+        message_data: *void;
         wndproc_context: *#Context;
 
         render: (data: *void);
@@ -1629,10 +1630,11 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             window := cast(*Windows_GL_Window) GetWindowLongPtrW(hwnd, GWLP_USERDATA);
             if window != null {
                 push_context window.backend.wndproc_context.* {
+                    handled := false;
                     if window.backend.message != null {
-                        window.backend.message(window, hwnd, message, wparam, lparam);
+                        result, handled = window.backend.message(window.backend.message_data, window, hwnd, message, wparam, lparam);
                     }
-                    if message == {
+                    if !handled if message == {
                         case WM_CLOSE;
                             window.running = false;
                         case WM_SYSCOMMAND;

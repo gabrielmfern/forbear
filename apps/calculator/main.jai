@@ -10,6 +10,8 @@ Math :: #import "Math";
 
 #if OS == .MACOS {
     #import "Objective_C";
+} else #if OS == .WINDOWS {
+    #import "Windows";
 }
 
 Operator :: enum { NONE; ADD; SUBTRACT; MULTIPLY; DIVIDE; };
@@ -109,23 +111,50 @@ U64_MAX :: Math.U64_MAX;
 // ===== program styles =====
 //
 #add_context inter: Font;
-WIDTH :: 300;
-HEIGHT :: 500;
-DIGITS_SIZE :: 32;
-BG :: #run hex("#111316");
-SUCCESS :: #run hex("#6FDD6F40");
-ERROR :: #run hex("#E85B5B");
-TRANSPARENT :: #run hex("#01010100");
+MIN_WIDTH    :: 225;
+MIN_HEIGHT   :: 325;
+DIGITS_SIZE  :: 32;
+BG           :: #run hex("#0F0F10");
+BG_SECONDARY :: #run hex("#19191B");
+BG_TERTIARY  :: #run hex("#262628");
+BG_HOVER     :: #run hex("#313134");
+BG_PRESSED   :: #run hex("#1E1E20");
+OP           :: #run hex("#ECECEC");
+OP_TEXT      :: #run hex("#19191B");
+OP_HOVER     :: #run hex("#FFFFFF");
+OP_PRESSED   :: #run hex("#CFCFD2");
+ERROR        :: #run hex("#E85B5B");
+TRANSPARENT  :: #run hex("#01010100");
 
-Button :: (body: Code) -> bool #expand {
+Column :: (body: Code) #expand {
+    element(Style.{width = grow(), height = grow(), x_justification = .CENTER}, body);
+} @component
+Row :: (body: Code) #expand {
+    element(Style.{width = grow(), height = fixed(64)}, body);
+} @component
+Button :: (contents: string, is_operator := false) -> pressing: bool {
+    pressing := false;
     element(Style.{
-        background = color(BG),
-        border_width = 1.0,
-        border_color =
-        border_radius = 4.0,
+        border_radius = 6.0,
+        background = color(ifx is_operator then OP else BG_TERTIARY),
+        color = ifx is_operator then OP_TEXT else VECTOR4_NAN,
+        font_size = 24,
+        x_justification = .CENTER,
+        y_justification = .CENTER,
+        width = fixed(48.0),
+        height = fixed(48.0),
     }, #code {
-        #insert body;
+        button := get_node();
+        if is_mouse_inside() {
+            button.style.background = color(ifx is_operator then OP_HOVER else BG_HOVER);
+        }
+        pressing = is_mouse_held() && is_mouse_inside();
+        if pressing {
+            button.style.background = color(ifx is_operator then OP_PRESSED else BG_PRESSED);
+        }
+        text(contents);
     });
+    return pressing;
 } @component
 
 Input_State :: struct {
@@ -302,6 +331,7 @@ Input_Caret :: (style: Style, using input_state: *Input_State, text_node_index: 
         cursor_position.x += input.style.padding.x.x;
         cursor_position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
 
+        // TODO: while typing, the blinking should reset
         blinking := cast(s64)Math.floor(seconds_since_init() * 2) % 2 != 1;
 
         element(overwrite(style, Style.{
@@ -338,7 +368,12 @@ App :: () {
     parse_result := state(Parse_Result);
     result := state(float64);
 
-    element(Style.{}, #code {
+    element(Style.{
+        direction = .VERTICAL,
+        background = color(BG_SECONDARY),
+        width = fixed(viewport.x),
+        height = fixed(viewport.y),
+    }, #code {
         element(Style.{
             background = color(BG),
             padding = in_line(block(20), 15),
@@ -442,7 +477,7 @@ App :: () {
             input_measurement, defined := get_measurement();
             if defined {
                 element(Style.{
-                    background = color(BG),
+                    background = color(BG_TERTIARY),
                     padding = all(5.0),
                     font_size = 12,
                 }, #code {
@@ -483,6 +518,38 @@ App :: () {
                 });
             }
         });
+
+        element(Style.{
+            direction = .VERTICAL,
+            y_justification = .CENTER,
+            width = grow(),
+            height = grow(),
+        }, #code {
+            Row(#code {
+                Column(#code { Button("7"); });
+                Column(#code { Button("8"); });
+                Column(#code { Button("9"); });
+                Column(#code { Button("÷", is_operator = true); });
+            });
+            Row(#code {
+                Column(#code { Button("4"); });
+                Column(#code { Button("5"); });
+                Column(#code { Button("6"); });
+                Column(#code { Button("×", is_operator = true); });
+            });
+            Row(#code {
+                Column(#code { Button("1"); });
+                Column(#code { Button("2"); });
+                Column(#code { Button("3"); });
+                Column(#code { Button("+", is_operator = true); });
+            });
+            Row(#code {
+                Column(#code { Button("+/-"); });
+                Column(#code { Button("0"); });
+                Column(#code { Button("."); });
+                Column(#code { Button("-", is_operator = true); });
+            });
+        });
     });
 
     if on_key_down(.ESCAPE) {
@@ -502,7 +569,7 @@ render :: (data: *void) {
     App();
 
     layout();
-    draw(BG);
+    draw(BG_SECONDARY);
 
     reset_temporary_storage();
 
@@ -514,14 +581,35 @@ main :: () {
     backend: Backend;
     window: Window;
     init_backend(*backend);
-    init_window(*backend, *window, WIDTH, HEIGHT, "Calculator");
+    init_window(*backend, *window, MIN_WIDTH, MIN_HEIGHT, "Calculator");
+    // TODO: we should add a native function to handle this min size thing
+    // also a max size thing would be nice
     #if OS == .LINUX {
-        send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Max_Size.{ width = WIDTH, height = HEIGHT });
-        send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Min_Size.{ width = WIDTH, height = HEIGHT });
+        send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Min_Size.{ width = MIN_WIDTH, height = MIN_HEIGHT });
     } else #if OS == .MACOS {
         set_size: (*void, Selector, NSSize) #c_call = xx objc_msgSend;
-        set_size(window.ns_window, selector("setContentMinSize:"), .{ width = WIDTH, height = HEIGHT });
-        set_size(window.ns_window, selector("setContentMaxSize:"), .{ width = WIDTH, height = HEIGHT });
+        set_size(window.ns_window, selector("setContentMinSize:"), .{ width = MIN_WIDTH, height = MIN_HEIGHT });
+    } else #if OS == .WINDOWS {
+        backend.message = (data: *void, window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> result: s64, handled: bool {
+            if Msg == {
+                case WM_GETMINMAXINFO;
+                    MINMAXINFO :: struct {
+                        ptReserved: POINT;
+                        ptMaxSize: POINT;
+                        ptMaxPosition: POINT;
+                        ptMinTrackSize: POINT;
+                        ptMaxTrackSize: POINT;
+                    };
+                    dpi := GetDpiForWindow(hWnd);
+                    window.scale = dpi / 96.0;
+                    rectangle := RECT.{ right = xx (MIN_WIDTH * window.scale), bottom = xx (MIN_HEIGHT * window.scale) };
+                    AdjustWindowRectExForDpi(*rectangle, WS_OVERLAPPEDWINDOW, 0, 0, dpi);
+                    min_max_info := cast(*MINMAXINFO) lParam;
+                    min_max_info.ptMinTrackSize = .{ rectangle.right - rectangle.left, rectangle.bottom - rectangle.top };
+                    return 0, true;
+            }
+            return 0, false;
+        }
     }
 
     context.inter = #run create_font(read_entire_file(tprint("%../Inter.ttf", #filepath)));
@@ -529,7 +617,7 @@ main :: () {
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *context.inter,
-        color = hex("#E6E8EB"),
+        color = hex("#ECECEC"),
         font_size = 16,
     });
 
