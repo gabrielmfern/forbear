@@ -2502,6 +2502,7 @@ Node :: struct {
 };
 Node_Measurement :: struct {
     size: Vector2 = VECTOR2_NAN;
+    content_size: Vector2 = VECTOR2_NAN;
     position: Vector2 = VECTOR2_NAN;
     clipping_rectangle: Vector4 = VECTOR4_NAN;
     state_offset: s64;
@@ -4533,11 +4534,17 @@ layout :: () {
                                 add(*pen, direction, margin.x);
                                 child.position = pen + child.style.translate + node.children_offset;
                                 add(*pen, direction, get(child.size, direction) + margin.y);
+                                opposite_margin := get(child.style.margin, opposite_direction);
+                                set(*node.content_size, opposite_direction, max(
+                                    get(node.content_size, opposite_direction),
+                                    opposite_margin.x + get(child.size, opposite_direction) + opposite_margin.y,
+                                ));
                         }
                         child_index = child.next_sibling;
                     }
 
                     content_size := get(pen, direction) - get(base, direction);
+                    set(*node.content_size, direction, content_size);
                     available := get(node.size, direction) - fitting_base(node, direction);
                     justification := get_justification(node, direction);
                     offset: float;
@@ -4757,7 +4764,6 @@ prepare_for_next_frame :: () {
     memset(*window.mouse_state.released, 0, size_of(type_of(window.mouse_state.released)));
     memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
 
-
     array_resize(*measurements, node_tree.count, false);
     for node: node_tree {
         // we can't just copy the entire Node_Tree with a mempcy here because it points into frame allocated data
@@ -4765,6 +4771,7 @@ prepare_for_next_frame :: () {
         // performant than if we were to copy the entire Node_Tree with memcpy.
         measurements[it_index] = Node_Measurement.{
             size = node.size,
+            content_size = node.content_size,
             position = node.position,
             clipping_rectangle = node.clipping_rectangle,
             state_offset = node.state_offset,
