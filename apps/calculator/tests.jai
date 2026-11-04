@@ -8,7 +8,7 @@ build :: () {
     set_build_options(options, w);
 
     compiler_begin_intercept(w, .SKIP_EXPRESSIONS_WITHOUT_NOTES);
-    add_build_file(tprint("%calculator.jai", #filepath), w);
+    add_build_file(tprint("%main.jai", #filepath), w);
 
     tests: [..] string;
     generated := false;
