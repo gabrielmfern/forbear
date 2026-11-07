@@ -1,41 +1,64 @@
-- [ ] polish calculator
-    - [ ] support other mouse cursor types
-    - [ ] support parenthesis, square barckets
-    - [ ] support exponentiation
-    - [ ] support scrolling in the input
-    - [ ] support constants (pi, e, phi)
-    - [ ] add a shake to everything when the expression is invalid
-    - [ ] make Enter put the result as the start of a new expression
-    - [ ] add thousand commas automatically while the user types in or pastes
-    - [ ] support pasting expressions
-    - [ ] support ctrl+z and ctrl+shift+z
-    - [ ] selection in the input: with the mouse and with the keyboard
-    - [ ] history of calculations, when reopening show the previous state of everything (history, expression being typed out, result)
-    - [ ] find a way so that numbers typed in never loose precision
-    - [ ] have a light and dark theme that is applied based on the system theme
-- [ ] complete windowing code
-    - [ ] clipboard handling for wayland
-    - [ ] handle the menu bar protocol in wayland, and render the Gnome menu bar
-    - [ ] use proper event handlers in macOS instead of polling
-    - [ ] handle re-rendering during resizing for macOS
-    - [ ] menu bar for macOS
+- Fix compiler plugin bugs
+    - Element build on a local #expand macro disappear with the plugin enabled only
+    - A @component called inside a #code block gets no scope
+    - A procedure declared inside a component returns garbage
+- implement C ABI and C adapter
+- polish calculator
+    - support other mouse cursor types
+    - support parenthesis, square barckets
+    - support exponentiation
+    - support scrolling in the input
+    - support constants (pi, e, phi)
+    - add a shake to everything when the expression is invalid
+    - make Enter put the result as the start of a new expression
+    - add thousand commas automatically while the user types in or pastes
+    - support pasting expressions
+    - support ctrl+z and ctrl+shift+z
+    - selection in the input: with the mouse and with the keyboard
+    - history of calculations, when reopening show the previous state of everything (history, expression being typed out, result)
+    - find a way so that numbers typed in never loose precision
+    - have a light and dark theme that is applied based on the system theme
+- Primitives that allow to handle focus
+    - The main problem around this is the fact that we can't really "consume" an event, given the UI is immediate and events are consumed as things are rendered, each element must know that some other element is the one that will be consuming the give event. In the Zig version I had a way to handle this, it was 80% of elegant but had some awkwardness.
+- text input builtins
+- scrolling builtins
+- glyphs are sitting on fractional pixels on the texture atlas
+- complete windowing code
+    - clipboard handling for wayland
+    - handle the menu bar protocol in wayland, and render the Gnome menu bar
+    - use proper event handlers in macOS instead of polling
+    - handle re-rendering during resizing for macOS
+    - menu bar for macOS
         - we need to at least have cmd+q working
-- [ ] implement C ABI and C adapter
-- [ ] scrolling builtins
-- [ ] text input builtins
-- [ ] gather all of the current pessimizations in the code
-- [ ] draw background images
+- If the forbear progam is manipulated by another program on Windows, modifiers don't actually quite work (ctrl+v), for example
+    - Raycast's emoji insertion is what I'm thinking of
+- do something when the glyph atlas is full
+- text shaping is not handling multiple fonts
+- Support for font fallbacks when some unicode doesn't have a glyph in the font. This is the case for emojis, where you might want to fallback to Segoe UI Emoji or something like that.
+- Cache the text shaping, and the text wrapping
+- Add the glyph positions to a node's measurements
+- Add a way to make placement an offset from any corner of the parent
+- draw background images
     - I'm removing aspect ratio sizings and instead we should draw images by clipping them into
     the given node, keeping its aspect ratio
-- [ ] text shaping is not handling multiple fonts
-- [ ] do something when the glyph atlas is full
-- [ ] glyphs are sitting on fractional pixels on the texture atlas
-- [ ] subpixel text rendering
-- [ ] async code primitives
-- [ ] make javascript adapter support async code
+- gather all of the current pessimizations in the code
+- brainstorm a headless mode that allows for e2e testing
+- async code primitives
+- make javascript adapter support async code
     - when doing native code, one can simply use a thread for the async work, which doesn't stall frames. javascript
       can't really do this, so how can we let it do async work?
-- [ ] metal rendering instead of opengl for macOS
+-  metal rendering instead of opengl for macOS
     - this is mainly because it looks like the fps is limimted to ~100, while the actual forbear work is 0.5ms which should lead to about 2000 and it all points to OpenGL not working very well which leads to the low FPs
-- [ ] directx rendering instead of opengl for Windows
-- [ ] use dynamically linked freetype on Linux, DirectWrite on Windows and CoreText on macOS
+- directx rendering instead of opengl for Windows
+- use dynamically linked freetype on Linux, DirectWrite on Windows and CoreText on macOS
+- subpixel text rendering
+
+possible other programs using forbear:
+- Merged Twitch and YouTube chat viewer
+- Program that intakes a website with an article, removes all fluff and makes all readable in a consistent way, and then adds in ways for you to add notes, highlight and add summaries while you read.
+- Program that downloads a documentation website and lets you read it in a consistent UI
+- A simple plotting program like Desmos
+- Daily to-do list program based on //TODO: comments and todo files
+- Music playing software for local music, that lets you download and buy music legally
+- Discord alternative with servers and conversations
+- Program to create slides, or library based on forbear to do so where you define the slides as components
