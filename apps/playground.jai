@@ -114,7 +114,7 @@ main :: () {
     init_backend(*backend);
     init_window(*backend, *window, 800, 600, "playground");
 
-    inter := #run create_font(read_entire_file(tprint("%Inter.ttf", #filepath)));
+    inter := #run create_font(read_entire_file(tprint("%../Inter.ttf", #filepath)));
 
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{

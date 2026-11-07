@@ -747,7 +747,7 @@ main :: () {
         }
     }
 
-    context.inter = #run create_font(read_entire_file(tprint("%../Inter.ttf", #filepath)));
+    context.inter = #run create_font(read_entire_file(tprint("%../../Inter.ttf", #filepath)));
 
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
