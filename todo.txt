@@ -30,6 +30,8 @@
     - handle re-rendering during resizing for macOS
     - menu bar for macOS
         - we need to at least have cmd+q working
+    - API to set the min and max sizes of the window
+    - API to set the window to full screen
 - If the forbear progam is manipulated by another program on Windows, modifiers don't actually quite work (ctrl+v), for example
     - Raycast's emoji insertion is what I'm thinking of
 - do something when the glyph atlas is full
