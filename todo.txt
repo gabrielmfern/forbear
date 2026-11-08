@@ -39,10 +39,14 @@
 - Support for font fallbacks when some unicode doesn't have a glyph in the font. This is the case for emojis, where you might want to fallback to Segoe UI Emoji or something like that.
 - Cache the text shaping, and the text wrapping
 - Add the glyph positions to a node's measurements
+- implement the Style fields that are currently no-ops
+    - line_height: text layout uses the font's line height and ignores the style's
+    - draw background gradient
+    - draw background images
+    - shadow
+    - overflow WRAP
+    - border_style DASHED
 - Add a way to make placement an offset from any corner of the parent
-- draw background images
-    - I'm removing aspect ratio sizings and instead we should draw images by clipping them into
-    the given node, keeping its aspect ratio
 - gather all of the current pessimizations in the code
 - brainstorm a headless mode that allows for e2e testing
 - async code primitives
