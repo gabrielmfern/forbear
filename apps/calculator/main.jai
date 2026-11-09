@@ -219,6 +219,9 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
             while c > 0 && !is_digit(text.*[c - 1]) {
                 c -= 1;
             }
+            while c > 0 && is_digit(text.*[c - 1]) {
+                c -= 1;
+            }
             return c;
         }
         next_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
@@ -377,8 +380,8 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         }
 
         text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
-        use_input(input_state, text_node_index, number_input_filter);
         Input_Caret(Style.{}, input_state, scrolling_effective_offset.*, text_node_index);
+        use_input(input_state, text_node_index, number_input_filter);
 
         input := get_node();
         input_measurement, defined := get_measurement();
