@@ -2,6 +2,7 @@
 - polish calculator
     - support other mouse cursor types
     - support parenthesis, square barckets
+    - gracefully handle different window sizes
     - support exponentiation
     - support scrolling in the input
     - support constants (pi, e, phi)
