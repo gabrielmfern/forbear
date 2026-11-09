@@ -310,8 +310,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     #load "bindings-linux.jai";
 
     #scope_module
-    WAYLAND_DEBUGGING :: false;
-    EGL_DEBUGGING :: false;
+    WAYLAND_DEBUGGING   :: false;
+    EGL_DEBUGGING       :: false;
     EXIT_ON_FIRST_FRAME :: false;
 
     GL_FRAMEBUFFER_FLIP_Y_MESA :: 35771;
@@ -323,29 +323,29 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 
     Wayland_Message_header :: struct {
         object_id: u32;
-        opcode: u16;
-        size: u16;
+        opcode:    u16;
+        size:      u16;
     } #no_padding;
     MAX_WAYLAND_MESSAGE_SIZE :: 4096;
     #scope_export
     Wayland_Connection :: struct {
-        fd: s32;
+        fd:         s32;
         polling_fd: pollfd;
 
-        wl_compositor_id: u32;
-        wl_data_device_manager_id: u32;
-        wl_data_device_id: u32;
-        wl_display_id: u32;
-        wl_keyboard_id: u32;
-        wl_pointer_id: u32;
-        wl_registry_id: u32;
-        wl_seat_id: u32;
-        wp_cursor_shape_device_id:  u32;
-        wp_cursor_shape_manager_id: u32;
+        wl_compositor_id:               u32;
+        wl_data_device_id:              u32;
+        wl_data_device_manager_id:      u32;
+        wl_display_id:                  u32;
+        wl_keyboard_id:                 u32;
+        wl_pointer_id:                  u32;
+        wl_registry_id:                 u32;
+        wl_seat_id:                     u32;
+        wp_cursor_shape_device_id:      u32;
+        wp_cursor_shape_manager_id:     u32;
         wp_fractional_scale_manager_id: u32;
-        wp_viewporter_id: u32;
-        xdg_wm_base_id: u32;
-        zwp_dmabuf_id: u32;
+        wp_viewporter_id:               u32;
+        xdg_wm_base_id:                 u32;
+        zwp_dmabuf_id:                  u32;
 
         //
         // TODO(depessimization): I do not like that xkb allocates the structs and also does reference counting with
@@ -355,24 +355,25 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         // taking a lot of the code here which is unfortunate because Wayland is actually most likely not going to
         // include most users.
         //
-        xkb: *xkb_context;
-        keymap: *xkb_keymap;
-        key_state: *xkb_state;
+
+        xkb:           *xkb_context;
+        keymap:        *xkb_keymap;
+        key_state:     *xkb_state;
         compose_table: *xkb_compose_table;
         compose_state: *xkb_compose_state;
 
-        reading_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
-        pending_reads: []u8;
+        reading_buffer:     [MAX_WAYLAND_MESSAGE_SIZE]u8;
+        pending_reads:      []u8;
         reading_fds_buffer: [8]s32;
-        pending_read_fds: []s32;
+        pending_read_fds:   []s32;
 
-        client_object_interfaces: [..]Interface_Id;
+        client_object_interfaces:         [..]Interface_Id;
         free_client_object_interface_ids: [..]s64;
-        server_object_interfaces: [..]Interface_Id;
+        server_object_interfaces:         [..]Interface_Id;
     };
     sockaddr_un :: struct {
         sun_family: sa_family_t;
-        sun_path: [100]u8;
+        sun_path:   [100]u8;
     };
     init_wayland_connection :: (connection: *Wayland_Connection) {
         connection.fd = socket(AF_UNIX, SOCK.STREAM, 0);
@@ -1127,6 +1128,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             mouse_press(*window.mouse_state, xx index, window.mouse_state.position);
                         }
                     }
+                    backend.clipboard_selection_serial = button.serial;
                 case Wl_Pointer_Event_Axis;
                     axis := cast(*Wl_Pointer_Event_Axis) event.data;
                     if axis.axis == .HORIZONTAL_SCROLL {
@@ -1179,6 +1181,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     update_held_keys_by_modifiers(backend, *window.keyboard_state);
                 case Wl_Keyboard_Event_Key;
                     key_event := cast(*Wl_Keyboard_Event_Key) event.data;
+                    backend.clipboard_selection_serial = key_event.serial;
                     xkb_key_code := key_event.key + 8;
                     if key_event.state == .RELEASED {
                         key := held[xkb_key_code];
@@ -1258,9 +1261,11 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         dri_fd: s32;
         device: *gbm_device;
 
-        clipboard_text_buffer: string;
-        clipboard_mime_is_text: bool;
-        clipboard_text: string;
+        clipboard_selection_serial:  u32;
+        clipboard_text_buffer:       string;
+        clipboard_mime_is_text:      bool;
+        clipboard_wl_data_source_id: u32;
+        clipboard_text:              string;
 
         dmabuf_modifiers: [..]u64;
 
@@ -1270,6 +1275,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     GBM_FORMAT_ABGR8888 :: 0x34324241;
     DRM_FORMAT_MOD_INVALID :: 0x00ffffffffffffff;
     init_backend :: (backend: *Wayland_EGL_Backend) {
+        signal(SIGPIPE, SIG_IGN);
         init_wayland_connection(*backend.connection);
 
         // TODO: this is hardcoded device, it can be wrong, and it can possibly not be the one the compositor is
@@ -1366,42 +1372,43 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             selection := cast(*Wl_Data_Device_Event_Selection) event.data;
             using backend;
             if selection.id != 0 {
-                // TODO: ignore the selection that we've made by the id
-                clipboard_text.count = 0;
-                if clipboard_mime_is_text {
-                    fds: [2]s32;
-                    if pipe(*fds) == 0 {
-                        send_wayland_message(
-                            *connection,
-                            selection.id,
-                            Wl_Data_Offer_Request_Receive.{
-                                mime_type = "text/plain;charset=utf-8",
-                                fd        = cast(Fd) fds[1]
-                            }
-                        );
-                        close(fds[1]);
-
-                        while true {
-                            if clipboard_text.count == clipboard_text_buffer.count {
-                                new_count := max(clipboard_text_buffer.count * 2, 4096);
-                                clipboard_text_buffer.data = realloc(
-                                    clipboard_text_buffer.data,
-                                    new_count,
-                                    clipboard_text_buffer.count,,
-                                    context.forbear.persistent_allocator
-                                );
-                                clipboard_text_buffer.count = new_count;
-                            }
-                            result := read(
-                                fds[0],
-                                clipboard_text_buffer.data + clipboard_text.count,
-                                xx (clipboard_text_buffer.count - clipboard_text.count)
+                if clipboard_wl_data_source_id == 0 {
+                    clipboard_text.count = 0;
+                    if clipboard_mime_is_text {
+                        fds: [2]s32;
+                        if pipe(*fds) == 0 {
+                            send_wayland_message(
+                                *connection,
+                                selection.id,
+                                Wl_Data_Offer_Request_Receive.{
+                                    mime_type = "text/plain;charset=utf-8",
+                                    fd        = cast(Fd) fds[1]
+                                }
                             );
-                            if result <= 0 break;
-                            clipboard_text.count += result;
+                            close(fds[1]);
+
+                            while true {
+                                if clipboard_text.count == clipboard_text_buffer.count {
+                                    new_count := max(clipboard_text_buffer.count * 2, 4096);
+                                    clipboard_text_buffer.data = realloc(
+                                        clipboard_text_buffer.data,
+                                        new_count,
+                                        clipboard_text_buffer.count,,
+                                        context.forbear.persistent_allocator
+                                    );
+                                    clipboard_text_buffer.count = new_count;
+                                }
+                                result := read(
+                                    fds[0],
+                                    clipboard_text_buffer.data + clipboard_text.count,
+                                    xx (clipboard_text_buffer.count - clipboard_text.count)
+                                );
+                                if result <= 0 break;
+                                clipboard_text.count += result;
+                            }
+                            clipboard_text.data = clipboard_text_buffer.data;
+                            close(fds[0]);
                         }
-                        clipboard_text.data = clipboard_text_buffer.data;
-                        close(fds[0]);
                     }
                 }
                 send_wayland_message(*connection, selection.id, Wl_Data_Offer_Request_Destroy.{});
@@ -1409,6 +1416,39 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                 clipboard_text.count = 0;
                 clipboard_mime_is_text = false;
             }
+        } else if event.object_id == backend.connection.wl_data_device_id
+               && event.message.type == Wl_Data_Device_Event_Enter {
+            enter := cast(*Wl_Data_Device_Event_Enter) event.data;
+            if enter.id != 0 {
+                send_wayland_message(*backend.connection, enter.id, Wl_Data_Offer_Request_Destroy.{});
+            }
+        } else if event.message.type == Wl_Data_Source_Event_Send {
+            send := cast(*Wl_Data_Source_Event_Send) event.data;
+            fd   := cast(s32) send.fd;
+            if event.object_id == backend.clipboard_wl_data_source_id {
+                written := 0;
+                while written < backend.clipboard_text.count {
+                    result := write(
+                        fd,
+                        backend.clipboard_text.data + written,
+                        xx (backend.clipboard_text.count - written)
+                    );
+                    if result > 0 {
+                        written += result;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            close(fd);
+        } else if event.object_id == backend.clipboard_wl_data_source_id
+               && event.message.type == Wl_Data_Source_Event_Cancelled {
+            send_wayland_message(
+                *backend.connection,
+                backend.clipboard_wl_data_source_id,
+                Wl_Data_Source_Request_Destroy.{}
+            );
+            backend.clipboard_wl_data_source_id = 0;
         }
     }
 
@@ -3135,6 +3175,47 @@ copy_to_clipboard :: (text: string) {
             CloseClipboard();
         } else {
             GlobalFree(memory);
+        }
+    } else #if OS == .LINUX {
+        connection := *backend.connection;
+        if connection.wl_data_device_id != 0 {
+            if text.count > backend.clipboard_text_buffer.count {
+                backend.clipboard_text_buffer.data = realloc(
+                    backend.clipboard_text_buffer.data,
+                    text.count,
+                    backend.clipboard_text_buffer.count,,
+                    persistent_allocator
+                );
+                backend.clipboard_text_buffer.count = text.count;
+            }
+            for 0..text.count - 1 {
+                backend.clipboard_text_buffer.data[it] = text.data[it];
+            }
+            backend.clipboard_text.data  = backend.clipboard_text_buffer.data;
+            backend.clipboard_text.count = text.count;
+
+            if backend.clipboard_wl_data_source_id != 0 {
+                send_wayland_message(connection, backend.clipboard_wl_data_source_id, Wl_Data_Source_Request_Destroy.{});
+            }
+            backend.clipboard_wl_data_source_id = new_wayland_client_object(connection, .WL_DATA_SOURCE);
+            send_wayland_message(
+                connection,
+                connection.wl_data_device_manager_id,
+                Wl_Data_Device_Manager_Request_Create_Data_Source.{ id = backend.clipboard_wl_data_source_id }
+            );
+            send_wayland_message(
+                connection,
+                backend.clipboard_wl_data_source_id,
+                Wl_Data_Source_Request_Offer.{ mime_type = "text/plain;charset=utf-8" }
+            );
+            send_wayland_message(
+                connection,
+                connection.wl_data_device_id,
+                Wl_Data_Device_Request_Set_Selection.{
+                    source = backend.clipboard_wl_data_source_id,
+                    serial = backend.clipboard_selection_serial
+                }
+            );
         }
     }
 }

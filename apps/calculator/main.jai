@@ -696,6 +696,8 @@ App :: () {
     }
 
     if on_key_down(.ENTER) {
+        // TODO: the copied result is gone in linux because the clipboard data remains in the process until another process requests for it,
+        // which means it's instantly lost as the window stops running.
         copy_to_clipboard(tprint("%", result.*));
         window.running = false;
     }
