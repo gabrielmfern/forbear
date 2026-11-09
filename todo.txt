@@ -1,7 +1,3 @@
-- Fix compiler plugin bugs
-    - Element build on a local #expand macro disappear with the plugin enabled only
-    - A @component called inside a #code block gets no scope
-    - A procedure declared inside a component returns garbage
 - implement C ABI and C adapter
 - polish calculator
     - support other mouse cursor types
@@ -59,7 +55,7 @@
 - use dynamically linked freetype on Linux, DirectWrite on Windows and CoreText on macOS
 - subpixel text rendering
 
-possible other programs using forbear:
+possible programs I can make with forbear next:
 - Merged Twitch and YouTube chat viewer
 - Program that intakes a website with an article, removes all fluff and makes all readable in a consistent way, and then adds in ways for you to add notes, highlight and add summaries while you read.
 - Program that downloads a documentation website and lets you read it in a consistent UI

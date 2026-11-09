@@ -52,7 +52,7 @@ Javascript_Adapter :: struct {
     // see javascript.cpp
     runtime: *void;
     frame_context: #Context;
-    openings_stack: [..]Element_Opening_Data;
+    openings_stack: [..]Node_Opening_Data;
 };
 
 init_adapter :: (

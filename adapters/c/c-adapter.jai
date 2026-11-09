@@ -11,7 +11,7 @@ open_element :: (
     style: Style,
     key_c_string: *u8,
     ctx: *void
-) -> Element_Opening_Data #c_call {
+) -> Node_Opening_Data #c_call {
     push_context ctx.(*#Context).* {
         key_string := to_string(key_c_string);
         key: u64;
@@ -25,7 +25,7 @@ open_element :: (
 }
 
 #program_export
-close_elemnet :: (data: Element_Opening_Data, ctx: *void) #c_call {
+close_elemnet :: (data: Node_Opening_Data, ctx: *void) #c_call {
     push_context ctx.(*#Context) {
         close_element(data);
     }

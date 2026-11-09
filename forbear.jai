@@ -1323,7 +1323,11 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 
         running := true;
     };
-    init_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window, width: float64, height: float64, title: string) {
+    init_window :: (backend: *MacOS_GL_Backend,
+                    window:  *MacOS_GL_Window,
+                    width:   float64,
+                    height:  float64,
+                    title:   string) {
         rectangle := NSRect.{ size = .{ width = width, height = height } };
 
         backend.pasteboard = NSPasteboard.generalPasteboard();
@@ -1947,7 +1951,12 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 
         running := true;
     };
-    init_window :: (backend: *Windows_GL_Backend, window: *Windows_GL_Window, width: float64, height: float64, title: string) {
+    init_window :: (backend: *Windows_GL_Backend,
+                    window:  *Windows_GL_Window,
+                    width:   float64,
+                    height:  float64,
+                    title:   string,
+                    show_window := true) {
         window.text.data = window.text_buffer.data;
         window.backend = backend;
         init_keyboard_state(*window.keyboard_state);
@@ -1967,7 +1976,9 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         rectangle := RECT.{ right = xx (width * window.scale), bottom = xx (height * window.scale) };
         AdjustWindowRectExForDpi(*rectangle, style, 0, 0, dpi);
         SetWindowPos(window.hwnd, null, 0, 0, rectangle.right - rectangle.left, rectangle.bottom - rectangle.top, SWP_NOMOVE | SWP_NOZORDER);
-        ShowWindow(window.hwnd, SW_SHOW);
+        if show_window {
+            ShowWindow(window.hwnd, SW_SHOW);
+        }
 
         _, window.hdc = wgl_create_context(window.hwnd, null, 3, 3);
         gl_load(*gl);
@@ -3152,7 +3163,7 @@ append_to_node_tree :: (node_tree: *Node_Tree, parent_index: s64 = -1) -> pointe
     return *node_tree.*[index], index;
 }
 
-Element_Opening_Data :: struct {
+Node_Opening_Data :: struct {
     parent_index: s64;
     scope_key: u64;
     base_style: Base_Style;
@@ -3172,7 +3183,7 @@ get_parent_element_index :: () -> s64 {
     return element_ancestor_index;
 }
 // intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
-open_element :: (style: Style, key: u64) -> Element_Opening_Data {
+open_element :: (style: Style, key: u64) -> Node_Opening_Data {
     previous_parent_index := context.forbear.parent_index;
     parent_index := get_parent_element_index();
 
@@ -3240,20 +3251,23 @@ open_element :: (style: Style, key: u64) -> Element_Opening_Data {
     //     setCursor(result.ptr.style.cursor);
     // }
 
-    return Element_Opening_Data.{
+    return Node_Opening_Data.{
         base_style = previous_base_style,
         scope_key = previous_scope_key,
         parent_index = previous_parent_index,
         node_index = index,
     };
 }
-close_element :: (using data: Element_Opening_Data) {
+close_element :: (using data: Node_Opening_Data) {
     node := *context.forbear.node_tree[node_index];
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 
     measurement, defined := get_measurement();
-    assert(!defined || node.state_size == measurement.state_size, "element called state() a different number of times than last frame");
+    assert(
+        !defined || node.state_size == measurement.state_size,
+        "element called state() a different number of times than last frame"
+    );
 
     context.forbear.parent_index = parent_index;
     context.forbear.scope_key = scope_key;
@@ -3287,7 +3301,12 @@ element :: (body: Code, location := #caller_location) -> s64 #expand {
 element :: (style: Style, body: Code, location := #caller_location) -> s64 #expand {
     return element(style, "", body, location);
 }
-scope :: (manual_key := "", $body := #code {}, location := #caller_location) -> body.type #expand {
+// TODO: I dislike that this API is different from the open_element because it receives the caller location
+// and is not really meant to be called by adapters.
+//
+// The main reason this exists is because there's a bug in the compiler where if you nest unbraced #code blocks
+// you can loose access to locals of where the #code was defined and this is our workaround. :(
+open_scope :: (manual_key := "", location := #caller_location) -> Node_Opening_Data {
     key: u64;
     if manual_key.count > 0 {
         key = fnv1a_hash(manual_key.data, manual_key.count);
@@ -3313,22 +3332,28 @@ scope :: (manual_key := "", $body := #code {}, location := #caller_location) -> 
         context.forbear.parent_index = index;
         context.forbear.scope_key = key;
     }
-    defer {
-        measurement, defined := get_measurement(include_scopes = true);
-        assert(!defined || context.forbear.node_tree[index].state_size == measurement.state_size, "scope called state() a different number of times than last frame");
+    return .{
+        parent_index = previous_parent_index,
+        scope_key = previous_scope_key,
+        node_index = index,
+    };
+}
+close_scope :: (using opening_data: Node_Opening_Data, value: $T) -> T {
+    measurement, defined := get_measurement(include_scopes = true);
+    assert(
+        !defined || context.forbear.node_tree[node_index].state_size == measurement.state_size,
+        "scope called state() a different number of times than last frame"
+    );
 
-        context.forbear.parent_index = previous_parent_index;
-        context.forbear.scope_key = previous_scope_key;
-    }
-
-    #if body.type == void {
-        #insert body;
-    } else {
-        return #insert body;
-    }
+    context.forbear.parent_index = parent_index;
+    context.forbear.scope_key    = scope_key;
+    return value;
+}
+scope :: (manual_key: string, $body: Code = #code {}, location := #caller_location) -> body.type #expand {
+    return close_scope(open_scope(manual_key, location), void);
 }
 scope :: ($body: Code, location := #caller_location) -> body.type #expand {
-    return scope("", body, location);
+    return close_scope(open_scope(location = location), #insert body);
 }
 
 Glyph :: struct {
@@ -4818,55 +4843,146 @@ prepare_for_next_frame :: () {
 // name is `@scope`, but there's also the two aliases `@component` or @hook` for what people
 // might prefer.
 #import "Compiler";
+COMPILER_PLUGIN_DEBUGGING :: false;
 get_plugin :: () -> *Metaprogram_Plugin {
+    format                          := *context.print_style.default_format_struct;
+    format.use_newlines_if_long_form = true;
+    format.indentation_width         = 4;
+
     using plugin := New(Metaprogram_Plugin);
-    message = (plugin: *Metaprogram_Plugin, message: *Message) {
+    message       = (plugin: *Metaprogram_Plugin, message: *Message) {
         if message.kind == .TYPECHECKED {
             typechecked := cast(*Message_Typechecked) message;
-            for typechecked.procedure_bodies {
-                body := it.expression;
-                if !(body.body_flags & .ALREADY_MODIFIED) {
-                    modified := false;
-                    for sub: it.subexpressions if sub.kind == .PROCEDURE_CALL {
-                        call := cast(*Code_Procedure_Call) sub;
-                        callee := call.resolved_procedure_expression;
-                        if callee && callee.kind == .PROCEDURE_HEADER {
-                            header := cast(*Code_Procedure_Header) callee;
-                            for note: header.notes if note.text == "scope" || note.text == "hook" || note.text == "component" {
-                                inner_call := New(Code_Procedure_Call);
-                                inner_call.* = call.*;
-                                inner_call.resolved_procedure_expression = null;
-                                inner_call.macro_expansion_block = null;
+            log_source :: (prefix: string, location: Code_Node.Location) {
+                #import "File";
+                if !location.enclosing_load {
+                    return;
+                }
+                path := location.enclosing_load.fully_pathed_filename;
+                source, success := read_entire_file(path, log_errors = false);
+                if !success {
+                    return;
+                }
+                defer free(source);
 
-                                code := New(Code_Directive_Code);
-                                code.kind = .DIRECTIVE_CODE;
-                                code.location = call.location;
-                                code.expression = inner_call;
-                                code.code_flags = .TYPED;
+                start, end := -1, -1;
+                line := 1;
+                line_start := 0;
+                for source {
+                    if line == location.l0 && start < 0 {
+                        start = line_start + location.c0 - 1;
+                    }
+                    if line == location.l1 {
+                        end = line_start + location.c1 - 1;
+                        break;
+                    }
+                    if it == #char "\n" {
+                        line += 1;
+                        line_start = it_index + 1;
+                    }
+                }
+                if start < 0 || end < start {
+                    return;
+                }
+                print("%: %:%:%: %\n", prefix, path, location.l0, location.c0, string.{end - start, source.data + start});
+            }
+            for typechecked_body: typechecked.procedure_bodies {
+                body := typechecked_body.expression;
+                if body.body_flags & .ALREADY_MODIFIED {
+                    continue;
+                }
 
-                                ident := New(Code_Ident);
-                                ident.kind = .IDENT;
-                                ident.location = call.location;
-                                ident.name = "scope";
+                scope_locations: [..]Code_Node.Location;
+                for typechecked_body.subexpressions if it.kind == .PROCEDURE_CALL {
+                    resolved := (cast(*Code_Procedure_Call) it).resolved_procedure_expression;
+                    if resolved && resolved.kind == .PROCEDURE_HEADER {
+                        // `expected` should be lower cased already
+                        lower_compare :: (actual: string, expected: string) -> bool {
+                            equals := true;
+                            if actual.count == expected.count {
+                                for expected if to_lower(actual[it_index]) != it {
+                                    equals = false;
+                                    break;
+                                }
+                            } else {
+                                equals = false;
+                            }
+                            return equals;
+                        }
 
-                                arguments: [..]Code_Argument;
-                                array_add(*arguments, .{expression = code});
+                        for note: (cast(*Code_Procedure_Header) resolved).notes if     lower_compare(note.text, "scope")
+                                                                                    || lower_compare(note.text, "component")
+                                                                                    || lower_compare(note.text, "hook") {
+                            if COMPILER_PLUGIN_DEBUGGING {
+                                log_source("found scope call", it.location);
+                            }
+                            array_add(*scope_locations, it.location);
+                            break;
+                        }
+                    }
+                }
 
-                                call.procedure_expression = ident;
-                                call.resolved_procedure_expression = null;
-                                call.overloads = null;
-                                call.arguments_unsorted = arguments;
-                                call.arguments_sorted = .[];
-                                call.macro_expansion_block = null;
+                modified := false;
+                for sub: typechecked_body.subexpressions {
+                    if sub.kind == .PROCEDURE_CALL {
+                        call    := cast(*Code_Procedure_Call) sub;
+                        matches := false;
+                        for scope_locations if memcmp(*it, *call.location, size_of(Code_Node.Location)) == 0 {
+                            matches = true;
+                            break;
+                        }
+                        if matches {
+                            if COMPILER_PLUGIN_DEBUGGING {
+                                log_source("wrapping in scope", call.location);
+                            }
+                            original  := New(Code_Procedure_Call);
+                            original.* = call.*;
 
-                                modified = true;
+                            open_scope_ident         := New(Code_Ident);
+                            open_scope_ident.location = call.location;
+                            open_scope_ident.name     = "open_scope";
+
+                            open_scope_call                     := New(Code_Procedure_Call);
+                            open_scope_call.location             = call.location;
+                            open_scope_call.procedure_expression = open_scope_ident;
+
+                            close_scope_ident         := New(Code_Ident);
+                            close_scope_ident.location = call.location;
+                            close_scope_ident.name     = "close_scope";
+
+                            arguments              := NewArray(2, Code_Argument);
+                            arguments[0].expression = open_scope_call;
+                            arguments[1].expression = original;
+
+                            call.*                    = .{};
+                            call.location             = original.location;
+                            call.procedure_expression = close_scope_ident;
+                            call.arguments_unsorted   = arguments;
+
+                            modified = true;
+                        }
+                    } else if sub.kind == .PROCEDURE_HEADER {
+                        // This is meant as a workaround to compiler bug where, a procedure defined inside a #code block looses its body
+                        // after compiler_modify_procedure because the procedure has no body in the syntax tree at that point.
+                        header := cast(*Code_Procedure_Header) sub;
+                        if !header.body_or_null {
+                            for typechecked_body.subexpressions if it.kind == .DECLARATION {
+                                declaration := cast(*Code_Declaration) it;
+                                if declaration.expression && declaration.expression.kind == .PROCEDURE_HEADER {
+                                    inserted := cast(*Code_Procedure_Header) declaration.expression;
+                                    if inserted.body_or_null && memcmp(*inserted.location, *header.location, size_of(Code_Node.Location)) == 0 {
+                                        if COMPILER_PLUGIN_DEBUGGING {
+                                            log_source("restoring body", header.location);
+                                        }
+                                        header.body_or_null = inserted.body_or_null;
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
-                    if modified {
-                        compiler_modify_procedure(message.workspace, body);
-                    }
                 }
+                compiler_modify_procedure(message.workspace, body);
             }
         }
     }
