@@ -316,6 +316,11 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 
     GL_FRAMEBUFFER_FLIP_Y_MESA :: 35771;
 
+    CURSOR_SHAPES :: Wp_Cursor_Shape_Device_V1_Shape.[
+        .DEFAULT, .TEXT, .POINTER, .WAIT, .PROGRESS, .CROSSHAIR, .HELP,
+        .NOT_ALLOWED, .MOVE, .EW_RESIZE, .NS_RESIZE, .NWSE_RESIZE, .NESW_RESIZE,
+    ];
+
     Wayland_Message_header :: struct {
         object_id: u32;
         opcode: u16;
@@ -337,6 +342,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         xdg_wm_base_id: u32;
         wp_viewporter_id: u32;
         wp_fractional_scale_manager_id: u32;
+        wp_cursor_shape_manager_id: u32;
+        wp_cursor_shape_device_id:  u32;
 
         //
         // TODO(depessimization): I do not like that xkb allocates the structs and also does reference counting with
@@ -460,6 +467,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                         connection.wp_viewporter_id = bind_global(connection, Interface_Id.WP_VIEWPORTER, global);
                     } else if global.interface_name == "wp_fractional_scale_manager_v1" {
                         connection.wp_fractional_scale_manager_id = bind_global(connection, Interface_Id.WP_FRACTIONAL_SCALE_MANAGER_V1, global);
+                    } else if global.interface_name == "wp_cursor_shape_manager_v1" {
+                        connection.wp_cursor_shape_manager_id = bind_global(connection, Interface_Id.WP_CURSOR_SHAPE_MANAGER_V1, global);
                     }
                 case Wl_Callback_Event_Done;
                     synced = true;
@@ -496,6 +505,16 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             if (capabilities.capabilities & .POINTER) && connection.wl_pointer_id == 0 {
                 connection.wl_pointer_id = new_wayland_client_object(connection, .WL_POINTER);
                 send_wayland_message(connection, connection.wl_seat_id, Wl_Seat_Request_Get_Pointer.{ id = connection.wl_pointer_id });
+
+                connection.wp_cursor_shape_device_id = new_wayland_client_object(connection, .WP_CURSOR_SHAPE_DEVICE_V1);
+                send_wayland_message(
+                    connection,
+                    connection.wp_cursor_shape_manager_id,
+                    Wp_Cursor_Shape_Manager_V1_Request_Get_Pointer.{
+                        cursor_shape_device = connection.wp_cursor_shape_device_id,
+                        pointer             = connection.wl_pointer_id
+                    }
+                );
             }
             if (capabilities.capabilities & .KEYBOARD) && connection.wl_keyboard_id == 0 {
                 connection.wl_keyboard_id = new_wayland_client_object(connection, .WL_KEYBOARD);
@@ -1046,6 +1065,14 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             cast(float) enter.surface_x,
                             cast(float) enter.surface_y,
                         } / 256.0;
+                        send_wayland_message(
+                            *backend.connection,
+                            backend.connection.wp_cursor_shape_device_id,
+                            Wp_Cursor_Shape_Device_V1_Request_Set_Shape.{
+                                serial = window.mouse_state.serial,
+                                shape  = CURSOR_SHAPES[window.mouse_state.cursor],
+                            }
+                        );
                     }
                 case Wl_Pointer_Event_Leave;
                     leave := cast(*Wl_Pointer_Event_Leave) event.data;
@@ -1681,7 +1708,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                         case WM_SETCURSOR;
                             HTCLIENT :: 1;
                             if (lparam & 0xFFFF) == HTCLIENT {
-                                SetCursor(window.backend.cursors[window.cursor]);
+                                SetCursor(window.backend.cursors[window.mouse_state.cursor]);
                                 result = 1;
                             } else {
                                 result = DefWindowProcW(hwnd, message, wparam, lparam);
@@ -1966,8 +1993,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         width: float64;
         height: float64;
         scale: float64;
-
-        cursor: Cursor;
 
         text_buffer: [256]u8;
         text: string;
@@ -2756,6 +2781,8 @@ Mouse_State :: struct {
     position: Vector2;
     scroll_delta: Vector2;
 
+    cursor: Cursor;
+
     press_position: [MOUSE_BUTTON_COUNT]Vector2;
     pressed: [MOUSE_BUTTON_COUNT]bool;
     released: [MOUSE_BUTTON_COUNT]bool;
@@ -3002,12 +3029,12 @@ copy_to_clipboard :: (text: string) {
             backend.clipboard_text_buffer.count = text.count;
         }
         memcpy(backend.clipboard_text_buffer.data, text.data, text.count);
-        backend.clipboard_text.data = backend.clipboard_text_buffer.data;
+        backend.clipboard_text.data  = backend.clipboard_text_buffer.data;
         backend.clipboard_text.count = text.count;
     } else #if OS == .WINDOWS {
-        units := MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, null, 0);
+        units  := MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, null, 0);
         memory := GlobalAlloc(GMEM_MOVEABLE, cast(u64) (units + 1) * size_of(u16));
-        wide := cast(*u16) GlobalLock(memory);
+        wide   := cast(*u16) GlobalLock(memory);
         MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, wide, units);
         wide[units] = 0;
         GlobalUnlock(memory);
@@ -3025,11 +3052,22 @@ copy_to_clipboard :: (text: string) {
 }
 set_cursor :: (cursor: Cursor) {
     using context.forbear;
-    #if OS == .WINDOWS {
-        if window.cursor != cursor {
-            window.cursor = cursor;
+    if window.mouse_state.cursor != cursor {
+        window.mouse_state.cursor = cursor;
+        #if OS == .WINDOWS {
             if window.mouse_state.inside {
                 SetCursor(window.backend.cursors[cursor]);
+            }
+        } else #if OS == .LINUX {
+            if window.mouse_state.inside && backend.connection.wp_cursor_shape_device_id != 0 {
+                send_wayland_message(
+                    *backend.connection,
+                    backend.connection.wp_cursor_shape_device_id,
+                    Wp_Cursor_Shape_Device_V1_Request_Set_Shape.{
+                        serial = window.mouse_state.serial,
+                        shape  = CURSOR_SHAPES[cursor],
+                    }
+                );
             }
         }
     }

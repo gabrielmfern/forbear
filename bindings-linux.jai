@@ -1,7 +1,7 @@
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 
@@ -1338,7 +1338,7 @@ libegl :: #library,system "libEGL";
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 
@@ -1709,7 +1709,7 @@ libgbm :: #library,system "libgbm";
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 
@@ -7090,7 +7090,7 @@ libxkbcommon :: #library,system "libxkbcommon";
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 
@@ -9922,7 +9922,7 @@ kb_text_shape :: #library,no_dll "vendor/kb_text_shape-linux";
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/gabriel/programming/open-source/forbear-jai/generate.jai
+// jai generate.jai
 //
 
 
@@ -17885,6 +17885,8 @@ Interface_Id :: enum u32 {
     WP_VIEWPORT;
     WP_FRACTIONAL_SCALE_MANAGER_V1;
     WP_FRACTIONAL_SCALE_V1;
+    WP_CURSOR_SHAPE_MANAGER_V1;
+    WP_CURSOR_SHAPE_DEVICE_V1;
 }
 
 Wl_Display_Error :: enum u32 {
@@ -19708,6 +19710,80 @@ Wp_Fractional_Scale_V1_Event_Preferred_Scale :: struct {
     scale: u32;
 }
 
+Wp_Cursor_Shape_Manager_V1_Request_Destroy :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Wp_Cursor_Shape_Manager_V1_Request_Get_Pointer :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[.NEW_ID, .OBJECT];
+    cursor_shape_device: u32;
+    pointer: u32;
+}
+
+Wp_Cursor_Shape_Manager_V1_Request_Get_Tablet_Tool_V2 :: struct {
+    OPCODE :: 2;
+    ARGS :: ProtocolType.[.NEW_ID, .OBJECT];
+    cursor_shape_device: u32;
+    tablet_tool: u32;
+}
+
+Wp_Cursor_Shape_Device_V1_Shape :: enum u32 {
+    DEFAULT :: 1;
+    CONTEXT_MENU :: 2;
+    HELP :: 3;
+    POINTER :: 4;
+    PROGRESS :: 5;
+    WAIT :: 6;
+    CELL :: 7;
+    CROSSHAIR :: 8;
+    TEXT :: 9;
+    VERTICAL_TEXT :: 10;
+    ALIAS :: 11;
+    COPY :: 12;
+    MOVE :: 13;
+    NO_DROP :: 14;
+    NOT_ALLOWED :: 15;
+    GRAB :: 16;
+    GRABBING :: 17;
+    E_RESIZE :: 18;
+    N_RESIZE :: 19;
+    NE_RESIZE :: 20;
+    NW_RESIZE :: 21;
+    S_RESIZE :: 22;
+    SE_RESIZE :: 23;
+    SW_RESIZE :: 24;
+    W_RESIZE :: 25;
+    EW_RESIZE :: 26;
+    NS_RESIZE :: 27;
+    NESW_RESIZE :: 28;
+    NWSE_RESIZE :: 29;
+    COL_RESIZE :: 30;
+    ROW_RESIZE :: 31;
+    ALL_SCROLL :: 32;
+    ZOOM_IN :: 33;
+    ZOOM_OUT :: 34;
+    DND_ASK :: 35;
+    ALL_RESIZE :: 36;
+}
+
+Wp_Cursor_Shape_Device_V1_Error :: enum u32 {
+    INVALID_SHAPE :: 1;
+}
+
+Wp_Cursor_Shape_Device_V1_Request_Destroy :: struct {
+    OPCODE :: 0;
+    ARGS :: ProtocolType.[];
+}
+
+Wp_Cursor_Shape_Device_V1_Request_Set_Shape :: struct {
+    OPCODE :: 1;
+    ARGS :: ProtocolType.[.UINT, .UINT];
+    serial: u32;
+    shape: Wp_Cursor_Shape_Device_V1_Shape;
+}
+
     Interface_Info :: struct {
         name: string;
         version: u32;
@@ -19759,6 +19835,8 @@ INTERFACES :: Interface_Info.[
     .{ "wp_viewport", 1, 202, 3, 205, 0 },
     .{ "wp_fractional_scale_manager_v1", 1, 205, 2, 207, 0 },
     .{ "wp_fractional_scale_v1", 1, 207, 1, 208, 1 },
+    .{ "wp_cursor_shape_manager_v1", 2, 209, 3, 212, 0 },
+    .{ "wp_cursor_shape_device_v1", 2, 212, 2, 214, 0 },
 ];
 
 Message_Id :: enum u32 {
@@ -19971,6 +20049,11 @@ Message_Id :: enum u32 {
     WP_FRACTIONAL_SCALE_MANAGER_V1_GET_FRACTIONAL_SCALE :: 206;
     WP_FRACTIONAL_SCALE_V1_DESTROY :: 207;
     WP_FRACTIONAL_SCALE_V1_PREFERRED_SCALE :: 208;
+    WP_CURSOR_SHAPE_MANAGER_V1_DESTROY :: 209;
+    WP_CURSOR_SHAPE_MANAGER_V1_GET_POINTER :: 210;
+    WP_CURSOR_SHAPE_MANAGER_V1_GET_TABLET_TOOL_V2 :: 211;
+    WP_CURSOR_SHAPE_DEVICE_V1_DESTROY :: 212;
+    WP_CURSOR_SHAPE_DEVICE_V1_SET_SHAPE :: 213;
 }
 
 MESSAGES :: Message_Info.[
@@ -20183,6 +20266,11 @@ MESSAGES :: Message_Info.[
     .{ Wp_Fractional_Scale_Manager_V1_Request_Get_Fractional_Scale, 319, 2 },
     .{ Wp_Fractional_Scale_V1_Request_Destroy, 321, 0 },
     .{ Wp_Fractional_Scale_V1_Event_Preferred_Scale, 321, 1 },
+    .{ Wp_Cursor_Shape_Manager_V1_Request_Destroy, 322, 0 },
+    .{ Wp_Cursor_Shape_Manager_V1_Request_Get_Pointer, 322, 2 },
+    .{ Wp_Cursor_Shape_Manager_V1_Request_Get_Tablet_Tool_V2, 324, 2 },
+    .{ Wp_Cursor_Shape_Device_V1_Request_Destroy, 326, 0 },
+    .{ Wp_Cursor_Shape_Device_V1_Request_Set_Shape, 326, 2 },
 ];
 
     MAX_MESSAGE_STRUCT_SIZE :: #run () -> s64 {
@@ -20516,5 +20604,11 @@ ARGS :: ProtocolType.[
     .INT,
     .NEW_ID,
     .OBJECT,
+    .UINT,
+    .NEW_ID,
+    .OBJECT,
+    .NEW_ID,
+    .OBJECT,
+    .UINT,
     .UINT,
 ];
