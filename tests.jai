@@ -32,7 +32,7 @@ main :: () {
     frame_allocator.data = *frame_pool;
     frame_allocator.proc = flat_pool_allocator_proc;
 
-    test :: (name: string, body: Code) #expand {
+    test_frame :: (name: string, body: Code) #expand {
         print("RUN  %\n", name);
         #insert body;
 
@@ -49,11 +49,10 @@ main :: () {
     }
 
     {
-
         //
         // ==== compiler plugin tests ====
         //
-        test("compiler plugin: components should get a scope node, and its children should be inserted too", #code {
+        test_frame("compiler plugin: components should get a scope node, and its children should be inserted too", #code {
             Root_Component();
 
             assert(context.forbear.node_tree.count == 2, "count=%", context.forbear.node_tree.count);
@@ -61,7 +60,7 @@ main :: () {
             shallow_node_check(1, .ELEMENT, -1);
         });
 
-        test("compiler plugin: local components should get a scope node, and its children should be inserted too", #code {
+        test_frame("compiler plugin: local components should get a scope node, and its children should be inserted too", #code {
             My_Component :: () {
                 print("my component ran\n");
                 text("My_Component did run\n");
@@ -73,7 +72,7 @@ main :: () {
             shallow_node_check(1, .ELEMENT, -1);
         });
 
-        test("compiler plugin: components shuold work just fine with other local procedures", #code {
+        test_frame("compiler plugin: components shuold work just fine with other local procedures", #code {
             My_Component :: () {
                 print("My Component did run\n");
                 text("hey");
@@ -91,7 +90,7 @@ main :: () {
             shallow_node_check(2, .ELEMENT, -1);
         });
 
-        test("compiler plugin: components called inside #code should get a scope node, so their elements get different keys", #code {
+        test_frame("compiler plugin: components called inside #code should get a scope node, so their elements get different keys", #code {
             Child_In_Code :: () {
                 Child :: () {
                     element(Style.{width = fixed(10), height = fixed(10)});
@@ -115,7 +114,7 @@ main :: () {
             assert(tree[3].key != tree[5].key, "both children have key %", tree[3].key);
         });
 
-        test("compiler plugin: local macros inside #code should keep their elements", #code {
+        test_frame("compiler plugin: local macros inside #code should keep their elements", #code {
             Child :: () {
                 element(Style.{width = fixed(10), height = fixed(10)});
             } @component
@@ -140,7 +139,7 @@ main :: () {
             shallow_node_check(5, .ELEMENT, 3);
         });
 
-        test("compiler plugin: components that return values should work", #code {
+        test_frame("compiler plugin: components that return values should work", #code {
             Button :: () -> string {
                 clicked := false;
                 element(Style.{width = fixed(10), height = fixed(10)}, #code {
