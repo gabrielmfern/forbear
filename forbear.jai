@@ -1637,10 +1637,13 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                         }
                         backend.app.sendEvent(backend.app, event);
                     case NSEventTypeScrollWheel;
-                        dy := cast(float) NSEvent.scrollingDeltaY(event);
-                        dx := cast(float) NSEvent.scrollingDeltaX(event);
-                        if !NSEvent.hasPreciseScrollingDeltas(event) {
-                            dy *= 48;
+                        scrolling_delta: (*NSEvent, Selector) -> float64 #c_call = xx objc_msgSend;
+                        has_precise:     (*NSEvent, Selector) -> BOOL #c_call    = xx objc_msgSend;
+
+                        dy := cast(float) scrolling_delta(event, selector("scrollingDeltaX"));
+                        dx := cast(float) scrolling_delta(event, selector("scrollingDeltaY"));
+                        if !has_precise(event, selector("hasPreciseScrollingDeltas")) {
+                            dy *= SCROLL_MULTIPLIER;
                         }
                         window.mouse_state.scroll_delta.y -= dy;
                         window.mouse_state.scroll_delta.x -= dx;
@@ -1678,9 +1681,19 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                         code := NSEvent.keyCode(event);
                         key := key_from_key_code(code);
                         if key != 0 {
-                            down := ifx key == .CAPS_LOCK
-                                then (NSEvent.modifierFlags(event) & .NSEventModifierFlagCapsLock) != 0
-                                else is_key_held(key);
+                            flags := cast(u64) NSEvent.modifierFlags(event);
+                            down: bool;
+                            if key == {
+                                case .CAPS_LOCK;     down = (flags & cast(u64) NSEventModifierFlags.NSEventModifierFlagCapsLock) != 0;
+                                case .CONTROL_LEFT;  down = (flags & 0x00000001) != 0;
+                                case .SHIFT_LEFT;    down = (flags & 0x00000002) != 0;
+                                case .SHIFT_RIGHT;   down = (flags & 0x00000004) != 0;
+                                case .SUPER_LEFT;    down = (flags & 0x00000008) != 0;
+                                case .SUPER_RIGHT;   down = (flags & 0x00000010) != 0;
+                                case .ALT_LEFT;      down = (flags & 0x00000020) != 0;
+                                case .ALT_RIGHT;     down = (flags & 0x00000040) != 0;
+                                case .CONTROL_RIGHT; down = (flags & 0x00002000) != 0;
+                            }
 
                             if down && held[code] == 0 {
                                 add_key_event(*events, Key_Event.{.PRESSED, key});
@@ -1881,13 +1894,13 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
                             MK_SHIFT :: 0x0004;
                             if wparam & MK_SHIFT {
-                                window.mouse_state.scroll_delta.x -= (cast(float)wheel) / 120.0 * 48;
+                                window.mouse_state.scroll_delta.x -= (cast(float)wheel) / 120.0 * SCROLL_MULTIPLIER;
                             } else {
-                                window.mouse_state.scroll_delta.y -= (cast(float)wheel) / 120.0 * 48;
+                                window.mouse_state.scroll_delta.y -= (cast(float)wheel) / 120.0 * SCROLL_MULTIPLIER;
                             }
                         case WM_MOUSEHWHEEL;
                             wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
-                            window.mouse_state.scroll_delta.x += (cast(float)wheel) / 120.0 * 48;
+                            window.mouse_state.scroll_delta.x += (cast(float)wheel) / 120.0 * SCROLL_MULTIPLIER;
                         case WM_MOUSELEAVE;
                             window.mouse_state.inside = false;
                         case WM_KILLFOCUS;
@@ -2901,6 +2914,7 @@ get_node :: () -> *Node {
         return null;
     }
 }
+SCROLL_MULTIPLIER :: 48; // TODO: assess if this value shoud be 1) dynamic and/or 2) configurable by the user
 Mouse_State :: struct {
     #if OS == .LINUX {
         serial: u32;
@@ -3303,27 +3317,22 @@ is_key_held :: (key: Key) -> bool {
             return GetKeyState(vk) < 0;
         }
     } else #if OS == .MACOS {
-        NX_DEVICELCTLKEYMASK   :: 0x00000001;
-        NX_DEVICELSHIFTKEYMASK :: 0x00000002;
-        NX_DEVICERSHIFTKEYMASK :: 0x00000004;
-        NX_DEVICELCMDKEYMASK   :: 0x00000008;
-        NX_DEVICERCMDKEYMASK   :: 0x00000010;
-        NX_DEVICELALTKEYMASK   :: 0x00000020;
-        NX_DEVICERALTKEYMASK   :: 0x00000040;
-        NX_DEVICERCTLKEYMASK   :: 0x00002000;
-
         if key >= .SHIFT_LEFT && key <= .SUPER_RIGHT {
-            current_flags: (*void, Selector) -> NSUInteger #c_call = xx objc_msgSend;
+            current_flags: (*void, Selector) -> NSEventModifierFlags #c_call = xx objc_msgSend;
             flags := current_flags(xx class(NSEvent), selector("modifierFlags"));
+            mask: NSEventModifierFlags;
             if key == {
-                case .CONTROL_LEFT;  return (flags & NX_DEVICELCTLKEYMASK) != 0;
-                case .SHIFT_LEFT;    return (flags & NX_DEVICELSHIFTKEYMASK) != 0;
-                case .SHIFT_RIGHT;   return (flags & NX_DEVICERSHIFTKEYMASK) != 0;
-                case .SUPER_LEFT;    return (flags & NX_DEVICELCMDKEYMASK) != 0;
-                case .SUPER_RIGHT;   return (flags & NX_DEVICERCMDKEYMASK) != 0;
-                case .ALT_LEFT;      return (flags & NX_DEVICELALTKEYMASK) != 0;
-                case .ALT_RIGHT;     return (flags & NX_DEVICERALTKEYMASK) != 0;
-                case .CONTROL_RIGHT; return (flags & NX_DEVICERCTLKEYMASK) != 0;
+                case .SHIFT_LEFT;    #through;
+                case .SHIFT_RIGHT;   mask = .NSEventModifierFlagShift;
+                case .CONTROL_LEFT;  #through;
+                case .CONTROL_RIGHT; mask = .NSEventModifierFlagControl;
+                case .ALT_LEFT;      #through;
+                case .ALT_RIGHT;     mask = .NSEventModifierFlagOption;
+                case .SUPER_LEFT;    #through;
+                case .SUPER_RIGHT;   mask = .NSEventModifierFlagCommand;
+            }
+            if !(flags & mask) {
+                return false;
             }
         }
     }
