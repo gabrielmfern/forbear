@@ -332,18 +332,20 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         fd: s32;
         polling_fd: pollfd;
 
-        wl_pointer_id: u32;
-        wl_keyboard_id: u32;
-        wl_seat_id: u32;
-        wl_display_id: u32;
-        wl_registry_id: u32;
         wl_compositor_id: u32;
-        zwp_dmabuf_id: u32;
-        xdg_wm_base_id: u32;
-        wp_viewporter_id: u32;
-        wp_fractional_scale_manager_id: u32;
-        wp_cursor_shape_manager_id: u32;
+        wl_data_device_manager_id: u32;
+        wl_data_device_id: u32;
+        wl_display_id: u32;
+        wl_keyboard_id: u32;
+        wl_pointer_id: u32;
+        wl_registry_id: u32;
+        wl_seat_id: u32;
         wp_cursor_shape_device_id:  u32;
+        wp_cursor_shape_manager_id: u32;
+        wp_fractional_scale_manager_id: u32;
+        wp_viewporter_id: u32;
+        xdg_wm_base_id: u32;
+        zwp_dmabuf_id: u32;
 
         //
         // TODO(depessimization): I do not like that xkb allocates the structs and also does reference counting with
@@ -469,6 +471,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                         connection.wp_fractional_scale_manager_id = bind_global(connection, Interface_Id.WP_FRACTIONAL_SCALE_MANAGER_V1, global);
                     } else if global.interface_name == "wp_cursor_shape_manager_v1" {
                         connection.wp_cursor_shape_manager_id = bind_global(connection, Interface_Id.WP_CURSOR_SHAPE_MANAGER_V1, global);
+                    } else if global.interface_name == "wl_data_device_manager" {
+                        connection.wl_data_device_manager_id = bind_global(connection, Interface_Id.WL_DATA_DEVICE_MANAGER, global);
                     }
                 case Wl_Callback_Event_Done;
                     synced = true;
@@ -479,6 +483,17 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         assert(connection.wl_compositor_id != 0, "expected wl_compositor to have been bound");
         assert(connection.xdg_wm_base_id != 0, "expected xdg_wm_base to have been bound");
         assert(connection.zwp_dmabuf_id != 0, "expected zwp_dmabuf to have been bound");
+        if connection.wl_data_device_manager_id != 0 && connection.wl_seat_id != 0 {
+            connection.wl_data_device_id = new_wayland_client_object(connection, .WL_DATA_DEVICE);
+            send_wayland_message(
+                connection,
+                connection.wl_data_device_manager_id,
+                Wl_Data_Device_Manager_Request_Get_Data_Device.{
+                    id   = connection.wl_data_device_id,
+                    seat = connection.wl_seat_id
+                }
+            );
+        }
     }
     update_wayland_connection :: (connection: *Wayland_Connection, event: Wayland_Event) {
         if event.object_id == connection.wl_display_id {
@@ -566,6 +581,13 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         }
     }
 
+    track_wayland_server_object :: (connection: *Wayland_Connection, interface_id: Interface_Id, id: u32) {
+        index := id - WAYLAND_SERVER_OBJECT_ID_CUTOFF;
+        if connection.server_object_interfaces.count < index + 1 {
+            array_resize(*connection.server_object_interfaces, index + 1);
+        }
+        connection.server_object_interfaces[index] = interface_id;
+    }
     new_wayland_client_object :: (connection: *Wayland_Connection, interface_id: Interface_Id) -> u32 {
         if connection.free_client_object_interface_ids.count > 0 {
             // we reuse ids that have been deleted/freed
@@ -585,6 +607,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         data: *void;
         object_id: u32;
     };
+    WAYLAND_SERVER_OBJECT_ID_CUTOFF :: 0xff000000;
     next_event :: (connection: *Wayland_Connection, wait := false) -> Wayland_Event {
         while connection.pending_reads.count < size_of(Wayland_Message_header) ||
         connection.pending_reads.count < (cast(*Wayland_Message_header) connection.pending_reads.data).size {
@@ -642,9 +665,9 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         incoming_message_header := cast(*Wayland_Message_header) connection.pending_reads.data;
 
         object_interface_id: Interface_Id;
-        if incoming_message_header.object_id >= 0xff000000 {
+        if incoming_message_header.object_id >= WAYLAND_SERVER_OBJECT_ID_CUTOFF {
             // means it's a server object id
-            object_interface_id = connection.server_object_interfaces[incoming_message_header.object_id - 0xff000000];
+            object_interface_id = connection.server_object_interfaces[incoming_message_header.object_id - WAYLAND_SERVER_OBJECT_ID_CUTOFF];
         } else {
             object_interface_id = connection.client_object_interfaces[incoming_message_header.object_id - 1];
         }
@@ -1028,7 +1051,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                         window.logical_height = configure.height;
                     }
             }
-        } else if event.object_id == window.wp_fractional_scale_id && event.message.type == Wp_Fractional_Scale_V1_Event_Preferred_Scale {
+        } else if event.object_id == window.wp_fractional_scale_id
+               && event.message.type == Wp_Fractional_Scale_V1_Event_Preferred_Scale {
             preferred_scale := cast(*Wp_Fractional_Scale_V1_Event_Preferred_Scale) event.data;
             window.scale = (cast(float64)preferred_scale.scale) / 120.0;
             if window.buffers[0].gbm_buffer_object != null {
@@ -1048,7 +1072,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             if EXIT_ON_FIRST_FRAME {
                 window.running = false;
             }
-        } else if event.object_id == window.wl_buffer_params_id && event.message.type == Zwp_Linux_Buffer_Params_V1_Event_Failed {
+        } else if event.object_id == window.wl_buffer_params_id
+               && event.message.type == Zwp_Linux_Buffer_Params_V1_Event_Failed {
             log_error("compositor failed to import the dmabuf (%x%)", window.width, window.height);
             exit(-1);
         } else if event.object_id == backend.connection.wl_pointer_id {
@@ -1195,7 +1220,9 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             if !compose_handled {
                                 append_text(key_text(backend.connection.key_state, xkb_key_code, utf8), *window.text, window.text_buffer);
                             }
-                            if key != 0 && repeat_rate > 0 && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
+                            if     key != 0
+                                && repeat_rate > 0
+                                && xkb_keymap_key_repeats(backend.connection.keymap, xkb_key_code) {
                                 repeating_key = key;
                                 repeating_key_code = xkb_key_code;
                                 next_repeat = seconds_since_init() + (cast(float)repeat_delay) / 1000.0;
@@ -1232,6 +1259,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         device: *gbm_device;
 
         clipboard_text_buffer: string;
+        clipboard_mime_is_text: bool;
         clipboard_text: string;
 
         dmabuf_modifiers: [..]u64;
@@ -1322,6 +1350,66 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     }
     update_backend :: (backend: *Wayland_EGL_Backend, event: Wayland_Event) {
         update_wayland_connection(*backend.connection, event);
+
+        if event.message.type == Wl_Data_Offer_Event_Offer {
+            offer := cast(*Wl_Data_Offer_Event_Offer) event.data;
+            if offer.mime_type == "text/plain;charset=utf-8" {
+                backend.clipboard_mime_is_text = true;
+            }
+        } else if event.object_id == backend.connection.wl_data_device_id
+               &&  event.message.type == Wl_Data_Device_Event_Data_Offer {
+            offer := cast(*Wl_Data_Device_Event_Data_Offer) event.data;
+            track_wayland_server_object(*backend.connection, .WL_DATA_OFFER, offer.id);
+            backend.clipboard_mime_is_text = false;
+        } else if event.object_id == backend.connection.wl_data_device_id
+               && event.message.type == Wl_Data_Device_Event_Selection {
+            selection := cast(*Wl_Data_Device_Event_Selection) event.data;
+            using backend;
+            if selection.id != 0 {
+                // TODO: ignore the selection that we've made by the id
+                clipboard_text.count = 0;
+                if clipboard_mime_is_text {
+                    fds: [2]s32;
+                    if pipe(*fds) == 0 {
+                        send_wayland_message(
+                            *connection,
+                            selection.id,
+                            Wl_Data_Offer_Request_Receive.{
+                                mime_type = "text/plain;charset=utf-8",
+                                fd        = cast(Fd) fds[1]
+                            }
+                        );
+                        close(fds[1]);
+
+                        while true {
+                            if clipboard_text.count == clipboard_text_buffer.count {
+                                new_count := max(clipboard_text_buffer.count * 2, 4096);
+                                clipboard_text_buffer.data = realloc(
+                                    clipboard_text_buffer.data,
+                                    new_count,
+                                    clipboard_text_buffer.count,,
+                                    context.forbear.persistent_allocator
+                                );
+                                clipboard_text_buffer.count = new_count;
+                            }
+                            result := read(
+                                fds[0],
+                                clipboard_text_buffer.data + clipboard_text.count,
+                                xx (clipboard_text_buffer.count - clipboard_text.count)
+                            );
+                            if result <= 0 break;
+                            clipboard_text.count += result;
+                        }
+                        clipboard_text.data = clipboard_text_buffer.data;
+                        close(fds[0]);
+                    }
+                }
+                send_wayland_message(*connection, selection.id, Wl_Data_Offer_Request_Destroy.{});
+            } else {
+                clipboard_text.count = 0;
+                clipboard_mime_is_text = false;
+            }
+        }
     }
 
     Backend :: Wayland_EGL_Backend;
