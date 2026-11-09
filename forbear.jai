@@ -1539,6 +1539,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         render: (data: *void);
         render_data: *void;
 
+        cursors: [CURSOR_COUNT]*NSCursor;
+
         app: *NSApplication;
         pixel_format: *NSOpenGLPixelFormat;
         gl_context: *NSOpenGLContext;
@@ -1553,10 +1555,40 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     init_backend :: (backend: *MacOS_GL_Backend) {
         init_objective_c();
         init_app_kit();
-        backend.app = NSApplication.sharedApplication();
-        NSApplication.setActivationPolicy(backend.app, NSApplicationActivationPolicyRegular);
-        NSApplication.finishLaunching(backend.app);
-        NSApplication.activateIgnoringOtherApps(backend.app, YES);
+        using backend;
+
+        cursors[Cursor.DEFAULT]     = NSCursor.arrowCursor();
+        cursors[Cursor.TEXT]        = NSCursor.IBeamCursor();
+        cursors[Cursor.POINTER]     = NSCursor.pointingHandCursor();
+        cursors[Cursor.NOT_ALLOWED] = NSCursor.operationNotAllowedCursor();
+        cursors[Cursor.MOVE]        = NSCursor.openHandCursor();
+        cursors[Cursor.EW_RESIZE]   = NSCursor.resizeLeftRightCursor();
+        cursors[Cursor.NS_RESIZE]   = NSCursor.resizeUpDownCursor();
+
+        get: (*void, Selector) -> *NSCursor #c_call = xx objc_msgSend;
+        cursors[Cursor.CROSSHAIR]                   = get(xx class(NSCursor), selector("crosshairCursor"));
+
+        cursors[Cursor.WAIT]     = cursors[Cursor.DEFAULT];
+        cursors[Cursor.PROGRESS] = cursors[Cursor.DEFAULT];
+        cursors[Cursor.HELP]     = cursors[Cursor.DEFAULT];
+        responds: (*void, Selector, Selector) -> BOOL #c_call = xx objc_msgSend;
+        if responds(xx class(NSCursor), selector("respondsToSelector:"), selector("busyButClickableCursor")) {
+            cursors[Cursor.WAIT]     = get(xx class(NSCursor), selector("busyButClickableCursor"));
+            cursors[Cursor.PROGRESS] = cursors[Cursor.WAIT];
+        }
+        if responds(xx class(NSCursor), selector("respondsToSelector:"), selector("_helpCursor")) {
+            cursors[Cursor.HELP] = get(xx class(NSCursor), selector("_helpCursor"));
+        }
+
+        frame_resize: (*void, Selector, NSUInteger, NSUInteger) -> *NSCursor #c_call = xx objc_msgSend;
+        sel                                                                         := selector("frameResizeCursorFromPosition:inDirections:");
+        cursors[Cursor.NWSE_RESIZE]                                                  = frame_resize(xx class(NSCursor), sel, 1 | 2, 3);
+        cursors[Cursor.NESW_RESIZE]                                                  = frame_resize(xx class(NSCursor), sel, 1 | 8, 3);
+
+        app = NSApplication.sharedApplication();
+        NSApplication.setActivationPolicy(app, NSApplicationActivationPolicyRegular);
+        NSApplication.finishLaunching(app);
+        NSApplication.activateIgnoringOtherApps(app, YES);
 
         attributes := NSOpenGLPixelFormatAttribute.[
             NSOpenGLPFADoubleBuffer,
@@ -1566,9 +1598,9 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core,
             0,
         ];
-        backend.pixel_format = NSOpenGLPixelFormat.initWithAttributes(objc_alloc(NSOpenGLPixelFormat), attributes.data);
-        backend.gl_context = NSOpenGLContext.initWithFormat(objc_alloc(NSOpenGLContext), backend.pixel_format, null);
-        NSOpenGLContext.makeCurrentContext(backend.gl_context);
+        pixel_format = NSOpenGLPixelFormat.initWithAttributes(objc_alloc(NSOpenGLPixelFormat), attributes.data);
+        gl_context = NSOpenGLContext.initWithFormat(objc_alloc(NSOpenGLContext), pixel_format, null);
+        NSOpenGLContext.makeCurrentContext(gl_context);
         gl_load(*gl);
     }
     update_backend :: (backend: *MacOS_GL_Backend) {
@@ -3237,20 +3269,22 @@ set_cursor :: (cursor: Cursor) {
     using context.forbear;
     if window.mouse_state.cursor != cursor {
         window.mouse_state.cursor = cursor;
-        #if OS == .WINDOWS {
-            if window.mouse_state.inside {
+        if window.mouse_state.inside {
+            #if OS == .WINDOWS {
                 SetCursor(window.backend.cursors[cursor]);
-            }
-        } else #if OS == .LINUX {
-            if window.mouse_state.inside && backend.connection.wp_cursor_shape_device_id != 0 {
-                send_wayland_message(
-                    *backend.connection,
-                    backend.connection.wp_cursor_shape_device_id,
-                    Wp_Cursor_Shape_Device_V1_Request_Set_Shape.{
-                        serial = window.mouse_state.serial,
-                        shape  = CURSOR_SHAPES[cursor],
-                    }
-                );
+            } else #if OS == .LINUX {
+                if backend.connection.wp_cursor_shape_device_id != 0 {
+                    send_wayland_message(
+                        *backend.connection,
+                        backend.connection.wp_cursor_shape_device_id,
+                        Wp_Cursor_Shape_Device_V1_Request_Set_Shape.{
+                            serial = window.mouse_state.serial,
+                            shape  = CURSOR_SHAPES[cursor],
+                        }
+                    );
+                }
+            } #if OS == .MACOS {
+               NSCursor.set(backend.cursors[cursor]);
             }
         }
     }
