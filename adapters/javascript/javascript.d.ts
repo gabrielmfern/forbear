@@ -15,7 +15,20 @@ type Shadow = [
 
 type Alignment = "start" | "center" | "end";
 type BorderStyle = "solid" | "dashed";
-type Cursor = "default" | "text" | "pointer";
+type Cursor =
+    | "default"
+    | "text"
+    | "pointer"
+    | "wait"
+    | "progress"
+    | "crosshair"
+    | "help"
+    | "not-allowed"
+    | "move"
+    | "ew-resize"
+    | "ns-resize"
+    | "nwse-resize"
+    | "nesw-resize";
 type Direction = "horizontal" | "vertical";
 type Overflow = "visible" | "wrap";
 type TextWrapping = "word" | "character" | "none";

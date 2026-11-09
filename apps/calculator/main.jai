@@ -143,6 +143,7 @@ Button :: (contents: string, is_operator := false) -> clicked: bool {
         y_justification = .CENTER,
         width = fixed(48.0),
         height = fixed(48.0),
+        cursor = .POINTER,
     }, #code {
         button := get_node();
         if is_mouse_inside() {

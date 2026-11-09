@@ -241,6 +241,16 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
         if value == "default" result.cursor = .DEFAULT;
         if value == "text" result.cursor = .TEXT;
         if value == "pointer" result.cursor = .POINTER;
+        if value == "wait" result.cursor = .WAIT;
+        if value == "progress" result.cursor = .PROGRESS;
+        if value == "crosshair" result.cursor = .CROSSHAIR;
+        if value == "help" result.cursor = .HELP;
+        if value == "not-allowed" result.cursor = .NOT_ALLOWED;
+        if value == "move" result.cursor = .MOVE;
+        if value == "ew-resize" result.cursor = .EW_RESIZE;
+        if value == "ns-resize" result.cursor = .NS_RESIZE;
+        if value == "nwse-resize" result.cursor = .NWSE_RESIZE;
+        if value == "nesw-resize" result.cursor = .NESW_RESIZE;
     }
 
     string_count = javascript_style_get_string_length(adapter.runtime, js_style_object, .OVERFLOW);

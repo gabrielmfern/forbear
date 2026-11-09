@@ -1622,6 +1622,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         message_data: *void;
         wndproc_context: *#Context;
 
+        cursors: [CURSOR_COUNT]HCURSOR;
+
         render: (data: *void);
         render_data: *void;
 
@@ -1636,12 +1638,26 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 :: cast(HANDLE) -4;
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
+        cursors[Cursor.DEFAULT]     = LoadCursorW(null, xx IDC_ARROW);
+        cursors[Cursor.TEXT]        = LoadCursorW(null, xx IDC_IBEAM);
+        cursors[Cursor.POINTER]     = LoadCursorW(null, xx IDC_HAND);
+        cursors[Cursor.WAIT]        = LoadCursorW(null, xx IDC_WAIT);
+        cursors[Cursor.PROGRESS]    = LoadCursorW(null, xx IDC_APPSTARTING);
+        cursors[Cursor.CROSSHAIR]   = LoadCursorW(null, xx IDC_CROSS);
+        cursors[Cursor.HELP]        = LoadCursorW(null, xx IDC_HELP);
+        cursors[Cursor.NOT_ALLOWED] = LoadCursorW(null, xx IDC_NO);
+        cursors[Cursor.MOVE]        = LoadCursorW(null, xx IDC_SIZEALL);
+        cursors[Cursor.EW_RESIZE]   = LoadCursorW(null, xx IDC_SIZEWE);
+        cursors[Cursor.NS_RESIZE]   = LoadCursorW(null, xx IDC_SIZENS);
+        cursors[Cursor.NWSE_RESIZE] = LoadCursorW(null, xx IDC_SIZENWSE);
+        cursors[Cursor.NESW_RESIZE] = LoadCursorW(null, xx IDC_SIZENESW);
+
         class: WNDCLASSEXW;
-        class.cbSize = size_of(WNDCLASSEXW);
-        class.style = CS_OWNDC;
-        class.lpfnWndProc = wndproc;
-        class.hInstance = GetModuleHandleW(null);
-        class.hCursor = LoadCursorW(null, xx IDC_ARROW);
+        class.cbSize        = size_of(WNDCLASSEXW);
+        class.style         = CS_OWNDC;
+        class.lpfnWndProc   = wndproc;
+        class.hInstance     = GetModuleHandleW(null);
+        class.hCursor       = cursors[Cursor.DEFAULT];
         class.lpszClassName = utf8_to_wide("forbear",, temp);
         RegisterClassExW(*class);
     }
@@ -1660,6 +1676,14 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             window.running = false;
                         case WM_SYSCOMMAND;
                             if (wparam & 0xFFF0) != SC_KEYMENU || lparam != 0 {
+                                result = DefWindowProcW(hwnd, message, wparam, lparam);
+                            }
+                        case WM_SETCURSOR;
+                            HTCLIENT :: 1;
+                            if (lparam & 0xFFFF) == HTCLIENT {
+                                SetCursor(window.backend.cursors[window.cursor]);
+                                result = 1;
+                            } else {
                                 result = DefWindowProcW(hwnd, message, wparam, lparam);
                             }
                         case WM_SIZE;
@@ -1943,6 +1967,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         height: float64;
         scale: float64;
 
+        cursor: Cursor;
+
         text_buffer: [256]u8;
         text: string;
 
@@ -2150,7 +2176,22 @@ Padding :: Sides;
 Margin :: Sides;
 Border_Width :: Sides;
 
-Cursor :: enum u8 { DEFAULT; TEXT; POINTER; };
+CURSOR_COUNT :: #run enum_highest_value(Cursor) + 1;
+Cursor :: enum u8 {
+    DEFAULT;
+    TEXT;
+    POINTER;
+    WAIT;
+    PROGRESS;
+    CROSSHAIR;
+    HELP;
+    NOT_ALLOWED;
+    MOVE;
+    EW_RESIZE;
+    NS_RESIZE;
+    NWSE_RESIZE;
+    NESW_RESIZE;
+};
 
 Border_Style :: enum u32 { SOLID; DASHED; };
 
@@ -2979,6 +3020,17 @@ copy_to_clipboard :: (text: string) {
             CloseClipboard();
         } else {
             GlobalFree(memory);
+        }
+    }
+}
+set_cursor :: (cursor: Cursor) {
+    using context.forbear;
+    #if OS == .WINDOWS {
+        if window.cursor != cursor {
+            window.cursor = cursor;
+            if window.mouse_state.inside {
+                SetCursor(window.backend.cursors[cursor]);
+            }
         }
     }
 }
@@ -4779,32 +4831,49 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 }
 prepare_for_next_frame :: () {
     using context.forbear;
-    now := seconds_since_init();
-    delta_time = xx min(now - last_frame_time, 1.0 / 30.0);
+    now            := seconds_since_init();
+    delta_time      = xx min(now - last_frame_time, 1.0 / 30.0);
     last_frame_time = now;
 
     window.keyboard_state.events.count = 0;
-    window.text.count = 0;
-    window.mouse_state.scroll_delta = Vector2.{0.0, 0.0};
+    window.text.count                  = 0;
+    window.mouse_state.scroll_delta    = Vector2.{0.0, 0.0};
     memset(*window.mouse_state.released, 0, size_of(type_of(window.mouse_state.released)));
     memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
 
+    cursor := Cursor.DEFAULT;
     array_resize(*measurements, node_tree.count, false);
     for node: node_tree {
         // we can't just copy the entire Node_Tree with a mempcy here because it points into frame allocated data
         // that was allocated in the frame pool. besides, in what I was able to measure, this copy tends to be more
         // performant than if we were to copy the entire Node_Tree with memcpy.
         measurements[it_index] = Node_Measurement.{
-            size = node.size,
-            content_size = node.content_size,
-            position = node.position,
+            size               = node.size,
+            content_size       = node.content_size,
+            position           = node.position,
             clipping_rectangle = node.clipping_rectangle,
-            state_offset = node.state_offset,
-            state_size = node.state_size,
-            pool_slot = node.pool_slot,
-            key = node.key,
+            state_offset       = node.state_offset,
+            state_size         = node.state_size,
+            pool_slot          = node.pool_slot,
+            key                = node.key,
         };
+        if window.mouse_state.inside {
+            mouse := window.mouse_state.position;
+            top_z := 0;
+            for node: node_tree if node.kind == .ELEMENT {
+                inside :=
+                       mouse.x >= node.position.x
+                    && mouse.x <= node.position.x + node.size.x
+                    && mouse.y >= node.position.y
+                    && mouse.y <= node.position.y + node.size.y;
+                if inside && node.z >= top_z {
+                    top_z  = node.z;
+                    cursor = node.style.cursor;
+                }
+            }
+        }
     }
+    set_cursor(cursor);
 
     #if OS == .LINUX {
         using window.keyboard_state;
@@ -4818,7 +4887,7 @@ prepare_for_next_frame :: () {
         }
     }
     state_current = 1 - state_current;
-    state_used = 0;
+    state_used    = 0;
     array_reset_keeping_memory(*node_tree);
 
     for *slot: pool_slots {
@@ -4866,7 +4935,7 @@ get_plugin :: () -> *Metaprogram_Plugin {
                 defer free(source);
 
                 start, end := -1, -1;
-                line := 1;
+                line       := 1;
                 line_start := 0;
                 for source {
                     if line == location.l0 && start < 0 {
@@ -4877,7 +4946,7 @@ get_plugin :: () -> *Metaprogram_Plugin {
                         break;
                     }
                     if it == #char "\n" {
-                        line += 1;
+                        line      += 1;
                         line_start = it_index + 1;
                     }
                 }
@@ -4982,7 +5051,7 @@ get_plugin :: () -> *Metaprogram_Plugin {
                         }
                     }
                 }
-                compiler_modify_procedure(message.workspace, body);
+                if modified compiler_modify_procedure(message.workspace, body);
             }
         }
     }
