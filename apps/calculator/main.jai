@@ -240,8 +240,8 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
         }
         #if OS == .MACOS {
             if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
-                previous = previous_word_boundary(*input_state.contents, 0);
-                next = next_word_boundary(*input_state.contents, input_state.contents.count);
+                previous = 0;
+                next = input_state.contents.count;
             }
         }
         removal_start, removal_end := input_state.cursor_index;
