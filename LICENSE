@@ -59,6 +59,20 @@ into your own software, for free, under these rules:
    releases, and security patches for your major version for 18
    months after its release.
 
+6. Sunset. If forbear ends, the Software enters the public domain.
+   forbear ends whenthe copyright holder dissolves, goes bankrupt,
+   or dies, and no successor continues the Software within 6 months.
+
+   From then on, every version of the Software released under this
+   license is dedicated to the public domain under CC0 1.0 Universal
+   (https://creativecommons.org/publicdomain/zero/1.0/). Where the
+   law does not allow that, CC0's fallback license gives everyone the
+   same freedom to use the Software for any purpose. Rules 2, 3, and
+   4 no longer apply, and no further royalties are owed.
+
+   Future versions of this license cannot remove this rule for
+   versions of the Software already released under it.
+
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
