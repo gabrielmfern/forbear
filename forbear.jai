@@ -88,58 +88,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     }
     return code_point;
 }
-#if OS == .LINUX {
-    key_text :: (state: *xkb_state, key_code: u32, utf8: []u8) -> string {
-        text: string;
-        if xkb_state_mod_name_is_active(state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 &&
-            xkb_state_mod_name_is_active(state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 0 {
-            length := xkb_state_key_get_utf8(state, key_code, utf8.data, xx utf8.count);
-            if length < utf8.count {
-                text = to_string(utf8.data, length);
-            } else {
-                log_error("we separated a % sized utf8 buffer for the key %, but it required length %. dropping it entirely.", utf8.count, key_code, length);
-            }
-        }
-        return text;
-    }
-    key_from_keysym :: (symbol: xkb_keysym_t) -> Key {
-        key: Key;
-        if symbol == {
-            case XKB_KEY_Escape;       key = .ESCAPE;
-            case XKB_KEY_Return;       #through;
-            case XKB_KEY_KP_Enter;     key = .ENTER;
-            case XKB_KEY_Tab;          #through;
-            case XKB_KEY_ISO_Left_Tab; key = .TAB;
-            case XKB_KEY_BackSpace;    key = .BACKSPACE;
-            case XKB_KEY_Delete;       key = .DELETE;
-            case XKB_KEY_Insert;       key = .INSERT;
-            case XKB_KEY_Left;         key = .ARROW_LEFT;
-            case XKB_KEY_Right;        key = .ARROW_RIGHT;
-            case XKB_KEY_Up;           key = .ARROW_UP;
-            case XKB_KEY_Down;         key = .ARROW_DOWN;
-            case XKB_KEY_Home;         key = .HOME;
-            case XKB_KEY_End;          key = .END;
-            case XKB_KEY_Page_Up;      key = .PAGE_UP;
-            case XKB_KEY_Page_Down;    key = .PAGE_DOWN;
-            case XKB_KEY_Shift_L;      key = .SHIFT_LEFT;
-            case XKB_KEY_Shift_R;      key = .SHIFT_RIGHT;
-            case XKB_KEY_Control_L;    key = .CONTROL_LEFT;
-            case XKB_KEY_Control_R;    key = .CONTROL_RIGHT;
-            case XKB_KEY_Alt_L;        key = .ALT_LEFT;
-            case XKB_KEY_Alt_R;        key = .ALT_RIGHT;
-            case XKB_KEY_Super_L;      key = .SUPER_LEFT;
-            case XKB_KEY_Super_R;      key = .SUPER_RIGHT;
-            case XKB_KEY_Caps_Lock;    key = .CAPS_LOCK;
-            case;
-                if symbol >= XKB_KEY_F1 && symbol <= XKB_KEY_F12 {
-                    key = Key.F1 + cast(Key) (symbol - XKB_KEY_F1);
-                } else {
-                    key = xx xkb_keysym_to_utf32(xkb_keysym_to_lower(symbol));
-                }
-        }
-        return key;
-    }
-} else #if OS == .WINDOWS {
+#if OS == .WINDOWS {
     key_from_virtual_key :: (vk: u32, scancode: u32) -> Key {
         state: [256]u8;
         GetKeyboardState(state.data);
@@ -298,6 +247,57 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         }
         return key;
     }
+} else #if OS == .LINUX {
+    key_text :: (state: *xkb_state, key_code: u32, utf8: []u8) -> string {
+        text: string;
+        if xkb_state_mod_name_is_active(state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 0 &&
+            xkb_state_mod_name_is_active(state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 0 {
+            length := xkb_state_key_get_utf8(state, key_code, utf8.data, xx utf8.count);
+            if length < utf8.count {
+                text = to_string(utf8.data, length);
+            } else {
+                log_error("we separated a % sized utf8 buffer for the key %, but it required length %. dropping it entirely.", utf8.count, key_code, length);
+            }
+        }
+        return text;
+    }
+    key_from_keysym :: (symbol: xkb_keysym_t) -> Key {
+        key: Key;
+        if symbol == {
+            case XKB_KEY_Escape;       key = .ESCAPE;
+            case XKB_KEY_Return;       #through;
+            case XKB_KEY_KP_Enter;     key = .ENTER;
+            case XKB_KEY_Tab;          #through;
+            case XKB_KEY_ISO_Left_Tab; key = .TAB;
+            case XKB_KEY_BackSpace;    key = .BACKSPACE;
+            case XKB_KEY_Delete;       key = .DELETE;
+            case XKB_KEY_Insert;       key = .INSERT;
+            case XKB_KEY_Left;         key = .ARROW_LEFT;
+            case XKB_KEY_Right;        key = .ARROW_RIGHT;
+            case XKB_KEY_Up;           key = .ARROW_UP;
+            case XKB_KEY_Down;         key = .ARROW_DOWN;
+            case XKB_KEY_Home;         key = .HOME;
+            case XKB_KEY_End;          key = .END;
+            case XKB_KEY_Page_Up;      key = .PAGE_UP;
+            case XKB_KEY_Page_Down;    key = .PAGE_DOWN;
+            case XKB_KEY_Shift_L;      key = .SHIFT_LEFT;
+            case XKB_KEY_Shift_R;      key = .SHIFT_RIGHT;
+            case XKB_KEY_Control_L;    key = .CONTROL_LEFT;
+            case XKB_KEY_Control_R;    key = .CONTROL_RIGHT;
+            case XKB_KEY_Alt_L;        key = .ALT_LEFT;
+            case XKB_KEY_Alt_R;        key = .ALT_RIGHT;
+            case XKB_KEY_Super_L;      key = .SUPER_LEFT;
+            case XKB_KEY_Super_R;      key = .SUPER_RIGHT;
+            case XKB_KEY_Caps_Lock;    key = .CAPS_LOCK;
+            case;
+                if symbol >= XKB_KEY_F1 && symbol <= XKB_KEY_F12 {
+                    key = Key.F1 + cast(Key) (symbol - XKB_KEY_F1);
+                } else {
+                    key = xx xkb_keysym_to_utf32(xkb_keysym_to_lower(symbol));
+                }
+        }
+        return key;
+    }
 }
 
 #scope_export
@@ -306,7 +306,771 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     #load "./adapters/javascript/javascript.jai";
 }
 
-#if OS == .LINUX {
+#if OS == .WINDOWS {
+    #load "bindings-win32.jai";
+    #import "Windows";
+    #import "Windows_Utf8";
+    #import "Unicode";
+    user32 :: #library,system "user32";
+    kernel32 :: #library,system "kernel32";
+
+    AdjustWindowRectExForDpi :: (rect: *RECT, style: u32, menu: BOOL, extended_style: u32, dpi: u32) -> BOOL #foreign user32;
+    DiscardVirtualMemory :: (VirtualAddress: *void, Size: SIZE_T) -> DWORD #foreign kernel32;
+    GetDpiForWindow :: (hwnd: HWND) -> u32 #foreign user32;
+    GetWindowLongPtrW :: (hwnd: HWND, index: s32) -> s64 #foreign user32;
+    SetProcessDpiAwarenessContext :: (value: HANDLE) -> BOOL #foreign user32;
+    SetProcessWorkingSetSize :: (hProcess: HANDLE, dwMinimumWorkingSetSize: SIZE_T, dwMaximumWorkingSetSize: SIZE_T) -> BOOL #foreign kernel32;
+    TRACKMOUSEEVENT :: struct {
+        cbSize: DWORD;
+        dwFlags: DWORD;
+        hwndTrack: HWND;
+        dwHoverTime: DWORD;
+    };
+    TrackMouseEvent :: (lpEventTrack: *TRACKMOUSEEVENT) -> BOOL #foreign user32;
+    ToUnicodeEx :: (wVirtKey: u32, wScanCode: u32, lpKeyState: *u8, pwszBuff: *u16, cchBuff: s32, wFlags: u32, dwhkl: *void) -> s32 #foreign user32;
+    GetKeyboardState :: (lpKeyState: *u8) -> BOOL #foreign user32;
+    GetKeyboardLayout :: (idThread: DWORD) -> *void #foreign user32;
+    MapVirtualKeyW :: (uCode: u32, uMapType: u32) -> u32 #foreign user32;
+    SetTimer :: (hWnd: HWND, nIDEvent: u64, uElapse: u32, lpTimerFunc: *void) -> u64 #foreign user32;
+    KillTimer :: (hWnd: HWND, uIDEvent: u64) -> BOOL #foreign user32;
+    WaitMessage :: () -> BOOL #foreign user32;
+    IsIconic :: (hWnd: HWND) -> BOOL #foreign user32;
+    GetMessageTime :: () -> s32 #foreign user32;
+    GetClipboardSequenceNumber :: () -> DWORD #foreign user32;
+    GlobalFree :: (hMem: HGLOBAL) -> HGLOBAL #foreign kernel32;
+
+    MODAL_TAKEOVER_TIMER :: 1;
+
+    MAPVK_VSC_TO_VK_EX :: 3;
+    GWLP_USERDATA :: -21;
+    TME_LEAVE :: 0x00000002;
+    WM_MOUSELEAVE :: 0x02A3;
+    WM_ENTERMENULOOP :: 0x0211;
+    WM_EXITMENULOOP :: 0x0212;
+    WM_CAPTURECHANGED :: 0x0215;
+
+    Windows_GL_Backend :: struct {
+        message: (data: *void, window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> result: s64, handled: bool;
+        message_data: *void;
+        wndproc_context: *#Context;
+
+        cursors: [CURSOR_COUNT]HCURSOR;
+
+        render: (data: *void);
+        render_data: *void;
+
+        clipboard_sequence: DWORD;
+        clipboard_text_buffer: string;
+        clipboard_text: string;
+    };
+    init_backend :: (using backend: *Windows_GL_Backend) {
+        wndproc_context = *context;
+
+        timeBeginPeriod(1);
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 :: cast(HANDLE) -4;
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+        cursors[Cursor.DEFAULT]     = LoadCursorW(null, xx IDC_ARROW);
+        cursors[Cursor.TEXT]        = LoadCursorW(null, xx IDC_IBEAM);
+        cursors[Cursor.POINTER]     = LoadCursorW(null, xx IDC_HAND);
+        cursors[Cursor.WAIT]        = LoadCursorW(null, xx IDC_WAIT);
+        cursors[Cursor.PROGRESS]    = LoadCursorW(null, xx IDC_APPSTARTING);
+        cursors[Cursor.CROSSHAIR]   = LoadCursorW(null, xx IDC_CROSS);
+        cursors[Cursor.HELP]        = LoadCursorW(null, xx IDC_HELP);
+        cursors[Cursor.NOT_ALLOWED] = LoadCursorW(null, xx IDC_NO);
+        cursors[Cursor.MOVE]        = LoadCursorW(null, xx IDC_SIZEALL);
+        cursors[Cursor.EW_RESIZE]   = LoadCursorW(null, xx IDC_SIZEWE);
+        cursors[Cursor.NS_RESIZE]   = LoadCursorW(null, xx IDC_SIZENS);
+        cursors[Cursor.NWSE_RESIZE] = LoadCursorW(null, xx IDC_SIZENWSE);
+        cursors[Cursor.NESW_RESIZE] = LoadCursorW(null, xx IDC_SIZENESW);
+
+        class: WNDCLASSEXW;
+        class.cbSize        = size_of(WNDCLASSEXW);
+        class.style         = CS_OWNDC;
+        class.lpfnWndProc   = wndproc;
+        class.hInstance     = GetModuleHandleW(null);
+        class.hCursor       = cursors[Cursor.DEFAULT];
+        class.lpszClassName = utf8_to_wide("forbear",, temp);
+        RegisterClassExW(*class);
+    }
+    wndproc :: (hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> s64 #c_call {
+        result: s64;
+        if message != WM_NCCREATE {
+            window := cast(*Windows_GL_Window) GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+            if window != null {
+                push_context window.backend.wndproc_context.* {
+                    handled := false;
+                    if window.backend.message != null {
+                        result, handled = window.backend.message(window.backend.message_data, window, hwnd, message, wparam, lparam);
+                    }
+                    if !handled if message == {
+                        case WM_CLOSE;
+                            window.running = false;
+                        case WM_SYSCOMMAND;
+                            if (wparam & 0xFFF0) != SC_KEYMENU || lparam != 0 {
+                                result = DefWindowProcW(hwnd, message, wparam, lparam);
+                            }
+                        case WM_SETCURSOR;
+                            HTCLIENT :: 1;
+                            if (lparam & 0xFFFF) == HTCLIENT {
+                                SetCursor(window.backend.cursors[window.mouse_state.cursor]);
+                                result = 1;
+                            } else {
+                                result = DefWindowProcW(hwnd, message, wparam, lparam);
+                            }
+                        case WM_SIZE;
+                            if wparam != SIZE_MINIMIZED {
+                                window.width = cast(float64)(lparam & 0xFFFF);
+                                window.height = cast(float64)((lparam >> 16) & 0xFFFF);
+                                if window.backend.render != null {
+                                    window.backend.render(window.backend.render_data);
+                                }
+                            }
+                        case WM_MOVE;
+                            if window.backend.render != null {
+                                window.backend.render(window.backend.render_data);
+                            }
+                        case WM_ENTERMENULOOP; #through;
+                        case WM_ENTERSIZEMOVE;
+                            SetTimer(hwnd, MODAL_TAKEOVER_TIMER, 1, null);
+                        case WM_EXITMENULOOP; #through;
+                        case WM_EXITSIZEMOVE;
+                            KillTimer(hwnd, MODAL_TAKEOVER_TIMER);
+                        case WM_TIMER;
+                            if wparam == MODAL_TAKEOVER_TIMER && window.backend.render {
+                                window.backend.render(window.backend.render_data);
+                            }
+                        case WM_MOUSEMOVE;
+                            if window.mouse_state.inside == false {
+                                window.mouse_state.inside = true;
+                                track := TRACKMOUSEEVENT.{
+                                    cbSize = size_of(TRACKMOUSEEVENT),
+                                    dwFlags = TME_LEAVE,
+                                    hwndTrack = hwnd,
+                                };
+                                TrackMouseEvent(*track);
+                            }
+                            window.mouse_state.position = Vector2.{
+                                cast(float) cast,trunc(s16) (lparam & 0xFFFF),
+                                cast(float) cast,trunc(s16) ((lparam >> 16) & 0xFFFF),
+                            } / cast(float) window.scale;
+                        case WM_MOUSEWHEEL;
+                            wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
+                            MK_SHIFT :: 0x0004;
+                            if wparam & MK_SHIFT {
+                                window.mouse_state.scroll_delta.x -= (cast(float)wheel) / 120.0 * SCROLL_MULTIPLIER;
+                            } else {
+                                window.mouse_state.scroll_delta.y -= (cast(float)wheel) / 120.0 * SCROLL_MULTIPLIER;
+                            }
+                        case WM_MOUSEHWHEEL;
+                            wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
+                            window.mouse_state.scroll_delta.x += (cast(float)wheel) / 120.0 * SCROLL_MULTIPLIER;
+                        case WM_MOUSELEAVE;
+                            window.mouse_state.inside = false;
+                        case WM_KILLFOCUS;
+                            memset(window.keyboard_state.held.data, 0, size_of(type_of(window.keyboard_state.held)));
+                        case WM_CAPTURECHANGED;
+                            memset(window.mouse_state.held.data, 0, size_of(type_of(window.mouse_state.held)));
+                        // TODO: handle double click events
+                        case WM_LBUTTONDOWN; #through;
+                        case WM_RBUTTONDOWN; #through;
+                        case WM_MBUTTONDOWN; #through;
+                        case WM_XBUTTONDOWN;
+                            button: Mouse_Button = xx ((message - WM_LBUTTONDOWN) / 3);
+                            if button == .BACK && ((wparam >> 16) & 0xFFFF) == 2 {
+                                button = .FORWARD;
+                            }
+                            mouse_press(*window.mouse_state, button, Vector2.{
+                                cast(float) cast,trunc(s16) (lparam & 0xFFFF),
+                                cast(float) cast,trunc(s16) ((lparam >> 16) & 0xFFFF),
+                            } / cast(float) window.scale);
+                            SetCapture(hwnd);
+                            if message == WM_XBUTTONDOWN {
+                                result = 1;
+                            }
+                        case WM_LBUTTONUP; #through;
+                        case WM_RBUTTONUP; #through;
+                        case WM_MBUTTONUP; #through;
+                        case WM_XBUTTONUP;
+                            button: Mouse_Button = xx ((message - WM_LBUTTONUP) / 3);
+                            if button == .BACK && ((wparam >> 16) & 0xFFFF) == 2 {
+                                button = .FORWARD;
+                            }
+                            mouse_release(*window.mouse_state, button);
+                            any_held := false;
+                            for window.mouse_state.held {
+                                if it {
+                                    any_held = true;
+                                    break;
+                                }
+                            }
+                            if !any_held {
+                                ReleaseCapture();
+                            }
+                            if message == WM_XBUTTONUP {
+                                result = 1;
+                            }
+                        case WM_CHAR;
+                            using window.keyboard_state;
+                            unit := cast(u16) wparam;
+                            code_point: u32;
+                            if is_high_surrogate(unit) {
+                                high_surrogate = unit;
+                            } else if is_low_surrogate(unit) {
+                                if is_high_surrogate(high_surrogate) {
+                                    code_point = utf16_to_code_point(u16.[high_surrogate, unit], 2);
+                                }
+                                high_surrogate = 0;
+                            } else {
+                                code_point = unit;
+                            }
+                            if code_point != 0 {
+                                bytes: [4]u8;
+                                utf8 := string.{ data = bytes.data };
+                                character_utf32_to_utf8(code_point, *utf8);
+                                append_text(utf8, *window.text, window.text_buffer);
+                            }
+                        case WM_SYSCHAR;
+                            // text typed while Alt is held
+                            if wparam == #char " " {
+                                result = DefWindowProcW(hwnd, message, wparam, lparam);
+                            }
+                        case WM_SYSKEYDOWN; #through;
+                        case WM_KEYDOWN;
+                            using window.keyboard_state;
+                            if wparam != VK_PROCESSKEY && wparam != VK_PACKET { // ignores keys typed during an IME compose event
+                                repeated := (lparam >> 30) & 1;
+                                scancode := cast(u32) ((lparam >> 16) & 0xFF);
+                                extended := (lparam >> 24) & 1;
+                                index    := scancode | (extended << 8);
+                                altgr_control := false;
+                                if wparam == VK_CONTROL && extended == 0 {
+                                    next: MSG;
+                                    altgr_control = PeekMessageW(*next, null, 0, 0, PM_NOREMOVE) != 0 &&
+                                        (next.message == WM_KEYDOWN || next.message == WM_SYSKEYDOWN) &&
+                                        next.wParam == VK_MENU &&
+                                        ((next.lParam >> 24) & 1) == 1 &&
+                                        next.time == GetMessageTime();
+                                }
+                                if altgr_control {
+                                } else if repeated && held[index] != 0 {
+                                    add_key_event(*events, Key_Event.{ .REPEATED, held[index] });
+                                } else {
+                                    key: Key = 0;
+                                    if wparam == {
+                                        case VK_ESCAPE;  key = .ESCAPE;
+                                        case VK_RETURN;  key = .ENTER;
+                                        case VK_TAB;     key = .TAB;
+                                        case VK_BACK;    key = .BACKSPACE;
+                                        case VK_DELETE;  key = .DELETE;
+                                        case VK_INSERT;  key = .INSERT;
+                                        case VK_LEFT;    key = .ARROW_LEFT;
+                                        case VK_RIGHT;   key = .ARROW_RIGHT;
+                                        case VK_UP;      key = .ARROW_UP;
+                                        case VK_DOWN;    key = .ARROW_DOWN;
+                                        case VK_HOME;    key = .HOME;
+                                        case VK_END;     key = .END;
+                                        case VK_PRIOR;   key = .PAGE_UP;
+                                        case VK_NEXT;    key = .PAGE_DOWN;
+                                        case VK_F1;      key = .F1;
+                                        case VK_F2;      key = .F2;
+                                        case VK_F3;      key = .F3;
+                                        case VK_F4;      key = .F4;
+                                        case VK_F5;      key = .F5;
+                                        case VK_F6;      key = .F6;
+                                        case VK_F7;      key = .F7;
+                                        case VK_F8;      key = .F8;
+                                        case VK_F9;      key = .F9;
+                                        case VK_F10;     key = .F10;
+                                        case VK_F11;     key = .F11;
+                                        case VK_F12;     key = .F12;
+                                        case VK_SHIFT;   #through;
+                                        case VK_CONTROL; #through;
+                                        case VK_MENU;
+                                            vk := MapVirtualKeyW(scancode | cast(u32) (ifx extended then 0xE000 else 0), MAPVK_VSC_TO_VK_EX);
+                                            if vk == {
+                                                case VK_LSHIFT;   key = .SHIFT_LEFT;
+                                                case VK_RSHIFT;   key = .SHIFT_RIGHT;
+                                                case VK_LCONTROL; key = .CONTROL_LEFT;
+                                                case VK_RCONTROL; key = .CONTROL_RIGHT;
+                                                case VK_LMENU;    key = .ALT_LEFT;
+                                                case VK_RMENU;    key = .ALT_RIGHT;
+                                            }
+                                        case VK_LWIN;    key = .SUPER_LEFT;
+                                        case VK_RWIN;    key = .SUPER_RIGHT;
+                                        case VK_CAPITAL; key = .CAPS_LOCK;
+                                        case;
+                                            // the key could not be found, meaning it's not in the named ones, so we're going to write it as a character instead
+                                            key = key_from_virtual_key(xx wparam, scancode);
+                                    }
+                                    if key != 0 {
+                                        held[index] = key;
+                                        add_key_event(*events, Key_Event.{ .PRESSED, key });
+                                    }
+                                    if wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU || wparam == VK_CAPITAL {
+                                        update_held_keys_by_modifiers(window.backend, *window.keyboard_state);
+                                    }
+                                }
+                            }
+                            if message == WM_SYSKEYDOWN {
+                                result = DefWindowProcW(hwnd, message, wparam, lparam);
+                            }
+                        case WM_DPICHANGED;
+                            window.scale = cast(float64) (wparam & 0xFFFF) / 96.0;
+                            suggested := cast(*RECT) lparam;
+                            SetWindowPos(hwnd, null, suggested.left, suggested.top,
+                                suggested.right - suggested.left, suggested.bottom - suggested.top,
+                                SWP_NOZORDER | SWP_NOACTIVATE);
+                        case WM_KEYUP; #through;
+                        case WM_SYSKEYUP;
+                            using window.keyboard_state;
+                            scancode := cast(u32) ((lparam >> 16) & 0xFF);
+                            extended := cast(u32) ((lparam >> 24) & 1);
+                            index := scancode | (extended << 8);
+                            key := held[index];
+                            if key != 0 {
+                                add_key_event(*events, .{.RELEASED, key});
+                                held[index] = 0;
+                            }
+                            if wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU || wparam == VK_CAPITAL {
+                                update_held_keys_by_modifiers(window.backend, *window.keyboard_state);
+                            }
+                            if message == WM_SYSKEYUP {
+                                result = DefWindowProcW(hwnd, message, wparam, lparam);
+                            }
+                        case;
+                            result = DefWindowProcW(hwnd, message, wparam, lparam);
+                    }
+                }
+            } else {
+                result = DefWindowProcW(hwnd, message, wparam, lparam);
+            }
+        } else {
+            // lpCreateParams is the first field of CREATESTRUCTW
+            create_params := (cast(**void) lparam).*;
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, xx create_params);
+            result = DefWindowProcW(hwnd, message, wparam, lparam);
+        }
+        return result;
+    }
+    update_backend :: (backend: *Backend) {
+        backend.wndproc_context = *context;
+        window := context.forbear.window;
+        while true {
+            message: MSG;
+            while PeekMessageW(*message, null, 0, 0, PM_REMOVE) {
+                TranslateMessage(*message);
+                DispatchMessageW(*message);
+            }
+            if !window.running || !IsIconic(window.hwnd) {
+                break;
+            }
+            WaitMessage();
+        }
+
+        sequence := GetClipboardSequenceNumber();
+        if sequence != backend.clipboard_sequence && OpenClipboard(window.hwnd) {
+            defer CloseClipboard();
+            backend.clipboard_sequence = sequence;
+            backend.clipboard_text.count = 0;
+
+            handle := GetClipboardData(CF_UNICODETEXT);
+            wide := cast(*u16) GlobalLock(handle);
+            if wide {
+                defer GlobalUnlock(handle);
+                // with -1, the count includes the null terminator
+                count := WideCharToMultiByte(CP_UTF8, 0, wide, -1, null, 0, null, null);
+                if count + 1 > backend.clipboard_text_buffer.count {
+                    backend.clipboard_text_buffer.data = realloc(backend.clipboard_text_buffer.data, count, backend.clipboard_text_buffer.count,, context.forbear.persistent_allocator);
+                    backend.clipboard_text_buffer.count = count;
+                }
+                WideCharToMultiByte(CP_UTF8, 0, wide, -1, backend.clipboard_text_buffer.data, count, null, null);
+                backend.clipboard_text = .{ count, backend.clipboard_text_buffer.data };
+            }
+        }
+    }
+
+    Windows_GL_Window :: struct {
+        hwnd: HWND;
+        hdc: HDC;
+        backend: *Windows_GL_Backend;
+
+        width: float64;
+        height: float64;
+        scale: float64;
+
+        text_buffer: [256]u8;
+        text: string;
+
+        keyboard_state: Keyboard_State;
+        mouse_state: Mouse_State;
+
+        running := true;
+    };
+    init_window :: (backend: *Windows_GL_Backend,
+                    window:  *Windows_GL_Window,
+                    width:   float64,
+                    height:  float64,
+                    title:   string,
+                    show_window := true) {
+        window.text.data = window.text_buffer.data;
+        window.backend = backend;
+        init_keyboard_state(*window.keyboard_state);
+
+        style :: WS_OVERLAPPEDWINDOW;
+        window.hwnd = CreateWindowExW(
+            0,
+            utf8_to_wide("forbear",, temp),
+            utf8_to_wide(title,, temp),
+            style,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+            null, null, GetModuleHandleW(null), window
+        );
+
+        dpi := GetDpiForWindow(window.hwnd);
+        window.scale = dpi / 96.0;
+        rectangle := RECT.{ right = xx (width * window.scale), bottom = xx (height * window.scale) };
+        AdjustWindowRectExForDpi(*rectangle, style, 0, 0, dpi);
+        SetWindowPos(window.hwnd, null, 0, 0, rectangle.right - rectangle.left, rectangle.bottom - rectangle.top, SWP_NOMOVE | SWP_NOZORDER);
+        if show_window {
+            ShowWindow(window.hwnd, SW_SHOW);
+        }
+
+        _, window.hdc = wgl_create_context(window.hwnd, null, 3, 3);
+        gl_load(*gl);
+        if gl.wglSwapIntervalEXT {
+            gl.wglSwapIntervalEXT(1);
+        }
+
+        client: RECT;
+        GetClientRect(window.hwnd, *client);
+        window.width = xx client.right;
+        window.height = xx client.bottom;
+    }
+
+    Backend :: Windows_GL_Backend;
+    Window :: Windows_GL_Window;
+} else #if OS == .MACOS {
+    #load "bindings-darwin.jai";
+    #import "Objective_C";
+    #import "Objective_C/AppKit";
+    #import "Process";
+    #import "File";
+    #import "File_Utilities";
+
+    MacOS_GL_Window :: struct {
+        width: float64;
+        height: float64;
+        scale: float64;
+
+        ns_window: *NSWindow;
+        view: *NSView;
+
+        text_buffer: [256]u8;
+        text: string;
+
+        keyboard_state: Keyboard_State;
+        mouse_state: Mouse_State;
+
+        running := true;
+    };
+    init_window :: (backend: *MacOS_GL_Backend,
+                    window:  *MacOS_GL_Window,
+                    width:   float64,
+                    height:  float64,
+                    title:   string) {
+        rectangle := NSRect.{ size = .{ width = width, height = height } };
+
+        backend.pasteboard = NSPasteboard.generalPasteboard();
+        window.ns_window = NSWindow.initWithContentRect(
+            objc_alloc(NSWindow),
+            rectangle,
+            NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable,
+            NSBackingStoreBuffered,
+            NO,
+            NSScreen.mainScreen()
+        );
+        NSWindow.setReleasedWhenClosed(window.ns_window, NO);
+        NSWindow.setTitle(window.ns_window, title);
+        NSWindow.center(window.ns_window);
+        NSWindow.makeKeyAndOrderFront(window.ns_window, null);
+
+        window.view = NSWindow.contentView(window.ns_window);
+        NSView.setWantsBestResolutionOpenGLSurface(window.view, YES);
+        NSOpenGLContext.setView(backend.gl_context, window.view);
+        backend.attached_view = window.view;
+
+        frame := NSView.frame(window.view);
+        backing := NSView.convertRectToBacking(window.view, frame);
+        window.width = backing.size.width;
+        window.height = backing.size.height;
+        window.scale = backing.size.width / frame.size.width;
+
+        window.text.data = window.text_buffer.data;
+
+        init_keyboard_state(*window.keyboard_state);
+    }
+    update_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window) {
+        is_visible: (*void, Selector) -> BOOL #c_call = xx objc_msgSend;
+        // TODO: this isVisible is not the right way to do it, this also becomes true when
+        // the program is minimized so the program just stops then which is a bug.
+        if !is_visible(window.ns_window, selector("isVisible")) {
+            window.running = false;
+        }
+
+        frame := NSView.frame(window.view);
+        backing := NSView.convertRectToBacking(window.view, frame);
+        if backing.size.width != window.width || backing.size.height != window.height {
+            window.width = backing.size.width;
+            window.height = backing.size.height;
+            window.scale = backing.size.width / frame.size.width;
+            NSOpenGLContext.update(backend.gl_context);
+        }
+        if NSApplication.keyWindow(backend.app) != window.ns_window {
+            memset(window.keyboard_state.held.data, 0, size_of(type_of(window.keyboard_state.held)));
+        }
+    }
+
+    MacOS_GL_Backend :: struct {
+        render: (data: *void);
+        render_data: *void;
+
+        cursors: [CURSOR_COUNT]*NSCursor;
+
+        app: *NSApplication;
+        pixel_format: *NSOpenGLPixelFormat;
+        gl_context: *NSOpenGLContext;
+
+        pasteboard: *NSPasteboard;
+        clipboard_change_count: NSInteger = -1;
+        clipboard_text_buffer: string;
+        clipboard_text: string;
+
+        attached_view: *NSView;
+    };
+    init_backend :: (backend: *MacOS_GL_Backend) {
+        init_objective_c();
+        init_app_kit();
+        using backend;
+
+        cursors[Cursor.DEFAULT]     = NSCursor.arrowCursor();
+        cursors[Cursor.TEXT]        = NSCursor.IBeamCursor();
+        cursors[Cursor.POINTER]     = NSCursor.pointingHandCursor();
+        cursors[Cursor.NOT_ALLOWED] = NSCursor.operationNotAllowedCursor();
+        cursors[Cursor.MOVE]        = NSCursor.openHandCursor();
+        cursors[Cursor.EW_RESIZE]   = NSCursor.resizeLeftRightCursor();
+        cursors[Cursor.NS_RESIZE]   = NSCursor.resizeUpDownCursor();
+
+        get: (*void, Selector) -> *NSCursor #c_call = xx objc_msgSend;
+        cursors[Cursor.CROSSHAIR]                   = get(xx class(NSCursor), selector("crosshairCursor"));
+
+        cursors[Cursor.WAIT]     = cursors[Cursor.DEFAULT];
+        cursors[Cursor.PROGRESS] = cursors[Cursor.DEFAULT];
+        cursors[Cursor.HELP]     = cursors[Cursor.DEFAULT];
+        responds: (*void, Selector, Selector) -> BOOL #c_call = xx objc_msgSend;
+        if responds(xx class(NSCursor), selector("respondsToSelector:"), selector("busyButClickableCursor")) {
+            cursors[Cursor.WAIT]     = get(xx class(NSCursor), selector("busyButClickableCursor"));
+            cursors[Cursor.PROGRESS] = cursors[Cursor.WAIT];
+        }
+        if responds(xx class(NSCursor), selector("respondsToSelector:"), selector("_helpCursor")) {
+            cursors[Cursor.HELP] = get(xx class(NSCursor), selector("_helpCursor"));
+        }
+
+        frame_resize: (*void, Selector, NSUInteger, NSUInteger) -> *NSCursor #c_call = xx objc_msgSend;
+        sel                                                                         := selector("frameResizeCursorFromPosition:inDirections:");
+        cursors[Cursor.NWSE_RESIZE]                                                  = frame_resize(xx class(NSCursor), sel, 1 | 2, 3);
+        cursors[Cursor.NESW_RESIZE]                                                  = frame_resize(xx class(NSCursor), sel, 1 | 8, 3);
+
+        app = NSApplication.sharedApplication();
+        NSApplication.setActivationPolicy(app, NSApplicationActivationPolicyRegular);
+        NSApplication.finishLaunching(app);
+        NSApplication.activateIgnoringOtherApps(app, YES);
+
+        attributes := NSOpenGLPixelFormatAttribute.[
+            NSOpenGLPFADoubleBuffer,
+            NSOpenGLPFAAccelerated,
+            NSOpenGLPFAColorSize, 24,
+            NSOpenGLPFAAlphaSize, 8,
+            NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core,
+            0,
+        ];
+        pixel_format = NSOpenGLPixelFormat.initWithAttributes(objc_alloc(NSOpenGLPixelFormat), attributes.data);
+        gl_context = NSOpenGLContext.initWithFormat(objc_alloc(NSOpenGLContext), pixel_format, null);
+        NSOpenGLContext.makeCurrentContext(gl_context);
+        gl_load(*gl);
+    }
+    update_backend :: (backend: *MacOS_GL_Backend) {
+        pool := objc_init(objc_alloc(NSAutoreleasePool));
+        defer NSAutoreleasePool.drain(pool);
+
+        window := context.forbear.window;
+        using window.keyboard_state;
+
+        frame := NSView.frame(window.view);
+        location := NSWindow.mouseLocationOutsideOfEventStream(window.ns_window);
+
+        window.mouse_state.inside = location.x >= 0 && location.y >= 0 &&
+                                    location.x < frame.size.width && location.y < frame.size.height;
+        window.mouse_state.position = Vector2.{ xx location.x, xx (frame.size.height - location.y) };
+
+        change_count: (*void, Selector) -> NSInteger #c_call = xx objc_msgSend;
+        count := change_count(backend.pasteboard, selector("changeCount"));
+        if count != backend.clipboard_change_count {
+            backend.clipboard_text.count = 0;
+            backend.clipboard_change_count = count;
+            nsstring := backend.pasteboard.stringForType(backend.pasteboard, NSPasteboardTypeString);
+            if nsstring != null {
+                utf8 := to_string(NSString.UTF8String(nsstring));
+                if utf8.count > backend.clipboard_text_buffer.count {
+                    backend.clipboard_text_buffer.data = realloc(
+                        backend.clipboard_text_buffer.data,
+                        utf8.count,
+                        backend.clipboard_text_buffer.count,,
+                        context.forbear.persistent_allocator
+                    );
+                    backend.clipboard_text_buffer.count = utf8.count;
+                }
+                memcpy(backend.clipboard_text_buffer.data, utf8.data, utf8.count);
+
+                backend.clipboard_text.data = backend.clipboard_text_buffer.data;
+                backend.clipboard_text.count = utf8.count;
+            }
+        }
+
+        while true {
+            event := NSApplication.nextEventMatchingMask(backend.app, NSEventMaskAny, NSDate.distantPast(), NSDefaultRunLoopMode, YES);
+            if event {
+                event_type := NSEvent.type(event);
+                if event_type == {
+                    case NSEventTypeRightMouseDown; #through;
+                    case NSEventTypeLeftMouseDown; #through;
+                    case NSEventTypeOtherMouseDown;
+                        button := NSEvent.buttonNumber(event);
+                        if window.mouse_state.inside {
+                            if button < MOUSE_BUTTON_COUNT {
+                                mouse_press(*window.mouse_state, xx button, window.mouse_state.position);
+                            } else {
+                                log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, MIDDLE, BACK and FORWARD. button: %", button);
+                            }
+                        }
+                        backend.app.sendEvent(backend.app, event);
+                    case NSEventTypeLeftMouseUp; #through;
+                    case NSEventTypeRightMouseUp; #through;
+                    case NSEventTypeOtherMouseUp;
+                        button := NSEvent.buttonNumber(event);
+                        if button < MOUSE_BUTTON_COUNT {
+                            mouse_release(*window.mouse_state, xx button);
+                        } else {
+                            log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, MIDDLE, BACK and FORWARD. button: %", button);
+                        }
+                        backend.app.sendEvent(backend.app, event);
+                    case NSEventTypeScrollWheel;
+                        scrolling_delta: (*NSEvent, Selector) -> float64 #c_call = xx objc_msgSend;
+                        has_precise:     (*NSEvent, Selector) -> BOOL #c_call    = xx objc_msgSend;
+
+                        dy := cast(float) scrolling_delta(event, selector("scrollingDeltaX"));
+                        dx := cast(float) scrolling_delta(event, selector("scrollingDeltaY"));
+                        if !has_precise(event, selector("hasPreciseScrollingDeltas")) {
+                            dy *= SCROLL_MULTIPLIER;
+                        }
+                        window.mouse_state.scroll_delta.y -= dy;
+                        window.mouse_state.scroll_delta.x -= dx;
+                        backend.app.sendEvent(backend.app, event);
+                    case NSEventTypeKeyDown;
+                        code := NSEvent.keyCode(event);
+                        if NSEvent.isARepeat(event) && held[code] != 0 {
+                            add_key_event(*events, Key_Event.{.REPEATED, held[code]});
+                        } else {
+                            key := key_from_key_code(code);
+                            if key != 0 {
+                                add_key_event(*events, Key_Event.{.PRESSED, key});
+                                held[code] = key;
+                            }
+                        }
+                        if !(NSEvent.modifierFlags(event) & .NSEventModifierFlagCommand) {
+                            characters := NSEvent.characters(event);
+                            if characters {
+                                text := to_string(NSString.UTF8String(characters));
+                                // TODO(bug): this is currently accepting the text version of stuff like CTRL, which doensn't make any sense.
+                                // We should be using NSTextInputClient instead.
+                                if text.count != 3 || text[0] == 0xEF && text[1] >= 0x9C && text[1] <= 0xA3 {
+                                    append_text(text, *window.text, window.text_buffer);
+                                }
+                            }
+                        }
+                    case NSEventTypeKeyUp;
+                        code := NSEvent.keyCode(event);
+                        key := held[code];
+                        if key != 0 {
+                            add_key_event(*events, Key_Event.{.RELEASED, held[code]});
+                            held[code] = 0;
+                        }
+                    case NSEventTypeFlagsChanged;
+                        code := NSEvent.keyCode(event);
+                        key := key_from_key_code(code);
+                        if key != 0 {
+                            flags := cast(u64) NSEvent.modifierFlags(event);
+                            down: bool;
+                            if key == {
+                                case .CAPS_LOCK;     down = (flags & cast(u64) NSEventModifierFlags.NSEventModifierFlagCapsLock) != 0;
+                                case .CONTROL_LEFT;  down = (flags & 0x00000001) != 0;
+                                case .SHIFT_LEFT;    down = (flags & 0x00000002) != 0;
+                                case .SHIFT_RIGHT;   down = (flags & 0x00000004) != 0;
+                                case .SUPER_LEFT;    down = (flags & 0x00000008) != 0;
+                                case .SUPER_RIGHT;   down = (flags & 0x00000010) != 0;
+                                case .ALT_LEFT;      down = (flags & 0x00000020) != 0;
+                                case .ALT_RIGHT;     down = (flags & 0x00000040) != 0;
+                                case .CONTROL_RIGHT; down = (flags & 0x00002000) != 0;
+                            }
+
+                            if down && held[code] == 0 {
+                                add_key_event(*events, Key_Event.{.PRESSED, key});
+                                held[code] = key;
+                            } else if !down && held[code] != 0 {
+                                add_key_event(*events, Key_Event.{.RELEASED, key});
+                                held[code] = 0;
+                            }
+                        }
+                        update_held_keys_by_modifiers(backend, *window.keyboard_state);
+                        backend.app.sendEvent(backend.app, event);
+                    case;
+                        backend.app.sendEvent(backend.app, event);
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    Backend :: MacOS_GL_Backend;
+    Window :: MacOS_GL_Window;
+
+    create_application :: (name: string, executable: string) {
+        app := tprint("%/%.app", get_working_directory(), name);
+        make_directory_if_it_does_not_exist(tprint("%/Contents/MacOS", app), recursive = true);
+        bundled := tprint("%/Contents/MacOS/%", app, name);
+        copy_file(executable, bundled);
+        chmod(temp_c_string(bundled), 0x1ED);
+        write_entire_file(
+            tprint("%/Contents/Info.plist", app),
+            tprint(#string PLIST
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                <plist version="1.0">
+                <dict>
+                <key>CFBundleExecutable</key><string>%1</string>
+                <key>CFBundleIdentifier</key><string>com.forbear.%1</string>
+                <key>CFBundleName</key><string>%1</string>
+                <key>CFBundlePackageType</key><string>APPL</string>
+                <key>NSHighResolutionCapable</key><true/>
+                </dict>
+                </plist>
+                PLIST,
+            name)
+        );
+        run_command("codesign", "--force", "--deep", "-s", "-", app);
+    }
+} else #if OS == .LINUX {
     #load "bindings-linux.jai";
 
     #scope_module
@@ -1454,770 +2218,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 
     Backend :: Wayland_EGL_Backend;
     Window :: Wayland_EGL_Window;
-} else #if OS == .MACOS {
-    #load "bindings-darwin.jai";
-    #import "Objective_C";
-    #import "Objective_C/AppKit";
-    #import "Process";
-    #import "File";
-    #import "File_Utilities";
-
-    MacOS_GL_Window :: struct {
-        width: float64;
-        height: float64;
-        scale: float64;
-
-        ns_window: *NSWindow;
-        view: *NSView;
-
-        text_buffer: [256]u8;
-        text: string;
-
-        keyboard_state: Keyboard_State;
-        mouse_state: Mouse_State;
-
-        running := true;
-    };
-    init_window :: (backend: *MacOS_GL_Backend,
-                    window:  *MacOS_GL_Window,
-                    width:   float64,
-                    height:  float64,
-                    title:   string) {
-        rectangle := NSRect.{ size = .{ width = width, height = height } };
-
-        backend.pasteboard = NSPasteboard.generalPasteboard();
-        window.ns_window = NSWindow.initWithContentRect(
-            objc_alloc(NSWindow),
-            rectangle,
-            NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable,
-            NSBackingStoreBuffered,
-            NO,
-            NSScreen.mainScreen()
-        );
-        NSWindow.setReleasedWhenClosed(window.ns_window, NO);
-        NSWindow.setTitle(window.ns_window, title);
-        NSWindow.center(window.ns_window);
-        NSWindow.makeKeyAndOrderFront(window.ns_window, null);
-
-        window.view = NSWindow.contentView(window.ns_window);
-        NSView.setWantsBestResolutionOpenGLSurface(window.view, YES);
-        NSOpenGLContext.setView(backend.gl_context, window.view);
-        backend.attached_view = window.view;
-
-        frame := NSView.frame(window.view);
-        backing := NSView.convertRectToBacking(window.view, frame);
-        window.width = backing.size.width;
-        window.height = backing.size.height;
-        window.scale = backing.size.width / frame.size.width;
-
-        window.text.data = window.text_buffer.data;
-
-        init_keyboard_state(*window.keyboard_state);
-    }
-    update_window :: (backend: *MacOS_GL_Backend, window: *MacOS_GL_Window) {
-        is_visible: (*void, Selector) -> BOOL #c_call = xx objc_msgSend;
-        // TODO: this isVisible is not the right way to do it, this also becomes true when
-        // the program is minimized so the program just stops then which is a bug.
-        if !is_visible(window.ns_window, selector("isVisible")) {
-            window.running = false;
-        }
-
-        frame := NSView.frame(window.view);
-        backing := NSView.convertRectToBacking(window.view, frame);
-        if backing.size.width != window.width || backing.size.height != window.height {
-            window.width = backing.size.width;
-            window.height = backing.size.height;
-            window.scale = backing.size.width / frame.size.width;
-            NSOpenGLContext.update(backend.gl_context);
-        }
-        if NSApplication.keyWindow(backend.app) != window.ns_window {
-            memset(window.keyboard_state.held.data, 0, size_of(type_of(window.keyboard_state.held)));
-        }
-    }
-
-    MacOS_GL_Backend :: struct {
-        render: (data: *void);
-        render_data: *void;
-
-        cursors: [CURSOR_COUNT]*NSCursor;
-
-        app: *NSApplication;
-        pixel_format: *NSOpenGLPixelFormat;
-        gl_context: *NSOpenGLContext;
-
-        pasteboard: *NSPasteboard;
-        clipboard_change_count: NSInteger = -1;
-        clipboard_text_buffer: string;
-        clipboard_text: string;
-
-        attached_view: *NSView;
-    };
-    init_backend :: (backend: *MacOS_GL_Backend) {
-        init_objective_c();
-        init_app_kit();
-        using backend;
-
-        cursors[Cursor.DEFAULT]     = NSCursor.arrowCursor();
-        cursors[Cursor.TEXT]        = NSCursor.IBeamCursor();
-        cursors[Cursor.POINTER]     = NSCursor.pointingHandCursor();
-        cursors[Cursor.NOT_ALLOWED] = NSCursor.operationNotAllowedCursor();
-        cursors[Cursor.MOVE]        = NSCursor.openHandCursor();
-        cursors[Cursor.EW_RESIZE]   = NSCursor.resizeLeftRightCursor();
-        cursors[Cursor.NS_RESIZE]   = NSCursor.resizeUpDownCursor();
-
-        get: (*void, Selector) -> *NSCursor #c_call = xx objc_msgSend;
-        cursors[Cursor.CROSSHAIR]                   = get(xx class(NSCursor), selector("crosshairCursor"));
-
-        cursors[Cursor.WAIT]     = cursors[Cursor.DEFAULT];
-        cursors[Cursor.PROGRESS] = cursors[Cursor.DEFAULT];
-        cursors[Cursor.HELP]     = cursors[Cursor.DEFAULT];
-        responds: (*void, Selector, Selector) -> BOOL #c_call = xx objc_msgSend;
-        if responds(xx class(NSCursor), selector("respondsToSelector:"), selector("busyButClickableCursor")) {
-            cursors[Cursor.WAIT]     = get(xx class(NSCursor), selector("busyButClickableCursor"));
-            cursors[Cursor.PROGRESS] = cursors[Cursor.WAIT];
-        }
-        if responds(xx class(NSCursor), selector("respondsToSelector:"), selector("_helpCursor")) {
-            cursors[Cursor.HELP] = get(xx class(NSCursor), selector("_helpCursor"));
-        }
-
-        frame_resize: (*void, Selector, NSUInteger, NSUInteger) -> *NSCursor #c_call = xx objc_msgSend;
-        sel                                                                         := selector("frameResizeCursorFromPosition:inDirections:");
-        cursors[Cursor.NWSE_RESIZE]                                                  = frame_resize(xx class(NSCursor), sel, 1 | 2, 3);
-        cursors[Cursor.NESW_RESIZE]                                                  = frame_resize(xx class(NSCursor), sel, 1 | 8, 3);
-
-        app = NSApplication.sharedApplication();
-        NSApplication.setActivationPolicy(app, NSApplicationActivationPolicyRegular);
-        NSApplication.finishLaunching(app);
-        NSApplication.activateIgnoringOtherApps(app, YES);
-
-        attributes := NSOpenGLPixelFormatAttribute.[
-            NSOpenGLPFADoubleBuffer,
-            NSOpenGLPFAAccelerated,
-            NSOpenGLPFAColorSize, 24,
-            NSOpenGLPFAAlphaSize, 8,
-            NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core,
-            0,
-        ];
-        pixel_format = NSOpenGLPixelFormat.initWithAttributes(objc_alloc(NSOpenGLPixelFormat), attributes.data);
-        gl_context = NSOpenGLContext.initWithFormat(objc_alloc(NSOpenGLContext), pixel_format, null);
-        NSOpenGLContext.makeCurrentContext(gl_context);
-        gl_load(*gl);
-    }
-    update_backend :: (backend: *MacOS_GL_Backend) {
-        pool := objc_init(objc_alloc(NSAutoreleasePool));
-        defer NSAutoreleasePool.drain(pool);
-
-        window := context.forbear.window;
-        using window.keyboard_state;
-
-        frame := NSView.frame(window.view);
-        location := NSWindow.mouseLocationOutsideOfEventStream(window.ns_window);
-
-        window.mouse_state.inside = location.x >= 0 && location.y >= 0 &&
-                                    location.x < frame.size.width && location.y < frame.size.height;
-        window.mouse_state.position = Vector2.{ xx location.x, xx (frame.size.height - location.y) };
-
-        change_count: (*void, Selector) -> NSInteger #c_call = xx objc_msgSend;
-        count := change_count(backend.pasteboard, selector("changeCount"));
-        if count != backend.clipboard_change_count {
-            backend.clipboard_text.count = 0;
-            backend.clipboard_change_count = count;
-            nsstring := backend.pasteboard.stringForType(backend.pasteboard, NSPasteboardTypeString);
-            if nsstring != null {
-                utf8 := to_string(NSString.UTF8String(nsstring));
-                if utf8.count > backend.clipboard_text_buffer.count {
-                    backend.clipboard_text_buffer.data = realloc(
-                        backend.clipboard_text_buffer.data,
-                        utf8.count,
-                        backend.clipboard_text_buffer.count,,
-                        context.forbear.persistent_allocator
-                    );
-                    backend.clipboard_text_buffer.count = utf8.count;
-                }
-                memcpy(backend.clipboard_text_buffer.data, utf8.data, utf8.count);
-
-                backend.clipboard_text.data = backend.clipboard_text_buffer.data;
-                backend.clipboard_text.count = utf8.count;
-            }
-        }
-
-        while true {
-            event := NSApplication.nextEventMatchingMask(backend.app, NSEventMaskAny, NSDate.distantPast(), NSDefaultRunLoopMode, YES);
-            if event {
-                event_type := NSEvent.type(event);
-                if event_type == {
-                    case NSEventTypeRightMouseDown; #through;
-                    case NSEventTypeLeftMouseDown; #through;
-                    case NSEventTypeOtherMouseDown;
-                        button := NSEvent.buttonNumber(event);
-                        if window.mouse_state.inside {
-                            if button < MOUSE_BUTTON_COUNT {
-                                mouse_press(*window.mouse_state, xx button, window.mouse_state.position);
-                            } else {
-                                log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, MIDDLE, BACK and FORWARD. button: %", button);
-                            }
-                        }
-                        backend.app.sendEvent(backend.app, event);
-                    case NSEventTypeLeftMouseUp; #through;
-                    case NSEventTypeRightMouseUp; #through;
-                    case NSEventTypeOtherMouseUp;
-                        button := NSEvent.buttonNumber(event);
-                        if button < MOUSE_BUTTON_COUNT {
-                            mouse_release(*window.mouse_state, xx button);
-                        } else {
-                            log_error("received a button that's bigger than what we expected to receive. in theory this can go to 31 button, but we only have LEFT, RIGHT, MIDDLE, BACK and FORWARD. button: %", button);
-                        }
-                        backend.app.sendEvent(backend.app, event);
-                    case NSEventTypeScrollWheel;
-                        scrolling_delta: (*NSEvent, Selector) -> float64 #c_call = xx objc_msgSend;
-                        has_precise:     (*NSEvent, Selector) -> BOOL #c_call    = xx objc_msgSend;
-
-                        dy := cast(float) scrolling_delta(event, selector("scrollingDeltaX"));
-                        dx := cast(float) scrolling_delta(event, selector("scrollingDeltaY"));
-                        if !has_precise(event, selector("hasPreciseScrollingDeltas")) {
-                            dy *= SCROLL_MULTIPLIER;
-                        }
-                        window.mouse_state.scroll_delta.y -= dy;
-                        window.mouse_state.scroll_delta.x -= dx;
-                        backend.app.sendEvent(backend.app, event);
-                    case NSEventTypeKeyDown;
-                        code := NSEvent.keyCode(event);
-                        if NSEvent.isARepeat(event) && held[code] != 0 {
-                            add_key_event(*events, Key_Event.{.REPEATED, held[code]});
-                        } else {
-                            key := key_from_key_code(code);
-                            if key != 0 {
-                                add_key_event(*events, Key_Event.{.PRESSED, key});
-                                held[code] = key;
-                            }
-                        }
-                        if !(NSEvent.modifierFlags(event) & .NSEventModifierFlagCommand) {
-                            characters := NSEvent.characters(event);
-                            if characters {
-                                text := to_string(NSString.UTF8String(characters));
-                                // TODO(bug): this is currently accepting the text version of stuff like CTRL, which doensn't make any sense.
-                                // We should be using NSTextInputClient instead.
-                                if text.count != 3 || text[0] == 0xEF && text[1] >= 0x9C && text[1] <= 0xA3 {
-                                    append_text(text, *window.text, window.text_buffer);
-                                }
-                            }
-                        }
-                    case NSEventTypeKeyUp;
-                        code := NSEvent.keyCode(event);
-                        key := held[code];
-                        if key != 0 {
-                            add_key_event(*events, Key_Event.{.RELEASED, held[code]});
-                            held[code] = 0;
-                        }
-                    case NSEventTypeFlagsChanged;
-                        code := NSEvent.keyCode(event);
-                        key := key_from_key_code(code);
-                        if key != 0 {
-                            flags := cast(u64) NSEvent.modifierFlags(event);
-                            down: bool;
-                            if key == {
-                                case .CAPS_LOCK;     down = (flags & cast(u64) NSEventModifierFlags.NSEventModifierFlagCapsLock) != 0;
-                                case .CONTROL_LEFT;  down = (flags & 0x00000001) != 0;
-                                case .SHIFT_LEFT;    down = (flags & 0x00000002) != 0;
-                                case .SHIFT_RIGHT;   down = (flags & 0x00000004) != 0;
-                                case .SUPER_LEFT;    down = (flags & 0x00000008) != 0;
-                                case .SUPER_RIGHT;   down = (flags & 0x00000010) != 0;
-                                case .ALT_LEFT;      down = (flags & 0x00000020) != 0;
-                                case .ALT_RIGHT;     down = (flags & 0x00000040) != 0;
-                                case .CONTROL_RIGHT; down = (flags & 0x00002000) != 0;
-                            }
-
-                            if down && held[code] == 0 {
-                                add_key_event(*events, Key_Event.{.PRESSED, key});
-                                held[code] = key;
-                            } else if !down && held[code] != 0 {
-                                add_key_event(*events, Key_Event.{.RELEASED, key});
-                                held[code] = 0;
-                            }
-                        }
-                        update_held_keys_by_modifiers(backend, *window.keyboard_state);
-                        backend.app.sendEvent(backend.app, event);
-                    case;
-                        backend.app.sendEvent(backend.app, event);
-                }
-            } else {
-                break;
-            }
-        }
-    }
-
-    Backend :: MacOS_GL_Backend;
-    Window :: MacOS_GL_Window;
-
-    create_application :: (name: string, executable: string) {
-        app := tprint("%/%.app", get_working_directory(), name);
-        make_directory_if_it_does_not_exist(tprint("%/Contents/MacOS", app), recursive = true);
-        bundled := tprint("%/Contents/MacOS/%", app, name);
-        copy_file(executable, bundled);
-        chmod(temp_c_string(bundled), 0x1ED);
-        write_entire_file(
-            tprint("%/Contents/Info.plist", app),
-            tprint(#string PLIST
-                <?xml version="1.0" encoding="UTF-8"?>
-                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-                <plist version="1.0">
-                <dict>
-                <key>CFBundleExecutable</key><string>%1</string>
-                <key>CFBundleIdentifier</key><string>com.forbear.%1</string>
-                <key>CFBundleName</key><string>%1</string>
-                <key>CFBundlePackageType</key><string>APPL</string>
-                <key>NSHighResolutionCapable</key><true/>
-                </dict>
-                </plist>
-                PLIST,
-            name)
-        );
-        run_command("codesign", "--force", "--deep", "-s", "-", app);
-    }
-} else #if OS == .WINDOWS {
-    #load "bindings-win32.jai";
-    #import "Windows";
-    #import "Windows_Utf8";
-    #import "Unicode";
-    user32 :: #library,system "user32";
-    kernel32 :: #library,system "kernel32";
-
-    AdjustWindowRectExForDpi :: (rect: *RECT, style: u32, menu: BOOL, extended_style: u32, dpi: u32) -> BOOL #foreign user32;
-    DiscardVirtualMemory :: (VirtualAddress: *void, Size: SIZE_T) -> DWORD #foreign kernel32;
-    GetDpiForWindow :: (hwnd: HWND) -> u32 #foreign user32;
-    GetWindowLongPtrW :: (hwnd: HWND, index: s32) -> s64 #foreign user32;
-    SetProcessDpiAwarenessContext :: (value: HANDLE) -> BOOL #foreign user32;
-    SetProcessWorkingSetSize :: (hProcess: HANDLE, dwMinimumWorkingSetSize: SIZE_T, dwMaximumWorkingSetSize: SIZE_T) -> BOOL #foreign kernel32;
-    TRACKMOUSEEVENT :: struct {
-        cbSize: DWORD;
-        dwFlags: DWORD;
-        hwndTrack: HWND;
-        dwHoverTime: DWORD;
-    };
-    TrackMouseEvent :: (lpEventTrack: *TRACKMOUSEEVENT) -> BOOL #foreign user32;
-    ToUnicodeEx :: (wVirtKey: u32, wScanCode: u32, lpKeyState: *u8, pwszBuff: *u16, cchBuff: s32, wFlags: u32, dwhkl: *void) -> s32 #foreign user32;
-    GetKeyboardState :: (lpKeyState: *u8) -> BOOL #foreign user32;
-    GetKeyboardLayout :: (idThread: DWORD) -> *void #foreign user32;
-    MapVirtualKeyW :: (uCode: u32, uMapType: u32) -> u32 #foreign user32;
-    SetTimer :: (hWnd: HWND, nIDEvent: u64, uElapse: u32, lpTimerFunc: *void) -> u64 #foreign user32;
-    KillTimer :: (hWnd: HWND, uIDEvent: u64) -> BOOL #foreign user32;
-    WaitMessage :: () -> BOOL #foreign user32;
-    IsIconic :: (hWnd: HWND) -> BOOL #foreign user32;
-    GetMessageTime :: () -> s32 #foreign user32;
-    GetClipboardSequenceNumber :: () -> DWORD #foreign user32;
-    GlobalFree :: (hMem: HGLOBAL) -> HGLOBAL #foreign kernel32;
-
-    MODAL_TAKEOVER_TIMER :: 1;
-
-    MAPVK_VSC_TO_VK_EX :: 3;
-    GWLP_USERDATA :: -21;
-    TME_LEAVE :: 0x00000002;
-    WM_MOUSELEAVE :: 0x02A3;
-    WM_ENTERMENULOOP :: 0x0211;
-    WM_EXITMENULOOP :: 0x0212;
-    WM_CAPTURECHANGED :: 0x0215;
-
-    Windows_GL_Backend :: struct {
-        message: (data: *void, window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> result: s64, handled: bool;
-        message_data: *void;
-        wndproc_context: *#Context;
-
-        cursors: [CURSOR_COUNT]HCURSOR;
-
-        render: (data: *void);
-        render_data: *void;
-
-        clipboard_sequence: DWORD;
-        clipboard_text_buffer: string;
-        clipboard_text: string;
-    };
-    init_backend :: (using backend: *Windows_GL_Backend) {
-        wndproc_context = *context;
-
-        timeBeginPeriod(1);
-        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 :: cast(HANDLE) -4;
-        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
-        cursors[Cursor.DEFAULT]     = LoadCursorW(null, xx IDC_ARROW);
-        cursors[Cursor.TEXT]        = LoadCursorW(null, xx IDC_IBEAM);
-        cursors[Cursor.POINTER]     = LoadCursorW(null, xx IDC_HAND);
-        cursors[Cursor.WAIT]        = LoadCursorW(null, xx IDC_WAIT);
-        cursors[Cursor.PROGRESS]    = LoadCursorW(null, xx IDC_APPSTARTING);
-        cursors[Cursor.CROSSHAIR]   = LoadCursorW(null, xx IDC_CROSS);
-        cursors[Cursor.HELP]        = LoadCursorW(null, xx IDC_HELP);
-        cursors[Cursor.NOT_ALLOWED] = LoadCursorW(null, xx IDC_NO);
-        cursors[Cursor.MOVE]        = LoadCursorW(null, xx IDC_SIZEALL);
-        cursors[Cursor.EW_RESIZE]   = LoadCursorW(null, xx IDC_SIZEWE);
-        cursors[Cursor.NS_RESIZE]   = LoadCursorW(null, xx IDC_SIZENS);
-        cursors[Cursor.NWSE_RESIZE] = LoadCursorW(null, xx IDC_SIZENWSE);
-        cursors[Cursor.NESW_RESIZE] = LoadCursorW(null, xx IDC_SIZENESW);
-
-        class: WNDCLASSEXW;
-        class.cbSize        = size_of(WNDCLASSEXW);
-        class.style         = CS_OWNDC;
-        class.lpfnWndProc   = wndproc;
-        class.hInstance     = GetModuleHandleW(null);
-        class.hCursor       = cursors[Cursor.DEFAULT];
-        class.lpszClassName = utf8_to_wide("forbear",, temp);
-        RegisterClassExW(*class);
-    }
-    wndproc :: (hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> s64 #c_call {
-        result: s64;
-        if message != WM_NCCREATE {
-            window := cast(*Windows_GL_Window) GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-            if window != null {
-                push_context window.backend.wndproc_context.* {
-                    handled := false;
-                    if window.backend.message != null {
-                        result, handled = window.backend.message(window.backend.message_data, window, hwnd, message, wparam, lparam);
-                    }
-                    if !handled if message == {
-                        case WM_CLOSE;
-                            window.running = false;
-                        case WM_SYSCOMMAND;
-                            if (wparam & 0xFFF0) != SC_KEYMENU || lparam != 0 {
-                                result = DefWindowProcW(hwnd, message, wparam, lparam);
-                            }
-                        case WM_SETCURSOR;
-                            HTCLIENT :: 1;
-                            if (lparam & 0xFFFF) == HTCLIENT {
-                                SetCursor(window.backend.cursors[window.mouse_state.cursor]);
-                                result = 1;
-                            } else {
-                                result = DefWindowProcW(hwnd, message, wparam, lparam);
-                            }
-                        case WM_SIZE;
-                            if wparam != SIZE_MINIMIZED {
-                                window.width = cast(float64)(lparam & 0xFFFF);
-                                window.height = cast(float64)((lparam >> 16) & 0xFFFF);
-                                if window.backend.render != null {
-                                    window.backend.render(window.backend.render_data);
-                                }
-                            }
-                        case WM_MOVE;
-                            if window.backend.render != null {
-                                window.backend.render(window.backend.render_data);
-                            }
-                        case WM_ENTERMENULOOP; #through;
-                        case WM_ENTERSIZEMOVE;
-                            SetTimer(hwnd, MODAL_TAKEOVER_TIMER, 1, null);
-                        case WM_EXITMENULOOP; #through;
-                        case WM_EXITSIZEMOVE;
-                            KillTimer(hwnd, MODAL_TAKEOVER_TIMER);
-                        case WM_TIMER;
-                            if wparam == MODAL_TAKEOVER_TIMER && window.backend.render {
-                                window.backend.render(window.backend.render_data);
-                            }
-                        case WM_MOUSEMOVE;
-                            if window.mouse_state.inside == false {
-                                window.mouse_state.inside = true;
-                                track := TRACKMOUSEEVENT.{
-                                    cbSize = size_of(TRACKMOUSEEVENT),
-                                    dwFlags = TME_LEAVE,
-                                    hwndTrack = hwnd,
-                                };
-                                TrackMouseEvent(*track);
-                            }
-                            window.mouse_state.position = Vector2.{
-                                cast(float) cast,trunc(s16) (lparam & 0xFFFF),
-                                cast(float) cast,trunc(s16) ((lparam >> 16) & 0xFFFF),
-                            } / cast(float) window.scale;
-                        case WM_MOUSEWHEEL;
-                            wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
-                            MK_SHIFT :: 0x0004;
-                            if wparam & MK_SHIFT {
-                                window.mouse_state.scroll_delta.x -= (cast(float)wheel) / 120.0 * SCROLL_MULTIPLIER;
-                            } else {
-                                window.mouse_state.scroll_delta.y -= (cast(float)wheel) / 120.0 * SCROLL_MULTIPLIER;
-                            }
-                        case WM_MOUSEHWHEEL;
-                            wheel := cast,trunc(s16) ((wparam >> 16) & 0xFFFF);
-                            window.mouse_state.scroll_delta.x += (cast(float)wheel) / 120.0 * SCROLL_MULTIPLIER;
-                        case WM_MOUSELEAVE;
-                            window.mouse_state.inside = false;
-                        case WM_KILLFOCUS;
-                            memset(window.keyboard_state.held.data, 0, size_of(type_of(window.keyboard_state.held)));
-                        case WM_CAPTURECHANGED;
-                            memset(window.mouse_state.held.data, 0, size_of(type_of(window.mouse_state.held)));
-                        // TODO: handle double click events
-                        case WM_LBUTTONDOWN; #through;
-                        case WM_RBUTTONDOWN; #through;
-                        case WM_MBUTTONDOWN; #through;
-                        case WM_XBUTTONDOWN;
-                            button: Mouse_Button = xx ((message - WM_LBUTTONDOWN) / 3);
-                            if button == .BACK && ((wparam >> 16) & 0xFFFF) == 2 {
-                                button = .FORWARD;
-                            }
-                            mouse_press(*window.mouse_state, button, Vector2.{
-                                cast(float) cast,trunc(s16) (lparam & 0xFFFF),
-                                cast(float) cast,trunc(s16) ((lparam >> 16) & 0xFFFF),
-                            } / cast(float) window.scale);
-                            SetCapture(hwnd);
-                            if message == WM_XBUTTONDOWN {
-                                result = 1;
-                            }
-                        case WM_LBUTTONUP; #through;
-                        case WM_RBUTTONUP; #through;
-                        case WM_MBUTTONUP; #through;
-                        case WM_XBUTTONUP;
-                            button: Mouse_Button = xx ((message - WM_LBUTTONUP) / 3);
-                            if button == .BACK && ((wparam >> 16) & 0xFFFF) == 2 {
-                                button = .FORWARD;
-                            }
-                            mouse_release(*window.mouse_state, button);
-                            any_held := false;
-                            for window.mouse_state.held {
-                                if it {
-                                    any_held = true;
-                                    break;
-                                }
-                            }
-                            if !any_held {
-                                ReleaseCapture();
-                            }
-                            if message == WM_XBUTTONUP {
-                                result = 1;
-                            }
-                        case WM_CHAR;
-                            using window.keyboard_state;
-                            unit := cast(u16) wparam;
-                            code_point: u32;
-                            if is_high_surrogate(unit) {
-                                high_surrogate = unit;
-                            } else if is_low_surrogate(unit) {
-                                if is_high_surrogate(high_surrogate) {
-                                    code_point = utf16_to_code_point(u16.[high_surrogate, unit], 2);
-                                }
-                                high_surrogate = 0;
-                            } else {
-                                code_point = unit;
-                            }
-                            if code_point != 0 {
-                                bytes: [4]u8;
-                                utf8 := string.{ data = bytes.data };
-                                character_utf32_to_utf8(code_point, *utf8);
-                                append_text(utf8, *window.text, window.text_buffer);
-                            }
-                        case WM_SYSCHAR;
-                            // text typed while Alt is held
-                            if wparam == #char " " {
-                                result = DefWindowProcW(hwnd, message, wparam, lparam);
-                            }
-                        case WM_SYSKEYDOWN; #through;
-                        case WM_KEYDOWN;
-                            using window.keyboard_state;
-                            if wparam != VK_PROCESSKEY && wparam != VK_PACKET { // ignores keys typed during an IME compose event
-                                repeated := (lparam >> 30) & 1;
-                                scancode := cast(u32) ((lparam >> 16) & 0xFF);
-                                extended := (lparam >> 24) & 1;
-                                index    := scancode | (extended << 8);
-                                altgr_control := false;
-                                if wparam == VK_CONTROL && extended == 0 {
-                                    next: MSG;
-                                    altgr_control = PeekMessageW(*next, null, 0, 0, PM_NOREMOVE) != 0 &&
-                                        (next.message == WM_KEYDOWN || next.message == WM_SYSKEYDOWN) &&
-                                        next.wParam == VK_MENU &&
-                                        ((next.lParam >> 24) & 1) == 1 &&
-                                        next.time == GetMessageTime();
-                                }
-                                if altgr_control {
-                                } else if repeated && held[index] != 0 {
-                                    add_key_event(*events, Key_Event.{ .REPEATED, held[index] });
-                                } else {
-                                    key: Key = 0;
-                                    if wparam == {
-                                        case VK_ESCAPE;  key = .ESCAPE;
-                                        case VK_RETURN;  key = .ENTER;
-                                        case VK_TAB;     key = .TAB;
-                                        case VK_BACK;    key = .BACKSPACE;
-                                        case VK_DELETE;  key = .DELETE;
-                                        case VK_INSERT;  key = .INSERT;
-                                        case VK_LEFT;    key = .ARROW_LEFT;
-                                        case VK_RIGHT;   key = .ARROW_RIGHT;
-                                        case VK_UP;      key = .ARROW_UP;
-                                        case VK_DOWN;    key = .ARROW_DOWN;
-                                        case VK_HOME;    key = .HOME;
-                                        case VK_END;     key = .END;
-                                        case VK_PRIOR;   key = .PAGE_UP;
-                                        case VK_NEXT;    key = .PAGE_DOWN;
-                                        case VK_F1;      key = .F1;
-                                        case VK_F2;      key = .F2;
-                                        case VK_F3;      key = .F3;
-                                        case VK_F4;      key = .F4;
-                                        case VK_F5;      key = .F5;
-                                        case VK_F6;      key = .F6;
-                                        case VK_F7;      key = .F7;
-                                        case VK_F8;      key = .F8;
-                                        case VK_F9;      key = .F9;
-                                        case VK_F10;     key = .F10;
-                                        case VK_F11;     key = .F11;
-                                        case VK_F12;     key = .F12;
-                                        case VK_SHIFT;   #through;
-                                        case VK_CONTROL; #through;
-                                        case VK_MENU;
-                                            vk := MapVirtualKeyW(scancode | cast(u32) (ifx extended then 0xE000 else 0), MAPVK_VSC_TO_VK_EX);
-                                            if vk == {
-                                                case VK_LSHIFT;   key = .SHIFT_LEFT;
-                                                case VK_RSHIFT;   key = .SHIFT_RIGHT;
-                                                case VK_LCONTROL; key = .CONTROL_LEFT;
-                                                case VK_RCONTROL; key = .CONTROL_RIGHT;
-                                                case VK_LMENU;    key = .ALT_LEFT;
-                                                case VK_RMENU;    key = .ALT_RIGHT;
-                                            }
-                                        case VK_LWIN;    key = .SUPER_LEFT;
-                                        case VK_RWIN;    key = .SUPER_RIGHT;
-                                        case VK_CAPITAL; key = .CAPS_LOCK;
-                                        case;
-                                            // the key could not be found, meaning it's not in the named ones, so we're going to write it as a character instead
-                                            key = key_from_virtual_key(xx wparam, scancode);
-                                    }
-                                    if key != 0 {
-                                        held[index] = key;
-                                        add_key_event(*events, Key_Event.{ .PRESSED, key });
-                                    }
-                                    if wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU || wparam == VK_CAPITAL {
-                                        update_held_keys_by_modifiers(window.backend, *window.keyboard_state);
-                                    }
-                                }
-                            }
-                            if message == WM_SYSKEYDOWN {
-                                result = DefWindowProcW(hwnd, message, wparam, lparam);
-                            }
-                        case WM_DPICHANGED;
-                            window.scale = cast(float64) (wparam & 0xFFFF) / 96.0;
-                            suggested := cast(*RECT) lparam;
-                            SetWindowPos(hwnd, null, suggested.left, suggested.top,
-                                suggested.right - suggested.left, suggested.bottom - suggested.top,
-                                SWP_NOZORDER | SWP_NOACTIVATE);
-                        case WM_KEYUP; #through;
-                        case WM_SYSKEYUP;
-                            using window.keyboard_state;
-                            scancode := cast(u32) ((lparam >> 16) & 0xFF);
-                            extended := cast(u32) ((lparam >> 24) & 1);
-                            index := scancode | (extended << 8);
-                            key := held[index];
-                            if key != 0 {
-                                add_key_event(*events, .{.RELEASED, key});
-                                held[index] = 0;
-                            }
-                            if wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU || wparam == VK_CAPITAL {
-                                update_held_keys_by_modifiers(window.backend, *window.keyboard_state);
-                            }
-                            if message == WM_SYSKEYUP {
-                                result = DefWindowProcW(hwnd, message, wparam, lparam);
-                            }
-                        case;
-                            result = DefWindowProcW(hwnd, message, wparam, lparam);
-                    }
-                }
-            } else {
-                result = DefWindowProcW(hwnd, message, wparam, lparam);
-            }
-        } else {
-            // lpCreateParams is the first field of CREATESTRUCTW
-            create_params := (cast(**void) lparam).*;
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, xx create_params);
-            result = DefWindowProcW(hwnd, message, wparam, lparam);
-        }
-        return result;
-    }
-    update_backend :: (backend: *Backend) {
-        backend.wndproc_context = *context;
-        window := context.forbear.window;
-        while true {
-            message: MSG;
-            while PeekMessageW(*message, null, 0, 0, PM_REMOVE) {
-                TranslateMessage(*message);
-                DispatchMessageW(*message);
-            }
-            if !window.running || !IsIconic(window.hwnd) {
-                break;
-            }
-            WaitMessage();
-        }
-
-        sequence := GetClipboardSequenceNumber();
-        if sequence != backend.clipboard_sequence && OpenClipboard(window.hwnd) {
-            defer CloseClipboard();
-            backend.clipboard_sequence = sequence;
-            backend.clipboard_text.count = 0;
-
-            handle := GetClipboardData(CF_UNICODETEXT);
-            wide := cast(*u16) GlobalLock(handle);
-            if wide {
-                defer GlobalUnlock(handle);
-                // with -1, the count includes the null terminator
-                count := WideCharToMultiByte(CP_UTF8, 0, wide, -1, null, 0, null, null);
-                if count + 1 > backend.clipboard_text_buffer.count {
-                    backend.clipboard_text_buffer.data = realloc(backend.clipboard_text_buffer.data, count, backend.clipboard_text_buffer.count,, context.forbear.persistent_allocator);
-                    backend.clipboard_text_buffer.count = count;
-                }
-                WideCharToMultiByte(CP_UTF8, 0, wide, -1, backend.clipboard_text_buffer.data, count, null, null);
-                backend.clipboard_text = .{ count, backend.clipboard_text_buffer.data };
-            }
-        }
-    }
-
-    Windows_GL_Window :: struct {
-        hwnd: HWND;
-        hdc: HDC;
-        backend: *Windows_GL_Backend;
-
-        width: float64;
-        height: float64;
-        scale: float64;
-
-        text_buffer: [256]u8;
-        text: string;
-
-        keyboard_state: Keyboard_State;
-        mouse_state: Mouse_State;
-
-        running := true;
-    };
-    init_window :: (backend: *Windows_GL_Backend,
-                    window:  *Windows_GL_Window,
-                    width:   float64,
-                    height:  float64,
-                    title:   string,
-                    show_window := true) {
-        window.text.data = window.text_buffer.data;
-        window.backend = backend;
-        init_keyboard_state(*window.keyboard_state);
-
-        style :: WS_OVERLAPPEDWINDOW;
-        window.hwnd = CreateWindowExW(
-            0,
-            utf8_to_wide("forbear",, temp),
-            utf8_to_wide(title,, temp),
-            style,
-            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-            null, null, GetModuleHandleW(null), window
-        );
-
-        dpi := GetDpiForWindow(window.hwnd);
-        window.scale = dpi / 96.0;
-        rectangle := RECT.{ right = xx (width * window.scale), bottom = xx (height * window.scale) };
-        AdjustWindowRectExForDpi(*rectangle, style, 0, 0, dpi);
-        SetWindowPos(window.hwnd, null, 0, 0, rectangle.right - rectangle.left, rectangle.bottom - rectangle.top, SWP_NOMOVE | SWP_NOZORDER);
-        if show_window {
-            ShowWindow(window.hwnd, SW_SHOW);
-        }
-
-        _, window.hdc = wgl_create_context(window.hwnd, null, 3, 3);
-        gl_load(*gl);
-        if gl.wglSwapIntervalEXT {
-            gl.wglSwapIntervalEXT(1);
-        }
-
-        client: RECT;
-        GetClientRect(window.hwnd, *client);
-        window.width = xx client.right;
-        window.height = xx client.bottom;
-    }
-
-    Backend :: Windows_GL_Backend;
-    Window :: Windows_GL_Window;
 }
 
 Direction :: enum u8 { HORIZONTAL; VERTICAL; };
@@ -2975,7 +2975,11 @@ mouse_release :: (using state: *Mouse_State, button: Mouse_Button) {
 }
 #scope_export
 Keyboard_State :: struct {
-    #if OS == .LINUX {
+    #if OS == .WINDOWS {
+        // used in WM_CHAR since Windows inputs utf16 piece by piece and
+        // we want to convert to utf8
+        high_surrogate: u16;
+    } else #if OS == .LINUX {
         serial: u32;
         inside: bool;
 
@@ -2990,10 +2994,6 @@ Keyboard_State :: struct {
         repeat_rate: s32;
         // in milliseconds
         repeat_delay: s32;
-    } else #if OS == .WINDOWS {
-        // used in WM_CHAR since Windows inputs utf16 piece by piece and
-        // we want to convert to utf8
-        high_surrogate: u16;
     }
     events_buffer: [32 * 3]Key_Event;
     events: []Key_Event;
@@ -3014,13 +3014,13 @@ update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_Stat
     for key, code: held {
         // only update the keys that correspond to unicode characters
         if key != 0 && key < .ESCAPE {
-            #if OS == .LINUX {
-                new_key := key_from_keysym(xkb_state_key_get_one_sym(backend.connection.key_state, xx code));
-            } else #if OS == .WINDOWS {
+            #if OS == .WINDOWS {
                 vk := MapVirtualKeyW(xx ((code & 0xFF) | (ifx code & 0x100 then 0xE000 else 0)), MAPVK_VSC_TO_VK_EX);
                 new_key := key_from_virtual_key(vk, cast(u32) code & 0xFF);
             } else #if OS == .MACOS {
                 new_key := key_from_key_code(xx code);
+            } else #if OS == .LINUX {
+                new_key := key_from_keysym(xkb_state_key_get_one_sym(backend.connection.key_state, xx code));
             }
             if new_key != 0 && key != new_key {
                 // This means that this key changes with some modifier on or off, so, we need to replace the previous
@@ -3181,7 +3181,24 @@ get_clipboard_text :: () -> string {
 copy_to_clipboard :: (text: string) {
     using context.forbear;
     // TOOD: implment this for wayland
-    #if OS == .MACOS {
+    #if OS == .WINDOWS {
+        units  := MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, null, 0);
+        memory := GlobalAlloc(GMEM_MOVEABLE, cast(u64) (units + 1) * size_of(u16));
+        wide   := cast(*u16) GlobalLock(memory);
+        MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, wide, units);
+        wide[units] = 0;
+        GlobalUnlock(memory);
+
+        if OpenClipboard(window.hwnd) {
+            EmptyClipboard();
+            if !SetClipboardData(CF_UNICODETEXT, memory) {
+                GlobalFree(memory);
+            }
+            CloseClipboard();
+        } else {
+            GlobalFree(memory);
+        }
+    } else #if OS == .MACOS {
         pool := objc_init(objc_alloc(NSAutoreleasePool));
         defer NSAutoreleasePool.drain(pool);
 
@@ -3205,23 +3222,6 @@ copy_to_clipboard :: (text: string) {
         memcpy(backend.clipboard_text_buffer.data, text.data, text.count);
         backend.clipboard_text.data  = backend.clipboard_text_buffer.data;
         backend.clipboard_text.count = text.count;
-    } else #if OS == .WINDOWS {
-        units  := MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, null, 0);
-        memory := GlobalAlloc(GMEM_MOVEABLE, cast(u64) (units + 1) * size_of(u16));
-        wide   := cast(*u16) GlobalLock(memory);
-        MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, wide, units);
-        wide[units] = 0;
-        GlobalUnlock(memory);
-
-        if OpenClipboard(window.hwnd) {
-            EmptyClipboard();
-            if !SetClipboardData(CF_UNICODETEXT, memory) {
-                GlobalFree(memory);
-            }
-            CloseClipboard();
-        } else {
-            GlobalFree(memory);
-        }
     } else #if OS == .LINUX {
         connection := *backend.connection;
         if connection.wl_data_device_id != 0 {
@@ -3272,6 +3272,8 @@ set_cursor :: (cursor: Cursor) {
         if window.mouse_state.inside {
             #if OS == .WINDOWS {
                 SetCursor(window.backend.cursors[cursor]);
+            } else #if OS == .MACOS {
+                NSCursor.set(backend.cursors[cursor]);
             } else #if OS == .LINUX {
                 if backend.connection.wp_cursor_shape_device_id != 0 {
                     send_wayland_message(
@@ -3283,8 +3285,6 @@ set_cursor :: (cursor: Cursor) {
                         }
                     );
                 }
-            } #if OS == .MACOS {
-               NSCursor.set(backend.cursors[cursor]);
             }
         }
     }
@@ -3319,23 +3319,7 @@ on_key_up :: (key: Key) -> bool {
 }
 is_key_held :: (key: Key) -> bool {
     using context.forbear;
-    #if OS == .LINUX {
-        if key == {
-            // TODO(depessimization): for all modifiers here we're lookgin them up by name when we should instead store the index of the modifier and just look it up
-            case .SHIFT_LEFT; #through;
-            case .SHIFT_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_SHIFT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-            case .ALT_LEFT; #through;
-            case .ALT_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-            case .CONTROL_LEFT; #through;
-            case .CONTROL_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-            case .SUPER_LEFT; #through;
-            case .SUPER_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-        }
-    } else #if OS == .WINDOWS {
+    #if OS == .WINDOWS {
         vk: s32;
         if key == {
             case .SHIFT_LEFT;    vk = VK_LSHIFT;
@@ -3368,6 +3352,22 @@ is_key_held :: (key: Key) -> bool {
             if !(flags & mask) {
                 return false;
             }
+        }
+    } else #if OS == .LINUX {
+        if key == {
+            // TODO(depessimization): for all modifiers here we're lookgin them up by name when we should instead store the index of the modifier and just look it up
+            case .SHIFT_LEFT; #through;
+            case .SHIFT_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_SHIFT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+            case .ALT_LEFT; #through;
+            case .ALT_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+            case .CONTROL_LEFT; #through;
+            case .CONTROL_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+            case .SUPER_LEFT; #through;
+            case .SUPER_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
         }
     }
 
@@ -4927,13 +4927,13 @@ Draw_Instance :: struct {
 };
 draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
-    #if OS == .LINUX {
-        glBindFramebuffer(GL_FRAMEBUFFER, window.buffers[window.current].fbo);
-    } else #if OS == .MACOS {
+    #if OS == .MACOS {
         if backend.attached_view != window.view {
             NSOpenGLContext.setView(backend.gl_context, window.view);
             backend.attached_view = window.view;
         }
+    } else #if OS == .LINUX {
+        glBindFramebuffer(GL_FRAMEBUFFER, window.buffers[window.current].fbo);
     }
 
     glViewport(0, 0, xx window.width, xx window.height);
@@ -5057,7 +5057,14 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, xx draw_instances.count);
 
-    #if OS == .LINUX {
+    #if OS == .WINDOWS {
+        SwapBuffers(window.hdc);
+        if frame == 3 {
+            SetProcessWorkingSetSize(GetCurrentProcess(), U64_MAX, U64_MAX);
+        }
+    } else #if OS == .MACOS {
+        NSOpenGLContext.flushBuffer(backend.gl_context);
+    } else #if OS == .LINUX {
         glFlush();
 
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Attach.{ buffer = window.buffers[window.current].wl_buffer_id, x = 0, y = 0 });
@@ -5070,13 +5077,6 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         window.buffers[window.current].busy = true;
         send_wayland_message(*backend.connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
         window.current = (window.current + 1) % 2;
-    } else #if OS == .MACOS {
-        NSOpenGLContext.flushBuffer(backend.gl_context);
-    } else #if OS == .WINDOWS {
-        SwapBuffers(window.hdc);
-        if frame == 3 {
-            SetProcessWorkingSetSize(GetCurrentProcess(), U64_MAX, U64_MAX);
-        }
     }
 }
 prepare_for_next_frame :: () {
