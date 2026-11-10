@@ -14,6 +14,7 @@ $files = [ordered]@{
     'modules/forbear/vendor/freetype-win32.lib' = 'vendor/freetype-win32.lib'
     'modules/forbear/vendor/kb_text_shape-win32.lib' = 'vendor/kb_text_shape-win32.lib'
     'modules/forbear/module.jai' = 'forbear.jai'
+    'modules/forbear/LICENSE' = 'LICENSE'
 }
 foreach ($file in $files.GetEnumerator()) {
     $out = Join-Path $dir $file.Key

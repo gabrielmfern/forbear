@@ -15,5 +15,6 @@ curl -fsSL --create-dirs \
   -o modules/forbear/bindings-win32.jai "$base/bindings-win32.jai" \
   -o modules/forbear/vendor/freetype-$os.a "$base/vendor/freetype-$os.a" \
   -o modules/forbear/vendor/kb_text_shape-$os.a "$base/vendor/kb_text_shape-$os.a" \
-  -o modules/forbear/module.jai "$base/forbear.jai"
+  -o modules/forbear/module.jai "$base/forbear.jai" \
+  -o modules/forbear/LICENSE "$base/LICENSE"
 echo "Run: cd $dir && jai main.jai +forbear"
