@@ -1,53 +1,71 @@
-build :: () {
-    set_build_options_dc(.{do_output = false});
+#import "Basic";
+Main :: #import,file "./main.jai";
+operator == :: Main.operator ==;
 
-    w := compiler_create_workspace("tests");
-    options := get_build_options(w);
-    options.output_executable_name = "tests";
-    options.entry_point_name = "__run_tests";
-    set_build_options(options, w);
+BUILD_FLAGS :: "+forbear";
 
-    compiler_begin_intercept(w, .SKIP_EXPRESSIONS_WITHOUT_NOTES);
-    add_build_file(tprint("%main.jai", #filepath), w);
-
-    tests: [..] string;
-    generated := false;
-    success := false;
-    while true {
-        message := compiler_wait_for_message();
-        if message.kind == {
-          case .TYPECHECKED;
-            typechecked := cast(*Message_Typechecked) message;
-            for typechecked.procedure_headers {
-                for note: it.expression.notes {
-                    if note.text == "test"  array_add(*tests, it.expression.name);
-                }
-            }
-
-          case .PHASE;
-            phase := cast(*Message_Phase) message;
-            if phase.phase == .TYPECHECKED_ALL_WE_CAN && !generated {
-                generated = true;
-                builder: String_Builder;
-                append(*builder, "__run_tests :: () {\n");
-                for tests  print_to_builder(*builder, "    print(\"RUN  %1\\n\");\n    %1();\n    print(\"PASS %1\\n\");\n", it);
-                append(*builder, "}\n");
-                add_build_string(builder_to_string(*builder), w);
-            }
-
-          case .COMPLETE;
-            complete := cast(*Message_Complete) message;
-            success = complete.error_code == .NONE;
-            break;
-        }
-    }
-    compiler_end_intercept(w);
-
-    if success  run_command(tprint("%tests", #filepath));
+test :: (name: string, body: Code) #expand {
+    print("TEST %\n", name);
+    #insert body;
+    print("PASS\n");
 }
 
-#run build();
+main :: () {
+    test("parse_expression", #code {
+        tokens: [..]Main.Token;
+        expression := "5 + 10 - 12 / 4 * 19";
+        result     := Main.parse_expression(expression, *tokens);
+        assert(result == .SUCCESS);
+        assert(tokens[0] == Main.Token.{kind=.NUMBER,number=5});
+        assert(tokens[1] == Main.ADD);
+        assert(tokens[2] == Main.Token.{kind=.NUMBER,number=10});
+        assert(tokens[3] == Main.SUBTRACT);
+        assert(tokens[4] == Main.Token.{kind=.NUMBER,number=12});
+        assert(tokens[5] == Main.DIVIDE);
+        assert(tokens[6] == Main.Token.{kind=.NUMBER,number=4});
+        assert(tokens[7] == Main.MULTIPLY);
+        assert(tokens[8] == Main.Token.{kind=.NUMBER,number=19});
+    });
 
-#import "Basic";
-#import "Compiler";
-#import "Process";
+    test("reverse_number_sign", #code {
+        text: [..]u8;
+        Main.reverse_number_sign(*text);
+        assert(to_string(text.data, text.count) == "");
+
+        array_add(*text, #char "1");
+        array_add(*text, #char "2");
+        array_add(*text, #char "3");
+        Main.reverse_number_sign(*text);
+        assert(to_string(text.data, text.count) == "-123");
+
+        array_reset_keeping_memory(*text);
+        array_add(*text, #char "-");
+        array_add(*text, #char "1");
+        array_add(*text, #char "2");
+        array_add(*text, #char "3");
+        Main.reverse_number_sign(*text);
+        assert(to_string(text.data, text.count) == "123");
+
+        array_reset_keeping_memory(*text);
+        array_add(*text, #char "-");
+        Main.reverse_number_sign(*text);
+        assert(to_string(text.data, text.count) == "-");
+
+        array_reset_keeping_memory(*text);
+        array_add(*text, #char "1");
+        array_add(*text, #char "2");
+        array_add(*text, #char "3");
+        array_add(*text, #char "-");
+        Main.reverse_number_sign(*text);
+        assert(to_string(text.data, text.count) == "123-");
+
+        array_reset_keeping_memory(*text);
+        array_add(*text, #char "1");
+        array_add(*text, #char "2");
+        array_add(*text, #char "3");
+        array_add(*text, #char " ");
+        array_add(*text, #char "-");
+        Main.reverse_number_sign(*text);
+        assert(to_string(text.data, text.count) == "123 -");
+    });
+}

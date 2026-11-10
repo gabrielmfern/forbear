@@ -1,6 +1,4 @@
-MEMORY_DEBUGGING :: false;
-
-#import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
+#import "Basic";
 Math :: #import "Math";
 #import "File";
 #import "String";
@@ -31,10 +29,10 @@ tokens_equal :: (a: Token, b: Token) -> bool {
     }
 }
 operator == :: tokens_equal;
-ADD :: Token.{ kind = .OPERATOR, op = .ADD };
+ADD      :: Token.{ kind = .OPERATOR, op = .ADD };
 SUBTRACT :: Token.{ kind = .OPERATOR, op = .SUBTRACT };
 MULTIPLY :: Token.{ kind = .OPERATOR, op = .MULTIPLY };
-DIVIDE :: Token.{ kind = .OPERATOR, op = .DIVIDE };
+DIVIDE   :: Token.{ kind = .OPERATOR, op = .DIVIDE };
 Parse_Result :: enum { SUCCESS; TWO_NUMBERS_IN_A_ROW; COULD_NOT_PARSE_FLOAT; };
 parse_expression :: (expression: string, tokens: *[..]Token) -> Parse_Result {
     array_reset_keeping_memory(tokens);
@@ -87,25 +85,10 @@ parse_expression :: (expression: string, tokens: *[..]Token) -> Parse_Result {
     }
     return .SUCCESS;
 }
-parse_expression_should_handle_basic_expression :: () {
-    tokens: [..]Token;
-    expression := "5 + 10 - 12 / 4 * 19";
-    result := parse_expression(expression, *tokens);
-    assert(result == .SUCCESS);
-    assert(tokens[0] == Token.{kind=.NUMBER,number=5});
-    assert(tokens[1] == ADD);
-    assert(tokens[2] == Token.{kind=.NUMBER,number=10});
-    assert(tokens[3] == SUBTRACT);
-    assert(tokens[4] == Token.{kind=.NUMBER,number=12});
-    assert(tokens[5] == DIVIDE);
-    assert(tokens[6] == Token.{kind=.NUMBER,number=4});
-    assert(tokens[7] == MULTIPLY);
-    assert(tokens[8] == Token.{kind=.NUMBER,number=19});
-} @test
 
-isnan :: Math.isnan;
+isnan       :: Math.isnan;
 FLOAT64_NAN :: Math.FLOAT64_NAN;
-U64_MAX :: Math.U64_MAX;
+U64_MAX     :: Math.U64_MAX;
 
 //
 // ===== program styles =====
@@ -126,24 +109,18 @@ OP_PRESSED   :: #run hex("#CFCFD2");
 ERROR        :: #run hex("#E85B5B");
 TRANSPARENT  :: #run hex("#01010100");
 
-Column :: (body: Code) #expand {
-    element(Style.{width = grow(), height = grow(), x_justification = .CENTER}, body);
-} @component
-Row :: (body: Code) #expand {
-    element(Style.{width = grow(), height = fixed(64)}, body);
-} @component
 Button :: (contents: string, is_operator := false) -> clicked: bool {
     clicked := false;
     element(Style.{
-        border_radius = 6.0,
-        background = color(ifx is_operator then OP else BG_TERTIARY),
-        color = ifx is_operator then OP_TEXT else VECTOR4_NAN,
-        font_size = 24,
+        border_radius   = 6.0,
+        background      = color(ifx is_operator then OP else BG_TERTIARY),
+        color           = ifx is_operator then OP_TEXT else VECTOR4_NAN,
+        font_size       = 24,
         x_justification = .CENTER,
         y_justification = .CENTER,
-        width = fixed(48.0),
-        height = fixed(48.0),
-        cursor = .POINTER,
+        width           = fixed(48.0),
+        height          = fixed(48.0),
+        cursor          = .POINTER,
     }, #code {
         button := get_node();
         if is_mouse_inside() {
@@ -162,8 +139,13 @@ Input_State :: struct {
     contents: [..]u8;
     cursor_index: s64;
 }
-use_input :: (using input_state: *Input_State, text_node_index: s64, input_character_filter: #type (input: u8) -> bool = null) {
-    append :: (using input_state: *Input_State, input: string, input_character_filter: #type (input: u8) -> bool) {
+use_input :: (using input_state:      *Input_State,
+              text_node_index:        s64,
+              input_character_filter: #type (input: u8) -> bool = null) {
+
+    append :: (using input_state:      *Input_State,
+               input:                  string,
+               input_character_filter: #type (input: u8) -> bool) {
         if input_character_filter != null {
             for character: input {
                 if input_character_filter(character) {
@@ -173,7 +155,7 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
             }
         } else {
             input_bytes: []u8 = ---;
-            input_bytes.data = input.data;
+            input_bytes.data  = input.data;
             input_bytes.count = input.count;
             array_add(*contents, ..input_bytes);
         }
@@ -208,40 +190,32 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
         // === keyboard deletion and cursor movement handling ===
         //
         previous := max(input_state.cursor_index - 1, 0); // TODO: we should not remove by just one byte necessarily, since, in unicode one character can be multiple bytes
-        next := min(input_state.cursor_index + 1, input_state.contents.count);
-        by_word := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
+        next     := min(input_state.cursor_index + 1, input_state.contents.count);
+        by_word  := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
         #if OS == .LINUX || OS == .WINDOWS {
             by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
         }
         // TODO: define a word boundary in a more generalized way that makes this actually work for any kind of input
         previous_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
             c := cursor;
-            while c > 0 && !is_digit(text.*[c - 1]) {
-                c -= 1;
-            }
-            while c > 0 && is_digit(text.*[c - 1]) {
-                c -= 1;
-            }
+            while c > 0 && !is_digit(text.*[c - 1]) c -= 1;
+            while c > 0 && is_digit(text.*[c - 1]) c -= 1;
             return c;
         }
         next_word_boundary :: (text: *[]u8, cursor: s64) -> s64 {
             c := cursor;
-            while c < text.count && !is_digit(text.*[c]) {
-                c += 1;
-            }
-            while c < text.count && is_digit(text.*[c]) {
-                c += 1;
-            }
+            while c < text.count && !is_digit(text.*[c]) c += 1;
+            while c < text.count && is_digit(text.*[c]) c += 1;
             return c;
         }
         if by_word {
             previous = previous_word_boundary(*input_state.contents, input_state.cursor_index);
-            next = next_word_boundary(*input_state.contents, input_state.cursor_index);
+            next     = next_word_boundary(*input_state.contents, input_state.cursor_index);
         }
         #if OS == .MACOS {
             if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
                 previous = 0;
-                next = input_state.contents.count;
+                next     = input_state.contents.count;
             }
         }
         removal_start, removal_end := input_state.cursor_index;
@@ -265,7 +239,7 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
                 input_state.contents[i] = input_state.contents[i + removed];
             }
             input_state.contents.count -= removed;
-            input_state.cursor_index = min(input_state.cursor_index, removal_start);
+            input_state.cursor_index    = min(input_state.cursor_index, removal_start);
         }
     }
 
@@ -273,12 +247,12 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
         //
         // === mouse event handling ===
         //
-        text_node := get_node(text_node_index);
+        text_node                 := get_node(text_node_index);
         text_measurement, defined := get_measurement(text_node_index);
         if defined && (on_mouse_down(.LEFT) || on_mouse_down(.RIGHT)) {
-            text_node_glyphs := text_node.glyphs;
+            text_node_glyphs    := text_node.glyphs;
             font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
-            line_height := text_node_glyphs.line_height * font_units_to_pixel;
+            line_height         := text_node_glyphs.line_height * font_units_to_pixel;
 
             mouse := get_mouse_position();
             closest_distance: float;
@@ -289,7 +263,7 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
                 distance := Math.abs(left_edge - mouse.x);
                 if it_index == 0 || distance < closest_distance {
                     closest_distance = distance;
-                    cursor_index = it_index;
+                    cursor_index     = it_index;
                 }
                 if it_index == text_node_glyphs.array.count - 1 {
                     right_edge := left_edge + it.advance.x * font_units_to_pixel;
@@ -298,7 +272,7 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
                     distance := Math.abs(right_edge - mouse.x);
                     if distance < closest_distance {
                         closest_distance = distance;
-                        cursor_index = text_node_glyphs.array.count;
+                        cursor_index     = text_node_glyphs.array.count;
                     }
                 }
             }
@@ -306,16 +280,16 @@ use_input :: (using input_state: *Input_State, text_node_index: s64, input_chara
     }
 } @hook
 Input_Caret :: (
-    style: Style,
+    style:             Style,
     using input_state: *Input_State,
-    scrolling_offset: float,
-    text_node_index: s64
+    scrolling_offset:  float,
+    text_node_index:   s64
 ) {
     input_measurement, defined := get_measurement();
     if defined {
-        text_node := get_node(text_node_index);
+        text_node        := get_node(text_node_index);
         text_measurement := get_measurement(text_node_index);
-        input_glyphs := text_node.glyphs;
+        input_glyphs     := text_node.glyphs;
         // TODO: should we be taking window scale into account for this conversion?
         font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
 
@@ -327,10 +301,10 @@ Input_Caret :: (
                 caret_position = input_glyphs.array[cursor_index].position * font_units_to_pixel;
             }
         }
-        line_height := input_glyphs.line_height * font_units_to_pixel;
         // TODO: support multi-line inputs, because we're currently only comparing against there being no wrapping in the input
-        input := get_node();
-        inner_height := input_measurement.size.y - input.style.padding.y.x - input.style.padding.y.y;
+        line_height      := input_glyphs.line_height * font_units_to_pixel;
+        input            := get_node();
+        inner_height     := input_measurement.size.y - input.style.padding.y.x - input.style.padding.y.y;
         caret_position.x -= scrolling_offset;
         caret_position.x += input.style.padding.x.x;
         caret_position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
@@ -349,31 +323,18 @@ Input_Caret :: (
         }));
     }
 } @component
-// TODO: There's a compiler bug with this somehow, we should report this to Jon. Apparently when this function is defined beside the use_input
-// call inline, the compiler throws a warning saying not all control paths are handled, and the function body doesn't seem to run proplery,
-// as in not run at all.
-number_input_filter :: (input: u8) -> bool {
-    // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
-    // and operators, we can simply remove by index as all characters are only going to be one byte.
-    if is_digit(input) || is_any(input, "+-*/ .") {
-        return true;
-    } else {
-        log("ignoring input character %, since it's not in the ones we defined as supporting", input);
-        return false;
-    }
-}
 Input :: (input_state: *Input_State, body: Code) #expand {
     viewport := get_viewport_size();
     element(Style.{
-        background = color(BG),
-        padding = in_line(bottom(top(10), 30), 5),
-        direction = .VERTICAL,
-        text_wrapping = .NONE,
+        background      = color(BG),
+        padding         = in_line(bottom(top(10), 30), 5),
+        direction       = .VERTICAL,
+        text_wrapping   = .NONE,
         y_justification = .CENTER,
-        font_size = DIGITS_SIZE,
-        width = fixed(viewport.x),
+        font_size       = DIGITS_SIZE,
+        width           = fixed(viewport.x),
     }, #code {
-        scrolling_offset := state(float);
+        scrolling_offset           := state(float);
         scrolling_effective_offset := state(float);
         if is_mouse_inside() {
             scrolling_offset.* += get_scroll_delta().x;
@@ -381,9 +342,18 @@ Input :: (input_state: *Input_State, body: Code) #expand {
 
         text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
         Input_Caret(Style.{}, input_state, scrolling_effective_offset.*, text_node_index);
-        use_input(input_state, text_node_index, number_input_filter);
+        use_input(input_state, text_node_index, (input: u8) -> bool {
+            // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
+            // and operators, we can simply remove by index as all characters are only going to be one byte.
+            if is_digit(input) || is_any(input, "+-*/ .") {
+                return true;
+            } else {
+                log("ignoring input character %, since it's not in the ones we defined as supporting", input);
+                return false;
+            }
+        });
 
-        input := get_node();
+        input                      := get_node();
         input_measurement, defined := get_measurement();
         if defined {
             scrolling_offset.* = clamp(
@@ -394,9 +364,9 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         }
         scrolling_effective_offset.* = spring_transition(scrolling_offset.*, .{
             stiffness = 320.0,
-            damping = 32.0,
-            mass = 1.0,
-            current = scrolling_effective_offset,
+            damping   = 32.0,
+            mass      = 1.0,
+            current   = scrolling_effective_offset,
         });
         input.children_offset.x = -scrolling_effective_offset.*;
 
@@ -424,81 +394,38 @@ reverse_number_sign :: (text: *[..]u8) -> s64 {
     }
     return number_start;
 }
-test_reverse_number_sign :: () {
-    text: [..]u8;
-    reverse_number_sign(*text);
-    assert(to_string(text.data, text.count) == "");
-
-    array_add(*text, #char "1");
-    array_add(*text, #char "2");
-    array_add(*text, #char "3");
-    reverse_number_sign(*text);
-    assert(to_string(text.data, text.count) == "-123");
-
-    array_reset_keeping_memory(*text);
-    array_add(*text, #char "-");
-    array_add(*text, #char "1");
-    array_add(*text, #char "2");
-    array_add(*text, #char "3");
-    reverse_number_sign(*text);
-    assert(to_string(text.data, text.count) == "123");
-
-    array_reset_keeping_memory(*text);
-    array_add(*text, #char "-");
-    reverse_number_sign(*text);
-    assert(to_string(text.data, text.count) == "-");
-
-    array_reset_keeping_memory(*text);
-    array_add(*text, #char "1");
-    array_add(*text, #char "2");
-    array_add(*text, #char "3");
-    array_add(*text, #char "-");
-    reverse_number_sign(*text);
-    assert(to_string(text.data, text.count) == "123-");
-
-    array_reset_keeping_memory(*text);
-    array_add(*text, #char "1");
-    array_add(*text, #char "2");
-    array_add(*text, #char "3");
-    array_add(*text, #char " ");
-    array_add(*text, #char "-");
-    reverse_number_sign(*text);
-    assert(to_string(text.data, text.count) == "123 -");
-} @test
 
 App :: () {
-    window := context.forbear.window;
+    window   := context.forbear.window;
     viewport := get_viewport_size();
 
-    tokens := state([..]Token);
+    tokens       := state([..]Token);
     parse_result := state(Parse_Result);
-    result := state(float64);
+    result       := state(float64);
 
     input_state := state(Input_State);
     // TODO: find some way that this allocator could be set automatically too
     input_state.contents.allocator = node_pool();
 
     element(Style.{
-        direction = .VERTICAL,
+        direction  = .VERTICAL,
         background = color(BG_SECONDARY),
-        width = fixed(viewport.x),
-        height = fixed(viewport.y),
+        width      = fixed(viewport.x),
+        height     = fixed(viewport.y),
     }, #code {
         Input(input_state, #code {
             parse_result.* = parse_expression(to_string(input_state.contents.data, input_state.contents.count), tokens);
             if parse_result.* == .SUCCESS {
                 Pass :: enum { DIVIDE_MULTIPLY; ADD_SUBTRACT; };
-                index := 0;
+                index     := 0;
                 pass: Pass = .DIVIDE_MULTIPLY;
                 while index < tokens.count {
-                    left: float64 = FLOAT64_NAN;
-                    op: Operator = .NONE;
-                    right: float64 = FLOAT64_NAN;
-                    operation_size: s64 = 0;
+                    left:           float64  = FLOAT64_NAN;
+                    op:             Operator = .NONE;
+                    right:          float64  = FLOAT64_NAN;
+                    operation_size: s64      = 0;
                     while isnan(left) || op == .NONE || isnan(right) {
-                        if index >= tokens.count {
-                            break;
-                        }
+                        if index >= tokens.count break;
                         token := tokens.*[index];
                         if isnan(left) {
                             if token.kind == .NUMBER {
@@ -506,7 +433,7 @@ App :: () {
                             } else if token.kind == .OPERATOR {
                                 // operation with implicit left number, assumed to be 0
                                 left = 0;
-                                op = token.op;
+                                op   = token.op;
                             }
                         } else if op == .NONE {
                             assert(token.kind == .OPERATOR);
@@ -520,7 +447,7 @@ App :: () {
                                 op = token.op;
                             }
                         }
-                        index += 1;
+                        index          += 1;
                         operation_size += 1;
                     }
                     if !isnan(left) && op != .NONE && !isnan(right) {
@@ -537,17 +464,17 @@ App :: () {
                                 tokens.*[index] = Token.{kind = .NUMBER, number = left - right};
                             }
                         }
-                        if (pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE))
-                        || (pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT)) {
+                        if     (pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE))
+                            || (pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT)) {
                             for j : index-operation_size..tokens.count-operation_size-1{
                                 tokens.*[j] = tokens.*[j + operation_size];
                             }
                             tokens.count -= operation_size;
-                            index -= operation_size;
+                            index        -= operation_size;
                         }
                     }
                     if pass == .DIVIDE_MULTIPLY && index >= tokens.count - 1 {
-                        pass = .ADD_SUBTRACT;
+                        pass  = .ADD_SUBTRACT;
                         index = 0;
                     }
                 }
@@ -557,7 +484,7 @@ App :: () {
                     for token: tokens.* {
                         if token.kind == .NUMBER {
                             number_tokens += 1;
-                            result.* = token.number;
+                            result.*       = token.number;
                         }
                     }
                     // the operation should have been resolved to a single number
@@ -569,11 +496,11 @@ App :: () {
             if defined {
                 element(Style.{
                     background = color(BG),
-                    padding = all(5.0),
-                    font_size = 12,
+                    padding    = all(5.0),
+                    font_size  = 12,
                 }, #code {
-                    text_index := text(sprint("= %", result.*));
-                    text_node := get_node(text_index);
+                    text_index  := text(sprint("= %", result.*));
+                    text_node   := get_node(text_index);
                     result_node := get_node();
                     result_node.style.placement = relative(Vector2.{
                         viewport.x - text_node.size.x - 15.0,
@@ -611,11 +538,18 @@ App :: () {
         //     });
         // }
 
+        Column :: (body: Code) #expand {
+            element(Style.{width = grow(), height = grow(), x_justification = .CENTER}, body);
+        } @component
+        Row :: (body: Code) #expand {
+            element(Style.{width = grow(), height = fixed(64)}, body);
+        } @component
+
         element(Style.{
-            direction = .VERTICAL,
+            direction       = .VERTICAL,
             y_justification = .CENTER,
-            width = grow(),
-            height = grow(),
+            width           = grow(),
+            height          = grow(),
         }, #code {
             Row(#code {
                 Column(#code { if Button("7") {
@@ -735,17 +669,17 @@ main :: () {
             if Msg == {
                 case WM_GETMINMAXINFO;
                     MINMAXINFO :: struct {
-                        ptReserved: POINT;
-                        ptMaxSize: POINT;
-                        ptMaxPosition: POINT;
+                        ptReserved:     POINT;
+                        ptMaxSize:      POINT;
+                        ptMaxPosition:  POINT;
                         ptMinTrackSize: POINT;
                         ptMaxTrackSize: POINT;
                     };
-                    dpi := GetDpiForWindow(hWnd);
+                    dpi         := GetDpiForWindow(hWnd);
                     window.scale = dpi / 96.0;
-                    rectangle := RECT.{ right = xx (MIN_WIDTH * window.scale), bottom = xx (MIN_HEIGHT * window.scale) };
+                    rectangle   := RECT.{ right = xx (MIN_WIDTH * window.scale), bottom = xx (MIN_HEIGHT * window.scale) };
                     AdjustWindowRectExForDpi(*rectangle, WS_OVERLAPPEDWINDOW, 0, 0, dpi);
-                    min_max_info := cast(*MINMAXINFO) lParam;
+                    min_max_info               := cast(*MINMAXINFO) lParam;
                     min_max_info.ptMinTrackSize = .{ rectangle.right - rectangle.left, rectangle.bottom - rectangle.top };
                     return 0, true;
             }
@@ -757,8 +691,8 @@ main :: () {
 
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
-        font = *context.inter,
-        color = hex("#ECECEC"),
+        font      = *context.inter,
+        color     = hex("#ECECEC"),
         font_size = 16,
     });
 
