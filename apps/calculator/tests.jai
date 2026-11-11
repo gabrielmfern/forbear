@@ -214,6 +214,236 @@ main :: () {
 
             array_reset_keeping_memory(*nodes);
         }
+
+        {
+            // parenthesis leave no node behind, what was inside is used directly as the operand
+            result = Main.parse_expression("(1)", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER, number = 1},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 1.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            // the multiplication can't reach inside the parenthesis for the 2
+            result = Main.parse_expression("(1+2)*3", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 1},
+                .{kind = .OPEARTOR, op     = .ADD},
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
+                .{kind = .OPEARTOR, op     = .MULTIPLY},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .BINARY,   binary = .{left = 3, op = 4, right = 5}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 9.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            // precedence starts over inside the parenthesis, so the addition is taken even while in the right of a multiplication
+            result = Main.parse_expression("2*(3+4)", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .OPEARTOR, op     = .MULTIPLY},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .OPEARTOR, op     = .ADD},
+                .{kind = .NUMBER,   number = 4},
+                .{kind = .BINARY,   binary = .{left = 2, op = 3, right = 4}},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 14.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("2*(3+(4-1))", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .OPEARTOR, op     = .MULTIPLY},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .OPEARTOR, op     = .ADD},
+                .{kind = .NUMBER,   number = 4},
+                .{kind = .OPEARTOR, op     = .SUBTRACT},
+                .{kind = .NUMBER,   number = 1},
+                .{kind = .BINARY,   binary = .{left = 4, op = 5, right = 6}},
+                .{kind = .BINARY,   binary = .{left = 2, op = 3, right = 7}},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 8}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 12.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression(" ( 1 + 2 ) * 3 ", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 1},
+                .{kind = .OPEARTOR, op     = .ADD},
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
+                .{kind = .OPEARTOR, op     = .MULTIPLY},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .BINARY,   binary = .{left = 3, op = 4, right = 5}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 9.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("(1+2", *nodes);
+            assert(result == .EXPECTED_A_CLOSING_PARENTHESIS, "result=%", result);
+            array_reset_keeping_memory(*nodes);
+
+            // a closing parenthesis that was never opened
+            result = Main.parse_expression("1+2)", *nodes);
+            assert(result == .EXPECTED_A_OPERATOR, "result=%", result);
+            array_reset_keeping_memory(*nodes);
+
+            result = Main.parse_expression("()", *nodes);
+            assert(result == .EXPECTED_A_NUMBER, "result=%", result);
+            array_reset_keeping_memory(*nodes);
+
+            // there is no implicit multiplication
+            result = Main.parse_expression("2(3)", *nodes);
+            assert(result == .EXPECTED_A_OPERATOR, "result=%", result);
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("1.5", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER, number = 1.5},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 1.5, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("1.5+2.25", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 1.5},
+                .{kind = .OPEARTOR, op     = .ADD},
+                .{kind = .NUMBER,   number = 2.25},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 3.75, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            // more than one digit on the whole part, and a whole number mixed with a decimal one
+            result = Main.parse_expression("10.5/4", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 10.5},
+                .{kind = .OPEARTOR, op     = .DIVIDE},
+                .{kind = .NUMBER,   number = 4},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 2.625, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("0.5*(1.5+2.5)", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 0.5},
+                .{kind = .OPEARTOR, op     = .MULTIPLY},
+                .{kind = .NUMBER,   number = 1.5},
+                .{kind = .OPEARTOR, op     = .ADD},
+                .{kind = .NUMBER,   number = 2.5},
+                .{kind = .BINARY,   binary = .{left = 2, op = 3, right = 4}},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 2.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            // the decimals are still being typed
+            result = Main.parse_expression("1.", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER, number = 1},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 1.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            // a number can't have spaces in the middle of it
+            result = Main.parse_expression("1 . 5", *nodes);
+            assert(result == .EXPECTED_A_OPERATOR, "result=%", result);
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("1.2.3", *nodes);
+            assert(result == .TOO_MANY_PERIODS, "result=%", result);
+            array_reset_keeping_memory(*nodes);
+
+            result = Main.parse_expression("1..2", *nodes);
+            assert(result == .TOO_MANY_PERIODS, "result=%", result);
+            array_reset_keeping_memory(*nodes);
+
+            // the failure is not lost when the number is in the right of a binary, or inside parenthesis
+            result = Main.parse_expression("1+2.5.2", *nodes);
+            assert(result == .TOO_MANY_PERIODS, "result=%", result);
+            array_reset_keeping_memory(*nodes);
+
+            result = Main.parse_expression("(1.5.2+1)*3", *nodes);
+            assert(result == .TOO_MANY_PERIODS, "result=%", result);
+            array_reset_keeping_memory(*nodes);
+        }
     });
 
     test("reverse_number_sign", #code {

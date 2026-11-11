@@ -2,7 +2,7 @@
 - polish calculator
     - gracefully handle different window sizes
     - support constants (pi, e, phi)
-    - add a shake to everything when the expression is invalid
+    - handle errors: show some indication of where there is an error, since the errors for a calculator are intuitive and shake the everything when there's an error
     - make Enter put the result as the start of a new expression and copy it
     - add thousand commas automatically while the user types in or pastes
     - support ctrl+z and ctrl+shift+z

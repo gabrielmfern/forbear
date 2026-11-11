@@ -36,7 +36,7 @@ Expression_Node      :: struct {
 };
 // TODO: return the index under which the failure happened, and then, after that index, make the text color red
 // to indicate a parsing failure.
-Parse_Result :: enum { OK; EXPECTED_A_NUMBER; EXPECTED_A_OPERATOR; EXPECTED_A_CLOSING_PARENTHESIS; };
+Parse_Result :: enum { OK; TOO_MANY_PERIODS; EXPECTED_A_NUMBER; EXPECTED_A_OPERATOR; EXPECTED_A_CLOSING_PARENTHESIS; };
 peek_number :: (expression: string, cursor: s64) -> float64, index_increment: s64, result: Parse_Result {
     index_increment := 0;
     while cursor + index_increment < expression.count && expression[cursor + index_increment] == #char " " {
@@ -44,9 +44,15 @@ peek_number :: (expression: string, cursor: s64) -> float64, index_increment: s6
     }
     if cursor + index_increment < expression.count && is_digit(expression[cursor + index_increment]) {
         number_start := cursor + index_increment;
+        found_period := false;
         // then, we find the end of this "number"
         while cursor + index_increment <= expression.count - 1 {
-            if !is_digit(expression[cursor + index_increment]) {
+            char := expression[cursor + index_increment];
+            if char == #char "." {
+                if found_period then return 0, index_increment, Parse_Result.TOO_MANY_PERIODS;
+                found_period = true;
+            }
+            if !is_digit(char) && char != #char "." {
                 break;
             }
             index_increment += 1;
@@ -628,7 +634,7 @@ App :: () {
             evaluation_success.* = parse_expression(to_string(input_state.contents.data, input_state.contents.count), *nodes) == .OK;
             if evaluation_success.* {
                 evaluation, success := evaluate(nodes);
-                result.* = evaluation;
+                result.*             = evaluation;
                 evaluation_success.* = success;
             }
 
@@ -649,34 +655,6 @@ App :: () {
                 });
             }
         });
-
-        // TODO: how can we handle this error so that it's not even shown to the user?
-        // if parse_result.* != .SUCCESS && input_state.contents.count > 0 && defined {
-        //     // TODO: is this really useful? should we remove this?
-        //     element(Style.{
-        //         font_size = 12,
-        //     }, #code {
-        //         message := "";
-        //         if parse_result.* == {
-        //             case .TWO_NUMBERS_IN_A_ROW;
-        //                 message = "Two numbers in a row can't be calculated";
-        //             case .COULD_NOT_PARSE_FLOAT;
-        //                 message = "Could not parse what should be a number";
-        //         }
-        //
-        //         text_node := get_node(text(Style.{
-        //             color = ERROR,
-        //             margin = in_line(5),
-        //             font_size = 12
-        //         }, message));
-        //
-        //         error_node := get_node();
-        //         error_node.style.placement = relative(Vector2.{
-        //             0.0,
-        //             input_measurement.size.y - text_node.size.y - 5
-        //         });
-        //     });
-        // }
 
         Column :: (body: Code) #expand {
             element(Style.{width = grow(), height = grow(), x_justification = .CENTER}, body);
