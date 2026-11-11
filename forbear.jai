@@ -5207,6 +5207,11 @@ prepare_for_next_frame :: () {
 #import "Compiler";
 COMPILER_PLUGIN_DEBUGGING :: false;
 get_plugin :: () -> *Metaprogram_Plugin {
+    // TODO: instead of wrapping the caller with a macro that re-returns the function's return values,
+    // we should instead modify the scope's procedure body to have the scope definition.
+    //
+    // to properly support this, we should pass the scope's location thruogh the context, and thus we will still
+    // need to modify the procedure callers, but just to add a `,, scope_location = #location()`
     format                          := *context.print_style.default_format_struct;
     format.use_newlines_if_long_form = true;
     format.indentation_width         = 4;
