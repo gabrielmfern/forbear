@@ -5,9 +5,8 @@
     - support exponentiation
     - support constants (pi, e, phi)
     - add a shake to everything when the expression is invalid
-    - make Enter put the result as the start of a new expression
+    - make Enter put the result as the start of a new expression and copy it
     - add thousand commas automatically while the user types in or pastes
-    - support pasting expressions
     - support ctrl+z and ctrl+shift+z
     - selection in the input: with the mouse and with the keyboard
     - history of calculations, when reopening show the previous state of everything (history, expression being typed out, result)

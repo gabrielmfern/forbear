@@ -1,6 +1,5 @@
 #import "Basic";
 Main :: #import,file "./main.jai";
-operator == :: Main.operator ==;
 
 BUILD_FLAGS :: "+forbear";
 
@@ -10,21 +9,103 @@ test :: (name: string, body: Code) #expand {
     print("PASS\n");
 }
 
+assert_nodes :: (expected: []Main.Expression_Node, loc := #caller_location) #expand {
+    assert(`nodes.count == expected.count, "nodes.count=%, expected %", `nodes.count, expected.count, loc = loc);
+    for expected {
+        node := `nodes[it_index];
+        assert(node.kind == it.kind, "nodes[%].kind=%, expected %", it_index, node.kind, it.kind, loc = loc);
+        if #complete it.kind == {
+            case .NUMBER;
+                assert(node.number == it.number, "nodes[%].number=%, expected %", it_index, node.number, it.number, loc = loc);
+            case .OPEARTOR;
+                assert(node.op == it.op, "nodes[%].op=%, expected %", it_index, node.op, it.op, loc = loc);
+            case .BINARY;
+                assert(
+                    node.binary.left == it.binary.left && node.binary.op == it.binary.op && node.binary.right == it.binary.right,
+                    "nodes[%].binary=%, expected %", it_index, node.binary, it.binary, loc = loc
+                );
+        }
+    }
+}
+
 main :: () {
     test("parse_expression", #code {
-        tokens: [..]Main.Token;
-        expression := "5 + 10 - 12 / 4 * 19";
-        result     := Main.parse_expression(expression, *tokens);
-        assert(result == .SUCCESS);
-        assert(tokens[0] == Main.Token.{kind=.NUMBER,number=5});
-        assert(tokens[1] == Main.ADD);
-        assert(tokens[2] == Main.Token.{kind=.NUMBER,number=10});
-        assert(tokens[3] == Main.SUBTRACT);
-        assert(tokens[4] == Main.Token.{kind=.NUMBER,number=12});
-        assert(tokens[5] == Main.DIVIDE);
-        assert(tokens[6] == Main.Token.{kind=.NUMBER,number=4});
-        assert(tokens[7] == Main.MULTIPLY);
-        assert(tokens[8] == Main.Token.{kind=.NUMBER,number=19});
+        nodes: [..]Main.Expression_Node;
+        result: Main.Parse_Result;
+
+        {
+            result = Main.parse_expression("1", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER, number = 1},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 1.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("1+2", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 1},
+                .{kind = .OPEARTOR, op = .ADD},
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 3.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("1+2*3", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 1},
+                .{kind = .OPEARTOR, op = .ADD},
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .OPEARTOR, op = .MULTIPLY},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .BINARY,   binary = .{left = 2, op = 3, right = 4}},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 7.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("1+2*3-7", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 1},
+                .{kind = .OPEARTOR, op     = .ADD},
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .OPEARTOR, op     = .MULTIPLY},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .BINARY,   binary = .{left = 2, op = 3, right = 4}},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
+                .{kind = .OPEARTOR, op     = .SUBTRACT},
+                .{kind = .NUMBER,   number = 7},
+                .{kind = .BINARY,   binary = .{left = 6, op = 7, right = 8}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(evaluated == 0.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
     });
 
     test("reverse_number_sign", #code {

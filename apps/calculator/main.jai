@@ -13,77 +13,253 @@ Math :: #import "Math";
 }
 
 Operator :: enum { NONE; ADD; SUBTRACT; MULTIPLY; DIVIDE; };
-Token :: struct {
-    Kind :: enum { NUMBER; OPERATOR; };
-    kind: Kind;
-    union { number: float64; op: Operator; }
-};
-tokens_equal :: (a: Token, b: Token) -> bool {
-    if a.kind != b.kind {
-        return false;
-    }
-    if a.kind == .NUMBER {
-        return a.number == b.number;
-    } else {
-        return a.op == b.op;
-    }
+is_operator :: (char: u8) -> bool {
+    return is_any(char, "+-*x/");
 }
-operator == :: tokens_equal;
-ADD      :: Token.{ kind = .OPERATOR, op = .ADD };
-SUBTRACT :: Token.{ kind = .OPERATOR, op = .SUBTRACT };
-MULTIPLY :: Token.{ kind = .OPERATOR, op = .MULTIPLY };
-DIVIDE   :: Token.{ kind = .OPERATOR, op = .DIVIDE };
-Parse_Result :: enum { SUCCESS; TWO_NUMBERS_IN_A_ROW; COULD_NOT_PARSE_FLOAT; };
-parse_expression :: (expression: string, tokens: *[..]Token) -> Parse_Result {
-    array_reset_keeping_memory(tokens);
-    in_progress: string = ---;
-    in_progress.data = expression.data;
-    in_progress.count = 1;
-    while in_progress.data != expression.data + expression.count {
-        trimmed := trim(in_progress);
-        if trimmed.count == 0 {
-            in_progress.data += 1;
-        } else {
-            if trimmed == {
-                case "+";
-                    array_add(tokens, ADD);
-                case "-";
-                    // TODO: handle negative numbers, it should just parse to a negative
-                    // number instead of a `-` operator token
-                    array_add(tokens, SUBTRACT);
-                case "*";
-                    array_add(tokens, MULTIPLY);
-                case "/";
-                    array_add(tokens, DIVIDE);
-                case;
-                    // I have to keep accumulating in progress until the next is either an operator, or it's a space. The
-                    // number might continue on after this is hit.
-                    while in_progress.data + in_progress.count - 1 < expression.data + expression.count - 1 {
-                        next_character := (in_progress.data + in_progress.count).*;
-                        if is_any(next_character, "+-*/ ") {
-                            break;
-                        } else {
-                            in_progress.count += 1;
-                        }
-                    }
-                    trimmed = trim(in_progress);
-
-                    // it must be a number at this point, so we assume so
-                    number, success := string_to_float64(trimmed);
-                    if success {
-                        if tokens.count > 0 && tokens.*[tokens.count - 1].kind == .NUMBER {
-                            return .TWO_NUMBERS_IN_A_ROW;
-                        }
-                        array_add(tokens, Token.{ kind = .NUMBER, number = number });
-                    } else {
-                        return .COULD_NOT_PARSE_FLOAT;
-                    }
-            }
-            in_progress.data += in_progress.count;
-            in_progress.count = 1;
+OPERATOR_PRECEDENCE  :: s64.[0, 1, 1, 2, 2];
+Expression_Node_Kind :: enum {
+    BINARY;
+    OPEARTOR;
+    NUMBER;
+}
+Expression_Node      :: struct {
+    kind: Expression_Node_Kind;
+    union {
+        number: float64;
+        op:     Operator;
+        binary: struct {
+            left:       s64;
+            op:         s64;
+            right:      s64;
         }
     }
-    return .SUCCESS;
+};
+// TODO: return the index under which the failure happened, and then, after that index, make the text color red
+// to indicate a parsing failure.
+Parse_Result :: enum { OK; EXPECTED_A_NUMBER; EXPECTED_A_OPERATOR; };
+peek_number :: (expression: string, cursor: s64) -> float64, index_increment: s64, result: Parse_Result {
+    index_increment := 0;
+    // first, we find the first digit for the start of this "number", this skips over all spaces and other characters
+    while cursor + index_increment < expression.count - 1 {
+        if is_digit(expression[cursor + index_increment]) {
+            break;
+        }
+        index_increment += 1;
+    }
+    if is_digit(expression[cursor + index_increment]) {
+        number_start := cursor + index_increment;
+        // then, we find the end of this "number"
+        while cursor + index_increment <= expression.count - 1 {
+            if !is_digit(expression[cursor + index_increment]) {
+                break;
+            }
+            index_increment += 1;
+        }
+
+        number: string = ---;
+        number.data    = expression.data + number_start;
+        number.count   = cursor + index_increment - number_start;
+        // TODO: ponder if we should handle the failure of this or not. I don't think this can ever fail given what we've already assured to this point
+        return string_to_float64(number), index_increment, .OK;
+    } else {
+        // if the character at this point is not a digit, it means we reached the end of the expression
+        // and could not find the number we expected. that indicates an improper expression was typed out
+        return 0, index_increment, Parse_Result.EXPECTED_A_NUMBER;
+    }
+}
+peek_opeartor :: (expression: string, cursor: s64) -> Operator, index_increment: s64, result: Parse_Result {
+    index_increment := 0;
+    while cursor + index_increment < expression.count - 1 {
+        if is_operator(expression[cursor + index_increment]) {
+            break;
+        }
+        index_increment += 1;
+    }
+    op_character := expression[cursor + index_increment];
+    if is_operator(op_character) {
+        op: Operator;
+        if op_character == {
+            case "+"; op = .ADD;
+            case "-"; op = .SUBTRACT;
+            case "*"; op = .MULTIPLY;
+            case "/"; op = .DIVIDE;
+        }
+        index_increment += 1;
+        return op, index_increment, Parse_Result.OK;
+    } else {
+        return .NONE, index_increment, Parse_Result.EXPECTED_A_OPERATOR;
+    }
+}
+Parser :: struct {
+    cursor:     s64;
+    expression: string;
+    nodes:      *[..]Expression_Node;
+};
+parse_number :: (using parser: *Parser) -> s64, result: Parse_Result {
+    number, increment, result := peek_number(expression, cursor);
+    node                      : Expression_Node;
+    if result == .OK {
+        cursor      = cursor + increment;
+        node.kind   = .NUMBER;
+        node.number = number;
+    }
+    array_add(nodes, node);
+    return nodes.count - 1, result;
+}
+parse_operator :: (using parser: *Parser) -> s64, result: Parse_Result {
+    op, increment, result := peek_opeartor(expression, cursor);
+    node                  : Expression_Node;
+    if result == .OK {
+        cursor    = cursor + increment;
+        node.kind = .OPEARTOR;
+        node.op   = op;
+    }
+    array_add(nodes, node);
+    return nodes.count - 1, result;
+}
+/*
+    This produces a tree for the entire expression in such a way that the binaries that are added onto the array
+    in the order in which they must be evaluated. This makes precedence work without much work and makes this quite
+    simple.
+
+    Examples:
+    1 + 2 * 3 - 4 -> [0] NUMBER   1
+                     [1] OPERATOR +
+                     [2] NUMBER   2
+                     [3] OPERATOR *
+                     [4] NUMBER   3
+                     [5] BINARY   left=2 op=3 right=4
+                     [6] BINARY   left=0 op=1 right=5
+                     [7] OPERATOR -
+                     [8] NUMBER   4
+                     [9] BINARY   left=6 op=7 right=8   <- root
+
+    1 - 2 - 3     -> [0] NUMBER   1
+                     [1] OPERATOR -
+                     [2] NUMBER   2
+                     [3] BINARY   left=0 op=1 right=2
+                     [4] OPERATOR -
+                     [5] NUMBER   3
+                     [6] BINARY   left=3 op=4 right=5
+
+    1 + 2 * 3     -> [0] NUMBER   1
+                     [1] OPERATOR +
+                     [2] NUMBER   2
+                     [3] OPERATOR *
+                     [4] NUMBER   3
+                     [5] BINARY   left=2 op=3 right=4
+                     [6] BINARY   left=0 op=1 right=5
+*/
+parse_expression :: (using parser: *Parser, min_precedence := 0) -> index: s64, Parse_Result {
+    result: Parse_Result;
+    left:   s64          = -1;
+    op:     s64          = -1;
+    right:  s64          = -1;
+    while parser.cursor < expression.count {
+        if left == -1 {
+            left, result = parse_number(parser);
+            if result != .OK || cursor >= expression.count then break;
+        }
+
+        assert(op == -1);
+        peeked_op, _, peeked_result := peek_opeartor(expression, cursor);
+        // this is the point of decision of whether this left number should be use in this new binary, or if it should be yielded to the caller.
+        //
+        // we determine if we want to keep it here if the caller's precedence (min_precedence) is smaller or equal to ours, in which case we
+        // create a new binary with it and instead yield the binary's index to be used as the `right` of the caller's express
+        if peeked_result == .OK && OPERATOR_PRECEDENCE[peeked_op] > min_precedence {
+            op, result = parse_operator(parser);
+            if result != .OK || cursor >= expression.count then break;
+
+            assert(right == -1);
+            // when we call this function we want to understand if the next number should be used here, or by another binary.
+            // if it's used by another binary, the right here becomes the index to that binary.
+            //
+            // read above to understand how this is determined.
+            right, result = parse_expression(parser, OPERATOR_PRECEDENCE[peeked_op]);
+            if result != .OK then break;
+
+            node: Expression_Node;
+            node.kind         = .BINARY;
+            node.binary.left  = left;
+            node.binary.op    = op;
+            node.binary.right = right;
+            array_add(nodes, node);
+
+            left  = nodes.count - 1;
+            op    = -1;
+            right = -1;
+        } else {
+            break;
+        }
+    }
+    return left, result;
+}
+// Heavily inspired by the conversation between Jonathan Blow and Casey Muratori here https://youtu.be/fIPO4G42wYE?si=elPLn4XFm9FhO-ZS
+parse_expression :: (expression: string, nodes: *[..]Expression_Node) -> Parse_Result {
+    parser: Parser;
+    parser.expression = expression;
+    parser.nodes      = nodes;
+    parser.cursor     = 0;
+
+    root, result := parse_expression(*parser, 0);
+    return result;
+}
+evaluate :: (nodes: [..]Expression_Node) -> float64, success: bool {
+    if nodes.count == 0 then return 0, false;
+    evaluate_node :: (nodes: [..]Expression_Node, node: Expression_Node) -> float64, success: bool {
+        if #complete node.kind == {
+            case .BINARY;
+                left, right: float64;
+                success: bool;
+
+                left, success = evaluate_node(nodes, nodes[node.binary.left]);
+                if !success then return 0, false;
+                right, success = evaluate_node(nodes, nodes[node.binary.right]);
+                if !success then return 0, false;
+                if #complete nodes[node.binary.op].op == {
+                    case .ADD;
+                        return left + right, true;
+                    case .SUBTRACT;
+                        return left - right, true;
+                    case .MULTIPLY;
+                        return left * right, true;
+                    case .DIVIDE;
+                        return left / right, true;
+                    case .NONE;
+                        return 0, false;
+                }
+            case .NUMBER;
+                return node.number, true;
+            case .OPEARTOR;
+                return 0, false;
+        }
+    }
+    // the last binary, that we then use to recurse outward
+    outer_binary_or_first_number: Expression_Node;
+    found_binary_or_first_number: bool;
+    for <nodes {
+        if it.kind == .BINARY {
+            outer_binary_or_first_number = it;
+            found_binary_or_first_number = true;
+            break;
+        }
+    }
+    if !found_binary_or_first_number {
+        // assummed that this number is going to be fast to find
+        for nodes {
+            if it.kind == .NUMBER {
+                outer_binary_or_first_number = it;
+                found_binary_or_first_number = true;
+                break;
+            }
+        }
+    }
+    if !found_binary_or_first_number {
+        return 0, false;
+    }
+    evaluation, success := evaluate_node(nodes, outer_binary_or_first_number);
+    return evaluation, success;
 }
 
 isnan       :: Math.isnan;
@@ -313,12 +489,12 @@ Input_Caret :: (
         blinking := cast(s64)Math.floor(seconds_since_init() * 2) % 2 != 1;
 
         element(overwrite(style, Style.{
-            placement = relative(caret_position),
+            placement  = relative(caret_position),
             background = ifx blinking then
                 color(hex("#FFFFFF"))
             else
                 color(TRANSPARENT),
-            width = fixed(1.0),
+            width  = fixed(1.0),
             height = fixed(line_height),
         }));
     }
@@ -345,7 +521,7 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         use_input(input_state, text_node_index, (input: u8) -> bool {
             // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
             // and operators, we can simply remove by index as all characters are only going to be one byte.
-            if is_digit(input) || is_any(input, "+-*/ .") {
+            if is_digit(input) || is_any(input, "+-*/() .") {
                 return true;
             } else {
                 log("ignoring input character %, since it's not in the ones we defined as supporting", input);
@@ -378,8 +554,8 @@ reverse_number_sign :: (text: *[..]u8) -> s64 {
     number_start := -1;
     if text.count > 0 {
         number_start = text.count - 1;
-        if !is_any(text.*[number_start], " /+-*") {
-            while number_start > 0 && !is_any(text.*[number_start - 1], " /+-*") {
+        if !is_any(text.*[number_start], " /+-*()") {
+            while number_start > 0 && !is_any(text.*[number_start - 1], " /+-*()") {
                 number_start -= 1;
             }
             if number_start < text.count - 1 && is_digit(text.*[number_start]) {
@@ -399,9 +575,8 @@ App :: () {
     window   := context.forbear.window;
     viewport := get_viewport_size();
 
-    tokens       := state([..]Token);
-    parse_result := state(Parse_Result);
-    result       := state(float64);
+    evaluation_success := state(false);
+    result             := state(float64);
 
     input_state := state(Input_State);
     // TODO: find some way that this allocator could be set automatically too
@@ -414,82 +589,12 @@ App :: () {
         height     = fixed(viewport.y),
     }, #code {
         Input(input_state, #code {
-            parse_result.* = parse_expression(to_string(input_state.contents.data, input_state.contents.count), tokens);
-            if parse_result.* == .SUCCESS {
-                Pass :: enum { DIVIDE_MULTIPLY; ADD_SUBTRACT; };
-                index     := 0;
-                pass: Pass = .DIVIDE_MULTIPLY;
-                while index < tokens.count {
-                    left:           float64  = FLOAT64_NAN;
-                    op:             Operator = .NONE;
-                    right:          float64  = FLOAT64_NAN;
-                    operation_size: s64      = 0;
-                    while isnan(left) || op == .NONE || isnan(right) {
-                        if index >= tokens.count break;
-                        token := tokens.*[index];
-                        if isnan(left) {
-                            if token.kind == .NUMBER {
-                                left = token.number;
-                            } else if token.kind == .OPERATOR {
-                                // operation with implicit left number, assumed to be 0
-                                left = 0;
-                                op   = token.op;
-                            }
-                        } else if op == .NONE {
-                            assert(token.kind == .OPERATOR);
-                            op = token.op;
-                        } else if isnan(right) {
-                            if token.kind == .NUMBER {
-                                right = token.number;
-                                break;
-                            } else if token.kind == .OPERATOR {
-                                // takes precedence over previous operator. might be confusing?
-                                op = token.op;
-                            }
-                        }
-                        index          += 1;
-                        operation_size += 1;
-                    }
-                    if !isnan(left) && op != .NONE && !isnan(right) {
-                        if pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE) {
-                            if op == .MULTIPLY {
-                                tokens.*[index] = Token.{kind = .NUMBER, number = left * right};
-                            } else if op == .DIVIDE {
-                                tokens.*[index] = Token.{kind = .NUMBER, number = left / right};
-                            }
-                        } else if pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT) {
-                            if op == .ADD {
-                                tokens.*[index] = Token.{kind = .NUMBER, number = left + right};
-                            } else if op == .SUBTRACT {
-                                tokens.*[index] = Token.{kind = .NUMBER, number = left - right};
-                            }
-                        }
-                        if     (pass == .DIVIDE_MULTIPLY && (op == .MULTIPLY || op == .DIVIDE))
-                            || (pass == .ADD_SUBTRACT && (op == .ADD || op == .SUBTRACT)) {
-                            for j : index-operation_size..tokens.count-operation_size-1{
-                                tokens.*[j] = tokens.*[j + operation_size];
-                            }
-                            tokens.count -= operation_size;
-                            index        -= operation_size;
-                        }
-                    }
-                    if pass == .DIVIDE_MULTIPLY && index >= tokens.count - 1 {
-                        pass  = .ADD_SUBTRACT;
-                        index = 0;
-                    }
-                }
-                result.* = 0;
-                if tokens.count > 0 {
-                    number_tokens := 0;
-                    for token: tokens.* {
-                        if token.kind == .NUMBER {
-                            number_tokens += 1;
-                            result.*       = token.number;
-                        }
-                    }
-                    // the operation should have been resolved to a single number
-                    assert(number_tokens == 1 || number_tokens == 0);
-                }
+            nodes: [..]Expression_Node;
+            evaluation_success.* = parse_expression(to_string(input_state.contents.data, input_state.contents.count), *nodes) == .OK;
+            if evaluation_success.* {
+                evaluation, success := evaluate(nodes);
+                result.* = evaluation;
+                evaluation_success.* = success;
             }
 
             input_measurement, defined := get_measurement();
