@@ -311,9 +311,21 @@ U64_MAX     :: Math.U64_MAX;
 // ===== program styles =====
 //
 #add_context inter: Font;
+// The interface is designed for MIN_WIDTH x MIN_HEIGHT. On bigger windows, everything gets multiplied by how much
+// the window grew on the axis it grew the least, and the buttons stretch to take what's left on the other axis.
+#add_context ui_scale: float = 1.0;
+scaled :: (value: float) -> float {
+    return value * context.ui_scale;
+}
+// the same conversion the layout does for the text of the input, so that the caret lines up with the glyphs
+digits_font_units_to_pixel :: () -> float {
+    window_scale := cast(float) context.forbear.window.scale;
+    return get_font_units_to_pixel(*context.inter, round_font_size(scaled(DIGITS_SIZE) * window_scale)) / window_scale;
+}
 MIN_WIDTH    :: 225;
 MIN_HEIGHT   :: 325;
 DIGITS_SIZE  :: 32;
+BUTTON_GAP   :: 8.0;
 BG           :: #run hex("#0F0F10");
 BG_SECONDARY :: #run hex("#19191B");
 BG_TERTIARY  :: #run hex("#262628");
@@ -329,14 +341,14 @@ TRANSPARENT  :: #run hex("#01010100");
 Button :: (contents: string, is_operator := false) -> clicked: bool {
     clicked := false;
     element(Style.{
-        border_radius   = 6.0,
+        border_radius   = scaled(6.0),
         background      = color(ifx is_operator then OP else BG_TERTIARY),
         color           = ifx is_operator then OP_TEXT else VECTOR4_NAN,
-        font_size       = 24,
+        font_size       = scaled(24),
         x_justification = .CENTER,
         y_justification = .CENTER,
-        width           = fixed(48.0),
-        height          = fixed(48.0),
+        width           = grow(),
+        height          = grow(),
         cursor          = .POINTER,
     }, #code {
         button := get_node();
@@ -468,7 +480,7 @@ use_input :: (using input_state:      *Input_State,
         text_measurement, defined := get_measurement(text_node_index);
         if defined && (on_mouse_down(.LEFT) || on_mouse_down(.RIGHT)) {
             text_node_glyphs    := text_node.glyphs;
-            font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
+            font_units_to_pixel := digits_font_units_to_pixel();
             line_height         := text_node_glyphs.line_height * font_units_to_pixel;
 
             mouse := get_mouse_position();
@@ -507,8 +519,7 @@ Input_Caret :: (
         text_node        := get_node(text_node_index);
         text_measurement := get_measurement(text_node_index);
         input_glyphs     := text_node.glyphs;
-        // TODO: should we be taking window scale into account for this conversion?
-        font_units_to_pixel := get_font_units_to_pixel(*context.inter, DIGITS_SIZE);
+        font_units_to_pixel := digits_font_units_to_pixel();
 
         caret_position: Vector2;
         if contents.count > 0 {
@@ -535,7 +546,7 @@ Input_Caret :: (
                 color(hex("#FFFFFF"))
             else
                 color(TRANSPARENT),
-            width  = fixed(1.0),
+            width  = fixed(scaled(1.0)),
             height = fixed(line_height),
         }));
     }
@@ -544,11 +555,11 @@ Input :: (input_state: *Input_State, body: Code) #expand {
     viewport := get_viewport_size();
     element(Style.{
         background      = color(BG),
-        padding         = in_line(bottom(top(10), 30), 5),
+        padding         = in_line(bottom(top(scaled(10)), scaled(30)), scaled(5)),
         direction       = .VERTICAL,
         text_wrapping   = .NONE,
         y_justification = .CENTER,
-        font_size       = DIGITS_SIZE,
+        font_size       = scaled(DIGITS_SIZE),
         width           = fixed(viewport.x),
     }, #code {
         scrolling_offset           := state(float);
@@ -615,6 +626,8 @@ reverse_number_sign :: (text: *[..]u8) -> s64 {
 App :: () {
     window   := context.forbear.window;
     viewport := get_viewport_size();
+    // the lower bound keeps font sizes sane on a degenerate viewport, like the one of a minimized window
+    context.ui_scale = max(min(viewport.x / MIN_WIDTH, viewport.y / MIN_HEIGHT), 0.5);
 
     evaluation_success := state(false);
     result             := state(float64);
@@ -642,30 +655,32 @@ App :: () {
             if defined {
                 element(Style.{
                     background = color(BG),
-                    padding    = all(5.0),
-                    font_size  = 12,
+                    padding    = all(scaled(5.0)),
+                    font_size  = scaled(12),
                 }, #code {
                     text_index  := text(sprint("= %", result.*));
                     text_node   := get_node(text_index);
                     result_node := get_node();
                     result_node.style.placement = relative(Vector2.{
-                        viewport.x - text_node.size.x - 15.0,
-                        input_measurement.size.y - text_node.size.y - 20.0
+                        viewport.x - text_node.size.x - scaled(15.0),
+                        input_measurement.size.y - text_node.size.y - scaled(20.0)
                     });
                 });
             }
         });
 
         Column :: (body: Code) #expand {
-            element(Style.{width = grow(), height = grow(), x_justification = .CENTER}, body);
+            // half of the gap on each side, so that two neighboring buttons end up a full gap apart
+            element(Style.{width = grow(), height = grow(), padding = all(scaled(BUTTON_GAP / 2))}, body);
         } @component
         Row :: (body: Code) #expand {
-            element(Style.{width = grow(), height = fixed(64)}, body);
+            element(Style.{width = grow(), height = grow()}, body);
         } @component
 
         element(Style.{
             direction       = .VERTICAL,
-            y_justification = .CENTER,
+            // the other half, so that the buttons are also a full gap away from the edges
+            padding         = all(scaled(BUTTON_GAP / 2)),
             width           = grow(),
             height          = grow(),
         }, #code {
