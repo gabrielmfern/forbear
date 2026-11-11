@@ -323,7 +323,7 @@ digits_font_units_to_pixel :: () -> float {
     return get_font_units_to_pixel(*context.inter, round_font_size(scaled(DIGITS_SIZE) * window_scale)) / window_scale;
 }
 MIN_WIDTH    :: 225;
-MIN_HEIGHT   :: 325;
+MIN_HEIGHT   :: 445;
 DIGITS_SIZE  :: 32;
 BUTTON_GAP   :: 8.0;
 BG           :: #run hex("#0F0F10");
@@ -331,6 +331,9 @@ BG_SECONDARY :: #run hex("#19191B");
 BG_TERTIARY  :: #run hex("#262628");
 BG_HOVER     :: #run hex("#313134");
 BG_PRESSED   :: #run hex("#1E1E20");
+FN           :: #run hex("#3A3A3D");
+FN_HOVER     :: #run hex("#464649");
+FN_PRESSED   :: #run hex("#2E2E30");
 OP           :: #run hex("#ECECEC");
 OP_TEXT      :: #run hex("#19191B");
 OP_HOVER     :: #run hex("#FFFFFF");
@@ -338,12 +341,25 @@ OP_PRESSED   :: #run hex("#CFCFD2");
 ERROR        :: #run hex("#E85B5B");
 TRANSPARENT  :: #run hex("#01010100");
 
-Button :: (contents: string, is_operator := false) -> clicked: bool {
+Button_Kind :: enum {
+    DIGIT;
+    // the ones that are neither a digit nor an operator, like the parenthesis
+    FUNCTION;
+    OPERATOR;
+}
+Button :: (contents: string, kind := Button_Kind.DIGIT) -> clicked: bool {
+    background, hover, pressed: Vector4;
+    if #complete kind == {
+        case .DIGIT;    background, hover, pressed = BG_TERTIARY, BG_HOVER, BG_PRESSED;
+        case .FUNCTION; background, hover, pressed = FN, FN_HOVER, FN_PRESSED;
+        case .OPERATOR; background, hover, pressed = OP, OP_HOVER, OP_PRESSED;
+    }
+
     clicked := false;
     element(Style.{
         border_radius   = scaled(6.0),
-        background      = color(ifx is_operator then OP else BG_TERTIARY),
-        color           = ifx is_operator then OP_TEXT else VECTOR4_NAN,
+        background      = color(background),
+        color           = ifx kind == .OPERATOR then OP_TEXT else VECTOR4_NAN,
         font_size       = scaled(24),
         x_justification = .CENTER,
         y_justification = .CENTER,
@@ -353,11 +369,11 @@ Button :: (contents: string, is_operator := false) -> clicked: bool {
     }, #code {
         button := get_node();
         if is_mouse_inside() {
-            button.style.background = color(ifx is_operator then OP_HOVER else BG_HOVER);
+            button.style.background = color(hover);
         }
         clicked = on_click();
         if is_mouse_held() && is_mouse_inside() {
-            button.style.background = color(ifx is_operator then OP_PRESSED else BG_PRESSED);
+            button.style.background = color(pressed);
         }
         text(contents);
     });
@@ -622,6 +638,22 @@ reverse_number_sign :: (text: *[..]u8) -> s64 {
     }
     return number_start;
 }
+// Removes what was last added by one of the buttons. The operator buttons surround the operator with spaces, so
+// those go away together with the operator.
+remove_last :: (text: *[..]u8) {
+    while text.count > 0 && text.*[text.count - 1] == #char " " {
+        text.count -= 1;
+    }
+    if text.count > 0 {
+        removed := text.*[text.count - 1];
+        text.count -= 1;
+        if is_operator(removed) {
+            while text.count > 0 && text.*[text.count - 1] == #char " " {
+                text.count -= 1;
+            }
+        }
+    }
+}
 
 App :: () {
     window   := context.forbear.window;
@@ -669,9 +701,10 @@ App :: () {
             }
         });
 
-        Column :: (body: Code) #expand {
+        // `span` is how many columns of the grid this one takes
+        Column :: (body: Code, span := 1.0) #expand {
             // half of the gap on each side, so that two neighboring buttons end up a full gap apart
-            element(Style.{width = grow(), height = grow(), padding = all(scaled(BUTTON_GAP / 2))}, body);
+            element(Style.{width = grow(span), height = grow(), padding = all(scaled(BUTTON_GAP / 2))}, body);
         } @component
         Row :: (body: Code) #expand {
             element(Style.{width = grow(), height = grow()}, body);
@@ -685,6 +718,35 @@ App :: () {
             height          = grow(),
         }, #code {
             Row(#code {
+                Column(#code { if Button("C", .FUNCTION) {
+                    input_state.contents.count = 0;
+                    input_state.cursor_index   = 0;
+                    // there's nothing to evaluate anymore, and the result is only updated when the evaluation succeeds
+                    result.* = 0;
+                } }, span = 2);
+                Column(#code { if Button("⌫", .FUNCTION) {
+                    remove_last(*input_state.contents);
+                    input_state.cursor_index = input_state.contents.count;
+                } }, span = 2);
+            });
+            Row(#code {
+                Column(#code { if Button("(", .FUNCTION) {
+                    array_add(*input_state.contents, #char "(");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button(")", .FUNCTION) {
+                    array_add(*input_state.contents, #char ")");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+                Column(#code { if Button("+/-", .FUNCTION) {
+                    input_state.cursor_index = reverse_number_sign(*input_state.contents);
+                } });
+                Column(#code { if Button("^", .OPERATOR) {
+                    array_add(*input_state.contents, #char " ", #char "^", #char " ");
+                    input_state.cursor_index = input_state.contents.count;
+                } });
+            });
+            Row(#code {
                 Column(#code { if Button("7") {
                     array_add(*input_state.contents, #char "7");
                     input_state.cursor_index = input_state.contents.count;
@@ -697,7 +759,7 @@ App :: () {
                     array_add(*input_state.contents, #char "9");
                     input_state.cursor_index = input_state.contents.count;
                 } });
-                Column(#code { if Button("÷", is_operator = true) {
+                Column(#code { if Button("÷", .OPERATOR) {
                     array_add(*input_state.contents, #char " ", #char "/", #char " ");
                     input_state.cursor_index = input_state.contents.count;
                 } });
@@ -715,7 +777,7 @@ App :: () {
                     array_add(*input_state.contents, #char "6");
                     input_state.cursor_index = input_state.contents.count;
                 } });
-                Column(#code { if Button("×", is_operator = true) {
+                Column(#code { if Button("×", .OPERATOR) {
                     array_add(*input_state.contents, #char " ", #char "*", #char " ");
                     input_state.cursor_index = input_state.contents.count;
                 } });
@@ -733,24 +795,21 @@ App :: () {
                     array_add(*input_state.contents, #char "3");
                     input_state.cursor_index = input_state.contents.count;
                 } });
-                Column(#code { if Button("+", is_operator = true) {
+                Column(#code { if Button("+", .OPERATOR) {
                     array_add(*input_state.contents, #char " ", #char "+", #char " ");
                     input_state.cursor_index = input_state.contents.count;
                 } });
             });
             Row(#code {
-                Column(#code { if Button("+/-") {
-                    input_state.cursor_index = reverse_number_sign(*input_state.contents);
-                } });
                 Column(#code { if Button("0") {
                     array_add(*input_state.contents, #char "0");
                     input_state.cursor_index = input_state.contents.count;
-                } });
+                } }, span = 2);
                 Column(#code { if Button(".") {
                     array_add(*input_state.contents, #char ".");
                     input_state.cursor_index = input_state.contents.count;
                 } });
-                Column(#code { if Button("-", is_operator = true) {
+                Column(#code { if Button("-", .OPERATOR) {
                     array_add(*input_state.contents, #char " ", #char "-", #char " ");
                     input_state.cursor_index = input_state.contents.count;
                 } });
