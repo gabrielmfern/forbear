@@ -3180,7 +3180,6 @@ get_clipboard_text :: () -> string {
 }
 copy_to_clipboard :: (text: string) {
     using context.forbear;
-    // TOOD: implment this for wayland
     #if OS == .WINDOWS {
         units  := MultiByteToWideChar(CP_UTF8, 0, text.data, xx text.count, null, 0);
         memory := GlobalAlloc(GMEM_MOVEABLE, cast(u64) (units + 1) * size_of(u16));
@@ -3660,6 +3659,7 @@ scope :: ($body: Code, location := #caller_location) -> body.type #expand {
 
 Glyph :: struct {
     index: s32;
+    index_into_original_text: s64;
     utf8: kbts_encode_utf8;
 
     // all of these are in points units, that means they do not account for the font size, but they do account for the font weight.
@@ -3823,7 +3823,7 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
         context.forbear.shaping_context,
         content.data,
         xx content.count,
-        xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX
+        xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_SOURCE_INDEX
     );
     if font.weight != U16_MAX {
         kbts_ShapePopGlobalVariation(context.forbear.shaping_context, WGHT);
@@ -3862,6 +3862,7 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
                 glyph.offset = offset;
                 glyph.position = pen + glyph.offset;
                 glyph.utf8 = utf8_encoded;
+                glyph.index_into_original_text = shape_codepoint.UserId;
                 array_add(*glyphs.array, glyph);
             }
 
