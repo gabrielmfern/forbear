@@ -1,4 +1,5 @@
 #import "Basic";
+#import "Math";
 Main :: #import,file "./main.jai";
 
 BUILD_FLAGS :: "+forbear";
@@ -26,6 +27,12 @@ assert_nodes :: (expected: []Main.Expression_Node, loc := #caller_location) #exp
                 );
         }
     }
+}
+
+// Math.pow is not exact, even for whole numbers, so anything going through it can't be compared with ==
+is_close :: (a: float64, b: float64) -> bool {
+    difference := abs(a - b);
+    return difference < 0.00001;
 }
 
 main :: () {
@@ -103,6 +110,107 @@ main :: () {
             evaluated, success := Main.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 0.0, "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            result = Main.parse_expression("2^3", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .OPEARTOR, op     = .EXPONENTIATE},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(is_close(evaluated, 8.0), "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            // right associative: 2^(3^2), not (2^3)^2
+            result = Main.parse_expression("2^3^2", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .OPEARTOR, op     = .EXPONENTIATE},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .OPEARTOR, op     = .EXPONENTIATE},
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .BINARY,   binary = .{left = 2, op = 3, right = 4}},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(is_close(evaluated, 512.0), "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            // binds tighter than the multiplication on its left
+            result = Main.parse_expression("2*3^2", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .OPEARTOR, op     = .MULTIPLY},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .OPEARTOR, op     = .EXPONENTIATE},
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .BINARY,   binary = .{left = 2, op = 3, right = 4}},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(is_close(evaluated, 18.0), "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            // being right associative must not make it swallow the multiplication on its right
+            result = Main.parse_expression("2^3*4", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .OPEARTOR, op     = .EXPONENTIATE},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
+                .{kind = .OPEARTOR, op     = .MULTIPLY},
+                .{kind = .NUMBER,   number = 4},
+                .{kind = .BINARY,   binary = .{left = 3, op = 4, right = 5}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(is_close(evaluated, 32.0), "evaluated=%", evaluated);
+
+            array_reset_keeping_memory(*nodes);
+        }
+
+        {
+            // parenthesis override the right associativity
+            result = Main.parse_expression("(2^3)^2", *nodes);
+            assert(result == .OK);
+            assert_nodes(.[
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .OPEARTOR, op     = .EXPONENTIATE},
+                .{kind = .NUMBER,   number = 3},
+                .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
+                .{kind = .OPEARTOR, op     = .EXPONENTIATE},
+                .{kind = .NUMBER,   number = 2},
+                .{kind = .BINARY,   binary = .{left = 3, op = 4, right = 5}},
+            ]);
+
+            evaluated, success := Main.evaluate(nodes);
+            assert(success == true, "evaluation should succeed");
+            assert(is_close(evaluated, 64.0), "evaluated=%", evaluated);
 
             array_reset_keeping_memory(*nodes);
         }

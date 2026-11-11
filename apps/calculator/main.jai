@@ -12,11 +12,11 @@ Math :: #import "Math";
     #import "Windows";
 }
 
-Operator :: enum { NONE; ADD; SUBTRACT; MULTIPLY; DIVIDE; };
+Operator :: enum { NONE; ADD; SUBTRACT; MULTIPLY; DIVIDE; EXPONENTIATE; };
 is_operator :: (char: u8) -> bool {
-    return is_any(char, "+-*x/");
+    return is_any(char, "+-*x/^");
 }
-OPERATOR_PRECEDENCE  :: s64.[0, 1, 1, 2, 2];
+OPERATOR_PRECEDENCE  :: s64.[0, 1, 1, 2, 2, 3];
 Expression_Node_Kind :: enum {
     BINARY;
     OPEARTOR;
@@ -75,8 +75,10 @@ peek_opeartor :: (expression: string, cursor: s64) -> Operator, index_increment:
         if op_character == {
             case "+"; op = .ADD;
             case "-"; op = .SUBTRACT;
+            case "x"; #through;
             case "*"; op = .MULTIPLY;
             case "/"; op = .DIVIDE;
+            case "^"; op = .EXPONENTIATE;
         }
         index_increment += 1;
         return op, index_increment, Parse_Result.OK;
@@ -193,11 +195,15 @@ parse_expression :: (using parser: *Parser, min_precedence := 0) -> index: s64, 
             if result != .OK || cursor >= expression.count then break;
 
             assert(right == -1);
+            precedence := OPERATOR_PRECEDENCE[peeked_op];
+            if peeked_op == .EXPONENTIATE {
+                precedence -= 1;
+            }
             // when we call this function we want to understand if the next number should be used here, or by another binary.
             // if it's used by another binary, the right here becomes the index to that binary.
             //
             // read above to understand how this is determined.
-            right, result = parse_expression(parser, OPERATOR_PRECEDENCE[peeked_op]);
+            right, result = parse_expression(parser, precedence);
             if result != .OK then break;
 
             node: Expression_Node;
@@ -253,6 +259,8 @@ evaluate :: (nodes: [..]Expression_Node) -> float64, success: bool {
                         return left * right, true;
                     case .DIVIDE;
                         return left / right, true;
+                    case .EXPONENTIATE;
+                        return Math.pow(left, right), true;
                     case .NONE;
                         return 0, false;
                 }
@@ -548,7 +556,7 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         use_input(input_state, text_node_index, (input: u8) -> bool {
             // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
             // and operators, we can simply remove by index as all characters are only going to be one byte.
-            if is_digit(input) || is_any(input, "+-*/() .") {
+            if is_digit(input) || is_operator(input) || is_any(input, " .()") {
                 return true;
             } else {
                 log("ignoring input character %, since it's not in the ones we defined as supporting", input);
@@ -581,8 +589,8 @@ reverse_number_sign :: (text: *[..]u8) -> s64 {
     number_start := -1;
     if text.count > 0 {
         number_start = text.count - 1;
-        if !is_any(text.*[number_start], " /+-*()") {
-            while number_start > 0 && !is_any(text.*[number_start - 1], " /+-*()") {
+        if !is_any(text.*[number_start], " /+-*x^()") {
+            while number_start > 0 && !is_any(text.*[number_start - 1], " /+-*x^()") {
                 number_start -= 1;
             }
             if number_start < text.count - 1 && is_digit(text.*[number_start]) {

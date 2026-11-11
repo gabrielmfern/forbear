@@ -1,7 +1,6 @@
 - implement C ABI and C adapter
 - polish calculator
     - gracefully handle different window sizes
-    - support exponentiation
     - support constants (pi, e, phi)
     - add a shake to everything when the expression is invalid
     - make Enter put the result as the start of a new expression and copy it
