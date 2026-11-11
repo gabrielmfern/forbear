@@ -3927,9 +3927,11 @@ Glyph_Atlas :: struct {
     cursor_x: s32;
     cursor_y: s32;
     row_height: s32;
+    size: s32 = INITIAL_SIZE;
 
     PADDING :: 1;
-    SIZE :: 1024;
+    INITIAL_SIZE :: 1024;
+    MAX_SIZE :: 4096;
 };
 glyph_atlas_key :: (font: *Font, glyph_index: u16, size: u16, weight: u16) -> u64 {
     key := (cast(u64) font.key) << 48;
@@ -3940,12 +3942,12 @@ glyph_atlas_key :: (font: *Font, glyph_index: u16, size: u16, weight: u16) -> u6
 }
 glyph_atlas_place :: (glyph_atlas: *Glyph_Atlas, width: s32, height: s32) -> x: s32, y: s32, ok: bool {
     using glyph_atlas;
-    if cursor_x + width + PADDING > SIZE {
+    if cursor_x + width + PADDING > size {
         cursor_x = 0;
         cursor_y += row_height + PADDING;
         row_height = 0;
     }
-    if cursor_y + height + PADDING > SIZE {
+    if cursor_y + height + PADDING > size {
         return 0, 0, false;
     }
 
@@ -3953,6 +3955,64 @@ glyph_atlas_place :: (glyph_atlas: *Glyph_Atlas, width: s32, height: s32) -> x: 
     cursor_x += width + PADDING;
     row_height = max(row_height, height);
     return x, y, true;
+}
+glyph_atlas_reset :: (glyph_atlas: *Glyph_Atlas) {
+    using glyph_atlas;
+    table_reset(*table);
+    cursor_x = 0;
+    cursor_y = 0;
+    row_height = 0;
+}
+// doubles the size of the atlas, throwing away everything that was in it
+glyph_atlas_grow :: (glyph_atlas: *Glyph_Atlas) -> bool {
+    using glyph_atlas;
+    if size * 2 > MAX_SIZE  return false;
+
+    size *= 2;
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, xx size, xx size, 0, GL_RED, GL_UNSIGNED_BYTE, null);
+    glyph_atlas_reset(glyph_atlas);
+    return true;
+}
+// rasters every glyph in the node tree that isn't in the atlas yet, returns false if the atlas got full before
+// all of them could be placed
+glyph_atlas_fill :: () -> bool {
+    using context.forbear;
+    for node: node_tree if node.kind == .ELEMENT && node.glyphs.array.count != 0 {
+        rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
+        for glyph: node.glyphs.array {
+            atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
+            if table_find_pointer(*glyph_atlas.table, atlas_key) != null  continue;
+
+            set_weight(node.style.font, node.style.font_weight);
+            set_font_size(node.style.font, rounded_font_size);
+            raster := font_raster_glyph(node.style.font, xx glyph.index);
+            x, y, ok := glyph_atlas_place(*glyph_atlas, xx raster.width, xx raster.height);
+            if !ok  return false;
+
+            if raster.bitmap.data != null {
+                glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, raster.pitch);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, raster.width, raster.height, GL_RED, GL_UNSIGNED_BYTE, raster.bitmap.data);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+            }
+
+            new_entry: Glyph_Atlas_Entry;
+            new_entry.bearing = .{ xx raster.left, xx -raster.top };
+            new_entry.size    = .{ xx raster.width, xx raster.height };
+            new_entry.uv_min  = .{
+                x = x / (cast(float) glyph_atlas.size),
+                y = y / (cast(float) glyph_atlas.size)
+            };
+            new_entry.uv_max  = .{
+                x = ((cast(float)x) + (cast(float)raster.width)) / (cast(float) glyph_atlas.size),
+                y = ((cast(float)y) + (cast(float)raster.height)) / (cast(float) glyph_atlas.size)
+            };
+            table_add(*glyph_atlas.table, atlas_key, new_entry);
+        }
+    }
+    return true;
 }
 
 static_state_buffers: [2][16 * 1024 * 1024]u8 #align 16;
@@ -4194,7 +4254,7 @@ GLSL);
     glGenTextures(1, *glyph_atlas.texture);
     glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
     // TOOD: keep track of whether subpixel rendering is enabled to create the texture atlas here accordingly
-    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, Glyph_Atlas.SIZE, Glyph_Atlas.SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, null);
+    glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, xx glyph_atlas.size, xx glyph_atlas.size, 0, GL_RED, GL_UNSIGNED_BYTE, null);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -4940,6 +5000,19 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     glClearColor(clearing_color.x, clearing_color.y, clearing_color.z, clearing_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
+    // every glyph has to be in the atlas before any of the instances are gathered, so that resetting or growing
+    // the atlas can't invalidate UVs that were already written out
+    if !glyph_atlas_fill() {
+        // glyphs that aren't used anymore may be what's filling it up, so start over with only this frame's
+        glyph_atlas_reset(*glyph_atlas);
+        while !glyph_atlas_fill() {
+            if !glyph_atlas_grow(*glyph_atlas) {
+                log_error("the glyph atlas is full at its maximum size of %, some glyphs will not be rendered", Glyph_Atlas.MAX_SIZE);
+                break;
+            }
+        }
+    }
+
     z_buckets: [..]u32;
     instance_count: s64;
     array_reserve(*z_buckets, node_tree.count);
@@ -4991,45 +5064,15 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
             for glyph: node.glyphs.array {
                 atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
-                if entry == null {
-                    set_weight(node.style.font, node.style.font_weight);
-                    set_font_size(node.style.font, rounded_font_size);
-                    // there's no entry in the atlas for this glyph configuration
-                    raster := font_raster_glyph(node.style.font, xx glyph.index);
-                    x, y, ok := glyph_atlas_place(*glyph_atlas, xx raster.width, xx raster.height);
-                    if !ok {
-                        log_error("the atlas is full, glyph index % will not be rendered", glyph.index);
-                        // TODO: pick how to handle the full atlas in a way that works as the user would prefer
-                    }
-
-                    if raster.bitmap.data != null {
-                        glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
-                        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-                        glPixelStorei(GL_UNPACK_ROW_LENGTH, raster.pitch);
-                        glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, raster.width, raster.height, GL_RED, GL_UNSIGNED_BYTE, raster.bitmap.data);
-                        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-                    }
-
-                    new_entry: Glyph_Atlas_Entry;
-                    new_entry.bearing = .{ xx raster.left, xx -raster.top };
-                    new_entry.size    = .{ xx raster.width, xx raster.height };
-                    new_entry.uv_min  = .{
-                        x = x / (cast(float) Glyph_Atlas.SIZE),
-                        y = y / (cast(float) Glyph_Atlas.SIZE)
-                    };
-                    new_entry.uv_max  = .{
-                        x = ((cast(float)x) + (cast(float)raster.width)) / (cast(float) Glyph_Atlas.SIZE),
-                        y = ((cast(float)y) + (cast(float)raster.height)) / (cast(float) Glyph_Atlas.SIZE)
-                    };
-                    entry = table_add(*glyph_atlas.table, atlas_key, new_entry);
-                }
 
                 instance: Draw_Instance;
+                instance.kind = .GLYPH;
+                instance.z = node.z;
                 scale := cast(float) window.scale;
-                {
+                // the entry is only missing if the atlas is full at its maximum size, the instance was already
+                // counted in the z buckets though, so it's left with no size
+                if entry != null {
                     using instance;
-                    kind = .GLYPH;
-                    z = node.z;
                     position = node.position + (Vector2.{0.0, node.glyphs.ascent} + glyph.position) * font_units_to_point;
                     size = entry.size / scale;
                     position += entry.bearing / scale;

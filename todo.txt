@@ -13,7 +13,6 @@
     - The main problem around this is the fact that we can't really "consume" an event, given the UI is immediate and events are consumed as things are rendered, each element must know that some other element is the one that will be consuming the give event. In the Zig version I had a way to handle this, it was 80% of elegant but had some awkwardness.
 - text input builtins
 - scrolling builtins
-- glyphs are sitting on fractional pixels on the texture atlas
 - complete windowing code
     - handle the menu bar protocol in wayland, and render the Gnome menu bar
     - use proper event handlers in macOS instead of polling
