@@ -36,17 +36,13 @@ Expression_Node      :: struct {
 };
 // TODO: return the index under which the failure happened, and then, after that index, make the text color red
 // to indicate a parsing failure.
-Parse_Result :: enum { OK; EXPECTED_A_NUMBER; EXPECTED_A_OPERATOR; };
+Parse_Result :: enum { OK; EXPECTED_A_NUMBER; EXPECTED_A_OPERATOR; EXPECTED_A_CLOSING_PARENTHESIS; };
 peek_number :: (expression: string, cursor: s64) -> float64, index_increment: s64, result: Parse_Result {
     index_increment := 0;
-    // first, we find the first digit for the start of this "number", this skips over all spaces and other characters
-    while cursor + index_increment < expression.count - 1 {
-        if is_digit(expression[cursor + index_increment]) {
-            break;
-        }
+    while cursor + index_increment < expression.count && expression[cursor + index_increment] == #char " " {
         index_increment += 1;
     }
-    if is_digit(expression[cursor + index_increment]) {
+    if cursor + index_increment < expression.count && is_digit(expression[cursor + index_increment]) {
         number_start := cursor + index_increment;
         // then, we find the end of this "number"
         while cursor + index_increment <= expression.count - 1 {
@@ -69,12 +65,10 @@ peek_number :: (expression: string, cursor: s64) -> float64, index_increment: s6
 }
 peek_opeartor :: (expression: string, cursor: s64) -> Operator, index_increment: s64, result: Parse_Result {
     index_increment := 0;
-    while cursor + index_increment < expression.count - 1 {
-        if is_operator(expression[cursor + index_increment]) {
-            break;
-        }
+    while cursor + index_increment < expression.count && expression[cursor + index_increment] == #char " " {
         index_increment += 1;
     }
+    if cursor + index_increment >= expression.count return .NONE, index_increment, Parse_Result.EXPECTED_A_OPERATOR;
     op_character := expression[cursor + index_increment];
     if is_operator(op_character) {
         op: Operator;
@@ -117,6 +111,33 @@ parse_operator :: (using parser: *Parser) -> s64, result: Parse_Result {
     array_add(nodes, node);
     return nodes.count - 1, result;
 }
+parse_operand :: (using parser: *Parser) -> index: s64, Parse_Result {
+    while cursor < expression.count && expression[cursor] == #char " " {
+        cursor += 1;
+    }
+    if cursor < expression.count && expression[cursor] == #char "(" {
+        cursor += 1;
+        // precedence starts over inside the parenthesis: whatever operator our caller is in the
+        // middle of can't reach in here, so the inner expression takes everything up to the ")"
+        inner, result := parse_expression(parser, 0);
+        if result == .OK {
+            while cursor < expression.count && expression[cursor] == #char " " {
+                cursor += 1;
+            }
+            if cursor < expression.count && expression[cursor] == #char ")" {
+                cursor += 1;
+                // no node for the parenthesis themselves, the index of what was inside is the operand
+                return inner, .OK;
+            } else {
+                return inner, .EXPECTED_A_CLOSING_PARENTHESIS;
+            }
+        } else {
+            return inner, result;
+        }
+    }
+    index, result := parse_number(parser);
+    return index, result;
+}
 /*
     This produces a tree for the entire expression in such a way that the binaries that are added onto the array
     in the order in which they must be evaluated. This makes precedence work without much work and makes this quite
@@ -157,7 +178,7 @@ parse_expression :: (using parser: *Parser, min_precedence := 0) -> index: s64, 
     right:  s64          = -1;
     while parser.cursor < expression.count {
         if left == -1 {
-            left, result = parse_number(parser);
+            left, result = parse_operand(parser);
             if result != .OK || cursor >= expression.count then break;
         }
 
@@ -203,6 +224,12 @@ parse_expression :: (expression: string, nodes: *[..]Expression_Node) -> Parse_R
     parser.cursor     = 0;
 
     root, result := parse_expression(*parser, 0);
+    if result == .OK {
+        while parser.cursor < expression.count && expression[parser.cursor] == #char " " {
+            parser.cursor += 1;
+        }
+        if parser.cursor < expression.count then result = .EXPECTED_A_OPERATOR;
+    }
     return result;
 }
 evaluate :: (nodes: [..]Expression_Node) -> float64, success: bool {
