@@ -654,12 +654,14 @@ Input :: (input_state: *Input_State, body: Code) #expand {
     }, #code {
         scrolling_offset           := state(float);
         scrolling_effective_offset := state(float);
+        // TODO: break this into a use_scrolling hook
         if is_mouse_inside() {
             scrolling_offset.* += get_scroll_delta().x;
         }
 
         text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
         Caret(Style.{}, input_state, scrolling_effective_offset.*, text_node_index);
+        // TODO: as the user types, this should scroll following the cursor
         use_input(input_state, text_node_index, (input: u8) -> bool {
             // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
             // and operators, we can simply remove by index as all characters are only going to be one byte.
