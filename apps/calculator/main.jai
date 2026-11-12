@@ -438,21 +438,15 @@ use_textual_keyboard_navigation :: (glyphs: []Glyph, cursor: *s64) -> struct { p
     }
     return .{previous, next};
 } @hook
-use_selection :: (using state: *Selection_State, text_node_index: s64) {
-    // TODO: we should be getting these glyphs out of the measurement so that we also take wrapping into account
-    glyphs    := get_node(text_node_index).glyphs;
-
-    if cursor != -1 && anchor != -1 && is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT) {
-        use_textual_keyboard_navigation(glyphs.array, *state.cursor);
-    }
-
+use_pressed_glyph :: (text_node_index: s64) -> s64 {
+    glyphs                    := get_node(text_node_index).glyphs;
     text_measurement, defined := get_measurement(text_node_index);
+    cursor                    := -1;
     if defined && (on_mouse_down(.LEFT) || on_mouse_down(.RIGHT)) {
         font_units_to_pixel := get_font_units_to_pixel(*context.inter, get_node(text_node_index).style.font_size);
         line_height         := glyphs.line_height * font_units_to_pixel;
-
-        mouse            := get_mouse_position();
-        closest_distance : float;
+        mouse               := get_mouse_position();
+        closest_distance    : float;
         for glyphs.array {
             left_edge := text_measurement.position.x + it.position.x * font_units_to_pixel;
             // TOOD: to make this work with mulitple lines, we will need to have the glyphs already wrapped here,
@@ -472,6 +466,21 @@ use_selection :: (using state: *Selection_State, text_node_index: s64) {
                     cursor           = glyphs.array.count;
                 }
             }
+        }
+    }
+    return cursor;
+} @hook
+use_selection :: (using state: *Selection_State, text_node_index: s64) {
+    // TODO: we should be getting these glyphs out of the measurement so that we also take wrapping into account
+    glyphs    := get_node(text_node_index).glyphs;
+    if cursor != -1 && anchor != -1 && is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT) {
+        use_textual_keyboard_navigation(glyphs.array, *state.cursor);
+    }
+    pressed_glyph := use_pressed_glyph(text_node_index);
+    if pressed_glyph != -1 {
+        cursor = pressed_glyph;
+        if anchor == -1 {
+            anchor = cursor;
         }
     }
 } @hook
@@ -560,39 +569,9 @@ use_input :: (using input_state:      *Input_State,
         }
     }
 
-    {
-        //
-        // === mouse event handling ===
-        //
-        text_measurement, defined := get_measurement(text_node_index);
-        if defined && (on_mouse_down(.LEFT) || on_mouse_down(.RIGHT)) {
-            font_size           := get_node(text_node_index).style.font_size;
-            font_units_to_pixel := get_font_units_to_pixel(*context.inter, font_size);
-            line_height         := glyphs.line_height * font_units_to_pixel;
-
-            mouse            := get_mouse_position();
-            closest_distance : float;
-            for glyphs.array {
-                left_edge := text_measurement.position.x + it.position.x * font_units_to_pixel;
-                // TOOD: to make this work with mulitple lines, we will need to have the glyphs already wrapped here,
-                // but then we will also need to find the closest line, to finally compare the x coordinates
-                distance := Math.abs(left_edge - mouse.x);
-                if it_index == 0 || distance < closest_distance {
-                    closest_distance = distance;
-                    cursor           = it_index;
-                }
-                if it_index == glyphs.array.count - 1 {
-                    right_edge := left_edge + it.advance.x * font_units_to_pixel;
-                    // TOOD: to make this work with mulitple lines, we will need to have the glyphs already wrapped here,
-                    // but then we will also need to find the closest line, to finally compare the x coordinates
-                    distance := Math.abs(right_edge - mouse.x);
-                    if distance < closest_distance {
-                        closest_distance = distance;
-                        cursor           = glyphs.array.count;
-                    }
-                }
-            }
-        }
+    pressed_glyph := use_pressed_glyph(text_node_index);
+    if pressed_glyph != -1 {
+        cursor = pressed_glyph;
     }
 } @hook
 Caret :: (
