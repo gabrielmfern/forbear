@@ -203,6 +203,7 @@ parse_expression :: (using parser: *Parser, min_precedence := 0) -> index: s64, 
             assert(right == -1);
             precedence := OPERATOR_PRECEDENCE[peeked_op];
             if peeked_op == .EXPONENTIATE {
+                // this makes the exponentiation be right associative as it should e.g. 2^3^2 = 2^(3^2)
                 precedence -= 1;
             }
             // when we call this function we want to understand if the next number should be used here, or by another binary.
