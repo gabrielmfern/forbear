@@ -642,6 +642,39 @@ Caret :: (
         }));
     }
 } @component
+Scrolling_State :: struct {
+    offset:           Vector2;
+    effective_offset: Vector2;
+}
+// For us to make this a proper builtin, this must be able to handle choosing between all nodes that can scroll
+// to scroll only one of them.
+//
+// Besides only scrolling one of them, once one scrolling container is done with the scrolling and the user keeps
+// scrolling in that direction, the scrolling shold go to the next scrolling container with less "precedence".
+use_scrolling :: (using state: *Scrolling_State) {
+    if is_mouse_inside() {
+        offset += get_scroll_delta();
+    }
+    node                 := get_node();
+    measurement, defined := get_measurement();
+    if defined {
+        offset = Vector2.{
+            clamp(offset.x, 0,
+                  max(measurement.content_size.x - measurement.size.x
+                      + node.style.padding.x.x + node.style.padding.x.y, 0.0)),
+            clamp(offset.y, 0,
+                  max(measurement.content_size.y - measurement.size.y
+                      + node.style.padding.y.x + node.style.padding.y.y, 0.0)),
+        };
+    }
+    effective_offset = spring_transition(offset, .{
+        stiffness = 320.0,
+        damping   = 32.0,
+        mass      = 1.0,
+        current   = *effective_offset,
+    });
+    node.children_offset = -effective_offset;
+} @hook
 Input :: (input_state: *Input_State, body: Code) #expand {
     viewport := get_viewport_size();
     element(Style.{
@@ -653,15 +686,10 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         font_size       = scaled(DIGITS_SIZE),
         width           = fixed(viewport.x),
     }, #code {
-        scrolling_offset           := state(float);
-        scrolling_effective_offset := state(float);
-        // TODO: break this into a use_scrolling hook
-        if is_mouse_inside() {
-            scrolling_offset.* += get_scroll_delta().x;
-        }
+        scrolling_state := state(Scrolling_State);
 
         text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
-        Caret(Style.{}, input_state, scrolling_effective_offset.*, text_node_index);
+        Caret(Style.{}, input_state, scrolling_state.effective_offset.x, text_node_index);
         // TODO: as the user types, this should scroll following the cursor
         use_input(input_state, text_node_index, (input: u8) -> bool {
             // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
@@ -674,22 +702,7 @@ Input :: (input_state: *Input_State, body: Code) #expand {
             }
         });
 
-        input                      := get_node();
-        input_measurement, defined := get_measurement();
-        if defined {
-            scrolling_offset.* = clamp(
-                scrolling_offset.*,
-                0,
-                max(input_measurement.content_size.x - input_measurement.size.x + input.style.padding.x.x + input.style.padding.x.x, 0.0)
-            );
-        }
-        scrolling_effective_offset.* = spring_transition(scrolling_offset.*, .{
-            stiffness = 320.0,
-            damping   = 32.0,
-            mass      = 1.0,
-            current   = scrolling_effective_offset,
-        });
-        input.children_offset.x = -scrolling_effective_offset.*;
+        use_scrolling(scrolling_state);
 
         #insert body;
     });
