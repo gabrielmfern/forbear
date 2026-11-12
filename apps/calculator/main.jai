@@ -318,11 +318,6 @@ U64_MAX     :: Math.U64_MAX;
 scaled :: (value: float) -> float {
     return value * context.ui_scale;
 }
-// the same conversion the layout does for the text of the input, so that the caret lines up with the glyphs
-digits_font_units_to_pixel :: () -> float {
-    window_scale := cast(float) context.forbear.window.scale;
-    return get_font_units_to_pixel(*context.inter, round_font_size(scaled(DIGITS_SIZE) * window_scale)) / window_scale;
-}
 MIN_WIDTH    :: 225;
 MIN_HEIGHT   :: 445;
 DIGITS_SIZE  :: 32;
@@ -453,7 +448,7 @@ use_selection :: (using state: *Selection_State, text_node_index: s64) {
 
     text_measurement, defined := get_measurement(text_node_index);
     if defined && (on_mouse_down(.LEFT) || on_mouse_down(.RIGHT)) {
-        font_units_to_pixel := digits_font_units_to_pixel();
+        font_units_to_pixel := get_font_units_to_pixel(*context.inter, get_node(text_node_index).style.font_size);
         line_height         := glyphs.line_height * font_units_to_pixel;
 
         mouse            := get_mouse_position();
@@ -571,7 +566,8 @@ use_input :: (using input_state:      *Input_State,
         //
         text_measurement, defined := get_measurement(text_node_index);
         if defined && (on_mouse_down(.LEFT) || on_mouse_down(.RIGHT)) {
-            font_units_to_pixel := digits_font_units_to_pixel();
+            font_size           := get_node(text_node_index).style.font_size;
+            font_units_to_pixel := get_font_units_to_pixel(*context.inter, font_size);
             line_height         := glyphs.line_height * font_units_to_pixel;
 
             mouse            := get_mouse_position();
@@ -607,10 +603,11 @@ Caret :: (
 ) {
     input_measurement, defined := get_measurement();
     if defined {
-        text_node        := get_node(text_node_index);
-        text_measurement := get_measurement(text_node_index);
-        input_glyphs     := text_node.glyphs;
-        font_units_to_pixel := digits_font_units_to_pixel();
+        text_node           := get_node(text_node_index);
+        text_measurement    := get_measurement(text_node_index);
+        input_glyphs        := text_node.glyphs;
+        font_size           := text_node.style.font_size;
+        font_units_to_pixel := get_font_units_to_pixel(*context.inter, font_size);
 
         caret_position: Vector2;
         if contents.count > 0 {
