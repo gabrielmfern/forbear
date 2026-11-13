@@ -712,6 +712,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     width:   float64,
                     height:  float64,
                     title:   string,
+                    // TODO: add this to the other platforms
                     show_window := true) {
         window.text.data = window.text_buffer.data;
         window.backend = backend;
@@ -3915,10 +3916,6 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
     glyphs.max_size.y = max(glyphs.min_size.y, glyphs.max_size.y);
 
     return glyphs;
-}
-free_font :: (font: *Font) {
-    // TODO: should we delete this function?
-    FT_Done_Face(font.raster_face);
 }
 // TODO: Support receiving any number of arguments that are passed down to sprint to then be rendered into text.
 // TODO: Support building multiple text runs for the same node's glyphs. This is quite important for text-heavy applications might have, say, emphasis on text.
