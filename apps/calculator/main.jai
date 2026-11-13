@@ -547,7 +547,7 @@ use_input :: (using input_state:      *Input_State,
         inserted := 0;
         for input {
             if input_character_filter == null || input_character_filter(it) {
-                if inserted == 0 && glyphs.array.count > 0 && selection_anchor != -1 {
+                if inserted == 0 && selection_anchor != -1 {
                     // this makes sure that we only delete and remove the selection if there's at least one
                     // character to insert
                     delete(input_state, glyphs, cursor, selection_anchor);
@@ -677,6 +677,7 @@ use_input :: (using input_state:      *Input_State,
         if !shift selection_anchor                               = -1;
     }
     if on_key_down(.ESCAPE) then selection_anchor = -1;
+    if selection_anchor == cursor && !is_dragging(.LEFT) then selection_anchor = -1;
 } @hook
 Caret :: (
     style:             Style,
