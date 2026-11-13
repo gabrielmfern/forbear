@@ -676,39 +676,6 @@ Caret :: (
         }));
     }
 } @component
-Scrolling_State :: struct {
-    offset:           Vector2;
-    effective_offset: Vector2;
-}
-// For us to make this a proper builtin, this must be able to handle choosing between all nodes that can scroll
-// to scroll only one of them.
-//
-// Besides only scrolling one of them, once one scrolling container is done with the scrolling and the user keeps
-// scrolling in that direction, the scrolling shold go to the next scrolling container with less "precedence".
-use_scrolling :: (using state: *Scrolling_State) {
-    if is_mouse_inside() {
-        offset += get_scroll_delta();
-    }
-    node                 := get_node();
-    measurement, defined := get_measurement();
-    if defined {
-        offset = Vector2.{
-            clamp(offset.x, 0,
-                  max(measurement.content_size.x - measurement.size.x
-                      + node.style.padding.x.x + node.style.padding.x.y, 0.0)),
-            clamp(offset.y, 0,
-                  max(measurement.content_size.y - measurement.size.y
-                      + node.style.padding.y.x + node.style.padding.y.y, 0.0)),
-        };
-    }
-    effective_offset = spring_transition(offset, .{
-        stiffness = 320.0,
-        damping   = 32.0,
-        mass      = 1.0,
-        current   = *effective_offset,
-    });
-    node.children_offset = -effective_offset;
-} @hook
 Input :: (input_state: *Input_State, body: Code) #expand {
     viewport := get_viewport_size();
     element(Style.{

@@ -100,12 +100,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         units: [4]u16;
         count := ToUnicodeEx(vk, scancode, state.data, units.data, units.count, 0x4, GetKeyboardLayout(0));
         code_point := utf16_to_code_point(units, count);
-        if (code_point >= #char "A" && code_point <= #char "Z")
-        || (code_point >= 0xC0 && code_point <= 0xDE && code_point != 0xD7) {
-            // lowercases all of the LATIN-1 uppercase characters
-            //
-            // TODO: should we use some builtin function that has a wider reach than this?
-            code_point += 32;
+        if code_point <= 0xFFFF {
+            code_point = xx cast(u64) CharLowerW(xx cast(u64) code_point);
         }
         return xx code_point;
     }
@@ -135,11 +131,11 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     kVK_RightShift                :: 0x3C;
     kVK_RightOption               :: 0x3D;
     kVK_RightControl              :: 0x3E;
-    kVK_Function                  :: 0x3F; // TODO: also include this in the Key enum
+    kVK_Function                  :: 0x3F;
     kVK_F17                       :: 0x40;
-    kVK_VolumeUp                  :: 0x48; // TODO: also include this in the Key enum
-    kVK_VolumeDown                :: 0x49; // TODO: also include this in the Key enum
-    kVK_Mute                      :: 0x4A; // TODO: also include this in the Key enum
+    kVK_VolumeUp                  :: 0x48;
+    kVK_VolumeDown                :: 0x49;
+    kVK_Mute                      :: 0x4A;
     kVK_F18                       :: 0x4F;
     kVK_F19                       :: 0x50;
     kVK_F20                       :: 0x5A;
@@ -154,10 +150,10 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     kVK_F16                       :: 0x6A;
     kVK_F14                       :: 0x6B;
     kVK_F10                       :: 0x6D;
-    kVK_ContextualMenu            :: 0x6E; // TODO: also include this in the Key enum
+    kVK_ContextualMenu            :: 0x6E;
     kVK_F12                       :: 0x6F;
     kVK_F15                       :: 0x71;
-    kVK_Help                      :: 0x72; // TODO: also include this in the Key enum
+    kVK_Help                      :: 0x72;
     kVK_Home                      :: 0x73;
     kVK_PageUp                    :: 0x74;
     kVK_ForwardDelete             :: 0x75;
@@ -210,20 +206,20 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             case kVK_Command;       key = .SUPER_LEFT;
             case kVK_RightCommand;  key = .SUPER_RIGHT;
             case kVK_CapsLock;      key = .CAPS_LOCK;
-            case kVK_Function;       #through;
-            case kVK_F13;            #through;
-            case kVK_F14;            #through;
-            case kVK_F15;            #through;
-            case kVK_F16;            #through;
-            case kVK_F17;            #through;
-            case kVK_F18;            #through;
-            case kVK_F19;            #through;
-            case kVK_F20;            #through;
-            case kVK_VolumeUp;       #through;
-            case kVK_VolumeDown;     #through;
-            case kVK_Mute;           #through;
-            case kVK_ContextualMenu; #through;
-            case kVK_Help;           return 0;
+            case kVK_F13;           key = .F13;
+            case kVK_F14;           key = .F14;
+            case kVK_F15;           key = .F15;
+            case kVK_F16;           key = .F16;
+            case kVK_F17;           key = .F17;
+            case kVK_F18;           key = .F18;
+            case kVK_F19;           key = .F19;
+            case kVK_F20;           key = .F20;
+            case kVK_Function;      key = .FUNCTION;
+            case kVK_VolumeUp;      key = .VOLUME_UP;
+            case kVK_VolumeDown;    key = .VOLUME_DOWN;
+            case kVK_Mute;          key = .VOLUME_MUTE;
+            case kVK_ContextualMenu; key = .CONTEXT_MENU;
+            case kVK_Help;          key = .HELP;
         }
         if key == 0 {
             source := TISCopyCurrentKeyboardLayoutInputSource();
@@ -289,8 +285,14 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             case XKB_KEY_Super_L;      key = .SUPER_LEFT;
             case XKB_KEY_Super_R;      key = .SUPER_RIGHT;
             case XKB_KEY_Caps_Lock;    key = .CAPS_LOCK;
+            case XKB_KEY_XF86Fn;       key = .FUNCTION;
+            case XKB_KEY_XF86AudioRaiseVolume; key = .VOLUME_UP;
+            case XKB_KEY_XF86AudioLowerVolume; key = .VOLUME_DOWN;
+            case XKB_KEY_XF86AudioMute; key = .VOLUME_MUTE;
+            case XKB_KEY_Menu;         key = .CONTEXT_MENU;
+            case XKB_KEY_Help;         key = .HELP;
             case;
-                if symbol >= XKB_KEY_F1 && symbol <= XKB_KEY_F12 {
+                if symbol >= XKB_KEY_F1 && symbol <= XKB_KEY_F20 {
                     key = Key.F1 + cast(Key) (symbol - XKB_KEY_F1);
                 } else {
                     key = xx xkb_keysym_to_utf32(xkb_keysym_to_lower(symbol));
@@ -330,6 +332,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     ToUnicodeEx :: (wVirtKey: u32, wScanCode: u32, lpKeyState: *u8, pwszBuff: *u16, cchBuff: s32, wFlags: u32, dwhkl: *void) -> s32 #foreign user32;
     GetKeyboardState :: (lpKeyState: *u8) -> BOOL #foreign user32;
     GetKeyboardLayout :: (idThread: DWORD) -> *void #foreign user32;
+    CharLowerW :: (lpsz: *u16) -> *u16 #foreign user32;
     MapVirtualKeyW :: (uCode: u32, uMapType: u32) -> u32 #foreign user32;
     SetTimer :: (hWnd: HWND, nIDEvent: u64, uElapse: u32, lpTimerFunc: *void) -> u64 #foreign user32;
     KillTimer :: (hWnd: HWND, uIDEvent: u64) -> BOOL #foreign user32;
@@ -584,6 +587,19 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                                         case VK_F10;     key = .F10;
                                         case VK_F11;     key = .F11;
                                         case VK_F12;     key = .F12;
+                                        case VK_F13;     key = .F13;
+                                        case VK_F14;     key = .F14;
+                                        case VK_F15;     key = .F15;
+                                        case VK_F16;     key = .F16;
+                                        case VK_F17;     key = .F17;
+                                        case VK_F18;     key = .F18;
+                                        case VK_F19;     key = .F19;
+                                        case VK_F20;     key = .F20;
+                                        case VK_VOLUME_UP;   key = .VOLUME_UP;
+                                        case VK_VOLUME_DOWN; key = .VOLUME_DOWN;
+                                        case VK_VOLUME_MUTE; key = .VOLUME_MUTE;
+                                        case VK_APPS;    key = .CONTEXT_MENU;
+                                        case VK_HELP;    key = .HELP;
                                         case VK_SHIFT;   #through;
                                         case VK_CONTROL; #through;
                                         case VK_MENU;
@@ -1014,6 +1030,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             down: bool;
                             if key == {
                                 case .CAPS_LOCK;     down = (flags & cast(u64) NSEventModifierFlags.NSEventModifierFlagCapsLock) != 0;
+                                case .FUNCTION;      down = (flags & cast(u64) NSEventModifierFlags.NSEventModifierFlagFunction) != 0;
                                 case .CONTROL_LEFT;  down = (flags & 0x00000001) != 0;
                                 case .SHIFT_LEFT;    down = (flags & 0x00000002) != 0;
                                 case .SHIFT_RIGHT;   down = (flags & 0x00000004) != 0;
@@ -2932,6 +2949,38 @@ spring_transition :: (target: $T, config: Spring_Config(T)) -> T
     }
     return value.*;
 } @hook
+Scrolling_State :: struct {
+    offset:           Vector2;
+    effective_offset: Vector2;
+}
+// TODO: This must be able to handle choosing between all nodes that can scroll to scroll only one of them.
+//
+// Besides only scrolling one of them, once one scrolling container is done with the scrolling and the user keeps
+// scrolling in that direction, the scrolling shold go to the next scrolling container with less "precedence".
+use_scrolling :: (using state: *Scrolling_State) {
+    if is_mouse_inside() {
+        offset += get_scroll_delta();
+    }
+    node                 := get_node();
+    measurement, defined := get_measurement();
+    if defined {
+        offset = Vector2.{
+            clamp(offset.x, 0,
+                  max(measurement.content_size.x - measurement.size.x
+                      + node.style.padding.x.x + node.style.padding.x.y, 0.0)),
+            clamp(offset.y, 0,
+                  max(measurement.content_size.y - measurement.size.y
+                      + node.style.padding.y.x + node.style.padding.y.y, 0.0)),
+        };
+    }
+    effective_offset = spring_transition(offset, .{
+        stiffness = 320.0,
+        damping   = 32.0,
+        mass      = 1.0,
+        current   = *effective_offset,
+    });
+    node.children_offset = -effective_offset;
+} @hook
 // beware that this pointer might be come invalid if you define one more element
 get_node :: (node_index: s64) -> *Node {
     using context.forbear;
@@ -3102,9 +3151,14 @@ Key :: enum u32 {
     ARROW_LEFT; ARROW_RIGHT; ARROW_UP; ARROW_DOWN;
     HOME; END; PAGE_UP; PAGE_DOWN;
     F1; F2; F3; F4; F5; F6; F7; F8; F9; F10; F11; F12;
+    F13; F14; F15; F16; F17; F18; F19; F20;
     SHIFT_LEFT; SHIFT_RIGHT; CONTROL_LEFT; CONTROL_RIGHT;
     ALT_LEFT; ALT_RIGHT; SUPER_LEFT; SUPER_RIGHT;
-    CAPS_LOCK; FUNCTION;
+    CAPS_LOCK;
+    FUNCTION; // only available on macOS and Linux
+    VOLUME_UP; VOLUME_DOWN; VOLUME_MUTE;
+    CONTEXT_MENU;
+    HELP;
 }
 MOUSE_BUTTON_COUNT :: #run enum_highest_value(Mouse_Button) + 1;
 Mouse_Button :: enum {
@@ -3945,7 +3999,6 @@ text :: (content: string, manual_key := "", location := #caller_location) -> s64
     return text(Style.{}, content, "", location);
 }
 Glyph_Atlas :: struct {
-    // TODO: change this based on the render API that's selected. currently we only support OpenGL, though.
     texture: u32;
     table: Table(u64, Glyph_Atlas_Entry);
 
@@ -4066,9 +4119,6 @@ Forbear :: struct {
     node_vbo: u32;
     glyph_atlas: Glyph_Atlas;
 
-    // TODO: we're going to have to change this once we support multiple windows
-    // Perhaps we can have a Window_Manager struct that can keep track of multiple windows,
-    // and give one specific window back.
     window: *Window;
     backend: *Backend;
 };
