@@ -587,6 +587,14 @@ use_input :: (using input_state:      *Input_State,
         copy_to_clipboard(to_string(contents.data + start_byte, end_byte - start_byte));
     }
 
+    if command && on_key_down(.X) && selection_anchor != -1 && glyphs.array.count > 0 {
+        start_byte := glyph_index_to_byte_index(glyphs, min(cursor, selection_anchor));
+        end_byte   := glyph_index_to_byte_index(glyphs, max(cursor, selection_anchor));
+        copy_to_clipboard(to_string(contents.data + start_byte, end_byte - start_byte));
+        delete(input_state, glyphs, cursor, selection_anchor);
+        selection_anchor = -1;
+    }
+
     dragging            := is_dragging(.LEFT);
     dragging_last_frame := state(false);
     if dragging {
