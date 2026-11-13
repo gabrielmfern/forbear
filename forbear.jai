@@ -3139,12 +3139,8 @@ get_mouse_position :: () -> Vector2 {
 is_mouse_inside :: () -> bool {
     using context.forbear;
     measurement, defined := get_measurement();
-    position := get_mouse_position();
-    return defined && window.mouse_state.inside &&
-           position.x >= measurement.position.x &&
-           position.y >= measurement.position.y &&
-           position.x <= measurement.position.x + measurement.size.x &&
-           position.y <= measurement.position.y + measurement.size.y;
+    position             := get_mouse_position();
+    return defined && window.mouse_state.inside && is_point_inside(position, measurement);
 }
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
@@ -3159,16 +3155,35 @@ on_mouse_down :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
 on_mouse_up :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
     return context.forbear.window.mouse_state.released[button] && (!check_inside || is_mouse_inside());
 }
+is_point_inside :: (point: Vector2, measurement: Node_Measurement) -> bool {
+    return point.x >= measurement.position.x
+        && point.y >= measurement.position.y
+        && point.x <= measurement.position.x + measurement.size.x
+        && point.y <= measurement.position.y + measurement.size.y;
+}
+on_drag :: (button := Mouse_Button.LEFT) -> bool {
+    using context.forbear;
+    measurement, defined := get_measurement();
+    if defined {
+        press_position := window.mouse_state.press_position[button];
+        mouse          := get_mouse_position();
+        delta          := mouse - press_position;
+        moved          := delta.x*delta.x + delta.y*delta.y > 4*4;
+        return window.mouse_state.held[button] && is_point_inside(press_position, measurement) && moved;
+    } else {
+        return false;
+    }
+}
 on_click :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
     using context.forbear;
     if on_mouse_up(button, check_inside) {
         measurement, defined := get_measurement();
         assert(defined, "the measurement should exist if is_mouse_inside is true");
+        mouse          := get_mouse_position();
         press_position := window.mouse_state.press_position[button];
-        return press_position.x >= measurement.position.x &&
-               press_position.y >= measurement.position.y &&
-               press_position.x <= measurement.position.x + measurement.size.x &&
-               press_position.y <= measurement.position.y + measurement.size.y;
+        delta          := mouse - press_position;
+        moved          := delta.x*delta.x + delta.y*delta.y > 4*4;
+        return is_point_inside(press_position, measurement) && !moved;
     } else {
         return false;
     }

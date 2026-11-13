@@ -376,10 +376,6 @@ Button :: (contents: string, kind := Button_Kind.DIGIT) -> clicked: bool {
     return clicked;
 } @component
 
-Selection_State :: struct {
-    anchor: s64 = -1;
-    cursor: s64 = -1;
-};
 previous_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
     c := cursor;
     // TODO: we should use a library that makes this work for any language, or implement something ourselves.
@@ -394,8 +390,6 @@ next_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
     while c < glyphs.count && is_alnum(glyphs[c].utf8.Encoded[0]) c += 1;
     return c;
 }
-Selection :: (state: *Selection_State) {
-} @component
 // Limitations:
 // - does not support word boundaries for non latin languages (chinese, japenese, arabic, hebrew, etc.);
 // - does not support multiline text.
@@ -438,11 +432,11 @@ use_textual_keyboard_navigation :: (glyphs: []Glyph, cursor: *s64) -> struct { p
     }
     return .{previous, next};
 } @hook
-use_pressed_glyph :: (text_node_index: s64) -> s64 {
+use_glyph_closest_to_mouse :: (text_node_index: s64) -> s64 {
     glyphs                    := get_node(text_node_index).glyphs;
     text_measurement, defined := get_measurement(text_node_index);
     cursor                    := -1;
-    if defined && (on_mouse_down(.LEFT) || on_mouse_down(.RIGHT)) {
+    if defined {
         font_units_to_pixel := get_font_units_to_pixel(*context.inter, get_node(text_node_index).style.font_size);
         line_height         := glyphs.line_height * font_units_to_pixel;
         mouse               := get_mouse_position();
@@ -470,23 +464,90 @@ use_pressed_glyph :: (text_node_index: s64) -> s64 {
     }
     return cursor;
 } @hook
-use_selection :: (using state: *Selection_State, text_node_index: s64) {
-    // TODO: we should be getting these glyphs out of the measurement so that we also take wrapping into account
-    glyphs    := get_node(text_node_index).glyphs;
-    if cursor != -1 && anchor != -1 && is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT) {
-        use_textual_keyboard_navigation(glyphs.array, *state.cursor);
-    }
-    pressed_glyph := use_pressed_glyph(text_node_index);
-    if pressed_glyph != -1 {
-        cursor = pressed_glyph;
-        if anchor == -1 {
-            anchor = cursor;
+Selection_State :: struct {
+    anchor: s64 = -1;
+    cursor: s64 = -1;
+};
+Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vector2, text_node_index: s64) {
+    input_measurement, defined := get_measurement();
+    if defined && anchor != -1 && cursor != -1 {
+        start := min(anchor, cursor);
+        end   := max(anchor, cursor);
+
+        text_node           := get_node(text_node_index);
+        glyphs              := text_node.glyphs;
+        font_size           := text_node.style.font_size;
+        font_units_to_pixel := get_font_units_to_pixel(*context.inter, font_size);
+
+        position: Vector2;
+        if glyphs.array.count > 0 {
+            if start == glyphs.array.count {
+                position = (peek(glyphs.array).position + peek(glyphs.array).advance) * font_units_to_pixel;
+            } else {
+                position = glyphs.array[start].position * font_units_to_pixel;
+            }
         }
+        width: float;
+        if glyphs.array.count > 0 {
+            if end == glyphs.array.count {
+                width = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel - position.x;
+            } else {
+                width = glyphs.array[end].position.x * font_units_to_pixel - position.x;
+            }
+        }
+        // TODO: support multi-line content, because we're currently only comparing against there being no wrapping
+        line_height      := glyphs.line_height * font_units_to_pixel;
+        input            := get_node();
+        inner_height     := input_measurement.size.y - input.style.padding.y.x - input.style.padding.y.y;
+        position -= scrolling_offset;
+        position.x += input.style.padding.x.x;
+        position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
+        element(overwrite(style, Style.{
+            // TODO: we should pick the default selection color per operating system.
+            // we can also query it by the opearting system, which sounds like the ideal solution.
+            background = color(hex("#3399FF")),
+            // border_radius = 4.0,
+            placement = relative(position),
+            width = fixed(width),
+            height = fixed(line_height),
+        }));
     }
-} @hook
+} @component
+// This is a good abstraction for implementing text selection, but not for an input component.
+// use_selection :: (using selection: *Selection_State, text_node_index: s64) {
+//     // TODO: we should be getting these glyphs out of the measurement so that we also take wrapping into account
+//     glyphs := get_node(text_node_index).glyphs;
+//     if cursor != -1 && (is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT)) {
+//         previous_cursor := cursor;
+//         use_textual_keyboard_navigation(glyphs.array, *selection.cursor);
+//         if anchor == -1 && previous_cursor != cursor {
+//             anchor = cursor;
+//         }
+//     }
+//     is_dragging    := state(false);
+//     draggin_button := state(Mouse_Button);
+//     if on_mouse_down(.LEFT) {
+//         is_dragging.*    = true;
+//         draggin_button.* = .LEFT;
+//     }
+//     if on_mouse_down(.RIGHT) {
+//         is_dragging.*    = true;
+//         draggin_button.* = .RIGHT;
+//     }
+//     if is_dragging.* && on_mouse_up(draggin_button.*, check_inside = false) {
+//         is_dragging.* = false;
+//         anchor        = -1;
+//     }
+//     if is_dragging.* {
+//         mouse_glyph := use_glyph_closest_to_mouse(text_node_index);
+//         if mouse_glyph != -1 then cursor = mouse_glyph;
+//         if anchor == -1 then anchor = cursor;
+//     }
+// } @hook
 Input_State :: struct {
     contents: [..]u8;
     cursor: s64;
+    selection_anchor: s64 = -1;
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - track the caret position based on glyph indices instead of bytes
@@ -545,22 +606,33 @@ use_input :: (using input_state:      *Input_State,
         //
         // === keyboard deletion and cursor movement handling ===
         //
+        previous_cursor := cursor;
         using use_textual_keyboard_navigation(glyphs.array, *cursor);
+        if     previous_cursor != cursor
+            && selection_anchor == -1
+            && (is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT)) {
+            selection_anchor = previous_cursor;
+        } else if previous_cursor != cursor && !is_key_held(.SHIFT_LEFT) && !is_key_held(.SHIFT_RIGHT) {
+            selection_anchor = -1;
+        }
+
         removal_start, removal_end := cursor;
-        if on_key_down(.BACKSPACE, true) {
-            removal_start = previous;
-        } else if on_key_down(.DELETE, true) {
-            removal_end = next;
+        if on_key_down(.BACKSPACE, true)   then removal_start = previous;
+        else if on_key_down(.DELETE, true) then removal_end   = next;
+        if (on_key_down(.BACKSPACE, true) || on_key_down(.DELETE, true)) && selection_anchor != -1 {
+            removal_start = min(cursor, selection_anchor);
+            removal_end   = max(cursor, selection_anchor);
+            selection_anchor = -1;
         }
 
         if glyphs.array.count > 0 && removal_start != removal_end {
             removal_start_byte, removal_end_byte := 0;
-            if removal_start < glyphs.array.count removal_start_byte = glyphs.array[removal_start].index_into_original_text;
-            else removal_start_byte                                  = glyphs.array[glyphs.array.count - 1].index_into_original_text + 1;
-            if removal_end < glyphs.array.count removal_end_byte = glyphs.array[removal_end].index_into_original_text;
-            else removal_end_byte                                = glyphs.array[glyphs.array.count - 1].index_into_original_text + 1;
+            if removal_start < glyphs.array.count then removal_start_byte = glyphs.array[removal_start].index_into_original_text;
+            else                                       removal_start_byte = peek(glyphs.array).index_into_original_text + 1;
+            if removal_end < glyphs.array.count   then removal_end_byte   = glyphs.array[removal_end].index_into_original_text;
+            else                                       removal_end_byte   = peek(glyphs.array).index_into_original_text + 1;
 
-            removed_bytes       = removal_end_byte - removal_start_byte;
+            removed_bytes = removal_end_byte - removal_start_byte;
             for i: removal_start_byte..contents.count - removed_bytes - 1 {
                 contents[i] = contents[i + removed_bytes];
             }
@@ -569,10 +641,17 @@ use_input :: (using input_state:      *Input_State,
         }
     }
 
-    pressed_glyph := use_pressed_glyph(text_node_index);
-    if pressed_glyph != -1 {
-        cursor = pressed_glyph;
+    if on_drag(.LEFT) || on_drag(.RIGHT) {
+        mouse_glyph := use_glyph_closest_to_mouse(text_node_index);
+        if mouse_glyph != -1      then cursor           = mouse_glyph;
+        if selection_anchor == -1 then selection_anchor = cursor;
     }
+    if on_click() {
+        mouse_glyph     := use_glyph_closest_to_mouse(text_node_index);
+        if mouse_glyph != -1      then cursor           = mouse_glyph;
+        selection_anchor = -1;
+    }
+    if on_key_down(.ESCAPE) then selection_anchor = -1;
 } @hook
 Caret :: (
     style:             Style,
@@ -583,21 +662,20 @@ Caret :: (
     input_measurement, defined := get_measurement();
     if defined {
         text_node           := get_node(text_node_index);
-        text_measurement    := get_measurement(text_node_index);
-        input_glyphs        := text_node.glyphs;
+        glyphs              := text_node.glyphs;
         font_size           := text_node.style.font_size;
         font_units_to_pixel := get_font_units_to_pixel(*context.inter, font_size);
 
         caret_position: Vector2;
-        if contents.count > 0 {
-            if cursor == contents.count {
-                caret_position = (input_glyphs.array[contents.count - 1].position + input_glyphs.array[contents.count - 1].advance) * font_units_to_pixel;
+        if glyphs.array.count > 0 {
+            if cursor == glyphs.array.count {
+                caret_position = (peek(glyphs.array).position + peek(glyphs.array).advance) * font_units_to_pixel;
             } else {
-                caret_position = input_glyphs.array[cursor].position * font_units_to_pixel;
+                caret_position = glyphs.array[cursor].position * font_units_to_pixel;
             }
         }
         // TODO: support multi-line inputs, because we're currently only comparing against there being no wrapping in the input
-        line_height      := input_glyphs.line_height * font_units_to_pixel;
+        line_height      := glyphs.line_height * font_units_to_pixel;
         input            := get_node();
         inner_height     := input_measurement.size.y - input.style.padding.y.x - input.style.padding.y.y;
         caret_position.x -= scrolling_offset;
@@ -664,7 +742,8 @@ Input :: (input_state: *Input_State, body: Code) #expand {
     }, #code {
         scrolling_state := state(Scrolling_State);
 
-        text_node_index := text(to_string(input_state.contents.data, input_state.contents.count));
+        text_node_index := text(Style.{ z_index = 2, },
+                                to_string(input_state.contents.data, input_state.contents.count));
         Caret(Style.{}, input_state, scrolling_state.effective_offset.x, text_node_index);
         // TODO: as the user types, this should scroll following the cursor
         use_input(input_state, text_node_index, (input: u8) -> bool {
@@ -677,6 +756,12 @@ Input :: (input_state: *Input_State, body: Code) #expand {
                 return false;
             }
         });
+
+        // use_selection(selection_state, text_node_index);
+        Selection(Style.{},
+                  *(Selection_State.{input_state.cursor, input_state.selection_anchor}),
+                  scrolling_state.effective_offset,
+                  text_node_index);
 
         use_scrolling(scrolling_state);
 
@@ -707,14 +792,14 @@ reverse_number_sign :: (text: *[..]u8) -> s64 {
 // Removes what was last added by one of the buttons. The operator buttons surround the operator with spaces, so
 // those go away together with the operator.
 remove_last :: (text: *[..]u8) {
-    while text.count > 0 && text.*[text.count - 1] == #char " " {
+    while text.count > 0 && peek(text.*) == #char " " {
         text.count -= 1;
     }
     if text.count > 0 {
-        removed := text.*[text.count - 1];
+        removed := peek(text.*);
         text.count -= 1;
         if is_operator(removed) {
-            while text.count > 0 && text.*[text.count - 1] == #char " " {
+            while text.count > 0 && peek(text.*) == #char " " {
                 text.count -= 1;
             }
         }
@@ -730,9 +815,12 @@ App :: () {
     evaluation_success := state(false);
     result             := state(float64);
 
-    input_state := state(Input_State);
+    input_state, first_frame := state(Input_State);
     // TODO: find some way that this allocator could be set automatically too
     input_state.contents.allocator = node_pool();
+    if first_frame {
+        array_add(*input_state.contents, #char "1", #char "2", #char "+", #char "3");
+    }
 
     element(Style.{
         direction  = .VERTICAL,
@@ -883,9 +971,9 @@ App :: () {
         });
     });
 
-    if on_key_down(.ESCAPE) {
-        window.running = false;
-    }
+    // if on_key_down(.ESCAPE) {
+    //     window.running = false;
+    // }
 
     if on_key_down(.ENTER) {
         // TODO: the copied result is gone in linux because the clipboard data remains in the process until another process requests for it,
