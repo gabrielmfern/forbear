@@ -506,10 +506,8 @@ Input_State :: struct {
     selection_anchor: s64 = -1;
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
-// - track the caret position based on glyph indices instead of bytes
-// - delete by glyphs unicode ranges instead of by bytes
+// - insertion should change the cursor by glyph indices not bytes
 // - handle multiline text
-// - make it generic: previous and next word boundaries should not be tied to digits
 use_input :: (using input_state:      *Input_State,
               text_node_index:        s64,
               input_character_filter: #type (input: u8) -> bool = null) {
