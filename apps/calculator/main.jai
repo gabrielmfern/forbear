@@ -378,16 +378,18 @@ Button :: (contents: string, kind := Button_Kind.DIGIT) -> clicked: bool {
 
 previous_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
     c := cursor;
-    // TODO: we should use a library that makes this work for any language, or implement something ourselves.
-    while c > 0 && !is_alnum(glyphs[c - 1].utf8.Encoded[0]) c -= 1;
-    while c > 0 && is_alnum(glyphs[c - 1].utf8.Encoded[0]) c -= 1;
+    while c > 0 && is_space(glyphs[c - 1].utf8.Encoded[0]) { c -= 1; }
+    while c > 0 {
+        c -= 1;
+        if glyphs[c].starts_word break;
+    }
     return c;
 }
 next_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
     c := cursor;
-    // TODO: we should use a library that makes this work for any language, or implement something ourselves.
-    while c < glyphs.count && !is_alnum(glyphs[c].utf8.Encoded[0]) c += 1;
-    while c < glyphs.count && is_alnum(glyphs[c].utf8.Encoded[0]) c += 1;
+    while c < glyphs.count && is_space(glyphs[c].utf8.Encoded[0]) { c += 1; }
+    if c < glyphs.count c += 1;
+    while c < glyphs.count && !glyphs[c].starts_word { c += 1; }
     return c;
 }
 use_glyph_closest_to :: (text_node_index: s64, position: Vector2) -> s64 {
@@ -544,13 +546,16 @@ use_input :: (using input_state:      *Input_State,
         }
         inserted := 0;
         for input {
-            if input_character_filter != null && !input_character_filter(it) continue;
-            array_insert_at(*contents, it, insert_at + inserted);
-            inserted += 1;
-        }
-        if inserted > 0 && glyphs.array.count > 0 && selection_anchor != -1 {
-            delete(input_state, glyphs, cursor, selection_anchor);
-            selection_anchor = -1;
+            if input_character_filter == null || input_character_filter(it) {
+                if inserted == 0 && glyphs.array.count > 0 && selection_anchor != -1 {
+                    // this makes sure that we only delete and remove the selection if there's at least one
+                    // character to insert
+                    delete(input_state, glyphs, cursor, selection_anchor);
+                    selection_anchor = -1;
+                }
+                array_insert_at(*contents, it, insert_at + inserted);
+                inserted += 1;
+            }
         }
         // TODO: this will cause bugs, we need to check how many glyphs this input
         // will generate by text shaping at this point
