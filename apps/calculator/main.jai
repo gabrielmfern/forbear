@@ -390,20 +390,19 @@ next_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
     while c < glyphs.count && is_alnum(glyphs[c].utf8.Encoded[0]) c += 1;
     return c;
 }
-use_glyph_closest_to_mouse :: (text_node_index: s64) -> s64 {
+use_glyph_closest_to :: (text_node_index: s64, position: Vector2) -> s64 {
     glyphs                    := get_node(text_node_index).glyphs;
     text_measurement, defined := get_measurement(text_node_index);
     cursor                    := -1;
     if defined {
         font_units_to_pixel := get_font_units_to_pixel(*context.inter, get_node(text_node_index).style.font_size);
         line_height         := glyphs.line_height * font_units_to_pixel;
-        mouse               := get_mouse_position();
         closest_distance    : float;
         for glyphs.array {
             left_edge := text_measurement.position.x + it.position.x * font_units_to_pixel;
             // TOOD: to make this work with mulitple lines, we will need to have the glyphs already wrapped here,
             // but then we will also need to find the closest line, to finally compare the x coordinates
-            distance := Math.abs(left_edge - mouse.x);
+            distance := Math.abs(left_edge - position.x);
             if it_index == 0 || distance < closest_distance {
                 closest_distance = distance;
                 cursor           = it_index;
@@ -412,7 +411,7 @@ use_glyph_closest_to_mouse :: (text_node_index: s64) -> s64 {
                 right_edge := left_edge + it.advance.x * font_units_to_pixel;
                 // TOOD: to make this work with mulitple lines, we will need to have the glyphs already wrapped here,
                 // but then we will also need to find the closest line, to finally compare the x coordinates
-                distance := Math.abs(right_edge - mouse.x);
+                distance := Math.abs(right_edge - position.x);
                 if distance < closest_distance {
                     closest_distance = distance;
                     cursor           = glyphs.array.count;
@@ -517,37 +516,10 @@ use_input :: (using input_state:      *Input_State,
         if index < glyphs.array.count then return glyphs.array[index].index_into_original_text;
         else                               return peek(glyphs.array).index_into_original_text + 1;
     }
-    append :: (using input_state:      *Input_State,
-               glyphs:                 Glyphs,
-               input:                  string,
-               input_character_filter: #type (input: u8) -> bool) {
-        cursor_byte_index := ifx glyphs.array.count > 0 then glyph_index_to_byte_index(glyphs, cursor) else 0;
-        if input_character_filter != null {
-            for character: input {
-                if input_character_filter(character) {
-                    array_insert_at(*contents, character, cursor_byte_index);
-                    // TODO: this will cause bugs, we need to check how many glyphs this input
-                    // will generate by text shaping at this point
-                    cursor += 1;
-                }
-            }
-        } else {
-            input_bytes: []u8 = ---;
-            input_bytes.data  = input.data;
-            input_bytes.count = input.count;
-            array_add(*contents, ..input_bytes);
-        }
-    }
-
-    glyphs := get_node(text_node_index).glyphs;
-
-    text_input := get_text_input();
-    if text_input.count > 0 {
-        append(input_state, glyphs, text_input, input_character_filter);
-    }
-
-    delete :: (using input_state: *Input_State, glyphs: Glyphs, start: s64, end: s64) {
+    delete :: (using input_state: *Input_State, glyphs: Glyphs, a: s64, b: s64) {
         if glyphs.array.count > 0 {
+            start      := min(a, b);
+            end        := max(a, b);
             start_byte := glyph_index_to_byte_index(glyphs, start);
             end_byte   := glyph_index_to_byte_index(glyphs, end);
             if start_byte != end_byte {
@@ -561,30 +533,60 @@ use_input :: (using input_state:      *Input_State,
             }
         }
     }
+    append :: (using input_state:      *Input_State,
+               glyphs:                 Glyphs,
+               input:                  string,
+               input_character_filter: #type (input: u8) -> bool) {
+        insert_at := 0;
+        if glyphs.array.count > 0 {
+            start := ifx selection_anchor != -1 then min(cursor, selection_anchor) else cursor;
+            insert_at = glyph_index_to_byte_index(glyphs, start);
+        }
+        inserted := 0;
+        for input {
+            if input_character_filter != null && !input_character_filter(it) continue;
+            array_insert_at(*contents, it, insert_at + inserted);
+            inserted += 1;
+        }
+        if inserted > 0 && glyphs.array.count > 0 && selection_anchor != -1 {
+            delete(input_state, glyphs, cursor, selection_anchor);
+            selection_anchor = -1;
+        }
+        // TODO: this will cause bugs, we need to check how many glyphs this input
+        // will generate by text shaping at this point
+        cursor += inserted;
+    }
+
+    shift   := is_key_held(.SHIFT_LEFT)   || is_key_held(.SHIFT_RIGHT);
+    ctrl    := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
+    alt     := is_key_held(.ALT_LEFT)     || is_key_held(.ALT_RIGHT);
+    super   := is_key_held(.SUPER_LEFT)   || is_key_held(.SUPER_RIGHT);
+    command := #ifx OS == .MACOS then super else ctrl;
+    by_word := #ifx OS == .MACOS then alt   else ctrl;
+    by_line := #ifx OS == .MACOS then super else false;
+
+    glyphs := get_node(text_node_index).glyphs;
+
+    text_input := get_text_input();
+    if text_input.count > 0 {
+        append(input_state, glyphs, text_input, input_character_filter);
+    }
 
     {
         //
         // === keyboard deletion and cursor movement handling ===
         //
+        left  := on_key_down(.ARROW_LEFT, true);
+        right := on_key_down(.ARROW_RIGHT, true);
+        home  := on_key_down(.HOME);
+        end   := on_key_down(.END);
 
-        // Limitations:
-        // - does not support word boundaries for non latin languages (chinese, japenese, arabic, hebrew, etc.);
-        // - does not support multiline text.
+        if (left || right) && !shift && selection_anchor != -1 {
+            cursor = ifx left then min(cursor, selection_anchor) else max(cursor, selection_anchor);
+        }
+
         previous := max(cursor - 1, 0);
         next     := min(cursor + 1, glyphs.array.count);
-        by_word  := false;
-        #if OS == .MACOS {
-            by_word = by_word || is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
-        }
-        #if OS == .LINUX || OS == .WINDOWS {
-            by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
-        }
-        by_line := false;
-        #if OS == .MACOS {
-            if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
-                by_line = true;
-            }
-        }
         if by_word {
             previous = previous_word_boundary(glyphs.array, cursor);
             next     = next_word_boundary(glyphs.array, cursor);
@@ -597,30 +599,15 @@ use_input :: (using input_state:      *Input_State,
             // not to the start of the entire piece of text.
             next = glyphs.array.count;
         }
-        // with selection:
-        // - arrow        -> disables selection, DOESNT move the cursor
-        // - ctrl + arrow -> disables selection, MOVES the cursor
-        if on_key_down(.ARROW_LEFT, true) {
-            if     ((is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT)) && selection_anchor != -1)
-                || by_line
-                || by_word
-                || selection_anchor == -1 {
-                cursor = previous;
-            }
-            if selection_anchor != -1 && !is_key_held(.SHIFT_LEFT) && !is_key_held(.SHIFT_RIGHT) {
-                selection_anchor = -1;
-            }
-        } else if on_key_down(.ARROW_RIGHT, true) {
-            if     ((is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT)) && selection_anchor != -1)
-                || by_line
-                || by_word
-                || selection_anchor == -1 {
-                cursor = next;
-            }
-            if selection_anchor != -1 && !is_key_held(.SHIFT_LEFT) && !is_key_held(.SHIFT_RIGHT) {
-                selection_anchor = -1;
-            }
-        } else if on_key_down(.HOME) {
+
+        if (left || right || home || end) && shift && selection_anchor == -1 then selection_anchor = cursor;
+
+        if left || right {
+            if shift || by_word || by_line || selection_anchor == -1 then cursor           = ifx left then previous else next;
+            if !shift                                                then selection_anchor = -1;
+        }
+
+        if on_key_down(.HOME) {
             // TODO: to support multiline text here, we need this to go to the start of the current line,
             // not to the start of the entire piece of text.
             cursor = 0;
@@ -630,21 +617,16 @@ use_input :: (using input_state:      *Input_State,
             cursor = glyphs.array.count;
         }
 
-        if (is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT)) && on_key_down(.A) {
+        if command && on_key_down(.A) {
             selection_anchor = 0;
             cursor = glyphs.array.count;
         }
 
-        removal_start, removal_end := cursor;
-        if on_key_down(.BACKSPACE, true)   then removal_start = previous;
-        else if on_key_down(.DELETE, true) then removal_end   = next;
-        if (on_key_down(.BACKSPACE, true) || on_key_down(.DELETE, true)) && selection_anchor != -1 {
-            removal_start    = min(cursor, selection_anchor);
-            removal_end      = max(cursor, selection_anchor);
-        }
-
-        if glyphs.array.count > 0 {
-            delete(input_state, glyphs, removal_start, removal_end);
+        backspace := on_key_down(.BACKSPACE, true);
+        if backspace || on_key_down(.DELETE, true) {
+            if selection_anchor != -1 then delete(input_state, glyphs, cursor, selection_anchor);
+            else if backspace         then delete(input_state, glyphs, previous, cursor);
+            else                           delete(input_state, glyphs, cursor, next);
         }
     }
 
@@ -652,47 +634,39 @@ use_input :: (using input_state:      *Input_State,
         //
         // === clipboard handling ===
         //
-        should_paste := false;
-        #if OS == .MACOS {
-            should_paste = (is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT)) && on_key_down(.V);
-        } else {
-            should_paste = is_key_held(.CONTROL_LEFT) && on_key_down(.V);
-        }
-        if should_paste {
+        if command && on_key_down(.V) {
             clipboard_text := get_clipboard_text();
-            if glyphs.array.count > 0 && selection_anchor != -1 {
-                selection_start := min(cursor, selection_anchor);
-                selection_end   := max(cursor, selection_anchor);
-                // replace the selection with what is being pasted
-                delete(input_state, glyphs, selection_start, selection_end);
-            }
             if clipboard_text.count > 0 then append(input_state, glyphs, clipboard_text, input_character_filter);
         }
 
-        if glyphs.array.count > 0 && selection_anchor != 1 {
-            should_copy := false;
-            #if OS == .MACOS then should_copy = (is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT)) && on_key_down(.C);
-            else                  should_copy = is_key_held(.CONTROL_LEFT) && on_key_down(.C);
-            if should_copy {
+        if glyphs.array.count > 0 && selection_anchor != -1 {
+            if command && on_key_down(.C) {
                 selection_start      := min(cursor, selection_anchor);
                 selection_end        := max(cursor, selection_anchor);
                 selection_start_byte := glyph_index_to_byte_index(glyphs, selection_start);
                 selection_end_byte   := glyph_index_to_byte_index(glyphs, selection_end);
 
-                copy_to_clipboard(to_string(contents.data + selection_start_byte, selection_end_byte));
+                copy_to_clipboard(to_string(contents.data + selection_start_byte, selection_end_byte - selection_start_byte));
             }
         }
     }
 
-    if on_drag(.LEFT) || on_drag(.RIGHT) {
-        mouse_glyph := use_glyph_closest_to_mouse(text_node_index);
-        if mouse_glyph != -1      then cursor           = mouse_glyph;
-        if selection_anchor == -1 then selection_anchor = cursor;
+    dragging_last_frame := state(false);
+    if is_dragging(.LEFT) {
+        mouse_glyph := -1;
+        if !dragging_last_frame.* {
+            mouse_glyph           = use_glyph_closest_to(text_node_index, get_press_position());
+            selection_anchor      = mouse_glyph;
+            dragging_last_frame.* = true;
+        } else mouse_glyph = use_glyph_closest_to(text_node_index, get_mouse_position());
+        if mouse_glyph != -1 then cursor = mouse_glyph;
+    } else {
+        dragging_last_frame.* = false;
     }
     if on_click() {
-        mouse_glyph     := use_glyph_closest_to_mouse(text_node_index);
-        if mouse_glyph != -1      then cursor           = mouse_glyph;
-        selection_anchor = -1;
+        mouse_glyph := use_glyph_closest_to(text_node_index, get_mouse_position());
+        if mouse_glyph != -1 then cursor           = mouse_glyph;
+        if !shift            then selection_anchor = -1;
     }
     if on_key_down(.ESCAPE) then selection_anchor = -1;
 } @hook
@@ -914,101 +888,126 @@ App :: () {
             width           = grow(),
             height          = grow(),
         }, #code {
+            using input_state;
             Row(#code {
                 Column(#code { if Button("C", .FUNCTION) {
-                    input_state.contents.count = 0;
-                    input_state.cursor   = 0;
+                    contents.count   = 0;
+                    cursor           = 0;
+                    selection_anchor = -1;
                     // there's nothing to evaluate anymore, and the result is only updated when the evaluation succeeds
                     result.* = 0;
                 } }, span = 2);
                 Column(#code { if Button("⌫", .FUNCTION) {
-                    remove_last(*input_state.contents);
-                    input_state.cursor = input_state.contents.count;
+                    remove_last(*contents);
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } }, span = 2);
             });
             Row(#code {
                 Column(#code { if Button("(", .FUNCTION) {
-                    array_add(*input_state.contents, #char "(");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "(");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button(")", .FUNCTION) {
-                    array_add(*input_state.contents, #char ")");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char ")");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("+/-", .FUNCTION) {
-                    input_state.cursor = reverse_number_sign(*input_state.contents);
+                    reversed_at := reverse_number_sign(*contents);
+                    if reversed_at != -1 {
+                        cursor           = reversed_at;
+                        selection_anchor = -1;
+                    }
                 } });
                 Column(#code { if Button("^", .OPERATOR) {
-                    array_add(*input_state.contents, #char " ", #char "^", #char " ");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char " ", #char "^", #char " ");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
             });
             Row(#code {
                 Column(#code { if Button("7") {
                     array_add(*input_state.contents, #char "7");
-                    input_state.cursor = input_state.contents.count;
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("8") {
-                    array_add(*input_state.contents, #char "8");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "8");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("9") {
-                    array_add(*input_state.contents, #char "9");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "9");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("÷", .OPERATOR) {
-                    array_add(*input_state.contents, #char " ", #char "/", #char " ");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char " ", #char "/", #char " ");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
             });
             Row(#code {
                 Column(#code { if Button("4") {
-                    array_add(*input_state.contents, #char "4");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "4");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("5") {
-                    array_add(*input_state.contents, #char "5");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "5");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("6") {
-                    array_add(*input_state.contents, #char "6");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "6");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("×", .OPERATOR) {
-                    array_add(*input_state.contents, #char " ", #char "*", #char " ");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char " ", #char "*", #char " ");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
             });
             Row(#code {
                 Column(#code { if Button("1") {
-                    array_add(*input_state.contents, #char "1");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "1");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("2") {
-                    array_add(*input_state.contents, #char "2");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "2");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("3") {
-                    array_add(*input_state.contents, #char "3");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "3");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("+", .OPERATOR) {
-                    array_add(*input_state.contents, #char " ", #char "+", #char " ");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char " ", #char "+", #char " ");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
             });
             Row(#code {
                 Column(#code { if Button("0") {
-                    array_add(*input_state.contents, #char "0");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char "0");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } }, span = 2);
                 Column(#code { if Button(".") {
-                    array_add(*input_state.contents, #char ".");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char ".");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
                 Column(#code { if Button("-", .OPERATOR) {
-                    array_add(*input_state.contents, #char " ", #char "-", #char " ");
-                    input_state.cursor = input_state.contents.count;
+                    array_add(*contents, #char " ", #char "-", #char " ");
+                    cursor           = contents.count;
+                    selection_anchor = -1;
                 } });
             });
         });

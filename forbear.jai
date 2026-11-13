@@ -3161,7 +3161,10 @@ is_point_inside :: (point: Vector2, measurement: Node_Measurement) -> bool {
         && point.x <= measurement.position.x + measurement.size.x
         && point.y <= measurement.position.y + measurement.size.y;
 }
-on_drag :: (button := Mouse_Button.LEFT) -> bool {
+get_press_position :: (button := Mouse_Button.LEFT) -> Vector2 {
+    return context.forbear.window.mouse_state.press_position[button];
+}
+is_dragging :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
     measurement, defined := get_measurement();
     if defined {
