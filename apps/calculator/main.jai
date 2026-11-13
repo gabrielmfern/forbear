@@ -583,24 +583,6 @@ use_input :: (using input_state:      *Input_State,
         append(input_state, text_input, input_character_filter);
     }
 
-    {
-        //
-        // === clipboard paste handling ===
-        //
-        should_paste := false;
-        #if OS == .MACOS {
-            should_paste = (is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT)) && on_key_down(.V);
-        } else {
-            should_paste = is_key_held(.CONTROL_LEFT) && on_key_down(.V);
-        }
-        if should_paste {
-            clipboard_text := get_clipboard_text();
-            if clipboard_text.count > 0 {
-                append(input_state, clipboard_text, input_character_filter);
-            }
-        }
-    }
-
     removed_bytes: s64;
     {
         //
@@ -620,8 +602,8 @@ use_input :: (using input_state:      *Input_State,
         if on_key_down(.BACKSPACE, true)   then removal_start = previous;
         else if on_key_down(.DELETE, true) then removal_end   = next;
         if (on_key_down(.BACKSPACE, true) || on_key_down(.DELETE, true)) && selection_anchor != -1 {
-            removal_start = min(cursor, selection_anchor);
-            removal_end   = max(cursor, selection_anchor);
+            removal_start    = min(cursor, selection_anchor);
+            removal_end      = max(cursor, selection_anchor);
             selection_anchor = -1;
         }
 
@@ -638,6 +620,44 @@ use_input :: (using input_state:      *Input_State,
             }
             contents.count -= removed_bytes;
             cursor          = min(cursor, removal_start_byte);
+        }
+    }
+
+    {
+        //
+        // === clipboard handling ===
+        //
+        should_paste := false;
+        #if OS == .MACOS {
+            should_paste = (is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT)) && on_key_down(.V);
+        } else {
+            should_paste = is_key_held(.CONTROL_LEFT) && on_key_down(.V);
+        }
+        if should_paste {
+            clipboard_text := get_clipboard_text();
+            if clipboard_text.count > 0 {
+                append(input_state, clipboard_text, input_character_filter);
+            }
+        }
+
+        if selection_anchor != 1 {
+            should_copy := false;
+            #if OS == .MACOS {
+                should_copy = (is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT)) && on_key_down(.C);
+            } else {
+                should_copy = is_key_held(.CONTROL_LEFT) && on_key_down(.C);
+            }
+            if should_copy {
+                start := min(cursor, selection_anchor);
+                end   := max(cursor, selection_anchor);
+                start_byte, end_byte := 0;
+                if start < glyphs.array.count then start_byte = glyphs.array[start].index_into_original_text;
+                else                               start_byte = peek(glyphs.array).index_into_original_text + 1;
+                if end < glyphs.array.count   then end_byte   = glyphs.array[end].index_into_original_text;
+                else                               end_byte   = peek(glyphs.array).index_into_original_text + 1;
+
+                copy_to_clipboard(to_string(contents.data + start_byte, end_byte));
+            }
         }
     }
 
