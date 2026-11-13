@@ -3679,6 +3679,7 @@ Glyph :: struct {
     index: s32;
     index_into_original_text: s64;
     utf8: kbts_encode_utf8;
+    starts_word: bool;
 
     // all of these are in points units, that means they do not account for the font size, but they do account for the font weight.
     position: Vector2;
@@ -3883,6 +3884,7 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
                 glyph.position = pen + glyph.offset;
                 glyph.utf8 = utf8_encoded;
                 glyph.index_into_original_text = shape_codepoint.UserId;
+                glyph.starts_word = (shape_codepoint.BreakFlags & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_WORD) != 0;
                 array_add(*glyphs.array, glyph);
             }
 
