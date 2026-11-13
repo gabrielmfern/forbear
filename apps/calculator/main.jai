@@ -470,37 +470,6 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
         }));
     }
 } @component
-// This is a good abstraction for implementing text selection, but not for an input component.
-// use_selection :: (using selection: *Selection_State, text_node_index: s64) {
-//     // TODO: we should be getting these glyphs out of the measurement so that we also take wrapping into account
-//     glyphs := get_node(text_node_index).glyphs;
-//     if cursor != -1 && (is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT)) {
-//         previous_cursor := cursor;
-//         use_textual_keyboard_navigation(glyphs.array, *selection.cursor);
-//         if anchor == -1 && previous_cursor != cursor {
-//             anchor = cursor;
-//         }
-//     }
-//     is_dragging    := state(false);
-//     draggin_button := state(Mouse_Button);
-//     if on_mouse_down(.LEFT) {
-//         is_dragging.*    = true;
-//         draggin_button.* = .LEFT;
-//     }
-//     if on_mouse_down(.RIGHT) {
-//         is_dragging.*    = true;
-//         draggin_button.* = .RIGHT;
-//     }
-//     if is_dragging.* && on_mouse_up(draggin_button.*, check_inside = false) {
-//         is_dragging.* = false;
-//         anchor        = -1;
-//     }
-//     if is_dragging.* {
-//         mouse_glyph := use_glyph_closest_to_mouse(text_node_index);
-//         if mouse_glyph != -1 then cursor = mouse_glyph;
-//         if anchor == -1 then anchor = cursor;
-//     }
-// } @hook
 Input_State :: struct {
     contents: [..]u8;
     cursor: s64;
@@ -509,6 +478,7 @@ Input_State :: struct {
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - insertion should change the cursor by glyph indices not bytes
 // - handle multiline text
+// - we should be moving the cursor by graphemes, not by glyphs
 use_input :: (using input_state:      *Input_State,
               text_node_index:        s64,
               input_character_filter: #type (input: u8) -> bool = null) {
