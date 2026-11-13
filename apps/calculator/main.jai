@@ -517,20 +517,16 @@ use_input :: (using input_state:      *Input_State,
         else                               return peek(glyphs.array).index_into_original_text + 1;
     }
     delete :: (using input_state: *Input_State, glyphs: Glyphs, a: s64, b: s64) {
+        selection_anchor = -1;
         if glyphs.array.count > 0 {
             start      := min(a, b);
-            end        := max(a, b);
             start_byte := glyph_index_to_byte_index(glyphs, start);
-            end_byte   := glyph_index_to_byte_index(glyphs, end);
-            if start_byte != end_byte {
-                bytes := end_byte - start_byte;
-                for i: start_byte..contents.count - bytes - 1 {
-                    contents[i] = contents[i + bytes];
-                }
-                contents.count  -= bytes;
-                cursor           = min(cursor, start);
-                selection_anchor = -1;
+            bytes      := glyph_index_to_byte_index(glyphs, max(a, b)) - start_byte;
+            for i: start_byte..contents.count - bytes - 1 {
+                contents[i] = contents[i + bytes];
             }
+            contents.count -= bytes;
+            cursor          = min(cursor, start);
         }
     }
     append :: (using input_state:      *Input_State,
@@ -545,12 +541,9 @@ use_input :: (using input_state:      *Input_State,
         inserted := 0;
         for input {
             if input_character_filter == null || input_character_filter(it) {
-                if inserted == 0 && selection_anchor != -1 {
-                    // this makes sure that we only delete and remove the selection if there's at least one
-                    // character to insert
-                    delete(input_state, glyphs, cursor, selection_anchor);
-                    selection_anchor = -1;
-                }
+                // this makes sure that we only delete and remove the selection if there's at least one
+                // character to insert
+                if inserted == 0 && selection_anchor != -1 then delete(input_state, glyphs, cursor, selection_anchor);
                 array_insert_at(*contents, it, insert_at + inserted);
                 inserted += 1;
             }
@@ -566,27 +559,20 @@ use_input :: (using input_state:      *Input_State,
     super   := is_key_held(.SUPER_LEFT)   || is_key_held(.SUPER_RIGHT);
     command := #ifx OS == .MACOS then super else ctrl;
     by_word := #ifx OS == .MACOS then alt   else ctrl;
-    by_line := #ifx OS == .MACOS then super else false;
+    by_line := (#ifx OS == .MACOS then super else false) || on_key_down(.HOME) || on_key_down(.END);
 
     glyphs := get_node(text_node_index).glyphs;
 
-    text_input := get_text_input();
-    if text_input.count > 0 {
-        append(input_state, glyphs, text_input, input_character_filter);
-    }
+    append(input_state, glyphs, get_text_input(), input_character_filter);
 
     {
         //
         // === keyboard deletion and cursor movement handling ===
         //
-        left  := on_key_down(.ARROW_LEFT, true);
-        right := on_key_down(.ARROW_RIGHT, true);
-        home  := on_key_down(.HOME);
-        end   := on_key_down(.END);
+        left  := on_key_down(.ARROW_LEFT, true)  || on_key_down(.HOME);
+        right := on_key_down(.ARROW_RIGHT, true) || on_key_down(.END);
 
-        if (left || right) && !shift && selection_anchor != -1 {
-            cursor = ifx left then min(cursor, selection_anchor) else max(cursor, selection_anchor);
-        }
+        if (left || right) && !shift && selection_anchor != -1 then cursor = ifx left then min(cursor, selection_anchor) else max(cursor, selection_anchor);
 
         previous := max(cursor - 1, 0);
         next     := min(cursor + 1, glyphs.array.count);
@@ -603,23 +589,10 @@ use_input :: (using input_state:      *Input_State,
             next = glyphs.array.count;
         }
 
-        if (left || right || home || end) && shift && selection_anchor == -1 then selection_anchor = cursor;
-
         if left || right {
+            if shift && selection_anchor == -1                       then selection_anchor = cursor;
             if shift || by_word || by_line || selection_anchor == -1 then cursor           = ifx left then previous else next;
             if !shift                                                then selection_anchor = -1;
-        }
-
-        if on_key_down(.HOME) {
-            // TODO: to support multiline text here, we need this to go to the start of the current line,
-            // not to the start of the entire piece of text.
-            cursor = 0;
-            if !shift then selection_anchor = -1;
-        } else if on_key_down(.END) {
-            // TODO: to support multiline text here, we need this to go to the end of the current line,
-            // not to the start of the entire piece of text.
-            cursor = glyphs.array.count;
-            if !shift then selection_anchor = -1;
         }
 
         if command && on_key_down(.A) {
@@ -635,47 +608,29 @@ use_input :: (using input_state:      *Input_State,
         }
     }
 
-    {
-        //
-        // === clipboard handling ===
-        //
-        if command && on_key_down(.V) {
-            clipboard_text := get_clipboard_text();
-            if clipboard_text.count > 0 then append(input_state, glyphs, clipboard_text, input_character_filter);
-        }
+    if command && on_key_down(.V) then append(input_state, glyphs, get_clipboard_text(), input_character_filter);
 
-        if glyphs.array.count > 0 && selection_anchor != -1 {
-            if command && on_key_down(.C) {
-                selection_start      := min(cursor, selection_anchor);
-                selection_end        := max(cursor, selection_anchor);
-                selection_start_byte := glyph_index_to_byte_index(glyphs, selection_start);
-                selection_end_byte   := glyph_index_to_byte_index(glyphs, selection_end);
-
-                copy_to_clipboard(to_string(contents.data + selection_start_byte, selection_end_byte - selection_start_byte));
-            }
-        }
+    if command && on_key_down(.C) && selection_anchor != -1 && glyphs.array.count > 0 {
+        start_byte := glyph_index_to_byte_index(glyphs, min(cursor, selection_anchor));
+        end_byte   := glyph_index_to_byte_index(glyphs, max(cursor, selection_anchor));
+        copy_to_clipboard(to_string(contents.data + start_byte, end_byte - start_byte));
     }
 
+    dragging            := is_dragging(.LEFT);
     dragging_last_frame := state(false);
-    if is_dragging(.LEFT) {
-        mouse_glyph := -1;
-        if !dragging_last_frame.* {
-            mouse_glyph           = use_glyph_closest_to(text_node_index, get_press_position());
-            selection_anchor      = mouse_glyph;
-            dragging_last_frame.* = true;
-        } else mouse_glyph = use_glyph_closest_to(text_node_index, get_mouse_position());
+    if dragging {
+        if !dragging_last_frame.* then selection_anchor = use_glyph_closest_to(text_node_index, get_press_position());
+        mouse_glyph := use_glyph_closest_to(text_node_index, get_mouse_position());
         if mouse_glyph != -1 then cursor = mouse_glyph;
-    } else {
-        dragging_last_frame.* = false;
     }
+    dragging_last_frame.* = dragging;
     if on_click() {
         mouse_glyph := use_glyph_closest_to(text_node_index, get_mouse_position());
-        if shift && selection_anchor == -1 then selection_anchor = cursor;
-        if mouse_glyph != -1 then cursor                         = mouse_glyph;
-        if !shift selection_anchor                               = -1;
+        if !shift                          then selection_anchor = -1;
+        else if selection_anchor == -1     then selection_anchor = cursor;
+        if mouse_glyph != -1               then cursor           = mouse_glyph;
     }
-    if on_key_down(.ESCAPE) then selection_anchor = -1;
-    if selection_anchor == cursor && !is_dragging(.LEFT) then selection_anchor = -1;
+    if on_key_down(.ESCAPE) || (selection_anchor == cursor && !dragging) then selection_anchor = -1;
 } @hook
 Caret :: (
     style:             Style,
