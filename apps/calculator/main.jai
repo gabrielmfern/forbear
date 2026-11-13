@@ -42,8 +42,9 @@ peek_number :: (expression: string, cursor: s64) -> float64, index_increment: s6
     while cursor + index_increment < expression.count && expression[cursor + index_increment] == #char " " {
         index_increment += 1;
     }
+    number_start := cursor + index_increment;
+    if number_start < expression.count && expression[number_start] == #char "-" then index_increment += 1;
     if cursor + index_increment < expression.count && is_digit(expression[cursor + index_increment]) {
-        number_start := cursor + index_increment;
         found_period := false;
         // then, we find the end of this "number"
         while cursor + index_increment <= expression.count - 1 {
@@ -748,25 +749,23 @@ Input :: (input_state: *Input_State, body: Code) #expand {
     });
 } @component
 
-reverse_number_sign :: (text: *[..]u8) -> s64 {
-    number_start := -1;
-    if text.count > 0 {
-        number_start = text.count - 1;
-        if !is_any(text.*[number_start], " /+-*x^()") {
-            while number_start > 0 && !is_any(text.*[number_start - 1], " /+-*x^()") {
-                number_start -= 1;
-            }
-            if number_start < text.count - 1 && is_digit(text.*[number_start]) {
-                if number_start > 0 && text.*[number_start - 1] == #char "-" {
-                    array_ordered_remove_by_index(text, number_start - 1);
-                    number_start -= 1;
-                } else {
-                    array_insert_at(text, #char "-", number_start);
-                }
-            }
-        }
+reverse_number_sign :: (text: *[..]u8) -> changed: bool {
+    start := text.count;
+    while start > 0 && (is_digit(text.*[start - 1]) || text.*[start - 1] == #char ".") {
+        start -= 1;
     }
-    return number_start;
+    changed := start < text.count;
+    if changed {
+        before_minus := start - 2;
+        while before_minus >= 0 && text.*[before_minus] == #char " " {
+            before_minus -= 1;
+        }
+        is_sign := start > 0 && text.*[start - 1] == #char "-"
+                   && (before_minus < 0 || !(is_digit(text.*[before_minus]) || is_any(text.*[before_minus], ".)")));
+        if is_sign then array_ordered_remove_by_index(text, start - 1);
+        else            array_insert_at(text, #char "-", start);
+    }
+    return changed;
 }
 // Removes what was last added by one of the buttons. The operator buttons surround the operator with spaces, so
 // those go away together with the operator.
@@ -877,9 +876,8 @@ App :: () {
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("+/-", .FUNCTION) {
-                    reversed_at := reverse_number_sign(*contents);
-                    if reversed_at != -1 {
-                        cursor           = reversed_at;
+                    if reverse_number_sign(*contents) {
+                        cursor           = contents.count;
                         selection_anchor = -1;
                     }
                 } });

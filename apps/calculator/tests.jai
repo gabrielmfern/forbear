@@ -444,47 +444,62 @@ main :: () {
             assert(result == .TOO_MANY_PERIODS, "result=%", result);
             array_reset_keeping_memory(*nodes);
         }
+
+        {
+            Case :: struct { expression: string; expected: float64; }
+            for Case.[
+                .{"-5", -5},
+                .{"12+-34", -22},
+                .{"12-34", -22},
+                .{"12--34", 46},
+                .{"12 - -34", 46},
+                .{"2*-3", -6},
+                .{"-1.5+1", -0.5},
+                .{"(-2)^2", 4},
+            ] {
+                result = Main.parse_expression(it.expression, *nodes);
+                assert(result == .OK, "parse_expression(\"%\")=%", it.expression, result);
+                evaluated, success := Main.evaluate(nodes);
+                assert(success && is_close(evaluated, it.expected), "evaluate(\"%\")=%, expected %", it.expression, evaluated, it.expected);
+                array_reset_keeping_memory(*nodes);
+            }
+
+            for string.["-", "1+-", "- 1", "-(1)"] {
+                result = Main.parse_expression(it, *nodes);
+                assert(result == .EXPECTED_A_NUMBER, "parse_expression(\"%\")=%", it, result);
+                array_reset_keeping_memory(*nodes);
+            }
+        }
     });
 
     test("reverse_number_sign", #code {
-        text: [..]u8;
-        Main.reverse_number_sign(*text);
-        assert(to_string(text.data, text.count) == "");
+        Case :: struct { text: string; expected: string; }
+        for Case.[
+            .{"", ""},
+            .{"5", "-5"},
+            .{"123", "-123"},
+            .{"-123", "123"},
+            .{"1.5", "-1.5"},
+            .{"12+3", "12+-3"},
+            .{"12+34", "12+-34"},
+            .{"12-34", "12--34"},
+            .{"12 - 34", "12 - -34"},
+            .{"12 + -34", "12 + 34"},
+            .{"(1)-2", "(1)--2"},
+            .{"(-2", "(2"},
+            .{"-", "-"},
+            .{"123-", "123-"},
+            .{"123 -", "123 -"},
+            .{"12 +", "12 +"},
+        ] {
+            text: [..]u8;
+            array_add(*text, ..cast([]u8) it.text);
+            changed := Main.reverse_number_sign(*text);
+            assert(to_string(text.data, text.count) == it.expected, "reverse_number_sign(\"%\")=\"%\", expected \"%\"", it.text, to_string(text.data, text.count), it.expected);
+            assert(changed == (it.text != it.expected), "reverse_number_sign(\"%\") changed=%", it.text, changed);
 
-        array_add(*text, #char "1");
-        array_add(*text, #char "2");
-        array_add(*text, #char "3");
-        Main.reverse_number_sign(*text);
-        assert(to_string(text.data, text.count) == "-123");
-
-        array_reset_keeping_memory(*text);
-        array_add(*text, #char "-");
-        array_add(*text, #char "1");
-        array_add(*text, #char "2");
-        array_add(*text, #char "3");
-        Main.reverse_number_sign(*text);
-        assert(to_string(text.data, text.count) == "123");
-
-        array_reset_keeping_memory(*text);
-        array_add(*text, #char "-");
-        Main.reverse_number_sign(*text);
-        assert(to_string(text.data, text.count) == "-");
-
-        array_reset_keeping_memory(*text);
-        array_add(*text, #char "1");
-        array_add(*text, #char "2");
-        array_add(*text, #char "3");
-        array_add(*text, #char "-");
-        Main.reverse_number_sign(*text);
-        assert(to_string(text.data, text.count) == "123-");
-
-        array_reset_keeping_memory(*text);
-        array_add(*text, #char "1");
-        array_add(*text, #char "2");
-        array_add(*text, #char "3");
-        array_add(*text, #char " ");
-        array_add(*text, #char "-");
-        Main.reverse_number_sign(*text);
-        assert(to_string(text.data, text.count) == "123 -");
+            Main.reverse_number_sign(*text);
+            assert(to_string(text.data, text.count) == it.text, "reversing \"%\" twice gave \"%\"", it.text, to_string(text.data, text.count));
+        }
     });
 }
