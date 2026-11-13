@@ -2,7 +2,7 @@
 Math :: #import "Math";
 #import "File";
 #import "forbear";
-Main :: #import,file "./main.jai";
+Calculator :: #import,file "./main.jai";
 
 BUILD_FLAGS :: "+forbear";
 
@@ -12,7 +12,7 @@ test :: (name: string, body: Code) #expand {
     print("PASS\n");
 }
 
-assert_nodes :: (expected: []Main.Expression_Node, loc := #caller_location) #expand {
+assert_nodes :: (expected: []Calculator.Expression_Node, loc := #caller_location) #expand {
     assert(`nodes.count == expected.count, "nodes.count=%, expected %", `nodes.count, expected.count, loc = loc);
     for expected {
         node := `nodes[it_index];
@@ -39,17 +39,17 @@ is_close :: (a: float64, b: float64) -> bool {
 
 main :: () {
     test("parse_expression", #code {
-        nodes: [..]Main.Expression_Node;
-        result: Main.Parse_Result;
+        nodes: [..]Calculator.Expression_Node;
+        result: Calculator.Parse_Result;
 
         {
-            result = Main.parse_expression("1", *nodes);
+            result = Calculator.parse_expression("1", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER, number = 1},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 1.0, "evaluated=%", evaluated);
 
@@ -57,7 +57,7 @@ main :: () {
         }
 
         {
-            result = Main.parse_expression("1+2", *nodes);
+            result = Calculator.parse_expression("1+2", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 1},
@@ -66,7 +66,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 3.0, "evaluated=%", evaluated);
 
@@ -74,7 +74,7 @@ main :: () {
         }
 
         {
-            result = Main.parse_expression("1+2*3", *nodes);
+            result = Calculator.parse_expression("1+2*3", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 1},
@@ -86,7 +86,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 7.0, "evaluated=%", evaluated);
 
@@ -94,7 +94,7 @@ main :: () {
         }
 
         {
-            result = Main.parse_expression("1+2*3-7", *nodes);
+            result = Calculator.parse_expression("1+2*3-7", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 1},
@@ -109,7 +109,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 6, op = 7, right = 8}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 0.0, "evaluated=%", evaluated);
 
@@ -117,7 +117,7 @@ main :: () {
         }
 
         {
-            result = Main.parse_expression("2^3", *nodes);
+            result = Calculator.parse_expression("2^3", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 2},
@@ -126,7 +126,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(is_close(evaluated, 8.0), "evaluated=%", evaluated);
 
@@ -135,7 +135,7 @@ main :: () {
 
         {
             // right associative: 2^(3^2), not (2^3)^2
-            result = Main.parse_expression("2^3^2", *nodes);
+            result = Calculator.parse_expression("2^3^2", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 2},
@@ -147,7 +147,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(is_close(evaluated, 512.0), "evaluated=%", evaluated);
 
@@ -156,7 +156,7 @@ main :: () {
 
         {
             // binds tighter than the multiplication on its left
-            result = Main.parse_expression("2*3^2", *nodes);
+            result = Calculator.parse_expression("2*3^2", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 2},
@@ -168,7 +168,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(is_close(evaluated, 18.0), "evaluated=%", evaluated);
 
@@ -177,7 +177,7 @@ main :: () {
 
         {
             // being right associative must not make it swallow the multiplication on its right
-            result = Main.parse_expression("2^3*4", *nodes);
+            result = Calculator.parse_expression("2^3*4", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 2},
@@ -189,7 +189,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 3, op = 4, right = 5}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(is_close(evaluated, 32.0), "evaluated=%", evaluated);
 
@@ -198,7 +198,7 @@ main :: () {
 
         {
             // parenthesis override the right associativity
-            result = Main.parse_expression("(2^3)^2", *nodes);
+            result = Calculator.parse_expression("(2^3)^2", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 2},
@@ -210,7 +210,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 3, op = 4, right = 5}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(is_close(evaluated, 64.0), "evaluated=%", evaluated);
 
@@ -219,13 +219,13 @@ main :: () {
 
         {
             // parenthesis leave no node behind, what was inside is used directly as the operand
-            result = Main.parse_expression("(1)", *nodes);
+            result = Calculator.parse_expression("(1)", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER, number = 1},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 1.0, "evaluated=%", evaluated);
 
@@ -234,7 +234,7 @@ main :: () {
 
         {
             // the multiplication can't reach inside the parenthesis for the 2
-            result = Main.parse_expression("(1+2)*3", *nodes);
+            result = Calculator.parse_expression("(1+2)*3", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 1},
@@ -246,7 +246,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 3, op = 4, right = 5}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 9.0, "evaluated=%", evaluated);
 
@@ -255,7 +255,7 @@ main :: () {
 
         {
             // precedence starts over inside the parenthesis, so the addition is taken even while in the right of a multiplication
-            result = Main.parse_expression("2*(3+4)", *nodes);
+            result = Calculator.parse_expression("2*(3+4)", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 2},
@@ -267,7 +267,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 14.0, "evaluated=%", evaluated);
 
@@ -275,7 +275,7 @@ main :: () {
         }
 
         {
-            result = Main.parse_expression("2*(3+(4-1))", *nodes);
+            result = Calculator.parse_expression("2*(3+(4-1))", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 2},
@@ -290,7 +290,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 8}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 12.0, "evaluated=%", evaluated);
 
@@ -298,7 +298,7 @@ main :: () {
         }
 
         {
-            result = Main.parse_expression(" ( 1 + 2 ) * 3 ", *nodes);
+            result = Calculator.parse_expression(" ( 1 + 2 ) * 3 ", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 1},
@@ -310,7 +310,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 3, op = 4, right = 5}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 9.0, "evaluated=%", evaluated);
 
@@ -318,33 +318,33 @@ main :: () {
         }
 
         {
-            result = Main.parse_expression("(1+2", *nodes);
+            result = Calculator.parse_expression("(1+2", *nodes);
             assert(result == .EXPECTED_A_CLOSING_PARENTHESIS, "result=%", result);
             array_reset_keeping_memory(*nodes);
 
             // a closing parenthesis that was never opened
-            result = Main.parse_expression("1+2)", *nodes);
+            result = Calculator.parse_expression("1+2)", *nodes);
             assert(result == .EXPECTED_A_OPERATOR, "result=%", result);
             array_reset_keeping_memory(*nodes);
 
-            result = Main.parse_expression("()", *nodes);
+            result = Calculator.parse_expression("()", *nodes);
             assert(result == .EXPECTED_A_NUMBER, "result=%", result);
             array_reset_keeping_memory(*nodes);
 
             // there is no implicit multiplication
-            result = Main.parse_expression("2(3)", *nodes);
+            result = Calculator.parse_expression("2(3)", *nodes);
             assert(result == .EXPECTED_A_OPERATOR, "result=%", result);
             array_reset_keeping_memory(*nodes);
         }
 
         {
-            result = Main.parse_expression("1.5", *nodes);
+            result = Calculator.parse_expression("1.5", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER, number = 1.5},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 1.5, "evaluated=%", evaluated);
 
@@ -352,7 +352,7 @@ main :: () {
         }
 
         {
-            result = Main.parse_expression("1.5+2.25", *nodes);
+            result = Calculator.parse_expression("1.5+2.25", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 1.5},
@@ -361,7 +361,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 3.75, "evaluated=%", evaluated);
 
@@ -370,7 +370,7 @@ main :: () {
 
         {
             // more than one digit on the whole part, and a whole number mixed with a decimal one
-            result = Main.parse_expression("10.5/4", *nodes);
+            result = Calculator.parse_expression("10.5/4", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 10.5},
@@ -379,7 +379,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 2}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 2.625, "evaluated=%", evaluated);
 
@@ -387,7 +387,7 @@ main :: () {
         }
 
         {
-            result = Main.parse_expression("0.5*(1.5+2.5)", *nodes);
+            result = Calculator.parse_expression("0.5*(1.5+2.5)", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER,   number = 0.5},
@@ -399,7 +399,7 @@ main :: () {
                 .{kind = .BINARY,   binary = .{left = 0, op = 1, right = 5}},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 2.0, "evaluated=%", evaluated);
 
@@ -408,13 +408,13 @@ main :: () {
 
         {
             // the decimals are still being typed
-            result = Main.parse_expression("1.", *nodes);
+            result = Calculator.parse_expression("1.", *nodes);
             assert(result == .OK);
             assert_nodes(.[
                 .{kind = .NUMBER, number = 1},
             ]);
 
-            evaluated, success := Main.evaluate(nodes);
+            evaluated, success := Calculator.evaluate(nodes);
             assert(success == true, "evaluation should succeed");
             assert(evaluated == 1.0, "evaluated=%", evaluated);
 
@@ -423,26 +423,26 @@ main :: () {
 
         {
             // a number can't have spaces in the middle of it
-            result = Main.parse_expression("1 . 5", *nodes);
+            result = Calculator.parse_expression("1 . 5", *nodes);
             assert(result == .EXPECTED_A_OPERATOR, "result=%", result);
             array_reset_keeping_memory(*nodes);
         }
 
         {
-            result = Main.parse_expression("1.2.3", *nodes);
+            result = Calculator.parse_expression("1.2.3", *nodes);
             assert(result == .TOO_MANY_PERIODS, "result=%", result);
             array_reset_keeping_memory(*nodes);
 
-            result = Main.parse_expression("1..2", *nodes);
+            result = Calculator.parse_expression("1..2", *nodes);
             assert(result == .TOO_MANY_PERIODS, "result=%", result);
             array_reset_keeping_memory(*nodes);
 
             // the failure is not lost when the number is in the right of a binary, or inside parenthesis
-            result = Main.parse_expression("1+2.5.2", *nodes);
+            result = Calculator.parse_expression("1+2.5.2", *nodes);
             assert(result == .TOO_MANY_PERIODS, "result=%", result);
             array_reset_keeping_memory(*nodes);
 
-            result = Main.parse_expression("(1.5.2+1)*3", *nodes);
+            result = Calculator.parse_expression("(1.5.2+1)*3", *nodes);
             assert(result == .TOO_MANY_PERIODS, "result=%", result);
             array_reset_keeping_memory(*nodes);
         }
@@ -459,15 +459,15 @@ main :: () {
                 .{"-1.5+1", -0.5},
                 .{"(-2)^2", 4},
             ] {
-                result = Main.parse_expression(it.expression, *nodes);
+                result = Calculator.parse_expression(it.expression, *nodes);
                 assert(result == .OK, "parse_expression(\"%\")=%", it.expression, result);
-                evaluated, success := Main.evaluate(nodes);
+                evaluated, success := Calculator.evaluate(nodes);
                 assert(success && is_close(evaluated, it.expected), "evaluate(\"%\")=%, expected %", it.expression, evaluated, it.expected);
                 array_reset_keeping_memory(*nodes);
             }
 
             for string.["-", "1+-", "- 1", "-(1)"] {
-                result = Main.parse_expression(it, *nodes);
+                result = Calculator.parse_expression(it, *nodes);
                 assert(result == .EXPECTED_A_NUMBER, "parse_expression(\"%\")=%", it, result);
                 array_reset_keeping_memory(*nodes);
             }
@@ -496,11 +496,11 @@ main :: () {
         ] {
             text: [..]u8;
             array_add(*text, ..cast([]u8) it.text);
-            changed := Main.reverse_number_sign(*text);
+            changed := Calculator.reverse_number_sign(*text);
             assert(to_string(text.data, text.count) == it.expected, "reverse_number_sign(\"%\")=\"%\", expected \"%\"", it.text, to_string(text.data, text.count), it.expected);
             assert(changed == (it.text != it.expected), "reverse_number_sign(\"%\") changed=%", it.text, changed);
 
-            Main.reverse_number_sign(*text);
+            Calculator.reverse_number_sign(*text);
             assert(to_string(text.data, text.count) == it.text, "reversing \"%\" twice gave \"%\"", it.text, to_string(text.data, text.count));
         }
     });
@@ -510,7 +510,7 @@ main :: () {
         window:  Window;
         forbear: Forbear;
         init_backend(*backend);
-        init_window(*backend, *window, Main.MIN_WIDTH, Main.MIN_HEIGHT, "calculator tests", show_window = false);
+        init_window(*backend, *window, Calculator.MIN_WIDTH, Calculator.MIN_HEIGHT, "calculator tests", show_window = false);
         context.inter = #run create_font(read_entire_file(tprint("%../../Inter.ttf", #filepath)));
         init_forbear(*forbear, *window, *backend, Base_Style.{
             font      = *context.inter,
@@ -617,7 +617,7 @@ main :: () {
               steps = .[.{mouse = .PRESS, mouse_at_glyph = 4, held = .[.SHIFT_LEFT]}, .{mouse = .RELEASE, mouse_at_glyph = 4, held = .[.SHIFT_LEFT]}],
               expected = "12345", expected_cursor = 4, expected_anchor = 1},
         ] {
-            input_state: Main.Input_State;
+            input_state: Calculator.Input_State;
             array_add(*input_state.contents, ..cast([]u8) it.contents);
             input_state.cursor           = it.cursor;
             input_state.selection_anchor = it.anchor;
@@ -650,7 +650,7 @@ main :: () {
                     window.mouse_state.held[Mouse_Button.LEFT]     = false;
                 }
 
-                Main.Input(*input_state, #code {});
+                Calculator.Input(*input_state, #code {});
                 layout();
 
                 array_reset_keeping_memory(*glyph_edges);
