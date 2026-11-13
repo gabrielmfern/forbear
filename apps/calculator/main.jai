@@ -390,48 +390,6 @@ next_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
     while c < glyphs.count && is_alnum(glyphs[c].utf8.Encoded[0]) c += 1;
     return c;
 }
-// Limitations:
-// - does not support word boundaries for non latin languages (chinese, japenese, arabic, hebrew, etc.);
-// - does not support multiline text.
-use_textual_keyboard_navigation :: (glyphs: []Glyph, cursor: *s64) -> struct { previous: s64; next: s64; } {
-    previous := max(cursor.* - 1, 0);
-    next     := min(cursor.* + 1, glyphs.count);
-    by_word  := false;
-    #if OS == .MACOS {
-        by_word = by_word || is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
-    }
-    #if OS == .LINUX || OS == .WINDOWS {
-        by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
-    }
-    if by_word {
-        previous = previous_word_boundary(glyphs, cursor.*);
-        next     = next_word_boundary(glyphs, cursor.*);
-    }
-    #if OS == .MACOS {
-        if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
-            // TODO: to support multiline text here, we need this to go to the start of the current line,
-            // not to the start of the entire piece of text.
-            previous = 0;
-            // TODO: to support multiline text here, we need this to go to the end of the current line,
-            // not to the start of the entire piece of text.
-            next     = glyphs.count;
-        }
-    }
-    if on_key_down(.ARROW_LEFT, true) {
-        cursor.* = previous;
-    } else if on_key_down(.ARROW_RIGHT, true) {
-        cursor.* = next;
-    } else if on_key_down(.HOME) {
-        // TODO: to support multiline text here, we need this to go to the start of the current line,
-        // not to the start of the entire piece of text.
-        cursor.* = 0;
-    } else if on_key_down(.END) {
-        // TODO: to support multiline text here, we need this to go to the end of the current line,
-        // not to the start of the entire piece of text.
-        cursor.* = glyphs.count;
-    }
-    return .{previous, next};
-} @hook
 use_glyph_closest_to_mouse :: (text_node_index: s64) -> s64 {
     glyphs                    := get_node(text_node_index).glyphs;
     text_measurement, defined := get_measurement(text_node_index);
@@ -489,11 +447,8 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
         }
         width: float;
         if glyphs.array.count > 0 {
-            if end == glyphs.array.count {
-                width = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel - position.x;
-            } else {
-                width = glyphs.array[end].position.x * font_units_to_pixel - position.x;
-            }
+            if end == glyphs.array.count then width = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel - position.x;
+            else                              width = glyphs.array[end].position.x * font_units_to_pixel - position.x;
         }
         // TODO: support multi-line content, because we're currently only comparing against there being no wrapping
         line_height      := glyphs.line_height * font_units_to_pixel;
@@ -558,13 +513,21 @@ use_input :: (using input_state:      *Input_State,
               text_node_index:        s64,
               input_character_filter: #type (input: u8) -> bool = null) {
 
+    glyph_index_to_byte_index :: (glyphs: Glyphs, index: s64) -> s64 {
+        if index < glyphs.array.count then return glyphs.array[index].index_into_original_text;
+        else                               return peek(glyphs.array).index_into_original_text + 1;
+    }
     append :: (using input_state:      *Input_State,
+               glyphs:                 Glyphs,
                input:                  string,
                input_character_filter: #type (input: u8) -> bool) {
+        cursor_byte_index := ifx glyphs.array.count > 0 then glyph_index_to_byte_index(glyphs, cursor) else 0;
         if input_character_filter != null {
             for character: input {
                 if input_character_filter(character) {
-                    array_insert_at(*contents, character, cursor);
+                    array_insert_at(*contents, character, cursor_byte_index);
+                    // TODO: this will cause bugs, we need to check how many glyphs this input
+                    // will generate by text shaping at this point
                     cursor += 1;
                 }
             }
@@ -580,22 +543,96 @@ use_input :: (using input_state:      *Input_State,
 
     text_input := get_text_input();
     if text_input.count > 0 {
-        append(input_state, text_input, input_character_filter);
+        append(input_state, glyphs, text_input, input_character_filter);
     }
 
-    removed_bytes: s64;
+    delete :: (using input_state: *Input_State, glyphs: Glyphs, start: s64, end: s64) {
+        if glyphs.array.count > 0 {
+            start_byte := glyph_index_to_byte_index(glyphs, start);
+            end_byte   := glyph_index_to_byte_index(glyphs, end);
+            if start_byte != end_byte {
+                bytes := end_byte - start_byte;
+                for i: start_byte..contents.count - bytes - 1 {
+                    contents[i] = contents[i + bytes];
+                }
+                contents.count  -= bytes;
+                cursor           = min(cursor, start);
+                selection_anchor = -1;
+            }
+        }
+    }
+
     {
         //
         // === keyboard deletion and cursor movement handling ===
         //
-        previous_cursor := cursor;
-        using use_textual_keyboard_navigation(glyphs.array, *cursor);
-        if     previous_cursor != cursor
-            && selection_anchor == -1
-            && (is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT)) {
-            selection_anchor = previous_cursor;
-        } else if previous_cursor != cursor && !is_key_held(.SHIFT_LEFT) && !is_key_held(.SHIFT_RIGHT) {
-            selection_anchor = -1;
+
+        // Limitations:
+        // - does not support word boundaries for non latin languages (chinese, japenese, arabic, hebrew, etc.);
+        // - does not support multiline text.
+        previous := max(cursor - 1, 0);
+        next     := min(cursor + 1, glyphs.array.count);
+        by_word  := false;
+        #if OS == .MACOS {
+            by_word = by_word || is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
+        }
+        #if OS == .LINUX || OS == .WINDOWS {
+            by_word = by_word || is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
+        }
+        by_line := false;
+        #if OS == .MACOS {
+            if is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT) {
+                by_line = true;
+            }
+        }
+        if by_word {
+            previous = previous_word_boundary(glyphs.array, cursor);
+            next     = next_word_boundary(glyphs.array, cursor);
+        }
+        if by_line {
+            // TODO: to support multiline text here, we need this to go to the start of the current line,
+            // not to the start of the entire piece of text.
+            previous = 0;
+            // TODO: to support multiline text here, we need this to go to the end of the current line,
+            // not to the start of the entire piece of text.
+            next = glyphs.array.count;
+        }
+        // with selection:
+        // - arrow        -> disables selection, DOESNT move the cursor
+        // - ctrl + arrow -> disables selection, MOVES the cursor
+        if on_key_down(.ARROW_LEFT, true) {
+            if     ((is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT)) && selection_anchor != -1)
+                || by_line
+                || by_word
+                || selection_anchor == -1 {
+                cursor = previous;
+            }
+            if selection_anchor != -1 && !is_key_held(.SHIFT_LEFT) && !is_key_held(.SHIFT_RIGHT) {
+                selection_anchor = -1;
+            }
+        } else if on_key_down(.ARROW_RIGHT, true) {
+            if     ((is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT)) && selection_anchor != -1)
+                || by_line
+                || by_word
+                || selection_anchor == -1 {
+                cursor = next;
+            }
+            if selection_anchor != -1 && !is_key_held(.SHIFT_LEFT) && !is_key_held(.SHIFT_RIGHT) {
+                selection_anchor = -1;
+            }
+        } else if on_key_down(.HOME) {
+            // TODO: to support multiline text here, we need this to go to the start of the current line,
+            // not to the start of the entire piece of text.
+            cursor = 0;
+        } else if on_key_down(.END) {
+            // TODO: to support multiline text here, we need this to go to the end of the current line,
+            // not to the start of the entire piece of text.
+            cursor = glyphs.array.count;
+        }
+
+        if (is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT)) && on_key_down(.A) {
+            selection_anchor = 0;
+            cursor = glyphs.array.count;
         }
 
         removal_start, removal_end := cursor;
@@ -604,22 +641,10 @@ use_input :: (using input_state:      *Input_State,
         if (on_key_down(.BACKSPACE, true) || on_key_down(.DELETE, true)) && selection_anchor != -1 {
             removal_start    = min(cursor, selection_anchor);
             removal_end      = max(cursor, selection_anchor);
-            selection_anchor = -1;
         }
 
-        if glyphs.array.count > 0 && removal_start != removal_end {
-            removal_start_byte, removal_end_byte := 0;
-            if removal_start < glyphs.array.count then removal_start_byte = glyphs.array[removal_start].index_into_original_text;
-            else                                       removal_start_byte = peek(glyphs.array).index_into_original_text + 1;
-            if removal_end < glyphs.array.count   then removal_end_byte   = glyphs.array[removal_end].index_into_original_text;
-            else                                       removal_end_byte   = peek(glyphs.array).index_into_original_text + 1;
-
-            removed_bytes = removal_end_byte - removal_start_byte;
-            for i: removal_start_byte..contents.count - removed_bytes - 1 {
-                contents[i] = contents[i + removed_bytes];
-            }
-            contents.count -= removed_bytes;
-            cursor          = min(cursor, removal_start_byte);
+        if glyphs.array.count > 0 {
+            delete(input_state, glyphs, removal_start, removal_end);
         }
     }
 
@@ -635,28 +660,26 @@ use_input :: (using input_state:      *Input_State,
         }
         if should_paste {
             clipboard_text := get_clipboard_text();
-            if clipboard_text.count > 0 {
-                append(input_state, clipboard_text, input_character_filter);
+            if glyphs.array.count > 0 && selection_anchor != -1 {
+                selection_start := min(cursor, selection_anchor);
+                selection_end   := max(cursor, selection_anchor);
+                // replace the selection with what is being pasted
+                delete(input_state, glyphs, selection_start, selection_end);
             }
+            if clipboard_text.count > 0 then append(input_state, glyphs, clipboard_text, input_character_filter);
         }
 
-        if selection_anchor != 1 {
+        if glyphs.array.count > 0 && selection_anchor != 1 {
             should_copy := false;
-            #if OS == .MACOS {
-                should_copy = (is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT)) && on_key_down(.C);
-            } else {
-                should_copy = is_key_held(.CONTROL_LEFT) && on_key_down(.C);
-            }
+            #if OS == .MACOS then should_copy = (is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT)) && on_key_down(.C);
+            else                  should_copy = is_key_held(.CONTROL_LEFT) && on_key_down(.C);
             if should_copy {
-                start := min(cursor, selection_anchor);
-                end   := max(cursor, selection_anchor);
-                start_byte, end_byte := 0;
-                if start < glyphs.array.count then start_byte = glyphs.array[start].index_into_original_text;
-                else                               start_byte = peek(glyphs.array).index_into_original_text + 1;
-                if end < glyphs.array.count   then end_byte   = glyphs.array[end].index_into_original_text;
-                else                               end_byte   = peek(glyphs.array).index_into_original_text + 1;
+                selection_start      := min(cursor, selection_anchor);
+                selection_end        := max(cursor, selection_anchor);
+                selection_start_byte := glyph_index_to_byte_index(glyphs, selection_start);
+                selection_end_byte   := glyph_index_to_byte_index(glyphs, selection_end);
 
-                copy_to_clipboard(to_string(contents.data + start_byte, end_byte));
+                copy_to_clipboard(to_string(contents.data + selection_start_byte, selection_end_byte));
             }
         }
     }
