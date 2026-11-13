@@ -470,10 +470,42 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
         }));
     }
 } @component
+Input_Edit :: struct {
+    position:                s64;
+    deleted_text_start:      s64;
+    deleted_text_end:        s64;
+    inserted_text_start:     s64;
+    inserted_text_end:       s64;
+    // there's never a selection after an edit
+    selection_anchor_before: s64;
+    // the cursor_after is always position + inserted_text.count
+    cursor_before:           s64;
+}
 Input_State :: struct {
-    contents: [..]u8;
-    cursor: s64;
-    selection_anchor: s64 = -1;
+    value:            [..]u8;
+    deleted_value:    [..]u8;
+    undo_history:     [..]Input_Edit;
+    redo_history:     [..]Input_Edit;
+    cursor:           s64;
+    selection_anchor: s64            = -1;
+}
+use_input_state :: (initial_value := "", initial_cursor := 0, initial_selection_anchor := -1) -> *Input_State {
+    thing, first_frame := state(Input_State.{
+        cursor           = initial_cursor,
+        selection_anchor = initial_selection_anchor,
+    });
+    allocator            := node_pool();
+    thing.value.allocator = allocator;
+    if first_frame && initial_value.count > 0 {
+        initial_bytes: []u8 = ---;
+        initial_bytes.data  = initial_value.data;
+        initial_bytes.count = initial_value.count;
+        array_add(*thing.value, ..initial_bytes);
+    }
+    thing.deleted_value.allocator = allocator;
+    thing.undo_history.allocator  = allocator;
+    thing.redo_history.allocator  = allocator;
+    return thing;
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - insertion should change the cursor by glyph indices not bytes
@@ -482,21 +514,29 @@ Input_State :: struct {
 use_input :: (using input_state:      *Input_State,
               text_node_index:        s64,
               input_character_filter: #type (input: u8) -> bool = null) {
+    // TOOD: clamp the cursor and selection_anchor based on the current contents of the input,
+    // since the user of this API might have changed it at some frame imperatively and that
+    // could cause those two numbers to go stale.
 
     glyph_index_to_byte_index :: (glyphs: Glyphs, index: s64) -> s64 {
         if index < glyphs.array.count then return glyphs.array[index].index_into_original_text;
         else                               return peek(glyphs.array).index_into_original_text + 1;
     }
+    // imagine the user wants to manipualte the input's value, how would they do it without breaking things?
+    // ideally we should expose these functions with a good API to the user.
+    //
+    // we're already actually using equivalents to this with the buttons that add and remove the contents
+    // from the calculactor
     delete :: (using input_state: *Input_State, glyphs: Glyphs, a: s64, b: s64) {
         selection_anchor = -1;
         if glyphs.array.count > 0 {
             start      := min(a, b);
             start_byte := glyph_index_to_byte_index(glyphs, start);
             bytes      := glyph_index_to_byte_index(glyphs, max(a, b)) - start_byte;
-            for i: start_byte..contents.count - bytes - 1 {
-                contents[i] = contents[i + bytes];
+            for i: start_byte..value.count - bytes - 1 {
+                value[i] = value[i + bytes];
             }
-            contents.count -= bytes;
+            value.count -= bytes;
             cursor          = min(cursor, start);
         }
     }
@@ -515,7 +555,7 @@ use_input :: (using input_state:      *Input_State,
                 // this makes sure that we only delete and remove the selection if there's at least one
                 // character to insert
                 if inserted == 0 && selection_anchor != -1 then delete(input_state, glyphs, cursor, selection_anchor);
-                array_insert_at(*contents, it, insert_at + inserted);
+                array_insert_at(*value, it, insert_at + inserted);
                 inserted += 1;
             }
         }
@@ -584,13 +624,13 @@ use_input :: (using input_state:      *Input_State,
     if command && on_key_down(.C) && selection_anchor != -1 && glyphs.array.count > 0 {
         start_byte := glyph_index_to_byte_index(glyphs, min(cursor, selection_anchor));
         end_byte   := glyph_index_to_byte_index(glyphs, max(cursor, selection_anchor));
-        copy_to_clipboard(to_string(contents.data + start_byte, end_byte - start_byte));
+        copy_to_clipboard(to_string(value.data + start_byte, end_byte - start_byte));
     }
 
     if command && on_key_down(.X) && selection_anchor != -1 && glyphs.array.count > 0 {
         start_byte := glyph_index_to_byte_index(glyphs, min(cursor, selection_anchor));
         end_byte   := glyph_index_to_byte_index(glyphs, max(cursor, selection_anchor));
-        copy_to_clipboard(to_string(contents.data + start_byte, end_byte - start_byte));
+        copy_to_clipboard(to_string(value.data + start_byte, end_byte - start_byte));
         delete(input_state, glyphs, cursor, selection_anchor);
         selection_anchor = -1;
     }
@@ -668,7 +708,7 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         scrolling_state := state(Scrolling_State);
 
         text_node_index := text(Style.{ z_index = 2, },
-                                to_string(input_state.contents.data, input_state.contents.count));
+                                to_string(input_state.value.data, input_state.value.count));
         Caret(Style.{}, input_state, scrolling_state.effective_offset.x, text_node_index);
         // TODO: as the user types, this should scroll following the cursor
         use_input(input_state, text_node_index, (input: u8) -> bool {
@@ -738,12 +778,7 @@ App :: () {
     evaluation_success := state(false);
     result             := state(float64);
 
-    input_state, first_frame := state(Input_State);
-    // TODO: find some way that this allocator could be set automatically too
-    input_state.contents.allocator = node_pool();
-    if first_frame {
-        array_add(*input_state.contents, #char "1", #char "2", #char "+", #char "3");
-    }
+    input_state := use_input_state();
 
     element(Style.{
         direction  = .VERTICAL,
@@ -753,7 +788,7 @@ App :: () {
     }, #code {
         Input(input_state, #code {
             nodes: [..]Expression_Node;
-            evaluation_success.* = parse_expression(to_string(input_state.contents.data, input_state.contents.count), *nodes) == .OK;
+            evaluation_success.* = parse_expression(to_string(input_state.value.data, input_state.value.count), *nodes) == .OK;
             if evaluation_success.* {
                 evaluation, success := evaluate(nodes);
                 result.*             = evaluation;
@@ -797,121 +832,121 @@ App :: () {
             using input_state;
             Row(#code {
                 Column(#code { if Button("C", .FUNCTION) {
-                    contents.count   = 0;
+                    value.count   = 0;
                     cursor           = 0;
                     selection_anchor = -1;
                     // there's nothing to evaluate anymore, and the result is only updated when the evaluation succeeds
                     result.* = 0;
                 } }, span = 2);
                 Column(#code { if Button("⌫", .FUNCTION) {
-                    remove_last(*contents);
-                    cursor           = contents.count;
+                    remove_last(*value);
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } }, span = 2);
             });
             Row(#code {
                 Column(#code { if Button("(", .FUNCTION) {
-                    array_add(*contents, #char "(");
-                    cursor           = contents.count;
+                    array_add(*value, #char "(");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button(")", .FUNCTION) {
-                    array_add(*contents, #char ")");
-                    cursor           = contents.count;
+                    array_add(*value, #char ")");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("+/-", .FUNCTION) {
-                    if reverse_number_sign(*contents) {
-                        cursor           = contents.count;
+                    if reverse_number_sign(*value) {
+                        cursor           = value.count;
                         selection_anchor = -1;
                     }
                 } });
                 Column(#code { if Button("^", .OPERATOR) {
-                    array_add(*contents, #char " ", #char "^", #char " ");
-                    cursor           = contents.count;
+                    array_add(*value, #char " ", #char "^", #char " ");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
             });
             Row(#code {
                 Column(#code { if Button("7") {
-                    array_add(*input_state.contents, #char "7");
-                    cursor           = contents.count;
+                    array_add(*input_state.value, #char "7");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("8") {
-                    array_add(*contents, #char "8");
-                    cursor           = contents.count;
+                    array_add(*value, #char "8");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("9") {
-                    array_add(*contents, #char "9");
-                    cursor           = contents.count;
+                    array_add(*value, #char "9");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("÷", .OPERATOR) {
-                    array_add(*contents, #char " ", #char "/", #char " ");
-                    cursor           = contents.count;
+                    array_add(*value, #char " ", #char "/", #char " ");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
             });
             Row(#code {
                 Column(#code { if Button("4") {
-                    array_add(*contents, #char "4");
-                    cursor           = contents.count;
+                    array_add(*value, #char "4");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("5") {
-                    array_add(*contents, #char "5");
-                    cursor           = contents.count;
+                    array_add(*value, #char "5");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("6") {
-                    array_add(*contents, #char "6");
-                    cursor           = contents.count;
+                    array_add(*value, #char "6");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("×", .OPERATOR) {
-                    array_add(*contents, #char " ", #char "*", #char " ");
-                    cursor           = contents.count;
+                    array_add(*value, #char " ", #char "*", #char " ");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
             });
             Row(#code {
                 Column(#code { if Button("1") {
-                    array_add(*contents, #char "1");
-                    cursor           = contents.count;
+                    array_add(*value, #char "1");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("2") {
-                    array_add(*contents, #char "2");
-                    cursor           = contents.count;
+                    array_add(*value, #char "2");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("3") {
-                    array_add(*contents, #char "3");
-                    cursor           = contents.count;
+                    array_add(*value, #char "3");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("+", .OPERATOR) {
-                    array_add(*contents, #char " ", #char "+", #char " ");
-                    cursor           = contents.count;
+                    array_add(*value, #char " ", #char "+", #char " ");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
             });
             Row(#code {
                 Column(#code { if Button("0") {
-                    array_add(*contents, #char "0");
-                    cursor           = contents.count;
+                    array_add(*value, #char "0");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } }, span = 2);
                 Column(#code { if Button(".") {
-                    array_add(*contents, #char ".");
-                    cursor           = contents.count;
+                    array_add(*value, #char ".");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
                 Column(#code { if Button("-", .OPERATOR) {
-                    array_add(*contents, #char " ", #char "-", #char " ");
-                    cursor           = contents.count;
+                    array_add(*value, #char " ", #char "-", #char " ");
+                    cursor           = value.count;
                     selection_anchor = -1;
                 } });
             });

@@ -618,7 +618,7 @@ main :: () {
               expected = "12345", expected_cursor = 4, expected_anchor = 1},
         ] {
             input_state: Calculator.Input_State;
-            array_add(*input_state.contents, ..cast([]u8) it.contents);
+            array_add(*input_state.value, ..cast([]u8) it.contents);
             input_state.cursor           = it.cursor;
             input_state.selection_anchor = it.anchor;
 
@@ -666,7 +666,7 @@ main :: () {
                 memset(window.keyboard_state.held.data, 0, size_of(type_of(window.keyboard_state.held)));
             }
 
-            contents := to_string(input_state.contents.data, input_state.contents.count);
+            contents := to_string(input_state.value.data, input_state.value.count);
             assert(
                 contents == it.expected && input_state.cursor == it.expected_cursor && input_state.selection_anchor == it.expected_anchor,
                 "%: got \"%\" cursor=% anchor=%, expected \"%\" cursor=% anchor=%",
