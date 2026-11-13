@@ -616,15 +616,17 @@ use_input :: (using input_state:      *Input_State,
             // TODO: to support multiline text here, we need this to go to the start of the current line,
             // not to the start of the entire piece of text.
             cursor = 0;
+            if !shift then selection_anchor = -1;
         } else if on_key_down(.END) {
             // TODO: to support multiline text here, we need this to go to the end of the current line,
             // not to the start of the entire piece of text.
             cursor = glyphs.array.count;
+            if !shift then selection_anchor = -1;
         }
 
         if command && on_key_down(.A) {
             selection_anchor = 0;
-            cursor = glyphs.array.count;
+            cursor           = glyphs.array.count;
         }
 
         backspace := on_key_down(.BACKSPACE, true);
@@ -670,8 +672,9 @@ use_input :: (using input_state:      *Input_State,
     }
     if on_click() {
         mouse_glyph := use_glyph_closest_to(text_node_index, get_mouse_position());
-        if mouse_glyph != -1 then cursor           = mouse_glyph;
-        if !shift            then selection_anchor = -1;
+        if shift && selection_anchor == -1 then selection_anchor = cursor;
+        if mouse_glyph != -1 then cursor                         = mouse_glyph;
+        if !shift selection_anchor                               = -1;
     }
     if on_key_down(.ESCAPE) then selection_anchor = -1;
 } @hook
