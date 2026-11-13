@@ -3680,6 +3680,7 @@ Glyph :: struct {
     index_into_original_text: s64;
     utf8: kbts_encode_utf8;
     starts_word: bool;
+    can_wrap_before: bool;
 
     // all of these are in points units, that means they do not account for the font size, but they do account for the font weight.
     position: Vector2;
@@ -3871,7 +3872,8 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
             utf8: string;
             utf8.data = utf8_encoded.Encoded.data;
             utf8.count = utf8_encoded.EncodedLength;
-            is_linebreak := starts_with(utf8, "\n");
+            is_linebreak    := starts_with(utf8, "\n");
+            can_wrap_before := (shape_codepoint.BreakFlags & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_LINE_SOFT) != 0;
             if is_linebreak {
                 advance.x = -pen.x;
                 advance.y += glyphs.line_height;
@@ -3885,18 +3887,18 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
                 glyph.utf8 = utf8_encoded;
                 glyph.index_into_original_text = shape_codepoint.UserId;
                 glyph.starts_word = (shape_codepoint.BreakFlags & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_WORD) != 0;
+                glyph.can_wrap_before = can_wrap_before;
                 array_add(*glyphs.array, glyph);
             }
 
             pen += advance;
             glyphs.max_size.x = max(glyphs.max_size.x, pen.x);
             if text_wrapping == .WORD {
-                if starts_with(utf8, " ") || is_linebreak {
+                if can_wrap_before || is_linebreak {
                     word_advance = Vector2.{};
                     glyphs.max_size.y += glyphs.line_height;
-                } else {
-                    word_advance += advance;
                 }
+                if !starts_with(utf8, " ") && !is_linebreak then word_advance += advance;
                 glyphs.min_size.x = max(glyphs.min_size.x, word_advance.x);
             } else if text_wrapping == .CHARACTER {
                 glyphs.min_size.x = max(glyphs.min_size.x, advance.x);
@@ -4645,11 +4647,7 @@ layout :: () {
                                 pen += glyph.advance;
                             }
                         case .WORD;
-                            Space :: struct {
-                                index: s64 = -1;
-                                position: Vector2;
-                            }
-                            last_space: Space;
+                            last_break: s64 = -1;
                             for *glyph: array {
                                 while break_cursor < pre_break_indices.count &&
                                 pre_break_indices[break_cursor] == it_index {
@@ -4663,37 +4661,33 @@ layout :: () {
                                     line_start_index = it_index;
                                     pen.x = 0.0;
                                     pen.y += line_height;
-                                    last_space = Space.{};
+                                    last_break = -1;
                                 }
 
-                                if pen.x + glyph.advance.x > line_end && last_space.index != -1 {
-                                    first_word_glyph := array[last_space.index + 1];
+                                if glyph.can_wrap_before && it_index > line_start_index then last_break = it_index;
+
+                                if pen.x + glyph.advance.x > line_end && last_break != -1 {
+                                    first_word_glyph := array[last_break];
                                     array_add(*lines, Line.{
                                         start = line_start_index,
-                                        end = last_space.index,
+                                        end = last_break - 1,
                                     });
-                                    line_start_index = last_space.index + 1;
+                                    line_start_index = last_break;
                                     pen.x = 0.0;
                                     pen.y += line_height;
 
-                                    for reverse_index: (last_space.index + 1)..(it_index - 1) {
+                                    for reverse_index: last_break..(it_index - 1) {
                                         reverse_glyph := *array[reverse_index];
                                         reverse_glyph.position.x -= first_word_glyph.position.x - base.x;
                                         reverse_glyph.position.y += line_height;
 
                                         pen += reverse_glyph.advance;
                                     }
-                                    last_space = Space.{};
+                                    last_break = -1;
                                 }
 
                                 glyph.position = base + pen + glyph.offset;
                                 pen += glyph.advance;
-                                if starts_with(to_string(glyph.utf8.Encoded), " ") {
-                                    last_space = Space.{
-                                        index = it_index,
-                                        position = glyph.position,
-                                    };
-                                }
                             }
                     }
 
