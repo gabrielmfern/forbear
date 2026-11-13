@@ -3798,8 +3798,8 @@ create_font :: (memory: string) -> Font {
 init_font :: (using font: *Font) {
     if context.forbear.freetype_library == null {
         FT_Init_FreeType(*context.forbear.freetype_library);
-        // TODO: implement subpixel font rendering and auto enable in lower DPI
-        // environments to match browser behavior.
+        // TODO: implement subpixel font rendering and auto enable in lower DPI environments to match browser behavior.
+        // TODO: implement rendering of glyphs with colors like emojis
         //
         // FT_Library_SetLcdFilter(freetype_library, FT_LCD_FILTER_DEFAULT);
     }
