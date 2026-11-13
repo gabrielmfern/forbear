@@ -3153,15 +3153,15 @@ is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
 get_scroll_delta :: () -> Vector2 {
     return context.forbear.window.mouse_state.scroll_delta;
 }
-on_mouse_down :: (button := Mouse_Button.LEFT) -> bool {
-    return context.forbear.window.mouse_state.pressed[button] && is_mouse_inside();
+on_mouse_down :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
+    return context.forbear.window.mouse_state.pressed[button] && (!check_inside || is_mouse_inside());
 }
-on_mouse_up :: (button := Mouse_Button.LEFT) -> bool {
-    return context.forbear.window.mouse_state.released[button] && is_mouse_inside();
+on_mouse_up :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
+    return context.forbear.window.mouse_state.released[button] && (!check_inside || is_mouse_inside());
 }
-on_click :: (button := Mouse_Button.LEFT) -> bool {
+on_click :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
     using context.forbear;
-    if on_mouse_up(button) {
+    if on_mouse_up(button, check_inside) {
         measurement, defined := get_measurement();
         assert(defined, "the measurement should exist if is_mouse_inside is true");
         press_position := window.mouse_state.press_position[button];
