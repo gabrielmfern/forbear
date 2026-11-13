@@ -2998,6 +2998,7 @@ Keyboard_State :: struct {
     events_buffer: [32 * 3]Key_Event;
     events: []Key_Event;
     held: [776]Key;
+    simulated: bool;
 };
 #scope_module
 init_keyboard_state :: (using state: *Keyboard_State) {
@@ -3336,55 +3337,57 @@ on_key_up :: (key: Key) -> bool {
 }
 is_key_held :: (key: Key) -> bool {
     using context.forbear;
-    #if OS == .WINDOWS {
-        vk: s32;
-        if key == {
-            case .SHIFT_LEFT;    vk = VK_LSHIFT;
-            case .SHIFT_RIGHT;   vk = VK_RSHIFT;
-            case .CONTROL_LEFT;  vk = VK_LCONTROL;
-            case .CONTROL_RIGHT; vk = VK_RCONTROL;
-            case .ALT_LEFT;      vk = VK_LMENU;
-            case .ALT_RIGHT;     vk = VK_RMENU;
-            case .SUPER_LEFT;    vk = VK_LWIN;
-            case .SUPER_RIGHT;   vk = VK_RWIN;
-        }
-        if vk != 0 {
-            return GetKeyState(vk) < 0;
-        }
-    } else #if OS == .MACOS {
-        if key >= .SHIFT_LEFT && key <= .SUPER_RIGHT {
-            current_flags: (*void, Selector) -> NSEventModifierFlags #c_call = xx objc_msgSend;
-            flags := current_flags(xx class(NSEvent), selector("modifierFlags"));
-            mask: NSEventModifierFlags;
+    if !window.keyboard_state.simulated {
+        #if OS == .WINDOWS {
+            vk: s32;
             if key == {
-                case .SHIFT_LEFT;    #through;
-                case .SHIFT_RIGHT;   mask = .NSEventModifierFlagShift;
-                case .CONTROL_LEFT;  #through;
-                case .CONTROL_RIGHT; mask = .NSEventModifierFlagControl;
-                case .ALT_LEFT;      #through;
-                case .ALT_RIGHT;     mask = .NSEventModifierFlagOption;
-                case .SUPER_LEFT;    #through;
-                case .SUPER_RIGHT;   mask = .NSEventModifierFlagCommand;
+                case .SHIFT_LEFT;    vk = VK_LSHIFT;
+                case .SHIFT_RIGHT;   vk = VK_RSHIFT;
+                case .CONTROL_LEFT;  vk = VK_LCONTROL;
+                case .CONTROL_RIGHT; vk = VK_RCONTROL;
+                case .ALT_LEFT;      vk = VK_LMENU;
+                case .ALT_RIGHT;     vk = VK_RMENU;
+                case .SUPER_LEFT;    vk = VK_LWIN;
+                case .SUPER_RIGHT;   vk = VK_RWIN;
             }
-            if !(flags & mask) {
-                return false;
+            if vk != 0 {
+                return GetKeyState(vk) < 0;
             }
-        }
-    } else #if OS == .LINUX {
-        if key == {
-            // TODO(depessimization): for all modifiers here we're lookgin them up by name when we should instead store the index of the modifier and just look it up
-            case .SHIFT_LEFT; #through;
-            case .SHIFT_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_SHIFT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-            case .ALT_LEFT; #through;
-            case .ALT_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-            case .CONTROL_LEFT; #through;
-            case .CONTROL_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-            case .SUPER_LEFT; #through;
-            case .SUPER_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+        } else #if OS == .MACOS {
+            if key >= .SHIFT_LEFT && key <= .SUPER_RIGHT {
+                current_flags: (*void, Selector) -> NSEventModifierFlags #c_call = xx objc_msgSend;
+                flags := current_flags(xx class(NSEvent), selector("modifierFlags"));
+                mask: NSEventModifierFlags;
+                if key == {
+                    case .SHIFT_LEFT;    #through;
+                    case .SHIFT_RIGHT;   mask = .NSEventModifierFlagShift;
+                    case .CONTROL_LEFT;  #through;
+                    case .CONTROL_RIGHT; mask = .NSEventModifierFlagControl;
+                    case .ALT_LEFT;      #through;
+                    case .ALT_RIGHT;     mask = .NSEventModifierFlagOption;
+                    case .SUPER_LEFT;    #through;
+                    case .SUPER_RIGHT;   mask = .NSEventModifierFlagCommand;
+                }
+                if !(flags & mask) {
+                    return false;
+                }
+            }
+        } else #if OS == .LINUX {
+            if key == {
+                // TODO(depessimization): for all modifiers here we're lookgin them up by name when we should instead store the index of the modifier and just look it up
+                case .SHIFT_LEFT; #through;
+                case .SHIFT_RIGHT;
+                    return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_SHIFT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+                case .ALT_LEFT; #through;
+                case .ALT_RIGHT;
+                    return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+                case .CONTROL_LEFT; #through;
+                case .CONTROL_RIGHT;
+                    return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+                case .SUPER_LEFT; #through;
+                case .SUPER_RIGHT;
+                    return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+            }
         }
     }
 
