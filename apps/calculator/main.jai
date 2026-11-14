@@ -959,15 +959,14 @@ App :: () {
         });
     });
 
-    // if on_key_down(.ESCAPE) {
-    //     window.running = false;
-    // }
-
     if on_key_down(.ENTER) {
-        // TODO: the copied result is gone in linux because the clipboard data remains in the process until another process requests for it,
-        // which means it's instantly lost as the window stops running.
-        copy_to_clipboard(tprint("%", result.*));
-        window.running = false;
+        stringified_result := tprint("%", result.*);
+        input_state.value.count = stringified_result.count;
+        memcpy(input_state.value.data, stringified_result.data, stringified_result.count);
+        input_state.cursor           = 0;
+        input_state.selection_anchor = -1;
+
+        copy_to_clipboard(stringified_result);
     }
 } @component
 

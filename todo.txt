@@ -4,7 +4,6 @@
     - find a way so that numbers typed in never loose precision
     - history of calculations, when reopening show the previous state of everything (history, expression being typed out, result)
     - add thousand commas automatically while the user types in or pastes
-    - make Enter put the result as the start of a new expression and copy it
     - support constants (pi, e, phi)
     - handle errors: show some indication of where there is an error, since the errors for a calculator are intuitive and shake the everything when there's an error
     - have a light and dark theme that is applied based on the system theme
