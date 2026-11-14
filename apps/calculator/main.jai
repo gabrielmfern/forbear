@@ -344,7 +344,7 @@ Button_Kind :: enum {
     FUNCTION;
     OPERATOR;
 }
-Button :: (contents: string, kind := Button_Kind.DIGIT) -> clicked: bool {
+Button :: (style: Style, contents: string, kind := Button_Kind.DIGIT) -> clicked: bool {
     background, hover, pressed: Vector4;
     if #complete kind == {
         case .DIGIT;    background, hover, pressed = BG_TERTIARY, BG_HOVER, BG_PRESSED;
@@ -353,7 +353,7 @@ Button :: (contents: string, kind := Button_Kind.DIGIT) -> clicked: bool {
     }
 
     clicked := false;
-    element(Style.{
+    element(overwrite(style, Style.{
         border_radius   = scaled(6.0),
         background      = color(background),
         color           = ifx kind == .OPERATOR then OP_TEXT else VECTOR4_NAN,
@@ -363,7 +363,7 @@ Button :: (contents: string, kind := Button_Kind.DIGIT) -> clicked: bool {
         width           = grow(),
         height          = grow(),
         cursor          = .POINTER,
-    }, #code {
+    }), #code {
         button := get_node();
         if is_mouse_inside() {
             button.style.background = color(hover);
@@ -815,14 +815,13 @@ App :: () {
             }
         });
 
-        // `span` is how many columns of the grid this one takes
-        Column :: (body: Code, span := 1.0) #expand {
-            // half of the gap on each side, so that two neighboring buttons end up a full gap apart
-            element(Style.{width = grow(span), height = grow(), padding = all(scaled(BUTTON_GAP / 2))}, body);
-        } @component
         Row :: (body: Code) #expand {
             element(Style.{width = grow(), height = grow()}, body);
         } @component
+
+        column_style :: (span := 1.0) -> Style {
+            return Style.{width = grow(span), height = grow(), margin = all(scaled(BUTTON_GAP / 2))};
+        }
 
         element(Style.{
             direction       = .VERTICAL,
@@ -833,124 +832,128 @@ App :: () {
         }, #code {
             using input_state;
             Row(#code {
-                Column(#code { if Button("C", .FUNCTION) {
+                if Button(column_style(2.0), "C", .FUNCTION) {
                     value.count   = 0;
                     cursor           = 0;
                     selection_anchor = -1;
                     // there's nothing to evaluate anymore, and the result is only updated when the evaluation succeeds
                     result.* = 0;
-                } }, span = 2);
-                Column(#code { if Button("⌫", .FUNCTION) {
+                }
+                if Button(column_style(2.0), "⌫", .FUNCTION) {
                     remove_last(*value);
                     cursor           = value.count;
                     selection_anchor = -1;
-                } }, span = 2);
+                }
             });
             Row(#code {
-                Column(#code { if Button("(", .FUNCTION) {
+                if Button(column_style(), "(", .FUNCTION) {
                     array_add(*value, #char "(");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button(")", .FUNCTION) {
+                }
+                if Button(column_style(), ")", .FUNCTION) {
                     array_add(*value, #char ")");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("+/-", .FUNCTION) {
+                }
+                if Button(column_style(), "+/-", .FUNCTION) {
                     if reverse_number_sign(*value) {
                         cursor           = value.count;
                         selection_anchor = -1;
                     }
-                } });
-                Column(#code { if Button("^", .OPERATOR) {
+                }
+                if Button(column_style(), "^", .OPERATOR) {
                     array_add(*value, #char " ", #char "^", #char " ");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
+                }
             });
             Row(#code {
-                Column(#code { if Button("7") {
+                if Button(column_style(), "7") {
                     array_add(*input_state.value, #char "7");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("8") {
+                }
+                if Button(column_style(), "8") {
                     array_add(*value, #char "8");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("9") {
+                }
+                if Button(column_style(), "9") {
                     array_add(*value, #char "9");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("÷", .OPERATOR) {
+                }
+                if Button(column_style(), "÷", .OPERATOR) {
                     array_add(*value, #char " ", #char "/", #char " ");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
+                }
             });
             Row(#code {
-                Column(#code { if Button("4") {
+                if Button(column_style(), "4") {
                     array_add(*value, #char "4");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("5") {
+                }
+                if Button(column_style(), "5") {
                     array_add(*value, #char "5");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("6") {
+                }
+                if Button(column_style(), "6") {
                     array_add(*value, #char "6");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("×", .OPERATOR) {
+                }
+                if Button(column_style(), "×", .OPERATOR) {
                     array_add(*value, #char " ", #char "*", #char " ");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
+                }
             });
             Row(#code {
-                Column(#code { if Button("1") {
+                if Button(column_style(), "1") {
                     array_add(*value, #char "1");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("2") {
+                }
+                if Button(column_style(), "2") {
                     array_add(*value, #char "2");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("3") {
+                }
+                if Button(column_style(), "3") {
                     array_add(*value, #char "3");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
-                Column(#code { if Button("+", .OPERATOR) {
+                }
+                if Button(column_style(), "+", .OPERATOR) {
                     array_add(*value, #char " ", #char "+", #char " ");
                     cursor           = value.count;
                     selection_anchor = -1;
-                } });
+                }
             });
             Row(#code {
-                Column(#code { if Button("0") {
-                    array_add(*value, #char "0");
-                    cursor           = value.count;
-                    selection_anchor = -1;
-                } }, span = 2);
-                Column(#code { if Button(".") {
-                    array_add(*value, #char ".");
-                    cursor           = value.count;
-                    selection_anchor = -1;
-                } });
-                Column(#code { if Button("-", .OPERATOR) {
-                    array_add(*value, #char " ", #char "-", #char " ");
-                    cursor           = value.count;
-                    selection_anchor = -1;
-                } });
+                Row(#code {
+                    if Button(column_style(), "0") {
+                        array_add(*value, #char "0");
+                        cursor           = value.count;
+                        selection_anchor = -1;
+                    }
+                });
+                Row(#code {
+                    if Button(column_style(), ".") {
+                        array_add(*value, #char ".");
+                        cursor           = value.count;
+                        selection_anchor = -1;
+                    }
+                    if Button(column_style(), "-", .OPERATOR) {
+                        array_add(*value, #char " ", #char "-", #char " ");
+                        cursor           = value.count;
+                        selection_anchor = -1;
+                    }
+                });
             });
         });
     });
