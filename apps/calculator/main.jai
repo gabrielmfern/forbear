@@ -353,7 +353,7 @@ Button :: (style: Style, contents: string, kind := Button_Kind.DIGIT) -> clicked
     }
 
     clicked := false;
-    element(overwrite(style, Style.{
+    element(overwrite(Style.{
         border_radius   = scaled(6.0),
         background      = color(background),
         color           = ifx kind == .OPERATOR then OP_TEXT else VECTOR4_NAN,
@@ -363,7 +363,7 @@ Button :: (style: Style, contents: string, kind := Button_Kind.DIGIT) -> clicked
         width           = grow(),
         height          = grow(),
         cursor          = .POINTER,
-    }), #code {
+    }, style), #code {
         button := get_node();
         if is_mouse_inside() {
             button.style.background = color(hover);
@@ -459,7 +459,7 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
         position -= scrolling_offset;
         position.x += input.style.padding.x.x;
         position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
-        element(overwrite(style, Style.{
+        element(overwrite(Style.{
             // TODO: we should pick the default selection color per operating system.
             // we can also query it by the opearting system, which sounds like the ideal solution.
             background = color(hex("#3399FF")),
@@ -467,7 +467,7 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
             placement = relative(position),
             width = fixed(width),
             height = fixed(line_height),
-        }));
+        }, style));
     }
 } @component
 Input_Edit :: struct {
@@ -683,7 +683,7 @@ Caret :: (
         // TODO: while typing, this blinking timer should reset
         blinking := cast(s64)Math.floor(seconds_since_init() * 2) % 2 != 1;
 
-        element(overwrite(style, Style.{
+        element(overwrite(Style.{
             placement  = relative(caret_position),
             background = ifx blinking then
                 color(hex("#FFFFFF"))
@@ -691,7 +691,7 @@ Caret :: (
                 color(TRANSPARENT),
             width  = fixed(scaled(1.0)),
             height = fixed(line_height),
-        }));
+        }, style));
     }
 } @component
 Input :: (input_state: *Input_State, body: Code) #expand {

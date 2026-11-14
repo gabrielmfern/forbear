@@ -3331,7 +3331,7 @@ Style :: struct {
     direction:       Direction = UNSET;
 };
 
-overwrite :: (overwriter: Style, overwritten: Style) -> Style {
+overwrite :: (overwritten: Style, overwriter: Style) -> Style {
     result := overwriter;
 
     if result.background.kind == xx UNSET  result.background = overwritten.background;
