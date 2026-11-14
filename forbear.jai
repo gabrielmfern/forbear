@@ -3280,8 +3280,8 @@ Style :: struct {
     line_height:   float         = FLOAT32_NAN;
     text_wrapping: Text_Wrapping = UNSET;
 
-    language:       Language       = .DONT_KNOW;
-    text_direction: Text_Direction = .DONT_KNOW;
+    language:       Language       = UNSET;
+    text_direction: Text_Direction = UNSET;
 
     cursor: Cursor = UNSET;
 
@@ -3321,14 +3321,14 @@ overwrite :: (overwriter: Style, overwritten: Style) -> Style {
 
     if isnan(result.shadow.blur_radius)  result.shadow = overwritten.shadow;
 
-    if result.font == null  result.font                          = overwritten.font;
-    if result.language == .DONT_KNOW result.language             = overwritten.language;
-    if result.text_direction == .DONT_KNOW result.text_direction = overwritten.text_direction;
-    if result.font_weight == 0  result.font_weight               = overwritten.font_weight;
-    if isnan(result.font_size)  result.font_size                 = overwritten.font_size;
-    if isnan(result.line_height)  result.line_height             = overwritten.line_height;
-    if result.text_wrapping == xx UNSET  result.text_wrapping    = overwritten.text_wrapping;
-    if result.cursor == xx UNSET  result.cursor                  = overwritten.cursor;
+    if result.font == null  result.font                        = overwritten.font;
+    if result.language == UNSET result.language                = overwritten.language;
+    if result.text_direction == UNSET result.text_direction    = overwritten.text_direction;
+    if result.font_weight == 0  result.font_weight             = overwritten.font_weight;
+    if isnan(result.font_size)  result.font_size               = overwritten.font_size;
+    if result.line_height.kind == xx UNSET  result.line_height = overwritten.line_height;
+    if result.text_wrapping == xx UNSET  result.text_wrapping  = overwritten.text_wrapping;
+    if result.cursor == xx UNSET  result.cursor                = overwritten.cursor;
 
     if result.overflow == xx UNSET  result.overflow        = overwritten.overflow;
     if result.placement.kind == xx UNSET  result.placement = overwritten.placement;
@@ -3366,8 +3366,8 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
     out.shadow = style.shadow;
 
     out.font           = ifx style.font == null then base.font else style.font;
-    out.language       = ifx style.language == .DONT_KNOW then base.language else style.language;
-    out.text_direction = ifx style.text_direction == .DONT_KNOW then base.text_direction else style.text_direction;
+    out.language       = ifx style.language == UNSET then base.language else style.language;
+    out.text_direction = ifx style.text_direction == UNSET then base.text_direction else style.text_direction;
     out.font_weight    = ifx style.font_weight == 0 then base.font_weight else style.font_weight;
     out.font_size      = ifx isnan(style.font_size) then base.font_size else style.font_size;
     out.line_height    = ifx isnan(style.line_height) then base.line_height else style.line_height;
@@ -4573,7 +4573,6 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, language: Language, di
                         null);
     defer kbts_ShapePopFont(ctx);
 
-    kbts_ShapeBegin(context.forbear.shaping_context, xx direction, xx language);
     kbts_ShapeUtf8(
         context.forbear.shaping_context,
         content.data,
