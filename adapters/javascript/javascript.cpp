@@ -20,14 +20,14 @@ enum JavascriptStyleField : uint8_t {
     BACKGROUND, COLOR, BORDER_RADIUS, BORDER_COLOR, BORDER_WIDTH, BORDER_STYLE,
     SHADOW, FONT, FONT_WEIGHT, FONT_SIZE, LINE_HEIGHT, TEXT_WRAPPING, CURSOR,
     OVERFLOW, PLACEMENT, Z_INDEX, MIN_WIDTH, MAX_WIDTH, WIDTH, MIN_HEIGHT,
-    MAX_HEIGHT, HEIGHT, TRANSLATE, PADDING, MARGIN, X_JUSTIFICATION,
+    MAX_HEIGHT, HEIGHT, TRANSLATE, CHILDREN_OFFSET, PADDING, MARGIN, X_JUSTIFICATION,
     Y_JUSTIFICATION, DIRECTION,
 };
 static const char* style_field_names[] = {
     "background", "color", "borderRadius", "borderColor", "borderWidth", "borderStyle",
     "shadow", "font", "fontWeight", "fontSize", "lineHeight", "textWrapping", "cursor",
     "overflow", "placement", "zIndex", "minWidth", "maxWidth", "width", "minHeight",
-    "maxHeight", "height", "translate", "padding", "margin", "xJustification", 
+    "maxHeight", "height", "translate", "childrenOffset", "padding", "margin", "xJustification", 
     "yJustification", "direction",
 };
 struct JavascriptRuntime {
@@ -1113,6 +1113,7 @@ extern "C" int64_t javascript_style_get_array_count(void* runtime_opaque, void* 
         case WIDTH:
         case HEIGHT:
         case TRANSLATE:
+        case CHILDREN_OFFSET:
         case PADDING:
         case MARGIN:
         {
@@ -1149,6 +1150,7 @@ extern "C" bool javascript_style_get_array_number(void* runtime_opaque, void* st
         case WIDTH:
         case HEIGHT:
         case TRANSLATE:
+        case CHILDREN_OFFSET:
         case PADDING:
         case MARGIN:
         {

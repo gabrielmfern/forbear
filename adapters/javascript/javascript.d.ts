@@ -64,6 +64,7 @@ interface Style {
     maxHeight?: number;
     height?: Sizing;
     translate?: Vector2;
+    childrenOffset?: Vector2;
     padding?: Sides;
     margin?: Sides;
     xJustification?: Alignment;

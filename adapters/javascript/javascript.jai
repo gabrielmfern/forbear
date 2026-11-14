@@ -88,7 +88,7 @@ Javascript_Style_Field :: enum u8 {
     BACKGROUND; COLOR; BORDER_RADIUS; BORDER_COLOR; BORDER_WIDTH; BORDER_STYLE;
     SHADOW; FONT; FONT_WEIGHT; FONT_SIZE; LINE_HEIGHT; TEXT_WRAPPING; CURSOR;
     OVERFLOW; PLACEMENT; Z_INDEX; MIN_WIDTH; MAX_WIDTH; WIDTH; MIN_HEIGHT;
-    MAX_HEIGHT; HEIGHT; TRANSLATE; PADDING; MARGIN; X_JUSTIFICATION;
+    MAX_HEIGHT; HEIGHT; TRANSLATE; CHILDREN_OFFSET; PADDING; MARGIN; X_JUSTIFICATION;
     Y_JUSTIFICATION; DIRECTION;
 };
 
@@ -198,6 +198,12 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
         javascript_style_get_array_number(adapter.runtime, js_style_object, .TRANSLATE, 0, *number) {
         result.translate.x = cast(float) number;
         if javascript_style_get_array_number(adapter.runtime, js_style_object, .TRANSLATE, 1, *number) result.translate.y = cast(float) number;
+    }
+
+    if javascript_style_get_array_count(adapter.runtime, js_style_object, .CHILDREN_OFFSET) == 2 &&
+        javascript_style_get_array_number(adapter.runtime, js_style_object, .CHILDREN_OFFSET, 0, *number) {
+        result.children_offset.x = cast(float) number;
+        if javascript_style_get_array_number(adapter.runtime, js_style_object, .CHILDREN_OFFSET, 1, *number) result.children_offset.y = cast(float) number;
     }
 
     if javascript_style_get_array_count(adapter.runtime, js_style_object, .PADDING) == 4 &&

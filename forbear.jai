@@ -3157,6 +3157,7 @@ Complete_Style :: struct {
     height: Sizing;
 
     translate: Vector2;
+    children_offset: Vector2;
 
     padding: Padding;
     margin: Margin;
@@ -3319,7 +3320,8 @@ Style :: struct {
     max_height: float  = FLOAT32_NAN;
     height:     Sizing = Sizing.{ kind = UNSET };
 
-    translate: Vector2 = VECTOR2_NAN;
+    translate:       Vector2 = VECTOR2_NAN;
+    children_offset: Vector2 = VECTOR2_NAN;
 
     padding: Padding = SIDES_NAN;
     margin:  Margin  = SIDES_NAN;
@@ -3362,7 +3364,8 @@ overwrite :: (overwriter: Style, overwritten: Style) -> Style {
     if isnan(result.max_height)  result.max_height   = overwritten.max_height;
     if result.height.kind == xx UNSET  result.height = overwritten.height;
 
-    if isnan(result.translate.x)  result.translate = overwritten.translate;
+    if isnan(result.translate.x)  result.translate             = overwritten.translate;
+    if isnan(result.children_offset.x)  result.children_offset = overwritten.children_offset;
 
     if isnan(result.padding.x.x)  result.padding = overwritten.padding;
     if isnan(result.margin.x.x)  result.margin   = overwritten.margin;
@@ -3408,6 +3411,7 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
     out.height          = ifx style.height.kind == xx UNSET      then Sizing.{ kind = .FIT } else style.height;
 
     out.translate       = ifx isnan(style.translate.x)           then make_vector2(0.0)      else style.translate;
+    out.children_offset = ifx isnan(style.children_offset.x)     then make_vector2(0.0)      else style.children_offset;
 
     out.padding         = ifx isnan(style.padding.x.x)           then all(0.0)               else style.padding;
     out.margin          = ifx isnan(style.margin.x.x)            then all(0.0)               else style.margin;
@@ -3444,12 +3448,7 @@ Node :: struct {
 
     style: Complete_Style;
 
-    content_size:    Vector2;
-    // TODO: should we have this? this feels like the wrong solution to the problem, there should be a user-accessible way of
-    // changing the offset of the children without a specific property for it
-    //
-    // Generally used for scrolling. This is added to the position of the children of this node
-    children_offset: Vector2;
+    content_size: Vector2;
 
     // Clip rect inherited from ancestors that have constrained size with overflowing children. Format: [x, y, width, height].
     // If NAN, no clipping is applied.
@@ -3672,7 +3671,6 @@ use_scrolling :: (using state: *Scrolling_State) {
         mass      = 1.0,
         current   = *effective_offset,
     });
-    node.children_offset = -effective_offset;
 } @hook
 // beware that this pointer might be come invalid if you define one more element
 get_node :: (node_index: s64) -> *Node {
@@ -5701,7 +5699,7 @@ layout :: () {
                             case .FLOW;
                                 margin := get(child.style.margin, direction);
                                 add(*pen, direction, margin.x);
-                                child.position = pen + child.style.translate + node.children_offset;
+                                child.position = pen + child.style.translate + node.style.children_offset;
                                 add(*pen, direction, get(child.size, direction) + margin.y);
                                 opposite_margin := get(child.style.margin, opposite_direction);
                                 set(*node.content_size, opposite_direction, max(

@@ -695,7 +695,8 @@ Caret :: (
     }
 } @component
 Input :: (input_state: *Input_State, body: Code) #expand {
-    viewport := get_viewport_size();
+    viewport        := get_viewport_size();
+    scrolling_state := state(Scrolling_State);
     element(Style.{
         background      = color(BG),
         padding         = in_line(bottom(top(scaled(10)), scaled(30)), scaled(5)),
@@ -704,9 +705,8 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         y_justification = .CENTER,
         font_size       = scaled(DIGITS_SIZE),
         width           = fixed(viewport.x),
+        children_offset = -scrolling_state.effective_offset,
     }, #code {
-        scrolling_state := state(Scrolling_State);
-
         text_node_index := text(Style.{ z_index = 2, },
                                 to_string(input_state.value.data, input_state.value.count));
         Caret(Style.{}, input_state, scrolling_state.effective_offset.x, text_node_index);
