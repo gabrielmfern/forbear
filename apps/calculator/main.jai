@@ -745,8 +745,10 @@ reverse_number_sign :: (text: *[..]u8) -> changed: bool {
         while before_minus >= 0 && text.*[before_minus] == #char " " {
             before_minus -= 1;
         }
-        is_sign := start > 0 && text.*[start - 1] == #char "-"
-                   && (before_minus < 0 || !(is_digit(text.*[before_minus]) || is_any(text.*[before_minus], ".)")));
+        is_sign :=
+               start > 0
+            && text.*[start - 1] == #char "-"
+            && (before_minus < 0 || !(is_digit(text.*[before_minus]) || is_any(text.*[before_minus], ".)")));
         if is_sign then array_ordered_remove_by_index(text, start - 1);
         else            array_insert_at(text, #char "-", start);
     }
