@@ -3778,7 +3778,7 @@ Font :: struct {
     memory: string;
 
     raster_face: FT_Face;
-    shaping_font: *kbts_font;
+    shaping_font: kbts_font;
     key: u16;
 
     // kept track of so that this can be set during kbts text shaping
@@ -3804,14 +3804,16 @@ init_font :: (using font: *Font) {
         // FT_Library_SetLcdFilter(freetype_library, FT_LCD_FILTER_DEFAULT);
     }
     if context.forbear.shaping_context == null {
+        // TODO(long term): include a custom allocator here
         context.forbear.shaping_context = kbts_CreateShapeContext(null, null);
     }
     FT_New_Memory_Face(context.forbear.freetype_library, memory.data, xx memory.count, 0, *raster_face);
-    // TODO: judege if we should support more than unicode here
+    // TODO(long term): support more than unicode here
     assert(raster_face.charmap.encoding == FT_Encoding.UNICODE);
     font.key = context.forbear.font_counter;
     context.forbear.font_counter += 1;
-    shaping_font = kbts_ShapePushFontFromMemory(context.forbear.shaping_context, memory.data, xx memory.count, 0);
+    shaping_font = kbts_FontFromMemory(memory.data, xx memory.count, 0, null, null);
+    assert(kbts_FontIsValid(*shaping_font) != 0);
 }
 Raster_Glyph :: struct {
     // might be null
@@ -3889,16 +3891,22 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
     glyphs.line_height = cast(float) font.raster_face.height;
     glyphs.ascent = cast(float) font.raster_face.ascender;
 
+    ctx    := context.forbear.shaping_context;
+    WGHT   : u32 : 0x77676874;
+    weight := kbts_variation.{ Tag = WGHT, Value = cast(float) font.weight };
+    kbts_ShapePushFont2(ctx,
+                        *font.shaping_font,
+                        *weight,
+                        ifx font.weight != U16_MAX then cast(s32)1 else cast(s32)0,
+                        null);
+    defer kbts_ShapePopFont(ctx);
+
     // TODO(next): pass the language and direction down as styles
     kbts_ShapeBegin(
         context.forbear.shaping_context,
         xx kbts_direction_enum.KBTS_DIRECTION_LTR,
         xx kbts_language_enum.KBTS_LANGUAGE_DONT_KNOW
     );
-    WGHT : u32 : 0x77676874;
-    if font.weight != U16_MAX {
-        kbts_ShapePushGlobalVariation(context.forbear.shaping_context, WGHT, cast(float) font.weight);
-    }
     kbts_ShapeUtf8(
         context.forbear.shaping_context,
         content.data,

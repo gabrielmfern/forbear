@@ -22,7 +22,6 @@
     - API to set the window to full screen
     - If the forbear progam is manipulated by another program on Windows, modifiers don't actually quite work (ctrl+v), for example
         - Raycast's emoji insertion is what I'm thinking of
-- text shaping is not handling multiple fonts
 - Support for font fallbacks when some unicode doesn't have a glyph in the font. This is the case for emojis, where you might want to fallback to Segoe UI Emoji or something like that.
 - Cache the text shaping, and the text wrapping
 - Add the glyph positions to a node's measurements
