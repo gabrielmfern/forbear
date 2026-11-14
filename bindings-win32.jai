@@ -1223,8 +1223,9 @@ kbts_shape_error_enum :: enum s32 {
     KBTS_SHAPE_ERROR_INVALID_FONT                   :: 1;
     KBTS_SHAPE_ERROR_GAVE_TEXT_BEFORE_CALLING_BEGIN :: 2;
     KBTS_SHAPE_ERROR_OUT_OF_MEMORY                  :: 3;
+    KBTS_SHAPE_ERROR_GENERATED_TOO_MANY_GLYPHS      :: 4;
 
-    KBTS_SHAPE_ERROR_COUNT                          :: 4;
+    KBTS_SHAPE_ERROR_COUNT                          :: 5;
 }
 
 kbts_allocator_op_kind :: u32;
@@ -1475,6 +1476,7 @@ kbts_unicode_flag_enum :: enum s32 {
     KBTS_UNICODE_FLAG_PART_OF_WORD            :: 16;
     KBTS_UNICODE_FLAG_DECIMAL_DIGIT           :: 32;
     KBTS_UNICODE_FLAG_NON_SPACING_MARK        :: 64;
+    KBTS_UNICODE_FLAG_RECOMPOSITION_RHS       :: 128;
 
     KBTS_UNICODE_FLAG_MIRRORED                :: 12;
 }
@@ -2503,9 +2505,6 @@ kbts_glyph :: struct {
 
     Config:                        *kbts_glyph_config;
 
-    // @Memory: We definitely don't need to carry this around for the entire shaping process.
-    Decomposition:                 u64;
-
     Classes:                       kbts_glyph_classes;
 
     Flags:                         kbts_glyph_flags;
@@ -2763,7 +2762,7 @@ kbts_PlaceShapeConfig2 :: (Font: *kbts_font, Script: kbts_script, Language: kbts
 kbts_PlaceShapeConfig :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, Memory: *void) -> *kbts_shape_config #foreign kb_text_shape;
 kbts_CreateShapeConfig2 :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, VariationVector: *float, Allocator: kbts_allocator_function, AllocatorData: *void, Uid: *kbts_uid) -> *kbts_shape_config #foreign kb_text_shape;
 kbts_CreateShapeConfig :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, Allocator: kbts_allocator_function, AllocatorData: *void) -> *kbts_shape_config #foreign kb_text_shape;
-
+kbts_ShapeConfigUid :: (Config: *kbts_shape_config, Uid: *kbts_uid) -> void #foreign kb_text_shape;
 kbts_DestroyShapeConfig :: (Config: *kbts_shape_config) -> void #foreign kb_text_shape;
 
 // A glyph_storage holds and recycles glyph data.
