@@ -20,9 +20,8 @@
         - we need to at least have cmd+q working
     - API to set the min and max sizes of the window
     - API to set the window to full screen
-- If the forbear progam is manipulated by another program on Windows, modifiers don't actually quite work (ctrl+v), for example
-    - Raycast's emoji insertion is what I'm thinking of
-- do something when the glyph atlas is full
+    - If the forbear progam is manipulated by another program on Windows, modifiers don't actually quite work (ctrl+v), for example
+        - Raycast's emoji insertion is what I'm thinking of
 - text shaping is not handling multiple fonts
 - Support for font fallbacks when some unicode doesn't have a glyph in the font. This is the case for emojis, where you might want to fallback to Segoe UI Emoji or something like that.
 - Cache the text shaping, and the text wrapping
@@ -36,16 +35,22 @@
     - border_style DASHED
 - Add a way to make placement an offset from any corner of the parent
 - gather all of the current pessimizations in the code
-- brainstorm a headless mode that allows for e2e testing
 - async code primitives
+- brainstorm how can there be a headless mode that allows for e2e testing
 - make javascript adapter support async code
     - when doing native code, one can simply use a thread for the async work, which doesn't stall frames. javascript
       can't really do this, so how can we let it do async work?
--  metal rendering instead of opengl for macOS
+- metal rendering instead of opengl for macOS
     - this is mainly because it looks like the fps is limimted to ~100, while the actual forbear work is 0.5ms which should lead to about 2000 and it all points to OpenGL not working very well which leads to the low FPs
 - directx rendering instead of opengl for Windows
 - use dynamically linked freetype on Linux, DirectWrite on Windows and CoreText on macOS
 - subpixel text rendering
+- colorful fonts rendering
+
+big problems that I don't have na answer too:
+- async
+- how to draw arbitrary things
+- context?
 
 possible programs I can make with forbear next:
 - Merged Twitch and YouTube chat viewer
