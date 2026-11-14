@@ -344,7 +344,7 @@ Button_Kind :: enum {
     FUNCTION;
     OPERATOR;
 }
-Button :: (style: Style, contents: string, kind := Button_Kind.DIGIT) -> clicked: bool {
+Button :: (style: Style, contents: string, is_pressed := false, kind := Button_Kind.DIGIT) -> clicked: bool {
     background, hover, pressed: Vector4;
     if #complete kind == {
         case .DIGIT;    background, hover, pressed = BG_TERTIARY, BG_HOVER, BG_PRESSED;
@@ -369,7 +369,7 @@ Button :: (style: Style, contents: string, kind := Button_Kind.DIGIT) -> clicked
             button.style.background = color(hover);
         }
         clicked = on_click();
-        if is_mouse_held() && is_mouse_inside() {
+        if (is_mouse_held() && is_mouse_inside()) || is_pressed {
             button.style.background = color(pressed);
         }
         text(contents);
@@ -832,103 +832,104 @@ App :: () {
         }, #code {
             using input_state;
             Row(#code {
-                if Button(column_style(2.0), "C", .FUNCTION) {
+                if Button(column_style(2.0), "C", kind = .FUNCTION) {
                     value.count   = 0;
                     cursor           = 0;
                     selection_anchor = -1;
                     // there's nothing to evaluate anymore, and the result is only updated when the evaluation succeeds
                     result.* = 0;
                 }
-                if Button(column_style(2.0), "⌫", .FUNCTION) {
+                if Button(column_style(2.0), "⌫", is_pressed = is_key_held(Key.BACKSPACE), kind = .FUNCTION) {
                     remove_last(*value);
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
             });
             Row(#code {
-                if Button(column_style(), "(", .FUNCTION) {
+                if Button(column_style(), "(", is_pressed = is_key_held(Key.PARENTHESIS_LEFT), kind = .FUNCTION) {
                     array_add(*value, #char "(");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), ")", .FUNCTION) {
+                if Button(column_style(), ")", is_pressed = is_key_held(Key.PARENTHESIS_RIGHT), kind = .FUNCTION) {
                     array_add(*value, #char ")");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "+/-", .FUNCTION) {
+                if Button(column_style(), "+/-", kind = .FUNCTION) {
                     if reverse_number_sign(*value) {
                         cursor           = value.count;
                         selection_anchor = -1;
                     }
                 }
-                if Button(column_style(), "^", .OPERATOR) {
+                if Button(column_style(), "^", is_pressed = is_key_held(Key.CARET), kind = .OPERATOR) {
                     array_add(*value, #char " ", #char "^", #char " ");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
             });
             Row(#code {
-                if Button(column_style(), "7") {
+                if Button(column_style(), "7", is_pressed = is_key_held(Key.DIGIT_7)) {
                     array_add(*input_state.value, #char "7");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "8") {
+                if Button(column_style(), "8", is_pressed = is_key_held(Key.DIGIT_8)) {
                     array_add(*value, #char "8");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "9") {
+                if Button(column_style(), "9", is_pressed = is_key_held(Key.DIGIT_9)) {
                     array_add(*value, #char "9");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "÷", .OPERATOR) {
+                if Button(column_style(), "÷", is_pressed = is_key_held(Key.PLUS), kind = .OPERATOR) {
                     array_add(*value, #char " ", #char "/", #char " ");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
             });
             Row(#code {
-                if Button(column_style(), "4") {
+                if Button(column_style(), "4", is_pressed = is_key_held(Key.DIGIT_4)) {
                     array_add(*value, #char "4");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "5") {
+                if Button(column_style(), "5", is_pressed = is_key_held(Key.DIGIT_5)) {
                     array_add(*value, #char "5");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "6") {
+                if Button(column_style(), "6", is_pressed = is_key_held(Key.DIGIT_6)) {
                     array_add(*value, #char "6");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "×", .OPERATOR) {
+                if Button(column_style(), "×",   is_pressed = is_key_held(Key.X)
+                                              || is_key_held(Key.ASTERISK), kind = .OPERATOR) {
                     array_add(*value, #char " ", #char "*", #char " ");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
             });
             Row(#code {
-                if Button(column_style(), "1") {
+                if Button(column_style(), "1", is_pressed = is_key_held(Key.DIGIT_1)) {
                     array_add(*value, #char "1");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "2") {
+                if Button(column_style(), "2", is_pressed = is_key_held(Key.DIGIT_2)) {
                     array_add(*value, #char "2");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "3") {
+                if Button(column_style(), "3", is_pressed = is_key_held(Key.DIGIT_3)) {
                     array_add(*value, #char "3");
                     cursor           = value.count;
                     selection_anchor = -1;
                 }
-                if Button(column_style(), "+", .OPERATOR) {
+                if Button(column_style(), "+", is_pressed = is_key_held(Key.PLUS), kind = .OPERATOR) {
                     array_add(*value, #char " ", #char "+", #char " ");
                     cursor           = value.count;
                     selection_anchor = -1;
@@ -936,19 +937,19 @@ App :: () {
             });
             Row(#code {
                 Row(#code {
-                    if Button(column_style(), "0") {
+                    if Button(column_style(), "0", is_pressed = is_key_held(Key.DIGIT_0)) {
                         array_add(*value, #char "0");
                         cursor           = value.count;
                         selection_anchor = -1;
                     }
                 });
                 Row(#code {
-                    if Button(column_style(), ".") {
+                    if Button(column_style(), ".", is_pressed = is_key_held(Key.PERIOD)) {
                         array_add(*value, #char ".");
                         cursor           = value.count;
                         selection_anchor = -1;
                     }
-                    if Button(column_style(), "-", .OPERATOR) {
+                    if Button(column_style(), "-", is_pressed = is_key_held(Key.MINUS), kind = .OPERATOR) {
                         array_add(*value, #char " ", #char "-", #char " ");
                         cursor           = value.count;
                         selection_anchor = -1;
