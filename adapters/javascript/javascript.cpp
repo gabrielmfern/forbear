@@ -43,6 +43,7 @@ struct JavascriptRuntime {
     v8::Global<v8::String> fit_string;
     v8::Global<v8::String> flow_string;
     v8::Global<v8::String> relative_string;
+    v8::Global<v8::String> percentage_string;
     v8::Global<v8::String> color_string;
     v8::Global<v8::String> gradient_string;
 };
@@ -159,6 +160,44 @@ void relative(const v8::FunctionCallbackInfo<v8::Value>& info) {
     } else {
         isolate->ThrowException(v8::Exception::TypeError(
             v8::String::NewFromUtf8Literal(isolate, "relative expects a Vector2")
+        ));
+    }
+}
+
+void line_height_percentage(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto line_height = v8::Array::New(isolate, 2);
+        line_height->Set(context, 0, runtime->percentage_string.Get(isolate)).Check();
+        line_height->Set(context, 1, info[0]).Check();
+        return_value.Set(line_height);
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "lineHeightPercentage expects a number, where 1 is 100% of the font's line height")
+        ));
+    }
+}
+
+void line_height_fixed(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto context = isolate->GetCurrentContext();
+    auto return_value = info.GetReturnValue();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() >= 1 && info[0]->IsNumber()) {
+        auto line_height = v8::Array::New(isolate, 2);
+        line_height->Set(context, 0, runtime->fixed_string.Get(isolate)).Check();
+        line_height->Set(context, 1, info[0]).Check();
+        return_value.Set(line_height);
+    } else {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "lineHeightFixed expects a number of pixels")
         ));
     }
 }
@@ -850,6 +889,7 @@ extern "C" void* javascript_init(
             runtime->grow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "grow"));
             runtime->flow_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "flow"));
             runtime->relative_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "relative"));
+            runtime->percentage_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "percentage"));
             runtime->color_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "color"));
             runtime->gradient_string.Reset(isolate, v8::String::NewFromUtf8Literal(isolate, "gradient"));
 
@@ -858,6 +898,8 @@ extern "C" void* javascript_init(
             define_global_function(runtime, runtime->grow_string.Get(isolate), grow);
             define_global_function(runtime, runtime->flow_string.Get(isolate), flow);
             define_global_function(runtime, runtime->relative_string.Get(isolate), relative);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "lineHeightPercentage"), line_height_percentage);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "lineHeightFixed"), line_height_fixed);
             define_global_function(runtime, runtime->color_string.Get(isolate), color);
             define_global_function(runtime, runtime->gradient_string.Get(isolate), gradient);
             define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "rgb"), rgb);

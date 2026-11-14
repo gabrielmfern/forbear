@@ -26,7 +26,6 @@
 - Cache the text shaping, and the text wrapping
 - Add the glyph positions to a node's measurements
 - implement the Style fields that are currently no-ops
-    - line_height: text layout uses the font's line height and ignores the style's
     - draw background gradient
     - draw background images
     - shadow

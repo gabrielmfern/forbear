@@ -122,9 +122,6 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
     if javascript_style_get_number(adapter.runtime, js_style_object, .FONT_SIZE, *number) {
         result.font_size = cast(float) number;
     }
-    if javascript_style_get_number(adapter.runtime, js_style_object, .LINE_HEIGHT, *number) {
-        result.line_height = cast(float) number;
-    }
     if javascript_style_get_number(adapter.runtime, js_style_object, .Z_INDEX, *number) {
         result.z_index = cast(u16) number;
     }
@@ -326,6 +323,19 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
         }
     }
 
+    string_count = javascript_style_get_array_string_length(adapter.runtime, js_style_object, .LINE_HEIGHT, 0);
+    if javascript_style_get_array_count(adapter.runtime, js_style_object, .LINE_HEIGHT) == 2 &&
+        string_count <= string_buffer.count &&
+        javascript_style_copy_array_string(adapter.runtime, js_style_object, .LINE_HEIGHT, 0, string_buffer.data, string_count) &&
+        javascript_style_get_array_number(adapter.runtime, js_style_object, .LINE_HEIGHT, 1, *number) {
+        value := string.{ data = string_buffer.data, count = string_count };
+        if value == "percentage" {
+            result.line_height = line_height_percentage(cast(float) number);
+        } else if value == "fixed" {
+            result.line_height = line_height_fixed(cast(float) number);
+        }
+    }
+
     background_count := javascript_style_get_array_count(adapter.runtime, js_style_object, .BACKGROUND);
     string_count = javascript_style_get_array_string_length(adapter.runtime, js_style_object, .BACKGROUND, 0);
     if background_count == 5 && string_count == 5 && javascript_style_copy_array_string(adapter.runtime, js_style_object, .BACKGROUND, 0, string_buffer.data, string_count) {
@@ -411,7 +421,7 @@ forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_d
         font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
         set_weight(node.style.font, node.style.font_weight);
         set_font_size(node.style.font, rounded_font_size);
-        node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
+        node.glyphs = shape_text(node.style, content);
         node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
         node.min_size = node.glyphs.min_size * font_units_to_point;
         node.max_size = node.glyphs.max_size * font_units_to_point;

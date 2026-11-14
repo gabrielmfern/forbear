@@ -2275,6 +2275,25 @@ grow :: (value := 1.0) -> Sizing {
     return Sizing.{ kind = .GROW, grow = value };
 }
 
+Line_Height :: struct {
+    Kind :: enum u8 {
+        PERCENTAGE; FIXED;
+    };
+
+    kind: Kind;
+
+    union {
+        percentage: float;
+        fixed: float;
+    }
+};
+line_height_percentage :: (value: float) -> Line_Height {
+    return Line_Height.{ kind = .PERCENTAGE, percentage = value };
+}
+line_height_fixed :: (value: float) -> Line_Height {
+    return Line_Height.{ kind = .FIXED, fixed = value };
+}
+
 Shadow :: struct {
     offset: Sides;
     blur_radius: float;
@@ -3122,7 +3141,7 @@ Complete_Style :: struct {
     // for different weights.
     font_weight: u16;
     font_size: float;
-    line_height: float;
+    line_height: Line_Height;
     text_wrapping: Text_Wrapping;
     cursor: Cursor;
 
@@ -3154,7 +3173,7 @@ Base_Style :: struct {
     color:          Vector4        = Vector4.{ 1.0, 1.0, 1.0, 1.0 };
     font_size:      float          = 16.0;
     font_weight:    u16            = 600;
-    line_height:    float          = 1.0;
+    line_height:    Line_Height    = Line_Height.{ kind = .PERCENTAGE, percentage = 1.0 };
     text_wrapping:  Text_Wrapping  = .WORD;
     cursor:         Cursor         = .DEFAULT;
 };
@@ -3277,7 +3296,7 @@ Style :: struct {
     font:          *Font;
     font_weight:   u16           = 0;
     font_size:     float         = FLOAT32_NAN;
-    line_height:   float         = FLOAT32_NAN;
+    line_height:   Line_Height   = Line_Height.{ kind = UNSET };
     text_wrapping: Text_Wrapping = UNSET;
 
     language:       Language       = UNSET;
@@ -3370,7 +3389,7 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
     out.text_direction = ifx style.text_direction == UNSET then base.text_direction else style.text_direction;
     out.font_weight    = ifx style.font_weight == 0 then base.font_weight else style.font_weight;
     out.font_size      = ifx isnan(style.font_size) then base.font_size else style.font_size;
-    out.line_height    = ifx isnan(style.line_height) then base.line_height else style.line_height;
+    out.line_height    = ifx style.line_height.kind == xx UNSET then base.line_height else style.line_height;
     out.text_wrapping  = ifx style.text_wrapping == xx UNSET then base.text_wrapping else style.text_wrapping;
     out.cursor         = ifx style.cursor == xx UNSET then base.cursor else style.cursor;
 
@@ -4557,11 +4576,19 @@ font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
     raster_glyph.pitch = glyph.bitmap.pitch;
     return raster_glyph;
 }
-shape_text :: (font: *Font, text_wrapping: Text_Wrapping, language: Language, direction: Text_Direction, content: string) -> Glyphs {
+shape_text :: (style: Complete_Style, content: string) -> Glyphs {
     // TODO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
+    font := style.font;
+    text_wrapping := style.text_wrapping;
     glyphs: Glyphs;
-    glyphs.line_height = cast(float) font.raster_face.height;
-    glyphs.ascent = cast(float) font.raster_face.ascender;
+    font_line_height := cast(float) font.raster_face.height;
+    if #complete style.line_height.kind == {
+        case .PERCENTAGE;
+            glyphs.line_height = font_line_height * style.line_height.percentage;
+        case .FIXED;
+            glyphs.line_height = style.line_height.fixed / get_font_units_to_pixel(font, style.font_size);
+    }
+    glyphs.ascent = cast(float) font.raster_face.ascender + (glyphs.line_height - font_line_height) / 2.0;
 
     ctx    := context.forbear.shaping_context;
     WGHT   : u32 : 0x77676874;
@@ -4573,6 +4600,7 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, language: Language, di
                         null);
     defer kbts_ShapePopFont(ctx);
 
+    kbts_ShapeBegin(context.forbear.shaping_context, xx style.text_direction, xx style.language);
     kbts_ShapeUtf8(
         context.forbear.shaping_context,
         content.data,
@@ -4653,11 +4681,7 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
         rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
         set_weight(node.style.font, node.style.font_weight);
         set_font_size(node.style.font, rounded_font_size);
-        node.glyphs = shape_text(node.style.font,
-                                 node.style.text_wrapping,
-                                 node.style.language,
-                                 node.style.text_direction,
-                                 content);
+        node.glyphs = shape_text(node.style, content);
         font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
         node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
         node.min_size = node.glyphs.min_size * font_units_to_point;

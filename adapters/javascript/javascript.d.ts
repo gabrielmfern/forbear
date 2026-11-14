@@ -2,6 +2,7 @@ type Vector2 = [x: number, y: number];
 type Vector4 = [r: number, g: number, b: number, a: number];
 type Sides = [left: number, right: number, top: number, bottom: number];
 type Sizing = [kind: "fit"] | [kind: "fixed" | "grow", value: number];
+type LineHeight = [kind: "percentage" | "fixed", value: number];
 type Placement = [kind: "flow"] | [kind: "fixed" | "relative", x: number, y: number];
 type GradientStop = [r: number, g: number, b: number, a: number, position: number];
 type Background =
@@ -49,7 +50,7 @@ interface Style {
     font?: Font;
     fontWeight?: number;
     fontSize?: number;
-    lineHeight?: number;
+    lineHeight?: LineHeight;
     textWrapping?: TextWrapping;
     cursor?: Cursor;
     overflow?: Overflow;
@@ -92,6 +93,9 @@ declare function fixed(value: Vector2): Placement;
 declare function grow(value?: number): Sizing;
 declare function flow(): Placement;
 declare function relative(value: Vector2): Placement;
+
+declare function lineHeightPercentage(value: number): LineHeight;
+declare function lineHeightFixed(value: number): LineHeight;
 
 declare function all(value: number): Sides;
 declare function inLine(value: number): Sides;
