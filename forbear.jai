@@ -2411,6 +2411,697 @@ Cursor :: enum u8 {
 
 Border_Style :: enum u32 { SOLID; DASHED; };
 
+Text_Direction :: enum u32 {
+    DONT_KNOW     :: kbts_direction_enum.KBTS_DIRECTION_DONT_KNOW;
+    LEFT_TO_RIGHT :: kbts_direction_enum.KBTS_DIRECTION_LTR;
+    RIGHT_TO_LEFT :: kbts_direction_enum.KBTS_DIRECTION_RTL;
+}
+Language :: enum u32 {
+    DONT_KNOW            :: kbts_language_enum.KBTS_LANGUAGE_DONT_KNOW;
+    A_HMAO               :: kbts_language_enum.KBTS_LANGUAGE_A_HMAO;
+    AARI                 :: kbts_language_enum.KBTS_LANGUAGE_AARI;
+    ABAZA                :: kbts_language_enum.KBTS_LANGUAGE_ABAZA;
+    ABKHAZIAN            :: kbts_language_enum.KBTS_LANGUAGE_ABKHAZIAN;
+    ACHI                 :: kbts_language_enum.KBTS_LANGUAGE_ACHI;
+    ACHOLI               :: kbts_language_enum.KBTS_LANGUAGE_ACHOLI;
+    ADYGHE               :: kbts_language_enum.KBTS_LANGUAGE_ADYGHE;
+    AFAR                 :: kbts_language_enum.KBTS_LANGUAGE_AFAR;
+    AFRIKAANS            :: kbts_language_enum.KBTS_LANGUAGE_AFRIKAANS;
+    AGAW                 :: kbts_language_enum.KBTS_LANGUAGE_AGAW;
+    AITON                :: kbts_language_enum.KBTS_LANGUAGE_AITON;
+    AKAN                 :: kbts_language_enum.KBTS_LANGUAGE_AKAN;
+    ALBANIAN             :: kbts_language_enum.KBTS_LANGUAGE_ALBANIAN;
+    ALSATIAN             :: kbts_language_enum.KBTS_LANGUAGE_ALSATIAN;
+    ALTAI                :: kbts_language_enum.KBTS_LANGUAGE_ALTAI;
+    ALUO                 :: kbts_language_enum.KBTS_LANGUAGE_ALUO;
+    AMERICAN_PHONETIC    :: kbts_language_enum.KBTS_LANGUAGE_AMERICAN_PHONETIC;
+    AMHARIC              :: kbts_language_enum.KBTS_LANGUAGE_AMHARIC;
+    ANGLO_SAXON          :: kbts_language_enum.KBTS_LANGUAGE_ANGLO_SAXON;
+    ARABIC               :: kbts_language_enum.KBTS_LANGUAGE_ARABIC;
+    ARAGONESE            :: kbts_language_enum.KBTS_LANGUAGE_ARAGONESE;
+    ARAKANESE            :: kbts_language_enum.KBTS_LANGUAGE_ARAKANESE;
+    ARAKWAL              :: kbts_language_enum.KBTS_LANGUAGE_ARAKWAL;
+    ARMENIAN             :: kbts_language_enum.KBTS_LANGUAGE_ARMENIAN;
+    ARMENIAN_EAST        :: kbts_language_enum.KBTS_LANGUAGE_ARMENIAN_EAST;
+    AROMANIAN            :: kbts_language_enum.KBTS_LANGUAGE_AROMANIAN;
+    ARPITAN              :: kbts_language_enum.KBTS_LANGUAGE_ARPITAN;
+    ASSAMESE             :: kbts_language_enum.KBTS_LANGUAGE_ASSAMESE;
+    ASTURIAN             :: kbts_language_enum.KBTS_LANGUAGE_ASTURIAN;
+    ATHAPASKAN           :: kbts_language_enum.KBTS_LANGUAGE_ATHAPASKAN;
+    ATSINA               :: kbts_language_enum.KBTS_LANGUAGE_ATSINA;
+    AVAR                 :: kbts_language_enum.KBTS_LANGUAGE_AVAR;
+    AVATIME              :: kbts_language_enum.KBTS_LANGUAGE_AVATIME;
+    AWADHI               :: kbts_language_enum.KBTS_LANGUAGE_AWADHI;
+    AYMARA               :: kbts_language_enum.KBTS_LANGUAGE_AYMARA;
+    AZERBAIJANI          :: kbts_language_enum.KBTS_LANGUAGE_AZERBAIJANI;
+    BADAGA               :: kbts_language_enum.KBTS_LANGUAGE_BADAGA;
+    BAGHELKHANDI         :: kbts_language_enum.KBTS_LANGUAGE_BAGHELKHANDI;
+    BAGRI                :: kbts_language_enum.KBTS_LANGUAGE_BAGRI;
+    BALANTE              :: kbts_language_enum.KBTS_LANGUAGE_BALANTE;
+    BALINESE             :: kbts_language_enum.KBTS_LANGUAGE_BALINESE;
+    BALKAR               :: kbts_language_enum.KBTS_LANGUAGE_BALKAR;
+    BALTI                :: kbts_language_enum.KBTS_LANGUAGE_BALTI;
+    BALUCHI              :: kbts_language_enum.KBTS_LANGUAGE_BALUCHI;
+    BAMBARA              :: kbts_language_enum.KBTS_LANGUAGE_BAMBARA;
+    BAMILEKE             :: kbts_language_enum.KBTS_LANGUAGE_BAMILEKE;
+    BANDA                :: kbts_language_enum.KBTS_LANGUAGE_BANDA;
+    BANDJALANG           :: kbts_language_enum.KBTS_LANGUAGE_BANDJALANG;
+    BANGLA               :: kbts_language_enum.KBTS_LANGUAGE_BANGLA;
+    BASHKIR              :: kbts_language_enum.KBTS_LANGUAGE_BASHKIR;
+    BASQUE               :: kbts_language_enum.KBTS_LANGUAGE_BASQUE;
+    BATAK                :: kbts_language_enum.KBTS_LANGUAGE_BATAK;
+    BATAK_ALAS_KLUET     :: kbts_language_enum.KBTS_LANGUAGE_BATAK_ALAS_KLUET;
+    BATAK_ANGKOLA        :: kbts_language_enum.KBTS_LANGUAGE_BATAK_ANGKOLA;
+    BATAK_DAIRI          :: kbts_language_enum.KBTS_LANGUAGE_BATAK_DAIRI;
+    BATAK_KARO           :: kbts_language_enum.KBTS_LANGUAGE_BATAK_KARO;
+    BATAK_MANDAILING     :: kbts_language_enum.KBTS_LANGUAGE_BATAK_MANDAILING;
+    BATAK_SIMALUNGUN     :: kbts_language_enum.KBTS_LANGUAGE_BATAK_SIMALUNGUN;
+    BATAK_TOBA           :: kbts_language_enum.KBTS_LANGUAGE_BATAK_TOBA;
+    BAULE                :: kbts_language_enum.KBTS_LANGUAGE_BAULE;
+    BAVARIAN             :: kbts_language_enum.KBTS_LANGUAGE_BAVARIAN;
+    BELARUSIAN           :: kbts_language_enum.KBTS_LANGUAGE_BELARUSIAN;
+    BEMBA                :: kbts_language_enum.KBTS_LANGUAGE_BEMBA;
+    BENCH                :: kbts_language_enum.KBTS_LANGUAGE_BENCH;
+    BERBER               :: kbts_language_enum.KBTS_LANGUAGE_BERBER;
+    BETI                 :: kbts_language_enum.KBTS_LANGUAGE_BETI;
+    BETTE_KURUMA         :: kbts_language_enum.KBTS_LANGUAGE_BETTE_KURUMA;
+    BHILI                :: kbts_language_enum.KBTS_LANGUAGE_BHILI;
+    BHOJPURI             :: kbts_language_enum.KBTS_LANGUAGE_BHOJPURI;
+    BHUTANESE            :: kbts_language_enum.KBTS_LANGUAGE_BHUTANESE;
+    BIBLE_CREE           :: kbts_language_enum.KBTS_LANGUAGE_BIBLE_CREE;
+    BIKOL                :: kbts_language_enum.KBTS_LANGUAGE_BIKOL;
+    BILEN                :: kbts_language_enum.KBTS_LANGUAGE_BILEN;
+    BISHNUPRIYA_MANIPURI :: kbts_language_enum.KBTS_LANGUAGE_BISHNUPRIYA_MANIPURI;
+    BISLAMA              :: kbts_language_enum.KBTS_LANGUAGE_BISLAMA;
+    BLACKFOOT            :: kbts_language_enum.KBTS_LANGUAGE_BLACKFOOT;
+    BODO                 :: kbts_language_enum.KBTS_LANGUAGE_BODO;
+    BOSNIAN              :: kbts_language_enum.KBTS_LANGUAGE_BOSNIAN;
+    BOUYEI               :: kbts_language_enum.KBTS_LANGUAGE_BOUYEI;
+    BRAHUI               :: kbts_language_enum.KBTS_LANGUAGE_BRAHUI;
+    BRAJ_BHASHA          :: kbts_language_enum.KBTS_LANGUAGE_BRAJ_BHASHA;
+    BRETON               :: kbts_language_enum.KBTS_LANGUAGE_BRETON;
+    BUGIS                :: kbts_language_enum.KBTS_LANGUAGE_BUGIS;
+    BULGARIAN            :: kbts_language_enum.KBTS_LANGUAGE_BULGARIAN;
+    BUMTHANGKHA          :: kbts_language_enum.KBTS_LANGUAGE_BUMTHANGKHA;
+    BURMESE              :: kbts_language_enum.KBTS_LANGUAGE_BURMESE;
+    BURUSHASKI           :: kbts_language_enum.KBTS_LANGUAGE_BURUSHASKI;
+    CAJUN_FRENCH         :: kbts_language_enum.KBTS_LANGUAGE_CAJUN_FRENCH;
+    CARRIER              :: kbts_language_enum.KBTS_LANGUAGE_CARRIER;
+    CATALAN              :: kbts_language_enum.KBTS_LANGUAGE_CATALAN;
+    CAYUGA               :: kbts_language_enum.KBTS_LANGUAGE_CAYUGA;
+    CEBUANO              :: kbts_language_enum.KBTS_LANGUAGE_CEBUANO;
+    CENTRAL_YUPIK        :: kbts_language_enum.KBTS_LANGUAGE_CENTRAL_YUPIK;
+    CHAHA_GURAGE         :: kbts_language_enum.KBTS_LANGUAGE_CHAHA_GURAGE;
+    CHAMORRO             :: kbts_language_enum.KBTS_LANGUAGE_CHAMORRO;
+    CHATTISGARHI         :: kbts_language_enum.KBTS_LANGUAGE_CHATTISGARHI;
+    CHECHEN              :: kbts_language_enum.KBTS_LANGUAGE_CHECHEN;
+    CHEROKEE             :: kbts_language_enum.KBTS_LANGUAGE_CHEROKEE;
+    CHEYENNE             :: kbts_language_enum.KBTS_LANGUAGE_CHEYENNE;
+    CHICHEWA             :: kbts_language_enum.KBTS_LANGUAGE_CHICHEWA;
+    CHIGA                :: kbts_language_enum.KBTS_LANGUAGE_CHIGA;
+    CHIMILA              :: kbts_language_enum.KBTS_LANGUAGE_CHIMILA;
+    CHIN                 :: kbts_language_enum.KBTS_LANGUAGE_CHIN;
+    CHINANTEC            :: kbts_language_enum.KBTS_LANGUAGE_CHINANTEC;
+    CHINESE_PHONETIC     :: kbts_language_enum.KBTS_LANGUAGE_CHINESE_PHONETIC;
+    CHINESE_SIMPLIFIED   :: kbts_language_enum.KBTS_LANGUAGE_CHINESE_SIMPLIFIED;
+    CHINESE_TRADITIONAL  :: kbts_language_enum.KBTS_LANGUAGE_CHINESE_TRADITIONAL;
+    CHINESE_TRADITIONAL_HONG_KONG :: kbts_language_enum.KBTS_LANGUAGE_CHINESE_TRADITIONAL_HONG_KONG;
+    CHINESE_TRADITIONAL_MACAO     :: kbts_language_enum.KBTS_LANGUAGE_CHINESE_TRADITIONAL_MACAO;
+    CHIPEWYAN                     :: kbts_language_enum.KBTS_LANGUAGE_CHIPEWYAN;
+    CHITTAGONIAN                  :: kbts_language_enum.KBTS_LANGUAGE_CHITTAGONIAN;
+    CHOCTAW                       :: kbts_language_enum.KBTS_LANGUAGE_CHOCTAW;
+    CHUKCHI                       :: kbts_language_enum.KBTS_LANGUAGE_CHUKCHI;
+    CHURCH_SLAVONIC               :: kbts_language_enum.KBTS_LANGUAGE_CHURCH_SLAVONIC;
+    CHUUKESE                      :: kbts_language_enum.KBTS_LANGUAGE_CHUUKESE;
+    CHUVASH                       :: kbts_language_enum.KBTS_LANGUAGE_CHUVASH;
+    COMORIAN                      :: kbts_language_enum.KBTS_LANGUAGE_COMORIAN;
+    COMOX                         :: kbts_language_enum.KBTS_LANGUAGE_COMOX;
+    COPTIC                        :: kbts_language_enum.KBTS_LANGUAGE_COPTIC;
+    CORNISH                       :: kbts_language_enum.KBTS_LANGUAGE_CORNISH;
+    CORSICAN                      :: kbts_language_enum.KBTS_LANGUAGE_CORSICAN;
+    CREE                          :: kbts_language_enum.KBTS_LANGUAGE_CREE;
+    CREOLES                       :: kbts_language_enum.KBTS_LANGUAGE_CREOLES;
+    CRIMEAN_TATAR                 :: kbts_language_enum.KBTS_LANGUAGE_CRIMEAN_TATAR;
+    CRIOULO                       :: kbts_language_enum.KBTS_LANGUAGE_CRIOULO;
+    CROATIAN                      :: kbts_language_enum.KBTS_LANGUAGE_CROATIAN;
+    CYPRIOT_ARABIC                :: kbts_language_enum.KBTS_LANGUAGE_CYPRIOT_ARABIC;
+    CZECH                         :: kbts_language_enum.KBTS_LANGUAGE_CZECH;
+    DAGBANI                       :: kbts_language_enum.KBTS_LANGUAGE_DAGBANI;
+    DAN                           :: kbts_language_enum.KBTS_LANGUAGE_DAN;
+    DANGME                        :: kbts_language_enum.KBTS_LANGUAGE_DANGME;
+    DANISH                        :: kbts_language_enum.KBTS_LANGUAGE_DANISH;
+    DARGWA                        :: kbts_language_enum.KBTS_LANGUAGE_DARGWA;
+    DARI                          :: kbts_language_enum.KBTS_LANGUAGE_DARI;
+    DAYI                          :: kbts_language_enum.KBTS_LANGUAGE_DAYI;
+    DEFAULT                       :: kbts_language_enum.KBTS_LANGUAGE_DEFAULT;
+    DEHONG_DAI                    :: kbts_language_enum.KBTS_LANGUAGE_DEHONG_DAI;
+    DHANGU                        :: kbts_language_enum.KBTS_LANGUAGE_DHANGU;
+    DHIVEHI                       :: kbts_language_enum.KBTS_LANGUAGE_DHIVEHI;
+    DHUWAL                        :: kbts_language_enum.KBTS_LANGUAGE_DHUWAL;
+    DIMLI                         :: kbts_language_enum.KBTS_LANGUAGE_DIMLI;
+    DINKA                         :: kbts_language_enum.KBTS_LANGUAGE_DINKA;
+    DIVEHI                        :: kbts_language_enum.KBTS_LANGUAGE_DIVEHI;
+    DJAMBARRPUYNGU                :: kbts_language_enum.KBTS_LANGUAGE_DJAMBARRPUYNGU;
+    DOGRI                         :: kbts_language_enum.KBTS_LANGUAGE_DOGRI;
+    DOGRI_MACROLANGUAGE           :: kbts_language_enum.KBTS_LANGUAGE_DOGRI_MACROLANGUAGE;
+    DUNGAN                        :: kbts_language_enum.KBTS_LANGUAGE_DUNGAN;
+    DUTCH                         :: kbts_language_enum.KBTS_LANGUAGE_DUTCH;
+    DZONGKHA                      :: kbts_language_enum.KBTS_LANGUAGE_DZONGKHA;
+    EASTERN_ABENAKI               :: kbts_language_enum.KBTS_LANGUAGE_EASTERN_ABENAKI;
+    EASTERN_CHAM                  :: kbts_language_enum.KBTS_LANGUAGE_EASTERN_CHAM;
+    EASTERN_CREE                  :: kbts_language_enum.KBTS_LANGUAGE_EASTERN_CREE;
+    EASTERN_MANINKAKAN            :: kbts_language_enum.KBTS_LANGUAGE_EASTERN_MANINKAKAN;
+    EASTERN_PWO_KAREN             :: kbts_language_enum.KBTS_LANGUAGE_EASTERN_PWO_KAREN;
+    EBIRA                         :: kbts_language_enum.KBTS_LANGUAGE_EBIRA;
+    EDO                           :: kbts_language_enum.KBTS_LANGUAGE_EDO;
+    EFIK                          :: kbts_language_enum.KBTS_LANGUAGE_EFIK;
+    EMBERA_BAUDO                  :: kbts_language_enum.KBTS_LANGUAGE_EMBERA_BAUDO;
+    EMBERA_CATIO                  :: kbts_language_enum.KBTS_LANGUAGE_EMBERA_CATIO;
+    EMBERA_CHAMI                  :: kbts_language_enum.KBTS_LANGUAGE_EMBERA_CHAMI;
+    EMBERA_TADO                   :: kbts_language_enum.KBTS_LANGUAGE_EMBERA_TADO;
+    ENGLISH                       :: kbts_language_enum.KBTS_LANGUAGE_ENGLISH;
+    EPENA                         :: kbts_language_enum.KBTS_LANGUAGE_EPENA;
+    ERZYA                         :: kbts_language_enum.KBTS_LANGUAGE_ERZYA;
+    ESPERANTO                     :: kbts_language_enum.KBTS_LANGUAGE_ESPERANTO;
+    ESTONIAN                      :: kbts_language_enum.KBTS_LANGUAGE_ESTONIAN;
+    EVEN                          :: kbts_language_enum.KBTS_LANGUAGE_EVEN;
+    EVENKI                        :: kbts_language_enum.KBTS_LANGUAGE_EVENKI;
+    EWE                           :: kbts_language_enum.KBTS_LANGUAGE_EWE;
+    FALAM_CHIN                    :: kbts_language_enum.KBTS_LANGUAGE_FALAM_CHIN;
+    FANG                          :: kbts_language_enum.KBTS_LANGUAGE_FANG;
+    FANTI                         :: kbts_language_enum.KBTS_LANGUAGE_FANTI;
+    FAROESE                       :: kbts_language_enum.KBTS_LANGUAGE_FAROESE;
+    FEFE                          :: kbts_language_enum.KBTS_LANGUAGE_FEFE;
+    FIJIAN                        :: kbts_language_enum.KBTS_LANGUAGE_FIJIAN;
+    FILIPINO                      :: kbts_language_enum.KBTS_LANGUAGE_FILIPINO;
+    FINNISH                       :: kbts_language_enum.KBTS_LANGUAGE_FINNISH;
+    FLEMISH                       :: kbts_language_enum.KBTS_LANGUAGE_FLEMISH;
+    FON                           :: kbts_language_enum.KBTS_LANGUAGE_FON;
+    FOREST_ENETS                  :: kbts_language_enum.KBTS_LANGUAGE_FOREST_ENETS;
+    FRENCH                        :: kbts_language_enum.KBTS_LANGUAGE_FRENCH;
+    FRENCH_ANTILLEAN              :: kbts_language_enum.KBTS_LANGUAGE_FRENCH_ANTILLEAN;
+    FRISIAN                       :: kbts_language_enum.KBTS_LANGUAGE_FRISIAN;
+    FRIULIAN                      :: kbts_language_enum.KBTS_LANGUAGE_FRIULIAN;
+    FULAH                         :: kbts_language_enum.KBTS_LANGUAGE_FULAH;
+    FUTA                          :: kbts_language_enum.KBTS_LANGUAGE_FUTA;
+    GA                            :: kbts_language_enum.KBTS_LANGUAGE_GA;
+    GAGAUZ                        :: kbts_language_enum.KBTS_LANGUAGE_GAGAUZ;
+    GALICIAN                      :: kbts_language_enum.KBTS_LANGUAGE_GALICIAN;
+    GANDA                         :: kbts_language_enum.KBTS_LANGUAGE_GANDA;
+    GARHWALI                      :: kbts_language_enum.KBTS_LANGUAGE_GARHWALI;
+    GARO                          :: kbts_language_enum.KBTS_LANGUAGE_GARO;
+    GARSHUNI                      :: kbts_language_enum.KBTS_LANGUAGE_GARSHUNI;
+    GEBA_KAREN                    :: kbts_language_enum.KBTS_LANGUAGE_GEBA_KAREN;
+    GEEZ                          :: kbts_language_enum.KBTS_LANGUAGE_GEEZ;
+    GEORGIAN                      :: kbts_language_enum.KBTS_LANGUAGE_GEORGIAN;
+    GEPO                          :: kbts_language_enum.KBTS_LANGUAGE_GEPO;
+    GERMAN                        :: kbts_language_enum.KBTS_LANGUAGE_GERMAN;
+    GIKUYU                        :: kbts_language_enum.KBTS_LANGUAGE_GIKUYU;
+    GILAKI                        :: kbts_language_enum.KBTS_LANGUAGE_GILAKI;
+    GILBERTESE                    :: kbts_language_enum.KBTS_LANGUAGE_GILBERTESE;
+    GILYAK                        :: kbts_language_enum.KBTS_LANGUAGE_GILYAK;
+    GITHABUL                      :: kbts_language_enum.KBTS_LANGUAGE_GITHABUL;
+    GOGO                          :: kbts_language_enum.KBTS_LANGUAGE_GOGO;
+    GONDI                         :: kbts_language_enum.KBTS_LANGUAGE_GONDI;
+    GREEK                         :: kbts_language_enum.KBTS_LANGUAGE_GREEK;
+    GREENLANDIC                   :: kbts_language_enum.KBTS_LANGUAGE_GREENLANDIC;
+    GUARANI                       :: kbts_language_enum.KBTS_LANGUAGE_GUARANI;
+    GUINEA                        :: kbts_language_enum.KBTS_LANGUAGE_GUINEA;
+    GUJARATI                      :: kbts_language_enum.KBTS_LANGUAGE_GUJARATI;
+    GUMATJ                        :: kbts_language_enum.KBTS_LANGUAGE_GUMATJ;
+    GUMUZ                         :: kbts_language_enum.KBTS_LANGUAGE_GUMUZ;
+    GUPAPUYNGU                    :: kbts_language_enum.KBTS_LANGUAGE_GUPAPUYNGU;
+    GUSII                         :: kbts_language_enum.KBTS_LANGUAGE_GUSII;
+    HAIDA                         :: kbts_language_enum.KBTS_LANGUAGE_HAIDA;
+    HAITIAN_CREOLE                :: kbts_language_enum.KBTS_LANGUAGE_HAITIAN_CREOLE;
+    HALKOMELEM                    :: kbts_language_enum.KBTS_LANGUAGE_HALKOMELEM;
+    HAMMER_BANNA                  :: kbts_language_enum.KBTS_LANGUAGE_HAMMER_BANNA;
+    HARARI                        :: kbts_language_enum.KBTS_LANGUAGE_HARARI;
+    HARAUTI                       :: kbts_language_enum.KBTS_LANGUAGE_HARAUTI;
+    HARYANVI                      :: kbts_language_enum.KBTS_LANGUAGE_HARYANVI;
+    HAUSA                         :: kbts_language_enum.KBTS_LANGUAGE_HAUSA;
+    HAVASUPAI_WALAPAI_YAVAPAI     :: kbts_language_enum.KBTS_LANGUAGE_HAVASUPAI_WALAPAI_YAVAPAI;
+    HAWAIIAN                      :: kbts_language_enum.KBTS_LANGUAGE_HAWAIIAN;
+    HAYA                          :: kbts_language_enum.KBTS_LANGUAGE_HAYA;
+    HAZARAGI                      :: kbts_language_enum.KBTS_LANGUAGE_HAZARAGI;
+    HEBREW                        :: kbts_language_enum.KBTS_LANGUAGE_HEBREW;
+    HEILTSUK                      :: kbts_language_enum.KBTS_LANGUAGE_HEILTSUK;
+    HERERO                        :: kbts_language_enum.KBTS_LANGUAGE_HERERO;
+    HIGH_MARI                     :: kbts_language_enum.KBTS_LANGUAGE_HIGH_MARI;
+    HILIGAYNON                    :: kbts_language_enum.KBTS_LANGUAGE_HILIGAYNON;
+    HINDI                         :: kbts_language_enum.KBTS_LANGUAGE_HINDI;
+    HINDKO                        :: kbts_language_enum.KBTS_LANGUAGE_HINDKO;
+    HIRI_MOTU                     :: kbts_language_enum.KBTS_LANGUAGE_HIRI_MOTU;
+    HMONG                         :: kbts_language_enum.KBTS_LANGUAGE_HMONG;
+    HMONG_DAW                     :: kbts_language_enum.KBTS_LANGUAGE_HMONG_DAW;
+    HMONG_SHUAT                   :: kbts_language_enum.KBTS_LANGUAGE_HMONG_SHUAT;
+    HO                            :: kbts_language_enum.KBTS_LANGUAGE_HO;
+    HUNGARIAN                     :: kbts_language_enum.KBTS_LANGUAGE_HUNGARIAN;
+    IBAN                          :: kbts_language_enum.KBTS_LANGUAGE_IBAN;
+    IBIBIO                        :: kbts_language_enum.KBTS_LANGUAGE_IBIBIO;
+    ICELANDIC                     :: kbts_language_enum.KBTS_LANGUAGE_ICELANDIC;
+    IDO                           :: kbts_language_enum.KBTS_LANGUAGE_IDO;
+    IGBO                          :: kbts_language_enum.KBTS_LANGUAGE_IGBO;
+    IJO                           :: kbts_language_enum.KBTS_LANGUAGE_IJO;
+    ILOKANO                       :: kbts_language_enum.KBTS_LANGUAGE_ILOKANO;
+    INARI_SAMI                    :: kbts_language_enum.KBTS_LANGUAGE_INARI_SAMI;
+    INDONESIAN                    :: kbts_language_enum.KBTS_LANGUAGE_INDONESIAN;
+    INGUSH                        :: kbts_language_enum.KBTS_LANGUAGE_INGUSH;
+    INTERLINGUA                   :: kbts_language_enum.KBTS_LANGUAGE_INTERLINGUA;
+    INTERLINGUE                   :: kbts_language_enum.KBTS_LANGUAGE_INTERLINGUE;
+    INUKTITUT                     :: kbts_language_enum.KBTS_LANGUAGE_INUKTITUT;
+    INUPIAT                       :: kbts_language_enum.KBTS_LANGUAGE_INUPIAT;
+    IPA_PHONETIC                  :: kbts_language_enum.KBTS_LANGUAGE_IPA_PHONETIC;
+    IRISH                         :: kbts_language_enum.KBTS_LANGUAGE_IRISH;
+    IRISH_TRADITIONAL             :: kbts_language_enum.KBTS_LANGUAGE_IRISH_TRADITIONAL;
+    IRULA                         :: kbts_language_enum.KBTS_LANGUAGE_IRULA;
+    ITALIAN                       :: kbts_language_enum.KBTS_LANGUAGE_ITALIAN;
+    JAMAICAN_CREOLE               :: kbts_language_enum.KBTS_LANGUAGE_JAMAICAN_CREOLE;
+    JAPANESE                      :: kbts_language_enum.KBTS_LANGUAGE_JAPANESE;
+    JAVANESE                      :: kbts_language_enum.KBTS_LANGUAGE_JAVANESE;
+    JENNU_KURUMA                  :: kbts_language_enum.KBTS_LANGUAGE_JENNU_KURUMA;
+    JUDEO_TAT                     :: kbts_language_enum.KBTS_LANGUAGE_JUDEO_TAT;
+    JULA                          :: kbts_language_enum.KBTS_LANGUAGE_JULA;
+    KABARDIAN                     :: kbts_language_enum.KBTS_LANGUAGE_KABARDIAN;
+    KABYLE                        :: kbts_language_enum.KBTS_LANGUAGE_KABYLE;
+    KACHCHI                       :: kbts_language_enum.KBTS_LANGUAGE_KACHCHI;
+    KADIWEU                       :: kbts_language_enum.KBTS_LANGUAGE_KADIWEU;
+    KALENJIN                      :: kbts_language_enum.KBTS_LANGUAGE_KALENJIN;
+    KALMYK                        :: kbts_language_enum.KBTS_LANGUAGE_KALMYK;
+    KAMBA                         :: kbts_language_enum.KBTS_LANGUAGE_KAMBA;
+    KANAUJI                       :: kbts_language_enum.KBTS_LANGUAGE_KANAUJI;
+    KANNADA                       :: kbts_language_enum.KBTS_LANGUAGE_KANNADA;
+    KANURI                        :: kbts_language_enum.KBTS_LANGUAGE_KANURI;
+    KAQCHIKEL                     :: kbts_language_enum.KBTS_LANGUAGE_KAQCHIKEL;
+    KARACHAY                      :: kbts_language_enum.KBTS_LANGUAGE_KARACHAY;
+    KARAIM                        :: kbts_language_enum.KBTS_LANGUAGE_KARAIM;
+    KARAKALPAK                    :: kbts_language_enum.KBTS_LANGUAGE_KARAKALPAK;
+    KARELIAN                      :: kbts_language_enum.KBTS_LANGUAGE_KARELIAN;
+    KAREN                         :: kbts_language_enum.KBTS_LANGUAGE_KAREN;
+    KASHMIRI                      :: kbts_language_enum.KBTS_LANGUAGE_KASHMIRI;
+    KASHUBIAN                     :: kbts_language_enum.KBTS_LANGUAGE_KASHUBIAN;
+    KATE                          :: kbts_language_enum.KBTS_LANGUAGE_KATE;
+    KAZAKH                        :: kbts_language_enum.KBTS_LANGUAGE_KAZAKH;
+    KEBENA                        :: kbts_language_enum.KBTS_LANGUAGE_KEBENA;
+    KEKCHI                        :: kbts_language_enum.KBTS_LANGUAGE_KEKCHI;
+    KHAKASS                       :: kbts_language_enum.KBTS_LANGUAGE_KHAKASS;
+    KHAMTI_SHAN                   :: kbts_language_enum.KBTS_LANGUAGE_KHAMTI_SHAN;
+    KHAMYANG                      :: kbts_language_enum.KBTS_LANGUAGE_KHAMYANG;
+    KHANTY_KAZIM                  :: kbts_language_enum.KBTS_LANGUAGE_KHANTY_KAZIM;
+    KHANTY_SHURISHKAR             :: kbts_language_enum.KBTS_LANGUAGE_KHANTY_SHURISHKAR;
+    KHANTY_VAKHI                  :: kbts_language_enum.KBTS_LANGUAGE_KHANTY_VAKHI;
+    KHASI                         :: kbts_language_enum.KBTS_LANGUAGE_KHASI;
+    KHENGKHA                      :: kbts_language_enum.KBTS_LANGUAGE_KHENGKHA;
+    KHINALUG                      :: kbts_language_enum.KBTS_LANGUAGE_KHINALUG;
+    KHMER                         :: kbts_language_enum.KBTS_LANGUAGE_KHMER;
+    KHORASANI_TURKIC              :: kbts_language_enum.KBTS_LANGUAGE_KHORASANI_TURKIC;
+    KHOWAR                        :: kbts_language_enum.KBTS_LANGUAGE_KHOWAR;
+    KHUTSURI_GEORGIAN             :: kbts_language_enum.KBTS_LANGUAGE_KHUTSURI_GEORGIAN;
+    KICHE                         :: kbts_language_enum.KBTS_LANGUAGE_KICHE;
+    KIKONGO                       :: kbts_language_enum.KBTS_LANGUAGE_KIKONGO;
+    KILDIN_SAMI                   :: kbts_language_enum.KBTS_LANGUAGE_KILDIN_SAMI;
+    KINYARWANDA                   :: kbts_language_enum.KBTS_LANGUAGE_KINYARWANDA;
+    KIRMANJKI                     :: kbts_language_enum.KBTS_LANGUAGE_KIRMANJKI;
+    KISII                         :: kbts_language_enum.KBTS_LANGUAGE_KISII;
+    KITUBA                        :: kbts_language_enum.KBTS_LANGUAGE_KITUBA;
+    KODAGU                        :: kbts_language_enum.KBTS_LANGUAGE_KODAGU;
+    KOKNI                         :: kbts_language_enum.KBTS_LANGUAGE_KOKNI;
+    KOMI                          :: kbts_language_enum.KBTS_LANGUAGE_KOMI;
+    KOMI_PERMYAK                  :: kbts_language_enum.KBTS_LANGUAGE_KOMI_PERMYAK;
+    KOMI_ZYRIAN                   :: kbts_language_enum.KBTS_LANGUAGE_KOMI_ZYRIAN;
+    KOMO                          :: kbts_language_enum.KBTS_LANGUAGE_KOMO;
+    KOMSO                         :: kbts_language_enum.KBTS_LANGUAGE_KOMSO;
+    KONGO                         :: kbts_language_enum.KBTS_LANGUAGE_KONGO;
+    KONKANI                       :: kbts_language_enum.KBTS_LANGUAGE_KONKANI;
+    KOORETE                       :: kbts_language_enum.KBTS_LANGUAGE_KOORETE;
+    KOREAN                        :: kbts_language_enum.KBTS_LANGUAGE_KOREAN;
+    KOREAN_OLD_HANGUL             :: kbts_language_enum.KBTS_LANGUAGE_KOREAN_OLD_HANGUL;
+    KORYAK                        :: kbts_language_enum.KBTS_LANGUAGE_KORYAK;
+    KOSRAEAN                      :: kbts_language_enum.KBTS_LANGUAGE_KOSRAEAN;
+    KPELLE                        :: kbts_language_enum.KBTS_LANGUAGE_KPELLE;
+    KPELLE_LIBERIA                :: kbts_language_enum.KBTS_LANGUAGE_KPELLE_LIBERIA;
+    KRIO                          :: kbts_language_enum.KBTS_LANGUAGE_KRIO;
+    KRYMCHAK                      :: kbts_language_enum.KBTS_LANGUAGE_KRYMCHAK;
+    KUANYAMA                      :: kbts_language_enum.KBTS_LANGUAGE_KUANYAMA;
+    KUBE                          :: kbts_language_enum.KBTS_LANGUAGE_KUBE;
+    KUI                           :: kbts_language_enum.KBTS_LANGUAGE_KUI;
+    KULVI                         :: kbts_language_enum.KBTS_LANGUAGE_KULVI;
+    KUMAONI                       :: kbts_language_enum.KBTS_LANGUAGE_KUMAONI;
+    KUMYK                         :: kbts_language_enum.KBTS_LANGUAGE_KUMYK;
+    KURDISH                       :: kbts_language_enum.KBTS_LANGUAGE_KURDISH;
+    KURUKH                        :: kbts_language_enum.KBTS_LANGUAGE_KURUKH;
+    KUY                           :: kbts_language_enum.KBTS_LANGUAGE_KUY;
+    KWAKWALA                      :: kbts_language_enum.KBTS_LANGUAGE_KWAKWALA;
+    KYRGYZ                        :: kbts_language_enum.KBTS_LANGUAGE_KYRGYZ;
+    L_CREE                        :: kbts_language_enum.KBTS_LANGUAGE_L_CREE;
+    LADAKHI                       :: kbts_language_enum.KBTS_LANGUAGE_LADAKHI;
+    LADIN                         :: kbts_language_enum.KBTS_LANGUAGE_LADIN;
+    LADINO                        :: kbts_language_enum.KBTS_LANGUAGE_LADINO;
+    LAHULI                        :: kbts_language_enum.KBTS_LANGUAGE_LAHULI;
+    LAK                           :: kbts_language_enum.KBTS_LANGUAGE_LAK;
+    LAKI                          :: kbts_language_enum.KBTS_LANGUAGE_LAKI;
+    LAMBANI                       :: kbts_language_enum.KBTS_LANGUAGE_LAMBANI;
+    LAMPUNG                       :: kbts_language_enum.KBTS_LANGUAGE_LAMPUNG;
+    LAO                           :: kbts_language_enum.KBTS_LANGUAGE_LAO;
+    LATIN                         :: kbts_language_enum.KBTS_LANGUAGE_LATIN;
+    LATVIAN                       :: kbts_language_enum.KBTS_LANGUAGE_LATVIAN;
+    LAZ                           :: kbts_language_enum.KBTS_LANGUAGE_LAZ;
+    LELEMI                        :: kbts_language_enum.KBTS_LANGUAGE_LELEMI;
+    LEZGI                         :: kbts_language_enum.KBTS_LANGUAGE_LEZGI;
+    LIGURIAN                      :: kbts_language_enum.KBTS_LANGUAGE_LIGURIAN;
+    LIMBU                         :: kbts_language_enum.KBTS_LANGUAGE_LIMBU;
+    LIMBURGISH                    :: kbts_language_enum.KBTS_LANGUAGE_LIMBURGISH;
+    LINGALA                       :: kbts_language_enum.KBTS_LANGUAGE_LINGALA;
+    LIPO                          :: kbts_language_enum.KBTS_LANGUAGE_LIPO;
+    LISU                          :: kbts_language_enum.KBTS_LANGUAGE_LISU;
+    LITHUANIAN                    :: kbts_language_enum.KBTS_LANGUAGE_LITHUANIAN;
+    LIV                           :: kbts_language_enum.KBTS_LANGUAGE_LIV;
+    LOJBAN                        :: kbts_language_enum.KBTS_LANGUAGE_LOJBAN;
+    LOMA                          :: kbts_language_enum.KBTS_LANGUAGE_LOMA;
+    LOMBARD                       :: kbts_language_enum.KBTS_LANGUAGE_LOMBARD;
+    LOMWE                         :: kbts_language_enum.KBTS_LANGUAGE_LOMWE;
+    LOW_MARI                      :: kbts_language_enum.KBTS_LANGUAGE_LOW_MARI;
+    LOW_SAXON                     :: kbts_language_enum.KBTS_LANGUAGE_LOW_SAXON;
+    LOWER_SORBIAN                 :: kbts_language_enum.KBTS_LANGUAGE_LOWER_SORBIAN;
+    LU                            :: kbts_language_enum.KBTS_LANGUAGE_LU;
+    LUBA_KATANGA                  :: kbts_language_enum.KBTS_LANGUAGE_LUBA_KATANGA;
+    LUBA_LULUA                    :: kbts_language_enum.KBTS_LANGUAGE_LUBA_LULUA;
+    LULE_SAMI                     :: kbts_language_enum.KBTS_LANGUAGE_LULE_SAMI;
+    LUO                           :: kbts_language_enum.KBTS_LANGUAGE_LUO;
+    LURI                          :: kbts_language_enum.KBTS_LANGUAGE_LURI;
+    LUSHOOTSEED                   :: kbts_language_enum.KBTS_LANGUAGE_LUSHOOTSEED;
+    LUXEMBOURGISH                 :: kbts_language_enum.KBTS_LANGUAGE_LUXEMBOURGISH;
+    LUYIA                         :: kbts_language_enum.KBTS_LANGUAGE_LUYIA;
+    MACEDONIAN                    :: kbts_language_enum.KBTS_LANGUAGE_MACEDONIAN;
+    MADURA                        :: kbts_language_enum.KBTS_LANGUAGE_MADURA;
+    MAGAHI                        :: kbts_language_enum.KBTS_LANGUAGE_MAGAHI;
+    MAITHILI                      :: kbts_language_enum.KBTS_LANGUAGE_MAITHILI;
+    MAJANG                        :: kbts_language_enum.KBTS_LANGUAGE_MAJANG;
+    MAKASAR                       :: kbts_language_enum.KBTS_LANGUAGE_MAKASAR;
+    MAKHUWA                       :: kbts_language_enum.KBTS_LANGUAGE_MAKHUWA;
+    MAKONDE                       :: kbts_language_enum.KBTS_LANGUAGE_MAKONDE;
+    MALAGASY                      :: kbts_language_enum.KBTS_LANGUAGE_MALAGASY;
+    MALAY                         :: kbts_language_enum.KBTS_LANGUAGE_MALAY;
+    MALAYALAM                     :: kbts_language_enum.KBTS_LANGUAGE_MALAYALAM;
+    MALAYALAM_REFORMED            :: kbts_language_enum.KBTS_LANGUAGE_MALAYALAM_REFORMED;
+    MALE                          :: kbts_language_enum.KBTS_LANGUAGE_MALE;
+    MALINKE                       :: kbts_language_enum.KBTS_LANGUAGE_MALINKE;
+    MALTESE                       :: kbts_language_enum.KBTS_LANGUAGE_MALTESE;
+    MAM                           :: kbts_language_enum.KBTS_LANGUAGE_MAM;
+    MANCHU                        :: kbts_language_enum.KBTS_LANGUAGE_MANCHU;
+    MANDAR                        :: kbts_language_enum.KBTS_LANGUAGE_MANDAR;
+    MANDINKA                      :: kbts_language_enum.KBTS_LANGUAGE_MANDINKA;
+    MANINKA                       :: kbts_language_enum.KBTS_LANGUAGE_MANINKA;
+    MANIPURI                      :: kbts_language_enum.KBTS_LANGUAGE_MANIPURI;
+    MANO                          :: kbts_language_enum.KBTS_LANGUAGE_MANO;
+    MANSI                         :: kbts_language_enum.KBTS_LANGUAGE_MANSI;
+    MANX                          :: kbts_language_enum.KBTS_LANGUAGE_MANX;
+    MAORI                         :: kbts_language_enum.KBTS_LANGUAGE_MAORI;
+    MAPUDUNGUN                    :: kbts_language_enum.KBTS_LANGUAGE_MAPUDUNGUN;
+    MARATHI                       :: kbts_language_enum.KBTS_LANGUAGE_MARATHI;
+    MARSHALLESE                   :: kbts_language_enum.KBTS_LANGUAGE_MARSHALLESE;
+    MARWARI                       :: kbts_language_enum.KBTS_LANGUAGE_MARWARI;
+    MAYAN                         :: kbts_language_enum.KBTS_LANGUAGE_MAYAN;
+    MAZANDERANI                   :: kbts_language_enum.KBTS_LANGUAGE_MAZANDERANI;
+    MBEMBE_TIGON                  :: kbts_language_enum.KBTS_LANGUAGE_MBEMBE_TIGON;
+    MBO                           :: kbts_language_enum.KBTS_LANGUAGE_MBO;
+    MBUNDU                        :: kbts_language_enum.KBTS_LANGUAGE_MBUNDU;
+    MEDUMBA                       :: kbts_language_enum.KBTS_LANGUAGE_MEDUMBA;
+    MEEN                          :: kbts_language_enum.KBTS_LANGUAGE_MEEN;
+    MENDE                         :: kbts_language_enum.KBTS_LANGUAGE_MENDE;
+    MERU                          :: kbts_language_enum.KBTS_LANGUAGE_MERU;
+    MEWATI                        :: kbts_language_enum.KBTS_LANGUAGE_MEWATI;
+    MINANGKABAU                   :: kbts_language_enum.KBTS_LANGUAGE_MINANGKABAU;
+    MINJANGBAL                    :: kbts_language_enum.KBTS_LANGUAGE_MINJANGBAL;
+    MIRANDESE                     :: kbts_language_enum.KBTS_LANGUAGE_MIRANDESE;
+    MIZO                          :: kbts_language_enum.KBTS_LANGUAGE_MIZO;
+    MOHAWK                        :: kbts_language_enum.KBTS_LANGUAGE_MOHAWK;
+    MOKSHA                        :: kbts_language_enum.KBTS_LANGUAGE_MOKSHA;
+    MOLDAVIAN                     :: kbts_language_enum.KBTS_LANGUAGE_MOLDAVIAN;
+    MON                           :: kbts_language_enum.KBTS_LANGUAGE_MON;
+    MONGOLIAN                     :: kbts_language_enum.KBTS_LANGUAGE_MONGOLIAN;
+    MOOSE_CREE                    :: kbts_language_enum.KBTS_LANGUAGE_MOOSE_CREE;
+    MORISYEN                      :: kbts_language_enum.KBTS_LANGUAGE_MORISYEN;
+    MOROCCAN                      :: kbts_language_enum.KBTS_LANGUAGE_MOROCCAN;
+    MOSSI                         :: kbts_language_enum.KBTS_LANGUAGE_MOSSI;
+    MUNDARI                       :: kbts_language_enum.KBTS_LANGUAGE_MUNDARI;
+    MUSCOGEE                      :: kbts_language_enum.KBTS_LANGUAGE_MUSCOGEE;
+    N_CREE                        :: kbts_language_enum.KBTS_LANGUAGE_N_CREE;
+    NAGA_ASSAMESE                 :: kbts_language_enum.KBTS_LANGUAGE_NAGA_ASSAMESE;
+    NAGARI                        :: kbts_language_enum.KBTS_LANGUAGE_NAGARI;
+    NAHUATL                       :: kbts_language_enum.KBTS_LANGUAGE_NAHUATL;
+    NANAI                         :: kbts_language_enum.KBTS_LANGUAGE_NANAI;
+    NASKAPI                       :: kbts_language_enum.KBTS_LANGUAGE_NASKAPI;
+    NAURUAN                       :: kbts_language_enum.KBTS_LANGUAGE_NAURUAN;
+    NAVAJO                        :: kbts_language_enum.KBTS_LANGUAGE_NAVAJO;
+    NDAU                          :: kbts_language_enum.KBTS_LANGUAGE_NDAU;
+    NDEBELE                       :: kbts_language_enum.KBTS_LANGUAGE_NDEBELE;
+    NDONGA                        :: kbts_language_enum.KBTS_LANGUAGE_NDONGA;
+    NEAPOLITAN                    :: kbts_language_enum.KBTS_LANGUAGE_NEAPOLITAN;
+    NEPALI                        :: kbts_language_enum.KBTS_LANGUAGE_NEPALI;
+    NEWARI                        :: kbts_language_enum.KBTS_LANGUAGE_NEWARI;
+    NGBAKA                        :: kbts_language_enum.KBTS_LANGUAGE_NGBAKA;
+    NIGERIAN_FULFULDE             :: kbts_language_enum.KBTS_LANGUAGE_NIGERIAN_FULFULDE;
+    NIMADI                        :: kbts_language_enum.KBTS_LANGUAGE_NIMADI;
+    NISI                          :: kbts_language_enum.KBTS_LANGUAGE_NISI;
+    NIUEAN                        :: kbts_language_enum.KBTS_LANGUAGE_NIUEAN;
+    NKO                           :: kbts_language_enum.KBTS_LANGUAGE_NKO;
+    NOGAI                         :: kbts_language_enum.KBTS_LANGUAGE_NOGAI;
+    NORFOLK                       :: kbts_language_enum.KBTS_LANGUAGE_NORFOLK;
+    NORTH_SLAVEY                  :: kbts_language_enum.KBTS_LANGUAGE_NORTH_SLAVEY;
+    NORTHERN_EMBERA               :: kbts_language_enum.KBTS_LANGUAGE_NORTHERN_EMBERA;
+    NORTHERN_SAMI                 :: kbts_language_enum.KBTS_LANGUAGE_NORTHERN_SAMI;
+    NORTHERN_SOTHO                :: kbts_language_enum.KBTS_LANGUAGE_NORTHERN_SOTHO;
+    NORTHERN_TAI                  :: kbts_language_enum.KBTS_LANGUAGE_NORTHERN_TAI;
+    NORWAY_HOUSE_CREE             :: kbts_language_enum.KBTS_LANGUAGE_NORWAY_HOUSE_CREE;
+    NORWEGIAN                     :: kbts_language_enum.KBTS_LANGUAGE_NORWEGIAN;
+    NORWEGIAN_NYNORSK             :: kbts_language_enum.KBTS_LANGUAGE_NORWEGIAN_NYNORSK;
+    NOVIAL                        :: kbts_language_enum.KBTS_LANGUAGE_NOVIAL;
+    NUMANGGANG                    :: kbts_language_enum.KBTS_LANGUAGE_NUMANGGANG;
+    NUNAVIK_INUKTITUT             :: kbts_language_enum.KBTS_LANGUAGE_NUNAVIK_INUKTITUT;
+    NUU_CHAH_NULTH                :: kbts_language_enum.KBTS_LANGUAGE_NUU_CHAH_NULTH;
+    NYAMWEZI                      :: kbts_language_enum.KBTS_LANGUAGE_NYAMWEZI;
+    NYANKOLE                      :: kbts_language_enum.KBTS_LANGUAGE_NYANKOLE;
+    OCCITAN                       :: kbts_language_enum.KBTS_LANGUAGE_OCCITAN;
+    ODIA                          :: kbts_language_enum.KBTS_LANGUAGE_ODIA;
+    OJI_CREE                      :: kbts_language_enum.KBTS_LANGUAGE_OJI_CREE;
+    OJIBWAY                       :: kbts_language_enum.KBTS_LANGUAGE_OJIBWAY;
+    OLD_IRISH                     :: kbts_language_enum.KBTS_LANGUAGE_OLD_IRISH;
+    OLD_JAVANESE                  :: kbts_language_enum.KBTS_LANGUAGE_OLD_JAVANESE;
+    ONEIDA                        :: kbts_language_enum.KBTS_LANGUAGE_ONEIDA;
+    ONONDAGA                      :: kbts_language_enum.KBTS_LANGUAGE_ONONDAGA;
+    OROMO                         :: kbts_language_enum.KBTS_LANGUAGE_OROMO;
+    OSSETIAN                      :: kbts_language_enum.KBTS_LANGUAGE_OSSETIAN;
+    PA_O_KAREN                    :: kbts_language_enum.KBTS_LANGUAGE_PA_O_KAREN;
+    PALAUAN                       :: kbts_language_enum.KBTS_LANGUAGE_PALAUAN;
+    PALAUNG                       :: kbts_language_enum.KBTS_LANGUAGE_PALAUNG;
+    PALESTINIAN_ARAMAIC           :: kbts_language_enum.KBTS_LANGUAGE_PALESTINIAN_ARAMAIC;
+    PALI                          :: kbts_language_enum.KBTS_LANGUAGE_PALI;
+    PALPA                         :: kbts_language_enum.KBTS_LANGUAGE_PALPA;
+    PAMPANGAN                     :: kbts_language_enum.KBTS_LANGUAGE_PAMPANGAN;
+    PANGASINAN                    :: kbts_language_enum.KBTS_LANGUAGE_PANGASINAN;
+    PAPIAMENTU                    :: kbts_language_enum.KBTS_LANGUAGE_PAPIAMENTU;
+    PASHTO                        :: kbts_language_enum.KBTS_LANGUAGE_PASHTO;
+    PATTANI_MALAY                 :: kbts_language_enum.KBTS_LANGUAGE_PATTANI_MALAY;
+    PENNSYLVANIA_GERMAN           :: kbts_language_enum.KBTS_LANGUAGE_PENNSYLVANIA_GERMAN;
+    PERSIAN                       :: kbts_language_enum.KBTS_LANGUAGE_PERSIAN;
+    PHAKE                         :: kbts_language_enum.KBTS_LANGUAGE_PHAKE;
+    PICARD                        :: kbts_language_enum.KBTS_LANGUAGE_PICARD;
+    PIEMONTESE                    :: kbts_language_enum.KBTS_LANGUAGE_PIEMONTESE;
+    PILAGA                        :: kbts_language_enum.KBTS_LANGUAGE_PILAGA;
+    PITE_SAMI                     :: kbts_language_enum.KBTS_LANGUAGE_PITE_SAMI;
+    POCOMCHI                      :: kbts_language_enum.KBTS_LANGUAGE_POCOMCHI;
+    POHNPEIAN                     :: kbts_language_enum.KBTS_LANGUAGE_POHNPEIAN;
+    POLISH                        :: kbts_language_enum.KBTS_LANGUAGE_POLISH;
+    POLYTONIC_GREEK               :: kbts_language_enum.KBTS_LANGUAGE_POLYTONIC_GREEK;
+    PORTUGUESE                    :: kbts_language_enum.KBTS_LANGUAGE_PORTUGUESE;
+    PROVENCAL                     :: kbts_language_enum.KBTS_LANGUAGE_PROVENCAL;
+    PUNJABI                       :: kbts_language_enum.KBTS_LANGUAGE_PUNJABI;
+    QUECHUA                       :: kbts_language_enum.KBTS_LANGUAGE_QUECHUA;
+    QUECHUA_BOLIVIA               :: kbts_language_enum.KBTS_LANGUAGE_QUECHUA_BOLIVIA;
+    QUECHUA_ECUADOR               :: kbts_language_enum.KBTS_LANGUAGE_QUECHUA_ECUADOR;
+    QUECHUA_PERU                  :: kbts_language_enum.KBTS_LANGUAGE_QUECHUA_PERU;
+    R_CREE                        :: kbts_language_enum.KBTS_LANGUAGE_R_CREE;
+    RAJASTHANI                    :: kbts_language_enum.KBTS_LANGUAGE_RAJASTHANI;
+    RAKHINE                       :: kbts_language_enum.KBTS_LANGUAGE_RAKHINE;
+    RAROTONGAN                    :: kbts_language_enum.KBTS_LANGUAGE_RAROTONGAN;
+    REJANG                        :: kbts_language_enum.KBTS_LANGUAGE_REJANG;
+    RIANG                         :: kbts_language_enum.KBTS_LANGUAGE_RIANG;
+    RIPUARIAN                     :: kbts_language_enum.KBTS_LANGUAGE_RIPUARIAN;
+    RITARUNGO                     :: kbts_language_enum.KBTS_LANGUAGE_RITARUNGO;
+    ROHINGYA                      :: kbts_language_enum.KBTS_LANGUAGE_ROHINGYA;
+    ROMANIAN                      :: kbts_language_enum.KBTS_LANGUAGE_ROMANIAN;
+    ROMANSH                       :: kbts_language_enum.KBTS_LANGUAGE_ROMANSH;
+    ROMANY                        :: kbts_language_enum.KBTS_LANGUAGE_ROMANY;
+    ROTUMAN                       :: kbts_language_enum.KBTS_LANGUAGE_ROTUMAN;
+    RUNDI                         :: kbts_language_enum.KBTS_LANGUAGE_RUNDI;
+    RUSSIAN                       :: kbts_language_enum.KBTS_LANGUAGE_RUSSIAN;
+    RUSSIAN_BURIAT                :: kbts_language_enum.KBTS_LANGUAGE_RUSSIAN_BURIAT;
+    RUSYN                         :: kbts_language_enum.KBTS_LANGUAGE_RUSYN;
+    SADRI                         :: kbts_language_enum.KBTS_LANGUAGE_SADRI;
+    SAKHA                         :: kbts_language_enum.KBTS_LANGUAGE_SAKHA;
+    SAMOAN                        :: kbts_language_enum.KBTS_LANGUAGE_SAMOAN;
+    SAMOGITIAN                    :: kbts_language_enum.KBTS_LANGUAGE_SAMOGITIAN;
+    SAN_BLAS_KUNA                 :: kbts_language_enum.KBTS_LANGUAGE_SAN_BLAS_KUNA;
+    SANGO                         :: kbts_language_enum.KBTS_LANGUAGE_SANGO;
+    SANSKRIT                      :: kbts_language_enum.KBTS_LANGUAGE_SANSKRIT;
+    SANTALI                       :: kbts_language_enum.KBTS_LANGUAGE_SANTALI;
+    SARAIKI                       :: kbts_language_enum.KBTS_LANGUAGE_SARAIKI;
+    SARDINIAN                     :: kbts_language_enum.KBTS_LANGUAGE_SARDINIAN;
+    SASAK                         :: kbts_language_enum.KBTS_LANGUAGE_SASAK;
+    SATERLAND_FRISIAN             :: kbts_language_enum.KBTS_LANGUAGE_SATERLAND_FRISIAN;
+    SAYISI                        :: kbts_language_enum.KBTS_LANGUAGE_SAYISI;
+    SCOTS                         :: kbts_language_enum.KBTS_LANGUAGE_SCOTS;
+    SCOTTISH_GAELIC               :: kbts_language_enum.KBTS_LANGUAGE_SCOTTISH_GAELIC;
+    SEKOTA                        :: kbts_language_enum.KBTS_LANGUAGE_SEKOTA;
+    SELKUP                        :: kbts_language_enum.KBTS_LANGUAGE_SELKUP;
+    SENA                          :: kbts_language_enum.KBTS_LANGUAGE_SENA;
+    SENECA                        :: kbts_language_enum.KBTS_LANGUAGE_SENECA;
+    SERBIAN                       :: kbts_language_enum.KBTS_LANGUAGE_SERBIAN;
+    SERER                         :: kbts_language_enum.KBTS_LANGUAGE_SERER;
+    SGAW_KAREN                    :: kbts_language_enum.KBTS_LANGUAGE_SGAW_KAREN;
+    SHAN                          :: kbts_language_enum.KBTS_LANGUAGE_SHAN;
+    SHONA                         :: kbts_language_enum.KBTS_LANGUAGE_SHONA;
+    SIBE                          :: kbts_language_enum.KBTS_LANGUAGE_SIBE;
+    SICILIAN                      :: kbts_language_enum.KBTS_LANGUAGE_SICILIAN;
+    SIDAMO                        :: kbts_language_enum.KBTS_LANGUAGE_SIDAMO;
+    SILESIAN                      :: kbts_language_enum.KBTS_LANGUAGE_SILESIAN;
+    SILTE_GURAGE                  :: kbts_language_enum.KBTS_LANGUAGE_SILTE_GURAGE;
+    SINDHI                        :: kbts_language_enum.KBTS_LANGUAGE_SINDHI;
+    SINHALA                       :: kbts_language_enum.KBTS_LANGUAGE_SINHALA;
+    SKOLT_SAMI                    :: kbts_language_enum.KBTS_LANGUAGE_SKOLT_SAMI;
+    SLAVEY                        :: kbts_language_enum.KBTS_LANGUAGE_SLAVEY;
+    SLOVAK                        :: kbts_language_enum.KBTS_LANGUAGE_SLOVAK;
+    SLOVENIAN                     :: kbts_language_enum.KBTS_LANGUAGE_SLOVENIAN;
+    SMALL_FLOWERY_MIAO            :: kbts_language_enum.KBTS_LANGUAGE_SMALL_FLOWERY_MIAO;
+    SODO_GURAGE                   :: kbts_language_enum.KBTS_LANGUAGE_SODO_GURAGE;
+    SOGA                          :: kbts_language_enum.KBTS_LANGUAGE_SOGA;
+    SOMALI                        :: kbts_language_enum.KBTS_LANGUAGE_SOMALI;
+    SONGE                         :: kbts_language_enum.KBTS_LANGUAGE_SONGE;
+    SONINKE                       :: kbts_language_enum.KBTS_LANGUAGE_SONINKE;
+    SOUTH_SLAVEY                  :: kbts_language_enum.KBTS_LANGUAGE_SOUTH_SLAVEY;
+    SOUTHERN_KIWAI                :: kbts_language_enum.KBTS_LANGUAGE_SOUTHERN_KIWAI;
+    SOUTHERN_SAMI                 :: kbts_language_enum.KBTS_LANGUAGE_SOUTHERN_SAMI;
+    SOUTHERN_SOTHO                :: kbts_language_enum.KBTS_LANGUAGE_SOUTHERN_SOTHO;
+    SPANISH                       :: kbts_language_enum.KBTS_LANGUAGE_SPANISH;
+    STANDARD_MOROCCAN_TAMAZIGHT   :: kbts_language_enum.KBTS_LANGUAGE_STANDARD_MOROCCAN_TAMAZIGHT;
+    STRAITS_SALISH                :: kbts_language_enum.KBTS_LANGUAGE_STRAITS_SALISH;
+    SUKUMA                        :: kbts_language_enum.KBTS_LANGUAGE_SUKUMA;
+    SUNDANESE                     :: kbts_language_enum.KBTS_LANGUAGE_SUNDANESE;
+    SURI                          :: kbts_language_enum.KBTS_LANGUAGE_SURI;
+    SUTU                          :: kbts_language_enum.KBTS_LANGUAGE_SUTU;
+    SVAN                          :: kbts_language_enum.KBTS_LANGUAGE_SVAN;
+    SWADAYA_ARAMAIC               :: kbts_language_enum.KBTS_LANGUAGE_SWADAYA_ARAMAIC;
+    SWAHILI                       :: kbts_language_enum.KBTS_LANGUAGE_SWAHILI;
+    SWATI                         :: kbts_language_enum.KBTS_LANGUAGE_SWATI;
+    SWEDISH                       :: kbts_language_enum.KBTS_LANGUAGE_SWEDISH;
+    SYLHETI                       :: kbts_language_enum.KBTS_LANGUAGE_SYLHETI;
+    SYRIAC                        :: kbts_language_enum.KBTS_LANGUAGE_SYRIAC;
+    SYRIAC_EASTERN                :: kbts_language_enum.KBTS_LANGUAGE_SYRIAC_EASTERN;
+    SYRIAC_ESTRANGELA             :: kbts_language_enum.KBTS_LANGUAGE_SYRIAC_ESTRANGELA;
+    SYRIAC_WESTERN                :: kbts_language_enum.KBTS_LANGUAGE_SYRIAC_WESTERN;
+    TABASARAN                     :: kbts_language_enum.KBTS_LANGUAGE_TABASARAN;
+    TACHELHIT                     :: kbts_language_enum.KBTS_LANGUAGE_TACHELHIT;
+    TAGALOG                       :: kbts_language_enum.KBTS_LANGUAGE_TAGALOG;
+    TAHAGGART_TAMAHAQ             :: kbts_language_enum.KBTS_LANGUAGE_TAHAGGART_TAMAHAQ;
+    TAHITIAN                      :: kbts_language_enum.KBTS_LANGUAGE_TAHITIAN;
+    TAI_LAING                     :: kbts_language_enum.KBTS_LANGUAGE_TAI_LAING;
+    TAJIKI                        :: kbts_language_enum.KBTS_LANGUAGE_TAJIKI;
+    TALYSH                        :: kbts_language_enum.KBTS_LANGUAGE_TALYSH;
+    TAMASHEK                      :: kbts_language_enum.KBTS_LANGUAGE_TAMASHEK;
+    TAMASHEQ                      :: kbts_language_enum.KBTS_LANGUAGE_TAMASHEQ;
+    TAMAZIGHT                     :: kbts_language_enum.KBTS_LANGUAGE_TAMAZIGHT;
+    TAMIL                         :: kbts_language_enum.KBTS_LANGUAGE_TAMIL;
+    TARIFIT                       :: kbts_language_enum.KBTS_LANGUAGE_TARIFIT;
+    TATAR                         :: kbts_language_enum.KBTS_LANGUAGE_TATAR;
+    TAWALLAMMAT_TAMAJAQ           :: kbts_language_enum.KBTS_LANGUAGE_TAWALLAMMAT_TAMAJAQ;
+    TAY                           :: kbts_language_enum.KBTS_LANGUAGE_TAY;
+    TAYART_TAMAJEQ                :: kbts_language_enum.KBTS_LANGUAGE_TAYART_TAMAJEQ;
+    TELUGU                        :: kbts_language_enum.KBTS_LANGUAGE_TELUGU;
+    TEMNE                         :: kbts_language_enum.KBTS_LANGUAGE_TEMNE;
+    TETUM                         :: kbts_language_enum.KBTS_LANGUAGE_TETUM;
+    TH_CREE                       :: kbts_language_enum.KBTS_LANGUAGE_TH_CREE;
+    THAI                          :: kbts_language_enum.KBTS_LANGUAGE_THAI;
+    THAILAND_MON                  :: kbts_language_enum.KBTS_LANGUAGE_THAILAND_MON;
+    THOMPSON                      :: kbts_language_enum.KBTS_LANGUAGE_THOMPSON;
+    TIBETAN                       :: kbts_language_enum.KBTS_LANGUAGE_TIBETAN;
+    TIGRE                         :: kbts_language_enum.KBTS_LANGUAGE_TIGRE;
+    TIGRINYA                      :: kbts_language_enum.KBTS_LANGUAGE_TIGRINYA;
+    TIV                           :: kbts_language_enum.KBTS_LANGUAGE_TIV;
+    TLINGIT                       :: kbts_language_enum.KBTS_LANGUAGE_TLINGIT;
+    TOBO                          :: kbts_language_enum.KBTS_LANGUAGE_TOBO;
+    TODO                          :: kbts_language_enum.KBTS_LANGUAGE_TODO;
+    TOK_PISIN                     :: kbts_language_enum.KBTS_LANGUAGE_TOK_PISIN;
+    TOMA                          :: kbts_language_enum.KBTS_LANGUAGE_TOMA;
+    TONGA                         :: kbts_language_enum.KBTS_LANGUAGE_TONGA;
+    TONGAN                        :: kbts_language_enum.KBTS_LANGUAGE_TONGAN;
+    TORKI                         :: kbts_language_enum.KBTS_LANGUAGE_TORKI;
+    TSHANGLA                      :: kbts_language_enum.KBTS_LANGUAGE_TSHANGLA;
+    TSONGA                        :: kbts_language_enum.KBTS_LANGUAGE_TSONGA;
+    TSWANA                        :: kbts_language_enum.KBTS_LANGUAGE_TSWANA;
+    TULU                          :: kbts_language_enum.KBTS_LANGUAGE_TULU;
+    TUMBUKA                       :: kbts_language_enum.KBTS_LANGUAGE_TUMBUKA;
+    TUNDRA_ENETS                  :: kbts_language_enum.KBTS_LANGUAGE_TUNDRA_ENETS;
+    TURKISH                       :: kbts_language_enum.KBTS_LANGUAGE_TURKISH;
+    TURKMEN                       :: kbts_language_enum.KBTS_LANGUAGE_TURKMEN;
+    TUROYO_ARAMAIC                :: kbts_language_enum.KBTS_LANGUAGE_TUROYO_ARAMAIC;
+    TUSCARORA                     :: kbts_language_enum.KBTS_LANGUAGE_TUSCARORA;
+    TUVALU                        :: kbts_language_enum.KBTS_LANGUAGE_TUVALU;
+    TUVIN                         :: kbts_language_enum.KBTS_LANGUAGE_TUVIN;
+    TWI                           :: kbts_language_enum.KBTS_LANGUAGE_TWI;
+    TZOTZIL                       :: kbts_language_enum.KBTS_LANGUAGE_TZOTZIL;
+    UDI                           :: kbts_language_enum.KBTS_LANGUAGE_UDI;
+    UDMURT                        :: kbts_language_enum.KBTS_LANGUAGE_UDMURT;
+    UKRAINIAN                     :: kbts_language_enum.KBTS_LANGUAGE_UKRAINIAN;
+    UMBUNDU                       :: kbts_language_enum.KBTS_LANGUAGE_UMBUNDU;
+    UME_SAMI                      :: kbts_language_enum.KBTS_LANGUAGE_UME_SAMI;
+    UPPER_SAXON                   :: kbts_language_enum.KBTS_LANGUAGE_UPPER_SAXON;
+    UPPER_SORBIAN                 :: kbts_language_enum.KBTS_LANGUAGE_UPPER_SORBIAN;
+    URALIC_PHONETIC               :: kbts_language_enum.KBTS_LANGUAGE_URALIC_PHONETIC;
+    URDU                          :: kbts_language_enum.KBTS_LANGUAGE_URDU;
+    UYGHUR                        :: kbts_language_enum.KBTS_LANGUAGE_UYGHUR;
+    UZBEK                         :: kbts_language_enum.KBTS_LANGUAGE_UZBEK;
+    VENDA                         :: kbts_language_enum.KBTS_LANGUAGE_VENDA;
+    VENETIAN                      :: kbts_language_enum.KBTS_LANGUAGE_VENETIAN;
+    VIETNAMESE                    :: kbts_language_enum.KBTS_LANGUAGE_VIETNAMESE;
+    VLAX_ROMANI                   :: kbts_language_enum.KBTS_LANGUAGE_VLAX_ROMANI;
+    VOLAPUK                       :: kbts_language_enum.KBTS_LANGUAGE_VOLAPUK;
+    VORO                          :: kbts_language_enum.KBTS_LANGUAGE_VORO;
+    WA                            :: kbts_language_enum.KBTS_LANGUAGE_WA;
+    WACI_GBE                      :: kbts_language_enum.KBTS_LANGUAGE_WACI_GBE;
+    WAGDI                         :: kbts_language_enum.KBTS_LANGUAGE_WAGDI;
+    WAKHI                         :: kbts_language_enum.KBTS_LANGUAGE_WAKHI;
+    WALLOON                       :: kbts_language_enum.KBTS_LANGUAGE_WALLOON;
+    WARAY_WARAY                   :: kbts_language_enum.KBTS_LANGUAGE_WARAY_WARAY;
+    WAYANAD_CHETTI                :: kbts_language_enum.KBTS_LANGUAGE_WAYANAD_CHETTI;
+    WAYUU                         :: kbts_language_enum.KBTS_LANGUAGE_WAYUU;
+    WELSH                         :: kbts_language_enum.KBTS_LANGUAGE_WELSH;
+    WENDAT                        :: kbts_language_enum.KBTS_LANGUAGE_WENDAT;
+    WEST_CREE                     :: kbts_language_enum.KBTS_LANGUAGE_WEST_CREE;
+    WESTERN_CHAM                  :: kbts_language_enum.KBTS_LANGUAGE_WESTERN_CHAM;
+    WESTERN_KAYAH                 :: kbts_language_enum.KBTS_LANGUAGE_WESTERN_KAYAH;
+    WESTERN_PANJABI               :: kbts_language_enum.KBTS_LANGUAGE_WESTERN_PANJABI;
+    WESTERN_PWO_KAREN             :: kbts_language_enum.KBTS_LANGUAGE_WESTERN_PWO_KAREN;
+    WOLOF                         :: kbts_language_enum.KBTS_LANGUAGE_WOLOF;
+    WOODS_CREE                    :: kbts_language_enum.KBTS_LANGUAGE_WOODS_CREE;
+    WUDING_LUQUAN_YI              :: kbts_language_enum.KBTS_LANGUAGE_WUDING_LUQUAN_YI;
+    WYANDOT                       :: kbts_language_enum.KBTS_LANGUAGE_WYANDOT;
+    XHOSA                         :: kbts_language_enum.KBTS_LANGUAGE_XHOSA;
+    Y_CREE                        :: kbts_language_enum.KBTS_LANGUAGE_Y_CREE;
+    YAO                           :: kbts_language_enum.KBTS_LANGUAGE_YAO;
+    YAPESE                        :: kbts_language_enum.KBTS_LANGUAGE_YAPESE;
+    YI_CLASSIC                    :: kbts_language_enum.KBTS_LANGUAGE_YI_CLASSIC;
+    YI_MODERN                     :: kbts_language_enum.KBTS_LANGUAGE_YI_MODERN;
+    YIDDISH                       :: kbts_language_enum.KBTS_LANGUAGE_YIDDISH;
+    YORUBA                        :: kbts_language_enum.KBTS_LANGUAGE_YORUBA;
+    ZAMBOANGA_CHAVACANO           :: kbts_language_enum.KBTS_LANGUAGE_ZAMBOANGA_CHAVACANO;
+    ZANDE                         :: kbts_language_enum.KBTS_LANGUAGE_ZANDE;
+    ZARMA                         :: kbts_language_enum.KBTS_LANGUAGE_ZARMA;
+    ZAZAKI                        :: kbts_language_enum.KBTS_LANGUAGE_ZAZAKI;
+    ZEALANDIC                     :: kbts_language_enum.KBTS_LANGUAGE_ZEALANDIC;
+    ZHUANG                        :: kbts_language_enum.KBTS_LANGUAGE_ZHUANG;
+    ZULU                          :: kbts_language_enum.KBTS_LANGUAGE_ZULU;
+};
 // -1 in values means it should be inferred by forbear
 Complete_Style :: struct {
     background: Background;
@@ -2424,6 +3115,8 @@ Complete_Style :: struct {
     shadow: Shadow;
 
     font: *Font;
+    language: Language;
+    text_direction: Text_Direction;
 
     // Will do nothing if the font is not a variable font. If you don't have a variable font, you should use different fonts
     // for different weights.
@@ -2455,29 +3148,33 @@ Complete_Style :: struct {
 };
 
 Base_Style :: struct {
-    font: *Font;
-    color: Vector4 = Vector4.{ 1.0, 1.0, 1.0, 1.0 };
-    font_size: float = 16.0;
-    font_weight: u16 = 600;
-    line_height: float = 1.0;
-    text_wrapping: Text_Wrapping = .WORD;
-    cursor: Cursor = .DEFAULT;
+    font:           *Font;
+    language:       Language       = .DONT_KNOW;
+    text_direction: Text_Direction = .DONT_KNOW;
+    color:          Vector4        = Vector4.{ 1.0, 1.0, 1.0, 1.0 };
+    font_size:      float          = 16.0;
+    font_weight:    u16            = 600;
+    line_height:    float          = 1.0;
+    text_wrapping:  Text_Wrapping  = .WORD;
+    cursor:         Cursor         = .DEFAULT;
 };
 
 from :: (style: Complete_Style) -> Base_Style {
     return Base_Style.{
-        font = style.font,
-        color = style.color,
-        font_size = style.font_size,
-        font_weight = style.font_weight,
-        line_height = style.line_height,
-        text_wrapping = style.text_wrapping,
-        cursor = style.cursor,
+        font           = style.font,
+        language       = style.language,
+        text_direction = style.text_direction,
+        color          = style.color,
+        font_size      = style.font_size,
+        font_weight    = style.font_weight,
+        line_height    = style.line_height,
+        text_wrapping  = style.text_wrapping,
+        cursor         = style.cursor,
     };
 }
 
 Gradient_Stop :: struct {
-    color: Vector4;
+    color:    Vector4;
     // Position along the gradient in the [0, 1] range.
     position: float;
 } #no_padding;
@@ -2485,34 +3182,18 @@ angle :: (degrees: float) -> Vector2 {
     radians := degrees * Math.PI / 180.0;
     return Vector2.{ x = Math.sin(radians), y = -Math.cos(radians)};
 }
-to_top :: () -> Vector2 {
-    return Vector2.{ x = 0, y = -1 };
-}
-to_bottom :: () -> Vector2 {
-    return Vector2.{ x = 0, y = 1 };
-}
-to_left :: () -> Vector2 {
-    return Vector2.{ x = -1, y = 0 };
-}
-to_right :: () -> Vector2 {
-    return Vector2.{ x = 1, y = 0 };
-}
-to_top_left :: () -> Vector2 {
-    return Vector2.{ x = xx -Math.SQRTH, y = xx -Math.SQRTH };
-}
-to_top_right :: () -> Vector2 {
-    return Vector2.{ x = xx Math.SQRTH, y = xx -Math.SQRTH };
-}
-to_bottom_left :: () -> Vector2 {
-    return Vector2.{ x = xx -Math.SQRTH, y = xx Math.SQRTH };
-}
-to_bottom_right :: () -> Vector2 {
-    return Vector2.{ x = xx Math.SQRTH, y = xx Math.SQRTH };
-}
+to_top          :: () -> Vector2 { return Vector2.{ x = 0, y = -1 }; }
+to_bottom       :: () -> Vector2 { return Vector2.{ x = 0, y = 1 }; }
+to_left         :: () -> Vector2 { return Vector2.{ x = -1, y = 0 }; }
+to_right        :: () -> Vector2 { return Vector2.{ x = 1, y = 0 }; }
+to_top_left     :: () -> Vector2 { return Vector2.{ x = xx -Math.SQRTH, y = xx -Math.SQRTH }; }
+to_top_right    :: () -> Vector2 { return Vector2.{ x = xx Math.SQRTH, y = xx -Math.SQRTH }; }
+to_bottom_left  :: () -> Vector2 { return Vector2.{ x = xx -Math.SQRTH, y = xx Math.SQRTH }; }
+to_bottom_right :: () -> Vector2 { return Vector2.{ x = xx Math.SQRTH, y = xx Math.SQRTH }; }
 Linear_Gradient :: struct {
     // Stops define where each color sits along the gradient; positions are expected to be monotonically increasing within the
     // [0, 1] range.
-    stops: []Gradient_Stop;
+    stops:     []Gradient_Stop;
     // Which way the gradient flows. Defaults to left-to-right.
     direction: Vector2;
 };
@@ -2527,21 +3208,15 @@ Background :: struct {
     kind: Kind;
     union {
         // image: *Graphics.Image,
-        color: Vector4;
+        color:    Vector4;
         // A linear gradient across the element. Defaults to flowing left-to-right; set `direction` to change which way it runs.
         // See `Linear_Gradient`.
         gradient: Linear_Gradient;
     }
 };
-rgb :: (r: float, g: float, b: float) -> Vector4 {
-    return Vector4.{r / 255.0, g / 255.0, b / 255.0, 1.0};
-}
-rgba :: (r: float, g: float, b: float) -> Vector4 {
-    return rgb(r, g, b);
-}
-rgba :: (r: float, g: float, b: float, a: float) -> Vector4 {
-    return Vector4.{r / 255.0, g / 255.0, b / 255.0, a};
-}
+rgb  :: (r: float, g: float, b: float) -> Vector4 { return Vector4.{r / 255.0, g / 255.0, b / 255.0, 1.0}; }
+rgba :: (r: float, g: float, b: float) -> Vector4 { return rgb(r, g, b); }
+rgba :: (r: float, g: float, b: float, a: float) -> Vector4 { return Vector4.{r / 255.0, g / 255.0, b / 255.0, a}; }
 hex :: ($code: string) -> Vector4 {
     COLOR :: #run -> Vector4 {
         digits := code;
@@ -2563,81 +3238,74 @@ hex :: ($code: string) -> Vector4 {
     };
     return COLOR;
 }
-color :: (value: Vector4) -> Background {
-    return Background.{ kind = .COLOR, color = value };
-}
-gradient :: (value: Linear_Gradient) -> Background {
-    return Background.{ kind = .GRADIENT, gradient = value };
-}
+color    :: (value: Vector4) -> Background { return Background.{ kind = .COLOR, color = value }; }
+gradient :: (value: Linear_Gradient) -> Background { return Background.{ kind = .GRADIENT, gradient = value }; }
 
 Placement :: struct {
     Kind :: enum u8 { FLOW; FIXED; RELATIVE; };
 
     kind: Kind;
     union {
-        fixed: Vector2;
+        fixed:    Vector2;
         relative: Vector2;
     }
 };
-flow :: () -> Placement {
-    return Placement.{ kind = .FLOW };
-}
-fixed :: (value: Vector2) -> Placement {
-    return Placement.{ kind = .FIXED, fixed = value };
-}
-relative :: (value: Vector2) -> Placement {
-    return Placement.{ kind = .RELATIVE, relative = value };
-}
+flow     :: () -> Placement { return Placement.{ kind = .FLOW }; }
+fixed    :: (value: Vector2) -> Placement { return Placement.{ kind = .FIXED, fixed = value }; }
+relative :: (value: Vector2) -> Placement { return Placement.{ kind = .RELATIVE, relative = value }; }
 
-UNSET :: 0xFF;
+UNSET       :: 0xFF;
 VECTOR2_NAN :: Vector2.{ x = FLOAT32_NAN, y = FLOAT32_NAN };
 VECTOR4_NAN :: Vector4.{ x = FLOAT32_NAN, y = FLOAT32_NAN, z = FLOAT32_NAN, w = FLOAT32_NAN };
-SIDES_NAN :: Sides.{ x = VECTOR2_NAN, y = VECTOR2_NAN };
+SIDES_NAN   :: Sides.{ x = VECTOR2_NAN, y = VECTOR2_NAN };
 Style :: struct {
     background: Background = Background.{ kind = UNSET };
 
-    color: Vector4 = VECTOR4_NAN;
-    border_radius: float = FLOAT32_NAN;
-    border_color: Vector4 = VECTOR4_NAN;
-    border_width: Border_Width = SIDES_NAN;
-    border_style: Border_Style = UNSET;
+    color:         Vector4      = VECTOR4_NAN;
+    border_radius: float        = FLOAT32_NAN;
+    border_color:  Vector4      = VECTOR4_NAN;
+    border_width:  Border_Width = SIDES_NAN;
+    border_style:  Border_Style = UNSET;
 
     shadow: Shadow = Shadow.{
-        offset = SIDES_NAN,
+        offset      = SIDES_NAN,
         blur_radius = FLOAT32_NAN,
-        spread = FLOAT32_NAN,
-        color = VECTOR4_NAN,
+        spread      = FLOAT32_NAN,
+        color       = VECTOR4_NAN,
     };
 
-    font: *Font;
-    font_weight: u16 = 0;
-    font_size: float = FLOAT32_NAN;
-    line_height: float = FLOAT32_NAN;
+    font:          *Font;
+    font_weight:   u16           = 0;
+    font_size:     float         = FLOAT32_NAN;
+    line_height:   float         = FLOAT32_NAN;
     text_wrapping: Text_Wrapping = UNSET;
+
+    language:       Language       = .DONT_KNOW;
+    text_direction: Text_Direction = .DONT_KNOW;
 
     cursor: Cursor = UNSET;
 
     // TODO: use this. we're currently not using this for anything I think this can wrap, without having to flow with text.
     // Flowing with text is meant for text decorations and such, which can be done with a text builder API
-    overflow: Overflow = UNSET;
+    overflow:  Overflow  = UNSET;
     placement: Placement = Placement.{ kind = UNSET };
-    z_index: u16 = U16_MAX;
+    z_index:   u16       = U16_MAX;
 
-    min_width: float = FLOAT32_NAN;
-    max_width: float = FLOAT32_NAN;
-    width: Sizing = Sizing.{ kind = UNSET };
-    min_height: float = FLOAT32_NAN;
-    max_height: float = FLOAT32_NAN;
-    height: Sizing = Sizing.{ kind = UNSET };
+    min_width:  float  = FLOAT32_NAN;
+    max_width:  float  = FLOAT32_NAN;
+    width:      Sizing = Sizing.{ kind = UNSET };
+    min_height: float  = FLOAT32_NAN;
+    max_height: float  = FLOAT32_NAN;
+    height:     Sizing = Sizing.{ kind = UNSET };
 
     translate: Vector2 = VECTOR2_NAN;
 
     padding: Padding = SIDES_NAN;
-    margin: Margin = SIDES_NAN;
+    margin:  Margin  = SIDES_NAN;
 
     x_justification: Alignment = UNSET;
     y_justification: Alignment = UNSET;
-    direction: Direction = UNSET;
+    direction:       Direction = UNSET;
 };
 
 overwrite :: (overwriter: Style, overwritten: Style) -> Style {
@@ -2645,40 +3313,42 @@ overwrite :: (overwriter: Style, overwritten: Style) -> Style {
 
     if result.background.kind == xx UNSET  result.background = overwritten.background;
 
-    if isnan(result.color.x)  result.color = overwritten.color;
-    if isnan(result.border_radius)  result.border_radius = overwritten.border_radius;
-    if isnan(result.border_color.x)  result.border_color = overwritten.border_color;
-    if isnan(result.border_width.x.x)  result.border_width = overwritten.border_width;
+    if isnan(result.color.x)  result.color                  = overwritten.color;
+    if isnan(result.border_radius)  result.border_radius    = overwritten.border_radius;
+    if isnan(result.border_color.x)  result.border_color    = overwritten.border_color;
+    if isnan(result.border_width.x.x)  result.border_width  = overwritten.border_width;
     if result.border_style == xx UNSET  result.border_style = overwritten.border_style;
 
     if isnan(result.shadow.blur_radius)  result.shadow = overwritten.shadow;
 
-    if result.font == null  result.font = overwritten.font;
-    if result.font_weight == 0  result.font_weight = overwritten.font_weight;
-    if isnan(result.font_size)  result.font_size = overwritten.font_size;
-    if isnan(result.line_height)  result.line_height = overwritten.line_height;
-    if result.text_wrapping == xx UNSET  result.text_wrapping = overwritten.text_wrapping;
-    if result.cursor == xx UNSET  result.cursor = overwritten.cursor;
+    if result.font == null  result.font                          = overwritten.font;
+    if result.language == .DONT_KNOW result.language             = overwritten.language;
+    if result.text_direction == .DONT_KNOW result.text_direction = overwritten.text_direction;
+    if result.font_weight == 0  result.font_weight               = overwritten.font_weight;
+    if isnan(result.font_size)  result.font_size                 = overwritten.font_size;
+    if isnan(result.line_height)  result.line_height             = overwritten.line_height;
+    if result.text_wrapping == xx UNSET  result.text_wrapping    = overwritten.text_wrapping;
+    if result.cursor == xx UNSET  result.cursor                  = overwritten.cursor;
 
-    if result.overflow == xx UNSET  result.overflow = overwritten.overflow;
+    if result.overflow == xx UNSET  result.overflow        = overwritten.overflow;
     if result.placement.kind == xx UNSET  result.placement = overwritten.placement;
-    if result.z_index == U16_MAX  result.z_index = overwritten.z_index;
+    if result.z_index == U16_MAX  result.z_index           = overwritten.z_index;
 
-    if isnan(result.min_width)  result.min_width = overwritten.min_width;
-    if isnan(result.max_width)  result.max_width = overwritten.max_width;
-    if result.width.kind == xx UNSET  result.width = overwritten.width;
-    if isnan(result.min_height)  result.min_height = overwritten.min_height;
-    if isnan(result.max_height)  result.max_height = overwritten.max_height;
+    if isnan(result.min_width)  result.min_width     = overwritten.min_width;
+    if isnan(result.max_width)  result.max_width     = overwritten.max_width;
+    if result.width.kind == xx UNSET  result.width   = overwritten.width;
+    if isnan(result.min_height)  result.min_height   = overwritten.min_height;
+    if isnan(result.max_height)  result.max_height   = overwritten.max_height;
     if result.height.kind == xx UNSET  result.height = overwritten.height;
 
     if isnan(result.translate.x)  result.translate = overwritten.translate;
 
     if isnan(result.padding.x.x)  result.padding = overwritten.padding;
-    if isnan(result.margin.x.x)  result.margin = overwritten.margin;
+    if isnan(result.margin.x.x)  result.margin   = overwritten.margin;
 
     if result.x_justification == xx UNSET  result.x_justification = overwritten.x_justification;
     if result.y_justification == xx UNSET  result.y_justification = overwritten.y_justification;
-    if result.direction == xx UNSET  result.direction = overwritten.direction;
+    if result.direction == xx UNSET  result.direction             = overwritten.direction;
 
     return result;
 }
@@ -2689,46 +3359,48 @@ complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
     out.color = ifx isnan(style.color.x) then base.color else style.color;
 
     out.border_radius = ifx isnan(style.border_radius) then 0.0 else style.border_radius;
-    out.border_color = ifx isnan(style.border_color.x) then make_vector4(0.0) else style.border_color;
-    out.border_width = ifx isnan(style.border_width.x.x) then all(0.0) else style.border_width;
-    out.border_style = ifx style.border_style == xx UNSET then .SOLID else style.border_style;
+    out.border_color  = ifx isnan(style.border_color.x) then make_vector4(0.0) else style.border_color;
+    out.border_width  = ifx isnan(style.border_width.x.x) then all(0.0) else style.border_width;
+    out.border_style  = ifx style.border_style == xx UNSET then .SOLID else style.border_style;
 
     out.shadow = style.shadow;
 
-    out.font = ifx style.font == null then base.font else style.font;
-    out.font_weight = ifx style.font_weight == 0 then base.font_weight else style.font_weight;
-    out.font_size = ifx isnan(style.font_size) then base.font_size else style.font_size;
-    out.line_height = ifx isnan(style.line_height) then base.line_height else style.line_height;
-    out.text_wrapping = ifx style.text_wrapping == xx UNSET then base.text_wrapping else style.text_wrapping;
-    out.cursor = ifx style.cursor == xx UNSET then base.cursor else style.cursor;
+    out.font           = ifx style.font == null then base.font else style.font;
+    out.language       = ifx style.language == .DONT_KNOW then base.language else style.language;
+    out.text_direction = ifx style.text_direction == .DONT_KNOW then base.text_direction else style.text_direction;
+    out.font_weight    = ifx style.font_weight == 0 then base.font_weight else style.font_weight;
+    out.font_size      = ifx isnan(style.font_size) then base.font_size else style.font_size;
+    out.line_height    = ifx isnan(style.line_height) then base.line_height else style.line_height;
+    out.text_wrapping  = ifx style.text_wrapping == xx UNSET then base.text_wrapping else style.text_wrapping;
+    out.cursor         = ifx style.cursor == xx UNSET then base.cursor else style.cursor;
 
-    out.overflow = ifx style.overflow == xx UNSET then .VISIBLE else style.overflow;
+    out.overflow  = ifx style.overflow == xx UNSET then .VISIBLE else style.overflow;
     out.placement = ifx style.placement.kind == xx UNSET then Placement.{ kind = .FLOW } else style.placement;
-    out.z_index = style.z_index;
+    out.z_index   = style.z_index;
 
     out.min_width = style.min_width;
     out.max_width = style.max_width;
-    out.width = ifx style.width.kind == xx UNSET then Sizing.{ kind = .FIT } else style.width;
+    out.width     = ifx style.width.kind == xx UNSET then Sizing.{ kind = .FIT } else style.width;
 
     out.min_height = style.min_height;
     out.max_height = style.max_height;
-    out.height = ifx style.height.kind == xx UNSET then Sizing.{ kind = .FIT } else style.height;
+    out.height     = ifx style.height.kind == xx UNSET then Sizing.{ kind = .FIT } else style.height;
 
     out.translate = ifx isnan(style.translate.x) then make_vector2(0.0) else style.translate;
 
     out.padding = ifx isnan(style.padding.x.x) then all(0.0) else style.padding;
-    out.margin = ifx isnan(style.margin.x.x) then all(0.0) else style.margin;
+    out.margin  = ifx isnan(style.margin.x.x) then all(0.0) else style.margin;
 
-    out.direction = ifx style.direction == xx UNSET then .HORIZONTAL else style.direction;
+    out.direction       = ifx style.direction == xx UNSET then .HORIZONTAL else style.direction;
     out.x_justification = ifx style.x_justification == xx UNSET then .START else style.x_justification;
     out.y_justification = ifx style.y_justification == xx UNSET then .START else style.y_justification;
 }
 
 Pool_Slot :: struct {
-    pool: Flat_Pool;
-    allocator: Allocator;
+    pool:       Flat_Pool;
+    allocator:  Allocator;
     last_frame: s64;
-    used: bool;
+    used:       bool;
 };
 Node :: struct {
     Kind :: enum {
@@ -2736,22 +3408,22 @@ Node :: struct {
     }
     kind: Kind = .ELEMENT;
 
-    size: Vector2;
+    size:     Vector2;
     position: Vector2;
     min_size: Vector2;
     max_size: Vector2 = Vector2.{FLOAT32_INFINITY, FLOAT32_INFINITY};
-    z: u16;
+    z:        u16;
 
-    first_child: s64 = -1;
-    last_child: s64 = -1;
-    next_sibling: s64 = -1;
-    previous_sibling: s64 = -1;
-    parent: s64 = -1;
-    glyphs: Glyphs;
+    first_child:      s64    = -1;
+    last_child:       s64    = -1;
+    next_sibling:     s64    = -1;
+    previous_sibling: s64    = -1;
+    parent:           s64    = -1;
+    glyphs:           Glyphs;
 
     style: Complete_Style;
 
-    content_size: Vector2;
+    content_size:    Vector2;
     // TODO: should we have this? this feels like the wrong solution to the problem, there should be a user-accessible way of
     // changing the offset of the children without a specific property for it
     //
@@ -2761,22 +3433,22 @@ Node :: struct {
     // Clip rect inherited from ancestors that have constrained size with overflowing children. Format: [x, y, width, height].
     // If NAN, no clipping is applied.
     clipping_rectangle: Vector4 = VECTOR4_NAN;
-    state_offset: s64;
-    state_size: s64;
-    pool_slot: s64 = -1;
-    key: u64;
+    state_offset:       s64;
+    state_size:         s64;
+    pool_slot:          s64     = -1;
+    key:                u64;
 
     tree: *Node_Tree;
 };
 Node_Measurement :: struct {
-    size: Vector2 = VECTOR2_NAN;
-    content_size: Vector2 = VECTOR2_NAN;
-    position: Vector2 = VECTOR2_NAN;
+    size:               Vector2 = VECTOR2_NAN;
+    content_size:       Vector2 = VECTOR2_NAN;
+    position:           Vector2 = VECTOR2_NAN;
     clipping_rectangle: Vector4 = VECTOR4_NAN;
-    state_offset: s64;
-    state_size: s64;
-    pool_slot: s64 = -1;
-    key: u64 = U64_MAX;
+    state_offset:       s64;
+    state_size:         s64;
+    pool_slot:          s64     = -1;
+    key:                u64     = U64_MAX;
 }
 get_measurement :: (node_index: s64 = -1, include_scopes := false) -> measurement: Node_Measurement, defined: bool {
     using context.forbear;
@@ -2810,7 +3482,7 @@ get_measurement :: (node_index: s64 = -1, include_scopes := false) -> measuremen
 node_pool :: () -> Allocator {
     using context.forbear;
     assert(parent_index != -1, "node_pool() must be called from inside an element");
-    node := *node_tree[parent_index];
+    node      := *node_tree[parent_index];
     pool_slot := node.pool_slot;
     if pool_slot == -1 {
         measurement, defined := get_measurement(include_scopes = true);
@@ -2862,7 +3534,7 @@ state :: ($T: Type, initial: T) -> *T, first_frame: bool {
         exit(-1);
     }
 
-    result := cast(*T) *state_buffers.*[state_current][state_used];
+    result  := cast(*T) *state_buffers.*[state_current][state_used];
     result.* = initial;
     is_resizable :: (T: Type) -> bool {
         info := cast(*Type_Info) T;
@@ -2872,12 +3544,12 @@ state :: ($T: Type, initial: T) -> *T, first_frame: bool {
         result.allocator = node_pool();
     }
     measurement, defined := get_measurement(include_scopes = true);
-    copy_forward := defined && node.state_size + size <= measurement.state_size;
+    copy_forward         := defined && node.state_size + size <= measurement.state_size;
     if copy_forward {
         memcpy(result, *state_buffers.*[1 - state_current][measurement.state_offset + node.state_size], size_of(T));
     }
     node.state_size += size;
-    state_used += size;
+    state_used      += size;
     return result, !copy_forward;
 }
 state :: (initial: $T) -> *T, first_frame: bool {
@@ -2885,18 +3557,18 @@ state :: (initial: $T) -> *T, first_frame: bool {
     return data, first_frame;
 }
 state :: ($T: Type) -> *T, first_frame: bool {
-    initial: T;
+    initial           : T;
     data, first_frame := state(T, initial);
     return data, first_frame;
 }
 transition :: (value: $T, duration: float, easing: (float) -> float) -> T
 #modify { return T == float || T == Vector2 || T == Vector3 || T == Vector4, "transition only supports float, Vector2, Vector3 and Vector4"; } {
-    start := state(value);
-    target := state(value);
+    start    := state(value);
+    target   := state(value);
     progress := state(1.0);
 
     progress.* = min(1.0, progress.* + context.forbear.delta_time / duration);
-    current := start.* + (target.* - start.*) * easing(progress.*);
+    current   := start.* + (target.* - start.*) * easing(progress.*);
 
     retarget: bool;
     #if T == float {
@@ -2905,16 +3577,16 @@ transition :: (value: $T, duration: float, easing: (float) -> float) -> T
         retarget = Math.length(value - target.*) > 0.0001;
     }
     if retarget {
-        start.* = current;
-        target.* = value;
+        start.*    = current;
+        target.*   = value;
         progress.* = 0.0;
     }
     return current;
 } @hook
 Spring_Config :: struct (T: Type) {
     stiffness: float;
-    damping: float;
-    mass: float;
+    damping:   float;
+    mass:      float;
 
     current: *T;
 }
@@ -2929,20 +3601,20 @@ spring_transition :: (target: $T, config: Spring_Config(T)) -> T
     dt := context.forbear.delta_time;
     if dt != 0.0 {
         N :: size_of(T) / size_of(float);
-        values := cast(*[N]float) value;
+        values     := cast(*[N]float) value;
         velocities := cast(*[N]float) velocity;
-        targets := cast(*[N]float) *target;
+        targets    := cast(*[N]float) *target;
         for i: 0..N-1 {
             displacement := targets.*[i] - values.*[i];
             if (displacement > 0.0 && velocities.*[i] < 0.0) || (displacement < 0.0 && velocities.*[i] > 0.0) {
                 velocities.*[i] = 0.0;
             }
-            acceleration := (config.stiffness * displacement - config.damping * velocities.*[i]) / config.mass;
+            acceleration    := (config.stiffness * displacement - config.damping * velocities.*[i]) / config.mass;
             velocities.*[i] += acceleration * dt;
-            values.*[i] += velocities.*[i] * dt;
+            values.*[i]     += velocities.*[i] * dt;
 
             if abs(displacement) <= 0.0001 && abs(velocities.*[i]) <= 0.0001 {
-                values.*[i] = targets.*[i];
+                values.*[i]     = targets.*[i];
                 velocities.*[i] = 0.0;
             }
         }
@@ -3001,27 +3673,27 @@ Mouse_State :: struct {
     #if OS == .LINUX {
         serial: u32;
     }
-    inside: bool;
-    position: Vector2;
+    inside:       bool;
+    position:     Vector2;
     scroll_delta: Vector2;
 
     cursor: Cursor;
 
     press_position: [MOUSE_BUTTON_COUNT]Vector2;
-    pressed: [MOUSE_BUTTON_COUNT]bool;
-    released: [MOUSE_BUTTON_COUNT]bool;
-    held: [MOUSE_BUTTON_COUNT]bool;
+    pressed:        [MOUSE_BUTTON_COUNT]bool;
+    released:       [MOUSE_BUTTON_COUNT]bool;
+    held:           [MOUSE_BUTTON_COUNT]bool;
 };
 #scope_module
 mouse_press :: (using state: *Mouse_State, button: Mouse_Button, new_position: Vector2) {
-    position = new_position;
+    position               = new_position;
     press_position[button] = new_position;
-    pressed[button] = true;
-    held[button] = true;
+    pressed[button]        = true;
+    held[button]           = true;
 }
 mouse_release :: (using state: *Mouse_State, button: Mouse_Button) {
     released[button] = true;
-    held[button] = false;
+    held[button]     = false;
 }
 #scope_export
 Keyboard_State :: struct {
@@ -3037,27 +3709,27 @@ Keyboard_State :: struct {
         // just inform you how they should be repeated.
         //
         // There is no alternative to this in Linux, so we have to handle it ourselves.
-        repeating_key: Key;
+        repeating_key:      Key;
         repeating_key_code: u32;
-        next_repeat: float64;
+        next_repeat:        float64;
         // in characters per second
-        repeat_rate: s32;
+        repeat_rate:        s32;
         // in milliseconds
-        repeat_delay: s32;
+        repeat_delay:       s32;
     }
     events_buffer: [32 * 3]Key_Event;
-    events: []Key_Event;
-    held: [776]Key;
-    simulated: bool;
+    events:        []Key_Event;
+    held:          [776]Key;
+    simulated:     bool;
 };
 #scope_module
 init_keyboard_state :: (using state: *Keyboard_State) {
-    events.data = events_buffer.data;
+    events.data  = events_buffer.data;
     events.count = 0;
 }
 add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
     assert(events.count < 32 * 3);
-    events.count += 1;
+    events.count              += 1;
     events.*[events.count - 1] = key_event;
 }
 // This ensures that the keys held are updated as the modifiers change, so that, in a US Keyboard Layout doing SHIFT+EQUALS holds PLUS, and then releasing SHIFT makes it hold EQUALS. This only applies for keys that
@@ -3885,7 +4557,7 @@ font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
     raster_glyph.pitch = glyph.bitmap.pitch;
     return raster_glyph;
 }
-shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Glyphs {
+shape_text :: (font: *Font, text_wrapping: Text_Wrapping, language: Language, direction: Text_Direction, content: string) -> Glyphs {
     // TODO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
     glyphs: Glyphs;
     glyphs.line_height = cast(float) font.raster_face.height;
@@ -3901,12 +4573,7 @@ shape_text :: (font: *Font, text_wrapping: Text_Wrapping, content: string) -> Gl
                         null);
     defer kbts_ShapePopFont(ctx);
 
-    // TODO(next): pass the language and direction down as styles
-    kbts_ShapeBegin(
-        context.forbear.shaping_context,
-        xx kbts_direction_enum.KBTS_DIRECTION_LTR,
-        xx kbts_language_enum.KBTS_LANGUAGE_DONT_KNOW
-    );
+    kbts_ShapeBegin(context.forbear.shaping_context, xx direction, xx language);
     kbts_ShapeUtf8(
         context.forbear.shaping_context,
         content.data,
@@ -3987,7 +4654,11 @@ text :: (style := Style.{}, content := "", manual_key := "", location := #caller
         rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
         set_weight(node.style.font, node.style.font_weight);
         set_font_size(node.style.font, rounded_font_size);
-        node.glyphs = shape_text(node.style.font, node.style.text_wrapping, content);
+        node.glyphs = shape_text(node.style.font,
+                                 node.style.text_wrapping,
+                                 node.style.language,
+                                 node.style.text_direction,
+                                 content);
         font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
         node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
         node.min_size = node.glyphs.min_size * font_units_to_point;

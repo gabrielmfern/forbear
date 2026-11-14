@@ -142,6 +142,8 @@ main :: () {
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *inter,
         color = rgb(255, 255, 255),
+        language = .ENGLISH,
+        text_direction = .LEFT_TO_RIGHT,
     });
     init_font(*inter);
 

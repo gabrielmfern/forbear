@@ -34,6 +34,8 @@ main :: () {
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font = *inter,
+        language = .ENGLISH,
+        text_direction = .LEFT_TO_RIGHT,
     });
 
     init_font(*inter);

@@ -513,9 +513,11 @@ main :: () {
         init_window(*backend, *window, Calculator.MIN_WIDTH, Calculator.MIN_HEIGHT, "calculator tests", show_window = false);
         context.inter = #run create_font(read_entire_file(tprint("%../../Inter.ttf", #filepath)));
         init_forbear(*forbear, *window, *backend, Base_Style.{
-            font      = *context.inter,
-            color     = hex("#ECECEC"),
-            font_size = 16,
+            font           = *context.inter,
+            color          = hex("#ECECEC"),
+            font_size      = 16,
+            language       = .ENGLISH,
+            text_direction = .LEFT_TO_RIGHT,
         });
         init_font(*context.inter);
         window.keyboard_state.simulated = true;
