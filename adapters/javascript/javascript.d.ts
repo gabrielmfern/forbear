@@ -3,7 +3,8 @@ type Vector4 = [r: number, g: number, b: number, a: number];
 type Sides = [left: number, right: number, top: number, bottom: number];
 type Sizing = [kind: "fit"] | [kind: "fixed" | "grow", value: number];
 type LineHeight = [kind: "percentage" | "fixed", value: number];
-type Placement = [kind: "flow"] | [kind: "fixed" | "relative", x: number, y: number];
+type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+type Placement = [kind: "flow"] | [kind: "fixed" | "relative", x: number, y: number, corner?: Corner];
 type GradientStop = [r: number, g: number, b: number, a: number, position: number];
 type Background =
     | [kind: "color", r: number, g: number, b: number, a: number]
@@ -89,10 +90,10 @@ declare function gradient(direction: Vector2, stops: GradientStop[]): Background
 
 declare function fit(): Sizing;
 declare function fixed(value: number): Sizing;
-declare function fixed(value: Vector2): Placement;
+declare function fixed(value: Vector2, corner?: Corner): Placement;
 declare function grow(value?: number): Sizing;
 declare function flow(): Placement;
-declare function relative(value: Vector2): Placement;
+declare function relative(value: Vector2, corner?: Corner): Placement;
 
 declare function lineHeightPercentage(value: number): LineHeight;
 declare function lineHeightFixed(value: number): LineHeight;

@@ -3260,18 +3260,20 @@ hex :: ($code: string) -> Vector4 {
 color    :: (value: Vector4) -> Background { return Background.{ kind = .COLOR, color = value }; }
 gradient :: (value: Linear_Gradient) -> Background { return Background.{ kind = .GRADIENT, gradient = value }; }
 
+Corner :: enum u8 { TOP_LEFT; TOP_RIGHT; BOTTOM_LEFT; BOTTOM_RIGHT; };
 Placement :: struct {
     Kind :: enum u8 { FLOW; FIXED; RELATIVE; };
 
     kind: Kind;
+    corner: Corner;
     union {
         fixed:    Vector2;
         relative: Vector2;
     }
 };
 flow     :: () -> Placement { return Placement.{ kind = .FLOW }; }
-fixed    :: (value: Vector2) -> Placement { return Placement.{ kind = .FIXED, fixed = value }; }
-relative :: (value: Vector2) -> Placement { return Placement.{ kind = .RELATIVE, relative = value }; }
+fixed    :: (value: Vector2, corner := Corner.TOP_LEFT) -> Placement { return Placement.{ kind = .FIXED, corner = corner, fixed = value }; }
+relative :: (value: Vector2, corner := Corner.TOP_LEFT) -> Placement { return Placement.{ kind = .RELATIVE, corner = corner, relative = value }; }
 
 UNSET       :: 0xFF;
 VECTOR2_NAN :: Vector2.{ x = FLOAT32_NAN, y = FLOAT32_NAN };
@@ -5650,6 +5652,13 @@ layout :: () {
             //
             // === place nodes and justifying them in both directions ===
             //
+            place_at_corner :: (corner: Corner, offset: Vector2, origin: Vector2, area: Vector2, size: Vector2) -> Vector2 {
+                result := origin + offset;
+                if corner == .TOP_RIGHT || corner == .BOTTOM_RIGHT   result.x = origin.x + area.x - size.x - offset.x;
+                if corner == .BOTTOM_LEFT || corner == .BOTTOM_RIGHT result.y = origin.y + area.y - size.y - offset.y;
+                return result;
+            }
+            viewport := get_viewport_size();
             for *node: node_tree if node.kind == .ELEMENT {
                 if node.parent == -1 {
                     if node.style.placement.kind == {
@@ -5658,11 +5667,16 @@ layout :: () {
                             node.position.x += node.style.margin.x.x;
                             node.position.y += node.style.margin.y.x;
                         case .FIXED;
-                            node.position = node.style.placement.fixed + node.style.translate;
+                            node.position = place_at_corner(node.style.placement.corner, node.style.placement.fixed, .{}, viewport, node.size) + node.style.translate;
                         case .RELATIVE;
-                            node.position = node.style.placement.relative + node.style.translate;
-                            node.position.x += node.style.margin.x.x;
-                            node.position.y += node.style.margin.y.x;
+                            margin := node.style.margin;
+                            node.position = place_at_corner(
+                                node.style.placement.corner,
+                                node.style.placement.relative,
+                                .{ margin.x.x, margin.y.x },
+                                viewport - Vector2.{ margin.x.x + margin.x.y, margin.y.x + margin.y.y },
+                                node.size,
+                            ) + node.style.translate;
                     }
                 }
                 if node.first_child != -1 {
@@ -5681,9 +5695,9 @@ layout :: () {
                         child := *node_tree[child_index];
                         if child.style.placement.kind == {
                             case .FIXED;
-                                child.position = child.style.placement.fixed + child.style.translate;
+                                child.position = place_at_corner(child.style.placement.corner, child.style.placement.fixed, .{}, viewport, child.size) + child.style.translate;
                             case .RELATIVE;
-                                child.position = node.position + child.style.placement.relative + child.style.translate;
+                                child.position = place_at_corner(child.style.placement.corner, child.style.placement.relative, node.position, node.size, child.size) + child.style.translate;
                             case .FLOW;
                                 margin := get(child.style.margin, direction);
                                 add(*pen, direction, margin.x);

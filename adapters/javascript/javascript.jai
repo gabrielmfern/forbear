@@ -286,14 +286,22 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
         value := string.{ data = string_buffer.data, count = string_count };
         if array_count == 1 && value == "flow" {
             result.placement.kind = .FLOW;
-        } else if array_count == 3 && value == "fixed" && javascript_style_get_array_number(adapter.runtime, js_style_object, .PLACEMENT, 1, *number) {
+        } else if (array_count == 3 || array_count == 4) && value == "fixed" && javascript_style_get_array_number(adapter.runtime, js_style_object, .PLACEMENT, 1, *number) {
             result.placement.kind = .FIXED;
             result.placement.fixed.x = cast(float) number;
             if javascript_style_get_array_number(adapter.runtime, js_style_object, .PLACEMENT, 2, *number) result.placement.fixed.y = cast(float) number;
-        } else if array_count == 3 && value == "relative" && javascript_style_get_array_number(adapter.runtime, js_style_object, .PLACEMENT, 1, *number) {
+        } else if (array_count == 3 || array_count == 4) && value == "relative" && javascript_style_get_array_number(adapter.runtime, js_style_object, .PLACEMENT, 1, *number) {
             result.placement.kind = .RELATIVE;
             result.placement.relative.x = cast(float) number;
             if javascript_style_get_array_number(adapter.runtime, js_style_object, .PLACEMENT, 2, *number) result.placement.relative.y = cast(float) number;
+        }
+        string_count = javascript_style_get_array_string_length(adapter.runtime, js_style_object, .PLACEMENT, 3);
+        if array_count == 4 && string_count <= string_buffer.count && javascript_style_copy_array_string(adapter.runtime, js_style_object, .PLACEMENT, 3, string_buffer.data, string_count) {
+            corner := string.{ data = string_buffer.data, count = string_count };
+            if corner == "top-left" result.placement.corner = .TOP_LEFT;
+            if corner == "top-right" result.placement.corner = .TOP_RIGHT;
+            if corner == "bottom-left" result.placement.corner = .BOTTOM_LEFT;
+            if corner == "bottom-right" result.placement.corner = .BOTTOM_RIGHT;
         }
     }
 

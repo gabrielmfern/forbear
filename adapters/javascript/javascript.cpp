@@ -73,6 +73,7 @@ void fixed(const v8::FunctionCallbackInfo<v8::Value>& info) {
             y->IsNumber()) {
             placement->Set(context, 1, x).Check();
             placement->Set(context, 2, y).Check();
+            if (info.Length() >= 2 && info[1]->IsString()) placement->Set(context, 3, info[1]).Check();
             return_value.Set(placement);
         } else {
             isolate->ThrowException(v8::Exception::TypeError(
@@ -151,6 +152,7 @@ void relative(const v8::FunctionCallbackInfo<v8::Value>& info) {
             y->IsNumber()) {
             placement->Set(context, 1, x).Check();
             placement->Set(context, 2, y).Check();
+            if (info.Length() >= 2 && info[1]->IsString()) placement->Set(context, 3, info[1]).Check();
             return_value.Set(placement);
         } else {
             isolate->ThrowException(v8::Exception::TypeError(
