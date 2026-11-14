@@ -3375,46 +3375,46 @@ overwrite :: (overwriter: Style, overwritten: Style) -> Style {
 }
 
 complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) {
-    out.background = ifx style.background.kind == xx UNSET then Background.{ kind = .COLOR, color = make_vector4(0.0) } else style.background;
+    out.background      = ifx style.background.kind == xx UNSET then Background.{ kind = .COLOR, color = make_vector4(0.0) } else style.background;
 
-    out.color = ifx isnan(style.color.x) then base.color else style.color;
+    out.color           = ifx isnan(style.color.x)               then base.color             else style.color;
 
-    out.border_radius = ifx isnan(style.border_radius) then 0.0 else style.border_radius;
-    out.border_color  = ifx isnan(style.border_color.x) then make_vector4(0.0) else style.border_color;
-    out.border_width  = ifx isnan(style.border_width.x.x) then all(0.0) else style.border_width;
-    out.border_style  = ifx style.border_style == xx UNSET then .SOLID else style.border_style;
+    out.border_radius   = ifx isnan(style.border_radius)         then 0.0                    else style.border_radius;
+    out.border_color    = ifx isnan(style.border_color.x)        then make_vector4(0.0)      else style.border_color;
+    out.border_width    = ifx isnan(style.border_width.x.x)      then all(0.0)               else style.border_width;
+    out.border_style    = ifx style.border_style == xx UNSET     then .SOLID                 else style.border_style;
 
-    out.shadow = style.shadow;
+    out.shadow          = style.shadow;
 
-    out.font           = ifx style.font == null then base.font else style.font;
-    out.language       = ifx style.language == UNSET then base.language else style.language;
-    out.text_direction = ifx style.text_direction == UNSET then base.text_direction else style.text_direction;
-    out.font_weight    = ifx style.font_weight == 0 then base.font_weight else style.font_weight;
-    out.font_size      = ifx isnan(style.font_size) then base.font_size else style.font_size;
-    out.line_height    = ifx style.line_height.kind == xx UNSET then base.line_height else style.line_height;
-    out.text_wrapping  = ifx style.text_wrapping == xx UNSET then base.text_wrapping else style.text_wrapping;
-    out.cursor         = ifx style.cursor == xx UNSET then base.cursor else style.cursor;
+    out.font            = ifx style.font == null                 then base.font              else style.font;
+    out.language        = ifx style.language == UNSET            then base.language          else style.language;
+    out.text_direction  = ifx style.text_direction == UNSET      then base.text_direction    else style.text_direction;
+    out.font_weight     = ifx style.font_weight == 0             then base.font_weight       else style.font_weight;
+    out.font_size       = ifx isnan(style.font_size)             then base.font_size         else style.font_size;
+    out.line_height     = ifx style.line_height.kind == xx UNSET then base.line_height       else style.line_height;
+    out.text_wrapping   = ifx style.text_wrapping == xx UNSET    then base.text_wrapping     else style.text_wrapping;
+    out.cursor          = ifx style.cursor == xx UNSET           then base.cursor            else style.cursor;
 
-    out.overflow  = ifx style.overflow == xx UNSET then .VISIBLE else style.overflow;
-    out.placement = ifx style.placement.kind == xx UNSET then Placement.{ kind = .FLOW } else style.placement;
-    out.z_index   = style.z_index;
+    out.overflow        = ifx style.overflow == xx UNSET         then .VISIBLE               else style.overflow;
+    out.placement       = ifx style.placement.kind == xx UNSET then Placement.{ kind = .FLOW } else style.placement;
+    out.z_index         = style.z_index;
 
-    out.min_width = style.min_width;
-    out.max_width = style.max_width;
-    out.width     = ifx style.width.kind == xx UNSET then Sizing.{ kind = .FIT } else style.width;
+    out.min_width       = style.min_width;
+    out.max_width       = style.max_width;
+    out.width           = ifx style.width.kind == xx UNSET       then Sizing.{ kind = .FIT } else style.width;
 
-    out.min_height = style.min_height;
-    out.max_height = style.max_height;
-    out.height     = ifx style.height.kind == xx UNSET then Sizing.{ kind = .FIT } else style.height;
+    out.min_height      = style.min_height;
+    out.max_height      = style.max_height;
+    out.height          = ifx style.height.kind == xx UNSET      then Sizing.{ kind = .FIT } else style.height;
 
-    out.translate = ifx isnan(style.translate.x) then make_vector2(0.0) else style.translate;
+    out.translate       = ifx isnan(style.translate.x)           then make_vector2(0.0)      else style.translate;
 
-    out.padding = ifx isnan(style.padding.x.x) then all(0.0) else style.padding;
-    out.margin  = ifx isnan(style.margin.x.x) then all(0.0) else style.margin;
+    out.padding         = ifx isnan(style.padding.x.x)           then all(0.0)               else style.padding;
+    out.margin          = ifx isnan(style.margin.x.x)            then all(0.0)               else style.margin;
 
-    out.direction       = ifx style.direction == xx UNSET then .HORIZONTAL else style.direction;
-    out.x_justification = ifx style.x_justification == xx UNSET then .START else style.x_justification;
-    out.y_justification = ifx style.y_justification == xx UNSET then .START else style.y_justification;
+    out.direction       = ifx style.direction == xx UNSET        then .HORIZONTAL            else style.direction;
+    out.x_justification = ifx style.x_justification == xx UNSET  then .START                 else style.x_justification;
+    out.y_justification = ifx style.y_justification == xx UNSET  then .START                 else style.y_justification;
 }
 
 Pool_Slot :: struct {
