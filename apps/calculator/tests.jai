@@ -494,14 +494,16 @@ main :: () {
             .{"123 -", "123 -"},
             .{"12 +", "12 +"},
         ] {
-            text: [..]u8;
-            array_add(*text, ..cast([]u8) it.text);
-            changed := Calculator.reverse_number_sign(*text);
-            assert(to_string(text.data, text.count) == it.expected, "reverse_number_sign(\"%\")=\"%\", expected \"%\"", it.text, to_string(text.data, text.count), it.expected);
+            input_state: Calculator.Input_State;
+            array_add(*input_state.value, ..cast([]u8) it.text);
+            changed := Calculator.reverse_number_sign(*input_state);
+            text    := to_string(input_state.value.data, input_state.value.count);
+            assert(text == it.expected, "reverse_number_sign(\"%\")=\"%\", expected \"%\"", it.text, text, it.expected);
             assert(changed == (it.text != it.expected), "reverse_number_sign(\"%\") changed=%", it.text, changed);
 
-            Calculator.reverse_number_sign(*text);
-            assert(to_string(text.data, text.count) == it.text, "reversing \"%\" twice gave \"%\"", it.text, to_string(text.data, text.count));
+            Calculator.reverse_number_sign(*input_state);
+            text = to_string(input_state.value.data, input_state.value.count);
+            assert(text == it.text, "reversing \"%\" twice gave \"%\"", it.text, text);
         }
     });
 

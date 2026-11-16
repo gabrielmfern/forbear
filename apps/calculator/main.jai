@@ -569,13 +569,9 @@ delete :: (using input_state: *Input_State, a: s64, b: s64) {
     }
     selection_anchor = -1;
 }
-append :: (using input_state: *Input_State, input: string, input_character_filter: #type (input: u8) -> bool) {
-    start := cursor;
-    end   := cursor;
-    if selection_anchor != -1 {
-        start = min(cursor, selection_anchor);
-        end   = max(cursor, selection_anchor);
-    }
+append :: (using input_state: *Input_State, a: s64, b: s64, input: string, input_character_filter: #type (input: u8) -> bool = null) {
+    start := min(a, b);
+    end   := max(a, b);
     edit := Input_Edit.{
         where                   = start,
         cursor_before           = cursor,
@@ -595,6 +591,7 @@ append :: (using input_state: *Input_State, input: string, input_character_filte
         }
     }
     if edit.inserted_length > 0 {
+        // TO-DO: this should try to concatenate the changes to the previous Input_Edit, instead of adding a new one.
         array_add(*edit_history, edit);
         array_reset_keeping_memory(*undo_history);
         cursor           = start + edit.inserted_length;
@@ -617,7 +614,7 @@ use_input :: (using input_state:      *Input_State,
 
     glyphs := get_node(text_node_index).glyphs;
 
-    append(input_state, get_text_input(), input_character_filter);
+    append(input_state, cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_text_input(), input_character_filter);
 
     {
         //
@@ -664,7 +661,9 @@ use_input :: (using input_state:      *Input_State,
         }
     }
 
-    if command && on_key_down(.V) then append(input_state, get_clipboard_text(), input_character_filter);
+    if command && on_key_down(.V) {
+        append(input_state, cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_clipboard_text(), input_character_filter);
+    }
 
     if command && on_key_down(.C) && selection_anchor != -1 && value.count > 0 {
         start := min(cursor, selection_anchor);
@@ -809,41 +808,42 @@ Input :: (input_state: *Input_State, body: Code) #expand {
     });
 } @component
 
-reverse_number_sign :: (text: *[..]u8) -> changed: bool {
-    start := text.count;
-    while start > 0 && (is_digit(text.*[start - 1]) || text.*[start - 1] == #char ".") {
+reverse_number_sign :: (using input_state: *Input_State) -> changed: bool {
+    start := value.count;
+    while start > 0 && (is_digit(value[start - 1]) || value[start - 1] == #char ".") {
         start -= 1;
     }
-    changed := start < text.count;
+    changed := start < value.count;
     if changed {
         before_minus := start - 2;
-        while before_minus >= 0 && text.*[before_minus] == #char " " {
+        while before_minus >= 0 && value[before_minus] == #char " " {
             before_minus -= 1;
         }
         is_sign :=
                start > 0
-            && text.*[start - 1] == #char "-"
-            && (before_minus < 0 || !(is_digit(text.*[before_minus]) || is_any(text.*[before_minus], ".)")));
-        if is_sign then array_ordered_remove_by_index(text, start - 1);
-        else            array_insert_at(text, #char "-", start);
+            && value[start - 1] == #char "-"
+            && (before_minus < 0 || !(is_digit(value[before_minus]) || is_any(value[before_minus], ".)")));
+        if is_sign then delete(input_state, start - 1, start);
+        else            append(input_state, start, start, "-");
     }
     return changed;
 }
 // Removes what was last added by one of the buttons. The operator buttons surround the operator with spaces, so
 // those go away together with the operator.
-remove_last :: (text: *[..]u8) {
-    while text.count > 0 && peek(text.*) == #char " " {
-        text.count -= 1;
+remove_last :: (using input_state: *Input_State) {
+    start := value.count;
+    while start > 0 && value[start - 1] == #char " " {
+        start -= 1;
     }
-    if text.count > 0 {
-        removed := peek(text.*);
-        text.count -= 1;
-        if is_operator(removed) {
-            while text.count > 0 && peek(text.*) == #char " " {
-                text.count -= 1;
+    if start > 0 {
+        start -= 1;
+        if is_operator(value[start]) {
+            while start > 0 && value[start - 1] == #char " " {
+                start -= 1;
             }
         }
     }
+    delete(input_state, start, value.count);
 }
 
 App :: () {
@@ -906,126 +906,83 @@ App :: () {
             using input_state;
             Row(#code {
                 if Button(column_style(2.0), "C", kind = .FUNCTION) {
-                    value.count      = 0;
-                    cursor           = 0;
-                    selection_anchor = -1;
+                    delete(input_state, 0, value.count);
                     // There's nothing to evaluate anymore, and the result is only updated when the evaluation succeeds
                     result.* = 0;
                 }
                 if Button(column_style(2.0), "⌫", is_pressed = is_key_held(Key.BACKSPACE), kind = .FUNCTION) {
-                    remove_last(*value);
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    remove_last(input_state);
                 }
             });
             Row(#code {
                 if Button(column_style(), "(", is_pressed = is_key_held(Key.PARENTHESIS_LEFT), kind = .FUNCTION) {
-                    array_add(*value, #char "(");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "(");
                 }
                 if Button(column_style(), ")", is_pressed = is_key_held(Key.PARENTHESIS_RIGHT), kind = .FUNCTION) {
-                    array_add(*value, #char ")");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, ")");
                 }
                 if Button(column_style(), "+/-", kind = .FUNCTION) {
-                    if reverse_number_sign(*value) {
-                        cursor           = value.count;
-                        selection_anchor = -1;
-                    }
+                    if reverse_number_sign(input_state) then cursor = value.count;
                 }
                 if Button(column_style(), "^", is_pressed = is_key_held(Key.CARET), kind = .OPERATOR) {
-                    array_add(*value, #char " ", #char "^", #char " ");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, " ^ ");
                 }
             });
             Row(#code {
                 if Button(column_style(), "7", is_pressed = is_key_held(Key.DIGIT_7)) {
-                    array_add(*input_state.value, #char "7");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "7");
                 }
                 if Button(column_style(), "8", is_pressed = is_key_held(Key.DIGIT_8)) {
-                    array_add(*value, #char "8");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "8");
                 }
                 if Button(column_style(), "9", is_pressed = is_key_held(Key.DIGIT_9)) {
-                    array_add(*value, #char "9");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "9");
                 }
                 if Button(column_style(), "÷", is_pressed = is_key_held(Key.PLUS), kind = .OPERATOR) {
-                    array_add(*value, #char " ", #char "/", #char " ");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, " / ");
                 }
             });
             Row(#code {
                 if Button(column_style(), "4", is_pressed = is_key_held(Key.DIGIT_4)) {
-                    array_add(*value, #char "4");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "4");
                 }
                 if Button(column_style(), "5", is_pressed = is_key_held(Key.DIGIT_5)) {
-                    array_add(*value, #char "5");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "5");
                 }
                 if Button(column_style(), "6", is_pressed = is_key_held(Key.DIGIT_6)) {
-                    array_add(*value, #char "6");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "6");
                 }
                 if Button(column_style(), "×",   is_pressed = is_key_held(Key.X)
                                               || is_key_held(Key.ASTERISK), kind = .OPERATOR) {
-                    array_add(*value, #char " ", #char "*", #char " ");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, " * ");
                 }
             });
             Row(#code {
                 if Button(column_style(), "1", is_pressed = is_key_held(Key.DIGIT_1)) {
-                    array_add(*value, #char "1");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "1");
                 }
                 if Button(column_style(), "2", is_pressed = is_key_held(Key.DIGIT_2)) {
-                    array_add(*value, #char "2");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "2");
                 }
                 if Button(column_style(), "3", is_pressed = is_key_held(Key.DIGIT_3)) {
-                    array_add(*value, #char "3");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, "3");
                 }
                 if Button(column_style(), "+", is_pressed = is_key_held(Key.PLUS), kind = .OPERATOR) {
-                    array_add(*value, #char " ", #char "+", #char " ");
-                    cursor           = value.count;
-                    selection_anchor = -1;
+                    append(input_state, value.count, value.count, " + ");
                 }
             });
             Row(#code {
                 Row(#code {
                     if Button(column_style(), "0", is_pressed = is_key_held(Key.DIGIT_0)) {
-                        array_add(*value, #char "0");
-                        cursor           = value.count;
-                        selection_anchor = -1;
+                        append(input_state, value.count, value.count, "0");
                     }
                 });
                 Row(#code {
                     if Button(column_style(), ".", is_pressed = is_key_held(Key.PERIOD)) {
-                        array_add(*value, #char ".");
-                        cursor           = value.count;
-                        selection_anchor = -1;
+                        append(input_state, value.count, value.count, ".");
                     }
                     if Button(column_style(), "-", is_pressed = is_key_held(Key.MINUS), kind = .OPERATOR) {
-                        array_add(*value, #char " ", #char "-", #char " ");
-                        cursor           = value.count;
-                        selection_anchor = -1;
+                        append(input_state, value.count, value.count, " - ");
                     }
                 });
             });
@@ -1034,10 +991,8 @@ App :: () {
 
     if on_key_down(.ENTER) {
         stringified_result := tprint("%", result.*);
-        input_state.value.count = stringified_result.count;
-        memcpy(input_state.value.data, stringified_result.data, stringified_result.count);
-        input_state.cursor           = 0;
-        input_state.selection_anchor = -1;
+        append(input_state, 0, input_state.value.count, stringified_result);
+        input_state.cursor = 0;
 
         copy_to_clipboard(stringified_result);
     }
