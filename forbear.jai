@@ -474,7 +474,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             memset(window.keyboard_state.held.data, 0, size_of(type_of(window.keyboard_state.held)));
                         case WM_CAPTURECHANGED;
                             memset(window.mouse_state.held.data, 0, size_of(type_of(window.mouse_state.held)));
-                        // TODO: handle double click events
+                        // TO-DO: handle double-click events
                         case WM_LBUTTONDOWN; #through;
                         case WM_RBUTTONDOWN; #through;
                         case WM_MBUTTONDOWN; #through;
@@ -534,14 +534,14 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                                 append_text(utf8, *window.text, window.text_buffer);
                             }
                         case WM_SYSCHAR;
-                            // text typed while Alt is held
+                            // Text typed while Alt is held
                             if wparam == #char " " {
                                 result = DefWindowProcW(hwnd, message, wparam, lparam);
                             }
                         case WM_SYSKEYDOWN; #through;
                         case WM_KEYDOWN;
                             using window.keyboard_state;
-                            if wparam != VK_PROCESSKEY && wparam != VK_PACKET { // ignores keys typed during an IME compose event
+                            if wparam != VK_PROCESSKEY && wparam != VK_PACKET { // Ignores keys typed during an IME compose event
                                 repeated := (lparam >> 30) & 1;
                                 scancode := cast(u32) ((lparam >> 16) & 0xFF);
                                 extended := (lparam >> 24) & 1;
@@ -616,7 +616,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                                         case VK_RWIN;    key = .SUPER_RIGHT;
                                         case VK_CAPITAL; key = .CAPS_LOCK;
                                         case;
-                                            // the key could not be found, meaning it's not in the named ones, so we're going to write it as a character instead
+                                            // The key could not be found, meaning it's not in the named ones, so we're going to write it as a character instead
                                             key = key_from_virtual_key(xx wparam, scancode);
                                     }
                                     if key != 0 {
@@ -694,7 +694,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             wide := cast(*u16) GlobalLock(handle);
             if wide {
                 defer GlobalUnlock(handle);
-                // with -1, the count includes the null terminator
+                // With -1, the count includes the null terminator
                 count := WideCharToMultiByte(CP_UTF8, 0, wide, -1, null, 0, null, null);
                 if count + 1 > backend.clipboard_text_buffer.count {
                     backend.clipboard_text_buffer.data = realloc(backend.clipboard_text_buffer.data, count, backend.clipboard_text_buffer.count,, context.forbear.persistent_allocator);
@@ -728,7 +728,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     width:   float64,
                     height:  float64,
                     title:   string,
-                    // TODO: add this to the other platforms
+                    // TO-DO: add this to the other platforms
                     show_window := true) {
         window.text.data = window.text_buffer.data;
         window.backend = backend;
@@ -2303,7 +2303,7 @@ Shadow :: struct {
 
 Alignment :: enum u8 { START; CENTER; END; };
 
-// Will modify the min size of layout boxes that wrap text accordingly
+// Will modify the minimum size of layout boxes that wrap text accordingly
 // character => largest character
 // word => largest word
 // none => all in one line
@@ -3227,7 +3227,9 @@ Background :: struct {
 
     kind: Kind;
     union {
-        // image: *Graphics.Image,
+        #if false {
+            image: *Graphics.Image,
+        }
         color:    Vector4;
         // A linear gradient across the element. Defaults to flowing left-to-right; set `direction` to change which way it runs.
         // See `Linear_Gradient`.
@@ -3307,7 +3309,7 @@ Style :: struct {
 
     cursor: Cursor = UNSET;
 
-    // TODO: use this. we're currently not using this for anything I think this can wrap, without having to flow with text.
+    // TO-DO: use this. We're currently not using this for anything I think this can wrap, without having to flow with text.
     // Flowing with text is meant for text decorations and such, which can be done with a text builder API
     overflow:  Overflow  = UNSET;
     placement: Placement = Placement.{ kind = UNSET };
@@ -3450,7 +3452,8 @@ Node :: struct {
 
     content_size: Vector2;
 
-    // Clip rect inherited from ancestors that have constrained size with overflowing children. Format: [x, y, width, height].
+    // Clipped rectangle inherited from ancestors that have constrained size with overflowing children.
+    // Format: [x, y, width, height].
     // If NAN, no clipping is applied.
     clipping_rectangle: Vector4 = VECTOR4_NAN;
     state_offset:       s64;
@@ -3481,13 +3484,12 @@ get_measurement :: (node_index: s64 = -1, include_scopes := false) -> measuremen
         if measurement_index < measurements.count && measurements[measurement_index].key == expected_key {
             return measurements[measurement_index], true;
         } else {
-            //
             // I don't think we should sort these measurements by keys because that would be making the normal case
-            // slower in favour of a case that should be rare as I expect things to be.
+            // slower in favor of a case that should be rare as I expect things to be.
             //
-            // TOOD(depessimization): we should store the previous_index in open_element(), then look up based on that here.
+            // TO-DO(depessimization): we should store the previous_index in open_element(), then look up based on that here.
             // There, if the indices don't match, we should iterate to find the index
-            // TODO(optimization): we should store a contiguous array of the keys of the previous frame's node tree's keys
+            // TO-DO(optimization): we should store a contiguous array of the keys of the previous frame's node tree's keys
             for measurement_by_index: measurements {
                 if measurement_by_index.key == expected_key {
                     return measurement_by_index, true;
@@ -3645,10 +3647,10 @@ Scrolling_State :: struct {
     offset:           Vector2;
     effective_offset: Vector2;
 }
-// TODO: This must be able to handle choosing between all nodes that can scroll to scroll only one of them.
+// TO-DO: This must be able to handle choosing between all nodes that can scroll to scroll only one of them.
 //
 // Besides only scrolling one of them, once one scrolling container is done with the scrolling and the user keeps
-// scrolling in that direction, the scrolling shold go to the next scrolling container with less "precedence".
+// scrolling in that direction, the scrolling should go to the next scrolling container with less "precedence".
 use_scrolling :: (using state: *Scrolling_State) {
     if is_mouse_inside() {
         offset += get_scroll_delta();
@@ -3672,12 +3674,12 @@ use_scrolling :: (using state: *Scrolling_State) {
         current   = *effective_offset,
     });
 } @hook
-// beware that this pointer might be come invalid if you define one more element
+// Beware that this pointer might be come invalid if you define one more element
 get_node :: (node_index: s64) -> *Node {
     using context.forbear;
     return *node_tree[node_index];
 }
-// beware that this pointer might be come invalid if you define one more element
+// Beware that this pointer might be come invalid if you define one more element
 get_node :: () -> *Node {
     using context.forbear;
     parent_element_index := get_parent_element_index();
@@ -3687,7 +3689,7 @@ get_node :: () -> *Node {
         return null;
     }
 }
-SCROLL_MULTIPLIER :: 48; // TODO: assess if this value shoud be 1) dynamic and/or 2) configurable by the user
+SCROLL_MULTIPLIER :: 48; // TO-DO: assess if this value should be 1) dynamic and/or 2) configurable by the user
 Mouse_State :: struct {
     #if OS == .LINUX {
         serial: u32;
@@ -3717,7 +3719,7 @@ mouse_release :: (using state: *Mouse_State, button: Mouse_Button) {
 #scope_export
 Keyboard_State :: struct {
     #if OS == .WINDOWS {
-        // used in WM_CHAR since Windows inputs utf16 piece by piece and
+        // Used in WM_CHAR since Windows inputs utf16 piece by piece and
         // we want to convert to utf8
         high_surrogate: u16;
     } else #if OS == .LINUX {
@@ -3754,7 +3756,7 @@ add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
 // This ensures that the keys held are updated as the modifiers change, so that, in a US Keyboard Layout doing SHIFT+EQUALS holds PLUS, and then releasing SHIFT makes it hold EQUALS. This only applies for keys that
 update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_State) {
     for key, code: held {
-        // only update the keys that correspond to unicode characters
+        // Only update the keys that correspond to Unicode characters
         if key != 0 && key < .ESCAPE {
             #if OS == .WINDOWS {
                 vk := MapVirtualKeyW(xx ((code & 0xFF) | (ifx code & 0x100 then 0xE000 else 0)), MAPVK_VSC_TO_VK_EX);
@@ -3766,7 +3768,7 @@ update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_Stat
             }
             if new_key != 0 && key != new_key {
                 // This means that this key changes with some modifier on or off, so, we need to replace the previous
-                // key it represented in favour of a new one. We also need to trigger the release and pressed key events
+                // key it represented in favor of a new one. We also need to trigger the release and pressed key events
                 // for both keys.
                 add_key_event(*events, Key_Event.{.RELEASED, key});
                 held[code] = new_key;
@@ -3789,7 +3791,7 @@ Key_Event :: struct {
     key: Key;
 }
 Key :: enum u32 {
-    // printable keys are their Unicode code point: cast(Key) #char "+"
+    // Printable keys are their Unicode code point: cast(Key) #char "+"
     A :: #char "a"; B :: #char "b"; C :: #char "c"; D :: #char "d"; E :: #char "e"; F :: #char "f";
     G :: #char "g"; H :: #char "h"; I :: #char "i"; J :: #char "j"; K :: #char "k"; L :: #char "l";
     M :: #char "m"; N :: #char "n"; O :: #char "o"; P :: #char "p"; Q :: #char "q"; R :: #char "r";
@@ -3833,7 +3835,7 @@ Key :: enum u32 {
     BRACE_RIGHT :: #char "}";
     TILDE :: #char "~";
 
-    ESCAPE :: 0x110000;  // first value above the Unicode range
+    ESCAPE :: 0x110000;  // First value above the Unicode range
     ENTER;
     TAB;
     BACKSPACE;
@@ -3846,7 +3848,7 @@ Key :: enum u32 {
     SHIFT_LEFT; SHIFT_RIGHT; CONTROL_LEFT; CONTROL_RIGHT;
     ALT_LEFT; ALT_RIGHT; SUPER_LEFT; SUPER_RIGHT;
     CAPS_LOCK;
-    FUNCTION; // only available on macOS and Linux
+    FUNCTION; // Only available on macOS and Linux
     VOLUME_UP; VOLUME_DOWN; VOLUME_MUTE;
     CONTEXT_MENU;
     HELP;
@@ -3938,7 +3940,7 @@ on_click :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
         return false;
     }
 }
-// TODO: Currently, this only supports text, but we should support other clipboard content types.
+// TO-DO: Currently, this only supports text, but we should support other clipboard content types.
 // Each operating system defines the type in the clipboard in a different manner, which make this quite difficult.
 get_clipboard_text :: () -> string {
     return context.forbear.backend.clipboard_text;
@@ -4241,7 +4243,7 @@ Node_Opening_Data :: struct {
 // creation, get_node and get_measurement calls are all properly using the closest parent that's an element instead
 // of the direct parent which might be a scope.
 //
-// TODO: This is a terrible trade-off of using a single fat struct for both scopes and elements.
+// TO-DO: This is a terrible trade-off of using a single fat struct for both scopes and elements.
 get_parent_element_index :: () -> s64 {
     element_ancestor_index := context.forbear.parent_index;
     previous_parent_index := context.forbear.parent_index;
@@ -4250,7 +4252,7 @@ get_parent_element_index :: () -> s64 {
     }
     return element_ancestor_index;
 }
-// intermediary API that's used from adapters, such as the javascript one. when in jai, use `element`
+// Intermediary API that's used from adapters, such as the JavaScript one. When in jai, use `element`
 open_element :: (style: Style, key: u64) -> Node_Opening_Data {
     previous_parent_index := context.forbear.parent_index;
     parent_index := get_parent_element_index();
@@ -4266,12 +4268,12 @@ open_element :: (style: Style, key: u64) -> Node_Opening_Data {
     }
     node.key = key;
     if node.style.width.kind == {
-        // we don't handle FIT or GROW since the node already has the right width by default
+        // We don't handle FIT or GROW since the node already has the right width by default
         case Sizing.Kind.FIXED;
             node.size.x = node.style.width.fixed;
     }
     if node.style.height.kind == {
-        // we don't handle FIT or GROW since the node already has the right width by default
+        // We don't handle FIT or GROW since the node already has the right width by default
         case Sizing.Kind.FIXED;
             node.size.y = node.style.height.fixed;
     }
@@ -4315,9 +4317,11 @@ open_element :: (style: Style, key: u64) -> Node_Opening_Data {
     if node.style.height.kind != Sizing.Kind.FIXED && isnan(node.style.min_height) {
         node.min_size.y = fitting_base(node, Direction.VERTICAL);
     }
-    // if (isNodeActive()) {
-    //     setCursor(result.ptr.style.cursor);
-    // }
+    #if false {
+        if (isNodeActive()) {
+            setCursor(result.ptr.style.cursor);
+        }
+    }
 
     return Node_Opening_Data.{
         base_style = previous_base_style,
@@ -4369,7 +4373,7 @@ element :: (body: Code, location := #caller_location) -> s64 #expand {
 element :: (style: Style, body: Code, location := #caller_location) -> s64 #expand {
     return element(style, "", body, location);
 }
-// TODO: I dislike that this API is different from the open_element because it receives the caller location
+// TO-DO: I dislike that this API is different from the open_element because it receives the caller location
 // and is not really meant to be called by adapters.
 //
 // The main reason this exists is because there's a bug in the compiler where if you nest unbraced #code blocks
@@ -4431,11 +4435,11 @@ Glyph :: struct {
     starts_word: bool;
     can_wrap_before: bool;
 
-    // all of these are in points units, that means they do not account for the font size, but they do account for the font weight.
+    // All of these are in points units, that means they do not account for the font size, but they do account for the font weight.
     position: Vector2;
-    // Meant for the recalculation of the glyphs position if that's required at some other layouting step
+    // Meant for the recalculation of the glyphs position if that's required at some other laying out step
     advance: Vector2;
-    // Meant for the recalculation of the glyphs position if that's required at some other layouting step
+    // Meant for the recalculation of the glyphs position if that's required at some other laying out step
     offset: Vector2;
 };
 Glyphs :: struct {
@@ -4445,7 +4449,7 @@ Glyphs :: struct {
     pre_break_indices: [..]s64;
 
     //
-    // all of the properties bellow are in font point units. this means they do not account for the font size, but they do account
+    // All the properties bellow are in font point units. This means they do not account for the font size, but they do account
     // for the font weight.
     //
 
@@ -4472,11 +4476,13 @@ Font :: struct {
     shaping_font: kbts_font;
     key: u16;
 
-    // kept track of so that this can be set during kbts text shaping
+    // Kept track of so that this can be set during kbts's text shaping
     weight: u16 = U16_MAX;
 
-    // prev_cache: Shaping_Cache;
-    // next_cache: Shaping_Cache;
+    #if false {
+        prev_cache: Shaping_Cache;
+        next_cache: Shaping_Cache;
+    }
 };
 create_font :: (memory: string) -> Font {
     #import "File";
@@ -4485,21 +4491,21 @@ create_font :: (memory: string) -> Font {
     font.memory = memory;
     return font;
 }
-// TOOD: handle errors for all of the freetype calls
+// TO-DO: handle errors for all the FreeType calls
 init_font :: (using font: *Font) {
     if context.forbear.freetype_library == null {
         FT_Init_FreeType(*context.forbear.freetype_library);
-        // TODO: implement subpixel font rendering and auto enable in lower DPI environments to match browser behavior.
-        // TODO: implement rendering of glyphs with colors like emojis
+        // TO-DO: implement subpixel font rendering and auto enable in lower DPI environments to match browser behavior.
+        // TO-DO: implement rendering of glyphs with colors like emojis
         //
         // FT_Library_SetLcdFilter(freetype_library, FT_LCD_FILTER_DEFAULT);
     }
     if context.forbear.shaping_context == null {
-        // TODO(long term): include a custom allocator here
+        // TO-DO(long term): include a custom allocator here
         context.forbear.shaping_context = kbts_CreateShapeContext(null, null);
     }
     FT_New_Memory_Face(context.forbear.freetype_library, memory.data, xx memory.count, 0, *raster_face);
-    // TODO(long term): support more than unicode here
+    // TO-DO(long term): support more than Unicode here
     assert(raster_face.charmap.encoding == FT_Encoding.UNICODE);
     font.key = context.forbear.font_counter;
     context.forbear.font_counter += 1;
@@ -4507,7 +4513,7 @@ init_font :: (using font: *Font) {
     assert(kbts_FontIsValid(*shaping_font) != 0);
 }
 Raster_Glyph :: struct {
-    // might be null
+    // Might be null
     bitmap: string;
     left: s32;
     top: s32;
@@ -4516,7 +4522,7 @@ Raster_Glyph :: struct {
     pitch: s32;
 };
 set_weight :: (font: *Font, weight: u16) {
-    // TODO: cache that this was already set so that we can avoid work
+    // TO-DO: cache that this was already set so that we can avoid work
     mm: *FT_MM_Var;
     err := FT_Get_MM_Var(font.raster_face, *mm);
     if err == xx FT_Err.Invalid_Argument {
@@ -4545,7 +4551,7 @@ set_weight :: (font: *Font, weight: u16) {
     font.weight = weight;
 }
 set_font_size :: (font: *Font, size: u16) {
-    // TODO: cache that this was already set so that we can avoid work
+    // TO-DO: cache that this was already set so that we can avoid work
     FT_Set_Pixel_Sizes(font.raster_face, size, size);
 }
 round_font_size :: (size: float) -> u16 #expand {
@@ -4577,7 +4583,7 @@ font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
     return raster_glyph;
 }
 shape_text :: (style: Complete_Style, content: string) -> Glyphs {
-    // TODO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
+    // TO-DO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
     font := style.font;
     text_wrapping := style.text_wrapping;
     glyphs: Glyphs;
@@ -4614,7 +4620,7 @@ shape_text :: (style: Complete_Style, content: string) -> Glyphs {
 
     run: kbts_run;
     pen: Vector2;
-    // the advance local to this word
+    // The advance local to this word
     word_advance: Vector2;
     while (kbts_ShapeRun(context.forbear.shaping_context, *run) != 0) {
         shaping_glyph: *kbts_glyph;
@@ -4673,8 +4679,8 @@ shape_text :: (style: Complete_Style, content: string) -> Glyphs {
 
     return glyphs;
 }
-// TODO: Support receiving any number of arguments that are passed down to sprint to then be rendered into text.
-// TODO: Support building multiple text runs for the same node's glyphs. This is quite important for text-heavy applications might have, say, emphasis on text.
+// TO-DO: Support receiving any number of arguments that are passed down to sprint to then be rendered into text.
+// TO-DO: Support building multiple text runs for the same node's glyphs. This is quite important for text-heavy applications might have, say, emphasis on text.
 text :: (style := Style.{}, content := "", manual_key := "", location := #caller_location) -> s64 #expand {
     return element(style, manual_key, #code {
         node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
@@ -4743,7 +4749,7 @@ glyph_atlas_reset :: (glyph_atlas: *Glyph_Atlas) {
     cursor_y = 0;
     row_height = 0;
 }
-// doubles the size of the atlas, throwing away everything that was in it
+// Doubles the size of the atlas, throwing away everything that was in it
 glyph_atlas_grow :: (glyph_atlas: *Glyph_Atlas) -> bool {
     using glyph_atlas;
     if size * 2 > MAX_SIZE  return false;
@@ -4754,7 +4760,7 @@ glyph_atlas_grow :: (glyph_atlas: *Glyph_Atlas) -> bool {
     glyph_atlas_reset(glyph_atlas);
     return true;
 }
-// rasters every glyph in the node tree that isn't in the atlas yet, returns false if the atlas got full before
+// Rasterizes every glyph in the node tree that isn't in the atlas yet, returns false if the atlas got full before
 // all of them could be placed
 glyph_atlas_fill :: () -> bool {
     using context.forbear;
@@ -4828,7 +4834,7 @@ Forbear :: struct {
 init_forbear :: (
     forbear: *Forbear,
     program_window: *Window,
-    // TOOD: currently we're defining the specific backend names to be just one here, but in the long-term we will include
+    // TO-DO: currently we're defining the specific backend names to be just one here, but in the long-term we will include
     // multiple backends for each operating system, not one, so we need to handle that in a better way.
     program_backend: *Backend,
     program_base_style: Base_Style,
@@ -4854,47 +4860,47 @@ init_forbear :: (
     glBindBuffer(GL_ARRAY_BUFFER, node_vbo);
 
     stride :: size_of(Draw_Instance);
-    // position
+    // `position`
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 0);
     glVertexAttribDivisor(0, 1);
 
-    // size
+    // `size`
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 8);
     glVertexAttribDivisor(1, 1);
 
-    // color
+    // `color`
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
     glVertexAttribDivisor(2, 1);
 
-    // border_width
+    // `border_width`
     glEnableVertexAttribArray(3);
     glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 32);
     glVertexAttribDivisor(3, 1);
 
-    // border_color
+    // `border_color`
     glEnableVertexAttribArray(4);
     glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 48);
     glVertexAttribDivisor(4, 1);
 
-    // border_radius
+    // `border_radius`
     glEnableVertexAttribArray(5);
     glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, stride, cast(*void) 64);
     glVertexAttribDivisor(5, 1);
 
-    // uv_min
+    // `uv_min`
     glEnableVertexAttribArray(6);
     glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 68);
     glVertexAttribDivisor(6, 1);
 
-    // uv_max
+    // `uv_max`
     glEnableVertexAttribArray(7);
     glVertexAttribPointer(7, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 76);
     glVertexAttribDivisor(7, 1);
 
-    // kind
+    // `kind`
     glEnableVertexAttribArray(8);
     glVertexAttribIPointer(8, 1, GL_UNSIGNED_INT, stride, cast(*void) 84);
     glVertexAttribDivisor(8, 1);
@@ -5006,7 +5012,7 @@ GLSL);
                     }
                 }
             } else if (v_kind == 2u) {
-                // TODO: handle subpixel rendering
+                // TO-DO: handle subpixel rendering
                 out_color = v_color * texture(atlas, v_uv).r;
             }
         }
@@ -5030,7 +5036,7 @@ GLSL);
 
     glGenTextures(1, *glyph_atlas.texture);
     glBindTexture(GL_TEXTURE_2D, glyph_atlas.texture);
-    // TOOD: keep track of whether subpixel rendering is enabled to create the texture atlas here accordingly
+    // TO-DO: keep track of whether subpixel rendering is enabled to create the texture atlas here accordingly
     glTexImage2D(GL_TEXTURE_2D, 0, xx GL_R8, xx glyph_atlas.size, xx glyph_atlas.size, 0, GL_RED, GL_UNSIGNED_BYTE, null);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -5043,11 +5049,11 @@ GLSL);
 // ======== frame lifecycle functions ========
 //
 
-// layouting is completely dependent on the fact that the children are appended in in the order of parent -> children, if
-// we ever change that, layouting completely changes too, at least in the way it traverses things, but the core algorithms
+// Laying out is completely dependent on the fact that the children are appended in the order of parent -> children. If
+// we ever change that, laying out completely changes too, at least in the way it traverses things, but the core algorithms
 // will remain.
 //
-// heavily inspired by Clay distrubuted under the zlib/libpng license:
+// Heavily inspired by Clay distributed under the zlib/libpng license:
 // - https://github.com/nicbarker/clay
 // - https://www.clay.com/
 // - https://www.youtube.com/watch?v=by9lQvpvMIc
@@ -5073,7 +5079,7 @@ layout :: () {
                 if preferred_size.kind == .FIT {
                     add(*node.size, fit_direction, child_size_contribution);
                 } else if preferred_size.kind == .GROW {
-                    // TODO: ensure the max and min sizes here
+                    // TO-DO: ensure the max and minimum sizes here
                     if fit_direction == .HORIZONTAL {
                         node.size.x = max(node.size.x, child_size_contribution + fitting_base(node, .HORIZONTAL));
                     } else {
@@ -5084,9 +5090,9 @@ layout :: () {
                     add(*node.min_size, fit_direction, child_min_size_contribution);
                 }
             } else {
-                // cross axis fitting
+                // Cross axis fitting
                 if should_accumulate {
-                    // TODO: ensure the max and min sizes here
+                    // TO-DO: ensure the max and minimum sizes here
                     set(
                         *node.size,
                         fit_direction,
@@ -5161,12 +5167,12 @@ layout :: () {
                     array_reset_keeping_memory(*changing);
                     layout_direction := node.style.direction;
                     opposite_direction := opposite(layout_direction);
-                    // this value is only the initial one, it's modified during the iteration over the children that follows
+                    // This value is only the initial one, it's modified during the iteration over the children that follows
                     remaining := inner_size(node, layout_direction);
 
-                    // this grows the children of this node. we need to do three visits here:
-                    // 1) grow the children on the opposite axis of the layout direction (Style.direction)
-                    // 2) iteratively grow the children equally in the layout direciton
+                    // This grows the children of this node. We need to do three visits here:
+                    // 1) grow the children on the opposite axis of the layout direction (`Style.direction`)
+                    // 2) iteratively grow the children equally in the layout direction
                     // 3) iteratively shrink the children equally in the layout direction
                     child_index := node.first_child;
                     {
@@ -5205,7 +5211,7 @@ layout :: () {
 
                             if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED)
                                 && preferred_size.kind == .GROW {
-                                // growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
+                                // Growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
                                 // siblings.
                                 available := inner_size(node, layout_direction) - child_margin.x - child_margin.y;
                                 set(*child.size, layout_direction, clamp(
@@ -5215,7 +5221,7 @@ layout :: () {
                                 ));
                             } else if child.style.placement.kind == .FLOW {
                                 if preferred_size.kind == .GROW && preferred_size.grow > 0.0 {
-                                    // we reset the size of the node to 0 so that the division is fair later
+                                    // We reset the size of the node to 0 so that the division is fair later
                                     set(*child.size, layout_direction, 0);
                                     if get(child.max_size, layout_direction) > 0 {
                                         array_add(*changing, child);
@@ -5226,7 +5232,7 @@ layout :: () {
                         }
 
                         child_index = node.first_child;
-                        // grow the children equally in the layout direciton
+                        // Grow the children equally in the layout direction
                         while remaining > EPSILON && changing.count > 0 {
                             total_factor: float = 0.0;
                             max_to_add: float = FLOAT32_INFINITY;
@@ -5237,7 +5243,7 @@ layout :: () {
                                 size := get(child.size, layout_direction);
                                 if approximately_equal(size, max_size) {
                                     array_unordered_remove_by_index(*changing, index);
-                                    // since the remove moves another child over to this same index, we go to the next iteration with the same index
+                                    // Since the remove moves another child over to this same index, we go to the next iteration with the same index
                                     continue;
                                 }
                                 preferred_size := get_preferred_size(child, layout_direction);
@@ -5261,7 +5267,7 @@ layout :: () {
                                         remaining -= clamp_addendum;
                                     }
                                     if approximately_equal(remaining, remaining_before_loop) {
-                                        // this means there's a max size constraint that doesn't let more size be added to any of the children
+                                        // This means there's a max size constraint that doesn't let more size be added to any of the children
                                         break;
                                     }
                                 } else {
@@ -5278,7 +5284,7 @@ layout :: () {
                         //
                         // === nodes shrinking ===
                         //
-                        // we shrink children so that nodes don't overflow the parent, but fit to the largest size possible that's bigger than
+                        // We shrink children so that nodes don't overflow the parent, but fit to the largest size possible that's bigger than
                         // their minimum size
                         array_reset_keeping_memory(*changing);
                         child_index = node.first_child;
@@ -5303,7 +5309,7 @@ layout :: () {
                                     if index == 0 && changing.count > 0 {
                                         largest = get(changing[0].size, layout_direction);
                                     }
-                                    // since the remove moves another child over to this same index, we go to the next iteration with the same index
+                                    // Since the remove moves another child over to this same index, we go to the next iteration with the same index
                                     continue;
                                 }
                                 if size > largest {
@@ -5314,7 +5320,7 @@ layout :: () {
                                 index += 1;
                             }
                             if changing.count > 0 {
-                                to_subtract := min(
+                                to_subtract:= min(
                                     largest - second_largest,
                                     -remaining / cast(float)changing.count,
                                 );
@@ -5511,7 +5517,7 @@ layout :: () {
 
         {
             //
-            // ==== regrowing nodes veritcally ====
+            // ==== regrowing nodes vertically ====
             //
             changing: [..]*Node;
             for *node: node_tree if node.kind == .ELEMENT {
@@ -5524,12 +5530,12 @@ layout :: () {
                     array_reset_keeping_memory(*changing);
                     layout_direction := node.style.direction;
                     opposite_direction := opposite(layout_direction);
-                    // this value is only the initial one, it's modified during the iteration over the children that follows
+                    // This value is only the initial one, it's modified during the iteration over the children that follows
                     remaining := inner_size(node, layout_direction);
 
-                    // this grows the children of this node. we need to do three visits here:
-                    // 1) grow the children on the opposite axis of the layout direction (Style.direction)
-                    // 2) iteratively grow the children equally in the layout direciton
+                    // This grows the children of this node. We need to do three visits here:
+                    // 1) grow the children on the opposite axis of the layout direction (`Style.direction`)
+                    // 2) iteratively grow the children equally in the layout direction
                     // 3) iteratively shrink the children equally in the layout direction
                     child_index := node.first_child;
                     {
@@ -5569,7 +5575,7 @@ layout :: () {
 
                                 if (child.style.placement.kind == .RELATIVE || child.style.placement.kind == .FIXED)
                                     && preferred_size.kind == .GROW {
-                                    // growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
+                                    // Growing child that's placed RELATIVE or FIXED will have a size based on the parent solely without considering its
                                     // siblings.
                                     available := inner_size(node, layout_direction) - child_margin.x - child_margin.y;
                                     set(*child.size, layout_direction, clamp(
@@ -5579,7 +5585,7 @@ layout :: () {
                                     ));
                                 } else if child.style.placement.kind == .FLOW {
                                     if preferred_size.kind == .GROW && preferred_size.grow > 0.0 {
-                                        // we reset the size of the node to 0 so that the division is fair later
+                                        // We reset the size of the node to 0 so that the division is fair later
                                         set(*child.size, layout_direction, 0);
                                         if get(child.max_size, layout_direction) > 0 {
                                             array_add(*changing, child);
@@ -5592,7 +5598,7 @@ layout :: () {
 
                         if layout_direction == .VERTICAL {
                             child_index = node.first_child;
-                            // grow the children equally in the layout direciton
+                            // Grow the children equally in the layout direction
                             while remaining > EPSILON && changing.count > 0 {
                                 total_factor: float = 0.0;
                                 max_to_add: float = FLOAT32_INFINITY;
@@ -5603,7 +5609,7 @@ layout :: () {
                                     size := get(child.size, layout_direction);
                                     if approximately_equal(size, max_size) {
                                         array_unordered_remove_by_index(*changing, index);
-                                        // since the remove moves another child over to this same index, we go to the next iteration with the same index
+                                        // Since the remove moves another child over to this same index, we go to the next iteration with the same index
                                         continue;
                                     }
                                     preferred_size := get_preferred_size(child, layout_direction);
@@ -5627,7 +5633,7 @@ layout :: () {
                                             remaining -= clamp_addendum;
                                         }
                                         if approximately_equal(remaining, remaining_before_loop) {
-                                            // this means there's a max size constraint that doesn't let more size be added to any of the children
+                                            // This means there's a max size constraint that doesn't let more size be added to any of the children
                                             break;
                                         }
                                     } else {
@@ -5639,7 +5645,7 @@ layout :: () {
                             }
                         }
                     }
-                    // TODO: should we shrink nodes here again? if we indeed decide to do this, the min sizes for
+                    // TO-DO: should we shrink nodes here again? If we indeed decide to do this, the minimum sizes for
                     // wrapped text should also change, otherwise this will reduce the wrapped text's height again after
                     // it wrapped and increased.
                 }
@@ -5683,7 +5689,7 @@ layout :: () {
                         node.style.border_width.y.x + node.style.padding.y.x,
                     };
 
-                    // TODO: when the direction is horizontal, we should also handle node overflow wrapping here.
+                    // TO-DO: when the direction is horizontal, we should also handle node overflow wrapping here.
                     pen := base;
                     direction := node.style.direction;
                     opposite_direction := opposite(node.style.direction);
@@ -5753,12 +5759,12 @@ Draw_Instance :: struct {
     size: Vector2;
     color: Vector4;
 
-    // node
+    // Node
     border_width: Vector4;
     border_color: Vector4;
     border_radius: float;
 
-    // glyph
+    // Glyph
     uv_min:  Vector2;
     uv_max:  Vector2;
 
@@ -5780,10 +5786,10 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     glClearColor(clearing_color.x, clearing_color.y, clearing_color.z, clearing_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // every glyph has to be in the atlas before any of the instances are gathered, so that resetting or growing
-    // the atlas can't invalidate UVs that were already written out
+    // Every glyph has to be in the atlas before any of the instances are gathered, so that resetting or growing
+    // the atlas can't invalidate UV's that were already written out
     if !glyph_atlas_fill() {
-        // glyphs that aren't used anymore may be what's filling it up, so start over with only this frame's
+        // Glyphs that aren't used anymore may be what's filling it up, so start over with only this frame's
         glyph_atlas_reset(*glyph_atlas);
         while !glyph_atlas_fill() {
             if !glyph_atlas_grow(*glyph_atlas) {
@@ -5821,15 +5827,15 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
             z = node.z;
             position = node.position;
             size = node.size;
-            // TODO: write out the instance gathering for the other types of backgrounds
+            // TO-DO: write out the instance gathering for the other types of backgrounds
             if node.style.background.kind == .COLOR {
                 color = node.style.background.color;
             }
             border_width = Vector4.{
-                node.style.border_width.x.x, // left
-                node.style.border_width.x.y, // right
-                node.style.border_width.y.x, // top
-                node.style.border_width.y.y  // bottom
+                node.style.border_width.x.x, // Left
+                node.style.border_width.x.y, // Right
+                node.style.border_width.y.x, // Top
+                node.style.border_width.y.y  // Bottom
             };
             border_color = node.style.border_color;
             border_radius = min(node.style.border_radius, min(node.size.x, node.size.y));
@@ -5849,7 +5855,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                 instance.kind = .GLYPH;
                 instance.z = node.z;
                 scale := cast(float) window.scale;
-                // the entry is only missing if the atlas is full at its maximum size, the instance was already
+                // The entry is only missing if the atlas is full at its maximum size, the instance was already
                 // counted in the z buckets though, so it's left with no size
                 if entry != null {
                     using instance;
@@ -5917,9 +5923,9 @@ prepare_for_next_frame :: () {
     cursor := Cursor.DEFAULT;
     array_resize(*measurements, node_tree.count, false);
     for node: node_tree {
-        // we can't just copy the entire Node_Tree with a mempcy here because it points into frame allocated data
-        // that was allocated in the frame pool. besides, in what I was able to measure, this copy tends to be more
-        // performant than if we were to copy the entire Node_Tree with memcpy.
+        // We can't just copy the entire Node_Tree with a `mempcy` here because it points into frame allocated data
+        // that was allocated in the frame pool. Besides, in what I was able to measure, this copy tends to be more
+        // performant than if we were to copy the entire Node_Tree with `memcpy`.
         measurements[it_index] = Node_Measurement.{
             size               = node.size,
             content_size       = node.content_size,
@@ -5980,17 +5986,17 @@ prepare_for_next_frame :: () {
     frame += 1;
 }
 
-// This introduces a compiler plugin so that users can do +forbear in their compiliation command,
-// and automatically get scope(#code Function(...)) for all of their components or hooks. The proper
+// This introduces a compiler plugin so that users can do +forbear in their compilation command,
+// and automatically get `scope(#code Function(...))` for all of their components or hooks. The proper
 // name is `@scope`, but there's also the two aliases `@component` or @hook` for what people
 // might prefer.
 #import "Compiler";
 COMPILER_PLUGIN_DEBUGGING :: false;
 get_plugin :: () -> *Metaprogram_Plugin {
-    // TODO: instead of wrapping the caller with a macro that re-returns the function's return values,
+    // TO-DO: instead of wrapping the caller with a macro that re-returns the function's return values,
     // we should instead modify the scope's procedure body to have the scope definition.
     //
-    // to properly support this, we should pass the scope's location thruogh the context, and thus we will still
+    // To properly support this, we should pass the scope's location through the context, and thus we will still
     // need to modify the procedure callers, but just to add a `,, scope_location = #location()`
     format                          := *context.print_style.default_format_struct;
     format.use_newlines_if_long_form = true;
