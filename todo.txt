@@ -1,55 +1,57 @@
 - implement C ABI and C adapter
-- finish calculator
-    - support ctrl+z and ctrl+shift+z
+- Finish calculator
+    - support control+z and control+shift+z
+    - double-clicking should select the current word
+    - triple clicking should select all the input's contents
     - the scrolling should move with the input cursor
     - have a light and dark theme that is applied based on the system theme
     - history of calculations, when reopening show the previous state of everything (history, expression being typed out, result)
-- Primitives that allow to handle focus
-    - The main problem around this is the fact that we can't really "consume" an event, given the UI is immediate and events are consumed as things are rendered, each element must know that some other element is the one that will be consuming the given event. In the Zig version I had a way to handle this, it was 80% as elegant as I'd like but had some awkwardness.
-- text input builtins
-- scrolling builtins
-- complete windowing code
-    - handle the menu bar protocol in wayland, and render the Gnome menu bar
-    - use proper event handlers in macOS instead of polling
-    - handle re-rendering during resizing for macOS
-    - menu bar for macOS
-        - we need to at least have cmd+q working
-    - API to set the min and max sizes of the window
+- Primitives that allow handling focus
+    - The main problem around this is the fact that we can't really "consume" an event. Given the UI is immediate and events are consumed as things are rendered, each element must know that some other element is the one that will be consuming the given event. In the Zig version I had a way to handle this, it was 80% as elegant as I'd like but had some awkwardness.
+- Text input hooks and components
+- Scrolling hooks and components
+- Complete windowing code
+    - Handle the menu bar protocol in Wayland, and render the Gnome menu bar
+    - Use proper event handlers in macOS instead of polling
+    - Handle re-rendering during resizing for macOS
+    - Menu bar for macOS
+        - We need to at least have command+q working
+    - API to set the minimum and maximum sizes of the window
     - API to set the window to full screen
-    - If the forbear progam is manipulated by another program on Windows, modifiers don't actually quite work (ctrl+v), for example
+    - If the forbear program is manipulated by another program on Windows, modifiers don't actually quite work (control+v), for example
         - Raycast's emoji insertion is what I'm thinking of
-- Support for font fallbacks when some unicode doesn't have a glyph in the font. This is the case for emojis, where you might want to fallback to Segoe UI Emoji or something like that.
+- Support for font fallbacks when some Unicode doesn't have a glyph in the font. This is the case for emojis, where you might want to fallback to Segoe UI Emoji or something like that.
 - Cache the text shaping, and the text wrapping
 - Add the glyph positions to a node's measurements
-- implement the Style fields that are currently no-ops
-    - draw background gradient
-    - draw background images
+- Implement the Style fields that are currently no-ops
+    - Draw background gradient
+    - Draw background images
     - shadow
     - overflow WRAP
     - border_style DASHED
-- gather all of the current pessimizations in the code
-- async code primitives
-- brainstorm how can there be a headless mode that allows for e2e testing
-- make javascript adapter support async code
-    - when doing native code, one can simply use a thread for the async work, which doesn't stall frames. javascript can't really do this, so how can we let it do async work?
-- metal rendering instead of opengl for macOS
-    - this is mainly because it looks like the fps is limimted to ~100, while the actual forbear work is 0.5ms which should lead to about 2000 and it all points to OpenGL not working very well which leads to the low FPs
-- directx rendering instead of opengl for Windows
-- use dynamically linked freetype on Linux, DirectWrite on Windows and CoreText on macOS
-- subpixel text rendering
-- colorful fonts rendering
+- Gather all the current pessimizations in the code
+- Async code primitives
+- Brainstorm how can there be a headless mode that allows for e2e testing
+- Make JavaScript adapter support async code
+    - When doing native code, one can simply use a thread for the async work, which doesn't stall frames. JavaScript can't really do this, so how can we let it do async work?
+- Metal rendering instead of OpenGL for macOS
+    - This is mainly because it looks like the fps is limited to ~100, while the actual forbear work is 0.5 milliseconds which should lead to about 2000 and it all points to OpenGL not working very well which leads to the low FPs
+- DirectX rendering instead of OpenGL for Windows
+- Use dynamically linked FreeType on Linux, DirectWrite on Windows and CoreText on macOS
+- Subpixel text rendering
+- Colorful fonts rendering
 
-big problems that I don't have na answer too:
-- async
-- how to draw arbitrary things
-- context?
+Big problems that I don't have an answer too:
+- Async
+- How to draw arbitrary things
+- Context?
 
-possible programs I can make with forbear next:
+Possible programs I can make with forbear next:
 - Merged Twitch and YouTube chat viewer
-- Program that intakes a website with an article, removes all fluff and makes all readable in a consistent way, and then adds in ways for you to add notes, highlight and add summaries while you read.
+- Program that intakes a website with an article, removes all fluff and makes all readable in a consistent way, and then adds in ways for you to add notes, highlight, and add summaries while you read.
 - Program that downloads a documentation website and lets you read it in a consistent UI
-- A simple plotting program like Desmos
-- Daily to-do list program based on //TODO: comments and todo files
+- A simple plotting program like Desmos.
+- Daily to-do list program based on // TO-DO: comments and to-do files
 - Music playing software for local music, that lets you download and buy music legally
 - Discord alternative with servers and conversations
 - Program to create slides, or library based on forbear to do so where you define the slides as components
