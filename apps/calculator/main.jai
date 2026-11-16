@@ -490,25 +490,26 @@ Input_State :: struct {
     selection_anchor: s64            = -1;
 }
 use_input_state :: (initial_value := "", initial_cursor := 0, initial_selection_anchor := -1) -> *Input_State {
-    thing, first_frame := state(Input_State.{
+    input_state, first_frame := state(Input_State.{
         cursor           = initial_cursor,
         selection_anchor = initial_selection_anchor,
     });
     allocator            := node_pool();
-    thing.value.allocator = allocator;
+
+    using input_state;
+    value.allocator = allocator;
     if first_frame && initial_value.count > 0 {
         initial_bytes: []u8 = ---;
         initial_bytes.data  = initial_value.data;
         initial_bytes.count = initial_value.count;
-        array_add(*thing.value, ..initial_bytes);
+        array_add(*value, ..initial_bytes);
     }
-    thing.deleted_value.allocator = allocator;
-    thing.undo_history.allocator  = allocator;
-    thing.redo_history.allocator  = allocator;
-    return thing;
+    deleted_value.allocator = allocator;
+    undo_history.allocator  = allocator;
+    redo_history.allocator  = allocator;
+    return input_state;
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
-// - insertion should change the cursor by glyph indices not bytes
 // - handle multiline text
 // - we should be moving the cursor by graphemes, not by glyphs
 use_input :: (using input_state:      *Input_State,
