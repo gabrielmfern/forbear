@@ -384,14 +384,24 @@ previous_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
         c -= 1;
         if glyphs[c].starts_word break;
     }
-    return c;
+    if c > 0 {
+        return glyphs[c].index_into_original_text;
+    } else {
+        return 0;
+    }
 }
 next_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
     c := cursor;
     while c < glyphs.count && is_space(glyphs[c].utf8.Encoded[0]) { c += 1; }
     if c < glyphs.count c += 1;
     while c < glyphs.count && !glyphs[c].starts_word { c += 1; }
-    return c;
+    if c < glyphs.count {
+        return glyphs[c].index_into_original_text;
+    } else if c > 0 {
+        return peek(glyphs).index_into_original_text + peek(glyphs).utf8.EncodedLength;
+    } else {
+        return 0;
+    }
 }
 use_glyph_closest_to :: (text_node_index: s64, position: Vector2) -> s64 {
     glyphs                    := get_node(text_node_index).glyphs;
@@ -408,7 +418,7 @@ use_glyph_closest_to :: (text_node_index: s64, position: Vector2) -> s64 {
             distance := Math.abs(left_edge - position.x);
             if it_index == 0 || distance < closest_distance {
                 closest_distance = distance;
-                cursor           = it_index;
+                cursor           = it.index_into_original_text;
             }
             if it_index == glyphs.array.count - 1 {
                 right_edge := left_edge + it.advance.x * font_units_to_pixel;
@@ -417,7 +427,7 @@ use_glyph_closest_to :: (text_node_index: s64, position: Vector2) -> s64 {
                 distance := Math.abs(right_edge - position.x);
                 if distance < closest_distance {
                     closest_distance = distance;
-                    cursor           = glyphs.array.count;
+                    cursor           = it.index_into_original_text + it.utf8.EncodedLength;
                 }
             }
         }
@@ -471,15 +481,15 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
     }
 } @component
 Input_Edit :: struct {
-    position:                s64;
-    deleted_text_start:      s64;
-    deleted_text_end:        s64;
-    inserted_text_start:     s64;
-    inserted_text_end:       s64;
+    // the cursor_after is always cursor + inserted_text_end - inserted_text_start when inserting or min(cursor, deleted_value_start)
+    cursor_before:           s64 = -1;
     // there's never a selection after an edit
-    selection_anchor_before: s64;
-    // the cursor_after is always position + inserted_text.count
-    cursor_before:           s64;
+    selection_anchor_before: s64 = -1;
+
+    deleted_value_start:     s64 = -1;
+    deleted_value_end:       s64 = -1;
+    inserted_value_start:    s64 = -1;
+    inserted_value_end:      s64 = -1;
 }
 Input_State :: struct {
     value:            [..]u8;
@@ -509,6 +519,37 @@ use_input_state :: (initial_value := "", initial_cursor := 0, initial_selection_
     redo_history.allocator  = allocator;
     return input_state;
 }
+delete :: (using input_state: *Input_State, a: s64, b: s64) {
+    selection_anchor = -1;
+    if value.count > 0 {
+        start := min(a, b);
+        end   := max(a, b);
+        bytes := end - start;
+        if bytes > 0 {
+            for i: start..value.count - bytes - 1 {
+                array_add(*deleted_value, value[i]);
+                value[i] = value[i + bytes];
+            }
+            value.count -= bytes;
+            cursor       = min(cursor, start);
+        }
+    }
+}
+append :: (using input_state: *Input_State, input: string, input_character_filter: #type (input: u8) -> bool) {
+    start     := ifx selection_anchor != -1 then min(cursor, selection_anchor) else cursor;
+    insert_at := start;
+    inserted  := 0;
+    for input {
+        if input_character_filter == null || input_character_filter(it) {
+            // this makes sure that we only delete and remove the selection if there's at least one
+            // character to insert
+            if inserted == 0 && selection_anchor != -1 then delete(input_state, cursor, selection_anchor);
+            array_insert_at(*value, it, insert_at + inserted);
+            inserted += 1;
+        }
+    }
+    cursor += inserted;
+}
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - handle multiline text
 // - we should be moving the cursor by graphemes, not by glyphs
@@ -518,52 +559,6 @@ use_input :: (using input_state:      *Input_State,
     // TOOD: clamp the cursor and selection_anchor based on the current contents of the input,
     // since the user of this API might have changed it at some frame imperatively and that
     // could cause those two numbers to go stale.
-
-    glyph_index_to_byte_index :: (glyphs: Glyphs, index: s64) -> s64 {
-        if index < glyphs.array.count then return glyphs.array[index].index_into_original_text;
-        else                               return peek(glyphs.array).index_into_original_text + 1;
-    }
-    // imagine the user wants to manipualte the input's value, how would they do it without breaking things?
-    // ideally we should expose these functions with a good API to the user.
-    //
-    // we're already actually using equivalents to this with the buttons that add and remove the contents
-    // from the calculactor
-    delete :: (using input_state: *Input_State, glyphs: Glyphs, a: s64, b: s64) {
-        selection_anchor = -1;
-        if glyphs.array.count > 0 {
-            start      := min(a, b);
-            start_byte := glyph_index_to_byte_index(glyphs, start);
-            bytes      := glyph_index_to_byte_index(glyphs, max(a, b)) - start_byte;
-            for i: start_byte..value.count - bytes - 1 {
-                value[i] = value[i + bytes];
-            }
-            value.count -= bytes;
-            cursor          = min(cursor, start);
-        }
-    }
-    append :: (using input_state:      *Input_State,
-               glyphs:                 Glyphs,
-               input:                  string,
-               input_character_filter: #type (input: u8) -> bool) {
-        insert_at := 0;
-        if glyphs.array.count > 0 {
-            start := ifx selection_anchor != -1 then min(cursor, selection_anchor) else cursor;
-            insert_at = glyph_index_to_byte_index(glyphs, start);
-        }
-        inserted := 0;
-        for input {
-            if input_character_filter == null || input_character_filter(it) {
-                // this makes sure that we only delete and remove the selection if there's at least one
-                // character to insert
-                if inserted == 0 && selection_anchor != -1 then delete(input_state, glyphs, cursor, selection_anchor);
-                array_insert_at(*value, it, insert_at + inserted);
-                inserted += 1;
-            }
-        }
-        // TODO: this will cause bugs, we need to check how many glyphs this input
-        // will generate by text shaping at this point
-        cursor += inserted;
-    }
 
     shift   := is_key_held(.SHIFT_LEFT)   || is_key_held(.SHIFT_RIGHT);
     ctrl    := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
@@ -575,7 +570,7 @@ use_input :: (using input_state:      *Input_State,
 
     glyphs := get_node(text_node_index).glyphs;
 
-    append(input_state, glyphs, get_text_input(), input_character_filter);
+    append(input_state, get_text_input(), input_character_filter);
 
     {
         //
@@ -584,10 +579,12 @@ use_input :: (using input_state:      *Input_State,
         left  := on_key_down(.ARROW_LEFT, true)  || on_key_down(.HOME);
         right := on_key_down(.ARROW_RIGHT, true) || on_key_down(.END);
 
-        if (left || right) && !shift && selection_anchor != -1 then cursor = ifx left then min(cursor, selection_anchor) else max(cursor, selection_anchor);
+        if (left || right) && !shift && selection_anchor != -1 {
+            cursor = ifx left then min(cursor, selection_anchor) else max(cursor, selection_anchor);
+        }
 
         previous := max(cursor - 1, 0);
-        next     := min(cursor + 1, glyphs.array.count);
+        next     := min(cursor + 1, value.count);
         if by_word {
             previous = previous_word_boundary(glyphs.array, cursor);
             next     = next_word_boundary(glyphs.array, cursor);
@@ -598,7 +595,7 @@ use_input :: (using input_state:      *Input_State,
             previous = 0;
             // TODO: to support multiline text here, we need this to go to the end of the current line,
             // not to the start of the entire piece of text.
-            next = glyphs.array.count;
+            next = value.count;
         }
 
         if left || right {
@@ -609,30 +606,30 @@ use_input :: (using input_state:      *Input_State,
 
         if command && on_key_down(.A) {
             selection_anchor = 0;
-            cursor           = glyphs.array.count;
+            cursor           = value.count;
         }
 
         backspace := on_key_down(.BACKSPACE, true);
         if backspace || on_key_down(.DELETE, true) {
-            if selection_anchor != -1 then delete(input_state, glyphs, cursor, selection_anchor);
-            else if backspace         then delete(input_state, glyphs, previous, cursor);
-            else                           delete(input_state, glyphs, cursor, next);
+            if selection_anchor != -1 then delete(input_state, cursor, selection_anchor);
+            else if backspace         then delete(input_state, previous, cursor);
+            else                           delete(input_state, cursor, next);
         }
     }
 
-    if command && on_key_down(.V) then append(input_state, glyphs, get_clipboard_text(), input_character_filter);
+    if command && on_key_down(.V) then append(input_state, get_clipboard_text(), input_character_filter);
 
-    if command && on_key_down(.C) && selection_anchor != -1 && glyphs.array.count > 0 {
-        start_byte := glyph_index_to_byte_index(glyphs, min(cursor, selection_anchor));
-        end_byte   := glyph_index_to_byte_index(glyphs, max(cursor, selection_anchor));
-        copy_to_clipboard(to_string(value.data + start_byte, end_byte - start_byte));
+    if command && on_key_down(.C) && selection_anchor != -1 && value.count > 0 {
+        start := min(cursor, selection_anchor);
+        end   := max(cursor, selection_anchor);
+        copy_to_clipboard(to_string(value.data + start, end - start));
     }
 
-    if command && on_key_down(.X) && selection_anchor != -1 && glyphs.array.count > 0 {
-        start_byte := glyph_index_to_byte_index(glyphs, min(cursor, selection_anchor));
-        end_byte   := glyph_index_to_byte_index(glyphs, max(cursor, selection_anchor));
-        copy_to_clipboard(to_string(value.data + start_byte, end_byte - start_byte));
-        delete(input_state, glyphs, cursor, selection_anchor);
+    if command && on_key_down(.X) && selection_anchor != -1 && value.count > 0 {
+        start := min(cursor, selection_anchor);
+        end   := max(cursor, selection_anchor);
+        copy_to_clipboard(to_string(value.data + start, end - start));
+        delete(input_state, cursor, selection_anchor);
         selection_anchor = -1;
     }
 
@@ -666,10 +663,11 @@ Caret :: (
         font_units_to_pixel := get_font_units_to_pixel(*context.inter, font_size);
 
         caret_position: Vector2;
-        if glyphs.array.count > 0 {
-            if cursor == glyphs.array.count {
+        if value.count > 0 && glyphs.array.count > 0 {
+            if cursor == value.count {
                 caret_position = (peek(glyphs.array).position + peek(glyphs.array).advance) * font_units_to_pixel;
             } else {
+                // TODO: to make this generic, this should not assume the glyphs map one-to-one to the value's bytes
                 caret_position = glyphs.array[cursor].position * font_units_to_pixel;
             }
         }
