@@ -483,6 +483,7 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
 Input_Edit :: struct {
     // This is always the start of where the change is done
     where:                   s64 = -1;
+    cursor_before:           s64 = -1;
     // There's never a selection after an edit
     selection_anchor_before: s64 = -1;
     inserted_length:         s64 = -1;
@@ -558,6 +559,7 @@ delete :: (using input_state: *Input_State, a: s64, b: s64) {
         if bytes > 0 {
             array_add(*edit_history, .{
                 where                   = min(cursor, start),
+                cursor_before           = cursor,
                 selection_anchor_before = selection_anchor,
 
                 history_storage_index           = history_storage.count,
@@ -591,6 +593,7 @@ append :: (using input_state: *Input_State, input: string, input_character_filte
     if inserted > 0 {
         array_add(*edit_history, .{
             where                   = cursor,
+            cursor_before           = cursor,
             selection_anchor_before = selection_anchor,
             inserted_length         = inserted,
         });
@@ -690,6 +693,7 @@ use_input :: (using input_state:      *Input_State,
                     assert(edit.history_storage_index != -1);
                     array_add(*edit_history, Input_Edit.{
                         where                   = edit.where,
+                        cursor_before           = edit.cursor_before,
                         selection_anchor_before = -1,
                         inserted_length         = edit.inserted_length,
                     });
@@ -701,6 +705,7 @@ use_input :: (using input_state:      *Input_State,
                     assert(edit.history_storage_index != -1);
                     array_add(*edit_history, Input_Edit.{
                         where                   = edit.where,
+                        cursor_before           = edit.cursor_before,
                         selection_anchor_before = -1,
                         deleted_length          = edit.deleted_length,
                         history_storage_index   = edit.history_storage_index,
@@ -721,6 +726,7 @@ use_input :: (using input_state:      *Input_State,
 
                 array_add(*undo_history, .{
                     where                   = edit.where,
+                    cursor_before           = edit.cursor_before,
                     selection_anchor_before = edit.selection_anchor_before,
                     inserted_length         = edit.inserted_length,
                     history_storage_index   = history_storage.count,
@@ -728,7 +734,6 @@ use_input :: (using input_state:      *Input_State,
                 array_add(*history_storage, ..array_view(value, edit.where, edit.inserted_length));
 
                 array_ordered_remove_interval(*value, edit.where, edit.inserted_length);
-                cursor = edit.where;
             } else if edit.deleted_length > 0 {
                 // We're undoing a deletion, thus we're inserting it again.
                 assert(edit.history_storage_index != -1);
@@ -737,8 +742,8 @@ use_input :: (using input_state:      *Input_State,
 
                 to_insert := array_view(history_storage, edit.history_storage_index, edit.deleted_length);
                 array_insert_at(*value, edit.where, to_insert);
-                cursor = edit.where + edit.deleted_length;
             }
+            cursor           = edit.cursor_before;
             selection_anchor = edit.selection_anchor_before;
         }
     }
@@ -818,6 +823,10 @@ Input :: (input_state: *Input_State, body: Code) #expand {
     }, #code {
         text_node_index := text(Style.{ z_index = 2, },
                                 to_string(input_state.value.data, input_state.value.count));
+        Selection(Style.{},
+                  *(Selection_State.{input_state.cursor, input_state.selection_anchor}),
+                  scrolling_state.effective_offset,
+                  text_node_index);
         Caret(Style.{}, input_state, scrolling_state.effective_offset.x, text_node_index);
         // TO-DO: as the user types, this should scroll following the cursor
         use_input(input_state, text_node_index, (input: u8) -> bool {
@@ -830,12 +839,6 @@ Input :: (input_state: *Input_State, body: Code) #expand {
                 return false;
             }
         });
-
-        // use_selection(selection_state, text_node_index);
-        Selection(Style.{},
-                  *(Selection_State.{input_state.cursor, input_state.selection_anchor}),
-                  scrolling_state.effective_offset,
-                  text_node_index);
 
         use_scrolling(scrolling_state);
 
