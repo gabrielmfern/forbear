@@ -155,7 +155,7 @@ main :: () {
         }
 
         {
-            // binds tighter than the multiplication on its left
+            // Binds tighter than the multiplication on its left
             result = Calculator.parse_expression("2*3^2", *nodes);
             assert(result == .OK);
             assert_nodes(.[
@@ -176,7 +176,7 @@ main :: () {
         }
 
         {
-            // being right associative must not make it swallow the multiplication on its right
+            // Being right associative must not make it swallow the multiplication on its right
             result = Calculator.parse_expression("2^3*4", *nodes);
             assert(result == .OK);
             assert_nodes(.[
@@ -218,7 +218,7 @@ main :: () {
         }
 
         {
-            // parenthesis leave no node behind, what was inside is used directly as the operand
+            // Parenthesis leave no node behind, what was inside is used directly as the operand
             result = Calculator.parse_expression("(1)", *nodes);
             assert(result == .OK);
             assert_nodes(.[
@@ -233,7 +233,7 @@ main :: () {
         }
 
         {
-            // the multiplication can't reach inside the parenthesis for the 2
+            // The multiplication can't reach inside the parenthesis for the 2
             result = Calculator.parse_expression("(1+2)*3", *nodes);
             assert(result == .OK);
             assert_nodes(.[
@@ -254,7 +254,7 @@ main :: () {
         }
 
         {
-            // precedence starts over inside the parenthesis, so the addition is taken even while in the right of a multiplication
+            // Precedence starts over inside the parenthesis, so the addition is taken even while in the right of multiplication
             result = Calculator.parse_expression("2*(3+4)", *nodes);
             assert(result == .OK);
             assert_nodes(.[
@@ -322,7 +322,7 @@ main :: () {
             assert(result == .EXPECTED_A_CLOSING_PARENTHESIS, "result=%", result);
             array_reset_keeping_memory(*nodes);
 
-            // a closing parenthesis that was never opened
+            // A closing parenthesis that was never opened
             result = Calculator.parse_expression("1+2)", *nodes);
             assert(result == .EXPECTED_A_OPERATOR, "result=%", result);
             array_reset_keeping_memory(*nodes);
@@ -407,7 +407,7 @@ main :: () {
         }
 
         {
-            // the decimals are still being typed
+            // The decimals are still being typed
             result = Calculator.parse_expression("1.", *nodes);
             assert(result == .OK);
             assert_nodes(.[
@@ -422,7 +422,7 @@ main :: () {
         }
 
         {
-            // a number can't have spaces in the middle of it
+            // A number can't have spaces in the middle of it
             result = Calculator.parse_expression("1 . 5", *nodes);
             assert(result == .EXPECTED_A_OPERATOR, "result=%", result);
             array_reset_keeping_memory(*nodes);
@@ -437,7 +437,7 @@ main :: () {
             assert(result == .TOO_MANY_PERIODS, "result=%", result);
             array_reset_keeping_memory(*nodes);
 
-            // the failure is not lost when the number is in the right of a binary, or inside parenthesis
+            // The failure is not lost when the number is in the right of a binary, or inside parenthesis
             result = Calculator.parse_expression("1+2.5.2", *nodes);
             assert(result == .TOO_MANY_PERIODS, "result=%", result);
             array_reset_keeping_memory(*nodes);
@@ -545,7 +545,39 @@ main :: () {
             expected_cursor: s64;
             expected_anchor: s64 = -1;
         }
+        UNDO :: Step.{key = .Z, held = .[COMMAND]};
+        REDO :: Step.{key = .Z, held = .[COMMAND, .SHIFT_LEFT]};
         for Case.[
+            .{name = "undo typing over a selection restores it in one step",
+              contents = "12345", cursor = 3, anchor = 1, steps = .[.{text = "9"}, UNDO],
+              expected = "12345", expected_cursor = 3, expected_anchor = 1},
+            .{name = "redo typing over a selection",
+              contents = "12345", cursor = 3, anchor = 1, steps = .[.{text = "9"}, UNDO, REDO],
+              expected = "1945", expected_cursor = 2},
+            .{name = "undo after redo restores the selection again",
+              contents = "12345", cursor = 3, anchor = 1, steps = .[.{text = "9"}, UNDO, REDO, UNDO],
+              expected = "12345", expected_cursor = 3, expected_anchor = 1},
+            .{name = "redo with nothing to redo does nothing",
+              contents = "125", cursor = 3, steps = .[.{text = "4"}, REDO],
+              expected = "1254", expected_cursor = 4},
+            .{name = "undo backspace on a right to left selection",
+              contents = "12345", cursor = 1, anchor = 4, steps = .[.{key = .BACKSPACE}, UNDO],
+              expected = "12345", expected_cursor = 1, expected_anchor = 4},
+            .{name = "undo delete keeps the cursor before the text",
+              contents = "12345", cursor = 2, steps = .[.{key = .DELETE}, UNDO],
+              expected = "12345", expected_cursor = 2},
+            .{name = "redo of a selection delete leaves no selection",
+              contents = "12+34567", cursor = 8, anchor = 4, steps = .[.{key = .BACKSPACE}, UNDO, REDO],
+              expected = "12+3", expected_cursor = 4},
+            .{name = "a new edit clears redo",
+              contents = "12", cursor = 2, steps = .[.{text = "3"}, UNDO, .{text = "4"}, REDO],
+              expected = "124", expected_cursor = 3},
+            .{name = "undo paste over select all",
+              contents = "12345", cursor = 2, steps = .[.{key = .A, held = .[COMMAND]}, .{key = .V, held = .[COMMAND], paste = "9"}, UNDO],
+              expected = "12345", expected_cursor = 5, expected_anchor = 0},
+            .{name = "undo twice walks back two edits",
+              contents = "1", cursor = 1, steps = .[.{text = "2"}, .{key = .ARROW_LEFT}, .{text = "3"}, UNDO, UNDO],
+              expected = "1", expected_cursor = 1},
             .{name = "typing over a selection replaces it",
               contents = "12345", cursor = 3, anchor = 1, steps = .[.{text = "9"}],
               expected = "1945", expected_cursor = 2},
@@ -652,7 +684,7 @@ main :: () {
                     window.mouse_state.held[Mouse_Button.LEFT]     = false;
                 }
 
-                Calculator.Input(*input_state, #code {});
+                element(Style.{}, #code { Calculator.Input(*input_state, #code {}); });
                 layout();
 
                 array_reset_keeping_memory(*glyph_edges);

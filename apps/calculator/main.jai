@@ -482,14 +482,14 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
 } @component
 Input_Edit :: struct {
     // This is always the start of where the change is done
-    where:                   s64 = -1;
-    cursor_before:           s64 = -1;
+    where:                   s64;
+    cursor_before:           s64;
     // There's never a selection after an edit
     selection_anchor_before: s64 = -1;
-    inserted_length:         s64 = -1;
-    deleted_length:          s64 = -1;
-    // Firstly used for deleted text, secondly for inserted text on `undo_history`
-    history_storage_index:   s64 = -1;
+    deleted_length:          s64;
+    inserted_length:         s64;
+    deleted_index:           s64 = -1;
+    inserted_index:          s64 = -1;
 }
 Input_State :: struct {
     value:            [..]u8;
@@ -552,54 +552,53 @@ array_ordered_remove_interval :: (array: *[]$T, start: s64, count: s64) {
     array.count -= count;
 }
 delete :: (using input_state: *Input_State, a: s64, b: s64) {
-    if value.count > 0 {
-        start := min(a, b);
-        end   := max(a, b);
-        bytes := end - start;
-        if bytes > 0 {
-            array_add(*edit_history, .{
-                where                   = min(cursor, start),
-                cursor_before           = cursor,
-                selection_anchor_before = selection_anchor,
-
-                history_storage_index           = history_storage.count,
-                deleted_length          = bytes,
-            });
-            array_add(*history_storage, ..array_view(value, start, bytes));
-            array_ordered_remove_interval(*value, start, bytes);
-            cursor = min(cursor, start);
-            array_reset_keeping_memory(*undo_history);
-        }
+    start := min(a, b);
+    end   := max(a, b);
+    if end > start {
+        array_add(*edit_history, .{
+            where                   = start,
+            cursor_before           = cursor,
+            selection_anchor_before = selection_anchor,
+            deleted_length          = end - start,
+            deleted_index           = history_storage.count,
+        });
+        array_add(*history_storage, ..array_view(value, start, end - start));
+        array_ordered_remove_interval(*value, start, end - start);
+        array_reset_keeping_memory(*undo_history);
+        cursor = start;
     }
     selection_anchor = -1;
 }
 append :: (using input_state: *Input_State, input: string, input_character_filter: #type (input: u8) -> bool) {
-    insert_at := cursor;
+    start := cursor;
+    end   := cursor;
     if selection_anchor != -1 {
-        insert_at = min(cursor, selection_anchor);
+        start = min(cursor, selection_anchor);
+        end   = max(cursor, selection_anchor);
     }
-    inserted := 0;
+    edit := Input_Edit.{
+        where                   = start,
+        cursor_before           = cursor,
+        selection_anchor_before = selection_anchor,
+        deleted_length          = end - start,
+    };
     for input {
         if input_character_filter == null || input_character_filter(it) {
-            if inserted == 0 && selection_anchor != -1 {
-                // This makes sure that we only delete and remove the selection if there's at least one
-                // character to insert
-                delete(input_state, cursor, selection_anchor);
+            // This makes sure that we only remove the selection if there's at least one character to insert
+            if edit.inserted_length == 0 && edit.deleted_length > 0 {
+                edit.deleted_index = history_storage.count;
+                array_add(*history_storage, ..array_view(value, start, edit.deleted_length));
+                array_ordered_remove_interval(*value, start, edit.deleted_length);
             }
-            array_insert_at(*value, it, insert_at + inserted);
-            inserted += 1;
+            array_insert_at(*value, it, start + edit.inserted_length);
+            edit.inserted_length += 1;
         }
     }
-    if inserted > 0 {
-        array_add(*edit_history, .{
-            where                   = cursor,
-            cursor_before           = cursor,
-            selection_anchor_before = selection_anchor,
-            inserted_length         = inserted,
-        });
-        selection_anchor = -1;
-        cursor          += inserted;
+    if edit.inserted_length > 0 {
+        array_add(*edit_history, edit);
         array_reset_keeping_memory(*undo_history);
+        cursor           = start + edit.inserted_length;
+        selection_anchor = -1;
     }
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
@@ -681,67 +680,33 @@ use_input :: (using input_state:      *Input_State,
         selection_anchor = -1;
     }
 
-    if command && on_key_down(.Z, on_repeat = true) {
-        if shift {
-            if undo_history.count > 0 {
-                edit := pop(*undo_history);
-                if edit.inserted_length > 0 {
-                    assert(edit.history_storage_index != -1);
-                    array_add(*edit_history, Input_Edit.{
-                        where                   = edit.where,
-                        cursor_before           = edit.cursor_before,
-                        selection_anchor_before = -1,
-                        inserted_length         = edit.inserted_length,
-                    });
-
-                    to_insert := array_view(history_storage, edit.history_storage_index, edit.inserted_length);
-                    array_insert_at(*value, edit.where, to_insert);
-                    cursor = edit.where + edit.inserted_length;
-                } else if edit.deleted_length > 0 {
-                    assert(edit.history_storage_index != -1);
-                    array_add(*edit_history, Input_Edit.{
-                        where                   = edit.where,
-                        cursor_before           = edit.cursor_before,
-                        selection_anchor_before = -1,
-                        deleted_length          = edit.deleted_length,
-                        history_storage_index   = edit.history_storage_index,
-                    });
-
-                    array_ordered_remove_interval(*value, edit.where, edit.deleted_length);
-                    cursor = edit.where;
-                }
-                selection_anchor = -1;
-            }
-        } else if edit_history.count > 0 {
-            edit := pop(*edit_history);
-            if edit.inserted_length > 0 {
-                // We're undoing an insertion, thus we're deleting it.
-                //
-                // Since this content should be in the original value, we don't need it in the history record.
-                assert(edit.history_storage_index == -1);
-
-                array_add(*undo_history, .{
-                    where                   = edit.where,
-                    cursor_before           = edit.cursor_before,
-                    selection_anchor_before = edit.selection_anchor_before,
-                    inserted_length         = edit.inserted_length,
-                    history_storage_index   = history_storage.count,
-                });
+    if command && !shift && on_key_down(.Z, on_repeat = true) && edit_history.count > 0 {
+        edit := pop(*edit_history);
+        if edit.inserted_length > 0 {
+            if edit.inserted_index == -1 {
+                edit.inserted_index = history_storage.count;
                 array_add(*history_storage, ..array_view(value, edit.where, edit.inserted_length));
-
-                array_ordered_remove_interval(*value, edit.where, edit.inserted_length);
-            } else if edit.deleted_length > 0 {
-                // We're undoing a deletion, thus we're inserting it again.
-                assert(edit.history_storage_index != -1);
-
-                array_add(*undo_history, edit);
-
-                to_insert := array_view(history_storage, edit.history_storage_index, edit.deleted_length);
-                array_insert_at(*value, edit.where, to_insert);
             }
-            cursor           = edit.cursor_before;
-            selection_anchor = edit.selection_anchor_before;
+            array_ordered_remove_interval(*value, edit.where, edit.inserted_length);
         }
+        if edit.deleted_length > 0 {
+            array_insert_at(*value, edit.where, array_view(history_storage, edit.deleted_index, edit.deleted_length));
+        }
+        cursor           = edit.cursor_before;
+        selection_anchor = edit.selection_anchor_before;
+        array_add(*undo_history, edit);
+    }
+    if command && shift && on_key_down(.Z, on_repeat = true) && undo_history.count > 0 {
+        edit := pop(*undo_history);
+        if edit.deleted_length > 0 {
+            array_ordered_remove_interval(*value, edit.where, edit.deleted_length);
+        }
+        if edit.inserted_length > 0 {
+            array_insert_at(*value, edit.where, array_view(history_storage, edit.inserted_index, edit.inserted_length));
+        }
+        cursor           = edit.where + edit.inserted_length;
+        selection_anchor = -1;
+        array_add(*edit_history, edit);
     }
 
     dragging            := is_dragging(.LEFT);

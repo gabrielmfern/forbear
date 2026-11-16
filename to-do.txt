@@ -1,6 +1,5 @@
 - implement C ABI and C adapter
 - Finish calculator
-    - support control+z and control+shift+z
     - double-clicking should select the current word
     - triple clicking should select all the input's contents
     - the scrolling should move with the input cursor

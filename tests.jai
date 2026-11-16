@@ -38,8 +38,8 @@ main :: () {
 
         prepare_for_next_frame();
         reset(*`frame_pool);
-        // if the body of the test ran and got here, it means the asserts succeded.
-        // if it had failed, the program would've exited.
+        // If the body of the test ran and got here, it means the asserts succeed.
+        // If it had failed, the program would've exited.
         print("    PASS %\n", name);
     }
     shallow_node_check :: (index: s64, kind: Node.Kind, parent_index: s64) #expand {
