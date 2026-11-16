@@ -608,10 +608,6 @@ append :: (using input_state: *Input_State, input: string, input_character_filte
 use_input :: (using input_state:      *Input_State,
               text_node_index:        s64,
               input_character_filter: #type (input: u8) -> bool = null) {
-    // TO-DO: clamp the cursor and selection_anchor based on the current contents of the input,
-    // since the user of this API might have changed it at some frame imperatively and that
-    // could cause those two numbers to go stale.
-
     shift   := is_key_held(.SHIFT_LEFT)   || is_key_held(.SHIFT_RIGHT);
     ctrl    := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
     alt     := is_key_held(.ALT_LEFT)     || is_key_held(.ALT_RIGHT);
@@ -714,7 +710,7 @@ use_input :: (using input_state:      *Input_State,
                     array_ordered_remove_interval(*value, edit.where, edit.deleted_length);
                     cursor = edit.where;
                 }
-                selection_anchor = edit.selection_anchor_before;
+                selection_anchor = -1;
             }
         } else if edit_history.count > 0 {
             edit := pop(*edit_history);
@@ -762,6 +758,8 @@ use_input :: (using input_state:      *Input_State,
         else if selection_anchor == -1     then selection_anchor = cursor;
         if mouse_glyph != -1               then cursor           = mouse_glyph;
     }
+    cursor = clamp(cursor, 0, value.count);
+    if selection_anchor > value.count then selection_anchor = value.count;
     if on_key_down(.ESCAPE) || (selection_anchor == cursor && !dragging) then selection_anchor = -1;
 } @hook
 Caret :: (
