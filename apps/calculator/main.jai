@@ -34,7 +34,7 @@ Expression_Node      :: struct {
         }
     }
 };
-// TODO: return the index under which the failure happened, and then, after that index, make the text color red
+// TO-DO: return the index under which the failure happened, and then, after that index, make the text color red
 // to indicate a parsing failure.
 Parse_Result :: enum { OK; TOO_MANY_PERIODS; EXPECTED_A_NUMBER; EXPECTED_A_OPERATOR; EXPECTED_A_CLOSING_PARENTHESIS; };
 peek_number :: (expression: string, cursor: s64) -> float64, index_increment: s64, result: Parse_Result {
@@ -46,7 +46,7 @@ peek_number :: (expression: string, cursor: s64) -> float64, index_increment: s6
     if number_start < expression.count && expression[number_start] == #char "-" then index_increment += 1;
     if cursor + index_increment < expression.count && is_digit(expression[cursor + index_increment]) {
         found_period := false;
-        // then, we find the end of this "number"
+        // Then, we find the end of this "number"
         while cursor + index_increment <= expression.count - 1 {
             char := expression[cursor + index_increment];
             if char == #char "." {
@@ -62,11 +62,11 @@ peek_number :: (expression: string, cursor: s64) -> float64, index_increment: s6
         number: string = ---;
         number.data    = expression.data + number_start;
         number.count   = cursor + index_increment - number_start;
-        // TODO: ponder if we should handle the failure of this or not. I don't think this can ever fail given what we've already assured to this point
+        // TO-DO: ponder if we should handle the failure of this or not. I don't think this can ever fail, given what we've already assured to this point
         return string_to_float64(number), index_increment, .OK;
     } else {
-        // if the character at this point is not a digit, it means we reached the end of the expression
-        // and could not find the number we expected. that indicates an improper expression was typed out
+        // If the character at this point is not a digit, it means we reached the end of the expression
+        // and could not find the number we expected. That indicates an improper expression was typed out
         return 0, index_increment, Parse_Result.EXPECTED_A_NUMBER;
     }
 }
@@ -126,7 +126,7 @@ parse_operand :: (using parser: *Parser) -> index: s64, Parse_Result {
     }
     if cursor < expression.count && expression[cursor] == #char "(" {
         cursor += 1;
-        // precedence starts over inside the parenthesis: whatever operator our caller is in the
+        // Precedence starts over inside the parenthesis: whatever operator our caller is in the
         // middle of can't reach in here, so the inner expression takes everything up to the ")"
         inner, result := parse_expression(parser, 0);
         if result == .OK {
@@ -135,7 +135,7 @@ parse_operand :: (using parser: *Parser) -> index: s64, Parse_Result {
             }
             if cursor < expression.count && expression[cursor] == #char ")" {
                 cursor += 1;
-                // no node for the parenthesis themselves, the index of what was inside is the operand
+                // No node for the parenthesis themselves, the index of what was inside is the operand
                 return inner, .OK;
             } else {
                 return inner, .EXPECTED_A_CLOSING_PARENTHESIS;
@@ -193,9 +193,9 @@ parse_expression :: (using parser: *Parser, min_precedence := 0) -> index: s64, 
 
         assert(op == -1);
         peeked_op, _, peeked_result := peek_opeartor(expression, cursor);
-        // this is the point of decision of whether this left number should be use in this new binary, or if it should be yielded to the caller.
+        // This is the point of decision of whether this left number should be use in this new binary, or if it should be yielded to the caller.
         //
-        // we determine if we want to keep it here if the caller's precedence (min_precedence) is smaller or equal to ours, in which case we
+        // We determine if we want to keep it here if the caller's precedence (`min_precedence`) is smaller or equal to ours. In that case we
         // create a new binary with it and instead yield the binary's index to be used as the `right` of the caller's express
         if peeked_result == .OK && OPERATOR_PRECEDENCE[peeked_op] > min_precedence {
             op, result = parse_operator(parser);
@@ -204,13 +204,13 @@ parse_expression :: (using parser: *Parser, min_precedence := 0) -> index: s64, 
             assert(right == -1);
             precedence := OPERATOR_PRECEDENCE[peeked_op];
             if peeked_op == .EXPONENTIATE {
-                // this makes the exponentiation be right associative as it should e.g. 2^3^2 = 2^(3^2)
+                // This makes the exponentiation be right associative as it should e.g. 2^3^2 = 2^(3^2)
                 precedence -= 1;
             }
-            // when we call this function we want to understand if the next number should be used here, or by another binary.
-            // if it's used by another binary, the right here becomes the index to that binary.
+            // When we call this function we want to understand if the next number should be used here, or by another binary.
+            // If it's used by another binary, the right here becomes the index to that binary.
             //
-            // read above to understand how this is determined.
+            // Read above to understand how this is determined.
             right, result = parse_expression(parser, precedence);
             if result != .OK then break;
 
@@ -278,7 +278,7 @@ evaluate :: (nodes: [..]Expression_Node) -> float64, success: bool {
                 return 0, false;
         }
     }
-    // the last binary, that we then use to recurse outward
+    // The last binary, that we then use to recurse outward
     outer_binary_or_first_number: Expression_Node;
     found_binary_or_first_number: bool;
     for <nodes {
@@ -289,7 +289,7 @@ evaluate :: (nodes: [..]Expression_Node) -> float64, success: bool {
         }
     }
     if !found_binary_or_first_number {
-        // assummed that this number is going to be fast to find
+        // Assumed that this number is going to be fast to find
         for nodes {
             if it.kind == .NUMBER {
                 outer_binary_or_first_number = it;
@@ -313,7 +313,7 @@ U64_MAX     :: Math.U64_MAX;
 // ===== program styles =====
 //
 #add_context inter: Font;
-// The interface is designed for MIN_WIDTH x MIN_HEIGHT. On bigger windows, everything gets multiplied by how much
+// The interface is designed for `MIN_WIDTH` x `MIN_HEIGHT`. On bigger windows, everything gets multiplied by how much
 // the window grew on the axis it grew the least, and the buttons stretch to take what's left on the other axis.
 #add_context ui_scale: float = 1.0;
 scaled :: (value: float) -> float {
@@ -340,7 +340,7 @@ TRANSPARENT  :: #run hex("#01010100");
 
 Button_Kind :: enum {
     DIGIT;
-    // the ones that are neither a digit nor an operator, like the parenthesis
+    // The ones that are neither a digit nor an operator, like the parenthesis
     FUNCTION;
     OPERATOR;
 }
@@ -413,7 +413,7 @@ use_glyph_closest_to :: (text_node_index: s64, position: Vector2) -> s64 {
         closest_distance    : float;
         for glyphs.array {
             left_edge := text_measurement.position.x + it.position.x * font_units_to_pixel;
-            // TOOD: to make this work with mulitple lines, we will need to have the glyphs already wrapped here,
+            // TO-DO: to make this work with multiple lines, we will need to have the glyphs already wrapped here,
             // but then we will also need to find the closest line, to finally compare the x coordinates
             distance := Math.abs(left_edge - position.x);
             if it_index == 0 || distance < closest_distance {
@@ -422,7 +422,7 @@ use_glyph_closest_to :: (text_node_index: s64, position: Vector2) -> s64 {
             }
             if it_index == glyphs.array.count - 1 {
                 right_edge := left_edge + it.advance.x * font_units_to_pixel;
-                // TOOD: to make this work with mulitple lines, we will need to have the glyphs already wrapped here,
+                // TO-DO: to make this work with multiple lines, we will need to have the glyphs already wrapped here,
                 // but then we will also need to find the closest line, to finally compare the x coordinates
                 distance := Math.abs(right_edge - position.x);
                 if distance < closest_distance {
@@ -462,7 +462,7 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
             if end == glyphs.array.count then width = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel - position.x;
             else                              width = glyphs.array[end].position.x * font_units_to_pixel - position.x;
         }
-        // TODO: support multi-line content, because we're currently only comparing against there being no wrapping
+        // TO-DO: support multiline content, because we're currently only comparing against there being no wrapping
         line_height      := glyphs.line_height * font_units_to_pixel;
         input            := get_node();
         inner_height     := input_measurement.size.y - input.style.padding.y.x - input.style.padding.y.y;
@@ -470,8 +470,8 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
         position.x += input.style.padding.x.x;
         position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
         element(overwrite(Style.{
-            // TODO: we should pick the default selection color per operating system.
-            // we can also query it by the opearting system, which sounds like the ideal solution.
+            // TO-DO: we should pick the default selection color per operating system.
+            // We can also query it by the operating system, which sounds like the ideal solution.
             background = color(hex("#3399FF")),
             // border_radius = 4.0,
             placement = relative(position),
@@ -481,21 +481,21 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
     }
 } @component
 Input_Edit :: struct {
-    // the cursor_after is always cursor + inserted_text_end - inserted_text_start when inserting or min(cursor, deleted_value_start)
-    cursor_before:           s64 = -1;
-    // there's never a selection after an edit
+    // This is always the start of where the change is done
+    where:                   s64 = -1;
+    // There's never a selection after an edit
     selection_anchor_before: s64 = -1;
-
-    deleted_value_start:     s64 = -1;
-    deleted_value_end:       s64 = -1;
-    inserted_value_start:    s64 = -1;
-    inserted_value_end:      s64 = -1;
+    inserted_length:         s64 = -1;
+    deleted_length:          s64 = -1;
+    // Firstly used for deleted text, secondly for inserted text on `undo_history`
+    history_storage_index:   s64 = -1;
 }
 Input_State :: struct {
     value:            [..]u8;
-    deleted_value:    [..]u8;
+    // Firstly used for deleted text, secondly for inserted text on the `undo_history`
+    history_storage:  [..]u8;
+    edit_history:     [..]Input_Edit;
     undo_history:     [..]Input_Edit;
-    redo_history:     [..]Input_Edit;
     cursor:           s64;
     selection_anchor: s64            = -1;
 }
@@ -504,7 +504,7 @@ use_input_state :: (initial_value := "", initial_cursor := 0, initial_selection_
         cursor           = initial_cursor,
         selection_anchor = initial_selection_anchor,
     });
-    allocator            := node_pool();
+    allocator := node_pool();
 
     using input_state;
     value.allocator = allocator;
@@ -514,41 +514,90 @@ use_input_state :: (initial_value := "", initial_cursor := 0, initial_selection_
         initial_bytes.count = initial_value.count;
         array_add(*value, ..initial_bytes);
     }
-    deleted_value.allocator = allocator;
-    undo_history.allocator  = allocator;
-    redo_history.allocator  = allocator;
+    history_storage.allocator = allocator;
+    edit_history.allocator   = allocator;
+    undo_history.allocator   = allocator;
     return input_state;
 }
+array_insert_at :: (array: *[..]$T, insertion_index: s64, to_insert: []T) {
+    assert(insertion_index >= 0);
+    assert(insertion_index <= array.count);
+
+    new_count := array.count + to_insert.count;
+    if new_count > array.allocated {
+        reserve := max(8, 2 * new_count);
+        array_reserve(cast(*Resizable_Array) array, reserve, size_of(T));
+    }
+    array.count = new_count;
+
+    i := array.count - 1;
+    while i >= insertion_index + to_insert.count {
+        (array.data + i).* = (array.data + i - to_insert.count).*;
+        i -= 1;
+    }
+
+    for to_insert {
+        (array.data + insertion_index + it_index).* = it;
+    }
+}
+array_ordered_remove_interval :: (array: *[]$T, start: s64, count: s64) {
+    assert(count > 0);
+    assert(count <= array.count);
+    assert(start < array.count);
+
+    for i: start..array.count - count - 1 {
+        array.*[i] = array.*[i + count];
+    }
+    array.count -= count;
+}
 delete :: (using input_state: *Input_State, a: s64, b: s64) {
-    selection_anchor = -1;
     if value.count > 0 {
         start := min(a, b);
         end   := max(a, b);
         bytes := end - start;
         if bytes > 0 {
-            for i: start..value.count - bytes - 1 {
-                array_add(*deleted_value, value[i]);
-                value[i] = value[i + bytes];
-            }
-            value.count -= bytes;
-            cursor       = min(cursor, start);
+            array_add(*edit_history, .{
+                where                   = min(cursor, start),
+                selection_anchor_before = selection_anchor,
+
+                history_storage_index           = history_storage.count,
+                deleted_length          = bytes,
+            });
+            array_add(*history_storage, ..array_view(value, start, bytes));
+            array_ordered_remove_interval(*value, start, bytes);
+            cursor = min(cursor, start);
+            array_reset_keeping_memory(*undo_history);
         }
     }
+    selection_anchor = -1;
 }
 append :: (using input_state: *Input_State, input: string, input_character_filter: #type (input: u8) -> bool) {
-    start     := ifx selection_anchor != -1 then min(cursor, selection_anchor) else cursor;
-    insert_at := start;
-    inserted  := 0;
+    insert_at := cursor;
+    if selection_anchor != -1 {
+        insert_at = min(cursor, selection_anchor);
+    }
+    inserted := 0;
     for input {
         if input_character_filter == null || input_character_filter(it) {
-            // this makes sure that we only delete and remove the selection if there's at least one
-            // character to insert
-            if inserted == 0 && selection_anchor != -1 then delete(input_state, cursor, selection_anchor);
+            if inserted == 0 && selection_anchor != -1 {
+                // This makes sure that we only delete and remove the selection if there's at least one
+                // character to insert
+                delete(input_state, cursor, selection_anchor);
+            }
             array_insert_at(*value, it, insert_at + inserted);
             inserted += 1;
         }
     }
-    cursor += inserted;
+    if inserted > 0 {
+        array_add(*edit_history, .{
+            where                   = cursor,
+            selection_anchor_before = selection_anchor,
+            inserted_length         = inserted,
+        });
+        selection_anchor = -1;
+        cursor          += inserted;
+        array_reset_keeping_memory(*undo_history);
+    }
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - handle multiline text
@@ -556,7 +605,7 @@ append :: (using input_state: *Input_State, input: string, input_character_filte
 use_input :: (using input_state:      *Input_State,
               text_node_index:        s64,
               input_character_filter: #type (input: u8) -> bool = null) {
-    // TOOD: clamp the cursor and selection_anchor based on the current contents of the input,
+    // TO-DO: clamp the cursor and selection_anchor based on the current contents of the input,
     // since the user of this API might have changed it at some frame imperatively and that
     // could cause those two numbers to go stale.
 
@@ -590,10 +639,10 @@ use_input :: (using input_state:      *Input_State,
             next     = next_word_boundary(glyphs.array, cursor);
         }
         if by_line {
-            // TODO: to support multiline text here, we need this to go to the start of the current line,
+            // TO-DO: to support multiline text here, we need this to go to the start of the current line,
             // not to the start of the entire piece of text.
             previous = 0;
-            // TODO: to support multiline text here, we need this to go to the end of the current line,
+            // TO-DO: to support multiline text here, we need this to go to the end of the current line,
             // not to the start of the entire piece of text.
             next = value.count;
         }
@@ -609,8 +658,8 @@ use_input :: (using input_state:      *Input_State,
             cursor           = value.count;
         }
 
-        backspace := on_key_down(.BACKSPACE, true);
-        if backspace || on_key_down(.DELETE, true) {
+        backspace := on_key_down(.BACKSPACE, on_repeat = true);
+        if backspace || on_key_down(.DELETE, on_repeat = true) {
             if selection_anchor != -1 then delete(input_state, cursor, selection_anchor);
             else if backspace         then delete(input_state, previous, cursor);
             else                           delete(input_state, cursor, next);
@@ -631,6 +680,67 @@ use_input :: (using input_state:      *Input_State,
         copy_to_clipboard(to_string(value.data + start, end - start));
         delete(input_state, cursor, selection_anchor);
         selection_anchor = -1;
+    }
+
+    if command && on_key_down(.Z, on_repeat = true) {
+        if shift {
+            if undo_history.count > 0 {
+                edit := pop(*undo_history);
+                if edit.inserted_length > 0 {
+                    assert(edit.history_storage_index != -1);
+                    array_add(*edit_history, Input_Edit.{
+                        where                   = edit.where,
+                        selection_anchor_before = -1,
+                        inserted_length         = edit.inserted_length,
+                    });
+
+                    to_insert := array_view(history_storage, edit.history_storage_index, edit.inserted_length);
+                    array_insert_at(*value, edit.where, to_insert);
+                    cursor = edit.where + edit.inserted_length;
+                } else if edit.deleted_length > 0 {
+                    assert(edit.history_storage_index != -1);
+                    array_add(*edit_history, Input_Edit.{
+                        where                   = edit.where,
+                        selection_anchor_before = -1,
+                        deleted_length          = edit.deleted_length,
+                        history_storage_index   = edit.history_storage_index,
+                    });
+
+                    array_ordered_remove_interval(*value, edit.where, edit.deleted_length);
+                    cursor = edit.where;
+                }
+                selection_anchor = edit.selection_anchor_before;
+            }
+        } else if edit_history.count > 0 {
+            edit := pop(*edit_history);
+            if edit.inserted_length > 0 {
+                // We're undoing an insertion, thus we're deleting it.
+                //
+                // Since this content should be in the original value, we don't need it in the history record.
+                assert(edit.history_storage_index == -1);
+
+                array_add(*undo_history, .{
+                    where                   = edit.where,
+                    selection_anchor_before = edit.selection_anchor_before,
+                    inserted_length         = edit.inserted_length,
+                    history_storage_index   = history_storage.count,
+                });
+                array_add(*history_storage, ..array_view(value, edit.where, edit.inserted_length));
+
+                array_ordered_remove_interval(*value, edit.where, edit.inserted_length);
+                cursor = edit.where;
+            } else if edit.deleted_length > 0 {
+                // We're undoing a deletion, thus we're inserting it again.
+                assert(edit.history_storage_index != -1);
+
+                array_add(*undo_history, edit);
+
+                to_insert := array_view(history_storage, edit.history_storage_index, edit.deleted_length);
+                array_insert_at(*value, edit.where, to_insert);
+                cursor = edit.where + edit.deleted_length;
+            }
+            selection_anchor = edit.selection_anchor_before;
+        }
     }
 
     dragging            := is_dragging(.LEFT);
@@ -667,11 +777,11 @@ Caret :: (
             if cursor == value.count {
                 caret_position = (peek(glyphs.array).position + peek(glyphs.array).advance) * font_units_to_pixel;
             } else {
-                // TODO: to make this generic, this should not assume the glyphs map one-to-one to the value's bytes
+                // TO-DO: to make this generic, this should not assume the glyphs map one-to-one to the value's bytes
                 caret_position = glyphs.array[cursor].position * font_units_to_pixel;
             }
         }
-        // TODO: support multi-line inputs, because we're currently only comparing against there being no wrapping in the input
+        // TO-DO: support multiline inputs, because we're currently only comparing against there being no wrapping in the input
         line_height      := glyphs.line_height * font_units_to_pixel;
         input            := get_node();
         inner_height     := input_measurement.size.y - input.style.padding.y.x - input.style.padding.y.y;
@@ -679,7 +789,7 @@ Caret :: (
         caret_position.x += input.style.padding.x.x;
         caret_position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
 
-        // TODO: while typing, this blinking timer should reset
+        // TO-DO: while typing, this blinking timer should reset
         blinking := cast(s64)Math.floor(seconds_since_init() * 2) % 2 != 1;
 
         element(overwrite(Style.{
@@ -709,9 +819,9 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         text_node_index := text(Style.{ z_index = 2, },
                                 to_string(input_state.value.data, input_state.value.count));
         Caret(Style.{}, input_state, scrolling_state.effective_offset.x, text_node_index);
-        // TODO: as the user types, this should scroll following the cursor
+        // TO-DO: as the user types, this should scroll following the cursor
         use_input(input_state, text_node_index, (input: u8) -> bool {
-            // since we're not really using any complicated utf8, but rather only ASCII input as there are only numbers
+            // Since we're not really using any complicated UTF8, but rather only ASCII input as there are only numbers
             // and operators, we can simply remove by index as all characters are only going to be one byte.
             if is_digit(input) || is_operator(input) || is_any(input, " .()") {
                 return true;
@@ -773,13 +883,13 @@ remove_last :: (text: *[..]u8) {
 App :: () {
     window   := context.forbear.window;
     viewport := get_viewport_size();
-    // the lower bound keeps font sizes sane on a degenerate viewport, like the one of a minimized window
-    context.ui_scale = max(min(viewport.x / MIN_WIDTH, viewport.y / MIN_HEIGHT), 0.5);
+    // The lower bound keeps font sizes sane on a degenerate viewport, like the one of a minimized window
+    context.ui_scale    = max(min(viewport.x / MIN_WIDTH, viewport.y / MIN_HEIGHT), 0.5);
 
     evaluation_success := state(false);
     result             := state(float64);
 
-    input_state := use_input_state();
+    input_state        := use_input_state();
 
     element(Style.{
         direction  = .VERTICAL,
@@ -817,14 +927,12 @@ App :: () {
         Row :: (body: Code) #expand {
             element(Style.{width = grow(), height = grow()}, body);
         } @component
-
         column_style :: (span := 1.0) -> Style {
             return Style.{width = grow(span), height = grow(), margin = all(scaled(BUTTON_GAP / 2))};
         }
-
         element(Style.{
             direction       = .VERTICAL,
-            // the other half, so that the buttons are also a full gap away from the edges
+            // The other half, so that the buttons are also a full gap away from the edges
             padding         = all(scaled(BUTTON_GAP / 2)),
             width           = grow(),
             height          = grow(),
@@ -832,10 +940,10 @@ App :: () {
             using input_state;
             Row(#code {
                 if Button(column_style(2.0), "C", kind = .FUNCTION) {
-                    value.count   = 0;
+                    value.count      = 0;
                     cursor           = 0;
                     selection_anchor = -1;
-                    // there's nothing to evaluate anymore, and the result is only updated when the evaluation succeeds
+                    // There's nothing to evaluate anymore, and the result is only updated when the evaluation succeeds
                     result.* = 0;
                 }
                 if Button(column_style(2.0), "⌫", is_pressed = is_key_held(Key.BACKSPACE), kind = .FUNCTION) {
@@ -989,7 +1097,7 @@ main :: () {
     window: Window;
     init_backend(*backend);
     init_window(*backend, *window, MIN_WIDTH, MIN_HEIGHT, "Calculator");
-    // TODO: we should add a native function to handle this min size thing
+    // TO-DO: we should add a native function to handle this minimum size thing
     // also a max size thing would be nice
     #if OS == .LINUX {
         send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Min_Size.{ width = MIN_WIDTH, height = MIN_HEIGHT });
