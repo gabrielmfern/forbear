@@ -4608,9 +4608,10 @@ get_font_units_to_pixel :: (font: *Font, font_size: float) -> float {
 }
 font_raster_glyph :: (font: *Font, glyph_index: u16, subpixel_bin: s32) -> Raster_Glyph {
     FT_LOAD_TARGET_LIGHT :: 1 << 16;
+    hinting: s32 = xx ifx context.forbear.window.scale >= 2 then FT_LOAD_NO_HINTING else FT_LOAD_TARGET_LIGHT;
     delta := FT_Vector.{ x = xx (subpixel_bin * 64 / SUBPIXEL_BINS) };
     FT_Set_Transform(font.raster_face, null, *delta);
-    FT_Load_Glyph(font.raster_face, xx glyph_index, FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT);
+    FT_Load_Glyph(font.raster_face, xx glyph_index, FT_LOAD_RENDER | hinting);
     glyph := font.raster_face.glyph;
     // FT_LOAD_RENDER already renders the glyph
     // FT_Render_Glyph(glyph, FT_Render_Mode.NORMAL);
@@ -4758,6 +4759,7 @@ Glyph_Atlas :: struct {
     cursor_y: s32;
     row_height: s32;
     size: s32 = INITIAL_SIZE;
+    scale: float64;
 
     PADDING :: 1;
     INITIAL_SIZE :: 1024;
@@ -4821,6 +4823,10 @@ glyph_atlas_grow :: (glyph_atlas: *Glyph_Atlas) -> bool {
 // all of them could be placed
 glyph_atlas_fill :: () -> bool {
     using context.forbear;
+    if glyph_atlas.scale != window.scale {
+        glyph_atlas_reset(*glyph_atlas);
+        glyph_atlas.scale = window.scale;
+    }
     for node: node_tree if node.kind == .ELEMENT && node.glyphs.array.count != 0 {
         scale := cast(float) window.scale;
         rounded_font_size := round_font_size(node.style.font_size * scale);
