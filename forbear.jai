@@ -11,6 +11,8 @@ operator == :: Math.operator ==;
 
 #scope_module
 
+EXIT_ON_FIRST_FRAME :: false;
+
 #import "Basic";
 #import "Flat_Pool";
 #import "GL";
@@ -1175,7 +1177,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     #scope_module
     WAYLAND_DEBUGGING   :: false;
     EGL_DEBUGGING       :: false;
-    EXIT_ON_FIRST_FRAME :: false;
 
     GL_FRAMEBUFFER_FLIP_Y_MESA :: 35771;
 
@@ -6074,8 +6075,16 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         if frame == 3 {
             SetProcessWorkingSetSize(GetCurrentProcess(), U64_MAX, U64_MAX);
         }
+        if EXIT_ON_FIRST_FRAME {
+            glFinish();
+            window.running = false;
+        }
     } else #if OS == .MACOS {
         NSOpenGLContext.flushBuffer(backend.gl_context);
+        if EXIT_ON_FIRST_FRAME {
+            glFinish();
+            window.running = false;
+        }
     } else #if OS == .LINUX {
         glFlush();
 
