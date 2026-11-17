@@ -958,20 +958,14 @@ App :: () {
                 evaluation_success.* = success;
             }
 
-            input_measurement, defined := get_measurement();
-            if defined {
+            if evaluation_success.* {
                 element(Style.{
                     background = color(palette.background),
                     padding    = all(scaled(5.0)),
                     font_size  = scaled(12),
+                    placement  = relative(Vector2.{ scaled(5.0), scaled(10.0) }, .BOTTOM_RIGHT),
                 }, #code {
-                    text_index  := text(sprint("= %", result.*));
-                    text_node   := get_node(text_index);
-                    result_node := get_node();
-                    result_node.style.placement = relative(Vector2.{
-                        viewport.x - text_node.size.x - scaled(15.0),
-                        input_measurement.size.y - text_node.size.y - scaled(20.0)
-                    });
+                    text(sprint("= %", result.*));
                 });
             }
         });
