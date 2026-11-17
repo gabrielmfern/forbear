@@ -3644,12 +3644,37 @@ spring_transition :: (target: $T, config: Spring_Config(T)) -> T
 Scrolling_State :: struct {
     offset:           Vector2;
     effective_offset: Vector2;
+    scheduled_scroll: Scheduled_Scroll;
+}
+Scheduled_Scroll :: struct {
+    // These are both private values, and they're there for bookkeeping
+    // so that we know when to actually consume this.
+    defined            := false;
+    defined_this_frame := true;
+
+    offset             : Vector2;
+    animate            : bool;
+};
+schedule_scroll :: (state: *Scrolling_State, offset: Vector2, animate := false) {
+    state.scheduled_scroll.defined            = true;
+    state.scheduled_scroll.defined_this_frame = true;
+    state.scheduled_scroll.offset             = offset;
+    state.scheduled_scroll.animate            = animate;
 }
 // TO-DO: This must be able to handle choosing between all nodes that can scroll to scroll only one of them.
 //
 // Besides only scrolling one of them, once one scrolling container is done with the scrolling and the user keeps
 // scrolling in that direction, the scrolling should go to the next scrolling container with less "precedence".
 use_scrolling :: (using state: *Scrolling_State) {
+    if scheduled_scroll.defined && scheduled_scroll.defined_this_frame {
+        scheduled_scroll.defined_this_frame = false;
+    } else if scheduled_scroll.defined {
+        offset = scheduled_scroll.offset;
+        if !scheduled_scroll.animate {
+            effective_offset = scheduled_scroll.offset;
+        }
+        scheduled_scroll.defined = false;
+    }
     if is_mouse_inside() {
         offset += get_scroll_delta();
     }
