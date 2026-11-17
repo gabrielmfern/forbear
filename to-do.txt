@@ -1,21 +1,23 @@
 - implement C ABI and C adapter
-- Primitives that allow handling focus
-    - The main problem around this is the fact that we can't really "consume" an event. Given the UI is immediate and events are consumed as things are rendered, each element must know that some other element is the one that will be consuming the given event. In the Zig version I had a way to handle this, it was 80% as elegant as I'd like but had some awkwardness.
-- Text input hooks and components
-- Scrolling hooks and components
 - Complete windowing code
     - Handle the menu bar protocol in Wayland, and render the Gnome menu bar
     - Use proper event handlers in macOS instead of polling
     - Handle re-rendering during resizing for macOS
+    - Currently minimizing the macOS window stops running the program
     - Menu bar for macOS
         - We need to at least have command+q working
     - API to set the minimum and maximum sizes of the window
     - API to set the window to full screen
     - If the forbear program is manipulated by another program on Windows, modifiers don't actually quite work (control+v), for example
         - Raycast's emoji insertion is what I'm thinking of
+- Primitives that allow handling focus
+    - The main problem around this is the fact that we can't really "consume" an event. Given the UI is immediate and events are consumed as things are rendered, each element must know that some other element is the one that will be consuming the given event. In the Zig version I had a way to handle this, it was 80% as elegant as I'd like but had some awkwardness.
+- Add the glyph positions to a node's measurements
+- Text input hooks and components
+- Scrolling hooks and components
 - Support for font fallbacks when some Unicode doesn't have a glyph in the font. This is the case for emojis, where you might want to fallback to Segoe UI Emoji or something like that.
 - Cache the text shaping, and the text wrapping
-- Add the glyph positions to a node's measurements
+- Create Twitch/YouTube chat viewer
 - Implement the Style fields that are currently no-ops
     - Draw background gradient
     - Draw background images
