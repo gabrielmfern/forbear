@@ -378,6 +378,7 @@ Button :: (style: Style, contents: string, is_pressed := false, kind := Button_K
 } @component
 
 previous_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
+    // TO-DO: this is assuming the glyphs map 1:1 to the bytes
     c := cursor;
     while c > 0 && is_space(glyphs[c - 1].utf8.Encoded[0]) { c -= 1; }
     while c > 0 {
@@ -391,6 +392,7 @@ previous_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
     }
 }
 next_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
+    // TO-DO: this is assuming the glyphs map 1:1 to the bytes
     c := cursor;
     while c < glyphs.count && is_space(glyphs[c].utf8.Encoded[0]) { c += 1; }
     if c < glyphs.count c += 1;
@@ -403,7 +405,8 @@ next_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
         return 0;
     }
 }
-use_glyph_closest_to :: (text_node_index: s64, position: Vector2) -> s64 {
+use_glyph_closest_to :: (position: Vector2) -> s64 {
+    using context.input;
     glyphs                    := get_node(text_node_index).glyphs;
     text_measurement, defined := get_measurement(text_node_index);
     cursor                    := -1;
@@ -434,21 +437,20 @@ use_glyph_closest_to :: (text_node_index: s64, position: Vector2) -> s64 {
     }
     return cursor;
 } @hook
-Selection_State :: struct {
-    anchor: s64 = -1;
-    cursor: s64 = -1;
-};
-Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vector2, text_node_index: s64) {
+Selection :: (style: Style) {
+    using context.input;
+    using state;
     input_measurement, defined := get_measurement();
-    if defined && anchor != -1 && cursor != -1 {
-        start := min(anchor, cursor);
-        end   := max(anchor, cursor);
+    if defined && selection_anchor != -1 {
+        start := min(selection_anchor, cursor);
+        end   := max(selection_anchor, cursor);
 
         text_node           := get_node(text_node_index);
         glyphs              := text_node.glyphs;
         font_size           := text_node.style.font_size;
         font_units_to_pixel := get_font_units_to_pixel(*context.inter, font_size);
 
+        // TO-DO: this is assuming the glyphs map 1:1 to the bytes
         position: Vector2;
         if glyphs.array.count > 0 {
             if start == glyphs.array.count {
@@ -466,7 +468,7 @@ Selection :: (style: Style, using state: *Selection_State, scrolling_offset: Vec
         line_height      := glyphs.line_height * font_units_to_pixel;
         input            := get_node();
         inner_height     := input_measurement.size.y - input.style.padding.y.x - input.style.padding.y.y;
-        position -= scrolling_offset;
+        position -= scrolling_state.effective_offset;
         position.x += input.style.padding.x.x;
         position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
         element(overwrite(Style.{
@@ -551,7 +553,16 @@ array_ordered_remove_interval :: (array: *[]$T, start: s64, count: s64) {
     }
     array.count -= count;
 }
-delete :: (using input_state: *Input_State, a: s64, b: s64) {
+Input_Context :: struct {
+    state:            *Input_State;
+    scrolling_state:        *Scrolling_State;
+    text_node_index:        s64;
+    input_character_filter: #type (input: u8) -> bool = null;
+};
+#add_context input: Input_Context;
+delete :: (a: s64, b: s64) {
+    using context.input;
+    using state;
     start := min(a, b);
     end   := max(a, b);
     if end > start {
@@ -566,10 +577,13 @@ delete :: (using input_state: *Input_State, a: s64, b: s64) {
         array_ordered_remove_interval(*value, start, end - start);
         array_reset_keeping_memory(*undo_history);
         cursor = start;
+        scroll_to_cursor();
     }
     selection_anchor = -1;
 }
-append :: (using input_state: *Input_State, a: s64, b: s64, input: string, input_character_filter: #type (input: u8) -> bool = null) {
+append :: (a: s64, b: s64, input: string) {
+    using context.input;
+    using state;
     start := min(a, b);
     end   := max(a, b);
     edit := Input_Edit.{
@@ -595,15 +609,35 @@ append :: (using input_state: *Input_State, a: s64, b: s64, input: string, input
         array_add(*edit_history, edit);
         array_reset_keeping_memory(*undo_history);
         cursor           = start + edit.inserted_length;
+        scroll_to_cursor();
         selection_anchor = -1;
     }
+}
+scroll_to_cursor :: () {
+    using context.input;
+    using state;
+    using scrolling_state;
+
+    text_node := get_node(text_node_index);
+    // TO-DO: how can we have this handling multiline text? This problem of multiline text just becomes dramatically simple in the case
+    // where the width of the text node is well-known, such as when it's fixed.
+    glyphs              := shape_text(text_node.style, to_string(value.data));
+
+    font_units_to_pixel := get_font_units_to_pixel(text_node.style.font, text_node.style.font_size);
+    // TO-DO: this is assuming the glyphs map 1:1 to the bytes
+
+    if cursor == glyphs.array.count {
+        offset.x = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel;
+    } else {
+        offset.x = glyphs.array[cursor].position.x * font_units_to_pixel;
+    }
+    effective_offset.x = offset.x;
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - handle multiline text
 // - we should be moving the cursor by graphemes, not by glyphs
-use_input :: (using input_state:      *Input_State,
-              text_node_index:        s64,
-              input_character_filter: #type (input: u8) -> bool = null) {
+use_input :: () {
+    using context.input.state;
     shift   := is_key_held(.SHIFT_LEFT)   || is_key_held(.SHIFT_RIGHT);
     ctrl    := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
     alt     := is_key_held(.ALT_LEFT)     || is_key_held(.ALT_RIGHT);
@@ -612,9 +646,9 @@ use_input :: (using input_state:      *Input_State,
     by_word := #ifx OS == .MACOS then alt   else ctrl;
     by_line := (#ifx OS == .MACOS then super else false) || on_key_down(.HOME) || on_key_down(.END);
 
-    glyphs := get_node(text_node_index).glyphs;
+    glyphs := get_node(context.input.text_node_index).glyphs;
 
-    append(input_state, cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_text_input(), input_character_filter);
+    append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_text_input());
 
     {
         //
@@ -655,14 +689,14 @@ use_input :: (using input_state:      *Input_State,
 
         backspace := on_key_down(.BACKSPACE, on_repeat = true);
         if backspace || on_key_down(.DELETE, on_repeat = true) {
-            if selection_anchor != -1 then delete(input_state, cursor, selection_anchor);
-            else if backspace         then delete(input_state, previous, cursor);
-            else                           delete(input_state, cursor, next);
+            if selection_anchor != -1 then delete(cursor, selection_anchor);
+            else if backspace         then delete(previous, cursor);
+            else                           delete(cursor, next);
         }
     }
 
     if command && on_key_down(.V) {
-        append(input_state, cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_clipboard_text(), input_character_filter);
+        append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_clipboard_text());
     }
 
     if command && on_key_down(.C) && selection_anchor != -1 && value.count > 0 {
@@ -675,7 +709,7 @@ use_input :: (using input_state:      *Input_State,
         start := min(cursor, selection_anchor);
         end   := max(cursor, selection_anchor);
         copy_to_clipboard(to_string(value.data + start, end - start));
-        delete(input_state, cursor, selection_anchor);
+        delete(cursor, selection_anchor);
         selection_anchor = -1;
     }
 
@@ -711,13 +745,13 @@ use_input :: (using input_state:      *Input_State,
     dragging            := is_dragging(.LEFT);
     dragging_last_frame := state(false);
     if dragging {
-        if !dragging_last_frame.* then selection_anchor = use_glyph_closest_to(text_node_index, get_press_position());
-        mouse_glyph := use_glyph_closest_to(text_node_index, get_mouse_position());
+        if !dragging_last_frame.* then selection_anchor = use_glyph_closest_to(get_press_position());
+        mouse_glyph := use_glyph_closest_to(get_mouse_position());
         if mouse_glyph != -1 then cursor = mouse_glyph;
     }
     dragging_last_frame.* = dragging;
     if on_click() {
-        mouse_glyph := use_glyph_closest_to(text_node_index, get_mouse_position());
+        mouse_glyph := use_glyph_closest_to(get_mouse_position());
         if !shift                          then selection_anchor = -1;
         else if selection_anchor == -1     then selection_anchor = cursor;
         if mouse_glyph != -1               then cursor           = mouse_glyph;
@@ -726,12 +760,9 @@ use_input :: (using input_state:      *Input_State,
     if selection_anchor > value.count then selection_anchor = value.count;
     if on_key_down(.ESCAPE) || (selection_anchor == cursor && !dragging) then selection_anchor = -1;
 } @hook
-Caret :: (
-    style:             Style,
-    using input_state: *Input_State,
-    scrolling_offset:  float,
-    text_node_index:   s64
-) {
+Caret :: (style: Style) {
+    using context.input;
+    using state;
     input_measurement, defined := get_measurement();
     if defined {
         text_node           := get_node(text_node_index);
@@ -744,7 +775,7 @@ Caret :: (
             if cursor == value.count {
                 caret_position = (peek(glyphs.array).position + peek(glyphs.array).advance) * font_units_to_pixel;
             } else {
-                // TO-DO: to make this generic, this should not assume the glyphs map one-to-one to the value's bytes
+                // TO-DO: this is assuming the glyphs map 1:1 to the bytes
                 caret_position = glyphs.array[cursor].position * font_units_to_pixel;
             }
         }
@@ -752,7 +783,7 @@ Caret :: (
         line_height      := glyphs.line_height * font_units_to_pixel;
         input            := get_node();
         inner_height     := input_measurement.size.y - input.style.padding.y.x - input.style.padding.y.y;
-        caret_position.x -= scrolling_offset;
+        caret_position.x -= scrolling_state.effective_offset.x;
         caret_position.x += input.style.padding.x.x;
         caret_position.y += input.style.padding.y.x + (inner_height - line_height) / 2;
 
@@ -773,6 +804,20 @@ Caret :: (
 Input :: (input_state: *Input_State, body: Code) #expand {
     viewport        := get_viewport_size();
     scrolling_state := state(Scrolling_State);
+    context.input = .{
+        state                  = input_state,
+        scrolling_state        = scrolling_state,
+        input_character_filter = (input: u8) -> bool {
+            // Since we're not really using any complicated UTF8, but rather only ASCII input as there are only numbers
+            // and operators, we can simply remove by index as all characters are only going to be one byte.
+            if is_digit(input) || is_operator(input) || is_any(input, " .()") {
+                return true;
+            } else {
+                log("ignoring input character %, since it's not in the ones we defined as supporting", input);
+                return false;
+            }
+        },
+    };
     element(Style.{
         background      = color(BG),
         padding         = in_line(bottom(top(scaled(10)), scaled(30)), scaled(5)),
@@ -783,24 +828,12 @@ Input :: (input_state: *Input_State, body: Code) #expand {
         width           = fixed(viewport.x),
         children_offset = -scrolling_state.effective_offset,
     }, #code {
-        text_node_index := text(Style.{ z_index = 2, },
-                                to_string(input_state.value.data, input_state.value.count));
-        Selection(Style.{},
-                  *(Selection_State.{input_state.cursor, input_state.selection_anchor}),
-                  scrolling_state.effective_offset,
-                  text_node_index);
-        Caret(Style.{}, input_state, scrolling_state.effective_offset.x, text_node_index);
+        context.input.text_node_index = text(Style.{ z_index = 2, },
+                                             to_string(input_state.value.data, input_state.value.count));
+        Selection(Style.{});
+        Caret(Style.{});
         // TO-DO: as the user types, this should scroll following the cursor
-        use_input(input_state, text_node_index, (input: u8) -> bool {
-            // Since we're not really using any complicated UTF8, but rather only ASCII input as there are only numbers
-            // and operators, we can simply remove by index as all characters are only going to be one byte.
-            if is_digit(input) || is_operator(input) || is_any(input, " .()") {
-                return true;
-            } else {
-                log("ignoring input character %, since it's not in the ones we defined as supporting", input);
-                return false;
-            }
-        });
+        use_input();
 
         use_scrolling(scrolling_state);
 
@@ -808,7 +841,8 @@ Input :: (input_state: *Input_State, body: Code) #expand {
     });
 } @component
 
-reverse_number_sign :: (using input_state: *Input_State) -> changed: bool {
+reverse_number_sign :: () -> changed: bool {
+    using context.input.state;
     start := value.count;
     while start > 0 && (is_digit(value[start - 1]) || value[start - 1] == #char ".") {
         start -= 1;
@@ -823,14 +857,15 @@ reverse_number_sign :: (using input_state: *Input_State) -> changed: bool {
                start > 0
             && value[start - 1] == #char "-"
             && (before_minus < 0 || !(is_digit(value[before_minus]) || is_any(value[before_minus], ".)")));
-        if is_sign then delete(input_state, start - 1, start);
-        else            append(input_state, start, start, "-");
+        if is_sign then delete(start - 1, start);
+        else            append(start, start, "-");
     }
     return changed;
 }
 // Removes what was last added by one of the buttons. The operator buttons surround the operator with spaces, so
 // those go away together with the operator.
-remove_last :: (using input_state: *Input_State) {
+remove_last :: () {
+    using context.input.state;
     start := value.count;
     while start > 0 && value[start - 1] == #char " " {
         start -= 1;
@@ -843,7 +878,7 @@ remove_last :: (using input_state: *Input_State) {
             }
         }
     }
-    delete(input_state, start, value.count);
+    delete(start, value.count);
 }
 
 App :: () {
@@ -906,83 +941,83 @@ App :: () {
             using input_state;
             Row(#code {
                 if Button(column_style(2.0), "C", kind = .FUNCTION) {
-                    delete(input_state, 0, value.count);
+                    delete(0, value.count);
                     // There's nothing to evaluate anymore, and the result is only updated when the evaluation succeeds
                     result.* = 0;
                 }
                 if Button(column_style(2.0), "⌫", is_pressed = is_key_held(Key.BACKSPACE), kind = .FUNCTION) {
-                    remove_last(input_state);
+                    remove_last();
                 }
             });
             Row(#code {
                 if Button(column_style(), "(", is_pressed = is_key_held(Key.PARENTHESIS_LEFT), kind = .FUNCTION) {
-                    append(input_state, value.count, value.count, "(");
+                    append(value.count, value.count, "(");
                 }
                 if Button(column_style(), ")", is_pressed = is_key_held(Key.PARENTHESIS_RIGHT), kind = .FUNCTION) {
-                    append(input_state, value.count, value.count, ")");
+                    append(value.count, value.count, ")");
                 }
                 if Button(column_style(), "+/-", kind = .FUNCTION) {
-                    if reverse_number_sign(input_state) then cursor = value.count;
+                    if reverse_number_sign() then cursor = value.count;
                 }
                 if Button(column_style(), "^", is_pressed = is_key_held(Key.CARET), kind = .OPERATOR) {
-                    append(input_state, value.count, value.count, " ^ ");
+                    append(value.count, value.count, " ^ ");
                 }
             });
             Row(#code {
                 if Button(column_style(), "7", is_pressed = is_key_held(Key.DIGIT_7)) {
-                    append(input_state, value.count, value.count, "7");
+                    append(value.count, value.count, "7");
                 }
                 if Button(column_style(), "8", is_pressed = is_key_held(Key.DIGIT_8)) {
-                    append(input_state, value.count, value.count, "8");
+                    append(value.count, value.count, "8");
                 }
                 if Button(column_style(), "9", is_pressed = is_key_held(Key.DIGIT_9)) {
-                    append(input_state, value.count, value.count, "9");
+                    append(value.count, value.count, "9");
                 }
                 if Button(column_style(), "÷", is_pressed = is_key_held(Key.PLUS), kind = .OPERATOR) {
-                    append(input_state, value.count, value.count, " / ");
+                    append(value.count, value.count, " / ");
                 }
             });
             Row(#code {
                 if Button(column_style(), "4", is_pressed = is_key_held(Key.DIGIT_4)) {
-                    append(input_state, value.count, value.count, "4");
+                    append(value.count, value.count, "4");
                 }
                 if Button(column_style(), "5", is_pressed = is_key_held(Key.DIGIT_5)) {
-                    append(input_state, value.count, value.count, "5");
+                    append(value.count, value.count, "5");
                 }
                 if Button(column_style(), "6", is_pressed = is_key_held(Key.DIGIT_6)) {
-                    append(input_state, value.count, value.count, "6");
+                    append(value.count, value.count, "6");
                 }
                 if Button(column_style(), "×",   is_pressed = is_key_held(Key.X)
                                               || is_key_held(Key.ASTERISK), kind = .OPERATOR) {
-                    append(input_state, value.count, value.count, " * ");
+                    append(value.count, value.count, " * ");
                 }
             });
             Row(#code {
                 if Button(column_style(), "1", is_pressed = is_key_held(Key.DIGIT_1)) {
-                    append(input_state, value.count, value.count, "1");
+                    append(value.count, value.count, "1");
                 }
                 if Button(column_style(), "2", is_pressed = is_key_held(Key.DIGIT_2)) {
-                    append(input_state, value.count, value.count, "2");
+                    append(value.count, value.count, "2");
                 }
                 if Button(column_style(), "3", is_pressed = is_key_held(Key.DIGIT_3)) {
-                    append(input_state, value.count, value.count, "3");
+                    append(value.count, value.count, "3");
                 }
                 if Button(column_style(), "+", is_pressed = is_key_held(Key.PLUS), kind = .OPERATOR) {
-                    append(input_state, value.count, value.count, " + ");
+                    append(value.count, value.count, " + ");
                 }
             });
             Row(#code {
                 Row(#code {
                     if Button(column_style(), "0", is_pressed = is_key_held(Key.DIGIT_0)) {
-                        append(input_state, value.count, value.count, "0");
+                        append(value.count, value.count, "0");
                     }
                 });
                 Row(#code {
                     if Button(column_style(), ".", is_pressed = is_key_held(Key.PERIOD)) {
-                        append(input_state, value.count, value.count, ".");
+                        append(value.count, value.count, ".");
                     }
                     if Button(column_style(), "-", is_pressed = is_key_held(Key.MINUS), kind = .OPERATOR) {
-                        append(input_state, value.count, value.count, " - ");
+                        append(value.count, value.count, " - ");
                     }
                 });
             });
@@ -991,7 +1026,7 @@ App :: () {
 
     if on_key_down(.ENTER) {
         stringified_result := tprint("%", result.*);
-        append(input_state, 0, input_state.value.count, stringified_result);
+        append(0, input_state.value.count, stringified_result);
         input_state.cursor = 0;
 
         copy_to_clipboard(stringified_result);
