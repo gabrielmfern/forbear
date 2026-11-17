@@ -362,7 +362,6 @@ Button :: (style: Style, contents: string, is_pressed := false, kind := Button_K
         y_justification = .CENTER,
         width           = grow(),
         height          = grow(),
-        cursor          = .POINTER,
     }, style), #code {
         button := get_node();
         if is_mouse_inside() {
