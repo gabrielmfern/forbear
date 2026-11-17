@@ -613,7 +613,7 @@ append :: (a: s64, b: s64, input: string) {
         selection_anchor = -1;
     }
 }
-scroll_to_cursor :: (input_context: Input_Context) {
+scroll_to_cursor :: (input_context: Input_Context, animate := false) {
     using input_context;
     using state;
     text_node := get_node(text_node_index);
@@ -629,7 +629,7 @@ scroll_to_cursor :: (input_context: Input_Context) {
     } else {
         cursor_x = glyphs.array[cursor].position.x * font_units_to_pixel;
     }
-    schedule_scroll(scrolling_state, Vector2.{ cursor_x, 0 });
+    schedule_scroll(scrolling_state, Vector2.{ cursor_x, 0 }, animate);
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - handle multiline text
@@ -753,7 +753,7 @@ use_input :: () {
         mouse_glyph := use_glyph_closest_to(get_mouse_position());
         if mouse_glyph != -1 {
             cursor = mouse_glyph;
-            scroll_to_cursor(context.input);
+            scroll_to_cursor(context.input, animate = true);
         }
     }
     dragging_last_frame.* = dragging;
@@ -763,7 +763,7 @@ use_input :: () {
         else if selection_anchor == -1     then selection_anchor = cursor;
         if mouse_glyph != -1               {
             cursor = mouse_glyph;
-            scroll_to_cursor(context.input);
+            scroll_to_cursor(context.input, animate = true);
         }
     }
     if cursor < 0 || cursor > value.count {
