@@ -577,7 +577,7 @@ delete :: (a: s64, b: s64) {
         array_ordered_remove_interval(*value, start, end - start);
         array_reset_keeping_memory(*undo_history);
         cursor = start;
-        scroll_to_cursor();
+        scroll_to_cursor(context.input);
     }
     selection_anchor = -1;
 }
@@ -609,29 +609,27 @@ append :: (a: s64, b: s64, input: string) {
         array_add(*edit_history, edit);
         array_reset_keeping_memory(*undo_history);
         cursor           = start + edit.inserted_length;
-        scroll_to_cursor();
+        scroll_to_cursor(context.input);
         selection_anchor = -1;
     }
 }
-scroll_to_cursor :: () {
-    using context.input;
+scroll_to_cursor :: (input_context: Input_Context) {
+    using input_context;
     using state;
-    using scrolling_state;
-
     text_node := get_node(text_node_index);
     // TO-DO: how can we have this handling multiline text? This problem of multiline text just becomes dramatically simple in the case
     // where the width of the text node is well-known, such as when it's fixed.
     glyphs              := shape_text(text_node.style, to_string(value.data));
-
     font_units_to_pixel := get_font_units_to_pixel(text_node.style.font, text_node.style.font_size);
     // TO-DO: this is assuming the glyphs map 1:1 to the bytes
 
+    offset_x := text_node.style.padding.x.x + text_node.style.padding.x.y;
     if cursor == glyphs.array.count {
-        offset.x = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel;
+        offset_x += (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel;
     } else {
-        offset.x = glyphs.array[cursor].position.x * font_units_to_pixel;
+        offset_x += glyphs.array[cursor].position.x * font_units_to_pixel;
     }
-    effective_offset.x = offset.x;
+    schedule_scroll(scrolling_state, Vector2.{ offset_x, scrolling_state.offset.y });
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - handle multiline text
@@ -678,13 +676,17 @@ use_input :: () {
 
         if left || right {
             if shift && selection_anchor == -1                       then selection_anchor = cursor;
-            if shift || by_word || by_line || selection_anchor == -1 then cursor           = ifx left then previous else next;
+            if shift || by_word || by_line || selection_anchor == -1 then {
+                cursor = ifx left then previous else next;
+                scroll_to_cursor(context.input);
+            }
             if !shift                                                then selection_anchor = -1;
         }
 
         if command && on_key_down(.A) {
             selection_anchor = 0;
             cursor           = value.count;
+            scroll_to_cursor(context.input);
         }
 
         backspace := on_key_down(.BACKSPACE, on_repeat = true);
@@ -695,7 +697,7 @@ use_input :: () {
         }
     }
 
-    if command && on_key_down(.V) {
+    if command && on_key_down(.V, on_repeat = true) {
         append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_clipboard_text());
     }
 
@@ -725,7 +727,8 @@ use_input :: () {
         if edit.deleted_length > 0 {
             array_insert_at(*value, edit.where, array_view(history_storage, edit.deleted_index, edit.deleted_length));
         }
-        cursor           = edit.cursor_before;
+        cursor = edit.cursor_before;
+        scroll_to_cursor(context.input);
         selection_anchor = edit.selection_anchor_before;
         array_add(*undo_history, edit);
     }
@@ -737,7 +740,8 @@ use_input :: () {
         if edit.inserted_length > 0 {
             array_insert_at(*value, edit.where, array_view(history_storage, edit.inserted_index, edit.inserted_length));
         }
-        cursor           = edit.where + edit.inserted_length;
+        cursor = edit.where + edit.inserted_length;
+        scroll_to_cursor(context.input);
         selection_anchor = -1;
         array_add(*edit_history, edit);
     }
@@ -747,16 +751,25 @@ use_input :: () {
     if dragging {
         if !dragging_last_frame.* then selection_anchor = use_glyph_closest_to(get_press_position());
         mouse_glyph := use_glyph_closest_to(get_mouse_position());
-        if mouse_glyph != -1 then cursor = mouse_glyph;
+        if mouse_glyph != -1 {
+            cursor = mouse_glyph;
+            scroll_to_cursor(context.input);
+        }
     }
     dragging_last_frame.* = dragging;
     if on_click() {
         mouse_glyph := use_glyph_closest_to(get_mouse_position());
         if !shift                          then selection_anchor = -1;
         else if selection_anchor == -1     then selection_anchor = cursor;
-        if mouse_glyph != -1               then cursor           = mouse_glyph;
+        if mouse_glyph != -1               {
+            cursor = mouse_glyph;
+            scroll_to_cursor(context.input);
+        }
     }
-    cursor = clamp(cursor, 0, value.count);
+    if cursor < 0 || cursor > value.count {
+        cursor = clamp(cursor, 0, value.count);
+        scroll_to_cursor(context.input);
+    }
     if selection_anchor > value.count then selection_anchor = value.count;
     if on_key_down(.ESCAPE) || (selection_anchor == cursor && !dragging) then selection_anchor = -1;
 } @hook
@@ -801,10 +814,10 @@ Caret :: (style: Style) {
         }, style));
     }
 } @component
-Input :: (input_state: *Input_State, body: Code) #expand {
+Input :: (input_state: *Input_State, body: Code) -> Input_Context #expand {
     viewport        := get_viewport_size();
     scrolling_state := state(Scrolling_State);
-    context.input = .{
+    input_context := Input_Context.{
         state                  = input_state,
         scrolling_state        = scrolling_state,
         input_character_filter = (input: u8) -> bool {
@@ -818,6 +831,7 @@ Input :: (input_state: *Input_State, body: Code) #expand {
             }
         },
     };
+    context.input = input_context;
     element(Style.{
         background      = color(BG),
         padding         = in_line(bottom(top(scaled(10)), scaled(30)), scaled(5)),
@@ -832,13 +846,13 @@ Input :: (input_state: *Input_State, body: Code) #expand {
                                              to_string(input_state.value.data, input_state.value.count));
         Selection(Style.{});
         Caret(Style.{});
+        use_scrolling(scrolling_state);
         // TO-DO: as the user types, this should scroll following the cursor
         use_input();
 
-        use_scrolling(scrolling_state);
-
         #insert body;
     });
+    return input_context;
 } @component
 
 reverse_number_sign :: () -> changed: bool {
@@ -898,7 +912,7 @@ App :: () {
         width      = fixed(viewport.x),
         height     = fixed(viewport.y),
     }, #code {
-        Input(input_state, #code {
+        input_context := Input(input_state, #code {
             nodes: [..]Expression_Node;
             evaluation_success.* = parse_expression(to_string(input_state.value.data, input_state.value.count), *nodes) == .OK;
             if evaluation_success.* {
@@ -957,7 +971,10 @@ App :: () {
                     append(value.count, value.count, ")");
                 }
                 if Button(column_style(), "+/-", kind = .FUNCTION) {
-                    if reverse_number_sign() then cursor = value.count;
+                    if reverse_number_sign() {
+                        cursor = value.count;
+                        scroll_to_cursor(input_context);
+                    }
                 }
                 if Button(column_style(), "^", is_pressed = is_key_held(Key.CARET), kind = .OPERATOR) {
                     append(value.count, value.count, " ^ ");
@@ -1022,15 +1039,16 @@ App :: () {
                 });
             });
         });
+
+        if on_key_down(.ENTER) {
+            stringified_result := tprint("%", result.*);
+            append(0, input_state.value.count, stringified_result);
+            input_state.cursor = 0;
+            scroll_to_cursor(input_context);
+
+            copy_to_clipboard(stringified_result);
+        }
     });
-
-    if on_key_down(.ENTER) {
-        stringified_result := tprint("%", result.*);
-        append(0, input_state.value.count, stringified_result);
-        input_state.cursor = 0;
-
-        copy_to_clipboard(stringified_result);
-    }
 } @component
 
 frame_pool: Flat_Pool;

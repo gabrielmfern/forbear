@@ -1,6 +1,5 @@
 - implement C ABI and C adapter
 - Finish calculator
-    - the scrolling should move with the input cursor
     - have a light and dark theme that is applied based on the system theme
     - history of calculations, when reopening show the previous state of everything (history, expression being typed out, result)
 - Primitives that allow handling focus
