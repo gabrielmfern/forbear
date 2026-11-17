@@ -3227,9 +3227,7 @@ Background :: struct {
 
     kind: Kind;
     union {
-        #if false {
-            image: *Graphics.Image,
-        }
+        // image: *Graphics.Image,
         color:    Vector4;
         // A linear gradient across the element. Defaults to flowing left-to-right; set `direction` to change which way it runs.
         // See `Linear_Gradient`.
