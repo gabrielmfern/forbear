@@ -656,16 +656,18 @@ scroll_to_cursor :: (input_context: Input_Context, animate := false) {
     // TO-DO: how can we have this handling multiline text? This problem of multiline text just becomes dramatically simple in the case
     // where the width of the text node is well-known, such as when it's fixed.
     glyphs              := shape_text(text_node.style, to_string(value.data));
-    font_units_to_pixel := get_font_units_to_pixel(text_node.style.font, text_node.style.font_size);
-    // TO-DO: this is assuming the glyphs map 1:1 to the bytes
+    if glyphs.array.count > 0 {
+        font_units_to_pixel := get_font_units_to_pixel(text_node.style.font, text_node.style.font_size);
+        // TO-DO: this is assuming the glyphs map 1:1 to the bytes
 
-    cursor_x: float;
-    if cursor == glyphs.array.count {
-        cursor_x = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel;
-    } else {
-        cursor_x = glyphs.array[cursor].position.x * font_units_to_pixel;
+        cursor_x: float;
+        if cursor == glyphs.array.count {
+            cursor_x = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel;
+        } else {
+            cursor_x = glyphs.array[cursor].position.x * font_units_to_pixel;
+        }
+        schedule_scroll(scrolling_state, Vector2.{ cursor_x, 0 }, animate);
     }
-    schedule_scroll(scrolling_state, Vector2.{ cursor_x, 0 }, animate);
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - handle multiline text
@@ -853,7 +855,7 @@ Caret :: (style: Style) {
 Input :: (input_state: *Input_State, body: Code) -> Input_Context #expand {
     viewport        := get_viewport_size();
     scrolling_state := state(Scrolling_State);
-    input_context := Input_Context.{
+    context.input = Input_Context.{
         state                  = input_state,
         scrolling_state        = scrolling_state,
         input_character_filter = (input: u8) -> bool {
@@ -867,7 +869,6 @@ Input :: (input_state: *Input_State, body: Code) -> Input_Context #expand {
             }
         },
     };
-    context.input = input_context;
     element(Style.{
         background      = color(palette.background),
         padding         = in_line(bottom(top(scaled(10)), scaled(30)), scaled(5)),
@@ -888,7 +889,7 @@ Input :: (input_state: *Input_State, body: Code) -> Input_Context #expand {
 
         #insert body;
     });
-    return input_context;
+    return context.input;
 } @component
 
 reverse_number_sign :: () -> changed: bool {
