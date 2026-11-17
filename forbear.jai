@@ -394,6 +394,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         class.style         = CS_OWNDC;
         class.lpfnWndProc   = wndproc;
         class.hInstance     = GetModuleHandleW(null);
+        class.hIcon         = LoadIconW(class.hInstance, cast(*u16) 2);
         class.hCursor       = cursors[Cursor.DEFAULT];
         class.lpszClassName = utf8_to_wide("forbear",, temp);
         RegisterClassExW(*class);
@@ -1140,12 +1141,14 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     Backend :: MacOS_GL_Backend;
     Window :: MacOS_GL_Window;
 
-    create_application :: (name: string, executable: string) {
+    create_application :: (name: string, executable: string, icon: string) {
         app := tprint("%/%.app", get_working_directory(), name);
         make_directory_if_it_does_not_exist(tprint("%/Contents/MacOS", app), recursive = true);
+        make_directory_if_it_does_not_exist(tprint("%/Contents/Resources", app), recursive = true);
         bundled := tprint("%/Contents/MacOS/%", app, name);
         copy_file(executable, bundled);
         chmod(temp_c_string(bundled), 0x1ED);
+        run_command("sips", "-s", "format", "icns", icon, "--out", tprint("%/Contents/Resources/icon.icns", app));
         write_entire_file(
             tprint("%/Contents/Info.plist", app),
             tprint(#string PLIST
@@ -1156,6 +1159,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                 <key>CFBundleExecutable</key><string>%1</string>
                 <key>CFBundleIdentifier</key><string>com.forbear.%1</string>
                 <key>CFBundleName</key><string>%1</string>
+                <key>CFBundleIconFile</key><string>icon.icns</string>
                 <key>CFBundlePackageType</key><string>APPL</string>
                 <key>NSHighResolutionCapable</key><true/>
                 </dict>

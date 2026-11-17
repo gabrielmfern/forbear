@@ -1,6 +1,10 @@
 #import "Basic";
 #import "Compiler";
 #import,file "../../forbear.jai";
+#if OS == .WINDOWS {
+    #import "Windows_Resources";
+    #import "Ico_File";
+}
 
 build :: () {
     set_build_options_dc(.{do_output = false});
@@ -24,8 +28,10 @@ build :: () {
     }
     compiler_end_intercept(w);
 
-    #if OS == .MACOS {
-        create_application("Calculator", tprint("%Calculator", #filepath));
+    #if OS == .WINDOWS {
+        set_icon_by_data(tprint("%Calculator.exe", #filepath), create_ico_file_from_bitmap_filename(tprint("%icon.png", #filepath)));
+    } else #if OS == .MACOS {
+        create_application("Calculator", tprint("%Calculator", #filepath), tprint("%icon.png", #filepath));
     }
 }
 
