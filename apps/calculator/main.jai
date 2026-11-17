@@ -1108,36 +1108,13 @@ main :: () {
     backend: Backend;
     window: Window;
     init_backend(*backend);
-    init_window(*backend, *window, MIN_WIDTH, MIN_HEIGHT, "Calculator");
-    // TO-DO: we should add a native function to handle this minimum size thing
-    // also a max size thing would be nice
-    #if OS == .LINUX {
-        send_wayland_message(*backend.connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Min_Size.{ width = MIN_WIDTH, height = MIN_HEIGHT });
-    } else #if OS == .MACOS {
-        set_size: (*void, Selector, NSSize) #c_call = xx objc_msgSend;
-        set_size(window.ns_window, selector("setContentMinSize:"), .{ width = MIN_WIDTH, height = MIN_HEIGHT });
-    } else #if OS == .WINDOWS {
-        backend.message = (data: *void, window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> result: s64, handled: bool {
-            if Msg == {
-                case WM_GETMINMAXINFO;
-                    MINMAXINFO :: struct {
-                        ptReserved:     POINT;
-                        ptMaxSize:      POINT;
-                        ptMaxPosition:  POINT;
-                        ptMinTrackSize: POINT;
-                        ptMaxTrackSize: POINT;
-                    };
-                    dpi         := GetDpiForWindow(hWnd);
-                    window.scale = dpi / 96.0;
-                    rectangle   := RECT.{ right = xx (MIN_WIDTH * window.scale), bottom = xx (MIN_HEIGHT * window.scale) };
-                    AdjustWindowRectExForDpi(*rectangle, WS_OVERLAPPEDWINDOW, 0, 0, dpi);
-                    min_max_info               := cast(*MINMAXINFO) lParam;
-                    min_max_info.ptMinTrackSize = .{ rectangle.right - rectangle.left, rectangle.bottom - rectangle.top };
-                    return 0, true;
-            }
-            return 0, false;
-        }
-    }
+    init_window(*backend,
+                *window,
+                MIN_WIDTH,
+                MIN_HEIGHT,
+                "Calculator",
+                min_width = MIN_WIDTH,
+                min_height = MIN_HEIGHT);
 
     context.inter = #run create_font(read_entire_file(tprint("%../../Inter.ttf", #filepath)));
 

@@ -27,6 +27,7 @@ Math :: #import "Math";
 min :: Math.min;
 max :: Math.max;
 FLOAT32_NAN :: Math.FLOAT32_NAN;
+FLOAT64_NAN :: Math.FLOAT64_NAN;
 FLOAT32_INFINITY :: Math.FLOAT32_INFINITY;
 U16_MAX :: Math.U16_MAX;
 U32_MAX :: Math.U32_MAX;
@@ -422,6 +423,23 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             } else {
                                 result = DefWindowProcW(hwnd, message, wparam, lparam);
                             }
+                        case WM_GETMINMAXINFO;
+                            MINMAXINFO :: struct {
+                                ptReserved:     POINT;
+                                ptMaxSize:      POINT;
+                                ptMaxPosition:  POINT;
+                                ptMinTrackSize: POINT;
+                                ptMaxTrackSize: POINT;
+                            };
+                            dpi          := GetDpiForWindow(hwnd);
+                            window.scale  = dpi / 96.0;
+                            min_max_info := cast(*MINMAXINFO) lparam;
+                            frame: RECT;
+                            AdjustWindowRectExForDpi(*frame, WS_OVERLAPPEDWINDOW, 0, 0, dpi);
+                            if !isnan(window.min_width)  min_max_info.ptMinTrackSize.x = xx (window.min_width  * window.scale) + frame.right  - frame.left;
+                            if !isnan(window.min_height) min_max_info.ptMinTrackSize.y = xx (window.min_height * window.scale) + frame.bottom - frame.top;
+                            if !isnan(window.max_width)  min_max_info.ptMaxTrackSize.x = xx (window.max_width  * window.scale) + frame.right  - frame.left;
+                            if !isnan(window.max_height) min_max_info.ptMaxTrackSize.y = xx (window.max_height * window.scale) + frame.bottom - frame.top;
                         case WM_SIZE;
                             if wparam != SIZE_MINIMIZED {
                                 window.width = cast(float64)(lparam & 0xFFFF);
@@ -724,20 +742,24 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     }
 
     Windows_GL_Window :: struct {
-        hwnd: HWND;
-        hdc: HDC;
+        hwnd:    HWND;
+        hdc:     HDC;
         backend: *Windows_GL_Backend;
 
-        width: float64;
-        height: float64;
-        scale: float64;
-        theme: Preferred_Theme;
+        width:      float64;
+        height:     float64;
+        min_width:  float64 = FLOAT64_NAN;
+        min_height: float64 = FLOAT64_NAN;
+        max_width:  float64 = FLOAT64_NAN;
+        max_height: float64 = FLOAT64_NAN;
+        scale:      float64;
+        theme:      Preferred_Theme;
 
         text_buffer: [256]u8;
-        text: string;
+        text:        string;
 
         keyboard_state: Keyboard_State;
-        mouse_state: Mouse_State;
+        mouse_state:    Mouse_State;
 
         running := true;
     };
@@ -746,22 +768,28 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     width:   float64,
                     height:  float64,
                     title:   string,
+                    min_width   := FLOAT64_NAN,
+                    min_height  := FLOAT64_NAN,
+                    max_width   := FLOAT64_NAN,
+                    max_height  := FLOAT64_NAN,
                     // TO-DO: add this to the other platforms
                     show_window := true) {
         window.text.data = window.text_buffer.data;
-        window.backend = backend;
+        window.backend   = backend;
         value: DWORD;
-        size: DWORD = size_of(DWORD);
-        status := RegGetValueA(
-            HKEY_CURRENT_USER,
-            "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize".data,
-            "AppsUseLightTheme".data,
-            RRF_RT_REG_DWORD,
-            null,
-            *value,
-            *size
-        );
-        window.theme = ifx status == 0 && value == 0 then .DARK else .LIGHT;
+        size:  DWORD = size_of(DWORD);
+        {
+            status := RegGetValueA(
+                HKEY_CURRENT_USER,
+                "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize".data,
+                "AppsUseLightTheme".data,
+                RRF_RT_REG_DWORD,
+                null,
+                *value,
+                *size
+            );
+            window.theme = ifx status == 0 && value == 0 then .DARK else .LIGHT;
+        }
         init_keyboard_state(*window.keyboard_state);
 
         style :: WS_OVERLAPPEDWINDOW;
@@ -774,9 +802,9 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             null, null, GetModuleHandleW(null), window
         );
 
-        dpi := GetDpiForWindow(window.hwnd);
+        dpi         := GetDpiForWindow(window.hwnd);
         window.scale = dpi / 96.0;
-        rectangle := RECT.{ right = xx (width * window.scale), bottom = xx (height * window.scale) };
+        rectangle   := RECT.{ right = xx (width * window.scale), bottom = xx (height * window.scale) };
         AdjustWindowRectExForDpi(*rectangle, style, 0, 0, dpi);
         SetWindowPos(window.hwnd, null, 0, 0, rectangle.right - rectangle.left, rectangle.bottom - rectangle.top, SWP_NOMOVE | SWP_NOZORDER);
         if show_window {
@@ -791,8 +819,12 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 
         client: RECT;
         GetClientRect(window.hwnd, *client);
-        window.width = xx client.right;
-        window.height = xx client.bottom;
+        window.width      = xx client.right;
+        window.height     = xx client.bottom;
+        window.min_width  = min_width;
+        window.min_height = min_height;
+        window.max_width  = max_width;
+        window.max_height = max_height;
     }
 
     Backend :: Windows_GL_Backend;
@@ -826,7 +858,11 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     window:  *MacOS_GL_Window,
                     width:   float64,
                     height:  float64,
-                    title:   string) {
+                    title:   string,
+                    min_width  := FLOAT64_NAN,
+                    min_height := FLOAT64_NAN,
+                    max_width  := FLOAT64_NAN,
+                    max_height := FLOAT64_NAN) {
         rectangle := NSRect.{ size = .{ width = width, height = height } };
         window.theme = .LIGHT;
 
@@ -840,6 +876,15 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             NSScreen.mainScreen()
         );
         NSWindow.setReleasedWhenClosed(window.ns_window, NO);
+        set_size: (*void, Selector, NSSize) -> void #c_call = xx objc_msgSend;
+        set_size(window.ns_window, selector("setContentMinSize:"), .{
+            width  = ifx isnan(min_width)  then 0 else min_width,
+            height = ifx isnan(min_height) then 0 else min_height,
+        });
+        set_size(window.ns_window, selector("setContentMaxSize:"), .{
+            width  = ifx isnan(max_width)  then Math.FLOAT32_MAX else max_width,
+            height = ifx isnan(max_height) then Math.FLOAT32_MAX else max_height,
+        });
         NSWindow.setTitle(window.ns_window, title);
         NSWindow.center(window.ns_window);
         NSWindow.makeKeyAndOrderFront(window.ns_window, null);
@@ -1709,7 +1754,15 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         fbo: GLuint;
         busy: bool;
     };
-    init_window :: (backend: *Backend, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
+    init_window :: (backend: *Backend,
+                    window:  *Wayland_EGL_Window,
+                    width:   s32,
+                    height:  s32,
+                    title:   string,
+                    min_width  := FLOAT64_NAN,
+                    min_height := FLOAT64_NAN,
+                    max_width  := FLOAT64_NAN,
+                    max_height := FLOAT64_NAN) {
         window.logical_width = width;
         window.logical_height = height;
         window.theme = .LIGHT;
@@ -1732,6 +1785,18 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         window.xdg_toplevel_id = new_wayland_client_object(connection, Interface_Id.XDG_TOPLEVEL);
         send_wayland_message(connection, window.xdg_surface_id, Xdg_Surface_Request_Get_Toplevel.{ id = window.xdg_toplevel_id });
         send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Title.{ title = title });
+        if !isnan(min_width) || !isnan(min_height) {
+            send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Min_Size.{
+                width  = ifx isnan(min_width)  then 0 else xx min_width,
+                height = ifx isnan(min_height) then 0 else xx min_height,
+            });
+        }
+        if !isnan(max_width) || !isnan(max_height) {
+            send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Max_Size.{
+                width  = ifx isnan(max_width)  then 0 else xx max_width,
+                height = ifx isnan(max_height) then 0 else xx max_height,
+            });
+        }
         send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
 
         for *buffer: window.buffers {
