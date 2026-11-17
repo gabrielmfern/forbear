@@ -3655,14 +3655,20 @@ use_scrolling :: (using state: *Scrolling_State) {
     }
     node                 := get_node();
     measurement, defined := get_measurement();
+    limit_x := FLOAT32_NAN;
+    limit_y := FLOAT32_NAN;
     if defined {
+        limit_x = max(  measurement.content_size.x
+                       - measurement.size.x
+                       + node.style.padding.x.x
+                       + node.style.padding.x.y, 0.0);
+        limit_y = max(  measurement.content_size.y
+                       - measurement.size.y
+                       + node.style.padding.y.x
+                       + node.style.padding.y.y, 0.0);
         offset = Vector2.{
-            clamp(offset.x, 0,
-                  max(measurement.content_size.x - measurement.size.x
-                      + node.style.padding.x.x + node.style.padding.x.y, 0.0)),
-            clamp(offset.y, 0,
-                  max(measurement.content_size.y - measurement.size.y
-                      + node.style.padding.y.x + node.style.padding.y.y, 0.0)),
+            clamp(offset.x, 0, limit_x),
+            clamp(offset.y, 0, limit_y),
         };
     }
     effective_offset = spring_transition(offset, .{
@@ -3671,6 +3677,13 @@ use_scrolling :: (using state: *Scrolling_State) {
         mass      = 1.0,
         current   = *effective_offset,
     });
+    if !isnan(limit_x) {
+        assert(!isnan(limit_y));
+        effective_offset = Vector2.{
+            clamp(effective_offset.x, 0, limit_x),
+            clamp(effective_offset.y, 0, limit_y),
+        };
+    }
 } @hook
 // Beware that this pointer might be come invalid if you define one more element
 get_node :: (node_index: s64) -> *Node {
