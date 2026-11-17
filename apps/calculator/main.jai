@@ -623,13 +623,13 @@ scroll_to_cursor :: (input_context: Input_Context) {
     font_units_to_pixel := get_font_units_to_pixel(text_node.style.font, text_node.style.font_size);
     // TO-DO: this is assuming the glyphs map 1:1 to the bytes
 
-    offset_x := text_node.style.padding.x.x + text_node.style.padding.x.y;
+    cursor_x: float;
     if cursor == glyphs.array.count {
-        offset_x += (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel;
+        cursor_x = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel;
     } else {
-        offset_x += glyphs.array[cursor].position.x * font_units_to_pixel;
+        cursor_x = glyphs.array[cursor].position.x * font_units_to_pixel;
     }
-    schedule_scroll(scrolling_state, Vector2.{ offset_x, scrolling_state.offset.y });
+    schedule_scroll(scrolling_state, Vector2.{ cursor_x, 0 });
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
 // - handle multiline text

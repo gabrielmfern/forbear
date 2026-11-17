@@ -3652,13 +3652,13 @@ Scheduled_Scroll :: struct {
     defined            := false;
     defined_this_frame := true;
 
-    offset             : Vector2;
+    position           : Vector2;
     animate            : bool;
 };
-schedule_scroll :: (state: *Scrolling_State, offset: Vector2, animate := false) {
+schedule_scroll :: (state: *Scrolling_State, position: Vector2, animate := false) {
     state.scheduled_scroll.defined            = true;
     state.scheduled_scroll.defined_this_frame = true;
-    state.scheduled_scroll.offset             = offset;
+    state.scheduled_scroll.position           = position;
     state.scheduled_scroll.animate            = animate;
 }
 // TO-DO: This must be able to handle choosing between all nodes that can scroll to scroll only one of them.
@@ -3666,15 +3666,6 @@ schedule_scroll :: (state: *Scrolling_State, offset: Vector2, animate := false) 
 // Besides only scrolling one of them, once one scrolling container is done with the scrolling and the user keeps
 // scrolling in that direction, the scrolling should go to the next scrolling container with less "precedence".
 use_scrolling :: (using state: *Scrolling_State) {
-    if scheduled_scroll.defined && scheduled_scroll.defined_this_frame {
-        scheduled_scroll.defined_this_frame = false;
-    } else if scheduled_scroll.defined {
-        offset = scheduled_scroll.offset;
-        if !scheduled_scroll.animate {
-            effective_offset = scheduled_scroll.offset;
-        }
-        scheduled_scroll.defined = false;
-    }
     if is_mouse_inside() {
         offset += get_scroll_delta();
     }
@@ -3682,6 +3673,21 @@ use_scrolling :: (using state: *Scrolling_State) {
     measurement, defined := get_measurement();
     limit_x := FLOAT32_NAN;
     limit_y := FLOAT32_NAN;
+    if scheduled_scroll.defined && scheduled_scroll.defined_this_frame {
+        scheduled_scroll.defined_this_frame = false;
+    } else if scheduled_scroll.defined && defined {
+        visible := Vector2.{
+            measurement.size.x - node.style.padding.x.x - node.style.padding.x.y,
+            measurement.size.y - node.style.padding.y.x - node.style.padding.y.y,
+        };
+        position := scheduled_scroll.position;
+        if position.x < offset.x                  then offset.x = position.x;
+        else if position.x > offset.x + visible.x then offset.x = position.x - visible.x;
+        if position.y < offset.y                  then offset.y = position.y;
+        else if position.y > offset.y + visible.y then offset.y = position.y - visible.y;
+        if !scheduled_scroll.animate then effective_offset = offset;
+        scheduled_scroll.defined = false;
+    }
     if defined {
         limit_x = max(  measurement.content_size.x
                        - measurement.size.x
