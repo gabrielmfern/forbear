@@ -5081,7 +5081,12 @@ GLSL);
                 }
             } else if (v_kind == 2u) {
                 // TO-DO: handle subpixel rendering
-                out_color = v_color * texture(atlas, v_uv).r;
+                // TO-DO: handle colored glyphs rendering
+                float coverage = texture(atlas, v_uv).r;
+                float luminance = dot(v_color.rgb / max(v_color.a, 0.0001), vec3(0.2126, 0.7152, 0.0722));
+                float light_on_dark = pow(coverage, 1.0 / 2.2);
+                float dark_on_light = 1.0 - pow(1.0 - coverage, 1.0 / 2.2);
+                out_color = v_color * mix(dark_on_light, light_on_dark, luminance);
             }
         }
 GLSL);
