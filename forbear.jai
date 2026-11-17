@@ -4077,7 +4077,7 @@ is_dragging :: (button := Mouse_Button.LEFT) -> bool {
         return false;
     }
 }
-on_click :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
+on_click :: (button := Mouse_Button.LEFT, check_inside := true, movement_threshold := false) -> bool {
     using context.forbear;
     if on_mouse_up(button, check_inside) {
         measurement, defined := get_measurement();
@@ -4086,7 +4086,7 @@ on_click :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
         press_position := window.mouse_state.press_position[button];
         delta          := mouse - press_position;
         moved          := delta.x*delta.x + delta.y*delta.y > 4*4;
-        return is_point_inside(press_position, measurement) && !moved;
+        return is_point_inside(press_position, measurement) && (!movement_threshold || !moved);
     } else {
         return false;
     }
