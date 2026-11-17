@@ -4600,8 +4600,10 @@ get_font_units_to_pixel :: (font: *Font, font_size: float) -> float {
     rounded_font_size := round_font_size(font_size * scale);
     return (cast(float) rounded_font_size) / (cast(float) font.raster_face.units_per_EM) / scale;
 }
-font_raster_glyph :: (font: *Font, glyph_index: u16) -> Raster_Glyph {
+font_raster_glyph :: (font: *Font, glyph_index: u16, subpixel_bin: s32) -> Raster_Glyph {
     FT_LOAD_TARGET_LIGHT :: 1 << 16;
+    delta := FT_Vector.{ x = xx (subpixel_bin * 64 / SUBPIXEL_BINS) };
+    FT_Set_Transform(font.raster_face, null, *delta);
     FT_Load_Glyph(font.raster_face, xx glyph_index, FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT);
     glyph := font.raster_face.glyph;
     // FT_LOAD_RENDER already renders the glyph
@@ -4755,12 +4757,25 @@ Glyph_Atlas :: struct {
     INITIAL_SIZE :: 1024;
     MAX_SIZE :: 4096;
 };
-glyph_atlas_key :: (font: *Font, glyph_index: u16, size: u16, weight: u16) -> u64 {
+SUBPIXEL_BINS :: 4;
+glyph_atlas_key :: (font: *Font, glyph_index: u16, size: u16, weight: u16, subpixel_bin: s32) -> u64 {
+    assert(weight < 1 << 14, "font weights need to fit in 14 bits to leave room for the subpixel bin");
     key := (cast(u64) font.key) << 48;
     key |= (cast(u64) glyph_index) << 32;
     key |= (cast(u64) size) << 16;
+    key |= (cast(u64) subpixel_bin) << 14;
     key |= (cast(u64) weight);
     return key;
+}
+glyph_subpixel_x :: (node_x: float, glyph_x: float, font_units_to_point: float, scale: float) -> pixel_x: float, bin: s32 {
+    x := (node_x + glyph_x * font_units_to_point) * scale;
+    pixel_x := floor(x);
+    bin := cast(s32) floor((x - pixel_x) * SUBPIXEL_BINS + 0.5);
+    if bin == SUBPIXEL_BINS {
+        pixel_x += 1;
+        bin = 0;
+    }
+    return pixel_x, bin;
 }
 glyph_atlas_place :: (glyph_atlas: *Glyph_Atlas, width: s32, height: s32) -> x: s32, y: s32, ok: bool {
     using glyph_atlas;
@@ -4801,14 +4816,17 @@ glyph_atlas_grow :: (glyph_atlas: *Glyph_Atlas) -> bool {
 glyph_atlas_fill :: () -> bool {
     using context.forbear;
     for node: node_tree if node.kind == .ELEMENT && node.glyphs.array.count != 0 {
-        rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
+        scale := cast(float) window.scale;
+        rounded_font_size := round_font_size(node.style.font_size * scale);
+        font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
         for glyph: node.glyphs.array {
-            atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
+            _, subpixel_bin := glyph_subpixel_x(node.position.x, glyph.position.x, font_units_to_point, scale);
+            atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight, subpixel_bin);
             if table_find_pointer(*glyph_atlas.table, atlas_key) != null  continue;
 
             set_weight(node.style.font, node.style.font_weight);
             set_font_size(node.style.font, rounded_font_size);
-            raster := font_raster_glyph(node.style.font, xx glyph.index);
+            raster := font_raster_glyph(node.style.font, xx glyph.index, subpixel_bin);
             x, y, ok := glyph_atlas_place(*glyph_atlas, xx raster.width, xx raster.height);
             if !ok  return false;
 
@@ -5880,26 +5898,26 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         z_buckets[instance.z] += 1;
 
         if node.glyphs.array.count != 0 {
-            rounded_font_size := round_font_size(node.style.font_size * (cast(float) window.scale));
+            scale := cast(float) window.scale;
+            rounded_font_size := round_font_size(node.style.font_size * scale);
             font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
 
             for glyph: node.glyphs.array {
-                atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight);
+                pixel_x, subpixel_bin := glyph_subpixel_x(node.position.x, glyph.position.x, font_units_to_point, scale);
+                atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight, subpixel_bin);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
 
                 instance: Draw_Instance;
                 instance.kind = .GLYPH;
                 instance.z = node.z;
-                scale := cast(float) window.scale;
                 // The entry is only missing if the atlas is full at its maximum size, the instance was already
                 // counted in the z buckets though, so it's left with no size
                 if entry != null {
                     using instance;
-                    position = node.position + (Vector2.{0.0, node.glyphs.ascent} + glyph.position) * font_units_to_point;
+                    baseline_y := node.position.y + (node.glyphs.ascent + glyph.position.y) * font_units_to_point;
+                    position.x = (pixel_x + entry.bearing.x) / scale;
+                    position.y = (floor(baseline_y * scale + 0.5) + entry.bearing.y) / scale;
                     size = entry.size / scale;
-                    position += entry.bearing / scale;
-                    position.x = floor(position.x * scale + 0.5) / scale;
-                    position.y = floor(position.y * scale + 0.5) / scale;
                     color = node.style.color;
 
                     uv_min = entry.uv_min;
