@@ -436,7 +436,7 @@ generate :: () {
         array_add(*freetype_bindings_opts.include_paths, "vendor/freetype/include");
         array_add(*freetype_bindings_opts.library_search_paths, "vendor");
         array_add(*freetype_bindings_opts.libraries, .{ filename = tprint("freetype-%", platform), identifier = "freetype" });
-        array_add(*freetype_bindings_opts.source_files, "vendor/freetype/include/freetype/freetype.h", "vendor/freetype/include/freetype/ftmm.h");
+        array_add(*freetype_bindings_opts.source_files, "vendor/freetype/include/freetype/freetype.h", "vendor/freetype/include/freetype/ftmm.h", "vendor/freetype/include/freetype/ftmodapi.h");
         freetype_bindings_opts.generate_library_declarations = false;
         freetype_bindings_opts.generate_compile_time_struct_checks = false;
         freetype_bindings_opts.auto_detect_enum_prefixes = true;

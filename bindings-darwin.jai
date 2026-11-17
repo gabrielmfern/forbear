@@ -10310,6 +10310,7 @@ FT_Get_Multi_Master :: (face: FT_Face, amaster: *FT_Multi_Master) -> FT_Error #f
 *   FreeType error code.  0~means success.
 */
 FT_Get_MM_Var :: (face: FT_Face, amaster: **FT_MM_Var) -> FT_Error #foreign freetype;
+FT_Property_Set :: (library: FT_Library, module_name: *FT_String, property_name: *FT_String, value: *void) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *

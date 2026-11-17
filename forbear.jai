@@ -4537,6 +4537,8 @@ create_font :: (memory: string) -> Font {
 init_font :: (using font: *Font) {
     if context.forbear.freetype_library == null {
         FT_Init_FreeType(*context.forbear.freetype_library);
+        no_stem_darkening: FT_Bool = 0;
+        FT_Property_Set(context.forbear.freetype_library, "autofitter".data, "no-stem-darkening".data, *no_stem_darkening);
         // TO-DO: implement subpixel font rendering and auto enable in lower DPI environments to match browser behavior.
         // TO-DO: implement rendering of glyphs with colors like emojis
         //
