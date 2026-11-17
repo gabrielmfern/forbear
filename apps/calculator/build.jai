@@ -18,7 +18,7 @@ build :: () {
 
     plugin := get_plugin();
     plugin.workspace = w;
-
+    disable_runtime_console(w);
     compiler_begin_intercept(w);
     add_build_file(tprint("%main.jai", #filepath), w);
     while true {
