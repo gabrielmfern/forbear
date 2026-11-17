@@ -312,6 +312,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     #load "bindings-win32.jai";
     #import "Windows";
     #import "Windows_Utf8";
+    #import "Windows_Registry";
     #import "Unicode";
     user32 :: #library,system "user32";
     kernel32 :: #library,system "kernel32";
@@ -637,6 +638,22 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             SetWindowPos(hwnd, null, suggested.left, suggested.top,
                                 suggested.right - suggested.left, suggested.bottom - suggested.top,
                                 SWP_NOZORDER | SWP_NOACTIVATE);
+                        case WM_SETTINGCHANGE;
+                            if lparam != 0 && wide_to_utf8(cast(*u16) lparam,, temp) == "ImmersiveColorSet" {
+                                value: DWORD;
+                                size: DWORD = size_of(DWORD);
+                                status := RegGetValueA(
+                                    HKEY_CURRENT_USER,
+                                    "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize".data,
+                                    "AppsUseLightTheme".data,
+                                    RRF_RT_REG_DWORD,
+                                    null,
+                                    *value,
+                                    *size
+                                );
+                                window.theme = ifx status == 0 && value == 0 then .DARK else .LIGHT;
+                            }
+                            result = DefWindowProcW(hwnd, message, wparam, lparam);
                         case WM_KEYUP; #through;
                         case WM_SYSKEYUP;
                             using window.keyboard_state;
@@ -714,6 +731,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         width: float64;
         height: float64;
         scale: float64;
+        theme: Preferred_Theme;
 
         text_buffer: [256]u8;
         text: string;
@@ -732,6 +750,18 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     show_window := true) {
         window.text.data = window.text_buffer.data;
         window.backend = backend;
+        value: DWORD;
+        size: DWORD = size_of(DWORD);
+        status := RegGetValueA(
+            HKEY_CURRENT_USER,
+            "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize".data,
+            "AppsUseLightTheme".data,
+            RRF_RT_REG_DWORD,
+            null,
+            *value,
+            *size
+        );
+        window.theme = ifx status == 0 && value == 0 then .DARK else .LIGHT;
         init_keyboard_state(*window.keyboard_state);
 
         style :: WS_OVERLAPPEDWINDOW;
@@ -779,6 +809,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         width: float64;
         height: float64;
         scale: float64;
+        theme: Preferred_Theme;
 
         ns_window: *NSWindow;
         view: *NSView;
@@ -797,6 +828,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     height:  float64,
                     title:   string) {
         rectangle := NSRect.{ size = .{ width = width, height = height } };
+        window.theme = .LIGHT;
 
         backend.pasteboard = NSPasteboard.generalPasteboard();
         window.ns_window = NSWindow.initWithContentRect(
@@ -1655,6 +1687,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         height: s32;
         logical_height: s32;
         scale: float64 = 1.0;
+        theme: Preferred_Theme;
 
         text_buffer: [MAX_WAYLAND_MESSAGE_SIZE]u8;
         text: string;
@@ -1679,6 +1712,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     init_window :: (backend: *Backend, window: *Wayland_EGL_Window, width: s32, height: s32, title: string) {
         window.logical_width = width;
         window.logical_height = height;
+        window.theme = .LIGHT;
 
         init_keyboard_state(*window.keyboard_state);
 
@@ -4074,6 +4108,11 @@ copy_to_clipboard :: (text: string) {
             );
         }
     }
+}
+Preferred_Theme :: enum u32 { DARK; LIGHT; }
+get_preferred_theme :: () -> Preferred_Theme {
+    // TO-DO: detect the preferred theme on Linux and macOS, they are always LIGHT for now
+    return context.forbear.window.theme;
 }
 set_cursor :: (cursor: Cursor) {
     using context.forbear;

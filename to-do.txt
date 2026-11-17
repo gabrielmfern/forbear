@@ -1,6 +1,5 @@
 - implement C ABI and C adapter
 - Finish calculator
-    - have a light and dark theme that is applied based on the system theme
     - history of calculations, when reopening show the previous state of everything (history, expression being typed out, result)
 - Primitives that allow handling focus
     - The main problem around this is the fact that we can't really "consume" an event. Given the UI is immediate and events are consumed as things are rendered, each element must know that some other element is the one that will be consuming the given event. In the Zig version I had a way to handle this, it was 80% as elegant as I'd like but had some awkwardness.

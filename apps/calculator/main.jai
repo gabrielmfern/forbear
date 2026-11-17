@@ -323,20 +323,57 @@ MIN_WIDTH    :: 225;
 MIN_HEIGHT   :: 445;
 DIGITS_SIZE  :: 32;
 BUTTON_GAP   :: 8.0;
-BG           :: #run hex("#0F0F10");
-BG_SECONDARY :: #run hex("#19191B");
-BG_TERTIARY  :: #run hex("#262628");
-BG_HOVER     :: #run hex("#313134");
-BG_PRESSED   :: #run hex("#1E1E20");
-FN           :: #run hex("#3A3A3D");
-FN_HOVER     :: #run hex("#464649");
-FN_PRESSED   :: #run hex("#2E2E30");
-OP           :: #run hex("#ECECEC");
-OP_TEXT      :: #run hex("#19191B");
-OP_HOVER     :: #run hex("#FFFFFF");
-OP_PRESSED   :: #run hex("#CFCFD2");
-ERROR        :: #run hex("#E85B5B");
 TRANSPARENT  :: #run hex("#01010100");
+
+Palette :: struct {
+    text:                 Vector4;
+    background:           Vector4;
+    background_secondary: Vector4;
+    background_tertiary:  Vector4;
+    background_hover:     Vector4;
+    backgruond_pressed:   Vector4;
+    function:             Vector4;
+    function_hover:       Vector4;
+    function_pressed:     Vector4;
+    op:                   Vector4;
+    op_text:              Vector4;
+    op_hover:             Vector4;
+    op_pressed:           Vector4;
+    error:                Vector4;
+}
+DARK_PALETTE :: Palette.{
+    text                 = #run hex("#ECECEC"),
+    background           = #run hex("#0F0F10"),
+    background_secondary = #run hex("#19191B"),
+    background_tertiary  = #run hex("#262628"),
+    background_hover     = #run hex("#313134"),
+    backgruond_pressed   = #run hex("#1E1E20"),
+    function             = #run hex("#3A3A3D"),
+    function_hover       = #run hex("#464649"),
+    function_pressed     = #run hex("#2E2E30"),
+    op                   = #run hex("#ECECEC"),
+    op_text              = #run hex("#19191B"),
+    op_hover             = #run hex("#FFFFFF"),
+    op_pressed           = #run hex("#CFCFD2"),
+    error                = #run hex("#E85B5B"),
+};
+LIGHT_PALETTE :: Palette.{
+    text                 = #run hex("#19191B"),
+    background           = #run hex("#FFFFFF"),
+    background_secondary = #run hex("#F2F2F4"),
+    background_tertiary  = #run hex("#E4E4E7"),
+    background_hover     = #run hex("#D9D9DD"),
+    backgruond_pressed   = #run hex("#EDEDEF"),
+    function             = #run hex("#D1D1D6"),
+    function_hover       = #run hex("#C5C5CB"),
+    function_pressed     = #run hex("#DCDCE0"),
+    op                   = #run hex("#19191B"),
+    op_text              = #run hex("#F2F2F4"),
+    op_hover             = #run hex("#000000"),
+    op_pressed           = #run hex("#3A3A3D"),
+    error                = #run hex("#D64545"),
+};
+palette := DARK_PALETTE;
 
 Button_Kind :: enum {
     DIGIT;
@@ -347,16 +384,16 @@ Button_Kind :: enum {
 Button :: (style: Style, contents: string, is_pressed := false, kind := Button_Kind.DIGIT) -> clicked: bool {
     background, hover, pressed: Vector4;
     if #complete kind == {
-        case .DIGIT;    background, hover, pressed = BG_TERTIARY, BG_HOVER, BG_PRESSED;
-        case .FUNCTION; background, hover, pressed = FN, FN_HOVER, FN_PRESSED;
-        case .OPERATOR; background, hover, pressed = OP, OP_HOVER, OP_PRESSED;
+        case .DIGIT;    background, hover, pressed = palette.background_tertiary, palette.background_hover, palette.backgruond_pressed;
+        case .FUNCTION; background, hover, pressed = palette.function, palette.function_hover, palette.function_pressed;
+        case .OPERATOR; background, hover, pressed = palette.op, palette.op_hover, palette.op_pressed;
     }
 
     clicked := false;
     element(overwrite(Style.{
         border_radius   = scaled(6.0),
         background      = color(background),
-        color           = ifx kind == .OPERATOR then OP_TEXT else VECTOR4_NAN,
+        color           = ifx kind == .OPERATOR then palette.op_text else VECTOR4_NAN,
         font_size       = scaled(24),
         x_justification = .CENTER,
         y_justification = .CENTER,
@@ -805,7 +842,7 @@ Caret :: (style: Style) {
         element(overwrite(Style.{
             placement  = relative(caret_position),
             background = ifx blinking then
-                color(hex("#FFFFFF"))
+                color(palette.text)
             else
                 color(TRANSPARENT),
             width  = fixed(scaled(1.0)),
@@ -832,7 +869,7 @@ Input :: (input_state: *Input_State, body: Code) -> Input_Context #expand {
     };
     context.input = input_context;
     element(Style.{
-        background      = color(BG),
+        background      = color(palette.background),
         padding         = in_line(bottom(top(scaled(10)), scaled(30)), scaled(5)),
         direction       = .VERTICAL,
         text_wrapping   = .NONE,
@@ -907,7 +944,7 @@ App :: () {
 
     element(Style.{
         direction  = .VERTICAL,
-        background = color(BG_SECONDARY),
+        background = color(palette.background_secondary),
         width      = fixed(viewport.x),
         height     = fixed(viewport.y),
     }, #code {
@@ -923,7 +960,7 @@ App :: () {
             input_measurement, defined := get_measurement();
             if defined {
                 element(Style.{
-                    background = color(BG),
+                    background = color(palette.background),
                     padding    = all(scaled(5.0)),
                     font_size  = scaled(12),
                 }, #code {
@@ -1054,10 +1091,12 @@ frame_pool: Flat_Pool;
 
 render :: (data: *void) {
     defer prepare_for_next_frame();
+    palette = ifx context.forbear.window.theme == .DARK then DARK_PALETTE else LIGHT_PALETTE;
+    context.forbear.base_style.color = palette.text;
     App();
 
     layout();
-    draw(BG_SECONDARY);
+    draw(palette.background_secondary);
 
     reset_temporary_storage();
 
@@ -1105,7 +1144,7 @@ main :: () {
     forbear: Forbear;
     init_forbear(*forbear, *window, *backend, Base_Style.{
         font           = *context.inter,
-        color          = hex("#ECECEC"),
+        color          = palette.text,
         font_size      = 16,
         language       = .ENGLISH,
         text_direction = .LEFT_TO_RIGHT
