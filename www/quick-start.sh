@@ -8,8 +8,8 @@ os=$(uname -s | sed 's/Darwin/darwin/; s/Linux/linux/')
 mkdir -p "$dir"
 cd "$dir"
 curl -fsSL --create-dirs \
-  -o main.jai "$base/apps/quick-start.jai" \
-  -o Inter.ttf "$base/Inter.ttf" \
+  -o main.jai "$base/apps/quick-start/main.jai" \
+  -o Inter.ttf "$base/apps/quick-start/Inter.ttf" \
   -o modules/forbear/bindings-darwin.jai "$base/bindings-darwin.jai" \
   -o modules/forbear/bindings-linux.jai "$base/bindings-linux.jai" \
   -o modules/forbear/bindings-win32.jai "$base/bindings-win32.jai" \
