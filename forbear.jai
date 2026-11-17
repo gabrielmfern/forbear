@@ -3656,8 +3656,10 @@ Scheduled_Scroll :: struct {
     animate            : bool;
 };
 schedule_scroll :: (state: *Scrolling_State, position: Vector2, animate := false) {
+    if !state.scheduled_scroll.defined {
+        state.scheduled_scroll.defined_this_frame = true;
+    }
     state.scheduled_scroll.defined            = true;
-    state.scheduled_scroll.defined_this_frame = true;
     state.scheduled_scroll.position           = position;
     state.scheduled_scroll.animate            = animate;
 }
