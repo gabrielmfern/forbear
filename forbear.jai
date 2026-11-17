@@ -11,6 +11,9 @@ operator == :: Math.operator ==;
 
 #scope_module
 
+// TO-DO: Benchmark and improve the time with this enabled one every operating system, I am certain
+// that we're leaving startup time on the table here. At the limit, we can also supres the time taken
+// for graphics work by software rendering the first few frames while the graphics API work goes on.
 EXIT_ON_FIRST_FRAME :: false;
 
 #import "Basic";
