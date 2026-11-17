@@ -1021,7 +1021,7 @@ App :: () {
                 if Button(column_style(), "9", is_pressed = is_key_held(Key.DIGIT_9)) {
                     append(value.count, value.count, "9");
                 }
-                if Button(column_style(), "÷", is_pressed = is_key_held(Key.PLUS), kind = .OPERATOR) {
+                if Button(column_style(), "÷", is_pressed = is_key_held(Key.SLASH), kind = .OPERATOR) {
                     append(value.count, value.count, " / ");
                 }
             });
