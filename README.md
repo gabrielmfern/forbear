@@ -3,16 +3,16 @@
 forbear is a high performance, immediate mode GUI library that looks like the web.
 
 Major features:
-- React-like declarative elements, components and hooks;
+- React-like declarative elements, components, and hooks;
 - JSX bindings;
 - easily embeddable and customizable;
-- HTML-like element styling and flexbox-like layout;
-- Cross-platform: Windows, Linux (wayland) and macOS.
+- HTML-like element styling and flex box-like layout;
+- Cross-platform: Windows, Linux (Wayland) and macOS.
 
-<!-- TODO: provide a way to download some of what's in ./apps so that people can easily see what forbear is capable of. -->
-<!-- TODO: in the future, add screenshots of programs built by the community with the library -->
+<!-- TO-DO: provide a way to download some of what's in ./apps so that people can easily see what forbear is capable of. -->
+<!-- TO-DO: in the future, add screenshots of programs built by the community with the library -->
 
-## Quick start
+## Quickstart
 
 Requirements: the Jai programming language, which is in private beta.
 
@@ -30,9 +30,9 @@ cd untitled-program
 jai main.jai +forbear
 ```
 
-The quick start program should show this:
+The quickstart program should show this:
 
-<img alt="The quick start program: a counter with an Increase button and an FPS monitor" src="www/assets/2026-10-28-quick-start.png">
+<img alt="The quickstart program: a counter with an Increase button and an FPS monitor" src="www/assets/2026-10-28-quick-start.png">
 
 ### At a glance
 
@@ -85,9 +85,9 @@ Counter :: () {
 
 Among all current GUI framework options there seems to always be a trade-off between: beauty, performance and developer experience. The most famous pick for established programs people use every day is Electron. Electron is famous for not having great performance and hogging way too many resources.
 
-We have a vision of a world where, just like Electron programs are widespread, we have programs that use minimal resources, open and close instantly, run using the hardware effectively wide spread.
+We have a vision of a world where, just like Electron programs are widespread, we have programs that use minimal resources, open, and close instantly, run using the hardware effectively widespread.
 
-To reach this vision of the future, I believe there's the need for an ease of development that has never gotten to before for UI libraries. Something that operating systems should have provided us from the beginning.
+To reach this vision of the future, I believe there's the need for ease of development that has never gotten to before for UI libraries. Something that operating systems should have provided us from the beginning.
 
 This is why forbear exists, it's meant to fuse the best of all worlds and make it accessible to all. High performance shouldn't be for only those who can bear the weight of extreme complexity, and beautiful UIs shouldn't be for only those who compromise for subpar performance.
 
@@ -95,7 +95,7 @@ This is why forbear exists, it's meant to fuse the best of all worlds and make i
 
 forbear is source available, not open source. It's free to use, copy and modify, and to ship inside your own programs.
 If a product built with forbear makes more than USD $100,000 in a year, you pay a royalty of 1% of the revenue above that.
-There is no royalty for internal tools, OSI-licensed open source projects, personal use, or non-profits.
+There is no royalty for internal tools, OSI-licensed open source projects, personal use, or nonprofits.
 You can't redistribute forbear itself as a standalone library, but you can build and sell your own libraries on top of it.
 
 See [LICENSE](./LICENSE) for the full terms.
@@ -104,11 +104,11 @@ There are two reasons for this kind of licensing:
 1) I believe that with something being paid for, the incentives are set up so that I can build the best UI library that has ever existed, by also freeing me up to work on it;
 2) this UI library has become a bigger undertaking than I originally thought it would be, and I've invested a substantial amount of time into it.
 
-## Roadmap
+## Road map
 
 Beware forbear has been in heavy development since early 2025 and the API that is established in the code will most likely change.
 
-The roadmap for the near future is:
+The road map for the near future is:
 - C ABI and C bindings.
 - Async API that works with the immediate mode nature of the library and the different adapters.
 - Complete Wayland and macOS windowing.
