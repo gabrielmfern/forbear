@@ -1,19 +1,79 @@
 #include "../../c-api/forbear.h"
+#include <time.h>
 
-static void render(void *data) {
+typedef struct timespec timespec;
+timespec start;
+double seconds_since_start(void) {
+    timespec now;
+    timespec_get(&now, TIME_UTC);
+    return (double)(now.tv_sec - start.tv_sec) + (now.tv_nsec - start.tv_nsec) / 1e9;
+}
+
+void Fps_Monitor(void) {
+    double *frames = FB_STATE(double);
+    double *fps    = FB_STATE(double);
+    double *last   = FB_STATE(double);
+    *frames += 1;
+    double now = seconds_since_start();
+    if (now - *last >= 1) {
+        *fps = *frames;
+        *frames = 0;
+        *last = now;
+    }
+
+    FB_ELEMENT(.width = fb_grow(1.0f), .y_justification = FB_ALIGNMENT_CENTER) {
+        FB_ELEMENT(.font_size = 28, .color = fb_rgb(255.0f, 255.0f, 255.0f)) {
+            FB_TEXT("forbear");
+        }
+
+        FB_ELEMENT(.width = fb_grow(1.0f));
+
+        FB_ELEMENT(
+            .background = fb_color(fb_rgb(17.0f, 19.0f, 22.0f)),
+            .text_wrapping = FB_TEXT_WRAPPING_NONE,
+            .min_width = 152.0f,
+            .padding = fb_all_sides(8.0f),
+            .color = fb_rgb(184.0f, 163.0f, 106.0f),
+            .direction = FB_DIRECTION_VERTICAL,
+        ) {
+            FB_ELEMENT(
+            ) {
+                FB_TEXT("FPS:");
+                FB_ELEMENT(.width = fb_grow(1.0f));
+                FB_TEXT("%f", *fps);
+            }
+        }
+    }
+}
+
+void render(void *data) {
     (void)data;
 
     FB_ELEMENT(
-        .width         = { .kind = FB_SIZING_KIND_GROW, .grow = 1.0f },
-        .height        = { .kind = FB_SIZING_KIND_GROW, .grow = 1.0f },
-        .background    = { .kind = FB_BACKGROUND_KIND_COLOR, .color = { 28 / 255.0f, 31 / 255.0f, 35 / 255.0f, 1.0f } },
-        .color         = { 174 / 255.0f, 184 / 255.0f, 196 / 255.0f, 1.0f },
+        .width         = fb_grow(1.0f),
+        .height        = fb_grow(1.0f),
+        .background    = fb_color(fb_rgb(28.0f, 31.0f, 35.0f)),
+        .color         = fb_rgb(174.0f, 184.0f, 196.0f),
         .font_size     = 14.0f,
-        .padding       = { { 16.0f, 16.0f }, { 16.0f, 16.0f } },
+        .padding       = fb_all_sides(16.0f),
         .text_wrapping = FB_TEXT_WRAPPING_CHARACTER,
         .direction     = FB_DIRECTION_VERTICAL,
     ) {
-        FB_TEXT("forbear");
+        FB_SCOPE Fps_Monitor();
+
+        FB_ELEMENT(
+            .background = fb_color(fb_rgb(255.0f, 0.0f, 0.0f)),
+            .width      = fb_fixed(200),
+            .height     = fb_fixed(200)
+        ) {
+            fb_Node *node = fb_get_node(-1);
+            if (fb_is_mouse_held(FB_MOUSE_BUTTON_LEFT) && fb_is_mouse_inside()) {
+                node->style.background = fb_color(fb_rgb(255.0f, 255.0f, 255.0f));
+            }
+            if (fb_is_key_held(FB_KEY_SHIFT_LEFT)) {
+                node->style.background = fb_color(fb_rgb(100.0f, 100.0f, 0.0f));
+            }
+        }
     }
 
     fb_layout();
@@ -21,10 +81,11 @@ static void render(void *data) {
     fb_prepare_for_next_frame();
 }
 
-static const uint8_t inter_ttf[] = {
-#embed "../../Inter.ttf"
+const uint8_t inter_ttf[] = {
+    #embed "../../Inter.ttf"
 };
 int main() {
+    timespec_get(&start, TIME_UTC);
     fb_Backend backend;
     fb_init_backend(&backend);
     fb_Window window;

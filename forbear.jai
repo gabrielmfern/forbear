@@ -3706,7 +3706,8 @@ state :: (initial_size: s64, initial: *void) -> *void, first_frame: bool {
     }
 
     result := *state_buffers.*[state_current][state_used];
-    memcpy(result, initial, initial_size);
+    if initial memcpy(result, initial, initial_size);
+    else       memset(result, 0, initial_size);
     measurement, defined := get_measurement(include_scopes = true);
     copy_forward         := defined && node.state_size + size <= measurement.state_size;
     if copy_forward {

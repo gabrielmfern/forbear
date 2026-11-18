@@ -2,6 +2,8 @@
 #define FORBEAR_H
 #include <stdint.h>
 #include <stddef.h>
+#include <stdarg.h>
+#include <stdio.h>
 
 #if defined(__GNUC__) || defined(__clang__)
 #define FB_FLOAT32_NAN __builtin_nanf("")
@@ -3686,12 +3688,39 @@ fb_Vector4 fb_use_spring_transition_v4(fb_Vector4 target, fb_Spring_Config_Vecto
         for (fb_Node_Opening_Data fb_scope_data = fb_open_scope(key); \
              fb_scope_latch < 1; \
              fb_scope_latch = 1, fb_close_scope(fb_scope_data))
-#define FB_SCOPE() FB_SCOPE_KEYED(FB_LOCATION_KEY)
+#define FB_SCOPE FB_SCOPE_KEYED(FB_LOCATION_KEY)
 
-#define FB_STATE(T, ...) ((T *)fb_state(sizeof(T), &(T){ __VA_ARGS__ }))
+#define FB_STATE_ZERO(T)      ((T *)fb_state(sizeof(T), NULL))
+#define FB_STATE_INIT(T, ...) ((T *)fb_state(sizeof(T), &(T){ __VA_ARGS__ }))
+#define FB_STATE_PICK(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, NAME, ...) NAME
+#define FB_STATE(...) FB_STATE_PICK(__VA_ARGS__, \
+    FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, \
+    FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, \
+    FB_STATE_ZERO, )(__VA_ARGS__)
 
-#define FB_TEXT_KEYED(key, content, ...) fb_stext(FB_STYLE(__VA_ARGS__), (content), (key))
-#define FB_TEXT(content, ...)            FB_TEXT_KEYED(FB_LOCATION_KEY, content, __VA_ARGS__)
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((format(printf, 3, 4)))
+#endif
+static inline void fb_stextf(fb_Style style, const char *key, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int length = vsnprintf(NULL, 0, format, args);
+    va_end(args);
+    if (length < 0) {
+        fb_stext(style, format, key);
+        return;
+    }
+    char *content = fb_frame_alloc(length + 1);
+    va_start(args, format);
+    vsnprintf(content, (size_t)length + 1, format, args);
+    va_end(args);
+    fb_stext(style, content, key);
+}
+
+#define FB_TEXT_KEYED(key, ...)         fb_stextf(FB_STYLE(), (key), __VA_ARGS__)
+#define FB_TEXT(...)                    FB_TEXT_KEYED(FB_LOCATION_KEY, __VA_ARGS__)
+#define FB_STEXT_KEYED(key, style, ...) fb_stextf(FB_STYLE style, (key), __VA_ARGS__)
+#define FB_STEXT(style, ...)            FB_STEXT_KEYED(FB_LOCATION_KEY, style, __VA_ARGS__)
 
 #define FB_BASE_STYLE(...) \
     FB_OVERRIDES_BEGIN \
