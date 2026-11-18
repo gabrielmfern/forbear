@@ -1,5 +1,6 @@
 #include "../../c-api/forbear.h"
 #include <time.h>
+#include <stdio.h>
 
 typedef struct timespec timespec;
 timespec start;
@@ -40,7 +41,9 @@ void Fps_Monitor(void) {
             ) {
                 FB_TEXT("FPS:");
                 FB_ELEMENT(.width = fb_grow(1.0f));
-                FB_TEXT("%f", *fps);
+                char fps_text[32];
+                snprintf(fps_text, sizeof(fps_text), "%.0f", *fps);
+                FB_TEXT(fps_text);
             }
         }
     }

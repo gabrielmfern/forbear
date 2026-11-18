@@ -2,16 +2,13 @@
 #define FORBEAR_H
 #include <stdint.h>
 #include <stddef.h>
-#include <stdarg.h>
-#include <stdio.h>
 
 #if defined(__GNUC__) || defined(__clang__)
 #define FB_FLOAT32_NAN __builtin_nanf("")
 #define FB_FLOAT64_NAN __builtin_nan("")
 #else
-#include <math.h>
-#define FB_FLOAT32_NAN NAN
-#define FB_FLOAT64_NAN ((double)NAN)
+#define FB_FLOAT32_NAN (-(float)(((float)(1e+300 * 1e+300)) * 0.0F))
+#define FB_FLOAT64_NAN ((double)FB_FLOAT32_NAN)
 #endif
 
 // ====== BEGIN AUTO GENERATED PORTION ======
@@ -3698,29 +3695,9 @@ fb_Vector4 fb_use_spring_transition_v4(fb_Vector4 target, fb_Spring_Config_Vecto
     FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, FB_STATE_INIT, \
     FB_STATE_ZERO, )(__VA_ARGS__)
 
-#if defined(__GNUC__) || defined(__clang__)
-__attribute__((format(printf, 3, 4)))
-#endif
-static inline void fb_stextf(fb_Style style, const char *key, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    int length = vsnprintf(NULL, 0, format, args);
-    va_end(args);
-    if (length < 0) {
-        fb_stext(style, format, key);
-        return;
-    }
-    char *content = fb_frame_alloc(length + 1);
-    va_start(args, format);
-    vsnprintf(content, (size_t)length + 1, format, args);
-    va_end(args);
-    fb_stext(style, content, key);
-}
-
-#define FB_TEXT_KEYED(key, ...)         fb_stextf(FB_STYLE(), (key), __VA_ARGS__)
-#define FB_TEXT(...)                    FB_TEXT_KEYED(FB_LOCATION_KEY, __VA_ARGS__)
-#define FB_STEXT_KEYED(key, style, ...) fb_stextf(FB_STYLE style, (key), __VA_ARGS__)
-#define FB_STEXT(style, ...)            FB_STEXT_KEYED(FB_LOCATION_KEY, style, __VA_ARGS__)
+#define FB_TEXT_KEYED_(key, content, ...) fb_stext(FB_STYLE(__VA_ARGS__), (content), (key))
+#define FB_TEXT_KEYED(key, ...)           FB_TEXT_KEYED_(key, __VA_ARGS__, )
+#define FB_TEXT(...)                      FB_TEXT_KEYED(FB_LOCATION_KEY, __VA_ARGS__)
 
 #define FB_BASE_STYLE(...) \
     FB_OVERRIDES_BEGIN \
