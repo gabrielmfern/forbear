@@ -1,13 +1,9 @@
 #include "../../c-api/forbear.h"
 
-static const uint8_t inter_ttf[] = {
-#embed "../../Inter.ttf"
-};
-
 static void render(void *data) {
     (void)data;
 
-    fb_Node_Opening_Data root = fb_open_element(FB_STYLE(
+    FB_ELEMENT(
         .width         = { .kind = FB_SIZING_KIND_GROW, .grow = 1.0f },
         .height        = { .kind = FB_SIZING_KIND_GROW, .grow = 1.0f },
         .background    = { .kind = FB_BACKGROUND_KIND_COLOR, .color = { 28 / 255.0f, 31 / 255.0f, 35 / 255.0f, 1.0f } },
@@ -16,15 +12,18 @@ static void render(void *data) {
         .padding       = { { 16.0f, 16.0f }, { 16.0f, 16.0f } },
         .text_wrapping = FB_TEXT_WRAPPING_CHARACTER,
         .direction     = FB_DIRECTION_VERTICAL,
-    ), "root");
-    fb_text("forbear", "title");
-    fb_close_element(root);
+    ) {
+        fb_text("forbear", "title");
+    }
 
     fb_layout();
     fb_draw((fb_Vector4){ 0.0f, 0.0f, 0.0f, 1.0f });
     fb_prepare_for_next_frame();
 }
 
+static const uint8_t inter_ttf[] = {
+#embed "../../Inter.ttf"
+};
 int main() {
     fb_Backend backend;
     fb_init_backend(&backend);

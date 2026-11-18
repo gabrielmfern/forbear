@@ -3290,6 +3290,18 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
     }) \
     FB_OVERRIDES_END
 
+#define FB_STRINGIFY_(x) #x
+#define FB_STRINGIFY(x)  FB_STRINGIFY_(x)
+#define FB_LOCATION_KEY __FILE__ ":" FB_STRINGIFY(__LINE__) ":" FB_STRINGIFY(__COUNTER__)
+
+// FB_ELEMENT(.width = ...) { children } opens the element, runs the block once, then closes it.
+// Leaving the block with break, return or goto skips fb_close_element.
+#define FB_ELEMENT(...) \
+    for (int fb_element_latch = 0; fb_element_latch < 1;) \
+        for (fb_Node_Opening_Data fb_element_data = fb_open_element(FB_STYLE(__VA_ARGS__), FB_LOCATION_KEY); \
+             fb_element_latch < 1; \
+             fb_element_latch = 1, fb_close_element(fb_element_data))
+
 #define FB_BASE_STYLE(...) \
     FB_OVERRIDES_BEGIN \
     ((fb_Base_Style){ \

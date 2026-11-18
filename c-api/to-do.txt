@@ -33,6 +33,5 @@ is_mouse_inside, is_mouse_held, on_mouse_down, on_mouse_up, on_click
 get_clibpoard_text, get_text_input
 on_key_down, on_key_up, is_key_held
 
-ELEMENT
 SCOPE
 
