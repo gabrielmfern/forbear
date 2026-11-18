@@ -3,11 +3,14 @@
 introspection
 
 # compiled outputs
+!vendor/**/*.a
+!vendor/**/*.lib
 *.a
 *.app
 *.dSYM*
 *.dylib
 *.exe
+*.ilk
 *.lib
 *.pdb
 *.rdi
@@ -15,8 +18,7 @@ introspection
 .build/
 .vercel
 dist
-!vendor/**/*.a
-!vendor/**/*.lib
+forbear.dll
 
 ## binaries
 apps/calculator/Calculator
