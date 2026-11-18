@@ -27,7 +27,7 @@ main :: () {
     backend: Backend;
     window: Window;
     init_backend(*backend);
-    init_window(*backend.connection, *window, 800, 600, "playground");
+    init_window(*backend, *window, 800, 600, "playground");
 
     inter := #run create_font(read_entire_file(tprint("%../../Inter.ttf", #filepath)));
 

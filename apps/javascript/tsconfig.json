@@ -9,5 +9,5 @@
     "module": "esnext",
     "target": "es2024"
   },
-  "include": ["src", "../../adapters/javascript.d.ts"]
+  "include": ["src", "../../adapters/javascript/javascript.d.ts"]
 }
