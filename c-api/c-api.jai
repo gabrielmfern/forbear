@@ -98,6 +98,11 @@ fb_open_element :: (style: Style,
 fb_close_element :: (data: Node_Opening_Data) #c_call { push_context frame_context { close_element(data); } }
 
 #program_export
+fb_open_scope :: (key: *u8) -> Node_Opening_Data #c_call { push_context frame_context { return open_scope(to_string(key)); } }
+#program_export
+fb_close_scope :: (data: Node_Opening_Data) #c_call { push_context frame_context { close_scope(data, 0); } }
+
+#program_export
 fb_stext :: (style: Style, content: *u8, key: *u8) #c_call {
     push_context frame_context {
         key_string := to_string(key);

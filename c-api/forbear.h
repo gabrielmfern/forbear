@@ -3304,6 +3304,15 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
              fb_element_latch = 1, fb_close_element(fb_element_data))
 #define FB_ELEMENT(...) FB_ELEMENT_KEYED(FB_LOCATION_KEY, __VA_ARGS__)
 
+// FB_SCOPE() card("title"); runs the next statement inside a scope, so the keys inside the component are unique
+// to this call site. Call each component through FB_SCOPE, and FB_SCOPE_KEYED(key) when called in a loop.
+#define FB_SCOPE_KEYED(key) \
+    for (int fb_scope_latch = 0; fb_scope_latch < 1;) \
+        for (fb_Node_Opening_Data fb_scope_data = fb_open_scope(key); \
+             fb_scope_latch < 1; \
+             fb_scope_latch = 1, fb_close_scope(fb_scope_data))
+#define FB_SCOPE() FB_SCOPE_KEYED(FB_LOCATION_KEY)
+
 // FB_TEXT("content") or FB_TEXT("content", .font_size = 20). FB_TEXT_KEYED takes the key first.
 #define FB_TEXT_KEYED(key, content, ...) fb_stext(FB_STYLE(__VA_ARGS__), (content), (key))
 #define FB_TEXT(content, ...)            FB_TEXT_KEYED(FB_LOCATION_KEY, content, __VA_ARGS__)
@@ -3360,6 +3369,9 @@ void fb_prepare_for_next_frame(void);
 
 fb_Node_Opening_Data fb_open_element(fb_Style style, const char *key);
 void fb_close_element(fb_Node_Opening_Data data);
+
+fb_Node_Opening_Data fb_open_scope(const char *key);
+void fb_close_scope(fb_Node_Opening_Data data);
 
 void fb_stext(fb_Style style, const char *content, const char *key);
 void fb_text(const char *content, const char *key);
