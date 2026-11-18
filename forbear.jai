@@ -4461,17 +4461,17 @@ get_parent_element_index :: () -> s64 {
 // scope_key and the caller_location.
 //
 // Internal API, in Jai use the `element` macro.
-open_element :: (style: Style, manual_key := "", location := #caller_location) -> Node_Opening_Data {
-    key: u64;
-    if manual_key.count > 0 {
-        key = fnv1a_hash(manual_key.data, manual_key.count);
+open_element :: (style: Style, key := "", location := #caller_location) -> Node_Opening_Data {
+    key_hash: u64;
+    if key.count > 0 {
+        key_hash = fnv1a_hash(key.data, key.count);
     } else {
-        key = fnv1a_hash(*location, size_of(Source_Code_Location));
+        key_hash = fnv1a_hash(*location, size_of(Source_Code_Location));
     }
     if context.forbear.scope_key != U64_MAX {
-        key = fnv1a_hash(context.forbear.scope_key, key);
+        key_hash = fnv1a_hash(context.forbear.scope_key, key_hash);
     }
-    return open_element(style, key);
+    return open_element(style, key_hash);
 }
 // Intermediary API that's used from adapters, such as the JavaScript one. When in jai, use `element`
 open_element :: (style: Style, key_hash: u64) -> Node_Opening_Data {
@@ -4572,13 +4572,11 @@ element :: (style := Style.{}, key: u64, body := #code {}) -> s64 #expand {
     close_element(opening);
     return opening.node_index;
 }
-element :: (
-    style      := Style.{},
-    manual_key := "",
-    body       := #code {},
-    location   := #caller_location
-) -> s64 #expand {
-    opening := open_element(style, manual_key, location);
+element :: (style      := Style.{},
+            key := "",
+            body       := #code {},
+            location   := #caller_location) -> s64 #expand {
+    opening := open_element(style, key, location);
     #insert body;
     close_element(opening);
     return opening.node_index;
@@ -4635,8 +4633,8 @@ close_scope :: (using opening_data: Node_Opening_Data, value: $T) -> T {
     context.forbear.scope_key    = scope_key;
     return value;
 }
-scope :: (manual_key: string, $body: Code = #code {}, location := #caller_location) -> body.type #expand {
-    return close_scope(open_scope(manual_key, location), void);
+scope :: (key: string, $body: Code = #code {}, location := #caller_location) -> body.type #expand {
+    return close_scope(open_scope(key, location), void);
 }
 scope :: ($body: Code, location := #caller_location) -> body.type #expand {
     return close_scope(open_scope(location = location), #insert body);
@@ -4923,16 +4921,16 @@ text :: (style: Style, content: string, key_hash: u64) -> s64 #expand {
     close_element(data);
     return data.node_index;
 }
-// TO-DO: Support receiving any number of arguments that are passed down to sprint to then be rendered into text.
 // TO-DO: Support building multiple text runs for the same node's glyphs. This is quite important for text-heavy applications might have, say, emphasis on text.
-text :: (style := Style.{}, content := "", manual_key := "", location := #caller_location) -> s64 #expand {
-    data := open_element(style, manual_key, location);
+text :: (style: Style, format: string, args: ..Any, key := "", location := #caller_location) -> s64 #expand {
+    data := open_element(style, key, location);
+    content := ifx args.count then sprint(format, ..args) else format;
     set_node_glyphs(*context.forbear.node_tree[data.node_index], content);
     close_element(data);
     return data.node_index;
 }
-text :: (content: string, manual_key := "", location := #caller_location) -> s64 #expand {
-    return text(Style.{}, content, "", location);
+text :: (format: string, args: ..Any, key := "", location := #caller_location) -> s64 #expand {
+    return text(Style.{}, format, ..args, key = key, location = location);
 }
 Glyph_Atlas :: struct {
     texture: u32;

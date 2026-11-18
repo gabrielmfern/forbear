@@ -56,12 +56,12 @@ Frame_Monitor :: () {
         element(Style.{ width = grow() }, #code {
             text("FPS:");
             element(Style.{ width = grow() });
-            text(tprint("%", cast(s64) fps.*));
+            text("%", cast(s64) fps.*);
         });
         element(Style.{ width = grow() }, #code {
             text("frame:");
             element(Style.{ width = grow() });
-            text(tprint("% ms", formatFloat(average.*, trailing_width = 2)));
+            text("% ms", formatFloat(average.*, trailing_width = 2));
         });
     });
 } @component
@@ -129,7 +129,7 @@ Task_List :: () {
         element(Style.{ width = grow(), y_justification = .CENTER, margin = bottom(12) }, #code {
             text(Style.{ font_size = 20, color = BRIGHT }, "tasks");
             element(Style.{ width = grow() });
-            text(Style.{ color = MUTED }, tprint("% of % done", done, tasks.count));
+            text(Style.{ color = MUTED }, "% of % done", done, tasks.count);
         });
 
         element(Style.{
@@ -166,7 +166,7 @@ Task_List :: () {
                 padding = in_line(block(8), 10),
                 margin = bottom(4),
                 y_justification = .CENTER,
-            }, manual_key = tprint("task-%", index), #code {
+            }, key = tprint("task-%", index), #code {
                 node := get_node();
                 if is_mouse_inside() {
                     node.style.background = color(UI);
@@ -322,7 +322,7 @@ App :: () {
                     });
                 });
                 for row: 0..7 {
-                    element(Style.{ width = grow() }, manual_key = tprint("row-%", row), #code {
+                    element(Style.{ width = grow() }, key = tprint("row-%", row), #code {
                         for column: 0..7 {
                             index := row * 8 + column;
                             scope(tprint("switch-%", index), #code {

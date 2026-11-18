@@ -36,7 +36,7 @@ Fps_Monitor :: () {
             element(Style.{ width = grow() }, #code {
                 text("FPS:");
                 element(Style.{ width = grow() });
-                text(tprint("%", fps.*));
+                text("%", fps.*);
             });
         });
     });
@@ -90,7 +90,7 @@ Counter :: () {
         }
     });
 
-    text(Style.{font_size = 32}, sprint("Count: %", counter.*));
+    text(Style.{font_size = 32}, "Count: %", counter.*);
 } @component
   // The `@component` is handled by a compiler plugin that's defined in the
   // `forbear.jai` as well. It goes through all calls of functions with this

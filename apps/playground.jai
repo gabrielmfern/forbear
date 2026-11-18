@@ -10,6 +10,41 @@ BUILD_FLAGS :: "+forbear";
 
 frame_pool: Flat_Pool;
 
+Fps_Monitor :: () {
+    frames   := state(cast(float64)0.0);
+    fps      := state(cast(float64)0.0);
+    last     := state(cast(float64)0.0);
+
+    frames.* += 1;
+    now      := seconds_since_init();
+    if now - last.* >= 1 {
+        fps.*    = frames.*;
+        frames.* = 0;
+        last.*   = now;
+    }
+
+    element(Style.{ width = grow(), y_justification = .CENTER }, #code {
+        element(Style.{ font_size = 28, color = rgb(255, 255, 255) }, #code {
+            text("forbear");
+        });
+        element(Style.{ width = grow() });
+        element(Style.{
+            background    = color(rgb(17, 19, 22)),
+            text_wrapping = .NONE,
+            min_width     = 152,
+            padding       = all(8),
+            color         = rgb(184, 163, 106),
+            direction     = .VERTICAL,
+        }, #code {
+            element(Style.{ width = grow() }, #code {
+                text("FPS:");
+                element(Style.{ width = grow() });
+                text("%", fps.*);
+            });
+        });
+    });
+} @component
+
 render :: (data: *void) {
     defer prepare_for_next_frame();
 
@@ -23,38 +58,7 @@ render :: (data: *void) {
         text_wrapping = .CHARACTER,
         direction = .VERTICAL,
     }, #code {
-        frames := state(cast(float64)0.0);
-        fps := state(cast(float64)0.0);
-        last := state(cast(float64)0.0);
-
-        frames.* += 1;
-        now := seconds_since_init();
-        if now - last.* >= 1 {
-            fps.* = frames.*;
-            frames.* = 0;
-            last.* = now;
-        }
-
-        element(Style.{ width = grow(), y_justification = .CENTER }, #code {
-            element(Style.{ font_size = 28, color = rgb(255, 255, 255) }, #code {
-                text("forbear");
-            });
-            element(Style.{ width = grow() });
-            element(Style.{
-                background = color(rgb(17, 19, 22)),
-                text_wrapping = .NONE,
-                min_width = 152,
-                padding = all(8),
-                color = rgb(184, 163, 106),
-                direction = .VERTICAL,
-            }, #code {
-                element(Style.{ width = grow() }, #code {
-                    text("FPS:");
-                    element(Style.{ width = grow() });
-                    text(tprint("%", fps.*));
-                });
-            });
-        });
+        Fps_Monitor();
 
         element(Style.{
             background = color(rgb(255, 0, 0)),
@@ -78,22 +82,22 @@ render :: (data: *void) {
             array_add(input, ..(cast([] u8) frame_input));
             print("input: %\n", to_string(input.data, input.count));
         }
-        text(sprint("this was the input text until now: '%'", to_string(input.data, input.count)));
+        text("this was the input text until now: '%'", to_string(input.data, input.count));
 
         for key: context.forbear.window.keyboard_state.held {
             if key != 0 {
                 string_key := sprint("%", key);
-                text(string_key, manual_key = string_key);
+                text(string_key, key = string_key);
             }
         }
 
         for label: string.["a", "b"] {
-            element(Style.{}, manual_key = label, #code {
+            element(Style.{}, key = label, #code {
                 count := state(0);
                 if on_click() {
                     count.* += 1;
                 }
-                text(tprint("% %", label, count.*));
+                text("% %", label, count.*);
             });
         }
     });
@@ -117,7 +121,7 @@ main :: () {
     inter := #run create_font(read_entire_file(tprint("%../Inter.ttf", #filepath)));
 
     forbear: Forbear;
-    init_forbear(*forbear, *window, *backend, Base_Style.{
+    init_forbear(*forbear, *backend, *window, Base_Style.{
         font = *inter,
         color = rgb(255, 255, 255),
         language = .ENGLISH,

@@ -82,7 +82,7 @@ main :: () {
             }
             My_Component();
             assert(calculate_something() == 151512 / 2323, "calculate_something()=%", calculate_something());
-            text(sprint("%", calculate_something()));
+            text("%", calculate_something());
 
             assert(context.forbear.node_tree.count == 3, "count=%", context.forbear.node_tree.count);
             shallow_node_check(0, .SCOPE, -1);
