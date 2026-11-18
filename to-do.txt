@@ -10,6 +10,7 @@
     - API to set the window to full screen
     - If the forbear program is manipulated by another program on Windows, modifiers don't actually quite work (control+v), for example
         - Raycast's emoji insertion is what I'm thinking of
+- Documentation
 - Primitives that allow handling focus
     - The main problem around this is the fact that we can't really "consume" an event. Given the UI is immediate and events are consumed as things are rendered, each element must know that some other element is the one that will be consuming the given event. In the Zig version I had a way to handle this, it was 80% as elegant as I'd like but had some awkwardness.
 - Add the glyph positions to a node's measurements
