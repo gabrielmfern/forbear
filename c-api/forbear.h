@@ -2722,6 +2722,30 @@ _Static_assert(offsetof(fb_Node_Opening_Data, scope_key) == 8, "fb_Node_Opening_
 _Static_assert(offsetof(fb_Node_Opening_Data, base_style) == 16, "fb_Node_Opening_Data.base_style");
 _Static_assert(offsetof(fb_Node_Opening_Data, node_index) == 72, "fb_Node_Opening_Data.node_index");
 
+typedef struct fb_Wayland_Event fb_Wayland_Event;
+typedef struct fb_Message_Info fb_Message_Info;
+struct fb_Message_Info {
+    void * type;
+    int32_t first_arg;
+    int32_t arg_count;
+};
+_Static_assert(sizeof(fb_Message_Info) == 16, "fb_Message_Info");
+_Static_assert(offsetof(fb_Message_Info, type) == 0, "fb_Message_Info.type");
+_Static_assert(offsetof(fb_Message_Info, first_arg) == 8, "fb_Message_Info.first_arg");
+_Static_assert(offsetof(fb_Message_Info, arg_count) == 12, "fb_Message_Info.arg_count");
+
+struct fb_Wayland_Event {
+    Bool something;
+    fb_Message_Info message;
+    void * data;
+    uint32_t object_id;
+};
+_Static_assert(sizeof(fb_Wayland_Event) == 40, "fb_Wayland_Event");
+_Static_assert(offsetof(fb_Wayland_Event, something) == 0, "fb_Wayland_Event.something");
+_Static_assert(offsetof(fb_Wayland_Event, message) == 8, "fb_Wayland_Event.message");
+_Static_assert(offsetof(fb_Wayland_Event, data) == 24, "fb_Wayland_Event.data");
+_Static_assert(offsetof(fb_Wayland_Event, object_id) == 32, "fb_Wayland_Event.object_id");
+
 typedef struct fb_Forbear fb_Forbear;
 typedef struct fb_Node fb_Node;
 typedef int64_t fb_Node_Kind;
@@ -3199,7 +3223,36 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
 void fb_init_forbear(fb_Forbear *forbear,
                      fb_Backend *program_backend,
                      fb_Window *program_window,
-                     fb_base_Style base_style);
+                     fb_Base_Style program_base_style);
+void fb_init_backend(fb_Backend *backend);
+void fb_init_window(fb_Backend *backend,
+                    fb_Window *window,
+                    double width,
+                    double height,
+                    char *title,
+                    double min_width,
+                    double min_height,
+                    double max_width,
+                    double max_height);
+
+#if defined(_WIN32)
+void fb_update_backend(fb_Backend *backend);
+#elif defined(__APPLE__)
+void fb_update_backend(fb_Backend *backend);
+void fb_update_window(fb_Backend *backend, fb_Window *window);
+#elif defined(__linux__)
+fb_Wayland_Event fb_next_event(fb_Wayland_Connection *connection, _Bool wait);
+_Bool fb_can_draw(fb_Window window);
+void fb_update_backend(fb_Backend *backend, fb_Wayland_Event event);
+void fb_update_window(fb_Backend *backend, fb_Window *window, fb_Wayland_Event event);
+#endif
+
+fb_Font fb_create_font(fb_String memory);
+void fb_init_font(fb_Font *font);
+
+void fb_layout(void);
+void fb_draw(fb_Vector4 clearing_color);
+void fb_prepare_for_next_frame(void);
 
 fb_Node_Opening_Data fb_open_element(fb_Style style, char *key);
 void fb_close_element(fb_Node_Opening_Data data);

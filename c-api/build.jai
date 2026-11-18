@@ -4,7 +4,7 @@
 #import "String";
 
 ROOTS  :: string.["Forbear", "Style", "Complete_Style", "Base_Style", "Font", "Node_Opening_Data",
-    "Windows_GL_Window", "Windows_GL_Backend", "Wayland_EGL_Window", "Wayland_EGL_Backend", "MacOS_GL_Window", "MacOS_GL_Backend"];
+    "Windows_GL_Window", "Windows_GL_Backend", "Wayland_EGL_Window", "Wayland_EGL_Backend", "MacOS_GL_Window", "MacOS_GL_Backend", "Wayland_Event"];
 OPAQUE :: string.["Table", "Flat_Pool", "kbts_font", "Context"];
 
 Target :: struct {
@@ -94,6 +94,7 @@ c_type :: (h: *Header, type: *Type_Info, owner: string) -> string {
         case .BOOL;   type_name = "Bool";
         case .FLOAT;  type_name = ifx type.runtime_size == 4 then "float" else "double";
         case .STRING; type_name = "fb_String";
+        case .TYPE;   type_name = "void *";
         case .INTEGER;
             integer := cast(*Type_Info_Integer) type;
             type_name = tprint("%int%_t", ifx integer.signed then "" else "u", integer.runtime_size * 8);

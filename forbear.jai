@@ -1858,7 +1858,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             glFramebufferParameteri(GL_FRAMEBUFFER, GL_FRAMEBUFFER_FLIP_Y_MESA, xx GL_TRUE);
         }
     }
-    can_draw :: (window: Wayland_EGL_Window) -> bool {
+    can_draw :: (window: Wayland_EGL_Window) -> bool #c_call {
         return !window.waiting_for_vblank && window.buffers[window.current].wl_buffer_id != 0 && !window.buffers[window.current].busy;
     }
     update_window :: (backend: *Backend, window: *Wayland_EGL_Window, event: Wayland_Event) {
@@ -4690,7 +4690,7 @@ Font :: struct {
         next_cache: Shaping_Cache;
     }
 };
-create_font :: (memory: string) -> Font {
+create_font :: (memory: string) -> Font #c_call {
     font: Font;
     font.memory = memory;
     return font;
