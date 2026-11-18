@@ -24,6 +24,7 @@ $files = [ordered]@{
     $main = "quick-start/$template/$main"
     'Inter.ttf' = 'Inter.ttf'
 }
+if ($language -eq 'c') { $files['build.bat'] = "quick-start/$template/build.bat" }
 $archives = [ordered]@{ "forbear-$language-win32" = $forbear }
 if ($adapter -eq 'javascript') {
     $files['package.json'] = "quick-start/$template/package.json"
@@ -47,14 +48,7 @@ foreach ($archive in $archives.GetEnumerator()) {
     Remove-Item $download
 }
 
-$library = if ($adapter -eq 'javascript') { 'forbear-javascript' } else { 'forbear' }
 Write-Host "Run: cd $dir"
 if ($adapter -eq 'javascript') { Write-Host '     npm install' }
-if ($language -eq 'jai') {
-    Write-Host '     jai main.jai +forbear'
-} else {
-    if ($adapter -eq 'javascript') { Write-Host '     npm run build' }
-    Write-Host "     clang -std=c23 main.c forbear/$library.lib -o main.exe"
-    Write-Host "     copy forbear\$library.dll ."
-}
+if ($language -eq 'jai') { Write-Host '     jai main.jai +forbear' } else { Write-Host '     .\build.bat' }
 }

@@ -26,6 +26,10 @@ mkdir -p "$dir/$forbear"
 cd "$dir"
 curl -fsSL --create-dirs -o "$main" "$base/quick-start/$template/$main" -o Inter.ttf "$base/Inter.ttf"
 curl -fsSL "$release/forbear-$language-$os.tar.gz" | tar -xz -C "$forbear"
+if [ "$language" = c ]; then
+  curl -fsSL -o build.sh "$base/quick-start/$template/build.sh"
+  chmod +x build.sh
+fi
 if [ "$adapter" = javascript ]; then
   curl -fsSL --create-dirs \
     -o package.json "$base/quick-start/$template/package.json" \
@@ -42,9 +46,5 @@ echo "Run: cd $dir"
 if [ "$language" = jai ]; then
   echo "     jai main.jai +forbear"
 else
-  library=forbear
-  [ "$adapter" = javascript ] && echo "     npm run build" && library=forbear-javascript
-  extension=so
-  [ "$os" = darwin ] && extension=dylib
-  echo "     cc -std=c23 main.c forbear/$library.$extension -Wl,-rpath,'\$ORIGIN/forbear' -o main"
+  echo "     ./build.sh"
 fi
