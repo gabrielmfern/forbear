@@ -100,6 +100,8 @@ fb_close_element :: (data: Node_Opening_Data) #c_call { push_context frame_conte
 #program_export
 fb_open_scope :: (key: *u8) -> Node_Opening_Data #c_call { push_context frame_context { return open_scope(to_string(key)); } }
 #program_export
+fb_state :: (size: s64, initial: *void) -> *void #c_call { push_context frame_context { return state(size, initial); } }
+#program_export
 fb_close_scope :: (data: Node_Opening_Data) #c_call { push_context frame_context { close_scope(data, 0); } }
 
 #program_export

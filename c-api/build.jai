@@ -30,7 +30,6 @@ build :: () {
 
     remaining := 0;
     for * targets {
-        // Objective_C runs code at compile time that loads libobjc, so macOS can only be checked on a Mac.
         if it.os == .MACOS && OS != .MACOS continue;
         remaining += 1;
 

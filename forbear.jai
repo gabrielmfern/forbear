@@ -3690,38 +3690,43 @@ END);
     pool_slots[node.pool_slot].last_frame = frame;
     return pool_slots[node.pool_slot].allocator;
 }
-state :: ($T: Type, initial: T) -> *T, first_frame: bool {
+state :: (initial_size: s64, initial: *void) -> *void, first_frame: bool {
     using context.forbear;
 
-    assert(parent_index != -1, "state(initial: $T) must be called from inside an element");
+    assert(parent_index != -1, "state() must be called from inside an element");
     node := *node_tree[parent_index];
     if node.state_size == 0 {
         node.state_offset = state_used;
     }
     assert(node.state_offset + node.state_size == state_used, "call state() before any child element that uses state");
-    size := (size_of(T) + 7) & ~7;
+    size := (initial_size + 7) & ~7;
     if state_used + size > state_buffers.*[0].count {
         log_error("state buffer is full: % bytes used, % more requested", state_used, size);
         exit(-1);
     }
 
-    result  := cast(*T) *state_buffers.*[state_current][state_used];
-    result.* = initial;
+    result := *state_buffers.*[state_current][state_used];
+    memcpy(result, initial, initial_size);
+    measurement, defined := get_measurement(include_scopes = true);
+    copy_forward         := defined && node.state_size + size <= measurement.state_size;
+    if copy_forward {
+        memcpy(result, *state_buffers.*[1 - state_current][measurement.state_offset + node.state_size], initial_size);
+    }
+    node.state_size += size;
+    state_used      += size;
+    return result, !copy_forward;
+}
+state :: ($T: Type, initial: T) -> *T, first_frame: bool {
+    value := initial;
     is_resizable :: (T: Type) -> bool {
         info := cast(*Type_Info) T;
         return info.type == .ARRAY && (cast(*Type_Info_Array) info).array_type == .RESIZABLE;
     }
     #if #run is_resizable(T) {
-        result.allocator = node_pool();
+        value.allocator = node_pool();
     }
-    measurement, defined := get_measurement(include_scopes = true);
-    copy_forward         := defined && node.state_size + size <= measurement.state_size;
-    if copy_forward {
-        memcpy(result, *state_buffers.*[1 - state_current][measurement.state_offset + node.state_size], size_of(T));
-    }
-    node.state_size += size;
-    state_used      += size;
-    return result, !copy_forward;
+    data, first_frame := state(size_of(T), *value);
+    return cast(*T) data, first_frame;
 }
 state :: (initial: $T) -> *T, first_frame: bool {
     data, first_frame := state(T, initial);

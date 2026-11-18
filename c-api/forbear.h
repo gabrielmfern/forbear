@@ -3229,8 +3229,6 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
 #endif
 // ====== END AUTO GENERATED PORTION ======
 
-// Designated initializers let later fields override earlier ones, so FB_STYLE(.width = ...) replaces the default.
-// Override whole fields only: a nested override like .padding.x.x = 4 behaves differently between GCC and clang.
 #if defined(__clang__)
 #define FB_OVERRIDES_BEGIN _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Winitializer-overrides\"")
 #define FB_OVERRIDES_END   _Pragma("clang diagnostic pop")
@@ -3294,9 +3292,6 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
 #define FB_STRINGIFY(x)  FB_STRINGIFY_(x)
 #define FB_LOCATION_KEY __FILE__ ":" FB_STRINGIFY(__LINE__) ":" FB_STRINGIFY(__COUNTER__)
 
-// FB_ELEMENT(.width = ...) { children } opens the element, runs the block once, then closes it.
-// Leaving the block with break, return or goto skips fb_close_element.
-// FB_ELEMENT_KEYED(key, .width = ...) uses key instead of the call site, like Jai's manual_key. Use it inside loops.
 #define FB_ELEMENT_KEYED(key, ...) \
     for (int fb_element_latch = 0; fb_element_latch < 1;) \
         for (fb_Node_Opening_Data fb_element_data = fb_open_element(FB_STYLE(__VA_ARGS__), (key)); \
@@ -3304,8 +3299,6 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
              fb_element_latch = 1, fb_close_element(fb_element_data))
 #define FB_ELEMENT(...) FB_ELEMENT_KEYED(FB_LOCATION_KEY, __VA_ARGS__)
 
-// FB_SCOPE() card("title"); runs the next statement inside a scope, so the keys inside the component are unique
-// to this call site. Call each component through FB_SCOPE, and FB_SCOPE_KEYED(key) when called in a loop.
 #define FB_SCOPE_KEYED(key) \
     for (int fb_scope_latch = 0; fb_scope_latch < 1;) \
         for (fb_Node_Opening_Data fb_scope_data = fb_open_scope(key); \
@@ -3313,7 +3306,8 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
              fb_scope_latch = 1, fb_close_scope(fb_scope_data))
 #define FB_SCOPE() FB_SCOPE_KEYED(FB_LOCATION_KEY)
 
-// FB_TEXT("content") or FB_TEXT("content", .font_size = 20). FB_TEXT_KEYED takes the key first.
+#define FB_STATE(T, ...) ((T *)fb_state(sizeof(T), &(T){ __VA_ARGS__ }))
+
 #define FB_TEXT_KEYED(key, content, ...) fb_stext(FB_STYLE(__VA_ARGS__), (content), (key))
 #define FB_TEXT(content, ...)            FB_TEXT_KEYED(FB_LOCATION_KEY, content, __VA_ARGS__)
 
@@ -3372,6 +3366,8 @@ void fb_close_element(fb_Node_Opening_Data data);
 
 fb_Node_Opening_Data fb_open_scope(const char *key);
 void fb_close_scope(fb_Node_Opening_Data data);
+
+void *fb_state(int64_t size, const void *initial);
 
 void fb_stext(fb_Style style, const char *content, const char *key);
 void fb_text(const char *content, const char *key);
