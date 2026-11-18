@@ -91,7 +91,7 @@ c_type :: (h: *Header, type: *Type_Info, owner: string) -> string {
     type_name := "";
     if type.type == {
         case .VOID;   type_name = "void";
-        case .BOOL;   type_name = "Bool";
+        case .BOOL;   type_name = "_Bool";
         case .FLOAT;  type_name = ifx type.runtime_size == 4 then "float" else "double";
         case .STRING; type_name = "fb_String";
         case .TYPE;   type_name = "void *";
@@ -166,6 +166,17 @@ field :: (h: *Header, b: *String_Builder, member: Type_Info_Struct_Member, owner
         array := cast(*Type_Info_Array) type;
         dims   = tprint("%[%]", dims, array.array_count);
         type   = array.element_type;
+    }
+
+    if type.type == .PROCEDURE {
+        procedure := cast(*Type_Info_Procedure) type;
+        if procedure.procedure_flags & .IS_C_CALL && procedure.return_types.count <= 1 {
+            arguments: [..]string;
+            for procedure.argument_types array_add(*arguments, c_type(h, it, owner));
+            returns := ifx procedure.return_types.count then c_type(h, procedure.return_types[0], owner) else "void";
+            print_to_builder(b, "    % (*%)(%);\n", returns, join(member.name, dims), ifx arguments.count then join(..arguments, ", ") else "void");
+            return;
+        }
     }
 
     opaque_struct := type.type == .STRUCT && array_find(OPAQUE, (cast(*Type_Info_Struct) type).name);
