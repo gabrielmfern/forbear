@@ -3296,11 +3296,17 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
 
 // FB_ELEMENT(.width = ...) { children } opens the element, runs the block once, then closes it.
 // Leaving the block with break, return or goto skips fb_close_element.
-#define FB_ELEMENT(...) \
+// FB_ELEMENT_KEYED(key, .width = ...) uses key instead of the call site, like Jai's manual_key. Use it inside loops.
+#define FB_ELEMENT_KEYED(key, ...) \
     for (int fb_element_latch = 0; fb_element_latch < 1;) \
-        for (fb_Node_Opening_Data fb_element_data = fb_open_element(FB_STYLE(__VA_ARGS__), FB_LOCATION_KEY); \
+        for (fb_Node_Opening_Data fb_element_data = fb_open_element(FB_STYLE(__VA_ARGS__), (key)); \
              fb_element_latch < 1; \
              fb_element_latch = 1, fb_close_element(fb_element_data))
+#define FB_ELEMENT(...) FB_ELEMENT_KEYED(FB_LOCATION_KEY, __VA_ARGS__)
+
+// FB_TEXT("content") or FB_TEXT("content", .font_size = 20). FB_TEXT_KEYED takes the key first.
+#define FB_TEXT_KEYED(key, content, ...) fb_stext(FB_STYLE(__VA_ARGS__), (content), (key))
+#define FB_TEXT(content, ...)            FB_TEXT_KEYED(FB_LOCATION_KEY, content, __VA_ARGS__)
 
 #define FB_BASE_STYLE(...) \
     FB_OVERRIDES_BEGIN \
@@ -3327,7 +3333,7 @@ void fb_init_window(fb_Backend *backend,
                     fb_Window *window,
                     double width,
                     double height,
-                    char *title,
+                    const char *title,
                     double min_width,
                     double min_height,
                     double max_width,
@@ -3352,10 +3358,10 @@ void fb_layout(void);
 void fb_draw(fb_Vector4 clearing_color);
 void fb_prepare_for_next_frame(void);
 
-fb_Node_Opening_Data fb_open_element(fb_Style style, char *key);
+fb_Node_Opening_Data fb_open_element(fb_Style style, const char *key);
 void fb_close_element(fb_Node_Opening_Data data);
 
-void fb_stext(fb_Style style, char *content, char *key);
-void fb_text(char *content, char *key);
+void fb_stext(fb_Style style, const char *content, const char *key);
+void fb_text(const char *content, const char *key);
 
 #endif

@@ -13,7 +13,7 @@ static void render(void *data) {
         .text_wrapping = FB_TEXT_WRAPPING_CHARACTER,
         .direction     = FB_DIRECTION_VERTICAL,
     ) {
-        fb_text("forbear", "title");
+        FB_TEXT("forbear");
     }
 
     fb_layout();
