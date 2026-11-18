@@ -9,7 +9,10 @@ Major features:
 - HTML-like element styling and flex box-like layout;
 - Cross-platform: Windows, Linux (Wayland) and macOS.
 
-<!-- TO-DO: provide a way to download some of what's in ./apps so that people can easily see what forbear is capable of. -->
+[Calculator](https://github.com/gabrielmfern/Calculator) is built with forbear: a single 3.6 MB executable that shows its first frame in about 300 ms. [Download it for Windows](https://github.com/gabrielmfern/Calculator/releases/latest/download/Calculator.exe).
+
+<a href="https://github.com/gabrielmfern/Calculator"><img alt="Calculator, built with forbear: typing 12.5*(78-9) shows 862.5 as you type" src="www/assets/2026-11-18-calculator.gif" width="281"></a>
+
 <!-- TO-DO: in the future, add screenshots of programs built by the community with the library -->
 
 ## Quickstart
