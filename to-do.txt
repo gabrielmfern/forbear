@@ -17,6 +17,8 @@
 - Scrolling hooks and components
 - Support for font fallbacks when some Unicode doesn't have a glyph in the font. This is the case for emojis, where you might want to fallback to Segoe UI Emoji or something like that.
 - Cache the text shaping, and the text wrapping
+- Colorful fonts rendering
+- Subpixel text rendering
 - Create Twitch/YouTube chat viewer
 - Implement the Style fields that are currently no-ops
     - Draw background gradient
@@ -33,8 +35,7 @@
     - This is mainly because it looks like the fps is limited to ~100, while the actual forbear work is 0.5 milliseconds which should lead to about 2000 and it all points to OpenGL not working very well which leads to the low FPs
 - DirectX rendering instead of OpenGL for Windows
 - Use dynamically linked FreeType on Linux, DirectWrite on Windows and CoreText on macOS
-- Subpixel text rendering
-- Colorful fonts rendering
+- Implement Software rendering and render using it until the chosen graphics API is ready
 
 Big problems that I don't have an answer too:
 - Async
