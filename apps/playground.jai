@@ -11,9 +11,9 @@ BUILD_FLAGS :: "+forbear";
 frame_pool: Flat_Pool;
 
 Fps_Monitor :: () {
-    frames   := state(cast(float64)0.0);
-    fps      := state(cast(float64)0.0);
-    last     := state(cast(float64)0.0);
+    frames   := state(float64);
+    fps      := state(float64);
+    last     := state(float64);
 
     frames.* += 1;
     now      := seconds_since_init();
