@@ -4452,6 +4452,10 @@ get_parent_element_index :: () -> s64 {
     }
     return element_ancestor_index;
 }
+// Overload of open_element that automatically computes the key_hash from a manual key, the
+// scope_key and the caller_location.
+//
+// Internal API, in Jai use the `element` macro.
 open_element :: (style: Style, manual_key := "", location := #caller_location) -> Node_Opening_Data {
     key: u64;
     if manual_key.count > 0 {
@@ -4465,7 +4469,7 @@ open_element :: (style: Style, manual_key := "", location := #caller_location) -
     return open_element(style, key);
 }
 // Intermediary API that's used from adapters, such as the JavaScript one. When in jai, use `element`
-open_element :: (style: Style, key: u64) -> Node_Opening_Data {
+open_element :: (style: Style, key_hash: u64) -> Node_Opening_Data {
     previous_parent_index := context.forbear.parent_index;
     parent_index := get_parent_element_index();
 
@@ -4478,7 +4482,7 @@ open_element :: (style: Style, key: u64) -> Node_Opening_Data {
     } else if parent_index != -1 {
         node.z = context.forbear.node_tree[parent_index].z;
     }
-    node.key = key;
+    node.key = key_hash;
     if node.style.width.kind == {
         // We don't handle FIT or GROW since the node already has the right width by default
         case Sizing.Kind.FIXED;
@@ -4886,29 +4890,41 @@ shape_text :: (style: Complete_Style, content: string) -> Glyphs {
 
     return glyphs;
 }
+// Internal API shared between the overloads of text.
+set_node_glyphs :: (node: *Node, content: string) {
+    node              := *context.forbear.node_tree[data.node_index];
+    rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
+    set_weight(node.style.font, node.style.font_weight);
+    set_font_size(node.style.font, rounded_font_size);
+    node.glyphs          = shape_text(node.style, content);
+    font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
+    node.size            = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
+    node.min_size        = node.glyphs.min_size * font_units_to_point;
+    node.max_size        = node.glyphs.max_size * font_units_to_point;
+
+    if node.parent != -1 {
+        parent := context.forbear.node_tree[node.parent];
+        if parent.style.cursor == .DEFAULT {
+            node.style.cursor = .TEXT;
+        }
+        node.style.x_justification = parent.style.x_justification;
+        node.style.y_justification = parent.style.y_justification;
+    }
+}
+// API used for by the C-ABI and adapters.
+text :: (style: Style, content: string, key_hash: u64) -> s64 #expand {
+    data := open_element(style, key_hash);
+    set_node_glyphs(*context.forbear.node_tree[data.node_index], content);
+    close_element(data);
+    return data.node_index;
+}
 // TO-DO: Support receiving any number of arguments that are passed down to sprint to then be rendered into text.
 // TO-DO: Support building multiple text runs for the same node's glyphs. This is quite important for text-heavy applications might have, say, emphasis on text.
 text :: (style := Style.{}, content := "", manual_key := "", location := #caller_location) -> s64 #expand {
-    return element(style, manual_key, #code {
-        node := *context.forbear.node_tree[context.forbear.node_tree.count - 1];
-        rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
-        set_weight(node.style.font, node.style.font_weight);
-        set_font_size(node.style.font, rounded_font_size);
-        node.glyphs = shape_text(node.style, content);
-        font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
-        node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
-        node.min_size = node.glyphs.min_size * font_units_to_point;
-        node.max_size = node.glyphs.max_size * font_units_to_point;
-
-        if node.parent != -1 {
-            parent := context.forbear.node_tree[node.parent];
-            if parent.style.cursor == .DEFAULT {
-                node.style.cursor = .TEXT;
-            }
-            node.style.x_justification = parent.style.x_justification;
-            node.style.y_justification = parent.style.y_justification;
-        }
-    }, location);
+    data := open_element(style, manual_key, location);
+    set_node_glyphs(*context.forbear.node_tree[data.node_index], content);
+    close_element(data);
+    return data.node_index;
 }
 text :: (content: string, manual_key := "", location := #caller_location) -> s64 #expand {
     return text(Style.{}, content, "", location);

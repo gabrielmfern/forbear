@@ -50,26 +50,24 @@ javascript_shim :: #library,no_dll "./javascript";
 
 Javascript_Adapter :: struct {
     // see javascript.cpp
-    runtime: *void;
-    frame_context: #Context;
+    runtime:        *void;
+    frame_context:  #Context;
     openings_stack: [..]Node_Opening_Data;
 };
 
 init_adapter :: (
-    adapter: *Javascript_Adapter,
-    frame_pool_allocator: Allocator,
-    main_javascript_source: string,
+    adapter:                     *Javascript_Adapter,
+    frame_pool_allocator:        Allocator,
+    main_javascript_source:      string,
     main_javascript_source_name: string,
 ) {
     adapter.frame_context = context;
     adapter.frame_context.allocator = frame_pool_allocator;
-    adapter.runtime = javascript_init(
-        adapter,
-        main_javascript_source.data,
-        main_javascript_source.count,
-        main_javascript_source_name.data,
-        main_javascript_source_name.count
-    );
+    adapter.runtime = javascript_init(adapter,
+                                      main_javascript_source.data,
+                                      main_javascript_source.count,
+                                      main_javascript_source_name.data,
+                                      main_javascript_source_name.count );
     adapter.openings_stack.allocator = context.forbear.persistent_allocator;
     if adapter.runtime == null {
         log_error("could not initliaze javascript runtime\n");
@@ -92,16 +90,29 @@ Javascript_Style_Field :: enum u8 {
     Y_JUSTIFICATION; DIRECTION;
 };
 
-javascript_init :: (adapter: *void, source_data: *u8, source_count: s64, source_name_data: *u8, source_name_count: s64) -> *void #c_call #foreign javascript_shim;
-javascript_render :: (runtime_opaque: *void) -> void #c_call #foreign javascript_shim;
-javascript_style_get_number :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, result: *float64) -> bool #c_call #foreign javascript_shim;
-javascript_style_get_string_length :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
-javascript_style_copy_string :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, result: *u8, result_count: s64) -> bool #c_call #foreign javascript_shim;
-javascript_style_get_array_count :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
-javascript_style_get_array_number :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, index: s64, result: *float64) -> bool #c_call #foreign javascript_shim;
+javascript_init                          :: (adapter:          *void,
+                                             source_data:      *u8,
+                                             source_count:     s64,
+                                             source_name_data: *u8,
+                                             source_name_count: s64) -> *void #c_call #foreign javascript_shim;
+javascript_render                        :: (runtime_opaque: *void) -> void #c_call #foreign javascript_shim;
+javascript_style_get_number              :: (runtime_opaque: *void,
+                                             style_object:   *void,
+                                             field:          Javascript_Style_Field,
+                                             result: *float64) -> bool #c_call #foreign javascript_shim;
+javascript_style_get_string_length       :: (runtime_opaque: *void,
+                                             style_object:   *void,
+                                             field: Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
+javascript_style_copy_string             :: (runtime_opaque: *void,
+                                             style_object:   *void,
+                                             field:          Javascript_Style_Field,
+                                             result:         *u8,
+                                             result_count: s64) -> bool #c_call #foreign javascript_shim;
+javascript_style_get_array_count         :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
+javascript_style_get_array_number        :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, index: s64, result: *float64) -> bool #c_call #foreign javascript_shim;
 javascript_style_get_array_string_length :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, index: s64) -> s64 #c_call #foreign javascript_shim;
-javascript_style_copy_array_string :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, index: s64, result: *u8, result_count: s64) -> bool #c_call #foreign javascript_shim;
-javascript_style_get_external :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> *void #c_call #foreign javascript_shim;
+javascript_style_copy_array_string       :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, index: s64, result: *u8, result_count: s64) -> bool #c_call #foreign javascript_shim;
+javascript_style_get_external            :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> *void #c_call #foreign javascript_shim;
 
 // a little annoying that we have to jump through these hoops, but since Style
 // is quite complicated and us making it C_ABI compatible would mean a lot of
@@ -395,7 +406,10 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
 }
 
 #program_export
-forbear_open :: (adapter: *Javascript_Adapter, js_style_object: *void, manual_key_data: *u8, manual_key_count: s64) #c_call {
+forbear_open :: (adapter:          *Javascript_Adapter,
+                 js_style_object:  *void,
+                 manual_key_data:  *u8,
+                 manual_key_count: s64) #c_call {
     push_context adapter.frame_context {
         key: u64;
         key = fnv1a_hash(manual_key_data, manual_key_count);
@@ -416,38 +430,22 @@ forbear_close :: (adapter: *Javascript_Adapter) #c_call {
 }
 
 #program_export
-forbear_text :: (adapter: *Javascript_Adapter, js_style_object: *void, content_data: *u8, content_count: s64, manual_key_data: *u8, manual_key_count: s64) #c_call {
+forbear_text :: (adapter:          *Javascript_Adapter,
+                 js_style_object:  *void,
+                 content_data:     *u8,
+                 content_count:    s64,
+                 manual_key_data:  *u8,
+                 manual_key_count: s64) #c_call {
     push_context adapter.frame_context {
         // TODO: can't this just be a text wrapper?
         content := to_string(content_data, content_count);
-        key: u64;
-        key = fnv1a_hash(manual_key_data, manual_key_count);
+        key_hash: u64;
+        key_hash = fnv1a_hash(manual_key_data, manual_key_count);
         if context.forbear.scope_key != U64_MAX {
-            key = fnv1a_hash(context.forbear.scope_key, key);
+            key_hash = fnv1a_hash(context.forbear.scope_key, key_hash);
         }
         style := style_from(adapter, js_style_object);
 
-        using opening := open_element(style, key);
-        node := *context.forbear.node_tree[node_index];
-
-        // TODO: find out how to not have this code here duplicated with the one on for `text`
-        rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
-        font_units_to_point := (cast(float) rounded_font_size) / (cast(float) context.forbear.window.scale) / (cast(float) node.style.font.raster_face.units_per_EM);
-        set_weight(node.style.font, node.style.font_weight);
-        set_font_size(node.style.font, rounded_font_size);
-        node.glyphs = shape_text(node.style, content);
-        node.size = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
-        node.min_size = node.glyphs.min_size * font_units_to_point;
-        node.max_size = node.glyphs.max_size * font_units_to_point;
-
-        if node.parent != -1 {
-            parent := context.forbear.node_tree[node.parent];
-            if parent.style.cursor == .DEFAULT {
-                node.style.cursor = .TEXT;
-            }
-            node.style.x_justification = parent.style.x_justification;
-            node.style.y_justification = parent.style.y_justification;
-        }
-        close_element(opening);
+        text(style, content, key_hash);
     }
 }
