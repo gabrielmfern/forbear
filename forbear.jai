@@ -1808,15 +1808,15 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     };
     init_window :: (backend: *Backend,
                     window:  *Wayland_EGL_Window,
-                    width:   s32,
-                    height:  s32,
+                    width:   float64,
+                    height:  float64,
                     title:   string,
                     min_width  := FLOAT64_NAN,
                     min_height := FLOAT64_NAN,
                     max_width  := FLOAT64_NAN,
                     max_height := FLOAT64_NAN) {
-        window.logical_width = width;
-        window.logical_height = height;
+        window.logical_width = xx width;
+        window.logical_height = xx height;
         window.theme = .LIGHT;
 
         init_keyboard_state(*window.keyboard_state);
@@ -1839,14 +1839,14 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Title.{ title = title });
         if !isnan(min_width) || !isnan(min_height) {
             send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Min_Size.{
-                width  = ifx isnan(min_width)  then 0 else xx min_width,
-                height = ifx isnan(min_height) then 0 else xx min_height,
+                width  = ifx isnan(min_width)  then 0 else cast(s32) min_width,
+                height = ifx isnan(min_height) then 0 else cast(s32) min_height,
             });
         }
         if !isnan(max_width) || !isnan(max_height) {
             send_wayland_message(connection, window.xdg_toplevel_id, Xdg_Toplevel_Request_Set_Max_Size.{
-                width  = ifx isnan(max_width)  then 0 else xx max_width,
-                height = ifx isnan(max_height) then 0 else xx max_height,
+                width  = ifx isnan(max_width)  then 0 else cast(s32) max_width,
+                height = ifx isnan(max_height) then 0 else cast(s32) max_height,
             });
         }
         send_wayland_message(connection, window.wl_surface_id, Wl_Surface_Request_Commit.{});
