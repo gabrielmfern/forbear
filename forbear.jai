@@ -780,7 +780,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     backend.clipboard_text_buffer.count = count;
                 }
                 WideCharToMultiByte(CP_UTF8, 0, wide, -1, backend.clipboard_text_buffer.data, count, null, null);
-                backend.clipboard_text = .{ count, backend.clipboard_text_buffer.data };
+                backend.clipboard_text = .{ count - 1, backend.clipboard_text_buffer.data };
             }
         }
     }
