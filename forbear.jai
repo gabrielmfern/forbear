@@ -971,9 +971,9 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 
     MacOS_GL_Backend :: struct {
         #if C_ABI {
-            Render_Proc :: (data: *void) #c_call;
+            Render_Proc :: #type (data: *void) #c_call;
         } else {
-            Render_Proc :: (data: *void);
+            Render_Proc :: #type (data: *void);
         }
 
         render: Render_Proc;
