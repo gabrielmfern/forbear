@@ -163,47 +163,49 @@ fb_line_height_fixed :: (value: float) -> Line_Height #c_call { push_context fra
 
 c_easing: (t: float) -> float #c_call;
 call_c_easing :: (t: float) -> float { return c_easing(t); }
-c_transition :: (key: *u8, value: $T, duration: float, easing: (t: float) -> float #c_call) -> T {
+c_use_transition :: (value: $T, duration: float, easing: (t: float) -> float #c_call) -> T {
     c_easing = easing;
-    data := open_scope(to_string(key));
-    return close_scope(data, transition(value, duration, call_c_easing));
-}
-c_spring_transition :: (key: *u8, target: $T, config: Spring_Config(T)) -> T {
-    data := open_scope(to_string(key));
-    return close_scope(data, spring_transition(target, config));
+    return use_transition(value, duration, call_c_easing);
 }
 #program_export
-fb_transition_f :: (key: *u8, value: float, duration: float, easing: (t: float) -> float #c_call) -> float #c_call {
-    push_context frame_context { return c_transition(key, value, duration, easing); }
+fb_use_transition_f :: (value: float, duration: float, easing: (t: float) -> float #c_call) -> float #c_call {
+    push_context frame_context { return c_use_transition(value, duration, easing); }
 }
 #program_export
-fb_transition_v2 :: (key: *u8, value: Vector2, duration: float, easing: (t: float) -> float #c_call) -> Vector2 #c_call {
-    push_context frame_context { return c_transition(key, value, duration, easing); }
+fb_use_transition_v2 :: (value: Vector2, duration: float, easing: (t: float) -> float #c_call) -> Vector2 #c_call {
+    push_context frame_context { return c_use_transition(value, duration, easing); }
 }
 #program_export
-fb_transition_v3 :: (key: *u8, value: Vector3, duration: float, easing: (t: float) -> float #c_call) -> Vector3 #c_call {
-    push_context frame_context { return c_transition(key, value, duration, easing); }
+fb_use_transition_v3 :: (value: Vector3, duration: float, easing: (t: float) -> float #c_call) -> Vector3 #c_call {
+    push_context frame_context { return c_use_transition(value, duration, easing); }
 }
 #program_export
-fb_transition_v4 :: (key: *u8, value: Vector4, duration: float, easing: (t: float) -> float #c_call) -> Vector4 #c_call {
-    push_context frame_context { return c_transition(key, value, duration, easing); }
+fb_use_transition_v4 :: (value: Vector4, duration: float, easing: (t: float) -> float #c_call) -> Vector4 #c_call {
+    push_context frame_context { return c_use_transition(value, duration, easing); }
 }
 #program_export
-fb_spring_transition_f :: (key: *u8, target: float, config: Spring_Config(float)) -> float #c_call {
-    push_context frame_context { return c_spring_transition(key, target, config); }
+fb_use_spring_transition_f :: (target: float, config: Spring_Config(float)) -> float #c_call {
+    push_context frame_context { return use_spring_transition(target, config); }
 }
 #program_export
-fb_spring_transition_v2 :: (key: *u8, target: Vector2, config: Spring_Config(Vector2)) -> Vector2 #c_call {
-    push_context frame_context { return c_spring_transition(key, target, config); }
+fb_use_spring_transition_v2 :: (target: Vector2, config: Spring_Config(Vector2)) -> Vector2 #c_call {
+    push_context frame_context { return use_spring_transition(target, config); }
 }
 #program_export
-fb_spring_transition_v3 :: (key: *u8, target: Vector3, config: Spring_Config(Vector3)) -> Vector3 #c_call {
-    push_context frame_context { return c_spring_transition(key, target, config); }
+fb_use_spring_transition_v3 :: (target: Vector3, config: Spring_Config(Vector3)) -> Vector3 #c_call {
+    push_context frame_context { return use_spring_transition(target, config); }
 }
 #program_export
-fb_spring_transition_v4 :: (key: *u8, target: Vector4, config: Spring_Config(Vector4)) -> Vector4 #c_call {
-    push_context frame_context { return c_spring_transition(key, target, config); }
+fb_use_spring_transition_v4 :: (target: Vector4, config: Spring_Config(Vector4)) -> Vector4 #c_call {
+    push_context frame_context { return use_spring_transition(target, config); }
 }
+
+#program_export
+fb_schedule_scroll :: (state: *Scrolling_State, position: Vector2, animate: bool) #c_call {
+    push_context frame_context { schedule_scroll(state, position, animate); }
+}
+#program_export
+fb_use_scrolling :: (state: *Scrolling_State) #c_call { push_context frame_context { use_scrolling(state); } }
 
 #program_export
 fb_from :: (style: Complete_Style) -> Base_Style #c_call { push_context frame_context { return from(style); } }

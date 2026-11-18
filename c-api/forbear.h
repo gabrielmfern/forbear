@@ -26,6 +26,39 @@ _Static_assert(offsetof(fb_Vector3, x) == 0, "fb_Vector3.x");
 _Static_assert(offsetof(fb_Vector3, y) == 4, "fb_Vector3.y");
 _Static_assert(offsetof(fb_Vector3, z) == 8, "fb_Vector3.z");
 
+typedef struct fb_Scrolling_State fb_Scrolling_State;
+typedef struct fb_Vector2 fb_Vector2;
+struct fb_Vector2 {
+    float x;
+    float y;
+};
+_Static_assert(sizeof(fb_Vector2) == 8, "fb_Vector2");
+_Static_assert(offsetof(fb_Vector2, x) == 0, "fb_Vector2.x");
+_Static_assert(offsetof(fb_Vector2, y) == 4, "fb_Vector2.y");
+
+typedef struct fb_Scheduled_Scroll fb_Scheduled_Scroll;
+struct fb_Scheduled_Scroll {
+    _Bool defined;
+    _Bool defined_this_frame;
+    fb_Vector2 position;
+    _Bool animate;
+};
+_Static_assert(sizeof(fb_Scheduled_Scroll) == 16, "fb_Scheduled_Scroll");
+_Static_assert(offsetof(fb_Scheduled_Scroll, defined) == 0, "fb_Scheduled_Scroll.defined");
+_Static_assert(offsetof(fb_Scheduled_Scroll, defined_this_frame) == 1, "fb_Scheduled_Scroll.defined_this_frame");
+_Static_assert(offsetof(fb_Scheduled_Scroll, position) == 4, "fb_Scheduled_Scroll.position");
+_Static_assert(offsetof(fb_Scheduled_Scroll, animate) == 12, "fb_Scheduled_Scroll.animate");
+
+struct fb_Scrolling_State {
+    fb_Vector2 offset;
+    fb_Vector2 effective_offset;
+    fb_Scheduled_Scroll scheduled_scroll;
+};
+_Static_assert(sizeof(fb_Scrolling_State) == 32, "fb_Scrolling_State");
+_Static_assert(offsetof(fb_Scrolling_State, offset) == 0, "fb_Scrolling_State.offset");
+_Static_assert(offsetof(fb_Scrolling_State, effective_offset) == 8, "fb_Scrolling_State.effective_offset");
+_Static_assert(offsetof(fb_Scrolling_State, scheduled_scroll) == 16, "fb_Scrolling_State.scheduled_scroll");
+
 typedef struct fb_Complete_Style fb_Complete_Style;
 typedef struct fb_Background fb_Background;
 typedef uint8_t fb_Background_Kind;
@@ -56,15 +89,6 @@ _Static_assert(offsetof(fb_Gradient_Stop, color) == 0, "fb_Gradient_Stop.color")
 _Static_assert(offsetof(fb_Gradient_Stop, position) == 16, "fb_Gradient_Stop.position");
 
 typedef struct { int64_t count; fb_Gradient_Stop *data; } fb_View_Gradient_Stop;
-
-typedef struct fb_Vector2 fb_Vector2;
-struct fb_Vector2 {
-    float x;
-    float y;
-};
-_Static_assert(sizeof(fb_Vector2) == 8, "fb_Vector2");
-_Static_assert(offsetof(fb_Vector2, x) == 0, "fb_Vector2.x");
-_Static_assert(offsetof(fb_Vector2, y) == 4, "fb_Vector2.y");
 
 struct fb_Linear_Gradient {
     fb_View_Gradient_Stop stops;
@@ -1555,6 +1579,39 @@ _Static_assert(offsetof(fb_Vector3, x) == 0, "fb_Vector3.x");
 _Static_assert(offsetof(fb_Vector3, y) == 4, "fb_Vector3.y");
 _Static_assert(offsetof(fb_Vector3, z) == 8, "fb_Vector3.z");
 
+typedef struct fb_Scrolling_State fb_Scrolling_State;
+typedef struct fb_Vector2 fb_Vector2;
+struct fb_Vector2 {
+    float x;
+    float y;
+};
+_Static_assert(sizeof(fb_Vector2) == 8, "fb_Vector2");
+_Static_assert(offsetof(fb_Vector2, x) == 0, "fb_Vector2.x");
+_Static_assert(offsetof(fb_Vector2, y) == 4, "fb_Vector2.y");
+
+typedef struct fb_Scheduled_Scroll fb_Scheduled_Scroll;
+struct fb_Scheduled_Scroll {
+    _Bool defined;
+    _Bool defined_this_frame;
+    fb_Vector2 position;
+    _Bool animate;
+};
+_Static_assert(sizeof(fb_Scheduled_Scroll) == 16, "fb_Scheduled_Scroll");
+_Static_assert(offsetof(fb_Scheduled_Scroll, defined) == 0, "fb_Scheduled_Scroll.defined");
+_Static_assert(offsetof(fb_Scheduled_Scroll, defined_this_frame) == 1, "fb_Scheduled_Scroll.defined_this_frame");
+_Static_assert(offsetof(fb_Scheduled_Scroll, position) == 4, "fb_Scheduled_Scroll.position");
+_Static_assert(offsetof(fb_Scheduled_Scroll, animate) == 12, "fb_Scheduled_Scroll.animate");
+
+struct fb_Scrolling_State {
+    fb_Vector2 offset;
+    fb_Vector2 effective_offset;
+    fb_Scheduled_Scroll scheduled_scroll;
+};
+_Static_assert(sizeof(fb_Scrolling_State) == 32, "fb_Scrolling_State");
+_Static_assert(offsetof(fb_Scrolling_State, offset) == 0, "fb_Scrolling_State.offset");
+_Static_assert(offsetof(fb_Scrolling_State, effective_offset) == 8, "fb_Scrolling_State.effective_offset");
+_Static_assert(offsetof(fb_Scrolling_State, scheduled_scroll) == 16, "fb_Scrolling_State.scheduled_scroll");
+
 typedef struct fb_Complete_Style fb_Complete_Style;
 typedef struct fb_Background fb_Background;
 typedef uint8_t fb_Background_Kind;
@@ -1585,15 +1642,6 @@ _Static_assert(offsetof(fb_Gradient_Stop, color) == 0, "fb_Gradient_Stop.color")
 _Static_assert(offsetof(fb_Gradient_Stop, position) == 16, "fb_Gradient_Stop.position");
 
 typedef struct { int64_t count; fb_Gradient_Stop *data; } fb_View_Gradient_Stop;
-
-typedef struct fb_Vector2 fb_Vector2;
-struct fb_Vector2 {
-    float x;
-    float y;
-};
-_Static_assert(sizeof(fb_Vector2) == 8, "fb_Vector2");
-_Static_assert(offsetof(fb_Vector2, x) == 0, "fb_Vector2.x");
-_Static_assert(offsetof(fb_Vector2, y) == 4, "fb_Vector2.y");
 
 struct fb_Linear_Gradient {
     fb_View_Gradient_Stop stops;
@@ -3434,31 +3482,34 @@ fb_Line_Height fb_line_height_percentage(float value);
 fb_Line_Height fb_line_height_fixed(float value);
 
 typedef float (*fb_Easing)(float t);
-float fb_transition_f(const char *key, float value, float duration, fb_Easing easing);
-fb_Vector2 fb_transition_v2(const char *key, fb_Vector2 value, float duration, fb_Easing easing);
-fb_Vector3 fb_transition_v3(const char *key, fb_Vector3 value, float duration, fb_Easing easing);
-fb_Vector4 fb_transition_v4(const char *key, fb_Vector4 value, float duration, fb_Easing easing);
-#define FB_TRANSITION(value, duration, easing) \
+float fb_use_transition_f(float value, float duration, fb_Easing easing);
+fb_Vector2 fb_use_transition_v2(fb_Vector2 value, float duration, fb_Easing easing);
+fb_Vector3 fb_use_transition_v3(fb_Vector3 value, float duration, fb_Easing easing);
+fb_Vector4 fb_use_transition_v4(fb_Vector4 value, float duration, fb_Easing easing);
+#define FB_USE_TRANSITION(value, duration, easing) \
     _Generic((value), \
-        float: fb_transition_f, \
-        fb_Vector2: fb_transition_v2, \
-        fb_Vector3: fb_transition_v3, \
-        fb_Vector4: fb_transition_v4)(FB_LOCATION_KEY, value, duration, easing)
+        float: fb_use_transition_f, \
+        fb_Vector2: fb_use_transition_v2, \
+        fb_Vector3: fb_use_transition_v3, \
+        fb_Vector4: fb_use_transition_v4)(value, duration, easing)
 
 typedef struct { float stiffness, damping, mass; float *current; } fb_Spring_Config_f;
 typedef struct { float stiffness, damping, mass; fb_Vector2 *current; } fb_Spring_Config_v2;
 typedef struct { float stiffness, damping, mass; fb_Vector3 *current; } fb_Spring_Config_v3;
 typedef struct { float stiffness, damping, mass; fb_Vector4 *current; } fb_Spring_Config_v4;
-float fb_spring_transition_f(const char *key, float target, fb_Spring_Config_f config);
-fb_Vector2 fb_spring_transition_v2(const char *key, fb_Vector2 target, fb_Spring_Config_v2 config);
-fb_Vector3 fb_spring_transition_v3(const char *key, fb_Vector3 target, fb_Spring_Config_v3 config);
-fb_Vector4 fb_spring_transition_v4(const char *key, fb_Vector4 target, fb_Spring_Config_v4 config);
-#define FB_SPRING_TRANSITION(target, config) \
+float fb_use_spring_transition_f(float target, fb_Spring_Config_f config);
+fb_Vector2 fb_use_spring_transition_v2(fb_Vector2 target, fb_Spring_Config_v2 config);
+fb_Vector3 fb_use_spring_transition_v3(fb_Vector3 target, fb_Spring_Config_v3 config);
+fb_Vector4 fb_use_spring_transition_v4(fb_Vector4 target, fb_Spring_Config_v4 config);
+#define FB_USE_SPRING_TRANSITION(target, config) \
     _Generic((target), \
-        float: fb_spring_transition_f, \
-        fb_Vector2: fb_spring_transition_v2, \
-        fb_Vector3: fb_spring_transition_v3, \
-        fb_Vector4: fb_spring_transition_v4)(FB_LOCATION_KEY, target, config)
+        float: fb_use_spring_transition_f, \
+        fb_Vector2: fb_use_spring_transition_v2, \
+        fb_Vector3: fb_use_spring_transition_v3, \
+        fb_Vector4: fb_use_spring_transition_v4)(target, config)
+
+void fb_schedule_scroll(fb_Scrolling_State *state, fb_Vector2 position, _Bool animate);
+void fb_use_scrolling(fb_Scrolling_State *state);
 
 fb_Base_Style fb_from(fb_Complete_Style style);
 

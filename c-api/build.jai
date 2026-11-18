@@ -4,7 +4,7 @@
 #import "String";
 
 ROOTS  :: string.["Forbear", "Style", "Complete_Style", "Base_Style", "Font", "Node_Opening_Data",
-    "Windows_GL_Window", "Windows_GL_Backend", "Wayland_EGL_Window", "Wayland_EGL_Backend", "MacOS_GL_Window", "MacOS_GL_Backend", "Wayland_Event", "Mouse_Button", "Vector3"];
+    "Windows_GL_Window", "Windows_GL_Backend", "Wayland_EGL_Window", "Wayland_EGL_Backend", "MacOS_GL_Window", "MacOS_GL_Backend", "Wayland_Event", "Mouse_Button", "Vector3", "Scrolling_State"];
 OPAQUE :: string.["Table", "Flat_Pool", "kbts_font", "Context"];
 
 Target :: struct {
