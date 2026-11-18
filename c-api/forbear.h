@@ -1670,9 +1670,7 @@ void fb_update_backend(fb_Windows_GL_Backend * backend);
 void fb_init_window(fb_Windows_GL_Backend * backend, fb_Windows_GL_Window * window, double width, double height, const char * title, double min_width, double min_height, double max_width, double max_height);
 void fb_init_backend(fb_Windows_GL_Backend * backend);
 void fb_init_forbear(fb_Forbear * forbear, fb_Windows_GL_Backend * program_backend, fb_Windows_GL_Window * program_window, fb_Base_Style program_base_style);
-void __jai_runtime_fini(void * _context);
 _Bool fb_is_key_held(fb_Key key);
-void * __jai_runtime_init(fb_s32 argc, void * argv);
 typedef struct fb_Spring_Config_Vector4 fb_Spring_Config_Vector4;
 struct fb_Spring_Config_Vector4 {
     float stiffness;
@@ -3492,7 +3490,6 @@ void * fb_frame_alloc(fb_s64 size);
 void * fb_state(fb_s64 size, void * initial);
 void fb_prepare_for_next_frame(void);
 void fb_layout(void);
-void __jai_runtime_fini(void * _context);
 void fb_init_forbear(fb_Forbear * forbear, fb_Wayland_EGL_Backend * program_backend, fb_Wayland_EGL_Window * program_window, fb_Base_Style program_base_style);
 void fb_init_backend(fb_Wayland_EGL_Backend * backend);
 void fb_init_window(fb_Wayland_EGL_Backend * backend, fb_Wayland_EGL_Window * window, double width, double height, const char * title, double min_width, double min_height, double max_width, double max_height);
@@ -3567,7 +3564,6 @@ _Bool fb_on_click(fb_Mouse_Button button, _Bool check_inside, _Bool movement_thr
 _Bool fb_on_key_down(fb_Key key, _Bool on_repeat);
 _Bool fb_on_key_up(fb_Key key);
 _Bool fb_is_key_held(fb_Key key);
-void * __jai_runtime_init(fb_s32 argc, void * argv);
 typedef struct fb_Spring_Config_float fb_Spring_Config_float;
 struct fb_Spring_Config_float {
     float stiffness;

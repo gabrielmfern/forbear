@@ -117,7 +117,7 @@ int main() {
             fb_update_window(&backend, &window);
         #elif defined(__linux__)
             while (true) {
-                event := fb_next_event(&backend.connection, !fb_can_draw(window));
+                fb_Wayland_Event event = fb_next_event(&backend.connection, !fb_can_draw(window));
                 if (!event.something) {
                     break;
                 }
