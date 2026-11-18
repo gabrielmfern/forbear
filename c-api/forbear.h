@@ -1515,4 +1515,15 @@ typedef fb_Windows_GL_Window fb_Window;
 typedef fb_Windows_GL_Backend fb_Backend;
 // ====== END AUTO GENERATED PORTION ======
 
+void fb_init_forbear(fb_Forbear *forbear,
+                     fb_Window *program_window,
+                     fb_Backend *program_backend,
+                     fb_base_Style base_style);
+
+fb_Node_Opening_Data fb_open_element(fb_Style style, char *key);
+void fb_close_element(fb_Node_Opening_Data data);
+
+void fb_stext(fb_Style style, char *content, char *key);
+void fb_text(char *content, char *key);
+
 #endif

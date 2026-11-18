@@ -6,9 +6,9 @@ jai_context: #Context;
 
 #program_export
 fb_init_forbear :: (forbear:            *Forbear,
-                 program_window:     *Window,
-                 program_backend:    *Backend,
-                 program_base_style: Base_Style) #c_call {
+                    program_window:     *Window,
+                    program_backend:    *Backend,
+                    program_base_style: Base_Style) #c_call {
     push_context jai_context {
         forbear.* = .{};
         init_forbear(forbear, program_window, program_backend, program_base_style);
@@ -16,10 +16,8 @@ fb_init_forbear :: (forbear:            *Forbear,
 }
 
 #program_export
-fb_open_element :: (
-    style:        Style,
-    key: *u8,
-) -> Node_Opening_Data #c_call {
+fb_open_element :: (style: Style,
+                    key:   *u8) -> Node_Opening_Data #c_call {
     push_context jai_context {
         key_string := to_string(key);
         key_hash   : u64;
