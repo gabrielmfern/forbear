@@ -51,15 +51,33 @@
 
 <p><a href="https://github.com/gabrielmfern/forbear">https://github.com/gabrielmfern/forbear</a></p>
 
-<form class="subscribe flex items-center gap-2 mt-8 text-sm">
-<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
-<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
-</form>
-<div class="mt-2 text-sm text-muted"></div>
+<div class="flex flex-col sm:flex-row sm:items-center gap-8 my-12">
+<video src="assets/2026-11-18-calculator.mp4" poster="assets/2026-11-18-calculator.png" width="281" height="556" autoplay muted loop playsinline aria-label="Calculator, built with forbear: typing 12.5*(78-9) shows 862.5 as you type" class="w-[281px] h-auto shrink-0 rounded-xl border border-ui"></video>
+<div>
+<h2 class="mt-0">Calculator</h2>
+<p>A native calculator built with forbear. The result updates as you type.</p>
+<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 my-6">
+<dt class="text-bright tabular-nums">3.6 MB</dt><dd class="text-muted">executable, a single file</dd>
+<dt class="text-bright tabular-nums">~300 ms</dt><dd class="text-muted">to show the first frame</dd>
+<dt class="text-bright tabular-nums">10.5 MB</dt><dd class="text-muted">of memory</dd>
+<dt class="text-bright tabular-nums">1,155</dt><dd class="text-muted">lines of Jai</dd>
+</dl>
+<div class="flex items-center gap-4 text-sm">
+<a href="https://github.com/gabrielmfern/Calculator/releases/latest/download/Calculator.exe" class="bg-yellow hover:bg-bright-yellow text-float hover:text-float font-medium px-3 py-1 rounded">Download for Windows</a>
+<a href="https://github.com/gabrielmfern/Calculator">Source code</a>
+</div>
+</div>
+</div>
 
 <h2>forbear log</h2>
 
 <p>Entries sharing the development progress of forbear.</p>
+
+<form class="subscribe flex items-center gap-2 mt-4 text-sm">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
+</form>
+<div class="mt-2 text-sm text-muted"></div>
 
 <ul class="my-8 space-y-1">
 <li class="flex gap-4"><span class="text-muted tabular-nums shrink-0">2026-11-01</span><span class="text-muted tabular-nums shrink-0">004</span><a href="log/004-react-like-state-without-the-heap.html">React-like state (mostly) without the heap, events without callbacks</a></li>
