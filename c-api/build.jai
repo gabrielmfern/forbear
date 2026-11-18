@@ -16,6 +16,7 @@ Target :: struct {
     workspace: Workspace;
     roots:     [..]*Type_Info_Struct;
     enums:     [..]*Type_Info_Enum;
+    exports:   [..]*Code_Declaration;
     section:   string;
 }
 
@@ -34,8 +35,8 @@ build :: () {
         if it.os == .MACOS && OS != .MACOS continue;
         remaining += 1;
 
-        it.workspace = compiler_create_workspace(tprint("%", it.os));
-        options := get_build_options(it.workspace);
+        it.workspace       = compiler_create_workspace(tprint("%", it.os));
+        options           := get_build_options(it.workspace);
         options.os_target  = it.os;
         options.cpu_target = it.cpu;
         if it.os == OS {
@@ -66,6 +67,12 @@ build :: () {
                     type := (cast(*Code_Enum) it.expression).external_type;
                     if type && array_find(ROOTS, type.name) array_add_if_unique(*target.enums, type);
                 }
+                for typechecked.declarations {
+                    declaration := it.expression;
+                    if declaration.flags & .PROGRAM_EXPORT && declaration.expression && declaration.expression.type.type == .PROCEDURE {
+                        array_add_if_unique(*target.exports, declaration);
+                    }
+                }
             case .PHASE;
                 phase := cast(*Message_Phase) message;
                 if phase.phase == .TYPECHECKED_ALL_WE_CAN && phase.num_items_waiting_to_typecheck == 0 {
@@ -74,8 +81,27 @@ build :: () {
                     append(*header.builder, "typedef struct { int64_t count; uint8_t *data; } fb_String;\n");
                     for target.roots emit_struct(*header, it);
                     for target.enums emit_enum(*header, it, "");
-                    print_to_builder(*header.builder, "typedef fb_% fb_Window;\ntypedef fb_% fb_Backend;\n#endif\n",
+                    print_to_builder(*header.builder, "typedef fb_% fb_Window;\ntypedef fb_% fb_Backend;\n\n",
                                      target.window, target.backend);
+                    for target.exports {
+                        procedure := cast(*Type_Info_Procedure) it.expression.type;
+                        assert(procedure.procedure_flags & .IS_C_CALL && procedure.return_types.count <= 1,
+                               "%: exported procedures must be #c_call with at most one return value", it.name);
+                        assert(it.expression.kind == .PROCEDURE_HEADER,
+                               "%: write the export as a procedure, not an alias, so its parameter names reach the header", it.name);
+                        procedure_header := cast(*Code_Procedure_Header) it.expression;
+                        arguments: [..]string;
+                        for procedure.argument_types {
+                            to := ifx it.type == .POINTER then (cast(*Type_Info_Pointer) it).pointer_to else null;
+                            is_c_string := to && to.type == .INTEGER && to.runtime_size == 1 && !(cast(*Type_Info_Integer) to).signed;
+                            argument_type := ifx is_c_string then "const char *" else c_type(*header, it, "");
+                            array_add(*arguments, tprint("% %", argument_type, procedure_header.arguments[it_index].name));
+                        }
+                        returns := ifx procedure.return_types.count then c_type(*header, procedure.return_types[0], "") else "void";
+                        print_to_builder(*header.builder, "% %(%);\n", returns, it.name,
+                                         ifx arguments.count then join(..arguments, ", ") else "void");
+                    }
+                    append(*header.builder, "#endif\n");
                     target.section = builder_to_string(*header.builder);
                 }
             case .COMPLETE;
@@ -108,7 +134,8 @@ c_type :: (h: *Header, type: *Type_Info, owner: string) -> string {
         case .STRUCT;  type_name = emit_struct(h, cast(*Type_Info_Struct) type);
         case .POINTER;
             to := (cast(*Type_Info_Pointer) type).pointer_to;
-            if to.type == .STRUCT && array_find(ROOTS, (cast(*Type_Info_Struct) to).name) {
+            if to.type == .STRUCT && (array_find(ROOTS, (cast(*Type_Info_Struct) to).name)
+                                      || array_find(h.emitted_definitions, struct_name(h, cast(*Type_Info_Struct) to))) {
                 type_name = tprint("% *", emit_struct(h, cast(*Type_Info_Struct) to));
             } else if to.type == .INTEGER || to.type == .FLOAT || to.type == .BOOL {
                 type_name = tprint("% *", c_type(h, to, owner));
@@ -126,6 +153,20 @@ c_type :: (h: *Header, type: *Type_Info, owner: string) -> string {
                 if resizable emit_struct(h, type_info(Allocator));
                 print_to_builder(*h.builder, "typedef struct { int64_t count; % *data;% } %;\n\n",
                                  element, ifx resizable then " int64_t allocated; fb_Allocator allocator;" else "", name);
+            }
+            type_name = name;
+        case .PROCEDURE;
+            procedure := cast(*Type_Info_Procedure) type;
+            assert(procedure.procedure_flags & .IS_C_CALL && procedure.return_types.count <= 1,
+                   "c_type: procedure in % must be #c_call with at most one return value", owner);
+            returns := ifx procedure.return_types.count then c_type(h, procedure.return_types[0], owner) else "void";
+            arguments: [..]string;
+            for procedure.argument_types array_add(*arguments, c_type(h, it, owner));
+            name := replace(tprint("fb_Proc_%_%", returns, join(..arguments, "_")), " *", "_ptr");
+            if !array_find(h.emitted_definitions, name) {
+                array_add(*h.emitted_definitions, name);
+                print_to_builder(*h.builder, "typedef % (*%)(%);\n", returns, name,
+                                 ifx arguments.count then join(..arguments, ", ") else "void");
             }
             type_name = name;
         case;
@@ -191,8 +232,19 @@ field :: (h: *Header, b: *String_Builder, member: Type_Info_Struct_Member, owner
     }
     print_to_builder(b, "    % %;\n", c_type(h, type, owner), join(member.name, dims));
 }
-emit_struct :: (h: *Header, type: *Type_Info_Struct) -> string {
+struct_name :: (h: *Header, type: *Type_Info_Struct) -> string {
     name := tprint("fb_%", type.name);
+    for type.specified_parameters {
+        assert(it.type.type == .TYPE && it.offset_into_constant_storage >= 0,
+               "struct_name: % has a non-type parameter '%', which has no C name yet", type.name, it.name);
+        parameter := (cast(**Type_Info) *type.constant_storage[it.offset_into_constant_storage]).*;
+        parameter_name := ifx parameter.type == .STRUCT then (cast(*Type_Info_Struct) parameter).name else c_type(h, parameter, type.name);
+        name = tprint("%_%", name, parameter_name);
+    }
+    return name;
+}
+emit_struct :: (h: *Header, type: *Type_Info_Struct) -> string {
+    name := struct_name(h, type);
     if array_find(h.emitted_definitions, name) return name;
     array_add(*h.emitted_definitions, name);
     print_to_builder(*h.builder, "typedef struct % %;\n", name, name);
@@ -231,7 +283,7 @@ write_autogenerated_header_portion :: (targets: []Target) {
         section := it.section;
         if !section {
             begin := tprint("#if defined(%)\n", it.macro);
-            end   := tprint("typedef fb_% fb_Backend;\n#endif\n", it.backend);
+            end   := "#endif\n";
             start := find_index_from_left(current_header_file, begin);
             if start == -1 continue;
             section = slice(current_header_file, start, find_index_from_left(current_header_file, end, start) + end.count - start);

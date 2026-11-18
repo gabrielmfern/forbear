@@ -53,7 +53,7 @@ fb_init_window :: (backend:    *Backend,
     #program_export
     fb_next_event :: (connection: *Wayland_Connection, wait: bool) -> Wayland_Event #c_call { push_context frame_context { return next_event(connection, wait); } }
     #program_export
-    fb_can_draw :: can_draw;
+    fb_can_draw :: (window: Window) -> bool #c_call { return can_draw(window); }
 
     #program_export
     fb_update_backend :: (backend: *Backend, event: Wayland_Event) #c_call { push_context frame_context { update_backend(backend, event); } }
@@ -62,7 +62,7 @@ fb_init_window :: (backend:    *Backend,
 }
 
 #program_export
-fb_create_font :: create_font;
+fb_create_font :: (memory: string) -> Font #c_call { return create_font(memory); }
 #program_export
 fb_init_font :: (font: *Font) #c_call { push_context frame_context { init_font(font); } }
 
