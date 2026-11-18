@@ -15,6 +15,17 @@
 // ====== BEGIN AUTO GENERATED PORTION ======
 #if defined(_WIN32)
 typedef struct { int64_t count; uint8_t *data; } fb_String;
+typedef struct fb_Vector3 fb_Vector3;
+struct fb_Vector3 {
+    float x;
+    float y;
+    float z;
+};
+_Static_assert(sizeof(fb_Vector3) == 12, "fb_Vector3");
+_Static_assert(offsetof(fb_Vector3, x) == 0, "fb_Vector3.x");
+_Static_assert(offsetof(fb_Vector3, y) == 4, "fb_Vector3.y");
+_Static_assert(offsetof(fb_Vector3, z) == 8, "fb_Vector3.z");
+
 typedef struct fb_Complete_Style fb_Complete_Style;
 typedef struct fb_Background fb_Background;
 typedef uint8_t fb_Background_Kind;
@@ -1533,6 +1544,17 @@ typedef fb_Windows_GL_Backend fb_Backend;
 
 #if defined(__linux__)
 typedef struct { int64_t count; uint8_t *data; } fb_String;
+typedef struct fb_Vector3 fb_Vector3;
+struct fb_Vector3 {
+    float x;
+    float y;
+    float z;
+};
+_Static_assert(sizeof(fb_Vector3) == 12, "fb_Vector3");
+_Static_assert(offsetof(fb_Vector3, x) == 0, "fb_Vector3.x");
+_Static_assert(offsetof(fb_Vector3, y) == 4, "fb_Vector3.y");
+_Static_assert(offsetof(fb_Vector3, z) == 8, "fb_Vector3.z");
+
 typedef struct fb_Complete_Style fb_Complete_Style;
 typedef struct fb_Background fb_Background;
 typedef uint8_t fb_Background_Kind;
@@ -3410,6 +3432,33 @@ fb_Sides fb_with_bottom_sides(fb_Sides sides, float value);
 
 fb_Line_Height fb_line_height_percentage(float value);
 fb_Line_Height fb_line_height_fixed(float value);
+
+typedef float (*fb_Easing)(float t);
+float fb_transition_f(const char *key, float value, float duration, fb_Easing easing);
+fb_Vector2 fb_transition_v2(const char *key, fb_Vector2 value, float duration, fb_Easing easing);
+fb_Vector3 fb_transition_v3(const char *key, fb_Vector3 value, float duration, fb_Easing easing);
+fb_Vector4 fb_transition_v4(const char *key, fb_Vector4 value, float duration, fb_Easing easing);
+#define FB_TRANSITION(value, duration, easing) \
+    _Generic((value), \
+        float: fb_transition_f, \
+        fb_Vector2: fb_transition_v2, \
+        fb_Vector3: fb_transition_v3, \
+        fb_Vector4: fb_transition_v4)(FB_LOCATION_KEY, value, duration, easing)
+
+typedef struct { float stiffness, damping, mass; float *current; } fb_Spring_Config_f;
+typedef struct { float stiffness, damping, mass; fb_Vector2 *current; } fb_Spring_Config_v2;
+typedef struct { float stiffness, damping, mass; fb_Vector3 *current; } fb_Spring_Config_v3;
+typedef struct { float stiffness, damping, mass; fb_Vector4 *current; } fb_Spring_Config_v4;
+float fb_spring_transition_f(const char *key, float target, fb_Spring_Config_f config);
+fb_Vector2 fb_spring_transition_v2(const char *key, fb_Vector2 target, fb_Spring_Config_v2 config);
+fb_Vector3 fb_spring_transition_v3(const char *key, fb_Vector3 target, fb_Spring_Config_v3 config);
+fb_Vector4 fb_spring_transition_v4(const char *key, fb_Vector4 target, fb_Spring_Config_v4 config);
+#define FB_SPRING_TRANSITION(target, config) \
+    _Generic((target), \
+        float: fb_spring_transition_f, \
+        fb_Vector2: fb_spring_transition_v2, \
+        fb_Vector3: fb_spring_transition_v3, \
+        fb_Vector4: fb_spring_transition_v4)(FB_LOCATION_KEY, target, config)
 
 fb_Base_Style fb_from(fb_Complete_Style style);
 
