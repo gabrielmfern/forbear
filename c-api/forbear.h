@@ -3,6 +3,15 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define FB_FLOAT32_NAN __builtin_nanf("")
+#define FB_FLOAT64_NAN __builtin_nan("")
+#else
+#include <math.h>
+#define FB_FLOAT32_NAN NAN
+#define FB_FLOAT64_NAN ((double)NAN)
+#endif
+
 // ====== BEGIN AUTO GENERATED PORTION ======
 #if defined(_WIN32)
 typedef struct { int64_t count; uint8_t *data; } fb_String;
@@ -1077,8 +1086,8 @@ struct fb_Glyph {
     int32_t index;
     int64_t index_into_original_text;
     fb_kbts_encode_utf8 utf8;
-    Bool starts_word;
-    Bool can_wrap_before;
+    _Bool starts_word;
+    _Bool can_wrap_before;
     fb_Vector2 position;
     fb_Vector2 advance;
     fb_Vector2 offset;
@@ -1200,7 +1209,7 @@ struct fb_Pool_Slot {
     _Alignas(8) uint8_t pool[40];
     fb_Allocator allocator;
     int64_t last_frame;
-    Bool used;
+    _Bool used;
 };
 _Static_assert(sizeof(fb_Pool_Slot) == 72, "fb_Pool_Slot");
 _Static_assert(offsetof(fb_Pool_Slot, pool) == 0, "fb_Pool_Slot.pool");
@@ -1230,11 +1239,11 @@ _Static_assert(offsetof(fb_Glyph_Atlas, scale) == 80, "fb_Glyph_Atlas.scale");
 typedef struct fb_Windows_GL_Window fb_Windows_GL_Window;
 typedef struct fb_Windows_GL_Backend fb_Windows_GL_Backend;
 struct fb_Windows_GL_Backend {
-    _Alignas(8) uint8_t message[8];
+    int64_t (*message)(void *, fb_Windows_GL_Window *, void *, uint32_t, uint64_t, int64_t, _Bool *);
     void * message_data;
     void * wndproc_context;
     void * cursors[13];
-    _Alignas(8) uint8_t render[8];
+    void (*render)(void *);
     void * render_data;
     uint32_t clipboard_sequence;
     fb_String clipboard_text_buffer;
@@ -1397,7 +1406,7 @@ struct fb_Keyboard_State {
     fb_Key_Event events_buffer[96];
     fb_View_Key_Event events;
     fb_Key held[776];
-    Bool simulated;
+    _Bool simulated;
 };
 _Static_assert(sizeof(fb_Keyboard_State) == 4672, "fb_Keyboard_State");
 _Static_assert(offsetof(fb_Keyboard_State, high_surrogate) == 0, "fb_Keyboard_State.high_surrogate");
@@ -1408,14 +1417,14 @@ _Static_assert(offsetof(fb_Keyboard_State, simulated) == 4664, "fb_Keyboard_Stat
 
 typedef struct fb_Mouse_State fb_Mouse_State;
 struct fb_Mouse_State {
-    Bool inside;
+    _Bool inside;
     fb_Vector2 position;
     fb_Vector2 scroll_delta;
     fb_Cursor cursor;
     fb_Vector2 press_position[5];
-    Bool pressed[5];
-    Bool released[5];
-    Bool held[5];
+    _Bool pressed[5];
+    _Bool released[5];
+    _Bool held[5];
 };
 _Static_assert(sizeof(fb_Mouse_State) == 80, "fb_Mouse_State");
 _Static_assert(offsetof(fb_Mouse_State, inside) == 0, "fb_Mouse_State.inside");
@@ -1443,7 +1452,7 @@ struct fb_Windows_GL_Window {
     fb_String text;
     fb_Keyboard_State keyboard_state;
     fb_Mouse_State mouse_state;
-    Bool running;
+    _Bool running;
 };
 _Static_assert(sizeof(fb_Windows_GL_Window) == 5120, "fb_Windows_GL_Window");
 _Static_assert(offsetof(fb_Windows_GL_Window, hwnd) == 0, "fb_Windows_GL_Window.hwnd");
@@ -2667,7 +2676,7 @@ struct fb_Wayland_EGL_Backend {
     void * device;
     uint32_t clipboard_selection_serial;
     fb_String clipboard_text_buffer;
-    Bool clipboard_mime_is_text;
+    _Bool clipboard_mime_is_text;
     uint32_t clipboard_wl_data_source_id;
     fb_String clipboard_text;
     fb_Array_uint64_t dmabuf_modifiers;
@@ -2735,7 +2744,7 @@ _Static_assert(offsetof(fb_Message_Info, first_arg) == 8, "fb_Message_Info.first
 _Static_assert(offsetof(fb_Message_Info, arg_count) == 12, "fb_Message_Info.arg_count");
 
 struct fb_Wayland_Event {
-    Bool something;
+    _Bool something;
     fb_Message_Info message;
     void * data;
     uint32_t object_id;
@@ -2769,8 +2778,8 @@ struct fb_Glyph {
     int32_t index;
     int64_t index_into_original_text;
     fb_kbts_encode_utf8 utf8;
-    Bool starts_word;
-    Bool can_wrap_before;
+    _Bool starts_word;
+    _Bool can_wrap_before;
     fb_Vector2 position;
     fb_Vector2 advance;
     fb_Vector2 offset;
@@ -2881,7 +2890,7 @@ struct fb_Pool_Slot {
     _Alignas(8) uint8_t pool[40];
     fb_Allocator allocator;
     int64_t last_frame;
-    Bool used;
+    _Bool used;
 };
 _Static_assert(sizeof(fb_Pool_Slot) == 72, "fb_Pool_Slot");
 _Static_assert(offsetof(fb_Pool_Slot, pool) == 0, "fb_Pool_Slot.pool");
@@ -3052,7 +3061,7 @@ typedef struct { int64_t count; fb_Key_Event *data; } fb_View_Key_Event;
 
 struct fb_Keyboard_State {
     uint32_t serial;
-    Bool inside;
+    _Bool inside;
     fb_Key repeating_key;
     uint32_t repeating_key_code;
     double next_repeat;
@@ -3061,7 +3070,7 @@ struct fb_Keyboard_State {
     fb_Key_Event events_buffer[96];
     fb_View_Key_Event events;
     fb_Key held[776];
-    Bool simulated;
+    _Bool simulated;
 };
 _Static_assert(sizeof(fb_Keyboard_State) == 4696, "fb_Keyboard_State");
 _Static_assert(offsetof(fb_Keyboard_State, serial) == 0, "fb_Keyboard_State.serial");
@@ -3079,14 +3088,14 @@ _Static_assert(offsetof(fb_Keyboard_State, simulated) == 4688, "fb_Keyboard_Stat
 typedef struct fb_Mouse_State fb_Mouse_State;
 struct fb_Mouse_State {
     uint32_t serial;
-    Bool inside;
+    _Bool inside;
     fb_Vector2 position;
     fb_Vector2 scroll_delta;
     fb_Cursor cursor;
     fb_Vector2 press_position[8];
-    Bool pressed[8];
-    Bool released[8];
-    Bool held[8];
+    _Bool pressed[8];
+    _Bool released[8];
+    _Bool held[8];
 };
 _Static_assert(sizeof(fb_Mouse_State) == 116, "fb_Mouse_State");
 _Static_assert(offsetof(fb_Mouse_State, serial) == 0, "fb_Mouse_State.serial");
@@ -3106,7 +3115,7 @@ struct fb_Wayland_EGL_Buffer {
     void * egl_image;
     uint32_t texture;
     uint32_t fbo;
-    Bool busy;
+    _Bool busy;
 };
 _Static_assert(sizeof(fb_Wayland_EGL_Buffer) == 40, "fb_Wayland_EGL_Buffer");
 _Static_assert(offsetof(fb_Wayland_EGL_Buffer, wl_buffer_id) == 0, "fb_Wayland_EGL_Buffer.wl_buffer_id");
@@ -3137,8 +3146,8 @@ struct fb_Wayland_EGL_Window {
     fb_Vector2 scroll_delta;
     fb_Wayland_EGL_Buffer buffers[2];
     int64_t current;
-    Bool waiting_for_vblank;
-    Bool running;
+    _Bool waiting_for_vblank;
+    _Bool running;
 };
 _Static_assert(sizeof(fb_Wayland_EGL_Window) == 9096, "fb_Wayland_EGL_Window");
 _Static_assert(offsetof(fb_Wayland_EGL_Window, wl_surface_id) == 0, "fb_Wayland_EGL_Window.wl_surface_id");
@@ -3219,6 +3228,83 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
 #error "forbear: unsupported platform"
 #endif
 // ====== END AUTO GENERATED PORTION ======
+
+// Designated initializers let later fields override earlier ones, so FB_STYLE(.width = ...) replaces the default.
+// Override whole fields only: a nested override like .padding.x.x = 4 behaves differently between GCC and clang.
+#if defined(__clang__)
+#define FB_OVERRIDES_BEGIN _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Winitializer-overrides\"")
+#define FB_OVERRIDES_END   _Pragma("clang diagnostic pop")
+#elif defined(__GNUC__)
+#define FB_OVERRIDES_BEGIN _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Woverride-init\"")
+#define FB_OVERRIDES_END   _Pragma("GCC diagnostic pop")
+#else
+#define FB_OVERRIDES_BEGIN
+#define FB_OVERRIDES_END
+#endif
+
+#define FB_UNSET 0xFF
+#define FB_VECTOR2_NAN { FB_FLOAT32_NAN, FB_FLOAT32_NAN }
+#define FB_VECTOR4_NAN { FB_FLOAT32_NAN, FB_FLOAT32_NAN, FB_FLOAT32_NAN, FB_FLOAT32_NAN }
+#define FB_SIDES_NAN   { FB_VECTOR2_NAN, FB_VECTOR2_NAN }
+
+#define FB_STYLE(...) \
+    FB_OVERRIDES_BEGIN \
+    ((fb_Style){ \
+        .background      = { .kind = FB_UNSET }, \
+        .color           = FB_VECTOR4_NAN, \
+        .border_radius   = FB_FLOAT32_NAN, \
+        .border_color    = FB_VECTOR4_NAN, \
+        .border_width    = FB_SIDES_NAN, \
+        .border_style    = FB_UNSET, \
+        .shadow          = { \
+            .offset      = FB_SIDES_NAN, \
+            .blur_radius = FB_FLOAT32_NAN, \
+            .spread      = FB_FLOAT32_NAN, \
+            .color       = FB_VECTOR4_NAN, \
+        }, \
+        .font            = NULL, \
+        .font_weight     = 0, \
+        .font_size       = FB_FLOAT32_NAN, \
+        .line_height     = { .kind = FB_UNSET }, \
+        .text_wrapping   = FB_UNSET, \
+        .language        = FB_UNSET, \
+        .text_direction  = FB_UNSET, \
+        .cursor          = FB_UNSET, \
+        .overflow        = FB_UNSET, \
+        .placement       = { .kind = FB_UNSET }, \
+        .z_index         = UINT16_MAX, \
+        .min_width       = FB_FLOAT32_NAN, \
+        .max_width       = FB_FLOAT32_NAN, \
+        .width           = { .kind = FB_UNSET }, \
+        .min_height      = FB_FLOAT32_NAN, \
+        .max_height      = FB_FLOAT32_NAN, \
+        .height          = { .kind = FB_UNSET }, \
+        .translate       = FB_VECTOR2_NAN, \
+        .children_offset = FB_VECTOR2_NAN, \
+        .padding         = FB_SIDES_NAN, \
+        .margin          = FB_SIDES_NAN, \
+        .x_justification = FB_UNSET, \
+        .y_justification = FB_UNSET, \
+        .direction       = FB_UNSET, \
+        __VA_ARGS__ \
+    }) \
+    FB_OVERRIDES_END
+
+#define FB_BASE_STYLE(...) \
+    FB_OVERRIDES_BEGIN \
+    ((fb_Base_Style){ \
+        .font           = NULL, \
+        .language       = FB_LANGUAGE_DONT_KNOW, \
+        .text_direction = FB_TEXT_DIRECTION_DONT_KNOW, \
+        .color          = { 1.0f, 1.0f, 1.0f, 1.0f }, \
+        .font_size      = 16.0f, \
+        .font_weight    = 600, \
+        .line_height    = { .kind = FB_LINE_HEIGHT_KIND_PERCENTAGE, .percentage = 1.0f }, \
+        .text_wrapping  = FB_TEXT_WRAPPING_WORD, \
+        .cursor         = FB_CURSOR_DEFAULT, \
+        __VA_ARGS__ \
+    }) \
+    FB_OVERRIDES_END
 
 void fb_init_forbear(fb_Forbear *forbear,
                      fb_Backend *program_backend,
