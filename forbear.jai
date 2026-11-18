@@ -4584,37 +4584,40 @@ element :: (body: Code, location := #caller_location) -> s64 #expand {
 element :: (style: Style, body: Code, location := #caller_location) -> s64 #expand {
     return element(style, "", body, location);
 }
-open_scope :: (manual_key := "", location := #caller_location) -> Node_Opening_Data {
-    key: u64;
-    if manual_key.count > 0 {
-        key = fnv1a_hash(manual_key.data, manual_key.count);
-    } else {
-        key = fnv1a_hash(*location, size_of(Source_Code_Location));
-    }
-    if context.forbear.scope_key != U64_MAX {
-        key = fnv1a_hash(context.forbear.scope_key, key);
-    }
-
-    parent_index := context.forbear.parent_index;
-    index := context.forbear.node_tree.count;
+// This is used by intermediary APIs, such as an adapter or the C ABI.
+open_scope :: (key_hash: u64) -> Node_Opening_Data {
+    parent_index          := context.forbear.parent_index;
+    index                 := context.forbear.node_tree.count;
     previous_parent_index := parent_index;
-    previous_scope_key := context.forbear.scope_key;
+    previous_scope_key    := context.forbear.scope_key;
     {
         node := Node.{
             parent = parent_index,
-            tree = *context.forbear.node_tree,
+            tree   = *context.forbear.node_tree,
         };
         node.kind = .SCOPE;
-        node.key = key;
+        node.key  = key_hash;
         array_add(*context.forbear.node_tree, node);
         context.forbear.parent_index = index;
-        context.forbear.scope_key = key;
+        context.forbear.scope_key    = key_hash;
     }
     return .{
         parent_index = previous_parent_index,
-        scope_key = previous_scope_key,
-        node_index = index,
+        scope_key    = previous_scope_key,
+        node_index   = index,
     };
+}
+open_scope :: (key := "", location := #caller_location) -> Node_Opening_Data {
+    key_hash: u64;
+    if key.count > 0 {
+        key_hash = fnv1a_hash(key.data, key.count);
+    } else {
+        key_hash = fnv1a_hash(*location, size_of(Source_Code_Location));
+    }
+    if context.forbear.scope_key != U64_MAX {
+        key_hash = fnv1a_hash(context.forbear.scope_key, key_hash);
+    }
+    return open_scope(key_hash);
 }
 close_scope :: (using opening_data: Node_Opening_Data, value: $T) -> T {
     measurement, defined := get_measurement(include_scopes = true);
