@@ -1,25 +1,25 @@
 <!-- later, we should move this to a BUILD.md instructions for other people to use, too -->
 
-first, clone:
+First, clone:
 ```bash
 git submodule update --init --depth 1 vendor/node
 cd vendor/node
 ```
 
-for linux:
+For Linux:
 ```bash
 export CFLAGS="-include $PWD/../old-libm.h" CXXFLAGS="-include $PWD/../old-libm.h"
 ./configure --ninja --shared
 make
 ```
 
-for macos:
+For macOS:
 ```bash
 ./configure --ninja --shared
 make
 ```
 
-for windows:
+For Windows:
 ```bash
 .\vcbuild dll
 ```
