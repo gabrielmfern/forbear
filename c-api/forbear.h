@@ -3456,6 +3456,11 @@ void fb_close_scope(fb_Node_Opening_Data data);
 
 void *fb_state(int64_t size, const void *initial);
 
+void *fb_frame_alloc(int64_t size);
+void *fb_frame_realloc(void *memory, int64_t size, int64_t old_size);
+void *fb_node_alloc(int64_t size);
+void *fb_node_realloc(void *memory, int64_t size, int64_t old_size);
+
 void fb_stext(fb_Style style, const char *content, const char *key);
 void fb_text(const char *content, const char *key);
 

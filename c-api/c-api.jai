@@ -102,6 +102,16 @@ fb_open_scope :: (key: *u8) -> Node_Opening_Data #c_call { push_context frame_co
 #program_export
 fb_state :: (size: s64, initial: *void) -> *void #c_call { push_context frame_context { return state(size, initial); } }
 #program_export
+fb_frame_alloc :: (size: s64) -> *void #c_call { push_context frame_context { return alloc(size); } }
+#program_export
+fb_frame_realloc :: (memory: *void, size: s64, old_size: s64) -> *void #c_call { push_context frame_context { return realloc(memory, size, old_size); } }
+#program_export
+fb_node_alloc :: (size: s64) -> *void #c_call { push_context frame_context { return alloc(size,, node_pool()); } }
+#program_export
+fb_node_realloc :: (memory: *void, size: s64, old_size: s64) -> *void #c_call {
+    push_context frame_context { return realloc(memory, size, old_size,, node_pool()); }
+}
+#program_export
 fb_close_scope :: (data: Node_Opening_Data) #c_call { push_context frame_context { close_scope(data, 0); } }
 
 #program_export
