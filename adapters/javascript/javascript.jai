@@ -20,25 +20,46 @@
     } else #if OS == .MACOS {
         src  := tprint("%/out/Release/libnode.137.dylib", node_root);
         dest := tprint("%/libnode.137.dylib", dest_dir);
+    } else #if OS == .WINDOWS {
+        src  := tprint("%/out/Release/libnode.dll", node_root);
+        dest := tprint("%/libnode.dll", dest_dir);
     }
     assert(file_exists(src), "libnode is missing; build vendor/node with --shared");
     if !file_exists(dest) {
         copy_file(src, dest);
     }
 
-    build_cpp_static_lib(
-        tprint("%/javascript", #filepath),
-        tprint("%/javascript.cpp", #filepath),
-        extra = .[
-            "-std=c++20", "-fno-rtti", "-fno-exceptions", "-fPIC",
-            tprint("-I%/src", node_root),
-            tprint("-I%/deps/v8/include", node_root),
-            tprint("-I%/deps/uv/include", node_root),
-        ],
-    );
+    #if OS == .WINDOWS {
+        build_cpp_static_lib(
+            tprint("%/javascript", #filepath),
+            tprint("%/javascript.cpp", #filepath),
+            extra = .[
+                "/std:c++20", "/GR-", "/MD", "/Zc:__cplusplus",
+                tprint("/I%/src", node_root),
+                tprint("/I%/deps/v8/include", node_root),
+                tprint("/I%/deps/uv/include", node_root),
+            ],
+        );
+    } else {
+        build_cpp_static_lib(
+            tprint("%/javascript", #filepath),
+            tprint("%/javascript.cpp", #filepath),
+            extra = .[
+                "-std=c++20", "-fno-rtti", "-fno-exceptions", "-fPIC",
+                tprint("-I%/src", node_root),
+                tprint("-I%/deps/v8/include", node_root),
+                tprint("-I%/deps/uv/include", node_root),
+            ],
+        );
+    }
 }
 
-libm :: #library,system,link_always "libm";
+#if OS == .WINDOWS {
+    msvcprt :: #library,system,link_always "msvcprt";
+    libnode :: #library,link_always "../../vendor/node/out/Release/libnode";
+} else {
+    libm :: #library,system,link_always "libm";
+}
 #if OS == .MACOS {
     libcpp :: #library,system,link_always "libc++";
     libnode :: #library,link_always "../../vendor/node/out/Release/libnode.137";
@@ -108,11 +129,27 @@ javascript_style_copy_string             :: (runtime_opaque: *void,
                                              field:          Javascript_Style_Field,
                                              result:         *u8,
                                              result_count: s64) -> bool #c_call #foreign javascript_shim;
-javascript_style_get_array_count         :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
-javascript_style_get_array_number        :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, index: s64, result: *float64) -> bool #c_call #foreign javascript_shim;
-javascript_style_get_array_string_length :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, index: s64) -> s64 #c_call #foreign javascript_shim;
-javascript_style_copy_array_string       :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field, index: s64, result: *u8, result_count: s64) -> bool #c_call #foreign javascript_shim;
-javascript_style_get_external            :: (runtime_opaque: *void, style_object: *void, field: Javascript_Style_Field) -> *void #c_call #foreign javascript_shim;
+javascript_style_get_array_count :: (runtime_opaque: *void,
+                                     style_object:   *void,
+                                     field:          Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
+javascript_style_get_array_number :: (runtime_opaque: *void,
+                                      style_object:   *void,
+                                      field:          Javascript_Style_Field,
+                                      index:          s64,
+                                      result:         *float64) -> bool #c_call #foreign javascript_shim;
+javascript_style_get_array_string_length :: (runtime_opaque: *void,
+                                             style_object:   *void,
+                                             field:          Javascript_Style_Field,
+                                             index:          s64) -> s64 #c_call #foreign javascript_shim;
+javascript_style_copy_array_string :: (runtime_opaque: *void,
+                                       style_object:   *void,
+                                       field:          Javascript_Style_Field,
+                                       index:          s64,
+                                       result:         *u8,
+                                       result_count:   s64) -> bool #c_call #foreign javascript_shim;
+javascript_style_get_external :: (runtime_opaque: *void,
+                                  style_object:   *void,
+                                  field:          Javascript_Style_Field) -> *void #c_call #foreign javascript_shim;
 
 // a little annoying that we have to jump through these hoops, but since Style
 // is quite complicated and us making it C_ABI compatible would mean a lot of

@@ -4892,7 +4892,6 @@ shape_text :: (style: Complete_Style, content: string) -> Glyphs {
 }
 // Internal API shared between the overloads of text.
 set_node_glyphs :: (node: *Node, content: string) {
-    node              := *context.forbear.node_tree[data.node_index];
     rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
     set_weight(node.style.font, node.style.font_weight);
     set_font_size(node.style.font, rounded_font_size);

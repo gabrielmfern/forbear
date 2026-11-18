@@ -5,7 +5,11 @@
 
 #run {
     #import "Process";
-    result := run_command("npm", "run", "build", working_directory = #filepath);
+    #if OS == .WINDOWS {
+        result := run_command("cmd", "/c", "npm", "run", "build", working_directory = #filepath);
+    } else {
+        result := run_command("npm", "run", "build", working_directory = #filepath);
+    }
     assert(result.type == .EXITED && result.exit_code == 0, "npm run build failed");
 }
 
