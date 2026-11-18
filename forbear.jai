@@ -1,4 +1,4 @@
-#module_parameters(JAVASCRIPT_ADAPTER := false);
+#module_parameters(JAVASCRIPT_ADAPTER := false, C_ABI := false);
 
 Vector2 :: Math.Vector2;
 Vector3 :: Math.Vector3;
@@ -360,13 +360,36 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     WM_CAPTURECHANGED :: 0x0215;
 
     Windows_GL_Backend :: struct {
-        message: (data: *void, window: *Windows_GL_Window, hWnd: HWND, Msg: u32, wParam: WPARAM, lParam: LPARAM) -> result: s64, handled: bool;
+        #if C_ABI {
+            Message_Proc :: #type (data:   *void,
+                             window: *Windows_GL_Window,
+                             hWnd:   HWND,
+                             Msg:    u32,
+                             wParam: WPARAM,
+                             lParam: LPARAM,
+                             handled: *bool) -> result: s64 #c_call;
+        } else {
+            Message_Proc :: #type (data:   *void,
+                             window: *Windows_GL_Window,
+                             hWnd:   HWND,
+                             Msg:    u32,
+                             wParam: WPARAM,
+                             lParam: LPARAM) -> result: s64, handled: bool;
+        }
+
+        message: Message_Proc;
         message_data: *void;
         wndproc_context: *#Context;
 
         cursors: [CURSOR_COUNT]HCURSOR;
 
-        render: (data: *void);
+        #if C_ABI {
+            Render_Proc :: #type (data: *void) #c_call;
+        } else {
+            Render_Proc :: #type (data: *void);
+        }
+
+        render: Render_Proc;
         render_data: *void;
 
         clipboard_sequence: DWORD;
@@ -412,7 +435,22 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                 push_context window.backend.wndproc_context.* {
                     handled := false;
                     if window.backend.message != null {
-                        result, handled = window.backend.message(window.backend.message_data, window, hwnd, message, wparam, lparam);
+                        #if C_ABI {
+                            result = window.backend.message(window.backend.message_data,
+                                                            window,
+                                                            hwnd,
+                                                            message,
+                                                            wparam,
+                                                            lparam,
+                                                            *handled);
+                        } else {
+                            result, handled = window.backend.message(window.backend.message_data,
+                                                            window,
+                                                            hwnd,
+                                                            message,
+                                                            wparam,
+                                                            lparam);
+                        }
                     }
                     if !handled if message == {
                         case WM_CLOSE;
@@ -932,7 +970,13 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     }
 
     MacOS_GL_Backend :: struct {
-        render: (data: *void);
+        #if C_ABI {
+            Render_Proc :: (data: *void) #c_call;
+        } else {
+            Render_Proc :: (data: *void);
+        }
+
+        render: Render_Proc;
         render_data: *void;
 
         cursors: [CURSOR_COUNT]*NSCursor;
@@ -4408,6 +4452,18 @@ get_parent_element_index :: () -> s64 {
     }
     return element_ancestor_index;
 }
+open_element :: (style: Style, manual_key := "", location := #caller_location) -> Node_Opening_Data {
+    key: u64;
+    if manual_key.count > 0 {
+        key = fnv1a_hash(manual_key.data, manual_key.count);
+    } else {
+        key = fnv1a_hash(*location, size_of(Source_Code_Location));
+    }
+    if context.forbear.scope_key != U64_MAX {
+        key = fnv1a_hash(context.forbear.scope_key, key);
+    }
+    return open_element(style, key);
+}
 // Intermediary API that's used from adapters, such as the JavaScript one. When in jai, use `element`
 open_element :: (style: Style, key: u64) -> Node_Opening_Data {
     previous_parent_index := context.forbear.parent_index;
@@ -4501,24 +4557,19 @@ close_element :: (using data: Node_Opening_Data) {
     context.forbear.scope_key = scope_key;
     context.forbear.base_style = base_style;
 }
-// API used when building UIs straight from jai
-element :: (
-    style := Style.{},
-    manual_key := "",
-    body: Code = #code {},
-    location := #caller_location
-) -> s64 #expand {
-    key: u64;
-    if manual_key.count > 0 {
-        key = fnv1a_hash(manual_key.data, manual_key.count);
-    } else {
-        key = fnv1a_hash(*location, size_of(Source_Code_Location));
-    }
-    if context.forbear.scope_key != U64_MAX {
-        key = fnv1a_hash(context.forbear.scope_key, key);
-    }
-
+element :: (style := Style.{}, key: u64, body := #code {}) -> s64 #expand {
     opening := open_element(style, key);
+    #insert body;
+    close_element(opening);
+    return opening.node_index;
+}
+element :: (
+    style      := Style.{},
+    manual_key := "",
+    body       := #code {},
+    location   := #caller_location
+) -> s64 #expand {
+    opening := open_element(style, manual_key, location);
     #insert body;
     close_element(opening);
     return opening.node_index;
@@ -4529,11 +4580,6 @@ element :: (body: Code, location := #caller_location) -> s64 #expand {
 element :: (style: Style, body: Code, location := #caller_location) -> s64 #expand {
     return element(style, "", body, location);
 }
-// TO-DO: I dislike that this API is different from the open_element because it receives the caller location
-// and is not really meant to be called by adapters.
-//
-// The main reason this exists is because there's a bug in the compiler where if you nest unbraced #code blocks
-// you can loose access to locals of where the #code was defined and this is our workaround. :(
 open_scope :: (manual_key := "", location := #caller_location) -> Node_Opening_Data {
     key: u64;
     if manual_key.count > 0 {
@@ -5013,14 +5059,12 @@ Forbear :: struct {
     backend: *Backend;
 };
 #add_context forbear: *Forbear;
-init_forbear :: (
-    forbear: *Forbear,
-    program_window: *Window,
-    // TO-DO: currently we're defining the specific backend names to be just one here, but in the long-term we will include
-    // multiple backends for each operating system, not one, so we need to handle that in a better way.
-    program_backend: *Backend,
-    program_base_style: Base_Style,
-) {
+init_forbear :: (forbear:            *Forbear,
+                 program_window:     *Window,
+                 // TO-DO: currently we're defining the specific backend names to be just one here, but in the long-term we will include
+                 // multiple backends for each operating system, not one, so we need to handle that in a better way.
+                 program_backend:    *Backend,
+                 program_base_style: Base_Style) {
     using forbear;
     context.forbear = forbear;
 
