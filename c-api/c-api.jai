@@ -6,12 +6,12 @@ jai_context: #Context;
 
 #program_export
 fb_init_forbear :: (forbear:            *Forbear,
-                    program_window:     *Window,
                     program_backend:    *Backend,
+                    program_window:     *Window,
                     program_base_style: Base_Style) #c_call {
     push_context jai_context {
         forbear.* = .{};
-        init_forbear(forbear, program_window, program_backend, program_base_style);
+        init_forbear(forbear, program_backend, program_window, program_base_style);
     }
 }
 

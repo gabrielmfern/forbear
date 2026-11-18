@@ -19,7 +19,7 @@ main :: () {
     init_window(*backend, *window, 1280, 728, "forbear tests", show_window = false);
 
     forbear: Forbear;
-    init_forbear(*forbear, *window, *backend, Base_Style.{
+    init_forbear(*forbear, *backend, *window, Base_Style.{
         font      = *inter,
         color     = hex("#ECECEC"),
         font_size = 16,

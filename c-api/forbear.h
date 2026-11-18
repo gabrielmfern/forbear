@@ -3197,8 +3197,8 @@ typedef fb_Wayland_EGL_Backend fb_Backend;
 // ====== END AUTO GENERATED PORTION ======
 
 void fb_init_forbear(fb_Forbear *forbear,
-                     fb_Window *program_window,
                      fb_Backend *program_backend,
+                     fb_Window *program_window,
                      fb_base_Style base_style);
 
 fb_Node_Opening_Data fb_open_element(fb_Style style, char *key);

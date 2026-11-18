@@ -4691,8 +4691,6 @@ Font :: struct {
     }
 };
 create_font :: (memory: string) -> Font {
-    #import "File";
-
     font: Font;
     font.memory = memory;
     return font;
@@ -5075,10 +5073,10 @@ Forbear :: struct {
 };
 #add_context forbear: *Forbear;
 init_forbear :: (forbear:            *Forbear,
-                 program_window:     *Window,
                  // TO-DO: currently we're defining the specific backend names to be just one here, but in the long-term we will include
                  // multiple backends for each operating system, not one, so we need to handle that in a better way.
                  program_backend:    *Backend,
+                 program_window:     *Window,
                  program_base_style: Base_Style) {
     using forbear;
     context.forbear = forbear;

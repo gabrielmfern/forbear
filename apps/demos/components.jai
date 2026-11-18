@@ -360,7 +360,7 @@ main :: () {
     inter := #run create_font(read_entire_file(tprint("%../../Inter.ttf", #filepath)));
 
     forbear: Forbear;
-    init_forbear(*forbear, *window, *backend, Base_Style.{
+    init_forbear(*forbear, *backend, *window, Base_Style.{
         font = *inter,
         color = rgb(255, 255, 255),
         language = .ENGLISH,
