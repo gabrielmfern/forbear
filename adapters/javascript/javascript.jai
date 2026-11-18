@@ -111,45 +111,45 @@ Javascript_Style_Field :: enum u8 {
     Y_JUSTIFICATION; DIRECTION;
 };
 
-javascript_init                          :: (adapter:          *void,
-                                             source_data:      *u8,
-                                             source_count:     s64,
-                                             source_name_data: *u8,
+javascript_init                          :: (adapter:           *void,
+                                             source_data:       *u8,
+                                             source_count:      s64,
+                                             source_name_data:  *u8,
                                              source_name_count: s64) -> *void #c_call #foreign javascript_shim;
 javascript_render                        :: (runtime_opaque: *void) -> void #c_call #foreign javascript_shim;
 javascript_style_get_number              :: (runtime_opaque: *void,
                                              style_object:   *void,
                                              field:          Javascript_Style_Field,
-                                             result: *float64) -> bool #c_call #foreign javascript_shim;
+                                             result:         *float64) -> bool #c_call #foreign javascript_shim;
 javascript_style_get_string_length       :: (runtime_opaque: *void,
                                              style_object:   *void,
-                                             field: Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
+                                             field:          Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
 javascript_style_copy_string             :: (runtime_opaque: *void,
                                              style_object:   *void,
                                              field:          Javascript_Style_Field,
                                              result:         *u8,
-                                             result_count: s64) -> bool #c_call #foreign javascript_shim;
-javascript_style_get_array_count :: (runtime_opaque: *void,
-                                     style_object:   *void,
-                                     field:          Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
-javascript_style_get_array_number :: (runtime_opaque: *void,
-                                      style_object:   *void,
-                                      field:          Javascript_Style_Field,
-                                      index:          s64,
-                                      result:         *float64) -> bool #c_call #foreign javascript_shim;
+                                             result_count:   s64) -> bool #c_call #foreign javascript_shim;
+javascript_style_get_array_count         :: (runtime_opaque: *void,
+                                             style_object:   *void,
+                                             field:          Javascript_Style_Field) -> s64 #c_call #foreign javascript_shim;
+javascript_style_get_array_number        :: (runtime_opaque: *void,
+                                             style_object:   *void,
+                                             field:          Javascript_Style_Field,
+                                             index:          s64,
+                                             result:         *float64) -> bool #c_call #foreign javascript_shim;
 javascript_style_get_array_string_length :: (runtime_opaque: *void,
                                              style_object:   *void,
                                              field:          Javascript_Style_Field,
                                              index:          s64) -> s64 #c_call #foreign javascript_shim;
-javascript_style_copy_array_string :: (runtime_opaque: *void,
-                                       style_object:   *void,
-                                       field:          Javascript_Style_Field,
-                                       index:          s64,
-                                       result:         *u8,
-                                       result_count:   s64) -> bool #c_call #foreign javascript_shim;
-javascript_style_get_external :: (runtime_opaque: *void,
-                                  style_object:   *void,
-                                  field:          Javascript_Style_Field) -> *void #c_call #foreign javascript_shim;
+javascript_style_copy_array_string       :: (runtime_opaque: *void,
+                                             style_object:   *void,
+                                             field:          Javascript_Style_Field,
+                                             index:          s64,
+                                             result:         *u8,
+                                             result_count:   s64) -> bool #c_call #foreign javascript_shim;
+javascript_style_get_external            :: (runtime_opaque: *void,
+                                             style_object:   *void,
+                                             field:          Javascript_Style_Field) -> *void #c_call #foreign javascript_shim;
 
 // a little annoying that we have to jump through these hoops, but since Style
 // is quite complicated and us making it C_ABI compatible would mean a lot of
