@@ -3737,8 +3737,8 @@ state :: ($T: Type) -> *T, first_frame: bool {
     data, first_frame := state(T, initial);
     return data, first_frame;
 }
-transition :: (value: $T, duration: float, easing: (float) -> float) -> T
-#modify { return T == float || T == Vector2 || T == Vector3 || T == Vector4, "transition only supports float, Vector2, Vector3 and Vector4"; } {
+use_transition :: (value: $T, duration: float, easing: (float) -> float) -> T
+#modify { return T == float || T == Vector2 || T == Vector3 || T == Vector4, "use_transition only supports float, Vector2, Vector3 and Vector4"; } {
     start    := state(value);
     target   := state(value);
     progress := state(1.0);
@@ -3766,8 +3766,8 @@ Spring_Config :: struct (T: Type) {
 
     current: *T;
 }
-spring_transition :: (target: $T, config: Spring_Config(T)) -> T
-#modify { return T == float || T == Vector2 || T == Vector3 || T == Vector4, "spring_transition only supports float, Vector2, Vector3 and Vector4"; } {
+use_spring_transition :: (target: $T, config: Spring_Config(T)) -> T
+#modify { return T == float || T == Vector2 || T == Vector3 || T == Vector4, "use_spring_transition only supports float, Vector2, Vector3 and Vector4"; } {
     value := config.current;
     if !value {
         value = state(target);
@@ -3860,7 +3860,7 @@ use_scrolling :: (using state: *Scrolling_State) {
             clamp(offset.y, 0, limit_y),
         };
     }
-    effective_offset = spring_transition(offset, .{
+    effective_offset = use_spring_transition(offset, .{
         stiffness = 320.0,
         damping   = 32.0,
         mass      = 1.0,
