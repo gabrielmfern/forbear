@@ -1520,6 +1520,13 @@ _Static_assert(offsetof(fb_Forbear, glyph_atlas) == 18688, "fb_Forbear.glyph_atl
 _Static_assert(offsetof(fb_Forbear, window) == 18776, "fb_Forbear.window");
 _Static_assert(offsetof(fb_Forbear, backend) == 18784, "fb_Forbear.backend");
 
+typedef int64_t fb_Mouse_Button;
+#define FB_MOUSE_BUTTON_LEFT 0
+#define FB_MOUSE_BUTTON_RIGHT 1
+#define FB_MOUSE_BUTTON_MIDDLE 2
+#define FB_MOUSE_BUTTON_BACK 3
+#define FB_MOUSE_BUTTON_FORWARD 4
+
 typedef fb_Windows_GL_Window fb_Window;
 typedef fb_Windows_GL_Backend fb_Backend;
 #endif
@@ -3221,6 +3228,16 @@ _Static_assert(offsetof(fb_Forbear, glyph_atlas) == 18688, "fb_Forbear.glyph_atl
 _Static_assert(offsetof(fb_Forbear, window) == 18776, "fb_Forbear.window");
 _Static_assert(offsetof(fb_Forbear, backend) == 18784, "fb_Forbear.backend");
 
+typedef int64_t fb_Mouse_Button;
+#define FB_MOUSE_BUTTON_LEFT 0
+#define FB_MOUSE_BUTTON_RIGHT 1
+#define FB_MOUSE_BUTTON_MIDDLE 2
+#define FB_MOUSE_BUTTON_SIDE 3
+#define FB_MOUSE_BUTTON_EXTRA 4
+#define FB_MOUSE_BUTTON_FORWARD 5
+#define FB_MOUSE_BUTTON_BACK 6
+#define FB_MOUSE_BUTTON_TASK 7
+
 typedef fb_Wayland_EGL_Window fb_Window;
 typedef fb_Wayland_EGL_Backend fb_Backend;
 #endif
@@ -3371,5 +3388,80 @@ void *fb_state(int64_t size, const void *initial);
 
 void fb_stext(fb_Style style, const char *content, const char *key);
 void fb_text(const char *content, const char *key);
+
+fb_Direction fb_opposite(fb_Direction direction);
+fb_Sizing fb_fit(void);
+fb_Sizing fb_fixed(float value);
+fb_Sizing fb_grow(float value);
+
+fb_Sides fb_all_sides(float value);
+fb_Sides fb_in_line_sides(float value);
+fb_Sides fb_with_in_line_sides(fb_Sides sides, float value);
+fb_Sides fb_block_sides(float value);
+fb_Sides fb_with_block_sides(fb_Sides sides, float value);
+fb_Sides fb_left_sides(float value);
+fb_Sides fb_with_left_sides(fb_Sides sides, float value);
+fb_Sides fb_right_sides(float value);
+fb_Sides fb_with_right_sides(fb_Sides sides, float value);
+fb_Sides fb_top_sides(float value);
+fb_Sides fb_with_top_sides(fb_Sides sides, float value);
+fb_Sides fb_bottom_sides(float value);
+fb_Sides fb_with_bottom_sides(fb_Sides sides, float value);
+
+fb_Line_Height fb_line_height_percentage(float value);
+fb_Line_Height fb_line_height_fixed(float value);
+
+fb_Base_Style fb_from(fb_Complete_Style style);
+
+fb_Vector2 fb_angle(float degrees);
+fb_Vector2 fb_to_top(void);
+fb_Vector2 fb_to_bottom(void);
+fb_Vector2 fb_to_left(void);
+fb_Vector2 fb_to_right(void);
+fb_Vector2 fb_to_top_left(void);
+fb_Vector2 fb_to_top_right(void);
+fb_Vector2 fb_to_bottom_left(void);
+fb_Vector2 fb_to_bottom_right(void);
+
+fb_Background fb_color(fb_Vector4 value);
+fb_Background fb_gradient(fb_Linear_Gradient value);
+fb_Vector4 fb_rgb(float r, float g, float b);
+fb_Vector4 fb_rgba(float r, float g, float b, float a);
+#define FB_HEX(rrggbb) ((fb_Vector4){ (((rrggbb) >> 16) & 0xFF) / 255.0f, (((rrggbb) >> 8) & 0xFF) / 255.0f, ((rrggbb) & 0xFF) / 255.0f, 1.0f })
+#define FB_HEXA(rrggbbaa) ((fb_Vector4){ (((rrggbbaa) >> 24) & 0xFF) / 255.0f, (((rrggbbaa) >> 16) & 0xFF) / 255.0f, (((rrggbbaa) >> 8) & 0xFF) / 255.0f, ((rrggbbaa) & 0xFF) / 255.0f })
+
+fb_Placement fb_flow(void);
+fb_Placement fb_fixed_placement(fb_Vector2 value, fb_Corner corner);
+fb_Placement fb_relative(fb_Vector2 value, fb_Corner corner);
+
+fb_Style fb_overwrite(fb_Style overwritten, fb_Style overwriter);
+void fb_complete_with(fb_Style style, fb_Base_Style base, fb_Complete_Style *out);
+
+_Bool fb_get_measurement(int64_t node_index, _Bool include_scopes, fb_Node_Measurement *out);
+fb_Node *fb_get_node(int64_t node_index);
+fb_Vector2 fb_get_viewport_size(void);
+float fb_get_delta_time(void);
+double fb_get_last_frame_time(void);
+fb_Preferred_Theme fb_get_preferred_theme(void);
+void fb_set_cursor(fb_Cursor cursor);
+
+fb_Vector2 fb_get_mouse_position(void);
+fb_Vector2 fb_get_scroll_delta(void);
+fb_Vector2 fb_get_press_position(fb_Mouse_Button button);
+_Bool fb_is_dragging(fb_Mouse_Button button);
+
+_Bool fb_is_mouse_inside(void);
+_Bool fb_is_mouse_held(fb_Mouse_Button button);
+_Bool fb_on_mouse_down(fb_Mouse_Button button, _Bool check_inside);
+_Bool fb_on_mouse_up(fb_Mouse_Button button, _Bool check_inside);
+_Bool fb_on_click(fb_Mouse_Button button, _Bool check_inside, _Bool movement_threshold);
+
+fb_String fb_get_clipboard_text(void);
+void fb_copy_to_clipboard(const char *text);
+fb_String fb_get_text_input(void);
+
+_Bool fb_on_key_down(fb_Key key, _Bool on_repeat);
+_Bool fb_on_key_up(fb_Key key);
+_Bool fb_is_key_held(fb_Key key);
 
 #endif

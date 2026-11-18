@@ -4,7 +4,7 @@
 #import "String";
 
 ROOTS  :: string.["Forbear", "Style", "Complete_Style", "Base_Style", "Font", "Node_Opening_Data",
-    "Windows_GL_Window", "Windows_GL_Backend", "Wayland_EGL_Window", "Wayland_EGL_Backend", "MacOS_GL_Window", "MacOS_GL_Backend", "Wayland_Event"];
+    "Windows_GL_Window", "Windows_GL_Backend", "Wayland_EGL_Window", "Wayland_EGL_Backend", "MacOS_GL_Window", "MacOS_GL_Backend", "Wayland_Event", "Mouse_Button"];
 OPAQUE :: string.["Table", "Flat_Pool", "kbts_font", "Context"];
 
 Target :: struct {
@@ -15,6 +15,7 @@ Target :: struct {
     backend:   string;
     workspace: Workspace;
     roots:     [..]*Type_Info_Struct;
+    enums:     [..]*Type_Info_Enum;
     section:   string;
 }
 
@@ -61,6 +62,10 @@ build :: () {
                     type := it.expression.defined_type;
                     if array_find(ROOTS, type.name) array_add_if_unique(*target.roots, type);
                 }
+                for typechecked.all if it.expression.kind == .ENUM {
+                    type := (cast(*Code_Enum) it.expression).external_type;
+                    if type && array_find(ROOTS, type.name) array_add_if_unique(*target.enums, type);
+                }
             case .PHASE;
                 phase := cast(*Message_Phase) message;
                 if phase.phase == .TYPECHECKED_ALL_WE_CAN && phase.num_items_waiting_to_typecheck == 0 {
@@ -68,6 +73,7 @@ build :: () {
                     print_to_builder(*header.builder, "#if defined(%)\n", target.macro);
                     append(*header.builder, "typedef struct { int64_t count; uint8_t *data; } fb_String;\n");
                     for target.roots emit_struct(*header, it);
+                    for target.enums emit_enum(*header, it, "");
                     print_to_builder(*header.builder, "typedef fb_% fb_Window;\ntypedef fb_% fb_Backend;\n#endif\n",
                                      target.window, target.backend);
                     target.section = builder_to_string(*header.builder);

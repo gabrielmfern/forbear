@@ -4075,7 +4075,7 @@ Mouse_Button :: enum {
 get_delta_time :: () -> float {
     return context.forbear.delta_time;
 }
-get_last_frame_time :: () -> float {
+get_last_frame_time :: () -> float64 {
     return context.forbear.last_frame_time;
 }
 get_viewport_size :: () -> Vector2 {

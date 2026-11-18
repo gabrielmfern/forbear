@@ -119,3 +119,150 @@ fb_stext :: (style: Style, content: *u8, key: *u8) #c_call {
 }
 #program_export
 fb_text :: (content: *u8, key: *u8) #c_call { fb_stext(Style.{}, content, key); }
+
+#program_export
+fb_opposite :: (direction: Direction) -> Direction #c_call { push_context frame_context { return opposite(direction); } }
+#program_export
+fb_fit :: () -> Sizing #c_call { push_context frame_context { return fit(); } }
+#program_export
+fb_fixed :: (value: float) -> Sizing #c_call { push_context frame_context { return fixed(value); } }
+#program_export
+fb_grow :: (value: float) -> Sizing #c_call { push_context frame_context { return grow(value); } }
+
+#program_export
+fb_all_sides :: (value: float) -> Sides #c_call { push_context frame_context { return all(value); } }
+#program_export
+fb_in_line_sides :: (value: float) -> Sides #c_call { push_context frame_context { return in_line(value); } }
+#program_export
+fb_with_in_line_sides :: (sides: Sides, value: float) -> Sides #c_call { push_context frame_context { return in_line(sides, value); } }
+#program_export
+fb_block_sides :: (value: float) -> Sides #c_call { push_context frame_context { return block(value); } }
+#program_export
+fb_with_block_sides :: (sides: Sides, value: float) -> Sides #c_call { push_context frame_context { return block(sides, value); } }
+#program_export
+fb_left_sides :: (value: float) -> Sides #c_call { push_context frame_context { return left(value); } }
+#program_export
+fb_with_left_sides :: (sides: Sides, value: float) -> Sides #c_call { push_context frame_context { return left(sides, value); } }
+#program_export
+fb_right_sides :: (value: float) -> Sides #c_call { push_context frame_context { return right(value); } }
+#program_export
+fb_with_right_sides :: (sides: Sides, value: float) -> Sides #c_call { push_context frame_context { return right(sides, value); } }
+#program_export
+fb_top_sides :: (value: float) -> Sides #c_call { push_context frame_context { return top(value); } }
+#program_export
+fb_with_top_sides :: (sides: Sides, value: float) -> Sides #c_call { push_context frame_context { return top(sides, value); } }
+#program_export
+fb_bottom_sides :: (value: float) -> Sides #c_call { push_context frame_context { return bottom(value); } }
+#program_export
+fb_with_bottom_sides :: (sides: Sides, value: float) -> Sides #c_call { push_context frame_context { return bottom(sides, value); } }
+
+#program_export
+fb_line_height_percentage :: (value: float) -> Line_Height #c_call { push_context frame_context { return line_height_percentage(value); } }
+#program_export
+fb_line_height_fixed :: (value: float) -> Line_Height #c_call { push_context frame_context { return line_height_fixed(value); } }
+
+#program_export
+fb_from :: (style: Complete_Style) -> Base_Style #c_call { push_context frame_context { return from(style); } }
+
+#program_export
+fb_angle :: (degrees: float) -> Vector2 #c_call { push_context frame_context { return angle(degrees); } }
+#program_export
+fb_to_top :: () -> Vector2 #c_call { push_context frame_context { return to_top(); } }
+#program_export
+fb_to_bottom :: () -> Vector2 #c_call { push_context frame_context { return to_bottom(); } }
+#program_export
+fb_to_left :: () -> Vector2 #c_call { push_context frame_context { return to_left(); } }
+#program_export
+fb_to_right :: () -> Vector2 #c_call { push_context frame_context { return to_right(); } }
+#program_export
+fb_to_top_left :: () -> Vector2 #c_call { push_context frame_context { return to_top_left(); } }
+#program_export
+fb_to_top_right :: () -> Vector2 #c_call { push_context frame_context { return to_top_right(); } }
+#program_export
+fb_to_bottom_left :: () -> Vector2 #c_call { push_context frame_context { return to_bottom_left(); } }
+#program_export
+fb_to_bottom_right :: () -> Vector2 #c_call { push_context frame_context { return to_bottom_right(); } }
+
+#program_export
+fb_color :: (value: Vector4) -> Background #c_call { push_context frame_context { return color(value); } }
+#program_export
+fb_gradient :: (value: Linear_Gradient) -> Background #c_call { push_context frame_context { return gradient(value); } }
+#program_export
+fb_rgb :: (r: float, g: float, b: float) -> Vector4 #c_call { push_context frame_context { return rgb(r, g, b); } }
+#program_export
+fb_rgba :: (r: float, g: float, b: float, a: float) -> Vector4 #c_call { push_context frame_context { return rgba(r, g, b, a); } }
+
+#program_export
+fb_flow :: () -> Placement #c_call { push_context frame_context { return flow(); } }
+#program_export
+fb_fixed_placement :: (value: Vector2, corner: Corner) -> Placement #c_call { push_context frame_context { return fixed(value, corner); } }
+#program_export
+fb_relative :: (value: Vector2, corner: Corner) -> Placement #c_call { push_context frame_context { return relative(value, corner); } }
+
+#program_export
+fb_overwrite :: (overwritten: Style, overwriter: Style) -> Style #c_call { push_context frame_context { return overwrite(overwritten, overwriter); } }
+#program_export
+fb_complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) #c_call { push_context frame_context { complete_with(style, base, out); } }
+
+#program_export
+fb_get_measurement :: (node_index: s64, include_scopes: bool, out: *Node_Measurement) -> bool #c_call {
+    push_context frame_context {
+        defined: bool;
+        out.*, defined = get_measurement(node_index, include_scopes);
+        return defined;
+    }
+}
+
+#program_export
+fb_get_node :: (node_index: s64) -> *Node #c_call {
+    push_context frame_context {
+        if node_index == -1 return get_node();
+        return get_node(node_index);
+    }
+}
+#program_export
+fb_get_viewport_size :: () -> Vector2 #c_call { push_context frame_context { return get_viewport_size(); } }
+#program_export
+fb_get_delta_time :: () -> float #c_call { push_context frame_context { return get_delta_time(); } }
+#program_export
+fb_get_last_frame_time :: () -> float64 #c_call { push_context frame_context { return get_last_frame_time(); } }
+#program_export
+fb_get_preferred_theme :: () -> Preferred_Theme #c_call { push_context frame_context { return get_preferred_theme(); } }
+#program_export
+fb_set_cursor :: (cursor: Cursor) #c_call { push_context frame_context { set_cursor(cursor); } }
+
+#program_export
+fb_get_mouse_position :: () -> Vector2 #c_call { push_context frame_context { return get_mouse_position(); } }
+#program_export
+fb_get_scroll_delta :: () -> Vector2 #c_call { push_context frame_context { return get_scroll_delta(); } }
+#program_export
+fb_get_press_position :: (button: Mouse_Button) -> Vector2 #c_call { push_context frame_context { return get_press_position(button); } }
+#program_export
+fb_is_dragging :: (button: Mouse_Button) -> bool #c_call { push_context frame_context { return is_dragging(button); } }
+
+#program_export
+fb_is_mouse_inside :: () -> bool #c_call { push_context frame_context { return is_mouse_inside(); } }
+#program_export
+fb_is_mouse_held :: (button: Mouse_Button) -> bool #c_call { push_context frame_context { return is_mouse_held(button); } }
+#program_export
+fb_on_mouse_down :: (button: Mouse_Button, check_inside: bool) -> bool #c_call { push_context frame_context { return on_mouse_down(button, check_inside); } }
+#program_export
+fb_on_mouse_up :: (button: Mouse_Button, check_inside: bool) -> bool #c_call { push_context frame_context { return on_mouse_up(button, check_inside); } }
+#program_export
+fb_on_click :: (button: Mouse_Button, check_inside: bool, movement_threshold: bool) -> bool #c_call {
+    push_context frame_context { return on_click(button, check_inside, movement_threshold); }
+}
+
+#program_export
+fb_get_clipboard_text :: () -> string #c_call { push_context frame_context { return get_clipboard_text(); } }
+#program_export
+fb_copy_to_clipboard :: (text: *u8) #c_call { push_context frame_context { copy_to_clipboard(to_string(text)); } }
+#program_export
+fb_get_text_input :: () -> string #c_call { push_context frame_context { return get_text_input(); } }
+
+#program_export
+fb_on_key_down :: (key: Key, on_repeat: bool) -> bool #c_call { push_context frame_context { return on_key_down(key, on_repeat); } }
+#program_export
+fb_on_key_up :: (key: Key) -> bool #c_call { push_context frame_context { return on_key_up(key); } }
+#program_export
+fb_is_key_held :: (key: Key) -> bool #c_call { push_context frame_context { return is_key_held(key); } }
