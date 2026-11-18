@@ -1,0 +1,11 @@
+{
+  "name": "quick-start",
+  "private": true,
+  "scripts": {
+    "build": "node forbear/jsx.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "6.0.2"
+  }
+}

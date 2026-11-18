@@ -1,2 +1,2 @@
-// This allows for us to do `jai apps/playground.jai +forbear`.
-#load "../forbear.jai";
+// This allows for us to do `jai playground.jai +forbear`.
+#load "../src/forbear.jai";

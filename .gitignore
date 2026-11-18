@@ -3,13 +3,13 @@
 introspection
 
 # compiled outputs
-!vendor/**/*.a
-!vendor/**/*.lib
 *.a
 *.app
+*.dll
 *.dSYM*
 *.dylib
 *.exe
+*.exp
 *.ilk
 *.lib
 *.pdb
@@ -18,18 +18,11 @@ introspection
 .build/
 .vercel
 dist
-forbear.dll
 
 ## binaries
-apps/calculator/Calculator
-apps/calculator/tests
-apps/components-demo
-apps/demos/components
-apps/javascript/main
-apps/playground
-apps/pools
-apps/quick-start/main
-apps/scopes
+/playground
+/tests
+quick-start/*/main
 
 # javascript
 node_modules

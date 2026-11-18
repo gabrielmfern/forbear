@@ -17,7 +17,9 @@ Major features:
 
 ## Quickstart
 
-Requirements: the Jai programming language, which is in private beta.
+The quickstart asks for a language, Jai or C, and an adapter, none or JavaScript.
+Jai is in private beta, so if you don't have it, pick C. You need a C23 compiler, such as clang 19 or newer.
+The JavaScript adapter also needs Node.js and npm.
 
 On Linux or macOS:
 ```sh
@@ -27,11 +29,7 @@ On Windows, in PowerShell:
 ```powershell
 irm https://forbear.dev/quick-start.ps1 | iex
 ```
-To build:
-```sh
-cd untitled-program
-jai main.jai +forbear
-```
+It ends by printing the commands to build your program.
 
 The quickstart program should show this:
 
