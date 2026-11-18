@@ -84,7 +84,7 @@ void render(void *data) {
     fb_prepare_for_next_frame();
 }
 
-const uint8_t inter_ttf[] = {
+const fb_u8 inter_ttf[] = {
     #embed "../../Inter.ttf"
 };
 int main() {
@@ -94,7 +94,7 @@ int main() {
     fb_Window window;
     fb_init_window(&backend, &window, 800, 600, "C example", FB_FLOAT64_NAN, FB_FLOAT64_NAN, FB_FLOAT64_NAN, FB_FLOAT64_NAN);
 
-    fb_Font inter = fb_create_font((fb_String){ sizeof(inter_ttf), (uint8_t *)inter_ttf });
+    fb_Font inter = fb_create_font((fb_String){ sizeof(inter_ttf), (fb_u8 *)inter_ttf });
 
     fb_Forbear forbear;
     fb_init_forbear(&forbear, &backend, &window, FB_BASE_STYLE(

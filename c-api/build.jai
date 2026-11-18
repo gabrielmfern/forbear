@@ -78,7 +78,7 @@ build :: () {
                 if phase.phase == .TYPECHECKED_ALL_WE_CAN && phase.num_items_waiting_to_typecheck == 0 {
                     header: Header;
                     print_to_builder(*header.builder, "#if defined(%)\n", target.macro);
-                    append(*header.builder, "typedef struct { int64_t count; uint8_t *data; } fb_String;\n");
+                    append(*header.builder, "typedef struct { fb_s64 count; fb_u8 *data; } fb_String;\n");
                     for target.roots emit_struct(*header, it);
                     for target.enums emit_enum(*header, it, "");
                     print_to_builder(*header.builder, "typedef fb_% fb_Window;\ntypedef fb_% fb_Backend;\n\n",
@@ -128,7 +128,7 @@ c_type :: (h: *Header, type: *Type_Info, owner: string) -> string {
         case .TYPE;   type_name = "void *";
         case .INTEGER;
             integer := cast(*Type_Info_Integer) type;
-            type_name = tprint("%int%_t", ifx integer.signed then "" else "u", integer.runtime_size * 8);
+            type_name = tprint("fb_%1%2", ifx integer.signed then "s" else "u", integer.runtime_size * 8);
         case .VARIANT; type_name = c_type(h, (cast(*Type_Info_Variant) type).variant_of, owner);
         case .ENUM;    type_name = emit_enum(h, cast(*Type_Info_Enum) type, owner);
         case .STRUCT;  type_name = emit_struct(h, cast(*Type_Info_Struct) type);
@@ -151,8 +151,8 @@ c_type :: (h: *Header, type: *Type_Info, owner: string) -> string {
             if !array_find(h.emitted_definitions, name) {
                 array_add(*h.emitted_definitions, name);
                 if resizable emit_struct(h, type_info(Allocator));
-                print_to_builder(*h.builder, "typedef struct { int64_t count; % *data;% } %;\n\n",
-                                 element, ifx resizable then " int64_t allocated; fb_Allocator allocator;" else "", name);
+                print_to_builder(*h.builder, "typedef struct { fb_s64 count; % *data;% } %;\n\n",
+                                 element, ifx resizable then " fb_s64 allocated; fb_Allocator allocator;" else "", name);
             }
             type_name = name;
         case .PROCEDURE;
@@ -227,7 +227,7 @@ field :: (h: *Header, b: *String_Builder, member: Type_Info_Struct_Member, owner
 
     opaque_struct := type.type == .STRUCT && array_find(OPAQUE, (cast(*Type_Info_Struct) type).name);
     if type.type == .PROCEDURE || opaque_struct {
-        print_to_builder(b, "    _Alignas(8) uint8_t %[%];\n", join(member.name, dims), type.runtime_size);
+        print_to_builder(b, "    _Alignas(8) fb_u8 %[%];\n", join(member.name, dims), type.runtime_size);
         return;
     }
     print_to_builder(b, "    % %;\n", c_type(h, type, owner), join(member.name, dims));
@@ -256,7 +256,7 @@ emit_struct :: (h: *Header, type: *Type_Info_Struct) -> string {
     print_to_builder(*b, "struct % {\n", name);
     for members field(h, *b, it, type.name);
     print_to_builder(*b, "};\n_Static_assert(sizeof(%) == %, \"%\");\n", name, type.runtime_size, name);
-    for members if it.name != "" print_to_builder(*b, "_Static_assert(offsetof(%, %) == %, \"%.%\");\n", name, it.name, it.offset_in_bytes, name, it.name);
+    for members if it.name != "" print_to_builder(*b, "_Static_assert(FB_OFFSETOF(%, %) == %, \"%.%\");\n", name, it.name, it.offset_in_bytes, name, it.name);
     append(*b, "\n");
 
     append(*h.builder, builder_to_string(*b));
