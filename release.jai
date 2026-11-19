@@ -38,7 +38,7 @@ release :: () {
     stage := join(root, ".build/release/");
     if is_directory(stage) delete_directory(stage);
 
-    run(join(root, "c-api"), compiler, "build.jai", "-", "no_javascript");
+    run(join(root, "c-api"), compiler, "c-api.jai", "-", "no_javascript");
 
     jai := tprint("%forbear-jai-%/", stage, platform);
     copy(join(root, "forbear.jai"), join(jai, "module.jai"));
@@ -50,7 +50,7 @@ release :: () {
     copy(join(root, "LICENSE"), join(jai, "LICENSE"));
 
     c := tprint("%forbear-c-%/", stage, platform);
-    for c_libraries copy(tprint("%c-api/%", root, it), join(c, it));
+    for c_libraries copy(tprint("%.build/%", root, it), join(c, it));
     copy(join(root, "c-api/forbear.h"), join(c, "forbear.h"));
     copy(join(root, "LICENSE"), join(c, "LICENSE"));
 
