@@ -39,8 +39,9 @@
 
 Big problems that I don't have an answer too:
 - Async
+- Hot reloading
 - How to draw arbitrary things
-- Context?
+- Context
 
 Possible programs I can make with forbear next:
 - Merged Twitch and YouTube chat viewer
