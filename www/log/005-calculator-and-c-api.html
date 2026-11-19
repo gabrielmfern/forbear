@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>forbear log, entry 005: the first program, a text input, and a C header generated from Jai</title>
+<meta name="description" content="the first program built with forbear, a calculator, the text input it needed, and a C API whose header is generated from the Jai code">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="forbear">
+<meta property="og:url" content="https://www.forbear.dev/log/005-calculator-and-c-api.html">
+<link rel="alternate" type="application/atom+xml" title="forbear log" href="/feed.xml">
+<meta property="og:title" content="the first program, a text input, and a C header generated from Jai">
+<meta property="og:description" content="the first program built with forbear, a calculator, the text input it needed, and a C API whose header is generated from the Jai code">
+<meta property="og:image" content="https://www.forbear.dev/assets/og-005.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="the first program, a text input, and a C header generated from Jai">
+<meta name="twitter:description" content="the first program built with forbear, a calculator, the text input it needed, and a C API whose header is generated from the Jai code">
+<meta name="twitter:image" content="https://www.forbear.dev/assets/og-005.png">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+@theme {
+  --color-bg: #1C1F23;
+  --color-float: #111316;
+  --color-ui: #2C333B;
+  --color-fg: #AEB8C4;
+  --color-muted: #6E7A87;
+  --color-bright: #FFFFFF;
+  --color-yellow: #B8A36A;
+  --color-bright-yellow: #CFBA78;
+}
+@layer base {
+  html { @apply overflow-x-clip; }
+  body { @apply bg-bg text-fg leading-relaxed; }
+  h1 { @apply text-bright text-3xl font-bold mb-8; }
+  h2 { @apply text-bright text-2xl font-bold mt-12 mb-4; }
+  h3 { @apply text-bright text-xl font-bold mt-8 mb-3; }
+  p { @apply my-4; }
+  ul { @apply list-disc pl-6 my-4; }
+  ol { @apply list-decimal pl-6 my-4; }
+  a { @apply text-yellow hover:text-bright-yellow; }
+  code { @apply bg-float text-bright px-1 rounded; }
+  pre { @apply bg-float text-fg text-sm p-4 rounded-lg overflow-x-auto my-6; }
+  pre code { @apply bg-transparent text-fg p-0; }
+}
+pre .hl-function { color: #b8a36a; }
+pre .hl-delimiter { color: #c8d0d8; }
+pre .hl-type { color: #ffffff; }
+pre .hl-punctuation-delimiter { color: #c8d0d8; }
+pre .hl-operator { color: #e0e2ea; }
+pre .hl-statement { color: #ffffff; }
+pre .hl-number { color: #7fa0b8; }
+pre .hl-string { font-style: italic; color: #b8a36a; }
+pre .hl-comment { color: #4ebe4e; font-style: italic; }
+pre .hl-string-special-symbol { font-style: italic; color: #aeb8c4; }
+pre .hl-special { color: #b8a36a; }
+pre .hl-label { color: #86a5bf; }
+pre .hl-preproc { color: #ffffff; }
+</style>
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+</head>
+<body>
+<main class="max-w-2xl mx-auto px-4 py-16">
+<p class="mt-0 mb-8"><a href="/">&larr; forbear</a></p>
+<h1>forbear log, entry 005: the first program, a text input, and a C header generated from Jai</h1>
+<p class="text-muted tabular-nums -mt-6"><time datetime="2026-11-19">2026-11-19</time></p>
+
+<video src="../assets/2026-11-18-calculator.mp4" poster="../assets/2026-11-18-calculator.png" width="281" height="556" controls autoplay muted loop playsinline aria-label="Calculator, built with forbear: typing 12.5*(78-9) shows 862.5 as you type" class="block my-6 w-[281px] h-auto rounded-xl border border-ui"></video>
+
+<p>TL;DR:</p>
+<ul>
+  <li>The first program built with forbear: a calculator</li>
+  <li>A text input with selection, clipboard, undo and redo</li>
+  <li>Hooks for scrolling and transitions</li>
+  <li>A C API, with a header generated from the Jai code</li>
+  <li>Other things: cursors, clipboard on Wayland, sharper text, window size limits</li>
+</ul>
+
+<p><a href="https://github.com/gabrielmfern/Calculator/releases/latest/download/Calculator.exe">Download the Calculator for Windows</a> to try it yourself, or read <a href="https://github.com/gabrielmfern/Calculator">its source code</a>.</p>
+
+<form class="subscribe flex items-center gap-2 mt-8 text-sm">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
+</form>
+<div class="mt-2 mb-8 text-sm text-muted"></div>
+
+<h2>Calculator</h2>
+
+<p>I'm happy to say I finally finished the first useful program built with forbear: the calculator I mentioned in <a href="/log/003-ui-from-javascript.html#whats-next">entry 003</a>.
+You can find it in <a href="https://github.com/gabrielmfern/Calculator">its own repository</a>.
+</p>
+
+<p>Some numbers:</p>
+
+<ul>
+  <li>3.6 MB executable, a single file with the font built in</li>
+  <li>about 300 ms to show the first frame (there's plenty of room for improvement here)</li>
+  <li>10.5 MB of memory</li>
+  <li>1,155 lines of Jai</li>
+</ul>
+
+<p>For comparison, on my machine the Windows Calculator is 18.2 MB on disk, takes about 410 ms
+until its buttons show up, and sits at about 97 MB of working set memory.</p>
+
+<h2>Text input</h2>
+
+<p>Unlike the Windows Calculator, this one lets you type expressions freely in a text field, and the result shows up as you type.</p>
+
+<p>If you have been following the progress of the library, you know that forbear currently only gives you <code>get_text_input</code>, the text typed this frame.
+So the calculator had to implement all of the input logic itself, which was the hardest part of building it.</p>
+
+<p>It has a caret, selection with the mouse and with shift, jumping by word, copy, cut, paste, and a very archaic undo and redo. It also scrolls to keep the caret visible.</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code><span style="color:#b8a36a">Input </span>:: <span style="color:#c8d0d8">(</span>input_state: *<span style="color:#ffffff;font-weight:bold">Input_State</span><span style="color:#c8d0d8">, </span>body: <span style="color:#ffffff;font-weight:bold">Code</span><span style="color:#c8d0d8">) </span>-&amp;gt<span style="color:#c8d0d8">; </span>Input_Context <span style="color:#ffffff;font-weight:bold">#expand </span><span style="color:#c8d0d8">{</span>
+    scrolling_state := <span style="color:#b8a36a">state</span><span style="color:#c8d0d8">(</span>Scrolling_State<span style="color:#c8d0d8">);</span>
+    <span style="color:#4ebe4e">// ...</span>
+    <span style="color:#b8a36a">element</span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">Style</span><span style="color:#c8d0d8">.{</span>
+        text_wrapping   = <span style="color:#7fa0b8">.NONE</span><span style="color:#c8d0d8">,</span>
+        children_offset = -scrolling_state<span style="color:#c8d0d8">.</span>effective_offset<span style="color:#c8d0d8">,</span>
+        <span style="color:#4ebe4e">// ...</span>
+    <span style="color:#c8d0d8">}, </span><span style="color:#ffffff;font-weight:bold">#code </span><span style="color:#c8d0d8">{</span>
+        <span style="color:#7fa0b8">context</span><span style="color:#c8d0d8">.</span>input<span style="color:#c8d0d8">.</span>text_node_index = <span style="color:#b8a36a">text</span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">Style</span><span style="color:#c8d0d8">.{ </span>z_index = <span style="color:#7fa0b8">2</span><span style="color:#c8d0d8">, },</span>
+                                             <span style="color:#b8a36a">to_string</span><span style="color:#c8d0d8">(</span>input_state<span style="color:#c8d0d8">.</span>value<span style="color:#c8d0d8">.</span>data<span style="color:#c8d0d8">, </span>input_state<span style="color:#c8d0d8">.</span>value<span style="color:#c8d0d8">.</span>count<span style="color:#c8d0d8">));</span>
+        <span style="color:#b8a36a">Selection</span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">Style</span><span style="color:#c8d0d8">.{});</span>
+        <span style="color:#b8a36a">Caret</span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">Style</span><span style="color:#c8d0d8">.{});</span>
+        <span style="color:#b8a36a">use_scrolling</span><span style="color:#c8d0d8">(</span>scrolling_state<span style="color:#c8d0d8">);</span>
+        <span style="color:#b8a36a">use_input</span><span style="color:#c8d0d8">();</span>
+
+        <span style="color:#ffffff;font-weight:bold">#insert </span>body<span style="color:#c8d0d8">;</span>
+    <span style="color:#c8d0d8">});</span>
+    <span style="color:#ffffff;font-weight:bold">return </span><span style="color:#7fa0b8">context</span><span style="color:#c8d0d8">.</span>input<span style="color:#c8d0d8">;</span>
+<span style="color:#c8d0d8">} </span><span style="color:#86a5bf">@component</span></code></pre>
+
+<p>The value and the undo history are resizable arrays kept in state, so they use the pools I wrote about in the last entry, through <code>node_pool()</code>.</p>
+
+<p>The caret and the selection are plain elements with relative placement. Text nodes have a <code>.glyphs</code> field, so the position of the caret is the
+position of the glyph under the cursor:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code>glyphs := <span style="color:#b8a36a">get_node</span><span style="color:#c8d0d8">(</span>text_node_index<span style="color:#c8d0d8">).</span>glyphs<span style="color:#c8d0d8">;</span>
+<span style="color:#4ebe4e">// ...</span>
+caret_position = glyphs<span style="color:#c8d0d8">.</span>array<span style="color:#c8d0d8">[</span>cursor<span style="color:#c8d0d8">].</span>position * font_units_to_pixel<span style="color:#c8d0d8">;</span></code></pre>
+
+<p>These are the glyph positions from before layout, at the point where the UI is defined. Since wrapping happens during layout, this approach doesn't work with multiline text.</p>
+
+<p>kb_text_shape already knows where words start, because it needs that for line breaking. forbear now exposes it on each glyph as <code>starts_word</code>,
+so jumping by word (with control, or option on macOS) is just walking the glyphs until the next one that starts a word.</p>
+
+<p>For undo and redo, each edit is recorded as one <code>Input_Edit</code>:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code><span style="color:#ffffff;font-weight:bold">Input_Edit </span>:: <span style="color:#ffffff;font-weight:bold">struct </span><span style="color:#c8d0d8">{</span>
+    <span style="color:#4ebe4e">// This is always the start of where the change is done</span>
+    where:                   <span style="color:#ffffff;font-weight:bold">s64</span><span style="color:#c8d0d8">;</span>
+    cursor_before:           <span style="color:#ffffff;font-weight:bold">s64</span><span style="color:#c8d0d8">;</span>
+    <span style="color:#4ebe4e">// There's never a selection after an edit</span>
+    selection_anchor_before: <span style="color:#ffffff;font-weight:bold">s64 </span>= -<span style="color:#7fa0b8">1</span><span style="color:#c8d0d8">;</span>
+    deleted_length:          <span style="color:#ffffff;font-weight:bold">s64</span><span style="color:#c8d0d8">;</span>
+    inserted_length:         <span style="color:#ffffff;font-weight:bold">s64</span><span style="color:#c8d0d8">;</span>
+    deleted_index:           <span style="color:#ffffff;font-weight:bold">s64 </span>= -<span style="color:#7fa0b8">1</span><span style="color:#c8d0d8">;</span>
+    inserted_index:          <span style="color:#ffffff;font-weight:bold">s64 </span>= -<span style="color:#7fa0b8">1</span><span style="color:#c8d0d8">;</span>
+<span style="color:#c8d0d8">}</span></code></pre>
+
+<p>The bytes an edit deletes are copied into a <code>history_storage</code> array, and the edit keeps their index.
+Undoing pops the last edit, reverts it and moves it into a second list. Redoing does the reverse. The bytes an edit inserted are only
+saved the first time it's undone, since that's the first time they would be lost.</p>
+
+<p>This was heavily inspired by <a href="https://github.com/nothings/stb/blob/master/stb_textedit.h">stb_textedit.h</a>.</p>
+
+<p>This still lives in the Calculator and not in forbear, beacuse of the following limitatiosn:</p>
+
+<ul>
+  <li>it only handles a single line</li>
+  <li>it assumes one byte per glyph, which holds here because the input ignores everything but digits, operators, parentheses, periods and spaces</li>
+  <li>it doesn't support input methods, as I mentioned in the last entry</li>
+</ul>
+
+<p>Once those are sorted out, <code>use_input</code>, <code>Caret</code> and <code>Selection</code> are going to become a built-in</p>
+
+<h2>Scrolling and transitions</h2>
+
+<p>To support scrolling on the input, forbear now has <code>use_scrolling</code>:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code>scrolling_state := <span style="color:#b8a36a">state</span><span style="color:#c8d0d8">(</span>Scrolling_State<span style="color:#c8d0d8">);</span>
+<span style="color:#b8a36a">element</span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">Style</span><span style="color:#c8d0d8">.{</span>
+    children_offset = -scrolling_state<span style="color:#c8d0d8">.</span>effective_offset<span style="color:#c8d0d8">,</span>
+<span style="color:#c8d0d8">}, </span><span style="color:#ffffff;font-weight:bold">#code </span><span style="color:#c8d0d8">{</span>
+    <span style="color:#b8a36a">use_scrolling</span><span style="color:#c8d0d8">(</span>scrolling_state<span style="color:#c8d0d8">);</span>
+    <span style="color:#4ebe4e">// ...</span>
+<span style="color:#c8d0d8">});</span></code></pre>
+
+<p>You keep a <code>Scrolling_State</code> in state, call the hook inside the element that scrolls, and move its children through the new <code>children_offset</code> style.
+The hook adds the scroll delta while the mouse is inside the element, and clamps the offset so that it can't go past the content. To know where the content ends, the measurement
+of an element now also has a <code>content_size</code>.</p>
+
+<p>There are two offsets in the state. <code>offset</code> is where the scrolling should end up, and <code>effective_offset</code> follows it with a spring, which is what makes it smooth.</p>
+
+<p>The input needs to scroll as the user types, and <code>use_scrolling</code> clamps the offsets to the sizes in the node's measurement,
+so the best solution I found was to schedule the scroll for the next frame.</p>
+
+<p>One thing is missing: when scrolling elements are nested, every one with the mouse inside scrolls. Only one of them should,
+and it should hand the scrolling over to the next one once it reaches its end.</p>
+
+<p>Scrolling is built on the second new thing, hooks for transitions:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code>effective_offset = <span style="color:#b8a36a">use_spring_transition</span><span style="color:#c8d0d8">(</span>offset<span style="color:#c8d0d8">, .{</span>
+    stiffness = <span style="color:#7fa0b8">320.0</span><span style="color:#c8d0d8">,</span>
+    damping   = <span style="color:#7fa0b8">32.0</span><span style="color:#c8d0d8">,</span>
+    mass      = <span style="color:#7fa0b8">1.0</span><span style="color:#c8d0d8">,</span>
+    current   = *effective_offset<span style="color:#c8d0d8">,</span>
+<span style="color:#c8d0d8">});</span></code></pre>
+
+<p><code>use_spring_transition</code> keeps a value and a velocity in state, and on every frame moves the value towards the target like a spring would.
+<code>use_transition</code> simply goes from the old value to the new one over a duration, with an easing function:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code><span style="color:#b8a36a">ease_out </span>:: <span style="color:#c8d0d8">(</span>t: <span style="color:#ffffff;font-weight:bold">float</span><span style="color:#c8d0d8">) </span>-&amp;gt<span style="color:#c8d0d8">; </span><span style="color:#ffffff;font-weight:bold">float </span><span style="color:#c8d0d8">{ </span><span style="color:#ffffff;font-weight:bold">return </span><span style="color:#7fa0b8">1 </span>- <span style="color:#c8d0d8">(</span><span style="color:#7fa0b8">1 </span>- t<span style="color:#c8d0d8">) </span>* <span style="color:#c8d0d8">(</span><span style="color:#7fa0b8">1 </span>- t<span style="color:#c8d0d8">); }</span>
+
+width := <span style="color:#b8a36a">use_transition</span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">ifx </span><span style="color:#b8a36a">is_mouse_inside</span><span style="color:#c8d0d8">() </span><span style="color:#ffffff;font-weight:bold">then </span><span style="color:#7fa0b8">240.0 </span><span style="color:#ffffff;font-weight:bold">else </span><span style="color:#7fa0b8">96.0</span><span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">0.2</span><span style="color:#c8d0d8">, </span>ease_out<span style="color:#c8d0d8">);</span></code></pre>
+
+<p>Both work with <code>float</code>, <code>Vector2</code>, <code>Vector3</code> and <code>Vector4</code> (from Jai's Math module), and both are plain functions over
+<code>state</code>, about 50 lines in total, so you can write your own if they don't fit your needs.</p>
+
+<p>They're marked with <code>@hook</code>, which works the same way as <code>@component</code> from the last entry: the compiler plugin wraps each call in a
+<code>scope</code>, so that two calls don't end up sharing their state.</p>
+
+<h2>C API</h2>
+
+<p>forbear now provides a C API and a dynamic library, and you can try both from the quick start.</p>
+
+<p>Here's the Counter from the last entry, in C:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code><span style="color:#ffffff;font-weight:bold">void </span><span style="color:#b8a36a">counter</span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">void</span><span style="color:#c8d0d8">) {</span>
+    fb_s64 *count = <span style="color:#b8a36a">fb_state</span><span style="color:#c8d0d8">(</span>fb_s64<span style="color:#c8d0d8">);</span>
+    <span style="color:#b8a36a">fb_element</span><span style="color:#c8d0d8">(</span>
+        <span style="color:#7fa0b8">.background    </span>= <span style="color:#b8a36a">fb_color</span><span style="color:#c8d0d8">(</span><span style="color:#b8a36a">fb_rgb</span><span style="color:#c8d0d8">(</span><span style="color:#7fa0b8">44</span><span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">49</span><span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">56</span><span style="color:#c8d0d8">)),</span>
+        <span style="color:#7fa0b8">.border_radius </span>= <span style="color:#7fa0b8">6</span><span style="color:#c8d0d8">,</span>
+        <span style="color:#7fa0b8">.padding       </span>= <span style="color:#b8a36a">fb_all_sides</span><span style="color:#c8d0d8">(</span><span style="color:#7fa0b8">8</span><span style="color:#c8d0d8">),</span>
+    <span style="color:#c8d0d8">) {</span>
+        char count_text<span style="color:#c8d0d8">[</span><span style="color:#7fa0b8">64</span><span style="color:#c8d0d8">];</span>
+        <span style="color:#b8a36a">snprintf</span><span style="color:#c8d0d8">(</span>count_text<span style="color:#c8d0d8">, </span><span style="color:#b8a36a">sizeof</span><span style="color:#c8d0d8">(</span>count_text<span style="color:#c8d0d8">), </span><span style="color:#b8a36a">"count: %lld"</span><span style="color:#c8d0d8">, (</span>long long<span style="color:#c8d0d8">)</span>*count<span style="color:#c8d0d8">);</span>
+        <span style="color:#b8a36a">fb_text</span><span style="color:#c8d0d8">(</span>count_text<span style="color:#c8d0d8">);</span>
+        <span style="color:#ffffff;font-weight:bold">if </span><span style="color:#c8d0d8">(</span><span style="color:#b8a36a">fb_on_click</span><span style="color:#c8d0d8">(</span>fb_mouse_button_left<span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">true</span><span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">false</span><span style="color:#c8d0d8">)) {</span>
+            *count += <span style="color:#7fa0b8">1</span><span style="color:#c8d0d8">;</span>
+        <span style="color:#c8d0d8">}</span>
+    <span style="color:#c8d0d8">}</span>
+<span style="color:#c8d0d8">}</span></code></pre>
+
+<p>C has no macros like the ones in Jai, and no closures, so the block that comes after <code>FB_ELEMENT</code> is the body of a <code>for</code> loop that runs once:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code><span style="color:#ffffff;font-weight:bold">#define </span><span style="color:#b8a36a">FB_ELEMENT_KEYED</span><span style="color:#c8d0d8">(</span>key<span style="color:#c8d0d8">, ...) \</span>
+<span style="color:#ffffff;font-weight:bold">for </span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">int </span>fb_element_latch = <span style="color:#7fa0b8">0</span><span style="color:#c8d0d8">; </span>fb_element_latch &amp;lt<span style="color:#c8d0d8">; </span><span style="color:#7fa0b8">1</span><span style="color:#c8d0d8">;) \</span>
+<span style="color:#ffffff;font-weight:bold">for </span><span style="color:#c8d0d8">(</span>fb_Node_Opening_Data fb_element_data = <span style="color:#b8a36a">fb_open_element</span><span style="color:#c8d0d8">(</span><span style="color:#b8a36a">FB_STYLE</span><span style="color:#c8d0d8">(</span>__VA_ARGS__<span style="color:#c8d0d8">), (</span>key<span style="color:#c8d0d8">)); \</span>
+     fb_element_latch &amp;lt<span style="color:#c8d0d8">; </span><span style="color:#7fa0b8">1</span><span style="color:#c8d0d8">; \</span>
+     fb_element_latch = <span style="color:#7fa0b8">1</span><span style="color:#c8d0d8">, </span><span style="color:#b8a36a">fb_close_element</span><span style="color:#c8d0d8">(</span>fb_element_data<span style="color:#c8d0d8">))</span>
+<span style="color:#ffffff;font-weight:bold">#define </span><span style="color:#b8a36a">FB_ELEMENT</span><span style="color:#c8d0d8">(...) </span><span style="color:#b8a36a">FB_ELEMENT_KEYED</span><span style="color:#c8d0d8">(</span>FB_LOCATION_KEY<span style="color:#c8d0d8">, </span>__VA_ARGS__<span style="color:#c8d0d8">)</span></code></pre>
+
+<p>Keying works like it does in the JavaScript adapter. The key is a string with the source location, which Jai then hashes:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code><span style="color:#ffffff;font-weight:bold">#define </span>FB_LOCATION_KEY __FILE__ <span style="color:#b8a36a">":" FB_STRINGIFY</span><span style="color:#c8d0d8">(</span>__LINE__<span style="color:#c8d0d8">) </span><span style="color:#b8a36a">":" FB_STRINGIFY</span><span style="color:#c8d0d8">(</span>__COUNTER__<span style="color:#c8d0d8">)</span></code></pre>
+
+<p>For elements in a loop, there's <code>FB_ELEMENT_KEYED</code>, which takes your own key.</p>
+
+<p>C doesn't have the compiler plugin that handles <code>@component</code> either, so the <code>scope</code> that the plugin would add is written by hand:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code>FB_SCOPE <span style="color:#b8a36a">Counter</span><span style="color:#c8d0d8">();</span>
+FB_SCOPE <span style="color:#b8a36a">Counter</span><span style="color:#c8d0d8">();</span></code></pre>
+
+<p>Without it, the two counters would share the same state, which is the problem <code>@component</code> solved in <a href="/log/004-react-like-state-without-the-heap.html#components-and-hooks">the last entry</a>.</p>
+
+<p><code>FB_STATE(fb_s64)</code> is the same <code>state</code> from Jai, on the same static buffers. It takes the size of the type and gives you back a pointer.
+An initial value goes after the type, as in <code>FB_STATE(fb_s64, 10)</code>.</p>
+
+<h3>forbear.h</h3>
+
+<p>Writing the whole C header by hand to match the Jai code would take a ton of time and open the way to mistakes and things getting out
+of date, so most of <code>forbear.h</code> is generated by the build of the C API, which is a Jai metaprogram.</p>
+
+<p>It compiles forbear once for each operating system, with no output for the ones it isn't running on,
+and listens to the compiler's messages. From the type-checked code, it collects the root structs, like <code>Style</code> and <code>Window</code>, everything
+they reference, the enums, and every exported procedure whose name starts with <code>fb_</code>. Then it writes each of them as C, with one section of the header per operating system:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code><span style="color:#ffffff;font-weight:bold">typedef struct </span>fb_Line_Height fb_Line_Height<span style="color:#c8d0d8">;</span>
+<span style="color:#ffffff;font-weight:bold">typedef </span>fb_u8 fb_Line_Height_Kind<span style="color:#c8d0d8">;</span>
+<span style="color:#ffffff;font-weight:bold">#define </span>FB_LINE_HEIGHT_KIND_PERCENTAGE <span style="color:#7fa0b8">0</span>
+<span style="color:#ffffff;font-weight:bold">#define </span>FB_LINE_HEIGHT_KIND_FIXED <span style="color:#7fa0b8">1</span>
+
+<span style="color:#ffffff;font-weight:bold">struct </span>fb_Line_Height <span style="color:#c8d0d8">{</span>
+    fb_Line_Height_Kind kind<span style="color:#c8d0d8">;</span>
+    <span style="color:#ffffff;font-weight:bold">union </span><span style="color:#c8d0d8">{</span>
+    <span style="color:#ffffff;font-weight:bold">float </span>percentage<span style="color:#c8d0d8">;</span>
+    <span style="color:#ffffff;font-weight:bold">float </span>fixed<span style="color:#c8d0d8">;</span>
+    <span style="color:#c8d0d8">};</span>
+<span style="color:#c8d0d8">};</span>
+<span style="color:#ffffff;font-weight:bold">_Static_assert</span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">sizeof</span><span style="color:#c8d0d8">(</span>fb_Line_Height<span style="color:#c8d0d8">) </span>== <span style="color:#7fa0b8">8</span><span style="color:#c8d0d8">, </span><span style="color:#b8a36a">"fb_Line_Height"</span><span style="color:#c8d0d8">);</span>
+<span style="color:#ffffff;font-weight:bold">_Static_assert</span><span style="color:#c8d0d8">(</span><span style="color:#b8a36a">FB_OFFSETOF</span><span style="color:#c8d0d8">(</span>fb_Line_Height<span style="color:#c8d0d8">, </span>kind<span style="color:#c8d0d8">) </span>== <span style="color:#7fa0b8">0</span><span style="color:#c8d0d8">, </span><span style="color:#b8a36a">"fb_Line_Height.kind"</span><span style="color:#c8d0d8">);</span></code></pre>
+
+<p>Every struct comes with a <code>_Static_assert</code> for its size and for the offset of each of its fields. If a C compiler ever lays out a
+struct differently from Jai, the program fails to compile instead of corrupting memory. The internals that C doesn't need to touch, like hash tables,
+become opaque bytes of the right size.</p>
+
+<p>The macros that the header provides for a proper API are still written by hand, of course.</p>
+
+<p>The quick start now asks for a language and picks C if it can't find Jai in your <code>PATH</code>, so anyone can try forbear!</p>
+<p>On Linux and macOS:</p>
+<pre><code>curl -fsSL https://forbear.dev/quick-start.sh | sh</code></pre>
+<p>On Windows:</p>
+<pre><code>irm https://forbear.dev/quick-start.ps1 | iex</code></pre>
+
+<p>The C quick start program needs a compiler with C23 support, like clang 19 or newer. forbear itself doesn't require it; it's only there to make the quick start simpler.</p>
+
+<h2>Other things</h2>
+
+<p>You can now set the mouse cursor on Windows, Wayland and macOS:</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code><span style="color:#ffffff;font-weight:bold">if </span><span style="color:#b8a36a">is_mouse_inside</span><span style="color:#c8d0d8">() {</span>
+    <span style="color:#b8a36a">set_cursor</span><span style="color:#c8d0d8">(</span><span style="color:#7fa0b8">.TEXT</span><span style="color:#c8d0d8">);</span>
+<span style="color:#c8d0d8">}</span></code></pre>
+
+<p>Copying to and pasting from the clipboard now also works on Wayland.</p>
+
+<p>You can also get the system theme on Windows (other operating systems are pending):</p>
+
+<pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code>palette = <span style="color:#ffffff;font-weight:bold">ifx </span><span style="color:#7fa0b8">context</span><span style="color:#c8d0d8">.</span>forbear<span style="color:#c8d0d8">.</span>window<span style="color:#c8d0d8">.</span>theme == <span style="color:#7fa0b8">.DARK </span><span style="color:#ffffff;font-weight:bold">then </span>DARK_PALETTE <span style="color:#ffffff;font-weight:bold">else </span>LIGHT_PALETTE<span style="color:#c8d0d8">;</span></code></pre>
+
+<p>Text got a few improvements again. Each glyph used to be rasterized once and drawn at a whole pixel, which made the space between letters uneven. Now, glyphs are rasterized at four horizontal offsets within a pixel, and each one is drawn with the offset closest to its position:</p>
+
+<img src="../assets/2026-11-19-glyph-offsets.png" alt="The word &quot;minimum&quot; at 14, 12, 11 and 10 pixels, zoomed in 3x: in Chrome, in forbear at whole pixels, with uneven gaps between the stems, and in forbear with four offsets, with more even gaps" class="block my-6 rounded-lg">
+
+<p>The coverage of each glyph is now gamma corrected, so light text on a dark background gets a bit heavier, and dark text on a light background gets a bit lighter:</p>
+
+<img src="../assets/2026-11-19-gamma-correction.png" alt="The same text on a dark and on a light background, zoomed in 2x, without and with gamma correction" class="block my-6 rounded-lg">
+
+<p>Hinting is now turned off when the scale of the window is 2 or more, and stays light below that. With hinting, the letters grow in steps as the font size grows. Without it, they grow evenly:</p>
+
+<img src="../assets/2026-11-19-hinting-at-2x.png" alt="&quot;Text hinting&quot; from 8 to 13 pixels on a window with a scale of 2, zoomed in 2x: with light hinting the last size is visibly bigger than the others, and without hinting the sizes grow evenly" class="block my-6 rounded-lg">
+
+<p>Word wrapping now uses the line breaking information from kb_text_shape instead of only breaking at spaces, so a line can also break after a hyphen:</p>
+
+<img src="../assets/2026-11-19-word-wrapping.png" alt="The same paragraph in a box 150 pixels wide, zoomed in 2x: breaking only at spaces takes five lines, and breaking after hyphens too takes four" class="block my-6 rounded-lg">
+
+<p>Windows can now have a minimum and a maximum size:</p>
+
+<pre><code>init_window(..., min_width, min_height);</code></pre>
+
+<p>Styles have two new properties: <code>line_height</code>, and a corner for relative placement, which is how the calculator's result stays at the bottom right of the input.</p>
+
+<p>The JavaScript adapter now builds on Windows too, but it has fallen well behind on features, and catching up requires much more thought.</p>
+
+<p>Next, I'm going to work on making windowing more complete and robust, especially on macOS, and on turning the calculator's input primitives into forbear built-ins.</p>
+
+<form class="subscribe flex items-center gap-2 my-4 text-sm">
+<input name="email" type="email" required placeholder="you@email.com" class="w-40 min-w-0 bg-float text-bright placeholder:text-muted px-2 py-1 rounded outline-none focus:ring-1 focus:ring-yellow">
+<button class="bg-yellow hover:bg-bright-yellow text-float font-medium px-3 py-1 rounded cursor-pointer">email me new entries</button>
+</form>
+<div class="mt-2 text-sm text-muted"></div>
+<script src="/assets/subscribe.js"></script>
+
+<p><a href="https://github.com/gabrielmfern/forbear">https://github.com/gabrielmfern/forbear</a></p>
+
+<nav class="flex justify-between gap-4 mt-16 pt-6 border-t border-ui">
+<a href="/log/004-react-like-state-without-the-heap.html"><span class="block text-muted text-sm">previous</span>&larr; 004: React-like state (mostly) without the heap, events without callbacks</a>
+<span></span>
+</nav>
+</main>
+
+</body>
+</html>
