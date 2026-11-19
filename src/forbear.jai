@@ -3628,8 +3628,8 @@ get_measurement :: (node_index: s64 = -1, include_scopes := false) -> measuremen
     if !include_scopes && node_index == -1 {
         measurement_index = get_parent_element_index();
     }
-    expected_key := node_tree[measurement_index].key;
     if measurement_index != -1 {
+        expected_key := node_tree[measurement_index].key;
         if measurement_index < measurements.count && measurements[measurement_index].key == expected_key {
             return measurements[measurement_index], true;
         } else {
