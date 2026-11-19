@@ -1,7 +1,9 @@
 #!/bin/sh
 set -eu
 languages="jai c"
-if command -v jai > /dev/null 2>&1; then default=jai; else default=c; fi
+jai=jai-$(uname -s | sed 's/Darwin/macos/; s/Linux/linux/')
+if command -v jai > /dev/null 2>&1; then jai=jai; fi
+if command -v "$jai" > /dev/null 2>&1; then default=jai; else default=c; fi
 
 printf 'Project name (untitled-program): '
 read -r dir < /dev/tty
@@ -27,7 +29,7 @@ fi
 
 echo "Run: cd $dir"
 if [ "$language" = jai ]; then
-  echo "     jai main.jai +forbear"
+  echo "     $jai main.jai +forbear"
 else
   echo "     ./build.sh"
 fi
